@@ -134,7 +134,7 @@ class TorchBlockBackend(BlockBackend):
     def block_log(self, a: Block) -> Block:
         return torch_module.log(a)
 
-    def block_allclose(self, a: Block, b: Block, rtol: float, atol: float) -> bool:
+    def block_allclose(self, a: Block, b: Block, rtol: float = 1e-5, atol: float = 1e-8) -> bool:
         return torch_module.allclose(a, b, rtol=rtol, atol=atol)
 
     def block_squeeze_legs(self, a: Block, idcs: list[int]) -> Block:
@@ -145,7 +145,7 @@ class TorchBlockBackend(BlockBackend):
     def block_add_axis(self, a: Block, pos: int) -> Block:
         return torch_module.unsqueeze(a, pos)
 
-    def block_norm(self, a: Block, order: int | float = None, axis: int | None = None) -> float:
+    def block_norm(self, a: Block, order: int | float = 2, axis: int | None = None) -> float:
         return torch_module.norm(a, p=order, dim=axis)
 
     def block_max_abs(self, a: Block) -> float:

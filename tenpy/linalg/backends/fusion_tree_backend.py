@@ -1,7 +1,7 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 from abc import ABC
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Iterator
 from math import prod
 import numpy as np
 
@@ -69,15 +69,46 @@ def tree_block_slice(space: ProductSpace, tree: FusionTree) -> slice:
 
 def _make_domain_codomain(legs: list[VectorSpace], num_domain_legs: int = 0, backend=None
                           ) -> tuple[ProductSpace, ProductSpace]:
-    assert 0 <= num_domain_legs < len(legs)
+    assert 0 <= num_domain_legs <= len(legs)
+    num_codomain_legs = len(legs) - num_domain_legs
     # need to pass symmetry and is_real, since codomain or domain might be the empty product.
     symmetry = legs[0].symmetry
     is_real = legs[0].is_real
-    domain = ProductSpace([l.dual for l in reversed(legs[-num_domain_legs:])], backend=backend,
+    domain = ProductSpace([l.dual for l in reversed(legs[num_codomain_legs:])], backend=backend,
                           symmetry=symmetry, is_real=is_real, _is_dual=False)
-    codomain = ProductSpace(legs[:-num_domain_legs], backend=backend, symmetry=symmetry,
+    codomain = ProductSpace(legs[:num_codomain_legs], backend=backend, symmetry=symmetry,
                             is_real=is_real, _is_dual=False)
     return domain, codomain
+
+
+def _iter_sectors_mults_slices(spaces: list[VectorSpace], symmetry: Symmetry
+                               ) -> Iterator[tuple[SectorArray, list[int], list[slice]]]:
+    """Helper iterator over all combinations of sectors and respective mults and slices.
+    
+    Yields
+    ------
+    uncoupled : list of 1D array of int
+        A combination ``[spaces[0].sectors[i0], spaces[1].sectors[i1], ...]``
+        of uncoupled sectors
+    mults : list of int
+        The corresponding ``[spaces[0].multiplicities[i0], spaces[1].multiplicities[i1], ...]``.
+    slices : list of slice
+        The corresponding ``[slice(*spaces[0].slices[i0]), slice(*spaces[1].slices[i1]), ...]``.
+    """
+    if len(spaces) == 0:
+        yield symmetry.empty_sector_array, [], []
+        return
+    
+    if len(spaces) == 1:
+        for a, m, slc in zip(spaces[0].sectors, spaces[0].multiplicities, spaces[0].slices):
+            yield a[None, :], [m], [slice(*slc)]
+        return
+    
+    # OPTIMIZE there is probably some itertools magic that does this better?
+    # OPTIMIZE or build a grid of indices?
+    for a_0, m_0, slc_0 in zip(spaces[0].sectors, spaces[0].multiplicities, spaces[0].slices):
+        for a_rest, m_rest, slc_rest in _iter_sectors_mults_slices(spaces[1:], symmetry):
+            yield np.concatenate([a_0[None, :], a_rest]), [m_0, *m_rest], [slice(*slc_0), *slc_rest]
 
 
 class FusionTreeData:
@@ -180,7 +211,7 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
         assert a.data.num_domain_legs == a.num_domain_legs
         for n in range(a.num_domain_legs):
             # domain: duals of second part, in reverse order
-            assert a.legs[-n] == a.data.domain.spaces[n].dual
+            assert a.legs[-1-n] == a.data.domain.spaces[n].dual
         for n in range(a.num_codomain_legs):
             # codomain: first part of legs
             assert a.legs[n] == a.data.codomain.spaces[n]
@@ -260,9 +291,133 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
     def diagonal_to_block(self, a: DiagonalTensor) -> Block:
         raise NotImplementedError  # TODO
 
-    def from_dense_block(self, a: Block, legs: list[VectorSpace], domain_num_legs: int,
+    def from_dense_block(self, a: Block, legs: list[VectorSpace], num_domain_legs: int,
                          tol: float = 1e-8) -> FusionTreeData:
-        raise NotImplementedError  # TODO
+        # convert to internal basis order, where the sectors are sorted and contiguous
+        a = self.apply_basis_perm(a, legs)
+        domain, codomain = _make_domain_codomain(legs, num_domain_legs=num_domain_legs, backend=self)
+        J = len(codomain.spaces)
+        K = len(domain.spaces)
+        # [i1,...,iJ,jK,...,j1] -> [i1,...,iJ,j1,...,jK]
+        a = self.block_permute_axes(a, [*range(J), *reversed(range(J, J + K))])
+        sym = domain.symmetry
+        dtype = Dtype.common(self.block_dtype(a), sym.fusion_tensor_dtype)
+        num_legs = len(legs)
+        # main loop: iterate over coupled sectors and construct the respective block.
+        coupled_sectors = []
+        blocks = []
+        norm_sq_projected = 0
+        for i, _ in _iter_common_sorted_arrays(domain._non_dual_sectors, codomain._non_dual_sectors):
+            coupled = domain._non_dual_sectors[i]
+            dim_c = sym.sector_dim(coupled)
+              # OPTIMIZE could be sth like np.empty
+            block = self.zero_block([block_size(codomain, coupled), block_size(domain, coupled)], dtype)
+            # iterate over uncoupled sectors / forest-blocks within the block
+            i1 = 0  # start row index of the current forest block
+            i2 = 0  # start column index of the current forest block
+            for b_sectors, n_dims, j2 in _iter_sectors_mults_slices(domain.spaces, sym):
+                b_dims = sym.batch_sector_dim(b_sectors)
+                tree_block_width = tree_block_size(domain, b_sectors)
+                for a_sectors, m_dims, j1 in _iter_sectors_mults_slices(codomain.spaces, sym):
+                    a_dims = sym.batch_sector_dim(a_sectors)
+                    tree_block_height = tree_block_size(codomain, a_sectors)
+                    entries = a[*j1, *j2]  # [(a1,m1),...,(aJ,mJ), (b1,n1),...,(bK,nK)]
+                    # reshape to [a1,m1,...,aJ,mJ, b1,n1,...,bK,nK]
+                    shape = [0] * (2 * num_legs)
+                    shape[::2] = [*a_dims, *b_dims]
+                    shape[1::2] = m_dims + n_dims
+                    entries = self.block_reshape(entries, shape)
+                    # permute to [a1,...,aJ, b1,...,bK, m1,...,mJ, n1,...nK]
+                    perm = [*range(0, 2 * num_legs, 2), *range(1, 2 * num_legs, 2)]
+                    entries = self.block_permute_axes(entries, perm)
+                    forest_block_height, forest_block_width = self._add_forest_block_entries(
+                        block, entries, sym, codomain, domain, coupled, dim_c, a_sectors, b_sectors,
+                        tree_block_width, tree_block_height, i1, i2
+                    )
+                    i1 += forest_block_height  # move down by one forest-block
+                i1 = 0  # reset to the top of the block
+                i2 += forest_block_width  # move right by one forest-block
+            block_norm = self.block_norm(block, order=2)
+            if block_norm <= 0.:  # TODO small finite tolerance instead?
+                continue
+            coupled_sectors.append(coupled)
+            blocks.append(block)
+            contribution = dim_c * block_norm ** 2
+            norm_sq_projected += contribution
+
+        # since the symmetric and non-symmetric components of ``a = a_sym + a_rest`` are mutually
+        # orthogonal, we have  ``norm(a) ** 2 = norm(a_sym) ** 2 + norm(a_rest) ** 2``.
+        # thus ``abs_err = norm(a - a_sym) = norm(a_rest) = sqrt(norm(a) ** 2 - norm(a_sym) ** 2)``
+        if tol is not None:
+            a_norm_sq = self.block_norm(a, order=2) ** 2
+            norm_diff_sq = a_norm_sq - norm_sq_projected
+            abs_tol_sq = tol * tol * a_norm_sq
+            if norm_diff_sq > abs_tol_sq > 0:
+                msg = (f'Block is not symmetric up to tolerance. '
+                       f'Original norm: {np.sqrt(a_norm_sq)}. '
+                       f'Norm after projection: {np.sqrt(norm_sq_projected)}.')
+                raise ValueError(msg)
+        coupled_sectors = np.asarray(coupled_sectors, int)
+        return FusionTreeData(coupled_sectors, blocks, domain, codomain, dtype)
+
+    def _add_forest_block_entries(self, block, entries, sym: Symmetry, codomain, domain, coupled,
+                                dim_c, a_sectors, b_sectors, tree_block_width, tree_block_height,
+                                i1_init, i2_init):
+        """Helper function for :meth:`from_dense_block`.
+
+        Adds the entries from a single forest-block to the current `block`, in place.
+
+        Parameters:
+            block: The block to modify
+            entries: The entries of the dense block corresponding to the given uncoupled sectors.
+                    Legs [a1,...,aJ, b1,...,bK, m1,...,mJ, n1,...,nK]
+            sym: The symmetry
+            codomain, domain: The codomain and domain of the new tensor
+            coupled, dim_c: The coupled sector of the current block and its quantum dimension
+            a_sectors: The codomain uncoupled sectors [a1, a2, ..., aJ]
+            b_sectors: The domain uncoupled sectors [b1, b2, ..., bK]
+            tree_block_width: Equal to ``tree_block_size(domain, b_sectors)``
+            tree_block_height: Equal to ``tree_block_size(codomain, a_sectors)``
+            i1_init, i2_init: The start indices of the current forest block within the block
+
+        Returns:
+            forest_block_height: height of the current forest block
+            forest_block_width: width of the current forest block
+        """
+        # OPTIMIZE do one loop per vertex in the tree instead.
+        i1 = i1_init  # i1: start row index of the current tree block within the block
+        i2 = i2_init  # i2: start column index of the current tree block within the block
+        domain_are_dual = [sp.is_dual for sp in domain.spaces]
+        codomain_are_dual = [sp.is_dual for sp in codomain.spaces]
+        J = len(codomain.spaces)
+        K = len(domain.spaces)
+        range_J = list(range(J))  # used in tdot calls below
+        range_K = list(range(K))  # used in tdot calls below
+        range_JK = list(range(J + K))
+        for alpha_tree in fusion_trees(sym, a_sectors, coupled, codomain_are_dual):
+            i2 = i2_init  # reset to the left of the current forest-block
+            X = alpha_tree.as_block(backend=self)
+            # entries: [a1,...,aJ,b1,...,bK,m1,...,mJ,n1,...,nK]
+            projected = self.block_tdot(entries, X, range_J, range_J)  # [{bk}, {mj}, {nk}, c]
+            for beta_tree in fusion_trees(sym, b_sectors, coupled, domain_are_dual):
+                Y = self.block_conj(beta_tree.as_block(backend=self))
+                projected = self.block_tdot(projected, Y, range_K, range_K)  # [{mj}, {nk}, c, c']
+                # projected onto the identity on [c, c']
+                tree_block = self.block_trace_partial(projected, [-2], [-1], range_JK) / dim_c
+                # [m1,...,mJ,n1,...,nK] -> [M, N]
+                ms_ns = self.block_shape(tree_block)
+                tree_block = np.reshape(tree_block, (prod(ms_ns[:J]), prod(ms_ns[J:])))
+                idx1 = slice(i1, i1 + tree_block_height)
+                idx2 = slice(i2, i2 + tree_block_width)
+                # make sure we set in-range elements! otherwise item assignment silently does nothing.
+                assert 0 <= idx1.start < idx1.stop <= block.shape[0]
+                assert 0 <= idx2.start < idx2.stop <= block.shape[1]
+                block[idx1, idx2] = tree_block
+                i2 += tree_block_width  # move right by one tree-block
+            i1 += tree_block_height  # move down by one tree-block (we reset to the left at start of the loop)
+        forest_block_height = i1 - i1_init
+        forest_block_width = i2 - i2_init
+        return forest_block_height, forest_block_width
 
     def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
         raise NotImplementedError  # TODO

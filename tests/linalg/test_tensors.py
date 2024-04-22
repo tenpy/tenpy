@@ -3,7 +3,6 @@
 import numpy as np
 import numpy.testing as npt
 import pytest
-import warnings
 import operator
 
 from tenpy.linalg import tensors
@@ -11,10 +10,11 @@ from tenpy.linalg.backends.no_symmetry import NoSymmetryBackend
 from tenpy.linalg.backends.abelian import AbelianBackend
 from tenpy.linalg.backends.fusion_tree_backend import FusionTreeBackend
 from tenpy.linalg.backends.torch import TorchBlockBackend
-from tenpy.linalg.backends.numpy import NumpyBlockBackend, NoSymmetryNumpyBackend
+from tenpy.linalg.backends.numpy import NumpyBlockBackend
+from tenpy.linalg.backends.backend_factory import get_backend
 from tenpy.linalg.dtypes import Dtype
 from tenpy.linalg.spaces import VectorSpace, ProductSpace, _fuse_spaces
-from tenpy.linalg.symmetries import ProductSymmetry
+from tenpy.linalg.symmetries import ProductSymmetry, z4_symmetry, SU2Symmetry
 
 
 
@@ -287,13 +287,11 @@ def test_ChargedTensor_tofrom_flat_block_single_sector(compatible_symmetry, make
 
 
 @pytest.mark.parametrize('symmetry_backend', ['abelian', pytest.param('fusion_tree', marks=pytest.mark.FusionTree)])
-def test_from_block(block_backend, symmetry_backend):
-    from tenpy.linalg.symmetries import z4_symmetry
-    from tenpy.linalg.backends.backend_factory import get_backend
-    backend = get_backend(symmetry=symmetry_backend, block_backend=block_backend)
-
-    print('by constructing basis')
-    q0, q1, q2, q3 = z4_symmetry.all_sectors()
+@pytest.mark.parametrize('num_domain_legs', [0, 1, 2])
+def test_from_block_z4symm_2legs(symmetry_backend, num_domain_legs, block_backend):
+    backend = get_backend(symmetry_backend, block_backend)
+    all_qi = z4_symmetry.all_sectors()
+    q0, q1, q2, q3 = all_qi
     basis1 = [q3, q3, q2, q0, q3, q2]  # basis_perm [3, 2, 5, 0, 1, 4]
     basis2 = [q2, q0, q1, q2, q3, q0, q1]  # basis_perm [1, 5, 2, 6, 0, 3, 4]
     s1 = VectorSpace.from_basis(z4_symmetry, basis1)  # sectors = [0, 2, 3]
@@ -306,21 +304,108 @@ def test_from_block(block_backend, symmetry_backend):
             [ 0,  7,  0,  0,  0,  8,  0],  # 0
             [ 0,  0,  9,  0,  0,  0, 10],  # 3
             [11,  0,  0, 12,  0,  0,  0]]  # 2
+
+    # after applying the basis perm
+    # q: 0   0   1   1   2   2   3       q
+    # [[ 7.  8.  0.  0.  0.  0.  0.]     0
+    #  [ 0.  0.  0.  0.  5.  6.  0.]     2
+    #  [ 0.  0.  0.  0. 11. 12.  0.]     2
+    #  [ 0.  0.  1.  2.  0.  0.  0.]     3
+    #  [ 0.  0.  3.  4.  0.  0.  0.]     3
+    #  [ 0.  0.  9. 10.  0.  0.  0.]]    3
+    
     block = backend.block_from_numpy(np.asarray(data, dtype=float))
-    t = tensors.BlockDiagonalTensor.from_dense_block(block, [s1, s2], backend=backend)
+    t = tensors.BlockDiagonalTensor.from_dense_block(
+        block, [s1, s2], backend=backend, num_domain_legs=num_domain_legs
+    )
+    t.test_sanity()
+    assert t.num_domain_legs == num_domain_legs
+    assert t.num_codomain_legs == 2 - num_domain_legs
+    # explicitly check the ``t.data`` vs what we expect
+    block_0 = np.asarray([[7, 8]])
+    block_1 = np.asarray([[1, 2], [3, 4], [9, 10]])
+    block_2 = np.asarray([[5, 6], [11, 12]])
 
-    # block_i is the one with sector q_i on s1
-    block_0 = [[7, 8]]
-    block_1 = [[1, 2], [3, 4], [9, 10]]
-    block_2 = [[5, 6], [11, 12]]
-    block_3 = [[]]
-    expect_blocks = [block_0, block_1, block_2, block_3]  # can be indexed by block_inds[1]
-    expect_blocks = [backend.block_from_numpy(np.asarray(b, dtype=float)) for b in expect_blocks]
+    if symmetry_backend == 'abelian':
+        expect_block_inds = np.array([
+            [0, 0],  # q=0, q=0
+            [2, 1],  # q=2, q=2
+            [1, 2],  # q=1, q=3
+        ])
+        assert np.all(t.data.block_inds == expect_block_inds)
+        expect_blocks = [backend.block_from_numpy(b) for b in [block_0, block_1, block_2]]
+        assert len(expect_blocks) == len(t.data.blocks)
+        for i, (actual, expect) in enumerate(zip(t.data.blocks, expect_blocks)):
+            print(f'checking blocks[{i}]')
+            assert backend.block_allclose(actual, expect)
+    
+    elif symmetry_backend == 'fusion_tree' and num_domain_legs == 0:
+        assert np.all(t.data.coupled_sectors == q0[None, :])
+        forest_block_q0_q0 = block_0.reshape((-1, 1))
+        forest_block_q1_q3 = block_2.reshape((-1, 1))
+        forest_block_q2_q2 = block_1.reshape((-1, 1))
+        expect_block = np.concatenate([forest_block_q0_q0, forest_block_q1_q3, forest_block_q2_q2],
+                                      axis=0)
+        expect_block = backend.block_from_numpy(expect_block)
+        assert len(t.data.blocks) == 1
+        assert backend.block_allclose(t.data.blocks[0], expect_block)
+        # [array([[ 7.,  8.,  1.,  3.,  9.,  2.,  4., 10.,  5., 11.,  6., 12.]])]
+    
+    elif symmetry_backend == 'fusion_tree' and num_domain_legs == 1:
+        # codomain: [s1]  , sector=[0, 2, 3]
+        # domain: [s2.dual], sectors=[0, 3, 2, 1]
+        # coupled sectors are sectors of the codomain.
+        expect_sectors = [q0, q2, q3]
+        expect_blocks = [block_0, block_2, block_1]  # block_1 appears with coupled sector [3].
+        assert np.all(t.data.coupled_sectors == np.array(expect_sectors))
+        for expect, actual in zip(expect_blocks, t.data.blocks):
+            assert backend.block_allclose(actual, expect)
 
-    for block, ind in zip(t.data.blocks, t.data.block_inds):
-        print(block)
-        print(expect_blocks[ind[1]])
-        assert backend.block_allclose(block, expect_blocks[ind[1]], rtol=1e-5, atol=1e-8)
+    elif symmetry_backend == 'fusion_tree' and num_domain_legs == 2:
+        assert np.all(t.data.coupled_sectors == q0[None, :])
+        expect_block = np.concatenate([block_0, block_1.T.reshape((1, -1)), block_2.T.reshape((1, -1))],
+                                      axis=1)
+        expect_block = backend.block_from_numpy(expect_block)
+        assert len(t.data.blocks) == 1
+        assert backend.block_allclose(t.data.blocks[0], expect_block)
+        # [array([[ 7.,  8.,  1.,  3.,  9.,  2.,  4., 10.,  5., 11.,  6., 12.]])]
+    
+    else:
+        raise RuntimeError('should have covered all cases above.')
+
+
+@pytest.mark.parametrize('symmetry_backend', [pytest.param('fusion_tree', marks=pytest.mark.FusionTree)])
+def test_from_block_su2_symm(symmetry_backend, block_backend):
+    # TODO convert back when to_dense is implemented.
+    backend = get_backend(symmetry_backend, block_backend)
+    sym = SU2Symmetry()
+    spin_half = VectorSpace(sym, [[1]])
+
+    # basis order: [down, up]
+    sx = .5 * np.array([[0., 1.], [1., 0.]], dtype=complex)
+    sy = .5 * np.array([[0., 1.j], [-1.j, 0]], dtype=complex)
+    sz = .5 * np.array([[-1., 0.], [0., +1.]], dtype=complex)
+    heisenberg_4 = sum(si[:, :, None, None] * si[None, None, :, :] for si in [sx, sy, sz])  # [p1, p1*, p2, p2*]
+    # construct in a specific leg-order where we know what the blocks should be.
+    heisenberg_4 = np.transpose(heisenberg_4, [0, 2, 3, 1])  # [p1, p2, p2*, p1*]
+
+    tens_4 = tensors.BlockDiagonalTensor.from_dense_block(
+        heisenberg_4, [spin_half, spin_half, spin_half.dual, spin_half.dual],
+        backend, labels=['p1', 'p2', 'p2*', 'p1*'], num_domain_legs=2,
+    )
+    tens_4.test_sanity()
+    assert np.all(tens_4.data.coupled_sectors == np.array([[0], [2]]))  # spin 0, spin 1
+    # in this leg order, the blocks come from maps
+    # [p1, p2] --X--> [coupled] --block--> [coupled] --Y--> [p1, p2].
+    # Thus, the blocks are the eigenvalue of the Heisenberg coupling in the fixed total spin sectors
+    # For singlet states (coupled=spin-0), we have eigenvalue -3/4
+    # For triplet states (coupled=spin-1), we have eigenvalue +1/4
+    expect_spin_0 = -3 / 4  
+    expect_spin_1 = 1 / 4
+    assert backend.block_allclose(tens_4.data.blocks[0], expect_spin_0)
+    assert backend.block_allclose(tens_4.data.blocks[1], expect_spin_1)
+
+    # TODO expand tests...
 
 
 def test_tdot(make_compatible_space, make_compatible_sectors, make_compatible_tensor):

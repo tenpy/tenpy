@@ -1049,6 +1049,8 @@ class SU2Symmetry(GroupSymmetry):
 
     def batch_sector_dim(self, a: SectorArray) -> npt.NDArray[np.int_]:
         # dim = 2 * J + 1 = jj + 1
+        if len(a) == 0:
+            return np.zeros([0], dtype=int)
         return a[:, 0] + 1
 
     def sector_str(self, a: Sector) -> str:
@@ -1099,10 +1101,11 @@ class SU2Symmetry(GroupSymmetry):
         from . import _su2data
         X = _su2data.fusion_tensor(a[0], b[0], c[0])
         if Z_a:
-            X = np.tensordot(self.Z_iso(a), X, (1, 0))
+            X = np.tensordot(self.Z_iso(a), X, (1, 1))  # [m_a, mu, m_b, m_c]
+            X = np.transpose(X, [1, 0, 2, 3])
         if Z_b:
-            X = np.tensordot(self.Z_iso(b), X, (2, 0))  # [mb, ma, mc]
-            X = np.transpose(X, [1, 0, 2])
+            X = np.tensordot(self.Z_iso(b), X, (1, 2))  # [m_b, mu, m_a, m_c]
+            X = np.transpose(X, [1, 2, 0, 3])
         return X
 
     def Z_iso(self, a: Sector) -> np.ndarray:

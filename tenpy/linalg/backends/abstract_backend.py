@@ -651,7 +651,7 @@ class BlockBackend(metaclass=ABCMeta):
         return self.block_reshape(a, tuple(new_shape))
 
     @abstractmethod
-    def block_allclose(self, a: Block, b: Block, rtol: float, atol: float) -> bool:
+    def block_allclose(self, a: Block, b: Block, rtol: float = 1e-5, atol: float = 1e-8) -> bool:
         ...
 
     @abstractmethod
@@ -664,7 +664,7 @@ class BlockBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def block_norm(self, a: Block, order: int | float = None, axis: int | None = None) -> float:
+    def block_norm(self, a: Block, order: int | float = 2, axis: int | None = None) -> float:
         """
         axis=None means "all axes", i.e. norm of the flattened block.
         axis: int means to broadcast the norm over all other axes.

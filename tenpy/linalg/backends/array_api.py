@@ -133,7 +133,7 @@ class ArrayApiBlockBackend(BlockBackend):
     def block_log(self, a: Block) -> Block:
         return self._api.log(a)
 
-    def block_allclose(self, a: Block, b: Block, rtol: float, atol: float) -> bool:
+    def block_allclose(self, a: Block, b: Block, rtol: float = 1e-5, atol: float = 1e-8) -> bool:
         res = self._api.all(self._api.abs(a - b) <= (atol + rtol * self._api.abs(b)))
         return self.block_item(res)
 
@@ -143,7 +143,7 @@ class ArrayApiBlockBackend(BlockBackend):
     def block_add_axis(self, a: Block, pos: int) -> Block:
         return self._api.expand_dims(a, axis=pos)
 
-    def block_norm(self, a: Block, order: int | float = None, axis: int | None = None) -> float:
+    def block_norm(self, a: Block, order: int | float = 2, axis: int | None = None) -> float:
         res = self._api.linalg.vector_norm(a, axis=axis, ord=order)
         return self.block_item(res)
 

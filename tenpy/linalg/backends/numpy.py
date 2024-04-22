@@ -103,7 +103,7 @@ class NumpyBlockBackend(BlockBackend):
     def block_log(self, a: Block) -> Block:
         return np.log(a)
 
-    def block_allclose(self, a: Block, b: Block, rtol: float, atol: float) -> bool:
+    def block_allclose(self, a: Block, b: Block, rtol: float = 1e-5, atol: float = 1e-8) -> bool:
         return np.allclose(a, b, rtol=rtol, atol=atol)
 
     def block_squeeze_legs(self, a: Block, idcs: list[int]) -> Block:
@@ -112,10 +112,9 @@ class NumpyBlockBackend(BlockBackend):
     def block_add_axis(self, a: Block, pos: int) -> Block:
         return np.expand_dims(a, pos)
 
-    def block_norm(self, a: Block, order: int | float = None, axis: int | None = None) -> float:
-        if (order is not None) and (axis is None):
-            # non-default order without specified axis expects a 1D array
-            a = a.flatten()
+    def block_norm(self, a: Block, order: int | float = 2, axis: int | None = None) -> float:
+        if axis is None:
+            a = a.ravel()
         return np.linalg.norm(a, ord=order, axis=axis)
 
     def block_max_abs(self, a: Block) -> float:
