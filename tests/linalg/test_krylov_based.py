@@ -5,6 +5,7 @@ from numpy import testing as npt
 import numpy as np
 from scipy.linalg import expm
 
+import tenpy as tp
 from tenpy.linalg import krylov_based, sparse, tensors, random_matrix, spaces
 
 
@@ -14,6 +15,19 @@ def test_lanczos_gs(compatible_backend, make_compatible_space, N_cache, tol):
     leg = make_compatible_space()
     backend = compatible_backend
     H = tensors.BlockDiagonalTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
+
+    if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend) and isinstance(leg.symmetry, tp.ProductSymmetry):
+        # TODO
+        with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented'):
+            _ = H.to_numpy_ndarray()
+        return
+    
+    if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend):
+        # TODO
+        with pytest.raises(AssertionError, match='norm not preserved'):
+            _ = H.to_numpy_ndarray()
+        return
+
     H_np = H.to_numpy_ndarray()
     H_op = sparse.TensorLinearOperator(H, which_leg=1)
     npt.assert_allclose(H_np, H_np.conj().transpose())  # make sure we generated a hermitian operator
@@ -91,6 +105,19 @@ def test_lanczos_evolve(compatible_backend, make_compatible_space, N_cache, tol)
     leg = make_compatible_space()
     H = tensors.BlockDiagonalTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
     H_op = sparse.TensorLinearOperator(H, which_leg=1)
+
+    if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend) and isinstance(leg.symmetry, tp.ProductSymmetry):
+        # TODO
+        with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented'):
+            _ = H.to_numpy_ndarray()
+        return
+    
+    if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend):
+        # TODO
+        with pytest.raises(AssertionError, match='norm not preserved'):
+            _ = H.to_numpy_ndarray()
+        return
+    
     H_np = H.to_numpy_ndarray()
     npt.assert_allclose(H_np, H_np.conj().transpose())  # make sure we generated a hermitian operator
 

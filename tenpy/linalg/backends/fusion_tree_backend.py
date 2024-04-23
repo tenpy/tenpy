@@ -6,7 +6,8 @@ from math import prod
 import numpy as np
 
 from .abstract_backend import (
-    Backend, BlockBackend, Block, Data, DiagonalData, _iter_common_sorted_arrays
+    Backend, BlockBackend, Block, Data, DiagonalData, _iter_common_sorted_arrays,
+    _iter_common_noncommon_sorted_arrays
 )
 from ..dtypes import Dtype
 from ..symmetries import Sector, SectorArray, Symmetry
@@ -549,10 +550,40 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
         raise NotImplementedError  # TODO
 
     def add(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor) -> Data:
-        raise NotImplementedError  # TODO
+        assert a.data.num_domain_legs == b.data.num_domain_legs
+        dtype = a.data.dtype.common(b.data.dtype)
+        a_blocks = [self.block_to_dtype(_a, dtype) for _a in a.data.blocks]
+        b_blocks = [self.block_to_dtype(_b, dtype) for _b in b.data.blocks]
+        blocks = []
+        coupled_sectors = []
+        for i, j in _iter_common_noncommon_sorted_arrays(a.data.coupled_sectors, b.data.coupled_sectors):
+            if i is None:
+                blocks.append(b_blocks[j])
+                coupled_sectors.append(b.data.coupled_sectors[j])
+            elif j is None:
+                blocks.append(a_blocks[i])
+                coupled_sectors.append(a.data.coupled_sectors[i])
+            else:
+                blocks.append(self.block_add(a_blocks[i], b_blocks[j]))
+                coupled_sectors.append(a.data.coupled_sectors[i])
+        if len(blocks) == 0:
+            coupled_sectors = a.symmetry.empty_sector_array
+        else:
+            coupled_sectors = np.array(coupled_sectors)
+        return FusionTreeData(coupled_sectors, blocks, a.data.domain, a.data.codomain, dtype)
 
     def mul(self, a: float | complex, b: BlockDiagonalTensor) -> Data:
-        raise NotImplementedError  # TODO
+        if a == 0.:
+            return self.zero_data(b.legs, b.data.dtype, b.num_domain_legs)
+        blocks = [self.block_mul(a, T) for T in b.data.blocks]
+        if len(blocks) == 0:
+            if isinstance(a, float):
+                dtype = b.data.dtype
+            else:
+                dtype = b.data.dtype.to_complex()
+        else:
+            dtype = self.block_dtype(blocks[0])
+        return FusionTreeData(b.data.coupled_sectors, blocks, b.data.domain, b.data.codomain, dtype)
 
     def infer_leg(self, block: Block, legs: list[VectorSpace | None], is_dual: bool = False,
                   is_real: bool = False) -> VectorSpace:

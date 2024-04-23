@@ -1207,9 +1207,15 @@ class AbelianBackend(Backend, BlockBackend, ABC):
     def mul(self, a: float | complex, b: BlockDiagonalTensor) -> Data:
         if a == 0.:
             return self.zero_data(b.legs, b.data.dtype, b.num_domain_legs)
-        res_blocks = [self.block_mul(a, T) for T in b.data.blocks]
-        res_dtype = b.data.dtype if len(res_blocks) == 0 else self.block_dtype(res_blocks[0])
-        return AbelianBackendData(res_dtype, res_blocks, b.data.block_inds, is_sorted=True)
+        blocks = [self.block_mul(a, T) for T in b.data.blocks]
+        if len(blocks) == 0:
+            if isinstance(a, float):
+                dtype = b.data.dtype
+            else:
+                dtype = b.data.dtype.to_complex
+        else:
+            dtype = self.block_dtype(blocks[0])
+        return AbelianBackendData(dtype, blocks, b.data.block_inds, is_sorted=True)
 
     def infer_leg(self, block: Block, legs: list[VectorSpace | None], is_dual: bool = False,
                   is_real: bool = False) -> VectorSpace:
