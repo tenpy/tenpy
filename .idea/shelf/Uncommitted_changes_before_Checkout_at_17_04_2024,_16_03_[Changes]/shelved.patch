@@ -1,0 +1,95 @@
+Index: .idea/Master.iml
+===================================================================
+diff --git a/.idea/Master.iml b/.idea/Master.iml
+--- a/.idea/Master.iml	
++++ b/.idea/Master.iml	
+@@ -4,8 +4,14 @@
+     <content url="file://$MODULE_DIR$">
+       <excludeFolder url="file://$MODULE_DIR$/venv" />
+     </content>
+-    <orderEntry type="jdk" jdkName="Python 3.10" jdkType="Python SDK" />
++    <orderEntry type="inheritedJdk" />
+     <orderEntry type="sourceFolder" forTests="false" />
+-    <orderEntry type="module" module-name="Functions.py" />
++  </component>
++  <component name="PyDocumentationSettings">
++    <option name="format" value="PLAIN" />
++    <option name="myDocStringFormat" value="Plain" />
++  </component>
++  <component name="TestRunnerService">
++    <option name="PROJECT_TEST_RUNNER" value="py.test" />
+   </component>
+ </module>
+\ No newline at end of file
+Index: PXPGC/DBChainKrylovBasis.py
+===================================================================
+diff --git a/PXPGC/DBChainKrylovBasis.py b/PXPGC/DBChainKrylovBasis.py
+--- a/PXPGC/DBChainKrylovBasis.py	
++++ b/PXPGC/DBChainKrylovBasis.py	
+@@ -1,5 +1,5 @@
+ from Functions import *
+-plt.style.use('/PXPGC/stylesheet.mplstyle')
++#plt.style.use('/PXPGC/stylesheet.mplstyle')
+ import igraph as ig
+ from igraph import Graph
+ 
+Index: PXPGC/Clustersearch.py
+===================================================================
+diff --git a/PXPGC/Clustersearch.py b/PXPGC/Clustersearch.py
+--- a/PXPGC/Clustersearch.py	
++++ b/PXPGC/Clustersearch.py	
+@@ -1,7 +1,7 @@
+ import scipy.linalg
+ 
+ from Functions import *
+-plt.style.use('/PXPGC/stylesheet.mplstyle')
++#plt.style.use('/PXPGC/stylesheet.mplstyle')
+ 
+ import igraph as ig
+ from igraph import Graph
+Index: .idea/modules.xml
+===================================================================
+diff --git a/.idea/modules.xml b/.idea/modules.xml
+--- a/.idea/modules.xml	
++++ b/.idea/modules.xml	
+@@ -2,7 +2,6 @@
+ <project version="4">
+   <component name="ProjectModuleManager">
+     <modules>
+-      <module fileurl="file:///tmp/Functions.py/.idea/Functions.py.iml" filepath="/tmp/Functions.py/.idea/Functions.py.iml" />
+       <module fileurl="file://$PROJECT_DIR$/.idea/Master.iml" filepath="$PROJECT_DIR$/.idea/Master.iml" />
+     </modules>
+   </component>
+Index: .idea/vcs.xml
+===================================================================
+diff --git a/.idea/vcs.xml b/.idea/vcs.xml
+--- a/.idea/vcs.xml	
++++ b/.idea/vcs.xml	
+@@ -1,12 +1,5 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <project version="4">
+-  <component name="GitSharedSettings">
+-    <option name="FORCE_PUSH_PROHIBITED_PATTERNS">
+-      <list>
+-        <option value="main" />
+-      </list>
+-    </option>
+-  </component>
+   <component name="VcsDirectoryMappings">
+     <mapping directory="$PROJECT_DIR$" vcs="Git" />
+   </component>
+Index: .idea/misc.xml
+===================================================================
+diff --git a/.idea/misc.xml b/.idea/misc.xml
+--- a/.idea/misc.xml	
++++ b/.idea/misc.xml	
+@@ -1,7 +1,4 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <project version="4">
+-  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.10" project-jdk-type="Python SDK" />
+-  <component name="PyCharmProfessionalAdvertiser">
+-    <option name="shown" value="true" />
+-  </component>
++  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.10 (venv)" project-jdk-type="Python SDK" />
+ </project>
+\ No newline at end of file

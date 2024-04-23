@@ -1,0 +1,824 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ChangeListManager">
+    <list default="true" id="ddc91417-0369-4890-8f91-a04646d1bdfc" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/tenpy/linalg/symmetries.py" beforeDir="false" afterPath="$PROJECT_DIR$/tenpy/linalg/symmetries.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/linalg/test_symmetries.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/linalg/test_symmetries.py" afterDir="false" />
+    </list>
+    <list id="b550dbef-21ba-407c-b9c5-d4b9d4a8d691" name="11.03.2024" comment="" />
+    <list id="ce7d06f7-f0d1-43b1-ad31-c8f44fff9ef2" name="Delete PXPGC directory" comment="" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Rebase.Settings">
+    <option name="NEW_BASE" value="TenpyMain/v2_alpha" />
+  </component>
+  <component name="Git.Settings">
+    <excluded-from-favorite>
+      <branch-storage>
+        <map>
+          <entry type="REMOTE">
+            <value>
+              <list>
+                <branch-info repo="$USER_HOME$/Desktop/Link to ge36xeh/code/Pycharm" source="origin/master" />
+              </list>
+            </value>
+          </entry>
+        </map>
+      </branch-storage>
+    </excluded-from-favorite>
+    <favorite-branches>
+      <branch-storage>
+        <map>
+          <entry type="REMOTE">
+            <value>
+              <list>
+                <branch-info repo="$USER_HOME$/Desktop/Link to ge36xeh/code/Pycharm" source="origin/main" />
+              </list>
+            </value>
+          </entry>
+        </map>
+      </branch-storage>
+    </favorite-branches>
+    <option name="PUSH_TAGS">
+      <GitPushTagMode>
+        <option name="argument" value="--tags" />
+        <option name="title" value="All" />
+      </GitPushTagMode>
+    </option>
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$USER_HOME$/Desktop/Link to ge36xeh/code/Pycharm" value="master" />
+        <entry key="$PROJECT_DIR$" value="product_symmetry" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="RESET_MODE" value="HARD" />
+    <option name="SWAP_SIDES_IN_COMPARE_BRANCHES" value="true" />
+  </component>
+  <component name="GithubPullRequestsUISettings">
+    <option name="selectedUrlAndAccountId">
+      <UrlAndAccount>
+        <option name="accountId" value="242ff936-53cd-48aa-997e-946a1294f93f" />
+        <option name="url" value="https://github.com/LudwigZw/tenpy" />
+      </UrlAndAccount>
+    </option>
+  </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProjectId" id="2K8svO1FkbuiEa0jrFQ3NqleJVm" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "Git.Branch.Popup.ShowAllRemotes": "true",
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "last_opened_file_path": "/space/ge36xeh/TNSymmetries/Tenpy",
+    "settings.editor.selected.configurable": "reference.settings.ide.settings.notifications"
+  }
+}]]></component>
+  <component name="PyConsoleOptionsProvider">
+    <option name="myPythonConsoleState">
+      <console-settings sdk-home="/space/ge36xeh/miniconda3/envs/tenpy_dev/bin/python">
+        <option name="mySdkHome" value="/space/ge36xeh/miniconda3/envs/tenpy_dev/bin/python" />
+      </console-settings>
+    </option>
+  </component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/PXPGC" />
+      <recent name="$PROJECT_DIR$" />
+    </key>
+  </component>
+  <component name="RunManager" selected="Python tests.pytest for test_symmetries.test_product_symmetry">
+    <configuration name="RenyiSpectrum" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="Master" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/PXPGC/RenyiSpectrum.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="SU2level4commutator" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="Master" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/PXPGC/SU2level4commutator.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="PythonConfigurationType" factoryName="Python">
+      <module name="Functions.py" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="main" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
+      <module name="Master" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/PXPGC/main.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="test_symmetries" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
+      <module name="Master" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="/space/ge36xeh/miniconda3/envs/tenpy_dev/bin/python" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/linalg" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/tests/linalg/test_symmetries.py" />
+      <option name="PARAMETERS" value="$FileDir$$FileDirName$" />
+      <option name="SHOW_COMMAND_LINE" value="true" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="Tox" factoryName="Tox">
+      <module name="Functions.py" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="docs" factoryName="Docutils task">
+      <module name="Functions.py" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="docutils_input_file" value="" />
+      <option name="docutils_output_file" value="" />
+      <option name="docutils_params" value="" />
+      <option name="docutils_task" value="" />
+      <option name="docutils_open_in_browser" value="false" />
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="docs" factoryName="Sphinx task">
+      <module name="Functions.py" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="docutils_input_file" value="" />
+      <option name="docutils_output_file" value="" />
+      <option name="docutils_params" value="" />
+      <option name="docutils_task" value="" />
+      <option name="docutils_open_in_browser" value="false" />
+      <method v="2" />
+    </configuration>
+    <configuration name="Python tests for " type="tests" factoryName="Autodetect" nameIsGenerated="true">
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="/space/ge36xeh/miniconda3/envs/tenpy_dev/bin/python" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <module name="" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="Python tests in BraidchainQuench.py" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+      <module name="Master" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;$PROJECT_DIR$/PXPGC/BraidchainQuench.py&quot;" />
+      <option name="_new_targetType" value="&quot;PATH&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="tests" factoryName="Doctests">
+      <module name="Functions.py" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="" />
+      <option name="CLASS_NAME" value="" />
+      <option name="METHOD_NAME" value="" />
+      <option name="FOLDER_NAME" value="" />
+      <option name="TEST_TYPE" value="TEST_SCRIPT" />
+      <option name="PATTERN" value="" />
+      <option name="USE_PATTERN" value="false" />
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="tests" factoryName="py.test">
+      <module name="Master" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;&quot;" />
+      <option name="_new_targetType" value="&quot;PATH&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="pytest for test_symmetries.test_product_symmetry" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+      <module name="Master" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/linalg" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;test_symmetries.test_product_symmetry&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="pytest for tests.linalg.test_symmetries.test_product_symmetry" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+      <module name="Master" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="/space/ge36xeh/miniconda3/envs/tenpy_dev/bin/python" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/linalg" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;tests.linalg.test_symmetries.test_product_symmetry&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <list>
+      <item itemvalue="Python.main" />
+      <item itemvalue="Python.test_symmetries" />
+      <item itemvalue="Python.RenyiSpectrum" />
+      <item itemvalue="Python.SU2level4commutator" />
+      <item itemvalue="Python tests.Python tests for " />
+      <item itemvalue="Python tests.pytest for test_symmetries.test_product_symmetry" />
+      <item itemvalue="Python tests.pytest for tests.linalg.test_symmetries.test_product_symmetry" />
+      <item itemvalue="Python tests.Python tests in BraidchainQuench.py" />
+    </list>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Python tests.pytest for test_symmetries.test_product_symmetry" />
+        <item itemvalue="Python tests.pytest for tests.linalg.test_symmetries.test_product_symmetry" />
+        <item itemvalue="Python tests.Python tests in BraidchainQuench.py" />
+        <item itemvalue="Python.SU2level4commutator" />
+        <item itemvalue="Python.RenyiSpectrum" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="SvnConfiguration">
+    <configuration>$USER_HOME$/.subversion</configuration>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="ddc91417-0369-4890-8f91-a04646d1bdfc" name="Changes" comment="" />
+      <changelist id="ce7d06f7-f0d1-43b1-ad31-c8f44fff9ef2" name="Delete PXPGC directory" comment="" />
+      <changelist id="b550dbef-21ba-407c-b9c5-d4b9d4a8d691" name="11.03.2024" comment="" />
+      <created>1673367773482</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1673367773482</updated>
+    </task>
+    <task id="LOCAL-00003" summary="11.01.2023">
+      <created>1673443939839</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1673443939839</updated>
+    </task>
+    <task id="LOCAL-00004" summary="11.01.2023">
+      <created>1673444914160</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1673444914160</updated>
+    </task>
+    <task id="LOCAL-00005" summary="11.01.2023">
+      <created>1673450196599</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1673450196599</updated>
+    </task>
+    <task id="LOCAL-00006" summary="11.01.2023">
+      <created>1673455149515</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1673455149515</updated>
+    </task>
+    <task id="LOCAL-00007" summary="13.01.2023">
+      <created>1673608650995</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1673608650995</updated>
+    </task>
+    <task id="LOCAL-00008" summary="13.01.2023">
+      <created>1673617252310</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1673617252310</updated>
+    </task>
+    <task id="LOCAL-00009" summary="13.01.2023">
+      <created>1673629720246</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1673629720246</updated>
+    </task>
+    <task id="LOCAL-00010" summary="20.01.2023">
+      <created>1674219396628</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1674219396628</updated>
+    </task>
+    <task id="LOCAL-00011" summary="20.01.2023">
+      <created>1674480335347</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1674480335347</updated>
+    </task>
+    <task id="LOCAL-00012" summary="25.01.2023">
+      <created>1674642828897</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1674642828897</updated>
+    </task>
+    <task id="LOCAL-00013" summary="25.01.2023">
+      <created>1674667820799</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1674667820799</updated>
+    </task>
+    <task id="LOCAL-00014" summary="26.01.2023">
+      <created>1674721482348</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1674721482348</updated>
+    </task>
+    <task id="LOCAL-00015" summary="26.01.2023">
+      <created>1674751220703</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1674751220703</updated>
+    </task>
+    <task id="LOCAL-00016" summary="07.02.2023">
+      <created>1675789163514</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1675789163514</updated>
+    </task>
+    <task id="LOCAL-00017" summary="22.02.2023">
+      <created>1677084694236</created>
+      <option name="number" value="00017" />
+      <option name="presentableId" value="LOCAL-00017" />
+      <option name="project" value="LOCAL" />
+      <updated>1677084694236</updated>
+    </task>
+    <task id="LOCAL-00018" summary="22.02.2023">
+      <created>1677168436058</created>
+      <option name="number" value="00018" />
+      <option name="presentableId" value="LOCAL-00018" />
+      <option name="project" value="LOCAL" />
+      <updated>1677168436058</updated>
+    </task>
+    <task id="LOCAL-00019" summary="24.02.2023">
+      <created>1677252267121</created>
+      <option name="number" value="00019" />
+      <option name="presentableId" value="LOCAL-00019" />
+      <option name="project" value="LOCAL" />
+      <updated>1677252267121</updated>
+    </task>
+    <task id="LOCAL-00020" summary="24.02.2023">
+      <created>1677258408555</created>
+      <option name="number" value="00020" />
+      <option name="presentableId" value="LOCAL-00020" />
+      <option name="project" value="LOCAL" />
+      <updated>1677258408555</updated>
+    </task>
+    <task id="LOCAL-00021" summary="01.03.2023">
+      <created>1677686837820</created>
+      <option name="number" value="00021" />
+      <option name="presentableId" value="LOCAL-00021" />
+      <option name="project" value="LOCAL" />
+      <updated>1677686837820</updated>
+    </task>
+    <task id="LOCAL-00022" summary="07.03.2023">
+      <created>1678195336997</created>
+      <option name="number" value="00022" />
+      <option name="presentableId" value="LOCAL-00022" />
+      <option name="project" value="LOCAL" />
+      <updated>1678195336997</updated>
+    </task>
+    <task id="LOCAL-00023" summary="07.03.2023">
+      <created>1678207962033</created>
+      <option name="number" value="00023" />
+      <option name="presentableId" value="LOCAL-00023" />
+      <option name="project" value="LOCAL" />
+      <updated>1678207962033</updated>
+    </task>
+    <task id="LOCAL-00024" summary="08.03.2023">
+      <created>1678290423677</created>
+      <option name="number" value="00024" />
+      <option name="presentableId" value="LOCAL-00024" />
+      <option name="project" value="LOCAL" />
+      <updated>1678290423677</updated>
+    </task>
+    <task id="LOCAL-00025" summary="10.03.2023">
+      <created>1678456632715</created>
+      <option name="number" value="00025" />
+      <option name="presentableId" value="LOCAL-00025" />
+      <option name="project" value="LOCAL" />
+      <updated>1678456632715</updated>
+    </task>
+    <task id="LOCAL-00026" summary="13.03.2023">
+      <created>1678730301842</created>
+      <option name="number" value="00026" />
+      <option name="presentableId" value="LOCAL-00026" />
+      <option name="project" value="LOCAL" />
+      <updated>1678730301842</updated>
+    </task>
+    <task id="LOCAL-00027" summary="13.03.2023">
+      <created>1678813115654</created>
+      <option name="number" value="00027" />
+      <option name="presentableId" value="LOCAL-00027" />
+      <option name="project" value="LOCAL" />
+      <updated>1678813115654</updated>
+    </task>
+    <task id="LOCAL-00028" summary="15.03.2023">
+      <created>1678898650352</created>
+      <option name="number" value="00028" />
+      <option name="presentableId" value="LOCAL-00028" />
+      <option name="project" value="LOCAL" />
+      <updated>1678898650352</updated>
+    </task>
+    <task id="LOCAL-00029" summary="16.03.2023">
+      <created>1678985707219</created>
+      <option name="number" value="00029" />
+      <option name="presentableId" value="LOCAL-00029" />
+      <option name="project" value="LOCAL" />
+      <updated>1678985707219</updated>
+    </task>
+    <task id="LOCAL-00030" summary="17.03.2023">
+      <created>1679069139230</created>
+      <option name="number" value="00030" />
+      <option name="presentableId" value="LOCAL-00030" />
+      <option name="project" value="LOCAL" />
+      <updated>1679069139230</updated>
+    </task>
+    <task id="LOCAL-00031" summary="23.03.2023">
+      <created>1679588036547</created>
+      <option name="number" value="00031" />
+      <option name="presentableId" value="LOCAL-00031" />
+      <option name="project" value="LOCAL" />
+      <updated>1679588036547</updated>
+    </task>
+    <task id="LOCAL-00032" summary="05.04.2023">
+      <created>1680709088055</created>
+      <option name="number" value="00032" />
+      <option name="presentableId" value="LOCAL-00032" />
+      <option name="project" value="LOCAL" />
+      <updated>1680709088055</updated>
+    </task>
+    <task id="LOCAL-00033" summary="05.04.2023">
+      <created>1680709709101</created>
+      <option name="number" value="00033" />
+      <option name="presentableId" value="LOCAL-00033" />
+      <option name="project" value="LOCAL" />
+      <updated>1680709709101</updated>
+    </task>
+    <task id="LOCAL-00034" summary="06.04.2023">
+      <created>1680800064204</created>
+      <option name="number" value="00034" />
+      <option name="presentableId" value="LOCAL-00034" />
+      <option name="project" value="LOCAL" />
+      <updated>1680800064204</updated>
+    </task>
+    <task id="LOCAL-00035" summary="021.04.2023">
+      <created>1682088880647</created>
+      <option name="number" value="00035" />
+      <option name="presentableId" value="LOCAL-00035" />
+      <option name="project" value="LOCAL" />
+      <updated>1682088880647</updated>
+    </task>
+    <task id="LOCAL-00036" summary="26.04.2023">
+      <created>1682504826175</created>
+      <option name="number" value="00036" />
+      <option name="presentableId" value="LOCAL-00036" />
+      <option name="project" value="LOCAL" />
+      <updated>1682504826175</updated>
+    </task>
+    <task id="LOCAL-00037" summary="28.04.2023">
+      <created>1682689324872</created>
+      <option name="number" value="00037" />
+      <option name="presentableId" value="LOCAL-00037" />
+      <option name="project" value="LOCAL" />
+      <updated>1682689324873</updated>
+    </task>
+    <task id="LOCAL-00038" summary="28.04.2023">
+      <created>1682694312912</created>
+      <option name="number" value="00038" />
+      <option name="presentableId" value="LOCAL-00038" />
+      <option name="project" value="LOCAL" />
+      <updated>1682694312912</updated>
+    </task>
+    <task id="LOCAL-00039" summary="02.05.2023">
+      <created>1683034295965</created>
+      <option name="number" value="00039" />
+      <option name="presentableId" value="LOCAL-00039" />
+      <option name="project" value="LOCAL" />
+      <updated>1683034295965</updated>
+    </task>
+    <task id="LOCAL-00040" summary="03.05.2023">
+      <created>1683131116078</created>
+      <option name="number" value="00040" />
+      <option name="presentableId" value="LOCAL-00040" />
+      <option name="project" value="LOCAL" />
+      <updated>1683131116078</updated>
+    </task>
+    <task id="LOCAL-00041" summary="12.05.2023">
+      <created>1683905871572</created>
+      <option name="number" value="00041" />
+      <option name="presentableId" value="LOCAL-00041" />
+      <option name="project" value="LOCAL" />
+      <updated>1683905871572</updated>
+    </task>
+    <task id="LOCAL-00042" summary="13.06.2023">
+      <created>1686649161960</created>
+      <option name="number" value="00042" />
+      <option name="presentableId" value="LOCAL-00042" />
+      <option name="project" value="LOCAL" />
+      <updated>1686649161960</updated>
+    </task>
+    <task id="LOCAL-00043" summary="13.06.2023">
+      <created>1687860361335</created>
+      <option name="number" value="00043" />
+      <option name="presentableId" value="LOCAL-00043" />
+      <option name="project" value="LOCAL" />
+      <updated>1687860361335</updated>
+    </task>
+    <task id="LOCAL-00044" summary="27.06.2023">
+      <created>1687874157073</created>
+      <option name="number" value="00044" />
+      <option name="presentableId" value="LOCAL-00044" />
+      <option name="project" value="LOCAL" />
+      <updated>1687874157073</updated>
+    </task>
+    <task id="LOCAL-00045" summary="30.06.2023">
+      <created>1688137439236</created>
+      <option name="number" value="00045" />
+      <option name="presentableId" value="LOCAL-00045" />
+      <option name="project" value="LOCAL" />
+      <updated>1688137439236</updated>
+    </task>
+    <task id="LOCAL-00046" summary="17.08.2023">
+      <created>1692288354727</created>
+      <option name="number" value="00046" />
+      <option name="presentableId" value="LOCAL-00046" />
+      <option name="project" value="LOCAL" />
+      <updated>1692288354727</updated>
+    </task>
+    <task id="LOCAL-00047" summary="11.03.2024">
+      <created>1710154739984</created>
+      <option name="number" value="00047" />
+      <option name="presentableId" value="LOCAL-00047" />
+      <option name="project" value="LOCAL" />
+      <updated>1710154739984</updated>
+    </task>
+    <task id="LOCAL-00048" summary="11.03.2024">
+      <created>1710164248502</created>
+      <option name="number" value="00048" />
+      <option name="presentableId" value="LOCAL-00048" />
+      <option name="project" value="LOCAL" />
+      <updated>1710164248502</updated>
+    </task>
+    <task id="LOCAL-00049" summary="11.03.2024">
+      <created>1710164386853</created>
+      <option name="number" value="00049" />
+      <option name="presentableId" value="LOCAL-00049" />
+      <option name="project" value="LOCAL" />
+      <updated>1710164386853</updated>
+    </task>
+    <task id="LOCAL-00050" summary="14.03.2024">
+      <created>1710427934264</created>
+      <option name="number" value="00050" />
+      <option name="presentableId" value="LOCAL-00050" />
+      <option name="project" value="LOCAL" />
+      <updated>1710427934264</updated>
+    </task>
+    <task id="LOCAL-00051" summary="Implemented the F and R symbol method for the product symmetry class.&#10;Also implemented tests for product symmetries and modified the common checks to take into account non integer quantum dimensions arising from product symmetries with anyons.">
+      <created>1713367319101</created>
+      <option name="number" value="00051" />
+      <option name="presentableId" value="LOCAL-00051" />
+      <option name="project" value="LOCAL" />
+      <updated>1713367319102</updated>
+    </task>
+    <option name="localTasksCounter" value="52" />
+    <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State>
+              <option name="FILTERS">
+                <map>
+                  <entry key="branch">
+                    <value>
+                      <list>
+                        <option value="TenpyMain/product_symmetry" />
+                      </list>
+                    </value>
+                  </entry>
+                </map>
+              </option>
+            </State>
+          </value>
+        </entry>
+      </map>
+    </option>
+    <option name="RECENT_FILTERS">
+      <map>
+        <entry key="Branch">
+          <value>
+            <list>
+              <RecentGroup>
+                <option name="FILTER_VALUES">
+                  <option value="TenpyMain/product_symmetry" />
+                </option>
+              </RecentGroup>
+              <RecentGroup>
+                <option name="FILTER_VALUES">
+                  <option value="origin/main" />
+                </option>
+              </RecentGroup>
+            </list>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <ignored-roots>
+      <path value="$USER_HOME$/Desktop/Link to ge36xeh/code/Pycharm" />
+      <path value="$PROJECT_DIR$" />
+      <path value="$PROJECT_DIR$/venv" />
+    </ignored-roots>
+    <MESSAGE value="24.02.2023" />
+    <MESSAGE value="01.03.2023" />
+    <MESSAGE value="07.03.2023" />
+    <MESSAGE value="08.03.2023" />
+    <MESSAGE value="10.03.2023" />
+    <MESSAGE value="13.03.2023" />
+    <MESSAGE value="15.03.2023" />
+    <MESSAGE value="16.03.2023" />
+    <MESSAGE value="17.03.2023" />
+    <MESSAGE value="23.03.2023" />
+    <MESSAGE value="05.04.2023" />
+    <MESSAGE value="06.04.2023" />
+    <MESSAGE value="021.04.2023" />
+    <MESSAGE value="26.04.2023" />
+    <MESSAGE value="28.04.2023" />
+    <MESSAGE value="02.05.2023" />
+    <MESSAGE value="03.05.2023" />
+    <MESSAGE value="12.05.2023" />
+    <MESSAGE value="13.06.2023" />
+    <MESSAGE value="27.06.2023" />
+    <MESSAGE value="30.06.2023" />
+    <MESSAGE value="17.08.2023" />
+    <MESSAGE value="11.03.2024" />
+    <MESSAGE value="14.03.2024" />
+    <MESSAGE value="Implemented the F and R symbol method for the product symmetry class.&#10;Also implemented tests for product symmetries and modified the common checks to take into account non integer quantum dimensions arising from product symmetries with anyons." />
+    <option name="LAST_COMMIT_MESSAGE" value="Implemented the F and R symbol method for the product symmetry class.&#10;Also implemented tests for product symmetries and modified the common checks to take into account non integer quantum dimensions arising from product symmetries with anyons." />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <default-breakpoints>
+        <breakpoint type="python-exception">
+          <properties notifyOnTerminate="true" exception="BaseException">
+            <option name="notifyOnTerminate" value="true" />
+          </properties>
+        </breakpoint>
+      </default-breakpoints>
+    </breakpoint-manager>
+    <watches-manager>
+      <configuration name="PythonConfigurationType">
+        <watch expression="s" language="Python" />
+        <watch expression="i" />
+      </configuration>
+    </watches-manager>
+  </component>
+</project>

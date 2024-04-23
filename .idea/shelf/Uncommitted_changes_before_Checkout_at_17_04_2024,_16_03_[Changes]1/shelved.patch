@@ -1,0 +1,262 @@
+Index: PXPGC/Subsyslevelspacing.py
+===================================================================
+diff --git a/PXPGC/Subsyslevelspacing.py b/PXPGC/Subsyslevelspacing.py
+new file mode 100644
+--- /dev/null	
++++ b/PXPGC/Subsyslevelspacing.py	
+@@ -0,0 +1,255 @@
++import numpy as np
++import scipy.linalg
++
++from Functions import *
++
++def doublebraidchainbasisfixedBC(L, fillingA, fillingB, BC='obc'):
++    if L%2 ==0:
++        L2=L//2
++    else:
++        L2=(L-1)/2
++
++
++    def realspacebinbasis(L, filling):
++
++        def permute(start):
++            a = sorted(start)
++            n = len(a) - 1
++            while True:
++                yield ''.join(a)
++
++                for j in range(n - 1, -1, -1):
++                    if a[j] < a[j + 1]:
++                        break
++                else:
++                    return
++
++                v = a[j]
++                for k in range(n, j, -1):
++                    if v < a[k]:
++                        break
++
++                a[j], a[k] = a[k], a[j]
++
++                a[j + 1:] = a[j + 1:][::-1]
++
++        if L==filling:
++            start = '0'
++        else:
++            start = '1'
++        for i in range((L - filling) - 1):
++            start += '1'
++        start = start.zfill(L)
++
++        return [b for b in permute(start)]
++
++    # sice fusion chain starts with one, the first element in each basis state needs to be tau=0
++    def fusionbasisobc(filling):
++        dim = filling-1
++        bas = PXPobc_basis(dim)
++        binbas = []
++        for i in range(len(bas)):
++            state = bas[i]
++            if state[-1]==1:
++                bstr = '0'+''.join(str(i) for i in state)
++                binbas.append(bstr)
++        return binbas
++
++    def fusionbasispbc(filling):
++        dim = filling
++        bas = PXPpbc_basis(dim)
++        binbas = []
++        for i in range(len(bas)):
++            state = bas[i]
++            bstr = ''.join(str(i) for i in state)
++            binbas.append(bstr)
++        return binbas
++
++    realbas1 = realspacebinbasis(L2, fillingA)
++    realbas2 = realspacebinbasis(L2, fillingB)
++    realbas=[]
++    for i in range(len(realbas1)):
++        for j in range(len(realbas2)):
++            bas=['0']*L
++            for k in range(0,L,2):
++                bas[k]=realbas1[i][k//2]
++            for k in range(1,L,2):
++                bas[k]=realbas2[j][(k-1)//2]
++
++            realbas.append(''.join(x for x in bas))
++
++    realbas = dict(list(enumerate([i for i in realbas])))
++
++
++    filling=fillingA+fillingB
++
++    if BC=='obc':
++        fusionbas = dict(list(enumerate(fusionbasisobc(filling))))
++    else:
++        fusionbas = dict(list(enumerate(fusionbasispbc(filling))))
++
++    conbasis=[]
++    for i in range(len(realbas)):
++        for j in range(len(fusionbas)):
++            new=realbas[i]+fusionbas[j]
++            conbasis.append(new)
++
++    conbasis=dict(list(enumerate(conbasis)))
++
++    return conbasis, realbas, fusionbas
++
++
++
++
++def Krylovbas(initstate, full, L, fsubspace, H):
++    # Gram-Schmidt with normalized initial vector
++    Vs=[]
++    #Ws=[]
++    Ventries=[]
++
++    w = np.array(initstate[:])
++    #Ws.append(w)
++    v = w[:]
++    Vs.append(v)
++
++
++    for i in range(H.shape[0]):
++
++        w=H@w
++        w[np.abs(w)<10**-13]=0
++        if scipy.linalg.norm(w) <10**-15:
++            print('W Norm: ', scipy.linalg.norm(w))
++            break
++
++        w=w/scipy.linalg.norm(w)
++        #Ws.append(w)
++        v=w[:]
++        for j in range(len(Vs)):
++            v-=np.vdot(Vs[j],v)*Vs[j]
++
++            # for m in range(len(v)):
++            #     if np.abs(v[m])>10**-13:
++            #         if str(full[m][L:]) != fsubspace:
++            #             print(str(full[m][L:]))
++            #             # print(v[m])
++            #             v[m]=0
++            #
++            #     elif np.abs(v[m])!=0:
++            #         v[m]=0
++
++
++        if scipy.linalg.norm(v)<10**-13:
++            print('V Norm: ', scipy.linalg.norm(v))
++            break
++
++        #print(scipy.linalg.norm(v))
++        v=v/scipy.linalg.norm(v)
++        Vs.append(v)
++
++        ents = []
++        for k in range(len(v)):
++            if np.abs(v[k])>10**-13:
++                ents.append(k)
++        Ventries.append(ents)
++
++    return Vs,Ventries
++
++
++
++
++
++
++def GramSchmidt(A):
++    M = A.shape[0]
++    N = A.shape[1]
++    assert(M >= N)
++    Q = np.zeros((M,N),dtype=complex)
++    for k in range(0,N):
++        Q[:,k] = A[:,k][:]
++        for j in range(0,k):
++            Q[:,k] = Q[:,k] - np.vdot(Q[:,j],A[:,k])*Q[:,j]
++
++        if linalg.norm(Q[:,k]) < 10**-10:
++            return Q
++
++        Q[:,k] = (1.0 / linalg.norm(Q[:,k])) * Q[:,k]
++    return Q
++
++
++def levelspacing2(eigs):
++    eigs=sorted(eigs)
++    eigs = np.around(eigs, decimals=12)
++    dele = []
++    for j in range(len(eigs) - 1):
++        if eigs[j + 1] == eigs[j]:
++            dele.append(j + 1)
++    eigs = np.delete(eigs, dele)
++    ratio = np.array([min(eigs[w + 1] - eigs[w], eigs[w + 2] - eigs[w + 1]) / max(eigs[w + 1] - eigs[w], eigs[w + 2] - eigs[w + 1]) for w in range(eigs.shape[0] - 2)])
++
++    return ratio
++
++
++
++if __name__ == '__main__':
++
++    L=14
++    fillingA=4
++    fillingB=2
++    theta=-1/10
++
++
++    full,real,fusion=doublebraidchainbasisfixedBC(L,fillingA,fillingB)
++    invfull = dict((tuple(v), k) for k, v in full.items())
++    invfusion = dict((tuple(v), k) for k, v in fusion.items())
++
++
++    print(len(full))
++    #print(full)
++
++    H=doublebraidchainH(L,full, invfull,fusion,invfusion,1,-1/10)
++
++
++    eH=scipy.linalg.expm(1.j*4.63*H.toarray())
++    #print(np.ceil(np.round(np.abs(eH), 1)))
++    eH[np.abs(eH)<10**-13]=0
++    communities = clustersearch(np.ceil(np.abs(eH)))
++    lens = []
++    # for i in communities:
++    #     print(len(i), sorted(i))
++    #     lens.append(len(i))
++    #
++    # print(len(communities))
++
++    maxcomm=len(communities[0])
++    print(maxcomm)
++
++    Hsub=np.zeros([maxcomm,maxcomm],dtype=complex)
++    for i in range(maxcomm):
++        for j in range(maxcomm):
++            Hsub[i,j]=H[communities[0][i], communities[0][j]]
++
++    e,v=np.linalg.eigh(Hsub)
++
++    spacing=levelspacing2(e)
++
++    #np.savetxt(f'/space/ge36xeh/AnyonChain/SubsysLevelspacing/spacing{L}_{fillingA}_{fillingB}_{theta}.txt',spacing)
++
++    plt.figure(figsize=[14, 14 / 1.618])
++    # plt.scatter(np.linspace(0,1,len(sp)),sp)
++    plt.hist(spacing, density=True, bins=20, histtype='step')
++
++    x = np.linspace(0, 1, 100)
++    p = POIpdf(x)
++    go = GOEpdf(x)
++    gu = GUEpdf(x)
++    plt.plot(x, p, label='Poisson')
++    plt.plot(x, go,label='GOE')
++    plt.plot(x, gu,label='GUE')
++
++    plt.legend()
++    plt.xlabel('r')
++    plt.ylabel('P(r)')
++
++
++    plt.show()
++

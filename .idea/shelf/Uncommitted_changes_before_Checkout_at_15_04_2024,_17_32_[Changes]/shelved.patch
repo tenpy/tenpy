@@ -1,0 +1,70 @@
+Index: PXPGC/Autocorrelator NNNAHC2.py
+===================================================================
+diff --git a/PXPGC/Autocorrelator NNNAHC2.py b/PXPGC/Autocorrelator NNNAHC2.py
+--- a/PXPGC/Autocorrelator NNNAHC2.py	
++++ b/PXPGC/Autocorrelator NNNAHC2.py	
+@@ -3,7 +3,7 @@
+ 
+ if __name__ == '__main__':
+     ### Calculate <T| n_L/2(t=0) e^{iHt} n_i(0) e^{-iHt} |T> autocorrelation function for infinite temperature state####
+-    L=22
++    L=12
+     fillingA=4
+     fillingB=1
+     theta=0
+@@ -36,6 +36,9 @@
+             brastate[i]*=0
+ 
+ 
++    oz0=np.abs(np.inner(np.conj(brastate), ketstate))
++
++
+     steps = 1000
+     start = 0
+     stop = 10
+@@ -45,6 +48,21 @@
+ 
+     ovlist=[]
+ 
++    ozf=[]
++    endbra = sparse.linalg.expm_multiply(-1.j * dt*steps * H, ketstate)
++    endket= np.conj(endbra).copy()
++
++    endbraP=endbra.copy()
++    for b in bs:
++        for i, state in full.items():
++            if state[b] == '1': # This must be a B site!!!!!
++                endbraP[i]*=0
++        ozf.append(np.abs(np.inner(np.conj(endbraP), endket)))
++        endbraP=endbra.copy()
++
++
++
++
+ 
+     for t in tqdm(ts):
+ 
+@@ -55,20 +73,21 @@
+                 if state[n] == '1':  # This must be a B site!!!!!
+                     pket[i]*=0
+ 
+-            ovs= np.abs(np.inner(np.conj(brastate), pket))
++            ovs= np.abs(np.inner(np.conj(brastate), pket))-ozf[n//2]*oz0
+             ovlist.append(ovs)
+ 
+         brastate = sparse.linalg.expm_multiply(-1.j * dt * H, brastate)
+         ketstate = sparse.linalg.expm_multiply(-1.j * dt * H, ketstate)
+ 
++
+         ovarr=np.array(ovlist)
+         sitecorr.append(ovarr)
+         ovlist=[]
+ 
+ 
++
+     fig, ax = plt.subplots(1, 1)
+ 
+-
+     #ovarr/=np.max(ovarr)
+ 
+ 

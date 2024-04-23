@@ -1,0 +1,17 @@
+Index: PXPGC/Autocorrelator NNNAHC2.py
+===================================================================
+diff --git a/PXPGC/Autocorrelator NNNAHC2.py b/PXPGC/Autocorrelator NNNAHC2.py
+--- a/PXPGC/Autocorrelator NNNAHC2.py	
++++ b/PXPGC/Autocorrelator NNNAHC2.py	
+@@ -66,6 +66,11 @@
+     fig, ax = plt.subplots(1, 1)
+ 
+ 
++
++
++
++
++
+     #ovarr/=np.max(ovarr)
+ 
+ 
