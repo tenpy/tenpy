@@ -22,11 +22,14 @@ from tenpy.algorithms import tebd, tdvp, mpo_evolution, exact_diag
     ('finite', 'I', 'SVD'),
     ('finite', 'I', 'variational'),
     ('finite', 'II', 'variational'),
+    ('finite', 'I', 'variationalQR'),
+    ('finite', 'II', 'variationalQR'),
     ('finite', 'I', 'zip_up'),
     ('finite', 'II', 'zip_up'),
     ('infinite', 'I', 'SVD'),
     ('infinite', 'II', 'SVD'),
     ('infinite', 'II', 'variational'),
+    ('infinite', 'II', 'variationalQR'),
 ])
 @pytest.mark.slow
 def test_ExpMPOEvolution(bc_MPS, approximation, compression, g=1.5):
