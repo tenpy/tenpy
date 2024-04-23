@@ -536,7 +536,17 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
 
     def almost_equal(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, rtol: float, atol: float
                      ) -> bool:
-        raise NotImplementedError  # TODO
+        for i, j in _iter_common_noncommon_sorted_arrays(a.data.coupled_sectors, b.data.coupled_sectors):
+            if j is None:
+                if self.block_max_abs(a.data.blocks[i]) > atol:
+                    return False
+            if i is None:
+                if self.block_max_abs(b.data.blocks[j]) > atol:
+                    return False
+            else:
+                if not self.block_allclose(a.data.blocks[i], b.data.blocks[j], rtol=rtol, atol=atol):
+                    return False
+        return True
 
     def squeeze_legs(self, a: BlockDiagonalTensor, idcs: list[int]) -> Data:
         raise NotImplementedError  # TODO
