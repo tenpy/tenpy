@@ -5,7 +5,7 @@ import numpy.testing as npt
 import pytest
 import scipy
 
-from tenpy.linalg import sparse, tensors, spaces
+from tenpy.linalg import sparse, tensors, spaces, backends
 from tenpy.linalg.backends.backend_factory import get_backend
 from tenpy.linalg.tensors import Tensor, BlockDiagonalTensor, Shape, Dtype, almost_equal
 
@@ -81,10 +81,17 @@ def test_SumLinearOperator(make_compatible_tensor):
     print('single operator')
     op = sparse.SumLinearOperator(op1)
     # check matvec correct
+    
     assert almost_equal(op.matvec(vec), factor1 *  vec)
     # check access to attributes of original_operator
     assert op.some_weird_attribute == 'arbitrary value'
     assert op.some_unrelated_function(2) == 4
+
+    if isinstance(T.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError, match='eye_data not implemented'):
+            check_to_tensor(op, vec)
+        return  # TODO
+    
     check_to_tensor(op, vec)
 
     print('two operators')
@@ -112,6 +119,12 @@ def test_ShiftedLinearOperator(make_compatible_tensor):
     assert almost_equal(op.matvec(vec), (factor + shift) * vec)
     assert op.some_weird_attribute == 'arbitrary value'
     assert op.some_unrelated_function(2) == 4
+
+    if isinstance(vec.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError, match='eye_data not implemented'):
+            check_to_tensor(op, vec)
+        return  # TODO
+    
     check_to_tensor(op, vec)
 
 
@@ -123,6 +136,12 @@ def test_ProjectedLinearOperator(make_compatible_tensor, penalty, project_operat
     assert (o1_norm := o1.norm()) > 0
     o1 = o1 / o1_norm
     o2 = make_compatible_tensor(legs=[a, b], labels=['a', 'b'])
+
+    if isinstance(vec.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError, match='inner not implemented'):
+            o2 = o2 - o1.inner(o2) * o1
+        return  # TODO
+    
     o2 = o2 - o1.inner(o2) * o1
     assert (o2_norm := o2.norm()) > 0
     o2 = o2 / o2_norm
@@ -156,6 +175,12 @@ def test_NumpyArrayLinearOperator_sector(make_compatible_space, make_compatible_
     a = make_compatible_space()
     b = make_compatible_space()
     H = make_compatible_tensor(legs=[a, b.dual, a.dual, b], labels=['a', 'b*', 'a*', 'b'])
+
+    if isinstance(H.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError, match='conj not implemented'):
+            H = H + H.conj()
+        return  # TODO
+    
     H = H + H.conj()
     #
     H_np = H.to_numpy_ndarray(leg_order=['a', 'b*', 'a*', 'b'])
@@ -194,6 +219,12 @@ def test_gram_schmidt(make_compatible_tensor, num_legs, num_vecs=5, tol=1e-15):
     vecs_old = [first] + [make_compatible_tensor(first.legs) for _ in range(num_vecs - 1)]
     # note: depending on the dimension of `legs` (which is random),
     # some of those can be linearly dependent!
+
+    if isinstance(first.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError, match='inner not implemented'):
+            vecs_new = sparse.gram_schmidt(vecs_old)
+        return  # TODO
+    
     vecs_new = sparse.gram_schmidt(vecs_old)  # rtol=tol is too small for some random spaces
     assert len(vecs_new) <= len(vecs_old)
     ovs = np.zeros((len(vecs_new), len(vecs_new)), dtype=np.complex128)

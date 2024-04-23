@@ -34,6 +34,15 @@ def test_svd(make_compatible_tensor, new_vh_leg_dual, all_labels, l_labels, r_la
     print(f'leg bipartition {all_labels} -> {l_labels} & {r_labels}')
     T: tensors.BlockDiagonalTensor = make_compatible_tensor(labels=all_labels, max_block_size=3)
     #  T_dense = T.to_numpy_ndarray()
+
+    if isinstance(T.backend, backends.FusionTreeBackend):
+        # TODO
+        with pytest.raises(NotImplementedError, match='permute_legs not implemented|svd not implemented'):
+            _ = matrix_operations.svd(
+                T, l_labels, r_labels, new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual
+            )
+        return
+        
     U, S, Vd = matrix_operations.svd(
         T, l_labels, r_labels, new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual
     )
@@ -71,6 +80,16 @@ def test_truncated_svd(make_compatible_tensor, new_vh_leg_dual, svd_min, normali
     T: tensors.BlockDiagonalTensor = make_compatible_tensor(
         labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3
     )
+
+    if isinstance(T.backend, backends.FusionTreeBackend):
+        # TODO
+        with pytest.raises(NotImplementedError, match='permute_legs not implemented|svd not implemented'):
+            _ = matrix_operations.truncated_svd(
+                T, ['l1', 'l2'], ['r1', 'r2'], new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual,
+                truncation_options=dict(svd_min=svd_min), normalize_to=normalize_to
+            )
+        return
+    
     U, S, Vd, err, renormalize = matrix_operations.truncated_svd(
         T, ['l1', 'l2'], ['r1', 'r2'], new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual,
         truncation_options=dict(svd_min=svd_min), normalize_to=normalize_to
@@ -114,6 +133,14 @@ def test_eig_based_svd(make_compatible_tensor, compute_u, compute_vh, new_vh_leg
     u_legs = ['l1', 'l2']
     vh_legs = ['r1', 'r2']
     new_labels = ['cr', 'cl']
+
+    if isinstance(T.backend, backends.FusionTreeBackend):
+        # TODO
+        with pytest.raises(NotImplementedError, match='permute_legs not implemented|svd not implemented'):
+            _ = matrix_operations.svd(
+                T, u_legs=u_legs, new_labels=new_labels, vh_legs=vh_legs, new_vh_leg_dual=new_vh_leg_dual
+            )
+        return
     
     svd_U, svd_S, svd_Vh = matrix_operations.svd(
         T, u_legs=u_legs, new_labels=new_labels, vh_legs=vh_legs, new_vh_leg_dual=new_vh_leg_dual
@@ -180,6 +207,17 @@ def test_truncated_eig_based_svd(make_compatible_tensor, compute_u, compute_vh, 
         labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3,
         all_blocks=True,  # TODO debug with missing blocks!
     )
+
+    if isinstance(T.backend, backends.FusionTreeBackend):
+        # TODO
+        with pytest.raises(NotImplementedError, match='permute_legs not implemented|svd not implemented'):
+            _ = matrix_operations.truncated_eig_based_svd(
+                T, compute_u=compute_u, compute_vh=compute_vh, u_legs=['l1', 'l2'], vh_legs=['r1', 'r2'],
+                new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual,
+                truncation_options=dict(svd_min=svd_min), normalize_to=normalize_to
+            )
+        return
+    
     U, S, Vh, err, renormalize = matrix_operations.truncated_eig_based_svd(
         T, compute_u=compute_u, compute_vh=compute_vh, u_legs=['l1', 'l2'], vh_legs=['r1', 'r2'],
         new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual,
@@ -250,6 +288,13 @@ def test_qr(make_compatible_tensor, new_r_leg_dual, full):
         labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3
     )
 
+    if isinstance(T.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError, match='permute_legs not implemented|qr not implemented'):
+            _ = matrix_operations.qr(T, q_legs=['l1', 'l2'], r_legs=['r1', 'r2'],
+                                     new_labels=['q', 'q*'], new_r_leg_dual=new_r_leg_dual,
+                                     full=full)
+        return
+
     for comment, q_legs, r_legs in [
         ('all labelled', ['l1', 'l2'], ['r1', 'r2']),
         ('all numbered', [2, 0], [1, 3]),
@@ -283,6 +328,13 @@ def test_lq(make_compatible_tensor, new_l_leg_dual, full):
     T: tensors.BlockDiagonalTensor = make_compatible_tensor(
         labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3
     )
+
+    if isinstance(T.backend, backends.FusionTreeBackend):
+        # TODO
+        with pytest.raises(NotImplementedError, match='permute_legs not implemented|qr not implemented'):
+            _ = matrix_operations.lq(T, l_legs=['l1', 'l2'], q_legs=['r1', 'r2'], new_labels=['q*', 'q'],
+                                     new_l_leg_dual=new_l_leg_dual, full=full)
+        return
 
     for comment, l_legs, q_legs in [
         ('all labelled', ['l1', 'l2'], ['r1', 'r2']),
@@ -327,6 +379,12 @@ def test_eigh(make_compatible_tensor, make_compatible_space, real, sort, new_leg
     T: tensors.BlockDiagonalTensor = make_compatible_tensor(
         legs=[a, b.dual, b, a.dual], real=real, labels=['a', 'b*', 'b', 'a*']
     )
+
+    if isinstance(T.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError, match='conj not implemented'):
+            T = .5 * (T + T.conj())
+        return  # TODO
+    
     T = .5 * (T + T.conj())
 
     print('check that we have constructed a hermitian tensor')
@@ -388,7 +446,8 @@ def test_eigh(make_compatible_tensor, make_compatible_space, real, sort, new_leg
 @pytest.mark.parametrize('real', [True, False])
 @pytest.mark.parametrize('mode', ['tensor', 'matrix', 'diagonal', 'scalar'])
 @pytest.mark.parametrize('func', ['exp', 'log'])
-def test_power_series_funcs(make_compatible_space, make_compatible_tensor, np_random, func, mode, real):
+def test_power_series_funcs(make_compatible_space, make_compatible_tensor, np_random,
+                            compatible_backend, func, mode, real):
     # common tests for matrix power series functions, such as exp, log etc
     tp_func = getattr(matrix_operations, func)
     np_func = dict(exp=scipy.linalg.expm, log=scipy.linalg.logm)[func]
@@ -399,6 +458,12 @@ def test_power_series_funcs(make_compatible_space, make_compatible_tensor, np_ra
         tens = make_compatible_tensor(legs=[leg, leg2.dual, leg2, leg.dual], real=real, all_blocks=need_all_blocks)
         d1, d2 = leg.dim, leg2.dim
         d = leg.dim * leg2.dim
+
+        if isinstance(compatible_backend, backends.FusionTreeBackend):
+            with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
+                res = tp_func(tens, legs1=[0, 2], legs2=[3, 1])
+            return  # TODO
+        
         res = tp_func(tens, legs1=[0, 2], legs2=[3, 1])
         res.test_sanity()
         res = res.to_numpy_ndarray()
@@ -406,6 +471,12 @@ def test_power_series_funcs(make_compatible_space, make_compatible_tensor, np_ra
         expect = np_func(np_matrix).reshape([d1, d2, d1, d2]).transpose([0, 3, 1, 2])
     elif mode == 'matrix':
         tens = make_compatible_tensor(legs=[leg, leg.dual], real=real, all_blocks=need_all_blocks)
+
+        if isinstance(compatible_backend, backends.FusionTreeBackend):
+            with pytest.raises(NotImplementedError, match='act_block_diagonal_square_matrix not implemented'):
+                res = tp_func(tens)
+            return  # TODO
+        
         res = tp_func(tens)
         res.test_sanity()
         res = res.to_numpy_ndarray()
@@ -414,7 +485,13 @@ def test_power_series_funcs(make_compatible_space, make_compatible_tensor, np_ra
         data = np_random.random((leg.dim,))
         if not real:
             data = data + 1.j * np_random.random((leg.dim,))
-        tens = tensors.DiagonalTensor.from_diag(diag=data, first_leg=leg)
+
+        if isinstance(compatible_backend, backends.FusionTreeBackend):
+            with pytest.raises(NotImplementedError, match='diagonal_from_block not implemented'):
+                tens = tensors.DiagonalTensor.from_diag(diag=data, first_leg=leg, backend=compatible_backend)
+            return  # TODO
+        
+        tens = tensors.DiagonalTensor.from_diag(diag=data, first_leg=leg, backend=compatible_backend)
         res = tp_func(tens)
         res.test_sanity()
         res = res.to_numpy_ndarray()

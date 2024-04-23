@@ -421,10 +421,10 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
         return forest_block_height, forest_block_width
 
     def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('diagonal_from_block not implemented')  # TODO
 
     def mask_from_block(self, a: Block, large_leg: VectorSpace, small_leg: VectorSpace) -> DiagonalData:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('mask_from_block not implemented')  # TODO
 
     def from_block_func(self, func, legs: list[VectorSpace], num_domain_legs: int, func_kwargs={}
                         ) -> FusionTreeData:
@@ -438,14 +438,15 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
             blocks.append(func(shape, **func_kwargs))
         if len(blocks) > 0:
             sample_block = blocks[0]
+            coupled_sectors = np.asarray(coupled_sectors, int)
         else:
             sample_block = func((1,) * len(legs), **func_kwargs)
+            coupled_sectors = domain.symmetry.empty_sector_array
         dtype = self.block_dtype(sample_block)
-        coupled_sectors = np.asarray(coupled_sectors, int)
         return FusionTreeData(coupled_sectors, blocks, domain, codomain, dtype)
 
     def diagonal_from_block_func(self, func, leg: VectorSpace, func_kwargs={}) -> DiagonalData:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('diagonal_from_block_func not implemented')  # TODO
 
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype, num_domain_legs: int) -> FusionTreeData:
         domain, codomain = _make_domain_codomain(legs, num_domain_legs=num_domain_legs, backend=self)
@@ -453,11 +454,11 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
                               domain=domain, codomain=codomain, dtype=dtype)
 
     def zero_diagonal_data(self, leg: VectorSpace, dtype: Dtype) -> DiagonalData:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('zero_diagonal_data not implemented')  # TODO
 
-    def eye_data(self, legs: list[VectorSpace], dtype: Dtype, domain_num_legs: int) -> FusionTreeData:
+    def eye_data(self, legs: list[VectorSpace], dtype: Dtype, **kw) -> FusionTreeData:
+        raise NotImplementedError('eye_data not implemented')  # TODO use _iter_common_... instead of allowed_coupled_sectors
         domain, codomain = _make_domain_codomain(legs, num_codomain=domain_num_legs, backend=self)
-        raise NotImplementedError  # TODO use _iter_common_... instead of allowed_coupled_sectors
         coupled = allowed_coupled_sectors(codomain, domain)
         blocks = [self.eye_block((block_size(codomain, c), block_size(domain, c)), dtype=dtype)
                   for c in coupled]
@@ -473,66 +474,66 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
 
     def _data_repr_lines(self, a: BlockDiagonalTensor, indent: str, max_width: int,
                          max_lines: int) -> list[str]:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('_data_repr_lines not implemented')  # TODO
 
     def tdot(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, axs_a: list[int],
              axs_b: list[int]) -> Data:
         # TODO need to be able to specify levels of braiding in general case!
         # TODO offer separate planar version? or just high
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('tdot not implemented')  # TODO
 
     def svd(self, a: BlockDiagonalTensor, new_vh_leg_dual: bool, algorithm: str | None,
             compute_u: bool, compute_vh: bool) -> tuple[Data, DiagonalData, Data, VectorSpace]:
         # TODO need to redesign Backend.svd specification! need to allow more than two legs!
         # TODO need to be able to specify levels of braiding in general case!
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('svd not implemented')  # TODO
 
     def qr(self, a: BlockDiagonalTensor, new_r_leg_dual: bool, full: bool
            ) -> tuple[Data, Data, VectorSpace]:
         # TODO do SVD first, comments there apply.
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('qr not implemented')  # TODO
 
     def outer(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor) -> Data:
         # TODO what target leg order is easiest? does it match the one specified in Backend.outer?
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('outer not implemented')  # TODO
 
     def inner(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, do_conj: bool,
               axs2: list[int] | None) -> complex:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('inner not implemented')  # TODO
     
     def permute_legs(self, a: BlockDiagonalTensor, permutation: list[int] | None, num_domain_legs: int
                      ) -> Data:
         # TODO need to specify levels for braiding and partitioning into domain / codomain
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('permute_legs not implemented')  # TODO
 
     def trace_full(self, a: BlockDiagonalTensor, idcs1: list[int], idcs2: list[int]
                    ) -> float | complex:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('trace_full not implemented')  # TODO
 
     def trace_partial(self, a: BlockDiagonalTensor, idcs1: list[int], idcs2: list[int],
                       remaining_idcs: list[int]) -> Data:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('trace_partial not implemented')  # TODO
 
     def diagonal_tensor_trace_full(self, a: DiagonalTensor) -> float | complex:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('diagonal_tensor_trace_full not implemented')  # TODO
 
     def conj(self, a: BlockDiagonalTensor | DiagonalTensor) -> Data | DiagonalData:
         # TODO what does this even mean? transpose of dagger?
         # TODO should we offer transpose and dagger too?
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('conj not implemented')  # TODO
 
     def combine_legs(self, a: BlockDiagonalTensor, combine_slices: list[int, int],
                      product_spaces: list[ProductSpace], new_axes: list[int],
                      final_legs: list[VectorSpace]) -> Data:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('combine_legs not implemented')  # TODO
         
     def split_legs(self, a: BlockDiagonalTensor, leg_idcs: list[int],
                    final_legs: list[VectorSpace]) -> Data:
         # TODO do we need metadata to split, like in abelian?
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('split_legs not implemented')  # TODO
 
     def add_trivial_leg(self, a: BlockDiagonalTensor, pos: int, to_domain: bool) -> Data:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('add_trivial_leg not implemented')  # TODO
 
     def almost_equal(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, rtol: float, atol: float
                      ) -> bool:
@@ -549,7 +550,7 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
         return True
 
     def squeeze_legs(self, a: BlockDiagonalTensor, idcs: list[int]) -> Data:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('squeeze_legs not implemented')  # TODO
 
     def norm(self, a: BlockDiagonalTensor | DiagonalTensor, order: int | float = None) -> float:
         # TODO be careful about weight with quantum dimensions! probably only support 2 norm.
@@ -557,7 +558,7 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
 
     def act_block_diagonal_square_matrix(self, a: BlockDiagonalTensor,
                                          block_method: Callable[[Block], Block]) -> Data:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('act_block_diagonal_square_matrix not implemented')  # TODO
 
     def add(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor) -> Data:
         assert a.data.num_domain_legs == b.data.num_domain_legs
@@ -597,72 +598,72 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
 
     def infer_leg(self, block: Block, legs: list[VectorSpace | None], is_dual: bool = False,
                   is_real: bool = False) -> VectorSpace:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('infer_leg not implemented')  # TODO
 
     def get_element(self, a: BlockDiagonalTensor, idcs: list[int]) -> complex | float | bool:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('get_element not implemented')  # TODO
 
     def get_element_diagonal(self, a: DiagonalTensor, idx: int) -> complex | float | bool:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('get_element_diagonal not implemented')  # TODO
 
     def set_element(self, a: BlockDiagonalTensor, idcs: list[int], value: complex | float) -> Data:
         # TODO not sure this can even be done sensibly, one entry of the dense block
         #      affects in general many entries of the blocks.
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('set_element not implemented')  # TODO
 
     def set_element_diagonal(self, a: DiagonalTensor, idx: int, value: complex | float | bool
                              ) -> DiagonalData:
         # TODO not sure this can even be done sensibly, one entry of the dense block
         #      affects in general many entries of the blocks.
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('set_element_diagonal not implemented')  # TODO
 
     def diagonal_data_from_full_tensor(self, a: BlockDiagonalTensor, check_offdiagonal: bool
                                        ) -> DiagonalData:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('diagonal_data_from_full_tensor not implemented')  # TODO
 
     def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('full_data_from_diagonal_tensor not implemented')  # TODO
 
     def full_data_from_mask(self, a: Mask, dtype: Dtype) -> Data:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('full_data_from_mask not implemented')  # TODO
 
     def scale_axis(self, a: BlockDiagonalTensor, b: DiagonalTensor, leg: int) -> Data:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('scale_axis not implemented')  # TODO
 
     # TODO how does entropy work here, should it consider quantum dimensions?
 
     def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs,
                                    maps_zero_to_zero: bool) -> DiagonalData:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('diagonal_elementwise_unary not implemented')  # TODO
 
     def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
                                     func_kwargs, partial_zero_is_zero: bool) -> DiagonalData:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('diagonal_elementwise_binary not implemented')  # TODO
 
     def apply_mask_to_Tensor(self, tensor: BlockDiagonalTensor, mask: Mask, leg_idx: int) -> Data:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('apply_mask_to_Tensor not implemented')  # TODO
 
     def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('apply_mask_to_DiagonalTensor not implemented')  # TODO
 
     def eigh(self, a: BlockDiagonalTensor, sort: str = None) -> tuple[DiagonalData, Data]:
         # TODO do SVD first, comments there apply.
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('eigh not implemented')  # TODO
 
     def from_flat_block_trivial_sector(self, block: Block, leg: VectorSpace) -> Data:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('from_flat_block_trivial_sector not implemented')  # TODO
 
     def to_flat_block_trivial_sector(self, tensor: BlockDiagonalTensor) -> Block:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('to_flat_block_trivial_sector not implemented')  # TODO
 
     def inv_part_from_flat_block_single_sector(self, block: Block, leg: VectorSpace,
                                                dummy_leg: VectorSpace) -> Data:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('inv_part_from_flat_block_single_sector not implemented')  # TODO
 
     def inv_part_to_flat_block_single_sector(self, tensor: BlockDiagonalTensor) -> Block:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('inv_part_to_flat_block_single_sector not implemented')  # TODO
 
     def flip_leg_duality(self, tensor: BlockDiagonalTensor, which_legs: list[int],
                          flipped_legs: list[VectorSpace], perms: list[np.ndarray]) -> Data:
         # TODO think carefully about what this means.
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('flip_leg_duality not implemented')  # TODO

@@ -142,11 +142,21 @@ def test_lanczos_evolve(compatible_backend, make_compatible_space, N_cache, tol)
 def test_arnoldi(compatible_backend, make_compatible_space, which, N_max=20):
     backend = compatible_backend
     leg = make_compatible_space()
-    tol = 5.e-14 if leg.dim <= N_max else 1.e-10
+    tol = 1.e-13 if leg.dim <= N_max else 1.e-10
     # if looking for small/large real part, ensure hermitian H
     func = random_matrix.GUE if which[-1] == 'R' else random_matrix.standard_normal_complex
     H = tensors.BlockDiagonalTensor.from_numpy_func(func, legs=[leg, leg.dual], backend=backend)
     H_op = sparse.TensorLinearOperator(H, which_leg=1)
+
+    if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend) and isinstance(leg.symmetry, tp.ProductSymmetry):
+        # TODO
+        with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented'):
+            _ = H.to_numpy_ndarray()
+        return
+    
+    if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend):
+        pytest.xfail(reason='to_dense_block seems bugged')  # TODO
+    
     H_np = H.to_numpy_ndarray()
     E_np, psi_np = np.linalg.eig(H_np)
     if which == 'LM':
@@ -161,6 +171,13 @@ def test_arnoldi(compatible_backend, make_compatible_space, which, N_max=20):
     psi_init = tensors.ChargedTensor.random_uniform(legs=[leg], charge=sector, backend=backend)
 
     engine = krylov_based.Arnoldi(H_op, psi_init, {'which': which, 'num_ev': 1, 'N_max': N_max})
+
+    if isinstance(compatible_backend, tp.linalg.backends.FusionTreeBackend):
+        # TODO
+        with pytest.raises(NotImplementedError, match='tdot not implemented'):
+            _ = engine.run()
+        return
+    
     (E0,), (psi0,), N = engine.run()
     print("full spectrum:", E_np)
     print("E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_np))

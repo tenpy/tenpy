@@ -7,7 +7,7 @@ import itertools as it
 import copy
 import pytest
 
-from tenpy import linalg as la
+from tenpy import linalg as la, backends
 from tenpy.networks import site
 
 from conftest import random_symmetry_sectors
@@ -100,6 +100,11 @@ def test_double_site(any_backend):
             expect_labels = ['down_0 down_1', 'down_0 up_1', 'up_0 down_1', 'up_0 up_1']
         else:
             raise NotImplementedError
+
+        if isinstance(any_backend, backends.FusionTreeBackend):
+            with pytest.raises(NotImplementedError, match='diagonal_from_block_func not implemented'):
+                site0 = site1 = site.SpinHalfSite(conserve, backend=any_backend)
+            return  # TODO
         
         site0 = site1 = site.SpinHalfSite(conserve, backend=any_backend)
         for symmetry_combine in ['same', 'drop', 'independent']:
@@ -440,6 +445,12 @@ def test_boson_site(any_backend, Nmax):
     hcs = dict(Id='Id', JW='JW', B='Bd', Bd='B', N='N', NN='NN', dN='dN', dNdN='dNdN', P='P')
     sites = []
     for conserve in all_conserve:
+
+        if isinstance(any_backend, backends.FusionTreeBackend):
+            with pytest.raises(NotImplementedError, match='diagonal_from_block_func not implemented'):
+                s = site.BosonSite(Nmax, conserve=conserve, backend=any_backend)
+            return  # TODO
+        
         s = site.BosonSite(Nmax, conserve=conserve, backend=any_backend)
         s.test_sanity()
         for op in s.all_op_names:
@@ -478,6 +489,12 @@ def test_clock_site(any_backend, q):
         hcs.update(X='Xhc', Z='Zhc', Xhc='X', Zhc='Z')
     sites = []
     for conserve in all_conserve:
+
+        if isinstance(any_backend, backends.FusionTreeBackend):
+            with pytest.raises(NotImplementedError, match='diagonal_from_block_func not implemented'):
+                s = site.ClockSite(q=q, conserve=conserve, backend=any_backend)
+            return  # TODO
+        
         s = site.ClockSite(q=q, conserve=conserve, backend=any_backend)
         s.test_sanity()
         for op in s.all_op_names:
@@ -519,6 +536,11 @@ def test_set_common_symmetry(any_backend):
     
     conserve_S = 'None' if isinstance(any_backend, la.NoSymmetryBackend) else 'Sz'
     conserve_N = 'None' if isinstance(any_backend, la.NoSymmetryBackend) else 'N'
+
+    if isinstance(any_backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError, match='diagonal_from_block_func not implemented'):
+            spin = site.SpinSite(S=0.5, conserve=conserve_S, backend=any_backend)
+        return  # TODO
     
     spin = site.SpinSite(S=0.5, conserve=conserve_S, backend=any_backend)
     spin1 = site.SpinSite(S=1, conserve=conserve_S, backend=any_backend)

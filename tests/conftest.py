@@ -84,7 +84,6 @@ from tenpy.linalg import backends, spaces, symmetries, tensors
 # QUICK CONFIGURATION
 
 _block_backends = ['numpy']  # TODO reactivate 'torch'
-# Note: FusionTree backend is skipped by default. Use ``--run-FusionTree`` CL option to run them.
 _symmetries = {
     'NoSymm': symmetries.no_symmetry,
     'U(1)': symmetries.u1_symmetry,
@@ -93,23 +92,6 @@ _symmetries = {
     'U(1)xZ3': symmetries.ProductSymmetry([symmetries.u1_symmetry, symmetries.z3_symmetry]),
     'SU(2)': symmetries.SU2Symmetry(),
 }
-
-
-# SETUP: command line options etc:
-
-
-def pytest_addoption(parser):
-    parser.addoption(
-        "--run-FusionTree", action="store_true", default=False, help="activate tests for FusionTree backend"
-    )
-
-
-def pytest_collection_modifyitems(config, items):
-    if not config.getoption("--run-FusionTree"):
-        skip_FusionTree = pytest.mark.skip(reason='need --run-FusionTree to run.')
-        for item in items:
-            if 'FusionTree' in item.keywords:
-                item.add_marker(skip_FusionTree)
 
 
 # "UNCONSTRAINED" FIXTURES  ->  independent (mostly) of the other features. no compatibility guarantees.
@@ -459,7 +441,7 @@ def find_compatible_leg(others, max_sectors: int, max_mult: int, extra_sectors=N
         which = np_random.choice(len(sectors), size=max_sectors, replace=False, shuffle=False)
         sectors = sectors[which, :]
         mults = mults[which]
-    mults = np.maximum(mults, max_mult)
+    mults = np.minimum(mults, max_mult)
     if extra_sectors is not None:
         # replace some sectors by extra_sectors
         duplicates = np.any(np.all(extra_sectors[None, :, :] == sectors[:, None, :], axis=2), axis=0)
