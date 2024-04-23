@@ -3216,7 +3216,10 @@ class MPS(BaseMPSExpectationValue):
 
         Returns
         -------
-        charge_tree : list
+        charge_tree : list of dict of tuples
+            A tree of possible charges (at the sites) for the desired ``charge_sector``.
+            I.e. consider the state :math:`\ket{++}`. The desired charge tree for the sector ``(0,)``
+            is ``[{(0,)}, {(1,), (-1,)}, {(0,)}]``.
         """
         L = len(sites)
         assert L > 0, "sites must contain a :class:`Site` with conserved charges"
@@ -3226,35 +3229,41 @@ class MPS(BaseMPSExpectationValue):
 
         charge_sector_left = chinfo.make_valid(None)  # zero charges
         charge_sector_right = chinfo.make_valid(charge_sector)
-
         assert charge_sector_right.ndim == 1
-        # get bounds for the maximal and minimal charge values at each bond
+
+        # create a "charge-tree" from the right (starting at the desired charge sector)
         Q_from_right = [None] * L + [set([tuple(charge_sector_right)])]  # all bonds 0, ... L
 
-        for i in reversed(range(L)):
-            Q_R = np.array(list(Q_from_right[i + 1]))
-            # find new charges possible on left of site i, coming from the right
+        for i in reversed(range(L)):  # loop from right to left over all sites
+            Q_R = np.array(list(Q_from_right[i + 1]))  # the dictionary of charges (Q_R) to the right of site i
             Q_L = set()
-            for Q_p in sites[i].leg.charges:
-                Q_L_add = chinfo.make_valid(Q_R - Q_p[np.newaxis, :])
+            # loop over possible/allowed changes of charges:
+            for Q_p in sites[i].leg.charges:  # i.e. site.leg.charges=[[-1], [1]] for a SpinHalfSite
+                # add all "combinations of charges" -> Q_p[np.newaxis] to use broadcasting; store results in a set
+                Q_L_add = chinfo.make_valid(Q_R - Q_p[np.newaxis])  # from right to left in the tree we must subtract
                 Q_L_add = set([tuple(q) for q in Q_L_add])
                 Q_L = Q_L.union(Q_L_add)
             Q_from_right[i] = Q_L
+
         if tuple(charge_sector_left) not in Q_from_right[0]:
             raise ValueError("can't get desired charge sector {charge_sector!r} "
                              "for the given charges on physical sites!")
+
+        # create a "charge-tree" from the left (starting with no charges), similar logic to above
         Q_from_left = [set([tuple(charge_sector_left)])] + [None] * L
         for i in range(L):
             Q_L = np.array(list(Q_from_left[i]))
             Q_R = set()
             for Q_p in sites[i].leg.charges:
-                Q_R_add = chinfo.make_valid(Q_L + Q_p[:, np.newaxis])
+                Q_R_add = chinfo.make_valid(Q_L + Q_p[np.newaxis])  # from left to right in the tree we must add
                 Q_R_add = set([tuple(q) for q in Q_R_add])
                 Q_R = Q_R.union(Q_R_add)
+
+            # only keep entries in the left tree that can also be reached from the right
             Q_from_left[i + 1] = Q_R.intersection(Q_from_right[i + 1])
 
-        assert Q_from_left[-1] == Q_from_right[-1]  # should match charge_sector on the right
-
+        assert Q_from_left[-1] == Q_from_right[-1], "Left `charge_sector` doesn't meet the one on the right"
+        # Q_from_left is already the intersection of the full tree from the left and from the right, hence return it
         return Q_from_left
 
     def mutinf_two_site(self, max_range=None, n=1):
