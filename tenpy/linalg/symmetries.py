@@ -7,6 +7,7 @@ from functools import reduce, lru_cache
 
 from numpy import typing as npt
 import numpy as np
+import math
 
 from .dtypes import Dtype
 
@@ -542,7 +543,7 @@ class ProductSymmetry(Symmetry):
             braiding_style=max((f.braiding_style for f in flat_factors), key=lambda style: style.value),
             trivial_sector=np.concatenate([f.trivial_sector for f in flat_factors]),
             group_name=' ⨉ '.join(f.group_name for f in flat_factors),
-            num_sectors= np.prod([symm.num_sectors for symm in flat_factors]), ####PROBLEM HERE WITH INT
+            num_sectors= math.prod([symm.num_sectors for symm in flat_factors]), ####PROBLEM HERE WITH INT
             descriptive_name=descriptive_name
         )
 
@@ -736,7 +737,7 @@ class ProductSymmetry(Symmetry):
         #print(self.factors)
 
         contributions = []
-        for i, f_i in enumerate(self.factors):      #self =Fibonacci_L x Fibonacci_R Product symmetry i=index f_i= FibonacciGrading left, FibonacciGrading right
+        for i, f_i in enumerate(self.factors):
 
             a_k = a[self.sector_slices[i]:self.sector_slices[i + 1]]
             b_k = b[self.sector_slices[i]:self.sector_slices[i + 1]]
@@ -745,13 +746,11 @@ class ProductSymmetry(Symmetry):
             e_k = e[self.sector_slices[i]:self.sector_slices[i + 1]]
             f_k = f[self.sector_slices[i]:self.sector_slices[i + 1]]
 
-
             contributions.append(f_i._f_symbol(a_k, b_k, c_k, d_k, e_k, f_k)) #[μ,ν,κ,λ]
 
-
-        Fs=np.multiply(contributions[0],contributions[1])
+        Fs=np.kron(contributions[0],contributions[1])
         for i in range(2, len((contributions))):
-            Fs = np.multiply(Fs,contributions[i])
+            Fs = np.kron(Fs,contributions[i])
 
         return Fs
 
