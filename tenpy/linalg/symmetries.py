@@ -16,7 +16,7 @@ __all__ = ['Sector', 'SectorArray', 'FusionStyle', 'BraidingStyle', 'Symmetry', 
            'z4_symmetry', 'z5_symmetry', 'z6_symmetry', 'z7_symmetry', 'z8_symmetry', 'z9_symmetry',
            'u1_symmetry', 'fermion_parity', 'IsingAnyonCategory',
            'QuantumDoubleZNAnyonCategory', 'SU2_kAnyonCategory', 'ZNAnyonCategory', 'ZNAnyonCategory2',
-           'double_semion_model', 'fibonacci_grading', 'ising_grading', 'semion_model', 'toric_code'
+           'double_semion_category', 'fibonacci_anyon_category', 'ising_anyon_category', 'semion_category', 'toric_code_category'
            ]
 
 
@@ -1846,8 +1846,8 @@ z8_symmetry = ZNSymmetry(N=8)
 z9_symmetry = ZNSymmetry(N=9)
 u1_symmetry = U1Symmetry()
 fermion_parity = FermionParity()
-semion_model = ZNAnyonCategory2(2, 0)
-toric_code = QuantumDoubleZNAnyonCategory(2)
-double_semion_model = ProductSymmetry([ZNAnyonCategory2(2, 0), ZNAnyonCategory2(2, 1)])
-fibonacci_grading = FibonacciAnyonCategory(handedness='left')
-ising_grading = IsingAnyonCategory(nu=1)
+semion_category = ZNAnyonCategory2(2, 0)
+toric_code_category = QuantumDoubleZNAnyonCategory(2)
+double_semion_category = ProductSymmetry([ZNAnyonCategory2(2, 0), ZNAnyonCategory2(2, 1)])
+fibonacci_anyon_category = FibonacciAnyonCategory(handedness='left')
+ising_anyon_category = IsingAnyonCategory(nu=1)

@@ -953,13 +953,13 @@ def test_fibonacci_grading(handedness, np_random):
 
     print('checking equality')
     assert sym == sym
-    assert (sym == symmetries.fibonacci_grading) == (handedness == 'left')
+    assert (sym == symmetries.fibonacci_anyon_category) == (handedness == 'left')
     assert sym != symmetries.no_symmetry
     assert sym != symmetries.SU2Symmetry()
 
     print('checking is_same_symmetry')
     assert sym.is_same_symmetry(sym)
-    assert sym.is_same_symmetry(symmetries.fibonacci_grading) == (handedness == 'left')
+    assert sym.is_same_symmetry(symmetries.fibonacci_anyon_category) == (handedness == 'left')
     assert not sym.is_same_symmetry(symmetries.no_symmetry)
     assert not sym.is_same_symmetry(symmetries.SU2Symmetry())
 
@@ -996,13 +996,13 @@ def test_ising_grading(nu, np_random):
 
     print('checking equality')
     assert sym == sym
-    assert (sym == symmetries.ising_grading) == (nu == 1)
+    assert (sym == symmetries.ising_anyon_category) == (nu == 1)
     assert sym != symmetries.no_symmetry
     assert sym != symmetries.SU2Symmetry()
 
     print('checking is_same_symmetry')
     assert sym.is_same_symmetry(sym)
-    assert sym.is_same_symmetry(symmetries.ising_grading) == (nu == 1)
+    assert sym.is_same_symmetry(symmetries.ising_anyon_category) == (nu == 1)
     assert not sym.is_same_symmetry(symmetries.no_symmetry)
     assert not sym.is_same_symmetry(symmetries.SU2Symmetry())
 
