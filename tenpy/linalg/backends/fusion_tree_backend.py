@@ -263,7 +263,7 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
                 assert expect_shape[0] == expect_shape[1]
                 expect_shape = (expect_shape[0],)
             assert all(dim > 0 for dim in expect_shape), 'should skip forbidden block'
-            assert self.block_shape(block) == expect_shape
+            assert self.block_shape(block) == expect_shape, 'wrong block shapes'
             # check matching dtype
             assert self.block_dtype(block) == a.data.dtype
 

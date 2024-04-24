@@ -14,17 +14,21 @@ def test_lanczos_gs(compatible_backend, make_compatible_space, N_cache, tol):
     # generate hermitian test array
     leg = make_compatible_space()
     backend = compatible_backend
+    
+    if isinstance(compatible_backend, tp.linalg.backends.FusionTreeBackend):
+        # TODO need to be more careful with from func.
+        # shapes of the blocks depend on num_domain_legs!
+        # and GUE((1, 9)) generates blocks with shape (9, 9) without error!!
+        # should GUE etc be Tensor classmethods?
+        with pytest.raises(AssertionError, match='not a square matrix shape'):
+            H = tensors.BlockDiagonalTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
+        return
+    
     H = tensors.BlockDiagonalTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
 
     if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend) and isinstance(leg.symmetry, tp.ProductSymmetry):
         # TODO
         with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented'):
-            _ = H.to_numpy_ndarray()
-        return
-    
-    if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend):
-        # TODO
-        with pytest.raises(AssertionError, match='norm not preserved'):
             _ = H.to_numpy_ndarray()
         return
 
@@ -103,6 +107,16 @@ def test_lanczos_arpack():
 def test_lanczos_evolve(compatible_backend, make_compatible_space, N_cache, tol):
     backend = compatible_backend
     leg = make_compatible_space()
+    
+    if isinstance(compatible_backend, tp.linalg.backends.FusionTreeBackend):
+        # TODO need to be more careful with from func.
+        # shapes of the blocks depend on num_domain_legs!
+        # and GUE((1, 9)) generates blocks with shape (9, 9) without error!!
+        # should GUE etc be Tensor classmethods?
+        with pytest.raises(AssertionError, match='not a square matrix shape'):
+            H = tensors.BlockDiagonalTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
+        return
+    
     H = tensors.BlockDiagonalTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
     H_op = sparse.TensorLinearOperator(H, which_leg=1)
 
@@ -145,6 +159,16 @@ def test_arnoldi(compatible_backend, make_compatible_space, which, N_max=20):
     tol = 1.e-13 if leg.dim <= N_max else 1.e-10
     # if looking for small/large real part, ensure hermitian H
     func = random_matrix.GUE if which[-1] == 'R' else random_matrix.standard_normal_complex
+
+    if which[-1] == 'R' and isinstance(compatible_backend, tp.linalg.backends.FusionTreeBackend):
+        # TODO need to be more careful with from func.
+        # shapes of the blocks depend on num_domain_legs!
+        # and GUE((1, 9)) generates blocks with shape (9, 9) without error!!
+        # should GUE etc be Tensor classmethods?
+        with pytest.raises(AssertionError, match='not a square matrix shape'):
+            H = tensors.BlockDiagonalTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
+        return
+    
     H = tensors.BlockDiagonalTensor.from_numpy_func(func, legs=[leg, leg.dual], backend=backend)
     H_op = sparse.TensorLinearOperator(H, which_leg=1)
 

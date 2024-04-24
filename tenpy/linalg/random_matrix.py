@@ -62,6 +62,7 @@ def GOE(size):
         Real, symmetric numpy matrix drawn from the GOE, i.e.
         :math:`p(H) = 1/Z exp(-n/4 tr(H^2))`
     """
+    assert len(size) == 2 and size[0] == size[1], f'not a square matrix shape: {size}'
     A = np.random.standard_normal(size)
     return (A + A.T) * 0.5
 
@@ -80,6 +81,7 @@ def GUE(size):
         Hermitian (complex) numpy matrix drawn from the GUE, i.e.
         :math:`p(H) = 1/Z exp(-n/4 tr(H^2))`.
     """
+    assert len(size) == 2 and size[0] == size[1], f'not a square matrix shape: {size}'
     A = standard_normal_complex(size)
     return (A + A.T.conj()) * 0.5
 
@@ -98,8 +100,7 @@ def CRE(size):
         Orthogonal matrix drawn from the CRE (=Haar measure on O(n)).
     """
     # almost same code as for CUE
-    n, m = size
-    assert n == m  # ensure that `mode` in qr doesn't matter.
+    assert len(size) == 2 and size[0] == size[1], f'not a square matrix shape: {size}'
     A = np.random.standard_normal(size)
     Q, R = np.linalg.qr(A)
     # Q-R is not unique; to make it unique ensure that the diagonal of R is positive
@@ -122,6 +123,7 @@ def COE(size):
     U : ndarray
         Unitary, symmetric (complex) matrix drawn from the COE (=Haar measure on this space).
     """
+    assert len(size) == 2 and size[0] == size[1], f'not a square matrix shape: {size}'
     U = CUE(size)
     return np.dot(U.T, U)
 
@@ -140,8 +142,7 @@ def CUE(size):
         Unitary matrix drawn from the CUE (=Haar measure on U(n)).
     """
     # almost same code as for CRE
-    n, m = size
-    assert n == m  # ensure that `mode` in qr doesn't matter.
+    assert len(size) == 2 and size[0] == size[1], f'not a square matrix shape: {size}'
     A = standard_normal_complex(size)
     Q, R = np.linalg.qr(A)
     # Q-R is not unique; to make it unique ensure that the diagonal of R is positive
@@ -168,8 +169,8 @@ def O_close_1(size, a=0.01):
     O : ndarray
         Orthogonal matrix close to the identity (for small `a`).
     """
+    assert len(size) == 2 and size[0] == size[1], f'not a square matrix shape: {size}'
     n, m = size
-    assert n == m
     A = GOE(size) / (2. * n)**0.5  # scale such that eigenvalues are in [-1, 1]
     E = np.eye(size[0])
     Q, R = np.linalg.qr(E + a * A)
@@ -195,8 +196,8 @@ def U_close_1(size, a=0.01):
         Unitary matrix close to the identity (for small `a`).
         Eigenvalues are chosen i.i.d. as ``exp(1.j*a*x)`` with `x` uniform in [-1, 1].
     """
+    assert len(size) == 2 and size[0] == size[1], f'not a square matrix shape: {size}'
     n, m = size
-    assert n == m
     U = CUE(size)  # random unitary
     E = np.exp(1.j * a * (np.random.rand(n) * 2. - 1.))
     return np.dot(U * E, U.T.conj())
