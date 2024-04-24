@@ -1050,12 +1050,6 @@ def test_str_repr(make_compatible_tensor, str_max_lines=30, repr_max_lines=30):
         print('----------------------')
         print('__repr__()')
         print('----------------------')
-
-        if isinstance(t.backend, FusionTreeBackend):
-            with pytest.raises(NotImplementedError, match='_data_repr_lines not implemented'):
-                res = repr(t)
-            return  # TODO
-        
         res = repr(t)
         assert len(res) <= repr_max_len
         assert res.count('\n') <= repr_max_lines

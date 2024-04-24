@@ -106,6 +106,14 @@ class FusionTree:
             assert N > 0, 'inconsistent fusion'
             assert 0 <= self.multiplicities[vertex] < N, 'invalid multiplicity label'
 
+    @property
+    def pre_Z_uncoupled(self):
+        res = self.uncoupled.copy()
+        for i, dual in enumerate(self.are_dual):
+            if dual:
+                res[i, :] = self.symmetry.dual_sector(res[i, :])
+        return res
+
     def __hash__(self) -> int:
         if self.fusion_style == FusionStyle.single:
             # inner sectors are completely determined by uncoupled, all multiplicities are 0

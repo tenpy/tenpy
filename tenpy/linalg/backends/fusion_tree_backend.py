@@ -10,7 +10,7 @@ from .abstract_backend import (
     _iter_common_noncommon_sorted_arrays
 )
 from ..dtypes import Dtype
-from ..symmetries import Sector, SectorArray, Symmetry
+from ..symmetries import Sector, SectorArray, Symmetry, FusionStyle
 from ..spaces import VectorSpace, ProductSpace
 from ..trees import FusionTree, fusion_trees
 
@@ -66,6 +66,36 @@ def tree_block_slice(space: ProductSpace, tree: FusionTree) -> slice:
     offset += fusion_trees(space.symmetry, tree.uncoupled, tree.coupled).index(tree)
     size = tree_block_size(space, tree.uncoupled)
     return slice(offset, offset + size)
+
+
+def _tree_block_iter(data: FusionTreeData, backend: BlockBackend):
+    sym = data.domain.symmetry
+    domain_are_dual = [sp.is_dual for sp in data.domain.spaces]
+    codomain_are_dual = [sp.is_dual for sp in data.codomain.spaces]
+    for coupled, block in zip(data.coupled_sectors, data.blocks):
+        i1_forest = 0  # start row index of the current forest block
+        i2_forest = 0  # start column index of the current forest block
+        for b_sectors, n_dims, j2 in _iter_sectors_mults_slices(data.domain.spaces, sym):
+            tree_block_width = tree_block_size(data.domain, b_sectors)
+            for a_sectors, m_dims, j1 in _iter_sectors_mults_slices(data.codomain.spaces, sym):
+                tree_block_height = tree_block_size(data.codomain, a_sectors)
+                i1 = i1_forest  # start row index of the current tree block
+                i2 = i2_forest  # start column index of the current tree block
+                for alpha_tree in fusion_trees(sym, a_sectors, coupled, codomain_are_dual):
+                    i2 = i2_forest  # reset to the left of the current forest block
+                    for beta_tree in fusion_trees(sym, b_sectors, coupled, domain_are_dual):
+                        idx1 = slice(i1, i1 + tree_block_height)
+                        idx2 = slice(i2, i2 + tree_block_width)
+                        entries = block[idx1, idx2]
+                        entries = backend.block_reshape(entries, m_dims + n_dims)
+                        yield alpha_tree, beta_tree, entries
+                        i2 += tree_block_width  # move right by one tree block
+                    i1 += tree_block_height  # move down by one tree block
+                forest_block_height = i1 - i1_forest
+                forest_block_width = i2 - i2_forest
+                i1_forest += forest_block_height
+            i1_forest = 0  # reset to the top of the block
+            i2_forest += forest_block_width
 
 
 def _make_domain_codomain(legs: list[VectorSpace], num_domain_legs: int = 0, backend=None
@@ -474,7 +504,51 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
 
     def _data_repr_lines(self, a: BlockDiagonalTensor, indent: str, max_width: int,
                          max_lines: int) -> list[str]:
-        raise NotImplementedError('_data_repr_lines not implemented')  # TODO
+        from ..dummy_config import printoptions
+        if len(a.data.blocks) == 0:
+            return [f'{indent}* Data : no non-zero blocks']
+
+        lines = []
+        for alpha_tree, beta_tree, entries in _tree_block_iter(a.data, backend=self):
+            # build (a_before_Z) <- (a_after_Z) <- coupled <- (b_after_Z) <- (b_before_Z)
+            a_before_Z, a_after_Z, coupled = alpha_tree._str_uncoupled_coupled(
+                a.symmetry, alpha_tree.uncoupled, alpha_tree.coupled, alpha_tree.are_dual
+            ).split(' -> ')
+            b_before_Z, b_after_Z, coupled = beta_tree._str_uncoupled_coupled(
+                a.symmetry, beta_tree.uncoupled, beta_tree.coupled, beta_tree.are_dual
+            ).split(' -> ')
+            sectors = f'{a_after_Z} <- {coupled} <- {b_after_Z}'
+            if a_before_Z != a_after_Z:
+                sectors = a_before_Z + ' <- ' + sectors
+            if b_before_Z != b_after_Z:
+                sectors = sectors + ' <- ' + b_before_Z
+
+            if a.symmetry.fusion_style is FusionStyle.single:
+                lines.append(f'{indent}* Data for sectors {sectors}')
+            elif a.symmetry.fusion_style is FusionStyle.multiple_unique:
+                # dont need multiplicity labels
+                a_inner = ', '.join(a.symmetry.sector_str(i) for i in alpha_tree.inner_sectors)
+                b_inner = ', '.join(a.symmetry.sector_str(i) for i in beta_tree.inner_sectors)
+                lines.append(f'{indent}* Data for trees {sectors}')
+                lines.append(f'{indent}  with inner sectors ({a_inner}) and ({b_inner})')
+            else:
+                a_inner = ', '.join(a.symmetry.sector_str(i) for i in alpha_tree.inner_sectors)
+                b_inner = ', '.join(a.symmetry.sector_str(i) for i in beta_tree.inner_sectors)
+                a_mults = ', '.join(map(str, alpha_tree.multiplicities))
+                b_mults = ', '.join(map(str, beta_tree.multiplicities))
+                lines.append(f'{indent}* Data for trees {sectors}')
+                lines.append(f'{indent}  with inner sectors ({a_inner}) and ({b_inner})')
+                lines.append(f'{indent}  with multiplicities ({a_mults}) <- ({b_mults})')
+            lines.extend(self._block_repr_lines(entries, indent=indent + printoptions.indent * ' ',
+                                                max_width=max_width, max_lines=max_lines))
+
+            if (len(lines) > max_lines) or any(len(line) > max_width for line in lines):
+                # fallback to just stating number of blocks.
+                num_entries = sum(prod(self.block_shape(b)) for b in a.data.blocks)
+                return [
+                    f'{indent}* Data: {num_entries} entries in {len(a.data.blocks)} blocks.'
+                ]
+        return lines
 
     def tdot(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, axs_a: list[int],
              axs_b: list[int]) -> Data:
