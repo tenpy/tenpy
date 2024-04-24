@@ -86,11 +86,11 @@ from tenpy.linalg import backends, spaces, symmetries, tensors
 _block_backends = ['numpy']  # TODO reactivate 'torch'
 _symmetries = {
     'NoSymm': symmetries.no_symmetry,
-    'U(1)': symmetries.u1_symmetry,
+    'U1': symmetries.u1_symmetry,
     'Z2': symmetries.z2_symmetry,
     'Z4_named': symmetries.ZNSymmetry(4, "My_Z4_symmetry"),
-    'U(1)xZ3': symmetries.ProductSymmetry([symmetries.u1_symmetry, symmetries.z3_symmetry]),
-    'SU(2)': symmetries.SU2Symmetry(),
+    'U1xZ3': symmetries.ProductSymmetry([symmetries.u1_symmetry, symmetries.z3_symmetry]),
+    'SU2': symmetries.SU2Symmetry(),
 }
 
 
