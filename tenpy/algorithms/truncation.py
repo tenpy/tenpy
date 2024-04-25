@@ -49,7 +49,7 @@ from ..tools.hdf5_io import Hdf5Exportable
 import warnings
 from ..tools.params import asConfig
 
-__all__ = ['TruncationError', 'truncate', 'svd_theta']
+__all__ = ['TruncationError', 'truncate', 'svd_theta', 'qr_theta']
 
 
 
