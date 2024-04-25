@@ -294,9 +294,15 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, make_compati
                 # make sure leg has the trivial space, so we can allow some blocks
                 if new_leg.sector_multiplicity(compatible_symmetry.trivial_sector) == 0:
                     sectors = new_leg._non_dual_sectors
-                    sectors[np_random.choice(len(sectors))] = compatible_symmetry.trivial_sector
+                    where = np_random.choice(len(sectors))
+                    sectors[where] = compatible_symmetry.trivial_sector
+                    # have potentially replaced higher-dimensional sectors with one-dimensional trivial sectors
+                    # this would reduce dim and make basis_perm invalid.
+                    # correct for that by increasing the multiplicities of the trivial sectors.
+                    mults = new_leg.multiplicities
+                    mults[where] *= compatible_symmetry.sector_dim(sectors[where])  
                     new_leg = spaces.VectorSpace.from_sectors(
-                        new_leg.symmetry, sectors, new_leg.multiplicities, new_leg.basis_perm
+                        new_leg.symmetry, sectors, mults, new_leg.basis_perm
                     )
             else:
                 new_leg = find_compatible_leg(legs[:which] + legs[which + 1:],

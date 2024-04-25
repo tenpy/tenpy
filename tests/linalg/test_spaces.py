@@ -145,6 +145,42 @@ def test_vector_space(any_symmetry, make_any_sectors, np_random):
     npt.assert_array_equal(space.sectors_of_basis, sectors_of_basis)
 
 
+def test_VectorSpace_from_sectors(any_symmetry, make_any_sectors, np_random):
+    sectors = np.concatenate([make_any_sectors(5) for _ in range(5)])
+    multiplicities = np_random.integers(1, 5, size=len(sectors))
+    dim = np.sum(multiplicities * any_symmetry.batch_sector_dim(sectors))
+    basis_perm = np_random.permutation(dim)
+    # build the expected perm by brute force
+    expect_internal_basis = []
+    for s, m in zip(sectors, multiplicities):
+        expect_internal_basis.extend([s] * m * any_symmetry.sector_dim(s))
+    expect_internal_basis = np.array(expect_internal_basis)
+    expect_public_basis = np.zeros_like(expect_internal_basis)
+    expect_public_basis[basis_perm] = expect_internal_basis
+    #
+    expect_sectors = np.unique(sectors, axis=0)
+    expect_sectors = expect_sectors[np.lexsort(expect_sectors.T)]
+    #
+    mult_contributions = np.where(
+        np.all(sectors[None, :, :] == expect_sectors[:, None, :], axis=2),
+        multiplicities[None, :],
+        0
+    )
+    expect_mults = np.sum(mult_contributions, axis=1)
+    #
+    res = spaces.VectorSpace.from_sectors(any_symmetry, sectors, multiplicities, basis_perm)
+    res.test_sanity()
+    assert np.all(res.sectors == expect_sectors)
+    assert np.all(res.multiplicities == expect_mults)
+    internal_basis = []
+    for s, m in zip(res.sectors, res.multiplicities):
+        internal_basis.extend([s] * m * any_symmetry.sector_dim(s))
+    internal_basis = np.array(internal_basis)
+    public_basis = np.zeros_like(internal_basis)
+    public_basis[res.basis_perm] = internal_basis
+    assert np.all(public_basis == expect_public_basis)
+
+
 def test_take_slice(make_any_space, any_symmetry, np_random):
     if isinstance(any_symmetry, symmetries.SU2Symmetry):
         sectors = np.array([0, 1, 2, 4])[:, None]
