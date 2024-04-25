@@ -77,6 +77,7 @@ The signature for ``make_compatible_tensor`` is
 
 import numpy as np
 import pytest
+from typing import Callable
 
 from tenpy.linalg import backends, spaces, symmetries, tensors
 
@@ -102,31 +103,31 @@ def np_random() -> np.random.Generator:
 
 
 @pytest.fixture(params=_block_backends)
-def block_backend(request):
+def block_backend(request) -> str:
     if request.param == 'torch':
         torch = pytest.importorskip('torch', reason='torch not installed')
     return request.param
 
 
 @pytest.fixture(params=['no_symmetry', 'abelian', pytest.param('fusion_tree', marks=pytest.mark.FusionTree)])
-def any_symmetry_backend(request):
+def any_symmetry_backend(request) -> str:
     return request.param
 
 
 @pytest.fixture
-def any_backend(block_backend, any_symmetry_backend):
+def any_backend(block_backend, any_symmetry_backend) -> backends.Backend:
     return backends.backend_factory.get_backend(any_symmetry_backend, block_backend)
 
 
 @pytest.fixture(params=list(_symmetries.values()), ids=list(_symmetries.keys()))
-def any_symmetry(request):
+def any_symmetry(request) -> symmetries.Symmetry:
     return request.param
 
 
 @pytest.fixture
 def make_any_sectors(any_symmetry, np_random):
     # if the symmetry does not have enough sectors, we return fewer!
-    def make(num: int, sort: bool = False):
+    def make(num: int, sort: bool = False) -> symmetries.SectorArray:
         # return SectorArray
         return random_symmetry_sectors(any_symmetry, num, sort, np_random=np_random)
     return make
@@ -134,7 +135,7 @@ def make_any_sectors(any_symmetry, np_random):
 
 @pytest.fixture
 def make_any_space(any_symmetry, np_random):
-    def make(max_sectors=5, max_mult=5, is_dual=None):
+    def make(max_sectors: int = 5, max_mult: int = 5, is_dual: bool = None) -> spaces.VectorSpace:
         # return VectorSpace
         return random_vector_space(any_symmetry, max_sectors, max_mult, is_dual, np_random=np_random)
     return make
@@ -142,7 +143,7 @@ def make_any_space(any_symmetry, np_random):
 
 @pytest.fixture
 def make_any_block(any_backend, np_random):
-    def make(size, real=False):
+    def make(size: tuple[int, ...], real=False) -> backends.Block:
         # return Block
         return random_block(any_backend, size, real=real, np_random=np_random)
     return make
@@ -160,7 +161,7 @@ for _sym_name, _sym in _symmetries.items():
     )
 
 @pytest.fixture(params=list(_compatible_pairs.values()), ids=list(_compatible_pairs.keys()))
-def _compatible_backend_symm_pairs(request):
+def _compatible_backend_symm_pairs(request) -> tuple[str, symmetries.Symmetry]:
     """Helper fixture that allows us to generate the *compatible* fixtures.
 
     Values are pairs (symmetry_backend: str, symmetry: Symmetry)
@@ -169,18 +170,18 @@ def _compatible_backend_symm_pairs(request):
 
 
 @pytest.fixture
-def compatible_symmetry_backend(_compatible_backend_symm_pairs):
+def compatible_symmetry_backend(_compatible_backend_symm_pairs) -> str:
     symmetry_backend, symmetry = _compatible_backend_symm_pairs
     return symmetry_backend
 
 
 @pytest.fixture
-def compatible_backend(compatible_symmetry_backend, block_backend):
+def compatible_backend(compatible_symmetry_backend, block_backend) -> backends.Backend:
     return backends.backend_factory.get_backend(compatible_symmetry_backend, block_backend)
 
 
 @pytest.fixture
-def compatible_symmetry(_compatible_backend_symm_pairs):
+def compatible_symmetry(_compatible_backend_symm_pairs) -> symmetries.Symmetry:
     symmetry_backend, symmetry = _compatible_backend_symm_pairs
     return symmetry
 
@@ -188,7 +189,7 @@ def compatible_symmetry(_compatible_backend_symm_pairs):
 @pytest.fixture
 def make_compatible_sectors(compatible_symmetry, np_random):
     # if the symmetry does not have enough sectors, we return fewer!
-    def make(num: int, sort: bool = False):
+    def make(num: int, sort: bool = False) -> symmetries.SectorArray:
         # returns SectorArray
         return random_symmetry_sectors(compatible_symmetry, num, sort, np_random=np_random)
     return make
@@ -196,7 +197,7 @@ def make_compatible_sectors(compatible_symmetry, np_random):
 
 @pytest.fixture
 def make_compatible_space(compatible_symmetry, np_random):
-    def make(max_sectors=5, max_mult=5, is_dual=None):
+    def make(max_sectors: int = 5, max_mult: int = 5, is_dual: bool = None) -> spaces.VectorSpace:
         # returns VectorSpace
         return random_vector_space(compatible_symmetry, max_sectors, max_mult, is_dual, np_random=np_random)
     return make
@@ -204,7 +205,7 @@ def make_compatible_space(compatible_symmetry, np_random):
 
 @pytest.fixture
 def make_compatible_block(compatible_backend, np_random):
-    def make(size, real=False):
+    def make(size: tuple[int, ...], real: bool = False) -> backends.Block:
         # returns Block
         return random_block(compatible_backend, size, real=real, np_random=np_random)
     return make
