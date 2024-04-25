@@ -52,6 +52,7 @@ __all__ = [
     'SubspaceExpansion',
     'VariationalCompression',
     'VariationalApplyMPO',
+    'QRBasedVariationalApplyMPO',
 ]
 
 
