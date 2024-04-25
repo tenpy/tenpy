@@ -2262,6 +2262,92 @@ class MPS(BaseMPSExpectationValue):
         SVs[0] = SVs[-1]
         return cls(sites, Bs, SVs, bc=bc, form='B')
 
+    @classmethod
+    def project_onto_charge_sector(cls, sites, p_state_list, charge_sector, dtype=float):
+        """Generates an MPS from a product state list which is projected onto a given charge sector.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the local Hilbert space. The sites should conserve *some* charge,
+            otherwise projecting onto a charge sector is meaningless.
+        p_state_list : list | np.ndarray
+            list defining the product state out of which to project
+        charge_sector : tuple of int
+            The charge sector corresponding to the conserved charge of the ``sites``
+        dtype : type
+
+        Returns
+        -------
+        projected_MPS : :class:`~tenpy.networks.mps.MPS`
+        """
+        charge_tree = cls.get_charge_tree_for_given_charge_sector(sites, charge_sector)
+        return cls._project_onto_sector_from_charge_tree(sites, p_state_list, charge_tree, dtype)
+
+    @classmethod
+    def _project_onto_sector_from_charge_tree(cls, sites, p_state_list, charge_tree, dtype=float):
+        """Select entries in a product state that are in a charge tree.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the local Hilbert space. The sites should conserve *some* charge,
+            otherwise projecting onto a charge sector is meaningless.
+        p_state_list : list | np.ndarray
+            list defining the product state out of which to project
+        charge_tree : list
+            a list containing a set of possible charges at each site
+        dtype : type
+            The data type of the ``B``-tensors, defaults to float
+        Returns
+        -------
+        projected_state : :class:`~tenpy.networks.mps.MPS`
+        """
+        p_state_list = np.array(p_state_list)  # convert (possible list) to ndarray for indexing
+        # check chiinfo
+        chinfo = sites[0].leg.chinfo
+        assert all(s.leg.chinfo == chinfo for s in sites), "Charge Info for all sites must be identical"
+
+        # init tensors and schmidt values
+        Bs = []
+        Ss = [np.ones(1, dtype=np.float64)]
+
+        # go through connections from left to right in the charge_tree
+        for i, (Q_L, Q_R) in enumerate(zip(charge_tree, charge_tree[1:])):
+            # dictionary holding indices of charges
+            Q_R_idx_map = dict((charge, i) for i, charge in enumerate(Q_R))
+
+            if i == 0:  # initial right leg for first charge
+                leg_R = npc.LegCharge.from_qflat(chinfo, np.array(list(Q_L)), qconj=-1)
+
+            # set legs
+            leg_L = leg_R.conj()
+            leg_R = npc.LegCharge.from_qflat(chinfo, np.array(list(Q_R)), qconj=-1)
+            # physical leg
+            leg_p = sites[i].leg
+            Q_p = leg_p.to_qflat()  # array of charges of physical leg
+
+            B = npc.zeros([leg_L, leg_R, leg_p],
+                          dtype=dtype,
+                          labels=['vL', 'vR', 'p'])
+
+            for j in range(leg_p.ind_len):  # iterate through possible charges of physical leg
+                value = p_state_list[i, - (j + 1)]  # go through values reversed
+                Q_p_j = Q_p[j]
+                for vL, Q_v_L in enumerate(np.array(list(Q_L))):
+                    Q_v_R = tuple(chinfo.make_valid(Q_v_L + Q_p_j))
+                    vR = Q_R_idx_map.get(Q_v_R, None)  # get index corresponding to vR
+                    if vR is not None:
+                        B[vL, vR, j] = value  # add an entry in the tensor
+
+            Bs.append(B)
+            # ignore S values as they will be obtained below from :meth:`MPS.canonical_form_finite`
+            Ss.append(np.ones(B.shape[1], np.float64))
+
+        projected_state = cls(sites, Bs, Ss, 'finite', form='B')
+        projected_state.canonical_form_finite()  # calculate S values and normalize
+        return projected_state
+    
     @property
     def L(self):
         """Number of physical sites; for an iMPS the len of the MPS unit cell."""
@@ -3486,6 +3572,72 @@ class MPS(BaseMPSExpectationValue):
         charges_mean = self.average_charge(bond)
         charges, ps = self.probability_per_charge(bond)
         return np.sum(ps[:, np.newaxis] * (charges - charges_mean[np.newaxis, :])**2, axis=0)
+
+    @staticmethod
+    def get_charge_tree_for_given_charge_sector(sites: list, charge_sector: tuple):
+        """Construct the charge-tree for a given charge sector.
+
+        This is a tree of possible charges for each site s.t. the MPS lies in the given ``charge_sector``.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the local Hilbert space. The sites should conserve *some* charge,
+            otherwise projecting onto a charge sector is meaningless.
+        charge_sector : tuple of int
+            The charge sector corresponding to the conserved charge of the ``sites``
+
+        Returns
+        -------
+        charge_tree : list of dict of tuples
+            A tree of possible charges (at the sites) for the desired ``charge_sector``.
+            I.e. consider the state :math:`\ket{++}`. The desired charge tree for the sector ``(0,)``
+            is ``[{(0,)}, {(1,), (-1,)}, {(0,)}]``.
+        """
+        L = len(sites)
+        assert L > 0, "sites must contain a :class:`Site` with conserved charges"
+        # check that all have same chiinfo
+        chinfo = sites[0].leg.chinfo
+        assert all(s.leg.chinfo == chinfo for s in sites), "Charge Info for all sites must be identical"
+
+        charge_sector_left = chinfo.make_valid(None)  # zero charges
+        charge_sector_right = chinfo.make_valid(charge_sector)
+        assert charge_sector_right.ndim == 1
+
+        # create a "charge-tree" from the right (starting at the desired charge sector)
+        Q_from_right = [None] * L + [set([tuple(charge_sector_right)])]  # all bonds 0, ... L
+
+        for i in reversed(range(L)):  # loop from right to left over all sites
+            Q_R = np.array(list(Q_from_right[i + 1]))  # the dictionary of charges (Q_R) to the right of site i
+            Q_L = set()
+            # loop over possible/allowed changes of charges:
+            for Q_p in sites[i].leg.charges:  # i.e. site.leg.charges=[[-1], [1]] for a SpinHalfSite
+                # add all "combinations of charges" -> Q_p[np.newaxis] to use broadcasting; store results in a set
+                Q_L_add = chinfo.make_valid(Q_R - Q_p[np.newaxis])  # from right to left in the tree we must subtract
+                Q_L_add = set([tuple(q) for q in Q_L_add])
+                Q_L = Q_L.union(Q_L_add)
+            Q_from_right[i] = Q_L
+
+        if tuple(charge_sector_left) not in Q_from_right[0]:
+            raise ValueError("can't get desired charge sector {charge_sector!r} "
+                             "for the given charges on physical sites!")
+
+        # create a "charge-tree" from the left (starting with no charges), similar logic to above
+        Q_from_left = [set([tuple(charge_sector_left)])] + [None] * L
+        for i in range(L):
+            Q_L = np.array(list(Q_from_left[i]))
+            Q_R = set()
+            for Q_p in sites[i].leg.charges:
+                Q_R_add = chinfo.make_valid(Q_L + Q_p[np.newaxis])  # from left to right in the tree we must add
+                Q_R_add = set([tuple(q) for q in Q_R_add])
+                Q_R = Q_R.union(Q_R_add)
+
+            # only keep entries in the left tree that can also be reached from the right
+            Q_from_left[i + 1] = Q_R.intersection(Q_from_right[i + 1])
+
+        assert Q_from_left[-1] == Q_from_right[-1], "Left `charge_sector` doesn't meet the one on the right"
+        # Q_from_left is already the intersection of the full tree from the left and from the right, hence return it
+        return Q_from_left
 
     def mutinf_two_site(self, max_range=None, n=1):
         """Calculate the two-site mutual information :math:`I(i:j)`.

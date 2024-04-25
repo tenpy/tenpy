@@ -234,39 +234,13 @@ class PurificationMPS(MPS):
         L = len(sites)
         assert L > 0
         chinfo = sites[0].leg.chinfo
-        for s in sites:
-            assert s.leg.chinfo == chinfo
-        charge_sector_left = chinfo.make_valid(None)  # zero charges
-        charge_sector_right = chinfo.make_valid(charge_sector)
-        assert charge_sector_right.ndim == 1
-        # get bounds for the maximal and minimal charge values at each bond
-        Q_from_right = [None] * L + [set([tuple(charge_sector_right)])]  # all bonds 0, ... L
-        for i in reversed(range(L)):
-            Q_R = np.array(list(Q_from_right[i+1]))
-            # find new charges possible on left of site i, coming from the right
-            Q_L = set()
-            for Q_p in sites[i].leg.charges:
-                Q_L_add = chinfo.make_valid(Q_R - Q_p[np.newaxis, :])
-                Q_L_add = set([tuple(q) for q in Q_L_add])
-                Q_L = Q_L.union(Q_L_add)
-            Q_from_right[i] = Q_L
-        if tuple(charge_sector_left) not in Q_from_right[0]:
-            raise ValueError("can't get desired charge sector {charge_sector!r} "
-                             "for the given charges on physical sites!")
-        Q_from_left = [set([tuple(charge_sector_left)])] + [None] * L
+        assert all(s.leg.chinfo == chinfo for s in sites), "Charge Info for all sites must be identical"
+        # get a 'charge_tree', (list of sets with possible charges for each site, including 0 to the left)
+        charge_tree = cls.get_charge_tree_for_given_charge_sector(sites, charge_sector)
+        # get charges from charge_tree in correct array form
         Q_L_arrays = []
-        for i in range(L):
-            Q_L = np.array(list(Q_from_left[i]))
-            Q_L = Q_L[lexsort(Q_L.T), :]
-            Q_L_arrays.append(Q_L)
-            Q_R = set()
-            for Q_p in sites[i].leg.charges:
-                Q_R_add = chinfo.make_valid(Q_L + Q_p[:, np.newaxis])
-                Q_R_add = set([tuple(q) for q in Q_R_add])
-                Q_R = Q_R.union(Q_R_add)
-            Q_from_left[i+1] = Q_R.intersection(Q_from_right[i+1])
-        assert Q_from_left[-1] == Q_from_right[-1]  # should match charge_sector on the right
-        Q_L_arrays.append(chinfo.make_valid(charge_sector_right[np.newaxis, :]))
+        for possible_charges_L in charge_tree:
+            Q_L_arrays.append(np.array(list(possible_charges_L)))
 
         # now we can define the tensors following section VI.C) of [barthel2016]_:
         # B[vL, vR, p, q] = delta_{p,q} delta_{Q(p) + Q(vL), Q(vR)}

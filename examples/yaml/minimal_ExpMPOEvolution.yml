@@ -30,7 +30,7 @@ final_time :  1.
 # additional measurements during the evolution
 connect_measurements: 
   - - tenpy.simulations.measurement
-    - onsite_expectation_value
+    - m_onsite_expectation_value
     - opname: Sz
   - - psi_method
     - wrap correlation_function
