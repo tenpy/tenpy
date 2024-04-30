@@ -57,11 +57,14 @@ class Symmetry(metaclass=ABCMeta):
         If the symmetry is abelian.
     """
     
-    has_fusion_tensor = False
-    """Whether the symmetry defines :meth:`fusion_tensor`. If not, it raises."""
+    has_fusion_tensor: bool
+    """Whether the symmetry defines :meth:`fusion_tensor`."""
 
     fusion_tensor_dtype = None
     """The dtype of fusion tensors, if available. Set to ``None`` otherwise."""
+
+    qdims_are_integer: bool
+    """Whether all quantum dimensions are integer (and sector_dim is implemented)"""
     
     def __init__(self, fusion_style: FusionStyle, braiding_style: BraidingStyle, trivial_sector: Sector,
                  group_name: str, num_sectors: int | float, descriptive_name: str | None = None):
@@ -131,6 +134,12 @@ class Symmetry(metaclass=ABCMeta):
         if self.is_abelian:
             return np.ones([a.shape[0]], dtype=int)
         return np.array([self.sector_dim(s) for s in a])
+
+    def batch_qdim(self, a: SectorArray) -> np.ndarray:
+        """qdim of every sector (row) in a"""
+        if self.is_abelian:
+            return np.ones([a.shape[0]], dtype=int)
+        return np.array([self.qdim(s) for s in a])
 
     def sector_str(self, a: Sector) -> str:
         """Short and readable string for the sector. Is used in __str__ of symmetry-related objects."""
@@ -522,6 +531,9 @@ class ProductSymmetry(Symmetry):
         nesting is flattened, i.e. ``[*others, psymm]`` is translated to
         ``[*others, *psymm.factors]`` for a :class:`ProductSymmetry` ``psymm``.
     """
+    has_fusion_tensor = None  # overridden by __init__
+    qdims_are_integer = None  # overridden by __init__
+
     def __init__(self, factors: list[Symmetry]):
         flat_factors = []
         for f in factors:
@@ -547,6 +559,7 @@ class ProductSymmetry(Symmetry):
             descriptive_name=descriptive_name
         )
         self.has_fusion_tensor = all(f.has_fusion_tensor for f in flat_factors)
+        self.qdims_are_integer = all(f.qdims_are_integer for f in flat_factors)
         dtypes = [f.fusion_tensor_dtype for f in flat_factors]
         if None in dtypes:
             self.fusion_tensor_dtype = None
@@ -641,6 +654,15 @@ class ProductSymmetry(Symmetry):
         for i, f_i in enumerate(self.factors):
             a_i = a[:, self.sector_slices[i]:self.sector_slices[i + 1]]
             dims.append(f_i.batch_sector_dim(a_i))
+        return np.prod(dims, axis=0)
+
+    def batch_qdim(self, a: SectorArray) -> npt.NDArray[np.int_]:
+        if self.is_abelian:
+            return np.ones([a.shape[0]], dtype=int)
+        dims = []
+        for i, f_i in enumerate(self.factors):
+            a_i = a[:, self.sector_slices[i]:self.sector_slices[i + 1]]
+            dims.append(f_i.batch_qdim(a_i))
         return np.prod(dims, axis=0)
 
     def sector_str(self, a: Sector) -> str:
@@ -777,6 +799,7 @@ class GroupSymmetry(Symmetry, metaclass=_ABCFactorSymmetryMeta):
     See examples in :class:`AbelianGroup`.
     """
     has_fusion_tensor = True
+    qdims_are_integer = True
     
     def __init__(self, fusion_style: FusionStyle, trivial_sector: Sector, group_name: str,
                  num_sectors: int | float, descriptive_name: str | None = None):
@@ -796,6 +819,9 @@ class GroupSymmetry(Symmetry, metaclass=_ABCFactorSymmetryMeta):
 
     def qdim(self, a: Sector) -> float:
         return self.sector_dim(a)
+
+    def batch_qdim(self, a: SectorArray) -> np.ndarray:
+        return self.batch_sector_dim(a)
 
 
 class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
@@ -1114,7 +1140,6 @@ class SU2Symmetry(GroupSymmetry):
         # Note to extend *linearly*, not anti-linearly.
         from . import _su2data
         return _su2data.Z_iso(a[0])
-        
 
 
 class FermionParity(Symmetry):
@@ -1124,6 +1149,7 @@ class FermionParity(Symmetry):
     `[0]`, `[1]`
     """
     has_fusion_tensor = True
+    qdims_are_integer = True
     fusion_tensor_dtype = Dtype.float64
     _one_2D = np.ones((1, 1), dtype=int)
     _one_2D_float = np.ones((1, 1), dtype=float)
@@ -1157,6 +1183,9 @@ class FermionParity(Symmetry):
         return 1
 
     def batch_sector_dim(self, a: SectorArray) -> np.ndarray:
+        return np.ones((len(a),), int)
+
+    def batch_qdim(self, a: SectorArray) -> np.ndarray:
         return np.ones((len(a),), int)
 
     def sector_str(self, a: Sector) -> str:
@@ -1229,7 +1258,8 @@ class ZNAnyonCategory(Symmetry):
 
     The anyon category corresponding to opposite handedness is obtained for `N` and `N-n` (or `-n`).
     """
-
+    has_fusion_tensor = False
+    qdims_are_integer = True
     _one_1D = np.ones((1,), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
@@ -1266,6 +1296,9 @@ class ZNAnyonCategory(Symmetry):
         return 1
 
     def batch_sector_dim(self, a: SectorArray) -> np.ndarray:
+        return np.ones((len(a),), int)
+
+    def batch_qdim(self, a: SectorArray) -> np.ndarray:
         return np.ones((len(a),), int)
 
     def __repr__(self):
@@ -1319,7 +1352,8 @@ class ZNAnyonCategory2(Symmetry):
 
     The anyon category corresponding to opposite handedness is obtained for `N` and `N-n` (or `-n`).
     """
-
+    has_fusion_tensor = False
+    qdims_are_integer = True
     _one_1D = np.ones((1,), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
@@ -1357,6 +1391,9 @@ class ZNAnyonCategory2(Symmetry):
         return 1
 
     def batch_sector_dim(self, a: SectorArray) -> np.ndarray:
+        return np.ones((len(a),), int)
+
+    def batch_qdim(self, a: SectorArray) -> np.ndarray:
         return np.ones((len(a),), int)
 
     def __repr__(self):
@@ -1403,7 +1440,8 @@ class QuantumDoubleZNAnyonCategory(Symmetry):
 
     This is not a simple product for two `ZNAnyonCategory`s; there are nontrivial R-symbols.
     """
-
+    has_fusion_tensor = False
+    qdims_are_integer = True
     _one_2D = np.ones((1, 1), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
@@ -1438,6 +1476,9 @@ class QuantumDoubleZNAnyonCategory(Symmetry):
         return 1
 
     def batch_sector_dim(self, a: SectorArray) -> np.ndarray:
+        return np.ones((len(a),), int)
+
+    def batch_qdim(self, a: SectorArray) -> np.ndarray:
         return np.ones((len(a),), int)
 
     def __repr__(self):
@@ -1488,7 +1529,8 @@ class FibonacciAnyonCategory(Symmetry):
         Considering anyons of different handedness is necessary for doubled models like,
         e.g., the anyons realized in the Levin-Wen string-net models.
     """
-
+    has_fusion_tensor = False  
+    qdims_are_integer = False
     _fusion_map = {  # key: number of tau in fusion input
         0: np.array([[0]]),  # 1 x 1 = 1
         1: np.array([[1]]),  # 1 x t = t = t x 1
@@ -1556,6 +1598,7 @@ class FibonacciAnyonCategory(Symmetry):
         return 1
 
     def qdim(self, a: Sector) -> float:
+        # TODO implement batch_qdim
         return 1 if a[0] == 0 else self._phi
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
@@ -1584,7 +1627,8 @@ class IsingAnyonCategory(Symmetry):
         anyon model. Different `nu` correspond to different topological twists of the Ising anyons.
         The Ising anyon model of opposite handedness is obtained for `-nu`.
     """
-
+    has_fusion_tensor = False
+    qdims_are_integer = False
     _fusion_map = {  # 1: vacuum, σ: Ising anyon, ψ: fermion
         0: np.array([[0]]),  # 1 x 1 = 1
         1: np.array([[1]]),  # 1 x σ = σ = σ x 1
@@ -1662,6 +1706,7 @@ class IsingAnyonCategory(Symmetry):
         return self.frobenius[a[0]]
 
     def qdim(self, a: Sector) -> float:
+        # TODO implement batch_qdim
         return np.sqrt(2) if a[0] == 1 else 1
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
@@ -1700,7 +1745,8 @@ class SU2_kAnyonCategory(Symmetry):
         Considering anyons of different handedness is necessary for doubled models like,
         e.g., the anyons realized in the Levin-Wen string-net models.
     """
-
+    has_fusion_tensor = False
+    qdims_are_integer = False
     _one_1D = np.ones((1,), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
@@ -1819,6 +1865,7 @@ class SU2_kAnyonCategory(Symmetry):
         return -1 if a[0] % 2 == 1 else 1
 
     def qdim(self, a: Sector) -> float:
+        # TODO implement batch_qdim
         return np.sin((a[0] + 1) * np.pi / (self.k + 2)) / np.sin(np.pi / (self.k + 2))
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
