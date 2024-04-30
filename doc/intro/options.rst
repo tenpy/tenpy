@@ -40,12 +40,12 @@ simulation, e.g., in the `sim_params` of the `results` returned by :meth:`~tenpy
 
 Python snippets in yaml files
 -----------------------------
-When defining the paremeters in the yaml file, you might want to evaluate small formulas e.g., set a parameter to a certain fraction of $\pi$,
-or expanding a long list ``[2**i for in range(5, 10)]`` without explicitly writing all the entries.
+When defining the parameters in the yaml file, you might want to evaluate small formulas e.g., set a parameter to a certain fraction of $\pi$,
+or expanding a long list ``[2**i for i in range(5, 10)]`` without explicitly writing all the entries.
 For those cases, it can be convenient to have small python snippets inside the yaml file, which we allow by loading the
 yaml files with :func:`tenpy.tools.params.load_yaml_with_py_eval`.
 
-It defines an ``!py_eval`` yaml tag, which should be followed by a string of python code to be evaluated with python's ``eval()`` function.
+It defines a ``!py_eval`` yaml tag, which should be followed by a string of python code to be evaluated with python's ``eval()`` function.
 A good method to pass the python code is to use a literal string in yaml, as shown in the simple examples below.
 
 .. code :: yaml

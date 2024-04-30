@@ -45,9 +45,10 @@ jobs:
         python -m pip install --upgrade pytest
     
     - name: Build and install tenpy
+      # also installs extra dependencies defined in pyproject.toml
       run: |
         python -m build .
-        python -m pip install .
+        python -m pip install ".[io, test, extra]"
     
     - name: Run pytest
       # configuration in pyproject.toml

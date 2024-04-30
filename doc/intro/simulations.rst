@@ -87,7 +87,7 @@ returned by the simulation (or saved to file):
     import yaml
 
     with open('parameters.yml', 'r') as stream:
-        simulation_parameters = yaml.safe_load(stream)
+        simulation_parameters = tenpy.load_yaml_with_py_eval(stream)
     # alternative: simulation_parameters = tenpy.load_yaml_with_py_eval('parameters.yml')
     results = tenpy.run_simulation(simulation_parameters)
     pprint(results['simulation_parameters'])
