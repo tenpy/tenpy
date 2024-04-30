@@ -40,9 +40,10 @@ jobs:
         python -m pip install --upgrade coverage
     
     - name: Build and install tenpy
+      # also installs extra dependencies defined in pyproject.toml
       run: |
         python -m build .
-        python -m pip install .
+        python -m pip install ".[io, test, extra]"
     
     - name: Run pytest with coverage
       # pytest configuration in pyproject.toml
