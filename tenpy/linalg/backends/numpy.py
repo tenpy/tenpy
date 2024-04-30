@@ -181,11 +181,8 @@ class NumpyBlockBackend(BlockBackend):
     def ones_block(self, shape: list[int], dtype: Dtype) -> Block:
         return np.ones(shape, dtype=self.backend_dtype_map[dtype])
 
-    def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
-        matrix_dim = np.prod(legs)
-        eye = np.eye(matrix_dim, dtype=self.backend_dtype_map[dtype])
-        eye = np.reshape(eye, legs + legs)
-        return eye
+    def eye_matrix(self, dim: int, dtype: Dtype) -> Block:
+        return np.eye(dim, dtype=self.backend_dtype_map[dtype])
 
     def block_kron(self, a: Block, b: Block) -> Block:
         return np.kron(a, b)

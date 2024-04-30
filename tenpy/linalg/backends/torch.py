@@ -191,11 +191,8 @@ class TorchBlockBackend(BlockBackend):
     def ones_block(self, shape: list[int], dtype: Dtype) -> Block:
         return torch_module.ones(list(shape), dtype=self.backend_dtype_map[dtype], device=self.device)
 
-    def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
-        matrix_dim = prod(legs)
-        eye = torch_module.eye(matrix_dim, dtype=self.backend_dtype_map[dtype], device=self.device)
-        eye = torch_module.reshape(eye, legs + legs)
-        return eye
+    def eye_matrix(self, dim: int, dtype: Dtype) -> Block:
+        return torch_module.eye(dim, dtype=self.backend_dtype_map[dtype], device=self.device)
 
     def block_kron(self, a: Block, b: Block) -> Block:
         return torch_module.kron(a, b)

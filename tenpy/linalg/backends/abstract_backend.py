@@ -7,6 +7,7 @@ Also contains some private utility function used by multiple backend modules.
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from typing import TypeVar, TYPE_CHECKING, Callable
+from math import prod
 import numpy as np
 
 from ..symmetries import Symmetry
@@ -787,9 +788,25 @@ class BlockBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
-        """eye from legs to dual of legs (result has ``2 * len(legs)`` axes!!)"""
+    def eye_matrix(self, dim: int, dtype: Dtype) -> Block:
+        """The ``dim x dim`` identity matrix"""
         ...
+
+    def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
+        """The identity matrix, reshaped to a block.
+
+        Note the unusual leg order ``[m1,...,mJ,mJ*,...,m1*]``,
+        which is chosen to match :meth:`eye_data`.
+
+        Note also that the ``legs`` only specify the dimensions of the first half,
+        namely ``m1,...,mJ``.
+        """
+        J = len(legs)
+        eye = self.eye_matrix(prod(legs), dtype)
+        # [M, M*] -> [m1,...,mJ,m1*,...,mJ*]
+        eye = self.block_reshape(eye, legs * 2)
+        # [m1,...,mJ,mJ*,...,m1*]
+        return self.block_permute_axes(eye, [*range(J), *reversed(range(J, 2 * J))])
 
     @abstractmethod
     def block_kron(self, a: Block, b: Block) -> Block:
