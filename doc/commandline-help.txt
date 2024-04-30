@@ -6,8 +6,10 @@ Command line interface to run a TeNPy simulation.
 
 positional arguments:
     parameters_file
-        Yaml (*.yml) file with the simulation parameters/options. Multiple files get merged
-        according to MERGE; see tenpy.tools.misc.merge_recursive for details.
+        Yaml (*.yml) file with the simulation parameters/options. We support an additional yaml
+        tag !py_eval: VALUE that gets initialized by python's ``eval(VALUE)`` with `np`, `scipy`
+        and `tenpy` defined. Multiple files get merged according to MERGE; see
+        tenpy.tools.misc.merge_recursive for details.
 
 options:
     -h, --help
