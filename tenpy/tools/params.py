@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 from .hdf5_io import ATTR_FORMAT
 
-__all__ = ["Config", "asConfig"]
+__all__ = ["Config", "asConfig", "load_yaml_with_py_eval"]
 
 
 class Config(MutableMapping):
@@ -427,7 +427,7 @@ def asConfig(config, name):
 
 
 
-def _yaml_eval_construcor(loader, node):
+def _yaml_eval_constructor(loader, node):
     """Yaml constructor to support `!py_eval` tag in yaml files."""
     cmd = loader.construct_scalar(node)
     if not isinstance(cmd, str):
@@ -445,10 +445,10 @@ try:
 except ImportError:
     pass
 else: # no ImportError
-    class YamlLoaderWithPyEval(yaml.FullLoader):
+    class _YamlLoaderWithPyEval(yaml.FullLoader):
         eval_context = {}
 
-    yaml.add_constructor("!py_eval", _yaml_eval_construcor, Loader=YamlLoaderWithPyEval)
+    yaml.add_constructor("!py_eval", _yaml_eval_constructor, Loader=_YamlLoaderWithPyEval)
 
 
 def load_yaml_with_py_eval(filename, context={'np': numpy}):
@@ -495,8 +495,8 @@ def load_yaml_with_py_eval(filename, context={'np': numpy}):
         Data (typically nested dictionary) as defined in the yaml file.
 
     """
-    YamlLoaderWithPyEval.eval_context = context
+    _YamlLoaderWithPyEval.eval_context = context
 
     with open(filename, 'r') as stream:
-        config = yaml.load(stream, Loader=YamlLoaderWithPyEval)
+        config = yaml.load(stream, Loader=_YamlLoaderWithPyEval)
     return config
