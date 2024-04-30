@@ -443,8 +443,11 @@ def _yaml_eval_constructor(loader, node):
 try:
     import yaml
 except ImportError:
-    pass
-else: # no ImportError
+    yaml = None
+
+if yaml is None:
+    _YamlLoaderWithPyEval = None
+else:
     class _YamlLoaderWithPyEval(yaml.FullLoader):
         eval_context = {}
 
@@ -495,6 +498,9 @@ def load_yaml_with_py_eval(filename, context={'np': numpy}):
         Data (typically nested dictionary) as defined in the yaml file.
 
     """
+    if _YamlLoaderWithPyEval is None:
+        raise RuntimeError('Could not import yaml. Consider installing the pyyaml package.')
+
     _YamlLoaderWithPyEval.eval_context = context
 
     with open(filename, 'r') as stream:
