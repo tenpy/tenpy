@@ -165,6 +165,49 @@ def include_command_line_help():
 
 include_command_line_help()
 
+# -- modify changelog/_latest.rst  ----------------------------------------
+
+
+def stitch_changelog_latest():
+    # Append the contents of all files in ``doc/changelog/latest/`` with ``.txt`` suffix
+    # to ``doc/changelog/_latest.rst`` verbatim.
+    # Intended use: contains only rst bullet points?
+    folder = os.path.join(os.path.dirname(__file__), 'changelog', 'latest')
+    outfile = os.path.join(os.path.dirname(__file__), 'changelog', '_latest.rst')
+    if not os.path.exists(outfile):
+        # repo should be set up such that this exists.
+        print(outfile)
+        raise ValueError('`doc/changelog/_latest.rst` not found.')
+    contents = [
+        '[latest]\n',
+        '========\n',
+        'The following changes are in the github repository, but not yet released.\n',
+        'The contents are auto-generated from multiple files.\n',
+        '\n',
+        '.. only :: comment\n',
+        '\n',
+        '    Contents are modified by ``stitch_changelog_latest`` in ``doc/conf.py``\n',
+        '    Any ``.txt`` file in ``doc/changelog/latest/`` is included verbatim.\n'
+        '\n',
+        '\n',
+    ]
+    
+    for fn in os.listdir(folder):
+        fn = os.path.join(folder, fn)
+        if not fn.endswith('.txt'):
+            continue
+        with open(fn, 'r') as f:
+            lines = f.readlines()
+        contents.extend(lines)
+        contents.append('\n')  # empty line between files
+    
+    with open(outfile, 'w') as f:
+        f.writelines(contents)
+    # done
+
+
+stitch_changelog_latest()
+
 # -- Options for HTML output ----------------------------------------------
 
 html_theme = 'sphinx_rtd_theme'

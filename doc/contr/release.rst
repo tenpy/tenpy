@@ -12,11 +12,17 @@ Follow this checklist when creating a new release, i.e. updating the version num
    A convenient way to check this is to re-run the github.com actions on the latest commit.
 
 #. Update the changelog and release notes.
-
-   - Make sure all important changes are listed in ``doc/changelog/latest.rst``.
-   - Rename that file to the next version number.
-   - Add it to the toctree in ``doc/releases.rst``.
-   - Create a new ``doc/changelog/latest.rst`` from the template.
+   
+   - The "latest" contributions should have added entries in ``doc/changelog/latest/``.
+     Starting a docbuild (``make html``) pastes all of these entries into ``doc/changelog/_latest.rst``,
+     even if aborted after a few seconds.
+   - Check the commit list on the main branch and make sure all important changes are listed in the changelog.
+   - Create a new changelog file by duplicating the ``doc/changelog/template.txt``.
+     Name it ``vX.Y.Z.rst`` according to the new version number.
+     Include all notes from the latest changelog, add a summary, adjust the title.
+   - Add the new file to the toctree in ``doc/releases.rst``.
+   - Delete the outdated files in ``doc/changelog/latest``.
+   - Make sure to *not* commit possible changes to ``doc/changelog/_latest.rst``.
 
 #. Update ``tenpy/version.py``
   

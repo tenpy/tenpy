@@ -52,7 +52,7 @@ To get the latest development version from the github main branch, you can use::
 
     pip install git+git://github.com/tenpy/tenpy.git
 
-This should already have the latest features described in :doc:`/changelog/latest`.
+This should already have the latest features described in :doc:`/changelog/_latest`.
 Disclaimer: this might sometimes be broken, although we do our best to keep to keep it stable as well.
 
 Installation from the downloaded source folder
