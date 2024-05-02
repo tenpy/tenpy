@@ -27,7 +27,7 @@ Of course, you can also directly run the simulation from inside python, the comm
     import tenpy
     import yaml
 
-    simulation_params = yaml.load("parameters.yml")
+    simulation_params = tenpy.load_yaml_with_py_eval("parameters.yml")
     # instead of using yaml, you can also define a usual python dictionary
     tenpy.run_simulation(**simulation_params)
 
@@ -86,8 +86,9 @@ returned by the simulation (or saved to file):
     from pprint import pprint
     import yaml
 
-    with open('parameters.yml', 'r') as f:
-        simulation_parameters = yaml.safe_load(f)
+    with open('parameters.yml', 'r') as stream:
+        simulation_parameters = tenpy.load_yaml_with_py_eval(stream)
+    # alternative: simulation_parameters = tenpy.load_yaml_with_py_eval('parameters.yml')
     results = tenpy.run_simulation(simulation_parameters)
     pprint(results['simulation_parameters'])
 

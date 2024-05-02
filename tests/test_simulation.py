@@ -350,3 +350,59 @@ def test_output_filename_from_dict():
                                    },
                                    parts_order=['alg.dt', ('model.Lx', 'model.Ly')])
     assert fn == 'result_dt_0.50_3x4.h5'
+
+
+yaml_example = """
+simulation_class : GroundStateSearch
+directory: results
+
+model_class : SpinModel
+model_params :
+    bc_MPS: infinite
+    bc_y: cylinder
+    lattice: !py_eval tenpy.models.lattice.Square
+    Lx: 2
+    Ly: 4
+    S: .5
+    Jx: !py_eval "[J ** 2 for J in range(6)]"
+    hx: !py_eval |
+        np.linspace(0, 5, 21, endpoint=True)
+
+log_params:
+    to_file: INFO
+    to_stdout: INFO
+
+initial_state_params:
+    method : lat_product_state
+    product_state : [[[up]]]
+
+algorithm_class: TwoSiteDMRGEngine
+algorithm_params:
+    mixer: True
+    trunc_params:
+        svd_min: 1.e-10
+        chi_max: 200
+    max_E_err: 1.e-10
+
+sequential:
+    recursive_keys:
+        - model_params.hx
+        - model_params.Jx
+"""
+
+
+def test_yaml_load(tmp_path):
+    yaml = pytest.importorskip('yaml')
+    file = tmp_path / 'simulation.yaml'
+    with open(file, 'w') as f:
+        print(yaml_example, file=f)
+    simulation_params = tenpy.load_yaml_with_py_eval(file, context=dict(np=np, tenpy=tenpy))
+    assert simulation_params['simulation_class'] == 'GroundStateSearch'
+    assert simulation_params['model_params']['Jx'] == [0, 1, 4, 9, 16, 25]
+    np.testing.assert_array_almost_equal_nulp(
+        simulation_params['model_params']['hx'],
+        np.linspace(0, 5, 21, endpoint=True),
+        10
+    )
+    assert simulation_params['model_params']['lattice'] is tenpy.Square
+    

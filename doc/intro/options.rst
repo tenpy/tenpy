@@ -36,3 +36,22 @@ simulation, e.g., in the `sim_params` of the `results` returned by :meth:`~tenpy
 
     If you add extra options to your configuration that TeNPy doesn't read out by the end of the simulation, it will (usually) issue a warning.
     Getting such a warnings is an indicator for a typo in your configuration, or an option being in the wrong config dictionary.
+
+
+Python snippets in yaml files
+-----------------------------
+When defining the parameters in the yaml file, you might want to evaluate small formulas e.g., set a parameter to a certain fraction of $\pi$,
+or expanding a long list ``[2**i for i in range(5, 10)]`` without explicitly writing all the entries.
+For those cases, it can be convenient to have small python snippets inside the yaml file, which we allow by loading the
+yaml files with :func:`tenpy.tools.params.load_yaml_with_py_eval`.
+
+It defines a ``!py_eval`` yaml tag, which should be followed by a string of python code to be evaluated with python's ``eval()`` function.
+A good method to pass the python code is to use a literal string in yaml, as shown in the simple examples below.
+
+.. code :: yaml
+
+    a: !py_eval |
+        2**np.arange(6, 10)
+    b: !py_eval |
+        [10, 15] + list(range(20, 31, 2)) + [35, 40]
+    c: !py_eval "2*np.pi * 0.3"

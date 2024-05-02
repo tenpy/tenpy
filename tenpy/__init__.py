@@ -84,7 +84,7 @@ from .simulations.measurement import (m_measurement_index, m_bond_dimension, m_b
 from .tools.hdf5_io import save, load, save_to_hdf5, load_from_hdf5
 from .tools.misc import (setup_logging, consistency_check, TenpyInconsistencyError,
                          TenpyInconsistencyWarning, BetaWarning)
-from .tools.params import Config, asConfig
+from .tools.params import Config, asConfig, load_yaml_with_py_eval
 
 
 
@@ -134,6 +134,7 @@ __all__ = [
     # from tenpy.tools
     'save', 'load', 'save_to_hdf5', 'load_from_hdf5', 'setup_logging', 'consistency_check',
     'TenpyInconsistencyError', 'TenpyInconsistencyWarning', 'BetaWarning', 'Config', 'asConfig',
+    'load_yaml_with_py_eval',
     # from tenpy.__init__, i.e. defined below
     'show_config', 'console_main',
 ]
@@ -173,7 +174,7 @@ def console_main(*command_line_args):
 
     args = parser.parse_args(args=command_line_args if command_line_args else None)
     # import extra modules
-    context = {'tenpy': globals(), 'np': np, 'scipy': scipy}
+    context = {'tenpy': sys.modules[__name__], 'np': np, 'scipy': scipy}
     if args.import_module:
         sys.path.insert(0, '.')
         for module_name in args.import_module:
@@ -182,11 +183,9 @@ def console_main(*command_line_args):
     # load parameters_file
     options = {}
     if args.parameters_file:
-        import yaml
         options_files = []
         for fn in args.parameters_file:
-            with open(fn, 'r') as stream:
-                options = yaml.safe_load(stream)
+            options = load_yaml_with_py_eval(fn, context)
             options_files.append(options)
         if len(options_files) > 1:
             options = tools.misc.merge_recursive(*options_files, conflict=args.merge)
@@ -267,6 +266,8 @@ def _setup_arg_parser(width=None):
     parser.add_argument('parameters_file',
                         nargs='*',
                         help="Yaml (*.yml) file with the simulation parameters/options. "
+                        "We support an additional yaml tag !py_eval: VALUE that gets initialized "
+                        "by python's ``eval(VALUE)`` with `np`, `scipy` and `tenpy` defined. "
                         "Multiple files get merged according to MERGE; "
                         "see tenpy.tools.misc.merge_recursive for details.")
     opt_help = textwrap.dedent("""\
