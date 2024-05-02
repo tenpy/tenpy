@@ -1,0 +1,2 @@
+- Add support for the ``!py_eval VALUE`` yaml tag for the command line interface,
+  see :doc:`/intro/options`
