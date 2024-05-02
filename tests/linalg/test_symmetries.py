@@ -1,4 +1,4 @@
-# Copyright 2023-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 import pytest
 import numpy as np
 from numpy.testing import assert_array_equal, assert_array_almost_equal

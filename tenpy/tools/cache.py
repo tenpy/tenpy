@@ -7,7 +7,7 @@ Any cache should be handled like a file object that needs to be closed after use
 this is easiest done through a ``with`` statement, see the example in :class:`DictCache`.
 """
 
-# Copyright 2021-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import pickle
 import numpy as np
@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 from .misc import find_subclass
 from .thread import Worker
 from .hdf5_io import load_from_hdf5, save_to_hdf5
-from .params import asConfig
 
 __all__ = ["DictCache", "CacheFile", "Storage", "PickleStorage", "Hdf5Storage", "ThreadedStorage"]
 
@@ -40,7 +39,7 @@ class DictCache(collections.abc.MutableMapping):
     memory, see :meth:`set_short_term_keys`.
 
     Using the :meth:`preload` method allows to generalize to the :class:`ThreadedDictCache`,
-    which can save/load data in parallel without blocking the main thread excution while waiting
+    which can save/load data in parallel without blocking the main thread execution while waiting
     for disk input/output.
 
     .. note ::
@@ -219,7 +218,7 @@ class CacheFile(DictCache):
         """Interface for opening a :class:`Storage` and creating a :class:`DictCache` from it.
 
         Default parameters just give a dummy cache that keeps everything in memory.
-        If you want to activate it to actually save things to disk, we cound that the following
+        If you want to activate it to actually save things to disk, we found that the following
         ``cache_params`` parameters worked reasonably well, to be used for
         the simulation's see :class:`~tenpy.simulations.simulation.Simulation.init_cache`:
 
@@ -329,7 +328,7 @@ class Storage:
         """Create another instance of the same class saving in a subdirectory/subgroup.
 
         This method allows multiple :class:`DictCache` instance re-using open resources.
-        Subcontainers will explcitly be closed when any of the parent containers (on which
+        Subcontainers will explicitly be closed when any of the parent containers (on which
         `subcontainer()` was called) is closed.
         """
         if not self._opened:
@@ -359,7 +358,7 @@ class Storage:
     def preload(self, key):
         """Interface for preloading data into the given dictionary `into`.
 
-        Only overriden in :class:`ThreadedStorage` for thread-parallelized pre-loading;
+        Only overridden in :class:`ThreadedStorage` for thread-parallelized pre-loading;
         in other cases it does nothing.
         """
         if not self._opened:

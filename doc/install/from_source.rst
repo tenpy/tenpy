@@ -12,7 +12,7 @@ Getting the source
 The following instructions are for (some kind of) Linux, and tested on Ubuntu. 
 However, the code itself should work on other operating systems as well (in particular MacOS and Windows).
 
-The offical repository is at https://github.com/tenpy/tenpy.git.
+The official repository is at https://github.com/tenpy/tenpy.git.
 To get the latest version of the code, you can clone it with [git]_ using the following commands::
 
     git clone https://github.com/tenpy/tenpy.git $HOME/TeNPy
@@ -25,7 +25,7 @@ To get the latest version of the code, you can clone it with [git]_ using the fo
 Optionally, if you don't want to contribute, you can checkout the latest stable release::
 
     git tag   # this prints the available version tags
-    git checkout v0.3.0  # or whatever is the lastest stable version
+    git checkout v0.3.0  # or whatever is the latest stable version
 
 .. note ::
     
@@ -46,7 +46,7 @@ On Linux, you can simply do this with the following line in the terminal::
 (If you have already a path in this variable, separate the paths with a colon ``:``.) 
 However, if you enter this in the terminal, it will only be temporary for the terminal session where you entered it.
 To make it permanently, you can add the above line to the file ``$HOME/.bashrc``.
-You might need to restart the terminal session or need to relogin to force a reload of the ``~/.bashrc``.
+You might need to restart the terminal session or need to re-login to force a reload of the ``~/.bashrc``.
 
 Whenever the path is set, you should be able to use the library from within python::
 
@@ -69,7 +69,7 @@ If you got a similar output as above: congratulations! You can now run the codes
 
 Compilation of np_conserved
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-At the heart of the TeNPy library is the module :mod:`tenpy.linalg.np_conseved`, which provides an Array class to exploit the
+At the heart of the TeNPy library is the module :mod:`tenpy.linalg.np_conserved`, which provides an Array class to exploit the
 conservation of abelian charges. The data model of python is not ideal for the required book-keeping, thus
 we have implemented the same np_conserved module in `Cython <https://cython.org>`_.
 This allows to compile (and thereby optimize) the corresponding python module, thereby speeding up the execution of the

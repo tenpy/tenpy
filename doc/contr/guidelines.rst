@@ -23,7 +23,7 @@ However, these are just guidelines - it still helps if you contribute something,
   The documentation uses `reStructuredText`. If you are new to `reStructuredText`, read this `introduction <http://www.sphinx-doc.org/en/stable/rest.html>`_.
   We use the `numpy` style for doc-strings (with the `napoleon <https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html>`_ extension to sphinx).
   You can read about them in these `Instructions for the doc strings <https://numpydoc.readthedocs.io/en/latest/format.html>`_.
-  In addition, you can take a look at the following `example file <http://github.com/numpy/numpy/blob/master/doc/example.py>`_.
+  In addition, you can take a look at the following `example file <https://github.com/numpy/numpydoc/blob/main/doc/example.py>`_.
   Helpful hints on top of that::
 
         r"""<- this r makes me a raw string, thus '\' has no special meaning.
@@ -67,6 +67,20 @@ However, these are just guidelines - it still helps if you contribute something,
   We have set up github actions to automatically run the tests.
 
 - Reversely, if you write new functions, please also include suitable tests!
+
+- Preserve backwards compatibility as far as possible.
+  If you change how a feature works, or how it is accessed or what its function signature is,
+  keep the deprecated version around with suitable deprecation warnings.
+  Issue a ``DeprecationWarning`` or ``FutureWarning`` when the deprecated implementation is used.
+  A common pattern for deprecated classes is to subclass from the new implementation and override
+  methods as needed.
+  Use the ``.. deprecated ::`` directive in the docstring and describe what should be used instead.
+  Include a version number roughly 2-3 versions in the future, at which the deprecated version will
+  be removed.
+  Make sure you update the changelog, clearly stating which new feature replaces which old one in
+  what circumstance.
+  For deprecated config options use :meth:`~tenpy.tools.config.Config.deprecated_alias`.
+
 - During development, you might introduce ``# TODO`` comments.  But also try to remove them again later!
   If you're not 100% sure that you will remove it soon, please add a doc-string with a 
   ``.. todo ::`` block, such that we can keep track of it.

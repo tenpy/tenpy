@@ -4,7 +4,8 @@ This example uses DMRG to find the ground state of the transverse field Ising mo
 through the phase transition by changing the field `g`.
 It plots a few observables in the end.
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
+
 
 import numpy as np
 

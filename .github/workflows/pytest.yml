@@ -1,42 +1,58 @@
-name: pytest
+name: Run Pytest
+# Run the test suite using pytest
+
+# Note: The doctests (pieces of test in the docstrings) are run by doc-build.yml
+# Note: The code-coverage.yml runs the test suite using the newest python version.
+#       So we can skip that version here.
 
 on:
-  push: 
+  # pushes to main
+  push:
     branches:
       - main
+  # PRs
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
 
 jobs:
   build:
+    if: github.event.pull_request.draft == false
 
     runs-on: ubuntu-latest
+    env:
+      # make pytest output in color
+      PY_COLORS: 1
     strategy:
       max-parallel: 5
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+        # Note: python 3.12 is covered by code_coverage.yml
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
 
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout
+      uses: actions/checkout@v4
+    
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Install build dependencies
+    
+    - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         python -m pip install --upgrade setuptools build
-    - name: Build
-      run: python -m build .
-    - name: Install
-      run: python -m pip install .
-#    - name: Lint with flake8
-#      run: |
-#        pip install flake8
-#        # stop the build if there are Python syntax errors or undefined names
-#        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-#        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-#        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    - name: Test with pytest
+        python -m pip install --upgrade pytest
+    
+    - name: Build and install tenpy
+      # also installs extra dependencies defined in pyproject.toml
       run: |
-        pip install pytest
-        pytest
+        python -m build .
+        python -m pip install ".[io, test, extra]"
+    
+    - name: Run pytest
+      # configuration in pyproject.toml
+      # Note: This runs in the repo root directory, which contains the uncompiled tenpy package.
+      #       To use the version we just installed, it is important to run `pytest`
+      #       instead of `python -m pytest`.
+      run: pytest

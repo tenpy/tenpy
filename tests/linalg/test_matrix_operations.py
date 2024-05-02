@@ -1,5 +1,5 @@
 """A collection of tests for tenpy.linalg.matrix_operations."""
-# Copyright 2023-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 import numpy as np
 import scipy
 import numpy.testing as npt

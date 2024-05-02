@@ -3,7 +3,8 @@
 The example functions in this class do the same as the ones in `toycodes/c_tebd.py`, but make use
 of the classes defined in tenpy.
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
+
 
 import numpy as np
 

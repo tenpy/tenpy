@@ -15,7 +15,8 @@ Main changes  (TODO -> changelog)
 - sites have a backend. all operators on the site need to have that backend.
 
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
+
 
 from __future__ import annotations
 import numpy as np

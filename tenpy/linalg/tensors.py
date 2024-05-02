@@ -22,7 +22,7 @@ TODO elaborate, this is a stub explanation.
 TODO num_domain_legs more in tests
 
 """
-# Copyright 2023-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod

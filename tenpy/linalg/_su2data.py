@@ -1,5 +1,5 @@
 """Compute symmetry data for SU(2)"""
-# Copyright 2023-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from __future__ import annotations
 import numpy as np

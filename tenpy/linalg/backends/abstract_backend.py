@@ -3,7 +3,7 @@ Also contains some private utility function used by multiple backend modules.
 
 """
 
-# Copyright 2023-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from typing import TypeVar, TYPE_CHECKING, Callable

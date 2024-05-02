@@ -1,7 +1,7 @@
 """Implements a generic BlockBackend that works with any library which follows the Array API standard
 https://data-apis.org/array-api/latest/purpose_and_scope.html
 """
-# Copyright 2023-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 
 from .abstract_backend import BlockBackend, Block, Data

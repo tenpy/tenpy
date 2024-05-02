@@ -6,26 +6,27 @@ designed to study the physics of strongly correlated quantum systems.
 The code is intended to be accessible for newcommers
 and yet powerful enough for day-to-day research.
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 # This file marks this directory as a python package.
-
-import warnings
-import logging
-logger = logging.getLogger(__name__)  # main logger for tenpy
-
-# load and provide subpackages on first input
-# note that the order matters!
-
-# TODO reinstate the commented-out modules!
 # TODO revise this whole structure for v2
 
-# from . import tools
-from . import linalg, networks
+# Note: all external packages that are imported should be `del`-ed at the end of the file!
+import logging
+
+# main logger for tenpy
+logger = logging.getLogger(__name__)
+
+# load and provide sub packages on first input
+# note that the order matters!
+from . import tools
+from . import linalg
 from .linalg import backends
-# from . import algorithms
-# from . import models
-# from . import simulations
+# from . import algorithms  # TODO
+from . import networks
+# from . import models  # TODO
+# from . import simulations  # TODO
 from . import version  # needs to be after linalg! (TODO this still true?)
+
 
 # provide the more important functions and classes directly from the main namespace:
 # from .algorithms.dmrg_parallel import DMRGThreadPlusHC
@@ -37,6 +38,7 @@ from . import version  # needs to be after linalg! (TODO this still true?)
 # from .algorithms.purification import PurificationApplyMPO, PurificationTEBD, PurificationTEBD2
 # from .algorithms.tdvp import (SingleSiteTDVPEngine, TwoSiteTDVPEngine, TimeDependentSingleSiteTDVP,
 #                               TimeDependentTwoSiteTDVP)
+# from .algorithms.vumps import SingleSiteVUMPSEngine, TwoSiteVUMPSEngine
 # from .algorithms.tebd import TEBDEngine, QRBasedTEBDEngine, RandomUnitaryEvolution, TimeDependentTEBD
 # from .algorithms.truncation import TruncationError, truncate, svd_theta
 from .linalg.dtypes import Dtype
@@ -47,7 +49,6 @@ from .linalg.tensors import *
 from .linalg import random_matrix
 from .linalg.sparse import *
 from .linalg.matrix_operations import *
-# from .linalg.krylov_based import Arnoldi, LanczosGroundState, LanczosEvolution, lanczos_arpack
 # from .models.lattice import (Lattice, TrivialLattice, SimpleLattice, MultiSpeciesLattice,
 #                              IrregularLattice, HelicalLattice, Chain, Ladder, NLegLadder, Square,
 #                              Triangular, Honeycomb, Kagome, get_lattice)
@@ -71,9 +72,11 @@ from .networks.site import *
 #                            build_initial_state)
 # from .networks.mpo import MPO, MPOEnvironment, MPOTransferMatrix
 # from .networks.purification_mps import PurificationMPS
+# from .networks.uniform_mps import UniformMPS
+# from .networks.momentum_mps import MomentumMPS
 # from .simulations.simulation import (Simulation, Skip, init_simulation, run_simulation,
 #                                      init_simulation_from_checkpoint, resume_from_checkpoint,
-#                                      run_seq_simulations)
+#                                      run_seq_simulations, estimate_simulation_RAM)
 # from .simulations.ground_state_search import (GroundStateSearch, OrthogonalExcitations,
 #                                               ExcitationInitialState)
 # from .simulations.time_evolution import RealTimeEvolution
@@ -81,6 +84,10 @@ from .networks.site import *
 #                                       m_simulation_parameter, m_energy_MPO, m_entropy,
 #                                       m_onsite_expectation_value, m_correlation_length,
 #                                       m_evolved_time)
+from .tools.hdf5_io import save, load, save_to_hdf5, load_from_hdf5
+from .tools.misc import (setup_logging, consistency_check, TenpyInconsistencyError,
+                         TenpyInconsistencyWarning, BetaWarning)
+from .tools.params import Config, asConfig, load_yaml_with_py_eval
 
 
 #: hard-coded version string
@@ -101,7 +108,8 @@ __all__ = [
     # 'contract', 'PurificationApplyMPO', 'PurificationTEBD', 'PurificationTEBD2',
     # 'SingleSiteTDVPEngine', 'TwoSiteTDVPEngine', 'TimeDependentSingleSiteTDVP',
     # 'TimeDependentTwoSiteTDVP', 'TEBDEngine', 'QRBasedTEBDEngine', 'RandomUnitaryEvolution',
-    # 'TimeDependentTEBD', 'TruncationError', 'truncate', 'svd_theta',
+    # 'TimeDependentTEBD', 'TruncationError', 'truncate', 'svd_theta', 'SingleSiteVUMPSEngine',
+    # 'TwoSiteVUMPSEngine',
     # # from tenpy.linalg
     'Dtype', 'get_backend', *linalg.symmetries.__all__, *linalg.spaces.__all__, *linalg.tensors.__all__,
      *linalg.sparse.__all__,  *linalg.matrix_operations.__all__,
@@ -124,7 +132,11 @@ __all__ = [
     # 'ExcitationInitialState', 'RealTimeEvolution', 'm_measurement_index', 'm_bond_dimension',
     # 'm_bond_energies', 'm_simulation_parameter', 'm_energy_MPO', 'm_entropy',
     # 'm_onsite_expectation_value', 'm_correlation_length', 'm_evolved_time',
-    # # from tenpy.__init__, i.e. defined below
+    # from tenpy.tools
+    'save', 'load', 'save_to_hdf5', 'load_from_hdf5', 'setup_logging', 'consistency_check',
+    'TenpyInconsistencyError', 'TenpyInconsistencyWarning', 'BetaWarning', 'Config', 'asConfig',
+    'load_yaml_with_py_eval',
+    # from tenpy.__init__, i.e. defined below
     'show_config', 'console_main',
 ]
 
@@ -163,7 +175,7 @@ def console_main(*command_line_args):
 
     args = parser.parse_args(args=command_line_args if command_line_args else None)
     # import extra modules
-    context = {'tenpy': globals(), 'np': np, 'scipy': scipy}
+    context = {'tenpy': sys.modules[__name__], 'np': np, 'scipy': scipy}
     if args.import_module:
         sys.path.insert(0, '.')
         for module_name in args.import_module:
@@ -172,33 +184,33 @@ def console_main(*command_line_args):
     # load parameters_file
     options = {}
     if args.parameters_file:
-        import yaml
         options_files = []
         for fn in args.parameters_file:
-            with open(fn, 'r') as stream:
-                options = yaml.safe_load(stream)
+            options = load_yaml_with_py_eval(fn, context)
             options_files.append(options)
         if len(options_files) > 1:
-            options = tools.misc.merge_recursive(*options_files, conflict=args.merge)  # noqa: F821 (TODO remove when tools is imported again)
+            options = tools.misc.merge_recursive(*options_files, conflict=args.merge)
     # update extra options
     if args.option:
         for key, val_string in args.option:
             val = eval(val_string, context)
-            tools.misc.set_recursive(options, key, val, insert_dicts=True)  # noqa: F821 (TODO remove when tools is imported again)
+            tools.misc.set_recursive(options, key, val, insert_dicts=True)
     if len(options) == 0:
         raise ValueError("No options supplied! Check your command line arguments!")
     if 'output_filename' not in options and 'output_filename_params' not in options:
         raise ValueError("No output filename specified - refuse to run without saving anything!")
     if args.sim_class is not None:  # non-default
-        if 'simulation_class_name' in options:
-            warnings.warn('command line overrides deprecated `simulation_class_name` parameter',
-                          FutureWarning)
-            del options['simulation_class_name']
         options['simulation_class'] = args.sim_class
+    if args.RAM:
+        # exit immediately
+        raise NotImplementedError
+        # return estimate_simulation_RAM(suppress_non_RAM_output=True, unit='MB', **options)
     if 'sequential' not in options:
-        run_simulation(**options)  # noqa: F821 (TODO remove when run_simulation is imported again)
+        raise NotImplementedError
+        # return run_simulation(**options)
     else:
-        run_seq_simulations(**options)  # noqa: F821 (TODO remove when run_simulation is imported again)
+        raise NotImplementedError
+        # return run_seq_simulations(**options)
 
 
 def _setup_arg_parser(width=None):
@@ -250,9 +262,16 @@ def _setup_arg_parser(width=None):
                         default='error',
                         help="Selects how to merge conflicts in case of multiple yaml files. "
                         "Options are 'error', 'first' or 'last'.")
+    parser.add_argument('--RAM',
+                        action="store_true",
+                        help="Estimates the required RAM. "
+                        "This argument does not execute any simulation, but just initializes it "
+                        "to predict the necessary RAM in MB and then exits.")
     parser.add_argument('parameters_file',
                         nargs='*',
                         help="Yaml (*.yml) file with the simulation parameters/options. "
+                        "We support an additional yaml tag !py_eval: VALUE that gets initialized "
+                        "by python's ``eval(VALUE)`` with `np`, `scipy` and `tenpy` defined. "
                         "Multiple files get merged according to MERGE; "
                         "see tenpy.tools.misc.merge_recursive for details.")
     opt_help = textwrap.dedent("""\
@@ -270,3 +289,7 @@ def _setup_arg_parser(width=None):
                         help=opt_help)
     parser.add_argument('--version', '-v', action='version', version=__full_version__)
     return parser
+
+
+# remove the imported libraries again. we do not want to expose them e.g. as tenpy.logging
+del logging

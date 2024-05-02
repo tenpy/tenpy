@@ -110,14 +110,14 @@ Boundary conditions
 -------------------
 
 The :class:`~tenpy.models.lattice.Lattice` defines the **boundary conditions** `bc` in each direction. 
-It can be one of the usual ``'open'`` or ``'periodic'`` in each direcetion and will be used by the
+It can be one of the usual ``'open'`` or ``'periodic'`` in each direction and will be used by the
 :class:`~tenpy.models.model.CouplingModel` to determine whether there should be added periodic couplings in the
 corresponding directions.
 
 On top of that, there is the `bc_MPS` boundary condition of the MPS, one of ``'finite', 'segment', 'infinite'``.
 For an ``'infinite'`` MPS, the whole lattice is repeated in the direction of the *first* basis vector of the lattice.
 For ``bc_MPS='infinite'``, the first direction should always be ``'periodic'``, but you *can* also define a lattice with
-``bc_MPS='finite', bc=['periodic', 'perioid']`` for a finite system on the torus.
+``bc_MPS='finite', bc=['periodic', 'periodic']`` for a finite system on the torus.
 This is discouraged, though, because the ground state MPS will require the *squared* bond dimension for the *same precision* in this
 case!
 
@@ -162,7 +162,7 @@ The :class:`~tenpy.models.lattice.IrregularLattice` allows you to add or remove 
 The doc-string of :class:`~tenpy.models.lattice.IrregularLattice` contains several examples. Let us consider another one
 here, where we use the IrregularLattice to "fix" the boundary of the Honeycomb lattice.
 When we use ``"open"`` boundary conditions for a finite system, there are two sites (shown on the lower left, and upper right corners of the figure below),
-wich are not included into any hexagonal. The following example shows how to remove them from the system:
+which are not included into any hexagonal. The following example shows how to remove them from the system:
 
 .. plot ::
     :include-source:

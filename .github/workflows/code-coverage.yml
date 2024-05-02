@@ -1,0 +1,87 @@
+name: Code Coverage
+# Run pytest with code coverage and make a badge for the README from coverage percentage
+
+# Note: The pytest.yml workflow runs pytest *without* coverage.
+#       This workflow is supposed to run tests for the most recent python version.
+#       That version can then be omitted in pytest.yml.
+
+on:
+  # pushes to main
+  push:
+    branches:
+      - main
+  # PRs
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  build:
+    if: github.event.pull_request.draft == false
+    
+    runs-on: ubuntu-latest
+    env:
+      # make pytest output in color
+      PY_COLORS: 1
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install --upgrade setuptools build
+        python -m pip install --upgrade pytest
+        python -m pip install --upgrade coverage
+    
+    - name: Build and install tenpy
+      # also installs extra dependencies defined in pyproject.toml
+      run: |
+        python -m build .
+        python -m pip install ".[io, test, extra]"
+    
+    - name: Run pytest with coverage
+      # pytest configuration in pyproject.toml
+      # Note: This runs in the repo root directory, which contains the uncompiled tenpy package.
+      #       To use the version we just installed, it is important to run `coverage`
+      #       instead of `python -m coverage`.
+      run: |
+        coverage run -m pytest .
+        coverage report -m --skip-covered --sort=miss
+        coverage json
+      # Note: to get a nicely rendered html page, you can run the following on your local machine:
+      #         python -m coverage run -m pytest
+      #         python -m coverage html
+      #       It will write to htmlcov.
+      #       We choose not to provide this html report from the workflow, because it generates
+      #       quite large files.
+    
+    - name: Set environment variable for badge
+      # note: this cuts off digits instead of rounding
+      run: echo "COV_PERCENT=$(jq .totals.percent_covered coverage.json | xargs printf "%.0f")" >> $GITHUB_ENV
+    
+    - name: Archive code coverage results
+      uses: actions/upload-artifact@v4
+      with:
+        name: code-coverage-report
+        path: coverage.json
+        if-no-files-found: error
+    
+    - name: Create badge
+      # Only on pushes to the main branch
+      if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.JAKOB_UNFRIED_GIST_TOKEN }}
+        gistID: 9e2e197d6a2e6e2c9440b2c0eda04d5c
+        filename: tenpy_coverage_badge.json
+        label: Code Coverage
+        message: ${{ env.COV_PERCENT }}%
+        minColorRange: 50
+        maxColorRange: 100
+        valColorRange: ${{ env.COV_PERCENT }}

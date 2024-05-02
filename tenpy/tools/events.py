@@ -1,14 +1,13 @@
 """Event handler.
 
-The :class:`EventHandler` is basically just holds a list of functions
+The :class:`EventHandler` just holds a list of functions
 which can get called once a certain "event" happens.
 Examples are given in the class doc-string.
 """
-# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from collections import namedtuple
 import warnings
-import functools
 
 from .hdf5_io import find_global
 
@@ -148,7 +147,7 @@ class EventHandler:
             The callback function exactly as given.
         """
         if callback is None:
-            # hande the case that we got called as property like this::
+            # handle the case that we got called as property like this::
             # @ev_handler.connect(priority=2)
             # def my_function():
             #     pass
@@ -205,7 +204,7 @@ class EventHandler:
         ----------
         *args, **kwargs:
             (Keyword) arguments to give to the callback functions.
-            Recall that there can also be addiontal `extra_kwargs` for each callback function.
+            Recall that there can also be additional `extra_kwargs` for each callback function.
 
         Returns
         -------

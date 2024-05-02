@@ -17,7 +17,8 @@ which provides the :class:`~tenpy.linalg.tensors.Tensor` class used by the rest 
     sparse
     matrix_operations
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
+
 
 from . import (spaces, backends, symmetries, tensors, random_matrix, sparse,
                matrix_operations, krylov_based, trees)

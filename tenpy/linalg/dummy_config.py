@@ -1,4 +1,4 @@
-# Copyright 2023-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 __all__ = ['config', 'printoptions']
 

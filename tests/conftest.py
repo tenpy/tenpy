@@ -73,7 +73,7 @@ The signature for ``make_compatible_tensor`` is
        empty_ok=False, all_blocks=False, cls=tensors.BlockDiagonalTensor, num_domain_legs=0)``
 
 """
-# Copyright 2023-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import pytest

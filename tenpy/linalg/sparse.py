@@ -7,7 +7,7 @@ implementations of these algorithms (e.g., :mod:`~tenpy.linalg.krylov_based`). M
 :class:`FlatLinearOperator` allows to use all the scipy sparse methods by providing functionality
 to convert flat numpy arrays to and from tenpy tensors.
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod

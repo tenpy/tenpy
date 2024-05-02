@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 #
 import sys
 import os
@@ -8,6 +8,7 @@ import inspect
 import sphinx_rtd_theme
 import io
 import warnings
+from datetime import datetime
 
 # ensure parent folder is in sys.path to allow import of tenpy
 REPO_PREFIX = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -71,7 +72,7 @@ pygments_style = 'sphinx'  # syntax highlighting style
 
 # General information about the project.
 project = 'TeNPy'
-copyright = '2016-2020, TeNPy Developers'
+copyright = f'2016-{datetime.today().strftime("%Y")}, TeNPy Developers'
 author = 'TeNPy Developers'
 version = tenpy.__version__  # The short X.Y version.
 release = tenpy.__full_version__  # The full version, including alpha/beta/rc tags.
@@ -279,6 +280,7 @@ extlinks = {
     'arxiv': ('https://arxiv.org/abs/%s', 'arXiv:%s'),
     'doi': ('https://dx.doi.org/%s', 'doi:%s'),
     'issue': (GITHUBBASE + '/issues/%s', 'issue #%s'),
+    'pull': (GITHUBBASE + '/pulls/%s', 'PR #%s'),
     'forum': ('https://tenpy.johannes-hauschild.de/viewtopic.php?t=%s',
               'community forum (topic %s)')
 }
