@@ -1,4 +1,4 @@
-"""Calculate the correleation legnth of the transferse field Ising model for various h_z.
+"""Calculate the correlation length of the transverse field Ising model for various h_z.
 
 This example uses DMRG to find the ground state of the transverse field Ising model when tuning
 through the phase transition by changing the field `hz`. It uses
