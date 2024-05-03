@@ -1,2 +1,0 @@
-- Activate consistency checks. Until now, consistency checks using :func:`tenpy.tools.misc.consistency_check`
-  only issued warnings. Now it can also raise errors on inconsistent values.

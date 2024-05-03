@@ -1,1 +1,0 @@
-- Update examples to comply with the v1 changes
