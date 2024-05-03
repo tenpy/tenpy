@@ -2029,7 +2029,7 @@ class MPS(BaseMPSExpectationValue):
         return cls(sites, Bs, SVs, bc=bc, form='B')
 
     @classmethod
-    def project_onto_charge_sector(cls, sites, p_state_list, charge_sector, dtype=float):
+    def project_onto_charge_sector(cls, sites, p_state_list, charge_sector, dtype=float, **kwargs):
         """Generates an MPS from a product state list which is projected onto a given charge sector.
 
         Parameters
@@ -2048,10 +2048,10 @@ class MPS(BaseMPSExpectationValue):
         projected_MPS : :class:`~tenpy.networks.mps.MPS`
         """
         charge_tree = cls.get_charge_tree_for_given_charge_sector(sites, charge_sector)
-        return cls._project_onto_sector_from_charge_tree(sites, p_state_list, charge_tree, dtype)
+        return cls._project_onto_sector_from_charge_tree(sites, p_state_list, charge_tree, dtype, **kwargs)
 
     @classmethod
-    def _project_onto_sector_from_charge_tree(cls, sites, p_state_list, charge_tree, dtype=float):
+    def _project_onto_sector_from_charge_tree(cls, sites, p_state_list, charge_tree, dtype=float, **kwargs):
         """Select entries in a product state that are in a charge tree.
 
         Parameters
@@ -2110,7 +2110,7 @@ class MPS(BaseMPSExpectationValue):
             # ignore S values as they will be obtained below from :meth:`MPS.canonical_form_finite`
             Ss.append(np.ones(B.shape[1], np.float64))
 
-        projected_state = cls(sites, Bs, Ss, 'finite', form='B')
+        projected_state = cls(sites, Bs, Ss, **kwargs)
         projected_state.canonical_form_finite()  # calculate S values and normalize
         return projected_state
     
@@ -3202,7 +3202,7 @@ class MPS(BaseMPSExpectationValue):
 
     @staticmethod
     def get_charge_tree_for_given_charge_sector(sites: list, charge_sector: tuple):
-        """Construct the charge-tree for a given charge sector.
+        r"""Construct the charge-tree for a given charge sector.
 
         This is a tree of possible charges for each site s.t. the MPS lies in the given ``charge_sector``.
 
@@ -6006,6 +6006,40 @@ class InitialStateBuilder:
         dtype = self.options.get('dtype', self.model_dtype)
         lat = self.lattice
         psi = MPS.from_product_state(lat.mps_sites(), p_state, bc=lat.bc_MPS, dtype=dtype)
+        return psi
+
+    def mps_state_in_charge_sector(self, charge_sector=None, p_state=None):
+        """Initialize a state on a lattice already in a desired charge sector.
+
+        See :meth:`MPS.project_onto_charge_sector` for details.
+
+        Options
+        -------
+        .. cfg:configoptions :: InitialStateBuilder
+
+            charge_sector : tuple of int
+                The `charge_sector` passed on to :meth:`MPS.project_onto_charge_sector`.
+                Depending on the number of sites in a lattice, only specific charge
+                sectors can be reached.
+            product_state : list | np.ndarray
+                Optional. A `product_state` as in :meth:`mps_product_state`.
+
+        """
+        if charge_sector is None:
+            charge_sector = self.options['charge_sector']
+        # yaml does not support lists, so in case a single charge is specified by an int, convert it
+        charge_sector = to_iterable(charge_sector)
+        dtype = self.options.get('dtype', self.model_dtype)
+        lat = self.lattice
+        sites = lat.mps_sites()
+        if p_state is None:
+            p_state = self.options.get('product_state', None)  # only optional
+        if p_state is None:
+            p_state = np.ones((lat.N_sites, sites[0].leg.block_number))  # equal superposition product state
+        self.check_filling(p_state)
+        # sites must all be the same, however an error would be raised anyways in :meth:`project_onto_charge_sector`
+        psi = MPS.project_onto_charge_sector(sites, p_state,
+                                             charge_sector=charge_sector, dtype=dtype, bc=lat.bc_MPS)
         return psi
 
     def check_filling(self, p_state):
