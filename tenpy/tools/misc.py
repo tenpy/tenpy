@@ -911,7 +911,7 @@ class BetaWarning(UserWarning):
     """Warning category that we emit in new code that still needs to be tested better.
 
     When adding new features like algorithms, we might raise a Warning of this category
-    to indicate that the featers are not yet super well tested. Thus, this warning gives a hint
+    to indicate that the features are not yet super well tested. Thus, this warning gives a hint
     that the user needs to be cautious and should not jump to conclusion
     if the results are unexpected.
     Rather, it's appropriate to test robustness, ideally by cross-checking with another
@@ -973,8 +973,6 @@ def consistency_check(value, options, threshold_key, threshold_default, msg, com
     if threshold is None:
         warn_instead = True
         threshold = threshold_default
-    warn_instead = True  # TODO for v0.99, we always just warn and never raise.
-                         # will remove this line and unleash errors for v1.0
     compare_func = {'<=': operator.le, '<': operator.lt, '>': operator.gt, '>=': operator.ge,
                     '!=': operator.ne, '==': operator.eq}.get(compare, compare)
     if not compare_func(value, threshold):
