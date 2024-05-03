@@ -1,0 +1,4 @@
+NOTE: This file is required for the docbuild on git to function properly on github!
+The docbuild checks the contents of the ``doc/changelog/latest`` folder and fails if that folder
+does not exist. However, git ignores empty folders.
+This file, simply by existing, makes git acknowledge that ``doc/changelog/latest`` exists.
