@@ -377,6 +377,68 @@ def _qr_theta_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: float
     Y0.iproject(piv, 'vL')
     return Y0
 
+
+def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[None, None],
+                   trunc_params=None):
+    """Computes the singular value decomposition of a matrix A via eigh
+
+    Singular values and vectors are obtained by diagonalizing the "square" A.hc @ A and/or A @ A.hc,
+    i.e. with two eigh calls instead of an svd call.
+
+    Truncation if performed if and only if trunc_params are given.
+    This performs better on GPU, but is not really useful on CPU.
+    If isometries U or Vd are not needed, their computation can be omitted for performance.
+
+    Does not (yet) support computing both U and Vd
+    """
+    warnings.warn('_eig_based_svd is nonsensical on CPU!!')
+    assert A.rank == 2
+
+    if need_U and need_Vd:
+        # TODO (JU) just doing separate eighs for U, S and for S, Vd is not sufficient
+        #  the phases of U / Vd are arbitrary.
+        #  Need to put in more work in that case...
+        raise NotImplementedError
+
+    if need_U:
+        Vd = None
+        A_Ahc = npc.tensordot(A, A.conj(), [1, 1])
+        L, U = npc.eigh(A_Ahc, sort='>')
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentally negative values close to zero
+        U = U.ireplace_label('eig', inner_labels[0])
+    elif need_Vd:
+        U = None
+        Ahc_A = npc.tensordot(A.conj(), A, [0, 0])
+        L, V = npc.eigh(Ahc_A, sort='>')
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentally negative values close to zero
+        Vd = V.iconj().itranspose().ireplace_label('eig*', inner_labels[1])
+    else:
+        U = None
+        Vd = None
+        # use the smaller of the two square matrices -- they have the same eigenvalues
+        if A.shape[1] >= A.shape[0]:
+            A2 = npc.tensordot(A, A.conj(), [1, 0])
+        else:
+            A2 = npc.tensordot(A.conj(), A, [1, 0])
+        L = npc.eigvalsh(A2)
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentally negative values close to zero
+
+    if trunc_params is not None:
+        piv, renormalize, trunc_err = truncate(S, trunc_params)
+        S = S[piv]
+        S /= renormalize
+        if need_U:
+            U.iproject(piv, 1)
+        if need_Vd:
+            Vd.iproject(piv, 0)
+    else:
+        renormalize = np.linalg.norm(S)
+        S /= renormalize
+        trunc_err = TruncationError()
+
+    return U, S, Vd, trunc_err, renormalize
+
+
 def decompose_theta_qr_based(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, trunc_params: dict, 
              expand: float, use_eig_based_svd: bool, need_A_L: bool, 
              compute_err: bool, min_block_increase: int):
@@ -419,9 +481,9 @@ def decompose_theta_qr_based(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, t
 
     # SVD of bond matrix Xi
     if use_eig_based_svd:
-        # TODO: Implement eigendecomposition based svd (could be copied from tebd.py but leave it for now)
-        msg = "decompose_theta_qr_based() is not implemented with eigendecomposition based svd. Please use implemente method by setting parameteruse_eig_based_svd=False"
-        raise NotImplementedError(msg)
+        U, S, Vd, trunc_err, renormalize = _eig_based_svd(
+            Xi, inner_labels=['vR', 'vL'], need_U=need_A_L, trunc_params=trunc_params
+        )
     else:
         U, S, Vd, _, renormalize = svd_theta(Xi, trunc_params)
     B_R = npc.tensordot(Vd, B_R, ['vR', 'vL'])
