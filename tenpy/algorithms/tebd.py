@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg import np_conserved as npc
-from .truncation import svd_theta, decompose_theta_qr_based, TruncationError, truncate
+from .truncation import svd_theta, decompose_theta_qr_based, TruncationError
 from ..linalg import random_matrix
 from ..tools.misc import consistency_check
 
