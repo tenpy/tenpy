@@ -49,7 +49,7 @@ from ..tools.hdf5_io import Hdf5Exportable
 import warnings
 from ..tools.params import asConfig
 
-__all__ = ['TruncationError', 'truncate', 'svd_theta', 'qr_theta']
+__all__ = ['TruncationError', 'truncate', 'svd_theta', 'decompose_theta_qr_based']
 
 
 
@@ -308,7 +308,7 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
 
 
 def _qr_theta_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: float, min_block_increase: int):
-    """Generate the initial guess Y0 for the right isometry for the QR based theta decomposition qr_theta().
+    """Generate the initial guess Y0 for the right isometry for the QR based theta decomposition decompose_theta_qr_based().
 
     Parameters
     ----------
@@ -377,7 +377,7 @@ def _qr_theta_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: float
     Y0.iproject(piv, 'vL')
     return Y0
 
-def qr_theta(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, trunc_params: dict, 
+def decompose_theta_qr_based(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, trunc_params: dict, 
              expand: float, use_eig_based_svd: bool, need_A_L: bool, 
              compute_err: bool, min_block_increase: int):
     """Performs a QR based decomposition of a matrix `theta` (= the wavefunction) and truncates it
@@ -420,7 +420,7 @@ def qr_theta(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, trunc_params: dic
     # SVD of bond matrix Xi
     if use_eig_based_svd:
         # TODO: Implement eigendecomposition based svd (could be copied from tebd.py but leave it for now)
-        msg = "qr_theta() is not implemented with eigendecomposition based svd. Please use implemente method by setting parameteruse_eig_based_svd=False"
+        msg = "decompose_theta_qr_based() is not implemented with eigendecomposition based svd. Please use implemente method by setting parameteruse_eig_based_svd=False"
         raise NotImplementedError(msg)
     else:
         U, S, Vd, _, renormalize = svd_theta(Xi, trunc_params)

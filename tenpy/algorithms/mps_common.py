@@ -25,7 +25,7 @@ from .algorithm import Algorithm
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
 from ..networks.mpo import MPOEnvironment
 from ..networks.mps import MPSEnvironment
-from .truncation import truncate, svd_theta, qr_theta, TruncationError
+from .truncation import truncate, svd_theta, decompose_theta_qr_based, TruncationError
 from ..linalg import np_conserved as npc
 from ..tools.params import asConfig
 from ..tools.misc import find_subclass, consistency_check
@@ -2455,7 +2455,7 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
         new_psi = self.psi
         # old_A0 = new_psi.get_B(i0, form='A')
         expand = self._expansion_rate(i0)
-        U, S, VH, err, renormalize = qr_theta(self.psi.get_B(i0, 'B'), self.psi.get_B(i0+1, 'B'), theta,
+        U, S, VH, err, renormalize = decompose_theta_qr_based(self.psi.get_B(i0, 'B'), self.psi.get_B(i0+1, 'B'), theta,
                                               self.trunc_params, 
                                               expand=expand, 
                                               use_eig_based_svd=self.options.get('use_eig_based_svd', False),
