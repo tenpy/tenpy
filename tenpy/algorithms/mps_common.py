@@ -2459,7 +2459,7 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
                                               self.trunc_params, 
                                               expand=expand, 
                                               use_eig_based_svd=self.options.get('use_eig_based_svd', False),
-                                              need_A_L=False, 
+                                              need_A_L=True,
                                               compute_err=self.options.get('compute_err', True),
                                               min_block_increase = self.options.get('cbe_min_block_increase', 1)) 
                                             # qtotal_LR=[old_A0.qtotal, None] <- what about this?
