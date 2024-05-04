@@ -2458,7 +2458,7 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
         U, S, VH, err, renormalize = decompose_theta_qr_based(self.psi.get_B(i0, 'B'), self.psi.get_B(i0+1, 'B'), theta,
                                               self.trunc_params, 
                                               expand=expand, 
-                                              use_eig_based_svd=self.options.get('use_eig_based_svd', False),
+                                              use_eig_based_svd=False,
                                               need_A_L=True,
                                               compute_err=self.options.get('compute_err', True),
                                               min_block_increase = self.options.get('cbe_min_block_increase', 1)) 
