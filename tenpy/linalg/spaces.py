@@ -626,14 +626,15 @@ class VectorSpace:
         # TODO include basis_perm?
         # number of *entries* in sectors (num_sectors * num_charges) that triggers multiple lines
         multiline_threshold = 4
-        
+
         is_dual_str = '.dual' if self.is_dual else ''
+        sectors = self._non_dual_sectors  # printing the non-dual space, eventually followed by .dual
 
         if self.sectors.size < multiline_threshold:
             elements = [
                 f'VectorSpace({self.symmetry!r}',
                 *(['is_real=True'] if self.is_real else []),
-                f'sectors={format_like_list(self.symmetry.sector_str(s) for s in self.sectors)}',
+                f'sectors={format_like_list(self.symmetry.sector_str(s) for s in sectors)}',
                 f'multiplicities={format_like_list(self.multiplicities)}){is_dual_str}',
             ]
             res = ', '.join(elements)
@@ -646,7 +647,7 @@ class VectorSpace:
         if 3 * self.sectors.size < printoptions.linewidth:  # otherwise there is no chance anyway
             lines = [
                 f'VectorSpace({self.symmetry!r},{" is_real=True," if self.is_real else ""}',
-                f'{indent}sectors={format_like_list(self.symmetry.sector_str(s) for s in self.sectors)},',
+                f'{indent}sectors={format_like_list(self.symmetry.sector_str(s) for s in sectors)},',
                 f'{indent}multiplicities={format_like_list(self.multiplicities)}',
                 f'){is_dual_str}'
             ]
