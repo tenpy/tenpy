@@ -52,7 +52,7 @@ class TensorDummyOperator(sparse.LinearOperator):
         return self.tensor.tdot(vec, ['a*', 'b*'], ['a', 'b'])
 
     def to_tensor(self, **kw) -> Tensor:
-        return self.tensor.permute_legs(['a', 'b', 'a*', 'b*'])
+        return self.tensor.permute_legs(['a', 'b', 'b*', 'a*'])
 
     def adjoint(self):
         return TensorDummyOperator(self.tensor.conj())
@@ -63,7 +63,7 @@ def check_to_tensor(op: sparse.LinearOperator, vec: Tensor):
     res_matvec = op.matvec(vec)
     tensor = op.to_tensor(backend=vec.backend)
     _ = op.to_matrix(backend=vec.backend)  # just check if it runs...
-    res_tensor = tensor.tdot(vec, range(vec.num_legs, 2 * vec.num_legs), range(vec.num_legs))
+    res_tensor = tensor.tdot(vec, range(vec.num_legs, 2 * vec.num_legs), reversed(range(vec.num_legs)))
     assert almost_equal(res_matvec, res_tensor)
 
 
@@ -88,7 +88,7 @@ def test_SumLinearOperator(make_compatible_tensor):
     assert op.some_unrelated_function(2) == 4
 
     if isinstance(T.backend, backends.FusionTreeBackend):
-        with pytest.raises(NotImplementedError, match='eye_data not implemented'):
+        with pytest.raises(NotImplementedError, match='permute_legs not implemented|combine_legs not implemented'):
             check_to_tensor(op, vec)
         return  # TODO
     
@@ -121,7 +121,7 @@ def test_ShiftedLinearOperator(make_compatible_tensor):
     assert op.some_unrelated_function(2) == 4
 
     if isinstance(vec.backend, backends.FusionTreeBackend):
-        with pytest.raises(NotImplementedError, match='eye_data not implemented'):
+        with pytest.raises(NotImplementedError, match='combine_legs not implemented'):
             check_to_tensor(op, vec)
         return  # TODO
     

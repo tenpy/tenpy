@@ -365,8 +365,8 @@ def test_lq(make_compatible_tensor, new_l_leg_dual, full):
         if full:
             # Q unitary?
             Q_Qd = tensors.tdot(Q, Q.conj(), 'q', 'q*')
-            expect = tensors.BlockDiagonalTensor.eye(Q.get_legs(['r1', 'r2']), backend=T.backend,
-                                        labels=['r1', 'r2', 'r1*', 'r2*'])
+            expect = tensors.eye_like(Q_Qd.permute_legs(['r1', 'r2', 'r2*', 'r1*']))
+            expect = expect.permute_legs(['r1', 'r2', 'r1*', 'r2*'], num_domain_legs=0)
             assert tensors.almost_equal(Q_Qd, expect)
 
 

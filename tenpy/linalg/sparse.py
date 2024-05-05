@@ -64,8 +64,9 @@ class LinearOperator(metaclass=ABCMeta):
         
         Returns
         -------
-        A tensor `t` with ``2 * N`` legs where ``N == self.vector_shape.num_legs``, such that
-        ``self.matvec(vec)`` is equivalent to ``tdot(t, vec, list(range(N, 2 * N)), list(range(N)))``.
+        A tensor `t` with ``2 * N`` legs ``[a1, a2, ..., aN, aN*, ..., a2*, a1*]``, where
+        ``[a1, a2, ..., aN]`` are the legs of the vectors this operator acts on.
+        S.t. ``self.matvec(vec)`` is equivalent to ``tdot(t, vec, [N, ..., 2*N-1], [N-1,...,0])``.
         """
         ...
 
@@ -288,6 +289,9 @@ class ProjectedLinearOperator(LinearOperatorWrapper):
         return res
 
     def to_tensor(self, **kw) -> Tensor:
+        raise NotImplementedError 
+        # TODO adjust to changed leg convention (change convention of outer to match this?)
+        #      or change conj accordingly? or implement a projector function |a><a|
         res = self.original_operator.to_tensor(**kw)
         P_ortho = zero_like(res)
         for o in self.ortho_vecs:
