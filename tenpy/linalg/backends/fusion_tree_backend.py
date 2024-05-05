@@ -315,11 +315,15 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
                 for a_sectors, m_dims, j1 in _iter_sectors_mults_slices(a.data.codomain.spaces, sym):
                     a_dims = sym.batch_sector_dim(a_sectors)
                     tree_block_height = tree_block_size(a.data.codomain, a_sectors)
-                    entries, forest_b_height, forest_b_width = self._get_forest_block_contribution(
+                    entries, num_alpha_trees, num_beta_trees = self._get_forest_block_contribution(
                         block, sym, a.data.codomain, a.data.domain, coupled, a_sectors, b_sectors,
                         a_dims, b_dims, tree_block_width, tree_block_height, i1, i2, m_dims, n_dims,
                         dtype
                     )
+                    forest_b_height = num_alpha_trees * tree_block_height
+                    forest_b_width = num_beta_trees * tree_block_width
+                    if forest_b_height == 0 or forest_b_width == 0:
+                        continue
                     # entries : [a1,...,aJ, b1,...,bK, m1,...,mJ, n1,...,nK]
                     # permute to [a1,m1,...,aJ,mJ, b1,n1,...,bK,nK]
                     perm = [i + offset for i in range(num_legs) for offset in [0, num_legs]]
@@ -360,8 +364,8 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
         Returns:
             entries: The entries of the dense block corresponding to the given uncoupled sectors.
                      Legs [a1,...,aJ, b1,...,bK, m1,...,mJ, n1,...,nK]
-            forest_block_height: height of the current forest block
-            forest_block_width: width of the current forest block
+            num_alpha_trees: The number of fusion trees from ``a_sectors`` to ``coupled``
+            num_beta_trees : The number of fusion trees from ``b_sectors`` to ``coupled``
         """
         # OPTIMIZE do one loop per vertex in the tree instead.
         i1 = i1_init  # i1: start row index of the current tree block within the block
@@ -370,7 +374,6 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
         beta_tree_iter = fusion_trees(sym, b_sectors, coupled, [sp.is_dual for sp in domain.spaces])
         entries = self.zero_block([*a_dims, *b_dims, *m_dims, *n_dims], dtype)
         for alpha_tree in alpha_tree_iter:
-            i2 = i2_init  # reset to the left of the current forest-block
             Y = self.block_conj(alpha_tree.as_block(backend=self))  # [a1,...,aJ,c]
             for beta_tree in beta_tree_iter:
                 X = beta_tree.as_block(backend=self)  # [b1,...,bK,c]
@@ -382,10 +385,12 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
                 degeneracy_data = self.block_reshape(degeneracy_data, m_dims + n_dims)
                 entries += self.block_outer(symmetry_data, degeneracy_data)  # [{aj} {bk} {mj} {nk}]
                 i2 += tree_block_width
+            i2 = i2_init  # reset to the left of the current forest-block
             i1 += tree_block_height
-        forest_block_height = i1 - i1_init
-        forest_block_width = i2 - i2_init
-        return entries, forest_block_height, forest_block_width
+        num_alpha_trees = len(alpha_tree_iter)  # OPTIMIZE count loop iterations above instead?
+                                                #          (same in _add_forest_block_entries)
+        num_beta_trees = len(beta_tree_iter)
+        return entries, num_alpha_trees, num_beta_trees
 
     def diagonal_to_block(self, a: DiagonalTensor) -> Block:
         raise NotImplementedError  # TODO
@@ -430,10 +435,12 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
                     # permute to [a1,...,aJ, b1,...,bK, m1,...,mJ, n1,...nK]
                     perm = [*range(0, 2 * num_legs, 2), *range(1, 2 * num_legs, 2)]
                     entries = self.block_permute_axes(entries, perm)
-                    forest_block_height, forest_block_width = self._add_forest_block_entries(
+                    num_alpha_trees, num_beta_trees = self._add_forest_block_entries(
                         block, entries, sym, codomain, domain, coupled, dim_c, a_sectors, b_sectors,
                         tree_block_width, tree_block_height, i1, i2
                     )
+                    forest_block_height = num_alpha_trees * tree_block_height
+                    forest_block_width = num_beta_trees * tree_block_width
                     i1 += forest_block_height  # move down by one forest-block
                 i1 = 0  # reset to the top of the block
                 i2 += forest_block_width  # move right by one forest-block
@@ -481,8 +488,8 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
             i1_init, i2_init: The start indices of the current forest block within the block
 
         Returns:
-            forest_block_height: height of the current forest block
-            forest_block_width: width of the current forest block
+            num_alpha_trees: The number of fusion trees from ``a_sectors`` to ``coupled``
+            num_beta_trees : The number of fusion trees from ``b_sectors`` to ``coupled``
         """
         # OPTIMIZE do one loop per vertex in the tree instead.
         i1 = i1_init  # i1: start row index of the current tree block within the block
@@ -494,12 +501,13 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
         range_J = list(range(J))  # used in tdot calls below
         range_K = list(range(K))  # used in tdot calls below
         range_JK = list(range(J + K))
-        for alpha_tree in fusion_trees(sym, a_sectors, coupled, codomain_are_dual):
-            i2 = i2_init  # reset to the left of the current forest-block
+        alpha_tree_iter = fusion_trees(sym, a_sectors, coupled, codomain_are_dual)
+        beta_tree_iter = fusion_trees(sym, b_sectors, coupled, domain_are_dual)
+        for alpha_tree in alpha_tree_iter:
             X = alpha_tree.as_block(backend=self)
             # entries: [a1,...,aJ,b1,...,bK,m1,...,mJ,n1,...,nK]
             projected = self.block_tdot(entries, X, range_J, range_J)  # [{bk}, {mj}, {nk}, c]
-            for beta_tree in fusion_trees(sym, b_sectors, coupled, domain_are_dual):
+            for beta_tree in beta_tree_iter:
                 Y = self.block_conj(beta_tree.as_block(backend=self))
                 projected = self.block_tdot(projected, Y, range_K, range_K)  # [{mj}, {nk}, c, c']
                 # projected onto the identity on [c, c']
@@ -514,10 +522,11 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
                 assert 0 <= idx2.start < idx2.stop <= block.shape[1]
                 block[idx1, idx2] = tree_block
                 i2 += tree_block_width  # move right by one tree-block
+            i2 = i2_init  # reset to the left of the current forest-block
             i1 += tree_block_height  # move down by one tree-block (we reset to the left at start of the loop)
-        forest_block_height = i1 - i1_init
-        forest_block_width = i2 - i2_init
-        return forest_block_height, forest_block_width
+        num_alpha_trees = len(alpha_tree_iter)  # OPTIMIZE count loop iterations above instead?
+        num_beta_trees = len(beta_tree_iter)
+        return num_alpha_trees, num_beta_trees
 
     def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
         raise NotImplementedError('diagonal_from_block not implemented')  # TODO
