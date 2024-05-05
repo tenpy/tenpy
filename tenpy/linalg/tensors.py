@@ -849,40 +849,43 @@ class BlockDiagonalTensor(SymmetricTensor):
 
     @classmethod
     def eye(cls, legs: VectorSpace | list[VectorSpace], backend=None,
-            labels: list[str | None] = None, dtype: Dtype = Dtype.float64,
-            num_domain_legs: int = 0) -> BlockDiagonalTensor:
-        """The identity map from one group of legs to their duals.
+            labels: list[str | None] = None, dtype: Dtype = Dtype.float64) -> BlockDiagonalTensor:
+        """The identity map on a group of legs, as a tensor with twice as many legs.
+
+        For a single leg, this is the identity matrix.
+        Note the leg order. E.g. for two legs ``p, q`` we have
+        ``eye([p, q]).legs == [p, q, q.dual, p.dual]``, where the duals are in *reverse order*.
 
         Parameters
         ----------
         backend : :class:`~tenpy.linalg.backends.abstract_backend.Backend`
             The backend for the Tensor
         legs : (list of) VectorSpace
-            *Half* of the legs of the result. The resulting tensor has twice as many legs.
+            *Half* of the legs of the result.
+            The result has legs ``[*legs, *(l.dual for l in reversed(legs))]``,
+            the given `legs` followed by their respective duals in reverse order.
         labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
-            Can either give one label for each of the `legs`, and the second half will be the respective
-            dual labels, or give twice as many and specify them all.
+            Can either give one label for each of the `legs`, and the second half will be the
+            respective dual labels, or give twice as many and specify them all.
         dtype : Dtype, optional
             The data type of the Tensor entries.
-        num_domain_legs : int
-            How many of the legs should be in the domain. See :ref:`tensors_as_maps`.
         """
         if backend is None:
             backend = get_backend(legs[0].symmetry)
         legs = to_iterable(legs)
         half_leg_num = len(legs)
         legs = [backend.add_leg_metadata(leg) for leg in legs]
-        data = backend.eye_data(legs=legs, dtype=dtype, num_domain_legs=num_domain_legs)
-        legs = legs + [leg.dual for leg in legs]
-        if labels is not None:
-            if len(labels) == half_leg_num:
-                labels = labels + [_dual_leg_label(l) for l in labels]
-            elif len(labels) != 2 * half_leg_num:
-                msg = f'Wrong number of labels. Expected {len(legs)} or {2 * len(legs)}. Got {len(labels)}.'
-                raise ValueError(msg)
-        return cls(data=data, backend=backend, legs=legs, num_domain_legs=num_domain_legs,
-                   labels=labels)
+        data = backend.eye_data(legs=legs, dtype=dtype)
+        legs = legs + [leg.dual for leg in reversed(legs)]
+        if labels is None:
+            labels = [None] * (2 * half_leg_num)
+        if len(labels) == half_leg_num:
+            labels = labels + [_dual_leg_label(l) for l in reversed(labels)]
+        if len(labels) != 2 * half_leg_num:
+            msg = f'Wrong number of labels. Expected {half_leg_num} or {2 * half_leg_num}. Got {len(labels)}.'
+            raise ValueError(msg)
+        return cls(data=data, backend=backend, legs=legs, num_domain_legs=half_leg_num, labels=labels)
 
     @classmethod
     def from_block_func(cls, func, legs: list[VectorSpace], backend=None,
@@ -3708,13 +3711,18 @@ def zero_like(tens: Tensor) -> Tensor:
 
 
 def eye_like(tens: Tensor) -> BlockDiagonalTensor | DiagonalTensor:
-    # TODO allow specification of leg bipartition ?
+    """The identity map, as a tensor of the same type, with the same legs as `tens`.
+
+    The legs of `tens` must be compatible with the identity map.
+    There must be an even number, where the second half are the duals of the first half
+    in reverse order, i.e. ``tens.legs[i] == tens.legs[-1 - i].dual``.
+    """
     if isinstance(tens, BlockDiagonalTensor):
         if tens.num_legs % 2 != 0:
             raise ValueError('eye is not defined for an odd number of legs')
         legs_1 = tens.legs[:tens.num_legs // 2]
         legs_2 = tens.legs[tens.num_legs // 2:]
-        for l1, l2 in zip(legs_1, legs_2):
+        for l1, l2 in zip(legs_1, legs_2[::-1]):
             if not l1.can_contract_with(l2):
                 if len(legs_1) == 1:
                     msg = 'Second leg must be the dual of the first leg'
@@ -3722,13 +3730,14 @@ def eye_like(tens: Tensor) -> BlockDiagonalTensor | DiagonalTensor:
                     msg = 'Second half of legs must be the dual of the first half'
                 raise ValueError(msg)
         return BlockDiagonalTensor.eye(legs=legs_1, backend=tens.backend, labels=tens.labels,
-                                       dtype=tens.dtype, num_domain_legs=tens.num_domain_legs)
+                                       dtype=tens.dtype)
     if isinstance(tens, DiagonalTensor):
         if tens.legs[0].is_dual == tens.legs[1].is_dual:
             raise ValueError('Second leg must be the dual of the first leg')
         return DiagonalTensor.eye(tens.legs[0], backend=tens.backend, labels=tens.labels,
                                   dtype=tens.dtype)
-    # TODO could define an eye mask....
+    if isinstance(tens, Mask):
+        return Mask.eye(tens.large_leg, backend=tens.backend, labels=tens.labels)
     raise TypeError(f'eye is not defined for type {type(tens)}')
 
 

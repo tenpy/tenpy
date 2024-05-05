@@ -564,14 +564,17 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
     def zero_diagonal_data(self, leg: VectorSpace, dtype: Dtype) -> DiagonalData:
         raise NotImplementedError('zero_diagonal_data not implemented')  # TODO
 
-    def eye_data(self, legs: list[VectorSpace], dtype: Dtype, **kw) -> FusionTreeData:
-        raise NotImplementedError('eye_data not implemented')  # TODO use _iter_common_... instead of allowed_coupled_sectors
-        domain, codomain = _make_domain_codomain(legs, num_codomain=domain_num_legs, backend=self)
-        coupled = allowed_coupled_sectors(codomain, domain)
-        blocks = [self.eye_block((block_size(codomain, c), block_size(domain, c)), dtype=dtype)
-                  for c in coupled]
-        return FusionTreeData(coupled_sectors=coupled, blocks=blocks, domain=domain,
-                              codomain=codomain, dtype=dtype)
+    def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> FusionTreeData:
+        # Note: the identity has the same matrix elements in all ONB, so ne need to consider
+        #       the basis perms.
+        # all_legs = legs + [leg.dual for leg in legs[::-1]]
+        # domain == [l.dual for l in all_legs[J:]] == legs
+        # codomain == all_legs[:J] == legs
+        # which makes intuitive sense, this is what we want from the identity *map*.
+        domain = ProductSpace(legs, backend=self, _is_dual=False)
+        coupled_sectors = domain._non_dual_sectors
+        blocks = [self.eye_matrix(block_size(domain, c), dtype) for c in coupled_sectors]
+        return FusionTreeData(coupled_sectors, blocks, domain, domain, dtype)
 
     def copy_data(self, a: BlockDiagonalTensor) -> FusionTreeData:
         return FusionTreeData(

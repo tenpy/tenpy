@@ -198,9 +198,11 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def eye_data(self, legs: list[VectorSpace], dtype: Dtype, num_domain_legs: int) -> Data:
-        """Data for an identity map from legs to their duals. In particular, the resulting tensor
-        has twice as many legs"""
+    def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
+        """Data for :meth:``BlockDiagonalTensor.eye``.
+
+        The result has legs ``first_legs + [l.dual for l in reversed(firs_legs)]``.
+        """
         ...
 
     @abstractmethod

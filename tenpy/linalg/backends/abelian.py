@@ -454,12 +454,22 @@ class AbelianBackend(Backend, BlockBackend, ABC):
     def zero_diagonal_data(self, leg: VectorSpace, dtype: Dtype) -> DiagonalData:
         return AbelianBackendData(dtype, blocks=[], block_inds=np.zeros((0, 2), dtype=int), is_sorted=True)
 
-    def eye_data(self, legs: list[VectorSpace], dtype: Dtype, num_domain_legs: int) -> Data:
-        block_inds = np.indices((leg.num_sectors for leg in legs)).T.reshape(-1, len(legs))
-        # block_inds is by construction np.lexsort()-ed
-        dims = [leg.multiplicities[bi] for leg, bi in zip(legs, block_inds.T)]
+    def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
+        # Note: the identity has the same matrix elements in all ONB, so ne need to consider
+        #       the basis perms.
+        # results[i1,...im,jm,...,j1] = delta_{i1,j1} ... delta{im,jm}
+        # need exactly the "diagonal" blocks, where sector of i1 matches the one of j1 etc.
+        # to guarantee sorting later, it is easier to generate the block inds of the domain
+        #   [jm,...,j1] first.
+        domain_dims = [leg.num_sectors for leg in reversed(legs)]
+        domain_block_inds = np.indices(domain_dims).T.reshape(-1, len(legs))
+        block_inds = np.hstack([domain_block_inds[:, ::-1], domain_block_inds])
+        # domain_block_inds is by construction np.lexsort( .T)-ed.
+        # since the last len(legs) columns of block_inds are already unique, the first columns
+        # are not relevant to np.lexsort( .T)-ing, thus the block_inds above is sorted.
+        dims = [leg.multiplicities[bi] for leg, bi in zip(legs, block_inds[:, :len(legs)].T)]  # OPTIMIZE can we do this in pure numpy?
         blocks = [self.eye_block(shape, dtype) for shape in zip(*dims)]
-        return AbelianBackendData(dtype, blocks, np.hstack([block_inds, block_inds]), is_sorted=True)
+        return AbelianBackendData(dtype, blocks, block_inds, is_sorted=True)
 
     def copy_data(self, a: BlockDiagonalTensor | DiagonalTensor) -> Data | DiagonalData:
         blocks = [self.block_copy(b) for b in self.blocks]
@@ -1459,7 +1469,7 @@ class AbelianBackend(Backend, BlockBackend, ABC):
         # for the eigenvectors, we choose the computational basis vectors, i.e. the matrix
         # representation within that block is the identity matrix.
         # we initialize all blocks to eye and override those where a has blocks.
-        eigvects_data = self.eye_data(legs=a.legs[0:1], num_domain_legs=-666, dtype=a.dtype)
+        eigvects_data = self.eye_data(legs=a.legs[0:1], dtype=a.dtype)
         eigvals_blocks = []
         for block, bi in zip(a.data.blocks, a.data.block_inds):
             vals, vects = self.block_eigh(block, sort=sort)

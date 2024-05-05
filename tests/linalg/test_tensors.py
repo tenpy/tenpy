@@ -102,18 +102,18 @@ def test_Tensor_classmethods(make_compatible_tensor, num_domain_legs):
     tens.test_sanity()
     npt.assert_array_almost_equal_nulp(tens.to_numpy_ndarray(), np.zeros(dims), 10)
 
-    print('checking eye')
-    if isinstance(tens.backend, FusionTreeBackend):
-        with pytest.raises(NotImplementedError, match='eye_data not implemented'):
-            tens = tensors.BlockDiagonalTensor.eye(legs[0], backend=backend)
-        return  # TODO
-    
+    print('checking eye (1 -> 1 legs)')
     tens = tensors.BlockDiagonalTensor.eye(legs[0], backend=backend)
     tens.test_sanity()
     npt.assert_array_equal(tens.to_numpy_ndarray(), np.eye(legs[0].dim))
+    
+    print('checking eye (2 -> 2 legs)')
     tens = tensors.BlockDiagonalTensor.eye(legs[:2], backend=backend)
     tens.test_sanity()
-    npt.assert_array_equal(tens.to_numpy_ndarray(), np.eye(np.prod(dims[:2])).reshape(dims[:2] + dims[:2]))
+    res = tens.to_numpy_ndarray()
+    expect = np.eye(dims[0])[:, None, None, :] * np.eye(dims[1])[None, :, :, None]
+    
+    npt.assert_almost_equal(res, expect)
 
 
 def test_Tensor_methods(make_compatible_tensor, make_compatible_space):

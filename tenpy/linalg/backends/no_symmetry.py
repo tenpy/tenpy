@@ -101,7 +101,9 @@ class NoSymmetryBackend(Backend, BlockBackend, ABC):
     def zero_diagonal_data(self, leg: VectorSpace, dtype: Dtype) -> DiagonalData:
         return self.zero_block(shape=[leg.dim], dtype=dtype)
 
-    def eye_data(self, legs: list[VectorSpace], dtype: Dtype, num_domain_legs: int) -> Data:
+    def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
+        # Note: the identity has the same matrix elements in all ONB, so ne need to consider
+        #       the basis perms.
         return self.eye_block(legs=[l.dim for l in legs], dtype=dtype)
 
     def copy_data(self, a: BlockDiagonalTensor | DiagonalTensor) -> Data | DiagonalData:
