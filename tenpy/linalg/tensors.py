@@ -87,6 +87,9 @@ class Shape:
     def __iter__(self):
         return iter(self.dims)
 
+    def __len__(self):
+        return self.num_legs
+
     def __getitem__(self, key):
         if isinstance(key, str):
             try:

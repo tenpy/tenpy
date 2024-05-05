@@ -66,7 +66,9 @@ def test_Tensor_classmethods(make_compatible_tensor, num_domain_legs):
     backend = T.backend
 
     if (isinstance(backend, FusionTreeBackend)) and (isinstance(T.symmetry, ProductSymmetry)):
-        pytest.xfail(reason='Topo data for ProductSymmetry is missing')
+        with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented for ProductSymmetry'):
+            numpy_block = T.to_numpy_ndarray()
+        return
     
     legs = T.legs
     dims = tuple(T.shape)
