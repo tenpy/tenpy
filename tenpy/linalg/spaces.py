@@ -50,10 +50,16 @@ class VectorSpace:
     computed from the :attr:`_non_dual_sectors` only when needed, that `V.dual` decomposes into
     are not sorted.
 
-    The notion of a basis and its associated attributes and functions may not be defined for
-    anyonic symmetries.
+    .. note ::
+    
+        The notion of a basis and its associated attributes and functions is only a useful
+        concepts if ``symmetry.qdims_are_integer``, i.e. if we can think of the sectors as 
+        complex vector spaces. This is not the case for some anyonic symmetries.
+        In particular :attr:`sector_dims`, :attr:`slices` and :attr:`dim`, :attr:`sectors_of_basis`,
+        :meth:`from_basis` etc. may not be defined and either be set to None or raise errors.
 
     .. note ::
+    
         It is best to think of ``VectorSpace``s as immutable objects.
         In practice they are mutable, i.e. you could change their attributes.
         This may lead to unexpected behavior, however, since it might make the cached metadata inconsistent.
@@ -70,16 +76,23 @@ class VectorSpace:
     multiplicities : 1D numpy array of int
         How often each of the `sectors` appears. A 1D array of positive integers with axis [s].
         ``sectors[i, :]`` appears ``multiplicities[i]`` times.
-    slices : 2D numpy array of int
+    sector_dims : 1D array of int | None
+        If ``symmetry.qdims_are_integer``, the integer dimension of each of the :attr:`sectors`.
+    sector_qdims : 1D array of float
+        The (quantum) dimension of each of the sectors. Unlike :attr:`sector_dims` this is always
+        defined, but may not always be integer.
+    dim : int | float
+        The total dimension. Is integer if ``symmetry.qdims_are_integer``, otherwise may be float.
+    slices : 2D numpy array of int | None
         For every sector ``sectors[n]``, the start ``slices[n, 0]`` and stop ``slices[n, 1]`` of
         indices (in the *internal* basis order) that belong to this sector.
         Conversely, ``basis_perm[slices[n, 0]:slices[n, 1]]`` are the elements of the public
-        basis that live in ``sectors[n]``.
+        basis that live in ``sectors[n]``. Only available if ``symmetry.qdims_are_integer``.
     is_real : bool
         If the space is over the real or complex numbers.
     is_dual : bool
         Whether this is the dual (a.k.a. bra) space or the regular (a.k.a. ket) space.
-    basis_perm : ndarray
+    basis_perm : ndarray | None
         The tensor manipulations of `tenpy.linalg` benefit from choosing a canonical order for the
         basis of vector spaces. This attribute translates between the "public" order of the basis,
         in which e.g. the inputs to :meth:`from_dense_block` are interpreted to this internal order,
@@ -89,14 +102,16 @@ class VectorSpace:
         We store the inverse as `_inverse_basis_perm`.
         For `ProductSpace`s we always set a trivial permutation.
         We can translate indices as ``public_idx == basis_perm[internal_idx]``.
+        Only available if ``symmetry.qdims_are_integer``.
         ``_basis_perm`` is the internal version which may be ``None`` if the permutation is trivial.
-    inverse_basis_perm : ndarray
+    inverse_basis_perm : ndarray | None
         Inverse of :attr:`basis_perm`. ``_inverse_basis_perm`` is the internal version.
-    sectors_of_basis : 2D numpy array of int
+        Only available if ``symmetry.qdims_are_integer``.
+    sectors_of_basis : 2D numpy array of int | None
         The sectors of every element of the "public" computational basis.
         Multi-dimensional sectors (such as e.g. the spin-1/2 sector of SU(2)) are listed multiple
         times (once for each basis state in the multiplet), such that the length is the total
-        dimension.
+        dimension. Only available if ``symmetry.qdims_are_integer``.
     _non_dual_sectors : 2D numpy array of int
         Internally stored version of :attr:`sectors`. For ket spaces (``is_dual=True``),
         these are the same as :attr:`sectors`, for bra spaces these are their duals.
@@ -147,16 +162,26 @@ class VectorSpace:
             self.multiplicities = multiplicities = np.ones((num_sectors,), dtype=int)
         else:
             self.multiplicities = multiplicities = np.asarray(multiplicities, dtype=int)
-        self.sector_dims = sector_dims = symmetry.batch_sector_dim(sectors)
-        slices = np.zeros((len(sectors), 2), dtype=np.intp)
-        slices[:, 1] = slice_ends = np.cumsum(multiplicities * sector_dims)
-        slices[1:, 0] = slice_ends[:-1]  # slices[0, 0] remains 0, which is correct
-        self.slices = slices
-        self.dim = np.sum(sector_dims * multiplicities)
+        if symmetry.qdims_are_integer:
+            self.sector_dims = sector_dims = symmetry.batch_sector_dim(sectors)
+            self.sector_qdims = sector_dims
+            slices = np.zeros((len(sectors), 2), dtype=np.intp)
+            slices[:, 1] = slice_ends = np.cumsum(multiplicities * sector_dims)
+            slices[1:, 0] = slice_ends[:-1]  # slices[0, 0] remains 0, which is correct
+            self.slices = slices
+            self.dim = np.sum(sector_dims * multiplicities)
+        else:
+            self.sector_dims = None
+            self.sector_qdims = sector_qdims = symmetry.batch_qdim(sectors)
+            self.slices = None
+            self.dim = np.sum(sector_qdims * multiplicities)
         if basis_perm is None:
             self._basis_perm = None
             self._inverse_basis_perm = None
         else:
+            if not symmetry.qdims_are_integer:
+                msg = f'basis_perm is meaningless for {symmetry} which has non-integer qdims.'
+                raise ValueError(msg)
             # OPTIMIZE set to None if trivial but explicit?
             self._basis_perm = basis_perm = np.asarray(basis_perm, dtype=int)
             self._inverse_basis_perm = inverse_permutation(basis_perm)
@@ -171,24 +196,30 @@ class VectorSpace:
         # multiplicities
         assert np.all(self.multiplicities > 0)
         assert self.multiplicities.shape == (self.num_sectors,)
-        # slices
-        assert self.slices.shape == (self.num_sectors, 2)
-        slice_diffs = self.slices[:, 1] - self.slices[:, 0]
-        assert np.all(self.sector_dims == self.symmetry.batch_sector_dim(self._non_dual_sectors))
-        expect_diffs = self.sector_dims * self.multiplicities
-        assert np.all(slice_diffs == expect_diffs)
-        # slices should be consecutive
-        if len(self.slices) > 0:
-            assert self.slices[0, 0] == 0
-            assert np.all(self.slices[1:, 0] == self.slices[:-1, 1])
-            assert self.slices[-1, 1] == self.dim
-        # basis_perm
-        if self._basis_perm is None:
-            assert self._inverse_basis_perm is None
+        if self.symmetry.qdims_are_integer:
+            # slices
+            assert self.slices.shape == (self.num_sectors, 2)
+            slice_diffs = self.slices[:, 1] - self.slices[:, 0]
+            assert np.all(self.sector_dims == self.symmetry.batch_sector_dim(self._non_dual_sectors))
+            expect_diffs = self.sector_dims * self.multiplicities
+            assert np.all(slice_diffs == expect_diffs)
+            # slices should be consecutive
+            if len(self.slices) > 0:
+                assert self.slices[0, 0] == 0
+                assert np.all(self.slices[1:, 0] == self.slices[:-1, 1])
+                assert self.slices[-1, 1] == self.dim
+            # basis_perm
+            if self._basis_perm is None:
+                assert self._inverse_basis_perm is None
+            else:
+                assert self._basis_perm.shape == (self.dim,)
+                assert len(np.unique(self._basis_perm)) == self.dim
+                assert np.all(self._basis_perm[self._inverse_basis_perm] == np.arange(self.dim))
         else:
-            assert self._basis_perm.shape == (self.dim,)
-            assert len(np.unique(self._basis_perm)) == self.dim
-            assert np.all(self._basis_perm[self._inverse_basis_perm] == np.arange(self.dim))
+            assert self.slices is None
+            assert self._basis_perm is None
+            assert self._inverse_basis_perm is None
+        assert self.dim >= 0
 
     @classmethod
     def from_basis(cls, symmetry: Symmetry, sectors_of_basis: Sequence[Sequence[int]],
@@ -223,6 +254,9 @@ class VectorSpace:
         :attr:`sectors_of_basis`
             Reproduces the `sectors_of_basis` parameter.
         """
+        if not symmetry.qdims_are_integer:
+            msg = f'from_basis is meaningless for {symmetry} which has non-integer qdims.'
+            raise ValueError(msg)
         sectors_of_basis = np.asarray(sectors_of_basis, dtype=int)
         assert sectors_of_basis.shape[1] == symmetry.sector_ind_len
         # note: numpy.lexsort is stable, i.e. it preserves the order of equal keys.
@@ -260,6 +294,11 @@ class VectorSpace:
         :class:`VectorSpace`
             A space with the overall `symmetry`.
         """
+        if not all(sp.symmetry.qdims_are_integer for sp in independent_descriptions):
+            msg = f'from_independent_symmetries is not supported for {symmetry} which has non-integer qdims.'
+            # TODO is there a way to define this?
+            #      the straight-forward picture works only if we have a vectorspace and can identify states.
+            raise ValueError(msg)
         assert len(independent_descriptions) > 0
         dim = independent_descriptions[0].dim
         assert all(s.dim == dim for s in independent_descriptions)
@@ -302,10 +341,10 @@ class VectorSpace:
 
         .. note ::
             Unlike :meth:`from_basis`, this method expects a multi-dimensional sector to be listed
-            only once to mean its entire multiplet of basis states. The Hilbert Space of a spin-one-half
-            D.O.F. can e.g. be created as ``VectorSpace.from_basis(su2, [[spin_half], [spin_half]])``
-            or as ``VectorSpace.from_sectors(su2, [[1]])``. In the former case we need to list the
-            same sector both for the spin up and spin down state.
+            only once to mean its entire multiplet of basis states. The Hilbert Space of a spin-1/2
+            D.O.F. can e.g. be created as ``VectorSpace.from_basis(su2, [spin_half, spin_half])``
+            or as ``VectorSpace.from_sectors(su2, [spin_half])``. In the former case we need to
+            list the same sector both for the spin up and spin down state.
 
         Parameters
         ----------
@@ -383,13 +422,16 @@ class VectorSpace:
     @property
     def sectors_of_basis(self):
         """The sector for each basis vector, like the input of :meth:`from_basis`."""
+        if not self.symmetry.qdims_are_integer:
+            msg = f'sectors_of_basis is meaningless for {self.symmetry} which has non-integer qdims.'
+            raise ValueError(msg)
         # build in internal basis, then permute
         res = np.zeros((self.dim, self.symmetry.sector_ind_len), dtype=int)
         # multi-dimensional sectors are captured by compatible slices.
         for sect, slc in zip(self.sectors, self.slices):
             res[slice(*slc), :] = sect[None, :]
         if self._inverse_basis_perm is not None:
-            res = res[self.inverse_basis_perm]
+            res = res[self._inverse_basis_perm]
         return res
 
     def as_VectorSpace(self):
@@ -411,6 +453,7 @@ class VectorSpace:
             The map is assumed to cooperate with duality, i.e. we assume without checking that
             ``symmetry.dual_sectors(sector_map(old_sectors))`` is the same as
             ``sector_map(old_symmetry.dual_sectors(old_sectors))``.
+            TODO do we need to assume more, i.e. compatibility with fusion?
         backend : :class: `~tenpy.linalg.backends.abstract_backend.Backend`
             This parameter is ignored. We only include it to have matching signatures
             with :meth:`ProductSpace.change_symmetry`.
@@ -437,8 +480,8 @@ class VectorSpace:
         ----------
         which : None | (list of) int
             If ``None`` (default) the entire symmetry is dropped and the result has ``no_symmetry``.
-            An integer or list of integers assume that `self.symmetry` is a `ProductSymmetry` and
-            specify which of its factors to drop.
+            An integer or list of integers assume that ``self.symmetry`` is a ``ProductSymmetry``
+            and indicates which of its factors to drop.
         remaining_symmetry : :class:`~tenpy.linalg.groups.Symmetry`, optional
             The resulting symmetry can optionally be passed, e.g. to control its name.
             Should be a :class:`~tenpy.linalg.groups.NoSymmetry` if all symmetries are
@@ -508,6 +551,9 @@ class VectorSpace:
         blockmask : 1D array-like of bool
             For every basis state of self, if it should be kept (``True``) or discarded (``False``).
         """
+        if not self.symmetry.qdims_are_integer:
+            msg = f'take_slice is meaningless for {self.symmetry} which has non-integer qdims.'
+            raise ValueError(msg)
         blockmask = np.asarray(blockmask, dtype=bool)
         if self._basis_perm is not None:
             blockmask = blockmask[self._basis_perm]
@@ -567,6 +613,9 @@ class VectorSpace:
         multiplicity_idx : int
             The index "within the sector", in ``range(sector_dim * self.multiplicities[sector_index])``.
         """
+        if not self.symmetry.qdims_are_integer:
+            msg = f'parse_index is meaningless for {self.symmetry} which has non-integer qdims.'
+            raise ValueError(msg)
         if self._inverse_basis_perm is not None:
             idx = self._inverse_basis_perm[idx]
         sector_idx = bisect.bisect(self.slices[:, 0], idx) - 1
@@ -809,8 +858,9 @@ class VectorSpace:
             return False
         if not np.all(self.multiplicities == other.multiplicities):
             return False
-        if not np.all(self.basis_perm == other.basis_perm):
-            return False
+        if (self._basis_perm is not None) or (other._basis_perm is not None):
+            if not np.all(self.basis_perm == other.basis_perm):
+                return False
         return True
 
     def can_contract_with(self, other):
@@ -827,12 +877,18 @@ class VectorSpace:
 
     @property
     def basis_perm(self):
+        if not self.symmetry.qdims_are_integer:
+            msg = f'basis_perm is meaningless for {self.symmetry} which has non-integer qdims.'
+            raise ValueError(msg)
         if self._basis_perm is None:
             return np.arange(self.dim)
         return self._basis_perm
 
     @property
     def inverse_basis_perm(self):
+        if not self.symmetry.qdims_are_integer:
+            msg = f'basis_perm is meaningless for {self.symmetry} which has non-integer qdims.'
+            raise ValueError(msg)
         if self._inverse_basis_perm is None:
             return np.arange(self.dim)
         return self._inverse_basis_perm
@@ -869,7 +925,8 @@ class VectorSpace:
 
         This function considers both spaces purely as `VectorSpace`s and ignores a possible
         `ProductSpace` structure.
-        Per convention, self is never a subspace of other, if the :attr:`is_dual` are different
+        Per convention, self is never a subspace of other, if the :attr:`is_dual` or the
+        :attr:`symmetry` are different.
         The :attr:`basis_perm`s are not considered.
         """
         if self.is_dual != other.is_dual:
@@ -929,10 +986,14 @@ class VectorSpace:
         is_dual = self.is_dual
         assert all(o.is_dual == is_dual for o in others)
 
-        offsets = np.cumsum([self.dim, *(o.dim for o in others)])
-        basis_perm = np.concatenate(
-            [self.basis_perm] + [o.basis_perm + n for o, n in zip(others, offsets)]
-        )
+
+        if symmetry.qdims_are_integer:
+            offsets = np.cumsum([self.dim, *(o.dim for o in others)])
+            basis_perm = np.concatenate(
+                [self.basis_perm] + [o.basis_perm + n for o, n in zip(others, offsets)]
+            )
+        else:
+            basis_perm = None
         sectors = np.concatenate([self._non_dual_sectors, *(o._non_dual_sectors for o in others)])
         multiplicities = np.concatenate([self.multiplicities, *(o.multiplicities for o in others)])
         res = VectorSpace.from_sectors(symmetry=symmetry, sectors=sectors,
@@ -1219,7 +1280,7 @@ class ProductSpace(VectorSpace):
             :options: +SKIP
 
             >>> spin_one_half = [1]  # sectors are labelled by 2*S
-            >>> site = VectorSpace(z2_symmetry, [spin_one_half])
+            >>> site = VectorSpace(su2_symmetry, [spin_one_half])
             >>> prod_space = ProductSpace([site, site])
             >>> trafo = prod_space.get_basis_transformation()
             >>> trafo[:, :, 0]  # | s=0, m=0 >
@@ -1592,7 +1653,3 @@ def _unique_sorted_sectors(unsorted_sectors: SectorArray, unsorted_multiplicitie
     multiplicities = slices[1:] - slices[:-1]
     sectors = sectors[diffs[:-1]]
     return sectors, multiplicities, perm
-     
-    
-    
-    
