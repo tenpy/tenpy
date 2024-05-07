@@ -193,7 +193,12 @@ class TermList(Hdf5Exportable):
     def __str__(self):
         res = []
         for term, strength in self:
-            term_str = ' '.join(['{op!s}_{i:d}'.format(op=op, i=i) for op, i in term])
+            ops = []
+            for op, i in term:
+                if ' ' in op:
+                    op = '[' + op + ']'
+                ops.append(f"{op!s}_{i:d}")
+            term_str = ' '.join(ops)
             res.append('{s:.5f} * {t}'.format(s=strength, t=term_str))
         return ' +\n'.join(res)
 

@@ -1,0 +1,1 @@
+- fix `str(TermList)` formatting to add brackets if multiple operators act on single site
