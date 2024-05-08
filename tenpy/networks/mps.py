@@ -4846,7 +4846,7 @@ class MPS(BaseMPSExpectationValue):
         expected_mean_k : float
             As explained in :cite:`cincio2013`, the returned `W` is extracted as eigenvector of a
             mixed transfer matrix, and hence has an undefined phase. We fix the overall phase
-            such that ``sum(s[j]**2 exp(iK[j]) == np.sum(W) = np.exp(1.j*expected_mean_k)``.
+            such that ``sum(s[j]**2 exp(iK[j])) == np.sum(W) = np.exp(1.j*expected_mean_k)``.
 
         Returns
         -------
@@ -4912,7 +4912,7 @@ class MPS(BaseMPSExpectationValue):
         W = W / np.sum(np.abs(W))  # fix overall scaling by normalization np.sum(S[i]**2) == 1.
         mean_exp_ik = np.sum(W)
         if np.abs(mean_exp_ik) > 1.e-5:
-            W *= np.conj(mean_exp_ik) / np.abs(mean_exp_ik)
+            W *= np.exp(1.j*expected_mean_k) * np.conj(mean_exp_ik) / np.abs(mean_exp_ik)
         # Strip S's from U
         inv_S = 1. / self.get_SL(0)
         U = sUs.scale_axis(inv_S, 0).iscale_axis(inv_S, 1)  # note: U should commute with s
