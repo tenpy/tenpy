@@ -76,4 +76,4 @@ def setup_cython_extension():
 
 
 if __name__ == '__main__':
-    setup(ext_modules=setup_cython_extension())
+    setup() #ext_modules=setup_cython_extension())
