@@ -454,7 +454,7 @@ else:
     yaml.add_constructor("!py_eval", _yaml_eval_constructor, Loader=_YamlLoaderWithPyEval)
 
 
-def load_yaml_with_py_eval(filename, context={'np': numpy}):
+def load_yaml_with_py_eval(filename=None, yaml_content=None, context={'np': numpy}):
     """Load a yaml file with support for an additional `!py_eval` tag.
 
     When defining yaml parameter files, it's sometimes convenient to just have python snippets
@@ -487,8 +487,11 @@ def load_yaml_with_py_eval(filename, context={'np': numpy}):
 
     Parameters
     ----------
-    filename : str
+    filename : str | None
         Filename of the file to load.
+    yaml_content : str | None
+        Alternatively to filename directly the content of the yaml file.
+        Pass either `filename` or `yaml_content`.
     context : dict
         The context of ``globals()`` passed to `eval`.
 
@@ -503,6 +506,11 @@ def load_yaml_with_py_eval(filename, context={'np': numpy}):
 
     _YamlLoaderWithPyEval.eval_context = context
 
-    with open(filename, 'r') as stream:
-        config = yaml.load(stream, Loader=_YamlLoaderWithPyEval)
+    if filename is not None:
+        with open(filename, 'r') as stream:
+            config = yaml.load(stream, Loader=_YamlLoaderWithPyEval)
+    elif yaml_content is not None:
+        config = yaml.load(yaml_content, Loader=_YamlLoaderWithPyEval)
+    else:
+        raise ValueError("pass either filename or yaml_content!")
     return config

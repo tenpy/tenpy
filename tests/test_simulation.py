@@ -393,6 +393,22 @@ sequential:
 
 def test_yaml_load(tmp_path):
     yaml = pytest.importorskip('yaml')
+
+    # load without writing to file first
+    simulation_params = tenpy.load_yaml_with_py_eval(yaml_content=yaml_example,
+                                                     context=dict(np=np, tenpy=tenpy))
+    assert simulation_params['simulation_class'] == 'GroundStateSearch'
+    assert simulation_params['model_params']['Jx'] == [0, 1, 4, 9, 16, 25]
+    np.testing.assert_array_almost_equal_nulp(
+        simulation_params['model_params']['hx'],
+        np.linspace(0, 5, 21, endpoint=True),
+        10
+    )
+    assert simulation_params['model_params']['lattice'] is tenpy.Square
+
+    # now try again loading from file
+    del simulation_params
+
     file = tmp_path / 'simulation.yaml'
     with open(file, 'w') as f:
         print(yaml_example, file=f)
@@ -405,4 +421,3 @@ def test_yaml_load(tmp_path):
         10
     )
     assert simulation_params['model_params']['lattice'] is tenpy.Square
-    
