@@ -1014,3 +1014,50 @@ def test_ising_grading(nu, np_random):
     print('checking dual_sector')
     assert_array_equal(sym.dual_sector(anyon), anyon)
     assert_array_equal(sym.dual_sector(fermion), fermion)
+
+
+def test_SU3_3AnyonCategory(np_random):
+    a = np.array([0])
+    b = np.array([1])
+    c = np.array([2])
+    d = np.array([3])
+    sym = symmetries.SU3_3AnyonCategory()
+    common_checks(sym, example_sectors=sym.all_sectors(),
+                  example_sectors_low_qdim=sym.all_sectors(), np_random=np_random)
+
+    print('instancecheck and is_abelian')
+    assert not isinstance(sym, symmetries.AbelianGroup)
+    assert not isinstance(sym, symmetries.GroupSymmetry)
+    assert not sym.is_abelian
+
+    print('checking valid sectors')
+    for valid in [a, b, c, d]:
+        assert sym.is_valid_sector(valid)
+    for invalid in [[-1], [4], [0, 0]]:
+        assert not sym.is_valid_sector(np.array(invalid))
+
+    print('checking fusion_outcomes')
+    assert_array_equal(sym.fusion_outcomes(b, b), np.stack([a, b, c, d]))
+    assert_array_equal(sym.fusion_outcomes(b, c), b[None, :])
+    assert_array_equal(sym.fusion_outcomes(b, d), b[None, :])
+    assert_array_equal(sym.fusion_outcomes(c, c), d[None, :])
+    assert_array_equal(sym.fusion_outcomes(c, d), a[None, :])
+    assert_array_equal(sym.fusion_outcomes(d, d), c[None, :])
+
+    print('checking equality')
+    assert sym == sym
+    assert sym != symmetries.no_symmetry
+    assert sym != symmetries.SU2Symmetry()
+
+    print('checking is_same_symmetry')
+    assert sym.is_same_symmetry(sym)
+    assert not sym.is_same_symmetry(symmetries.no_symmetry)
+    assert not sym.is_same_symmetry(symmetries.SU2Symmetry())
+
+    print('checking dual_sector')
+    assert_array_equal(sym.dual_sector(b), b)
+    assert_array_equal(sym.dual_sector(c), d)
+    assert_array_equal(sym.dual_sector(d), c)
+
+    print('checking dual_sectors')
+    assert_array_equal(sym.dual_sectors(np.stack([a, b, c, d])), np.stack([a, b, d, c]))

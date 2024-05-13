@@ -1901,6 +1901,7 @@ class SU3_3AnyonCategory(Symmetry):
     only exchanges the two fusion multiplicities of anyon `8`.
     """
 
+    # TODO: discuss qdims_are_integer, sector_dim
     has_fusion_tensor = False
     qdims_are_integer = True
     _one_1D = np.ones((1,), dtype=int)
