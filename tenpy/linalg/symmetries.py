@@ -4,6 +4,7 @@ from __future__ import annotations
 from abc import abstractmethod, ABCMeta
 from enum import Enum
 from functools import reduce, lru_cache
+from itertools import product
 
 from numpy import typing as npt
 import numpy as np
@@ -14,7 +15,7 @@ __all__ = ['Sector', 'SectorArray', 'FusionStyle', 'BraidingStyle', 'Symmetry', 
            'GroupSymmetry', 'AbelianGroup', 'NoSymmetry', 'U1Symmetry', 'ZNSymmetry', 'SU2Symmetry',
            'FermionParity', 'FibonacciAnyonCategory', 'no_symmetry', 'z2_symmetry', 'z3_symmetry',
            'z4_symmetry', 'z5_symmetry', 'z6_symmetry', 'z7_symmetry', 'z8_symmetry', 'z9_symmetry',
-           'u1_symmetry', 'fermion_parity', 'IsingAnyonCategory',
+           'u1_symmetry', 'fermion_parity', 'IsingAnyonCategory', 'SU3_3AnyonCategory',
            'QuantumDoubleZNAnyonCategory', 'SU2_kAnyonCategory', 'ZNAnyonCategory', 'ZNAnyonCategory2',
            'double_semion_category', 'fibonacci_anyon_category', 'ising_anyon_category', 'semion_category', 'toric_code_category'
            ]
@@ -1598,8 +1599,10 @@ class FibonacciAnyonCategory(Symmetry):
         return 1
 
     def qdim(self, a: Sector) -> float:
-        # TODO implement batch_qdim
         return 1 if a[0] == 0 else self._phi
+
+    def batch_qdim(self, a: SectorArray) -> np.ndarray:
+        return np.where(a == 1, self._phi, 1).flatten()
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         if np.all(np.concatenate([a, b])):
@@ -1706,8 +1709,10 @@ class IsingAnyonCategory(Symmetry):
         return self.frobenius[a[0]]
 
     def qdim(self, a: Sector) -> float:
-        # TODO implement batch_qdim
         return np.sqrt(2) if a[0] == 1 else 1
+
+    def batch_qdim(self, a: SectorArray) -> np.ndarray:
+        return np.where(a == 1, np.sqrt(2), 1).flatten()
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         if np.all(np.concatenate([a, b])):
@@ -1865,8 +1870,10 @@ class SU2_kAnyonCategory(Symmetry):
         return -1 if a[0] % 2 == 1 else 1
 
     def qdim(self, a: Sector) -> float:
-        # TODO implement batch_qdim
         return np.sin((a[0] + 1) * np.pi / (self.k + 2)) / np.sin(np.pi / (self.k + 2))
+
+    def batch_qdim(self, a: SectorArray) -> np.ndarray:
+        return np.sin((a.flatten() + 1) * np.pi / (self.k + 2)) / np.sin(np.pi / (self.k + 2))
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         try:  # nontrivial R-symbols
@@ -1879,6 +1886,194 @@ class SU2_kAnyonCategory(Symmetry):
 
     def all_sectors(self) -> SectorArray:
         return np.arange(self.k + 1, dtype=int)[:, None]
+
+
+class SU3_3AnyonCategory(Symmetry):
+    r""":math:`SU(3)_3` anyon category
+
+    Can be used as a good first check for categories with higher fusion multiplicities.
+
+    The anyons are denoted by `1`, `8`, `10` and `\bar{10}` with the fusion rule
+    `8 x 8 = 1 + 8 + 8 + 10 + 10-`. (For convenience, we denote `\bar{10}` as `10-`)
+    The anyons correspond to the allowed sectors (1D arrays) ``[j]`` with `j = 0,1,2,3`.
+
+    The notion of handedness does not make sense for this specific anyon model since it
+    only exchanges the two fusion multiplicities of anyon `8`.
+    """
+
+    has_fusion_tensor = False
+    qdims_are_integer = True
+    _one_1D = np.ones((1,), dtype=int)
+    _one_4D = np.ones((1, 1, 1, 1), dtype=int)
+    _fusion_map = {  # notation: 10- = \bar{10}
+        0: np.array([[0]]),  # 1 x 1 = 1
+        1: np.array([[1]]),  # 1 x 8 = 8 = 8 x 1
+        4: np.array([[2]]),  # 1 x 10 = 10 = 1 x 10
+        9: np.array([[3]]),  # 1 x 10- = 10- = 1 x 10-
+        2: np.array([[0], [1], [2], [3]]),  # 8 x 8 = 1 + 8 + 8 + 10 + 10-
+        5: np.array([[1]]),  # 8 x 10 = 8 = 10 x 8
+        10: np.array([[1]]), # 8 x 10- = 8 = 10- x 8
+        8: np.array([[3]]),  # 10 x 10 = 10-
+        13: np.array([[0]]), # 10 x 10- = 1 = 10- x 10
+        18: np.array([[2]])  # 10- x 10- = 10
+    }
+    _dual_map = {0: np.array([0]),
+                 1: np.array([1]),
+                 2: np.array([3]),
+                 3: np.array([2])}
+    _f1 = np.identity(2)
+    _f2 = np.array([[-0.5, -3**0.5/2],
+                    [3**0.5/2, -0.5]])
+    _f3 = _f2.T
+    _f4 = np.zeros((7,7))
+    _f4[0,0] = _f4[5,5] = _f4[6,5] = _f4[5,6] = _f4[6,6] = 1/3
+    _f4[0,5] = _f4[0,6] = _f4[5,0] = _f4[6,0] = -1/3
+    _f4[0,1] = _f4[1,0] = _f4[0,4] = _f4[4,0] = 3**-0.5
+    _f4[2,2] = _f4[3,2] = _f4[2,3] = _f4[3,3] = _f4[1,4] = _f4[4,1] = 0.5
+    _f4[2,6] = _f4[6,3] = _f4[3,5] = _f4[5,2] = 0.5
+    _f4[2,5] = _f4[5,3] = _f4[3,6] = _f4[6,2] = -0.5
+    _f4[1,1] = _f4[4,4] = -0.5
+    _f4[1,5] = _f4[1,6] = _f4[5,1] = _f4[6,1] = 12**-0.5
+    _f4[4,5] = _f4[4,6] = _f4[5,4] = _f4[6,4] = 12**-0.5
+    _fsym_map = {}
+
+    def __init__(self):
+        self._c = {}
+        Symmetry.__init__(self,
+                          fusion_style=FusionStyle.general,
+                          braiding_style=BraidingStyle.anyonic,
+                          trivial_sector=np.array([0], dtype=int),
+                          group_name='SU3_3AnyonCategory',
+                          num_sectors=4, descriptive_name=None)
+
+        for charges in product(range(4), repeat=6):
+            a, b, c, d, e, f = [np.array([i]) for i in charges]
+            self._fsym_map[(a[0], b[0], c[0], d[0], e[0], f[0])] = self._compute_f_symbol(a, b, c, d, e, f)
+
+        for charges in product(range(4), repeat=6):
+            a, b, c, d, e, f = [np.array([i]) for i in charges]
+            if (self.can_fuse_to(a, b, e) and self.can_fuse_to(e, c, d) and
+                    self.can_fuse_to(a, c, f) and self.can_fuse_to(f, b, d)):
+                self._c[(a[0], b[0], c[0], d[0], e[0], f[0])] = super()._c_symbol(a, b, c, d, e, f)
+
+    def _compute_f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
+                  ) -> np.ndarray:
+        if not np.all([self.can_fuse_to(b, c, e), self.can_fuse_to(a, e, d),
+                       self.can_fuse_to(a, b, f), self.can_fuse_to(f, c, d)]):
+            return self._one_4D
+
+        abcd = [a, b, c, d]
+        check_8 = [charge == np.array([1]) for charge in abcd]
+        shape = (self._n_symbol(b, c, e), self._n_symbol(a, e, d),
+                 self._n_symbol(a, b, f), self._n_symbol(f, c, d))
+
+        if check_8.count(True) == 4:
+            slices = []
+            for charge in [e, f]:
+                if charge ==  np.array([0]):
+                    slices.append(slice(0,1))
+                elif charge ==  np.array([1]):
+                    slices.append(slice(1,5))
+                elif charge ==  np.array([2]):
+                    slices.append(slice(5,6))
+                else:
+                    slices.append(slice(6,7))
+            return self._f4[slices[1], slices[0]].reshape(shape)
+
+        elif check_8.count(True) == 3:
+            index = check_8.index(False)
+            not_8 = abcd[index]
+            if not_8 == self.trivial_sector:
+                return self._f1.reshape(shape)
+            elif (not_8 == np.array([2]) and index != 1) or (not_8 == np.array([3]) and index == 1):
+                return self._f2.reshape(shape)
+            else:
+                return self._f3.reshape(shape)
+
+        elif check_8.count(True) == 2 and np.all(abcd):  # two 8 and no 1
+            index1 = check_8.index(True)
+            check_8[index1] = False
+            index2 = check_8.index(True)
+            if (index2 == index1 + 1) or (index1 == 0 and index2 == 3):
+                return -1 * self._one_4D
+
+        elif check_8.count(True) == 0 and np.all(abcd):
+            check_10 = [charge == np.array([2]) for charge in abcd]
+            index = 1
+            if check_10.count(True) == 3:
+                index = check_10.index(False)
+            elif check_10.count(True) == 1:
+                index = check_10.index(True)
+            if index == 0 or index == 2:
+                return -1 * self._one_4D
+        return self._one_4D
+
+    def is_valid_sector(self, a: Sector) -> bool:
+        return getattr(a, 'shape', ()) == (1,) and 0 <= a < 4
+
+    def are_valid_sectors(self, sectors) -> bool:
+        shape = getattr(sectors, 'shape', ())
+        return len(shape) == 2 and shape[1] == 1 and np.all(0 <= sectors) and np.all(sectors < 4)
+
+    def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
+        return self._fusion_map[a[0]**2 + b[0]**2]
+
+    def sector_dim(self, a: Sector) -> int:
+        return 1
+
+    def batch_sector_dim(self, a: SectorArray) -> np.ndarray:
+        return np.ones((len(a),), int)
+
+    def sector_str(self, a: Sector) -> str:
+        if a[0] == 1:
+            return '8'
+        elif a[0] == 2:
+            return '10'
+        return 'vac' if a[0] == 0 else '10-'
+
+    def __repr__(self):
+        return f'SU3_3AnyonCategory()'
+
+    def is_same_symmetry(self, other) -> bool:
+        return isinstance(other, SU3_3AnyonCategory)
+
+    def dual_sector(self, a: Sector) -> Sector:
+        return self._dual_map[a[0]]
+
+    def dual_sectors(self, sectors: SectorArray) -> SectorArray:
+        return np.where(sectors >= 2, -sectors % 5, sectors)
+
+    def _n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
+        return 2 if np.all(np.concatenate([a, b, c]) == np.array([[1]*3])) else 1
+
+    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
+                  ) -> np.ndarray:
+        return self._fsym_map[(a[0], b[0], c[0], d[0], e[0], f[0])]
+
+    def frobenius_schur(self, a: Sector) -> int:
+        return 1
+
+    def qdim(self, a: Sector) -> float:
+        return 3 if a[0] == 1 else 1
+
+    def batch_qdim(self, a: SectorArray) -> np.ndarray:
+        return np.where(a == 1, 3, 1).flatten()
+
+    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        if np.all(np.concatenate([a, b]) == np.array([[1], [1]])):
+            if c == np.array([1]):
+                return np.array([-1j, 1j])
+            return -1 * self._one_1D
+        return self._one_1D
+
+    def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
+        try:
+            return self._c[(a[0], b[0], c[0], d[0], e[0], f[0])]
+        except KeyError:  # inconsistent fusion
+            return self._one_4D
+
+    def all_sectors(self) -> SectorArray:
+        return np.arange(4, dtype=int)[:, None]
 
 
 # Note : some symmetries have expensive __init__ ! Do not initialize those.
