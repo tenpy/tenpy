@@ -426,7 +426,7 @@ def check_F_symbols(sym: symmetries.Symmetry, sector_sextets, sector_unitarity_t
         F = sym.f_symbol(a, b, c, d, e, f)
 
         assert F.shape == shape  # shape
-        if np.any([charge == sym.trivial_sector for charge in [a, b, c]]):
+        if np.any([np.array_equal(charge, sym.trivial_sector) for charge in [a, b, c]]):
             id = np.identity(int(np.prod(shape)**0.5)).reshape(shape)
             assert_array_almost_equal(F, id)  # for trivial sector
 
@@ -460,7 +460,7 @@ def check_R_symbols(sym: symmetries.Symmetry, sector_triplets, example_sectors_l
         assert_array_almost_equal(sym.topological_twist(a), sym.frobenius_schur(a) *  # TODO is this general ???
                                   sym.r_symbol(sym.dual_sector(a), a, sym.trivial_sector)[0].conj())
 
-        if np.any([charge == sym.trivial_sector for charge in [a, b]]):
+        if np.any([np.array_equal(charge, sym.trivial_sector) for charge in [a, b]]):
             assert_array_almost_equal(R, np.ones_like(R))  # exchange with trivial sector
 
     for a in example_sectors_low_qdim:  # consistency with topological twist
@@ -479,7 +479,7 @@ def check_C_symbols(sym: symmetries.Symmetry, sector_sextets, sector_unitarity_t
         C = sym.c_symbol(a, b, c, d, e, f)
 
         assert C.shape == shape  # shape
-        if np.any([charge == sym.trivial_sector for charge in [b, c]]):
+        if np.any([np.array_equal(charge, sym.trivial_sector) for charge in [b, c]]):
             id = np.identity(int(np.prod(shape)**0.5)).reshape(shape)
             assert_array_almost_equal(C, id)  # for trivial sector
 
