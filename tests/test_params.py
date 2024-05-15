@@ -34,7 +34,21 @@ def test_parameters():
     pars_copy['sub']['z'] = 30
     assert config.as_dict() == pars_copy
     example_function(sub)
-    
+
+    # test .get(..., expect_types) argument
+    _ = config.get('a', 4, NotADirectoryError)  # value of None always passes
+    _ = config.get('a', 12, [NotADirectoryError, dict])  # value of None always passes
+    _ = config.get('b', 5 ,'real')
+    with pytest.warns(UserWarning, match='Invalid type for key'):
+        _ = config.get('b', 5, int)
+    _ = config.get('uses_default_value', 5.3 ,'real')
+    with pytest.warns(UserWarning, match='Invalid type for key'):
+        _ = config.get('uses_default_value', 5.3, int)
+    _ = config.get('b', 5, [float, dict])
+    with pytest.warns(UserWarning, match='Invalid type for key'):
+        _ = config.get('b', 5, [int, dict])
+
+    # test warnings on deletion
     assert len(config.unused) == 1
     # the match is a bit ugly, since brackets have special meaning in regex.
     # the expected message is
@@ -47,3 +61,4 @@ def test_parameters():
     assert len(sub.unused) == 2
     with pytest.warns(UserWarning, match=r"unused options for config sub:\n\['x', 'y_new'\]"):
         sub.__del__()
+
