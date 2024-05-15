@@ -385,11 +385,11 @@ class MixedXKModel(CouplingMPOModel):
         if xy_lattice != "Square":
             raise NotImplementedError("Can't choose other than Square for now")
         self.real_space_lattice = xy_lattice
-        N_rings = model_params.get('Lx', 1)
-        Ly = model_params.get('Ly', 2)
+        N_rings = model_params.get('Lx', 1, int)
+        Ly = model_params.get('Ly', 2, int)
         ring_order = model_params.get('ring_order', None)
-        conserve_k = model_params.get('conserve_k', True)
-        bc_MPS = model_params.get('bc_MPS', 'infinite')
+        conserve_k = model_params.get('conserve_k', True, bool)
+        bc_MPS = model_params.get('bc_MPS', 'infinite', str)
         bc = 'periodic' if bc_MPS == 'infinite' else 'open'
         lat = MixedXKLattice.from_charges_of_orbitals(N_rings,
                                                       Ly,
@@ -735,8 +735,8 @@ class SpinlessMixedXKSquare(MixedXKModel):
 
     def init_terms(self, model_params):
         # Read out parameters
-        t = model_params.get('t', 1.)
-        V = model_params.get('V', 1.)
+        t = model_params.get('t', 1., 'real_or_array')
+        V = model_params.get('V', 1., 'real_or_array')
         xk_lat = self.lat
         Ly = xk_lat.Ly
         N_orb = xk_lat.N_orb
@@ -782,8 +782,8 @@ class HubbardMixedXKSquare(MixedXKModel):
 
     def init_terms(self, model_params):
         # Read out parameters
-        t = model_params.get('t', 1.)
-        U = model_params.get('U', 1.)
+        t = model_params.get('t', 1., 'real_or_array')
+        U = model_params.get('U', 1., 'real_or_array')
         xk_lat = self.lat
         Ly = xk_lat.Ly
         N_orb = xk_lat.N_orb

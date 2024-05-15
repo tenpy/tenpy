@@ -170,7 +170,7 @@ class VUMPSEngine(IterativeSweeps):
         self.psi.left_U, self.psi.right_U = None, None
         self.psi.valid_umps = False
 
-        self.N_sweeps_check = self.options.get('N_sweeps_check', 1)
+        self.N_sweeps_check = self.options.get('N_sweeps_check', 1, int)
         default_min_sweeps = int(1.5 * self.N_sweeps_check)
         if self.chi_list is not None:
             default_min_sweeps = max(max(self.chi_list.keys()), default_min_sweeps)
@@ -208,8 +208,8 @@ class VUMPSEngine(IterativeSweeps):
             The current ground state approximation, i.e. just a reference to :attr:`psi`.
         """
         options = self.options
-        cutoff = options.get('cutoff', 0.)
-        diagonal_gauge_frequency = options.get('diagonal_gauge_frequency', 0)
+        cutoff = options.get('cutoff', 0., 'real')
+        diagonal_gauge_frequency = options.get('diagonal_gauge_frequency', 0, int)
 
         # energy and entropy before the iteration:
         if len(self.sweep_stats['E']) < 1:  # first iteration
@@ -220,7 +220,7 @@ class VUMPSEngine(IterativeSweeps):
             S_old = self.sweep_stats['S'][-1]
 
         # VUMPS specific convergence criteria
-        diagonal_gauge_frequency = options.get('diagonal_gauge_frequency', 0)
+        diagonal_gauge_frequency = options.get('diagonal_gauge_frequency', 0, int)
 
         # perform sweeps
         logger.info('Running sweep with optimization')
@@ -311,9 +311,9 @@ class VUMPSEngine(IterativeSweeps):
                 Convergence if the norm error between AC=AL-C and AC=C_AR is
                 smaller than max_split_err.
         """
-        max_E_err = self.options.get('max_E_err', 1.e-8)
-        max_S_err = self.options.get('max_S_err', 1.e-5)
-        max_split_error = self.options.get('max_split_err', 1.e-8)
+        max_E_err = self.options.get('max_E_err', 1.e-8, 'real')
+        max_S_err = self.options.get('max_S_err', 1.e-5, 'real')
+        max_split_error = self.options.get('max_split_err', 1.e-8, 'real')
         E = self.sweep_stats['E'][-1]
         Delta_E = self.sweep_stats['Delta_E'][-1]
         Delta_S = self.sweep_stats['Delta_S'][-1]
@@ -339,8 +339,8 @@ class VUMPSEngine(IterativeSweeps):
         
         """
         super().post_run_cleanup()
-        check_overlap = self.options.get('check_overlap', True)
-        norm_tol = self.options.get('norm_tol', 1.e-10)
+        check_overlap = self.options.get('check_overlap', True, bool)
+        norm_tol = self.options.get('norm_tol', 1.e-10, 'real')
 
         self.psi.test_validity()
         logger.info(f'{self.__class__.__name__} finished after {self.sweeps} sweeps, '

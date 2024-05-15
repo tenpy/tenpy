@@ -66,15 +66,15 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
         options = self.options
-        self.trunc_err = options.get('start_trunc_err', TruncationError())
+        self.trunc_err = options.get('start_trunc_err', TruncationError(), TruncationError)
         self._U_MPO = None
         self._U_param = {}
 
     # run from TimeEvolutionAlgorithm
 
     def prepare_evolve(self, dt):
-        order = self.options.get('order', 2)
-        approximation = self.options.get('approximation', 'II')
+        order = self.options.get('order', 2, int)
+        approximation = self.options.get('approximation', 'II', str)
 
         self.calc_U(dt, order, approximation)
 

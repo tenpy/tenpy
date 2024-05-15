@@ -1877,8 +1877,8 @@ def spin_half_species(SpeciesSite, cons_N, cons_Sz, **kwargs):
     You can use this directly in the :meth:`tenpy.models.model.CouplingMPOModel.init_sites`,
     e.g., as in the :meth:`tenpy.models.hubbard.FermiHubbardModel2.init_sites`::
 
-        cons_N = model_params.get('cons_N', 'N')
-        cons_Sz = model_params.get('cons_Sz', 'Sz')
+        cons_N = model_params.get('cons_N', 'N', str)
+        cons_Sz = model_params.get('cons_Sz', 'Sz', str)
         return spin_half_species(FermionSite, cons_N=cons_N, cons_Sz=cons_Sz)
 
     Parameters

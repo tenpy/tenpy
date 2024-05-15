@@ -359,8 +359,8 @@ class TimeEvolutionAlgorithm(Algorithm):
 
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
-        self.evolved_time = self.options.get('start_time', 0.)
-        self.trunc_err = self.options.get('start_trunc_err', TruncationError())
+        self.evolved_time = self.options.get('start_time', 0., 'real')
+        self.trunc_err = self.options.get('start_trunc_err', TruncationError(), TruncationError)
         self.force_prepare_evolve = False
         if self.resume_data:
             self.evolved_time = self.resume_data['evolved_time']
@@ -377,8 +377,8 @@ class TimeEvolutionAlgorithm(Algorithm):
         The recommended way to do this is via the
         :class:`~tenpy.simulations.time_evolution.RealTimeEvolution`.
         """
-        dt = self.options.get('dt', 0.1)
-        N_steps = self.options.get('N_steps', 1)
+        dt = self.options.get('dt', 0.1, 'real')
+        N_steps = self.options.get('N_steps', 1, int)
 
         start_time = time.time()
         Sold = np.mean(self.psi.entanglement_entropy())
@@ -403,7 +403,7 @@ class TimeEvolutionAlgorithm(Algorithm):
         This is the inner part of :meth:`run` without the logging.
         For parameters see :cfg:config:`TimeEvolutionAlgorithm`.
         """
-        preserve_norm = self.options.get('preserve_norm', None)
+        preserve_norm = self.options.get('preserve_norm', None, bool)
         if preserve_norm is None:  # default: preserve norm for real time evolution
             preserve_norm = not np.iscomplex(dt)
         if preserve_norm:
@@ -509,7 +509,7 @@ class TimeDependentHAlgorithm(TimeEvolutionAlgorithm):
         Updates the model after each time step `dt` to account for changing H(t).
         For parameters see :cfg:config:`TimeEvolutionAlgorithm`.
         """
-        preserve_norm = self.options.get('preserve_norm', None)
+        preserve_norm = self.options.get('preserve_norm', None, bool)
         if preserve_norm is None:  # default: preserve norm for real time evolution
             preserve_norm = not np.iscomplex(dt)
         if preserve_norm:
@@ -533,7 +533,7 @@ class TimeDependentHAlgorithm(TimeEvolutionAlgorithm):
         Skips re-initialization if the ``model.options['time']`` is the same as `evolved_time`.
         The model should read out the option ``'time'`` and initialize the corresponding ``H(t)``.
         """
-        model_time = self.model.options.get('time', None)
+        model_time = self.model.options.get('time', None, 'real')
         if model_time is not None and model_time == self.evolved_time:
             return  # already had that time defined during model init, so no need to update
         self.model = self.model.update_time_parameter(self.evolved_time)

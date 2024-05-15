@@ -68,8 +68,8 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
     force_default_lattice = True
 
     def init_sites(self, model_params):
-        S = model_params.get('S', 0.5)
-        conserve = model_params.get('conserve', 'best')
+        S = model_params.get('S', 0.5, 'real')
+        conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
             # check how much we can conserve
             if not model_params.any_nonzero([('Jx', 'Jy'),
@@ -85,15 +85,15 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
         return site
 
     def init_terms(self, model_params):
-        Jx = model_params.get('Jx', 1.)
-        Jy = model_params.get('Jy', 1.)
-        Jz = model_params.get('Jz', 1.)
-        Jxp = model_params.get('Jxp', 1.)
-        Jyp = model_params.get('Jyp', 1.)
-        Jzp = model_params.get('Jzp', 1.)
-        hx = model_params.get('hx', 0.)
-        hy = model_params.get('hy', 0.)
-        hz = model_params.get('hz', 0.)
+        Jx = model_params.get('Jx', 1., 'real_or_array')
+        Jy = model_params.get('Jy', 1., 'real_or_array')
+        Jz = model_params.get('Jz', 1., 'real_or_array')
+        Jxp = model_params.get('Jxp', 1., 'real_or_array')
+        Jyp = model_params.get('Jyp', 1., 'real_or_array')
+        Jzp = model_params.get('Jzp', 1., 'real_or_array')
+        hx = model_params.get('hx', 0., 'real_or_array')
+        hy = model_params.get('hy', 0., 'real_or_array')
+        hz = model_params.get('hz', 0., 'real_or_array')
 
         # Only valid for self.lat being a Chain...
         self.add_onsite(-hx, 0, 'Sx0')
@@ -160,8 +160,8 @@ class SpinChainNNN2(CouplingMPOModel):
             Coupling as defined for the Hamiltonian above.
     """
     def init_sites(self, model_params):
-        S = model_params.get('S', 0.5)
-        conserve = model_params.get('conserve', 'best')
+        S = model_params.get('S', 0.5, 'real')
+        conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
             # check how much we can conserve
             if not model_params.any_nonzero([('Jx', 'Jy'),
@@ -178,15 +178,15 @@ class SpinChainNNN2(CouplingMPOModel):
 
     def init_terms(self, model_params):
         # 0) read out/set default parameters
-        Jx = model_params.get('Jx', 1.)
-        Jy = model_params.get('Jy', 1.)
-        Jz = model_params.get('Jz', 1.)
-        Jxp = model_params.get('Jxp', 1.)
-        Jyp = model_params.get('Jyp', 1.)
-        Jzp = model_params.get('Jzp', 1.)
-        hx = model_params.get('hx', 0.)
-        hy = model_params.get('hy', 0.)
-        hz = model_params.get('hz', 0.)
+        Jx = model_params.get('Jx', 1., 'real_or_array')
+        Jy = model_params.get('Jy', 1., 'real_or_array')
+        Jz = model_params.get('Jz', 1., 'real_or_array')
+        Jxp = model_params.get('Jxp', 1., 'real_or_array')
+        Jyp = model_params.get('Jyp', 1., 'real_or_array')
+        Jzp = model_params.get('Jzp', 1., 'real_or_array')
+        hx = model_params.get('hx', 0., 'real_or_array')
+        hy = model_params.get('hy', 0., 'real_or_array')
+        hz = model_params.get('hz', 0., 'real_or_array')
 
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-hx, u, 'Sx')

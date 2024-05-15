@@ -218,7 +218,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         # We create GS_env_L and GS_env_R to make topological easier.
         self.GS_env = self.GS_env_L = self.GS_env_R = MPOEnvironment(self.psi, self.H, self.psi,
                                                                      **self.boundary_env_data)
-        self.lambda_C1 = options.get('lambda_C1', None)
+        self.lambda_C1 = options.get('lambda_C1', None, 'real')
         if self.lambda_C1 is None:
             C0_L = self.Cs[0]
             norm = npc.tensordot(C0_L, C0_L.conj(), axes=(['vL', 'vR'], ['vL*', 'vR*']))
@@ -277,7 +277,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         lanczos_params = self.options.subconfig('lanczos_params')
         X_init = self.initial_guess(qtotal_change)
         if len(E_boosts) != len(orthogonal_to):
-            E_boost = self.options.get('E_boost', 100)
+            E_boost = self.options.get('E_boost', 100, 'real')
             E_boosts = [E_boost] * len(orthogonal_to)
         if len(orthogonal_to) > 0:
             effective_H = BoostNpcLinearOperator(effective_H, E_boosts, orthogonal_to)
@@ -296,7 +296,7 @@ class PlaneWaveExcitationEngine(Algorithm):
             Es = [energy - self.lambda_C1 - self.energy_density * self.L]
             psis = [MomentumMPS(X, self.psi, p)]
 
-        if N == lanczos_params.get('N_max', 20):
+        if N == lanczos_params.get('N_max', 20, int):
             import warnings
             warnings.warn('Maximum Lanczos iterations needed; be wary of results.')
 
@@ -355,9 +355,9 @@ class PlaneWaveExcitationEngine(Algorithm):
             sum_iterations : int
                 Maximum number of iterations for the explicit summation (default sum_iterations=100).
         """
-        sum_tol = self.options.get('sum_tol', 1.e-10)
-        sum_iterations = self.options.get('sum_iterations', 100)
-        sum_method = self.options.get('sum_method', 'explicit')
+        sum_tol = self.options.get('sum_tol', 1.e-10, 'real')
+        sum_iterations = self.options.get('sum_iterations', 100, int)
+        sum_method = self.options.get('sum_method', 'explicit', str)
 
         B = npc.tensordot(self.VLs[self.L - 1], X[self.L - 1], axes=(['vR'], ['vL']))
         RB = append_right_env([B], [self.ARs[self.L - 1]], self.RW, Ws=[self.Ws[self.L - 1]])
@@ -438,9 +438,9 @@ class PlaneWaveExcitationEngine(Algorithm):
             sum_iterations : int
                 Maximum number of iterations for the explicit summation (default sum_iterations=100).
         """
-        sum_tol = self.options.get('sum_tol', 1.e-10)
-        sum_iterations = self.options.get('sum_iterations', 100)
-        sum_method = self.options.get('sum_method', 'explicit')
+        sum_tol = self.options.get('sum_tol', 1.e-10, 'real')
+        sum_iterations = self.options.get('sum_iterations', 100, int)
+        sum_method = self.options.get('sum_method', 'explicit', str)
 
         B = npc.tensordot(self.VLs[0], X[0], axes=(['vR'], ['vL']))
         LB = append_left_env([B], [self.ALs[0]], self.LW, Ws=[self.Ws[0]])
@@ -730,7 +730,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         assert self.psi.L == self.model.H_MPO.L
         self.L = self.psi.L
 
-        self.size = self.options.get('excitation_size', 1)
+        self.size = self.options.get('excitation_size', 1, int)
         assert self.size >= 1
 
         self.ALs = [self.psi.get_AL(i) for i in range(self.L)]
@@ -763,7 +763,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         # We create GS_env_L and GS_env_R to make topological easier.
         self.GS_env = self.GS_env_L = self.GS_env_R = MPOEnvironment(self.psi, self.H, self.psi,
                                                                      **self.boundary_env_data)
-        self.lambda_C1 = options.get('lambda_C1', None)
+        self.lambda_C1 = options.get('lambda_C1', None, 'real')
         if self.lambda_C1 is None:
             C0_L = self.Cs[0]
             norm = npc.tensordot(C0_L, C0_L.conj(), axes=(['vL', 'vR'], ['vL*', 'vR*']))
@@ -821,7 +821,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         lanczos_params = self.options.subconfig('lanczos_params')
         X_init = self.initial_guess(qtotal_change)
         if len(E_boosts) != len(orthogonal_to):
-            E_boost = self.options.get('E_boost', 100)
+            E_boost = self.options.get('E_boost', 100, 'real')
             E_boosts = [E_boost] * len(orthogonal_to)
         if len(orthogonal_to) > 0:
             effective_H = BoostNpcLinearOperator(effective_H, E_boosts, orthogonal_to)
@@ -843,7 +843,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             Es = [energy - self.lambda_C1 - self.energy_density * (self.L * multiple_unit_cell)]
             psis = [MomentumMPS(X, self.psi, p, self.size)]
 
-        if N == lanczos_params.get('N_max', 20):
+        if N == lanczos_params.get('N_max', 20, int):
             import warnings
             warnings.warn('Maximum Lanczos iterations needed; be wary of results.')
 
@@ -940,9 +940,9 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             sum_iterations : int
                 Maximum number of iterations for the explicit summation (default sum_iterations=100).
         """
-        sum_tol = self.options.get('sum_tol', 1.e-10)
-        sum_iterations = self.options.get('sum_iterations', 100)
-        sum_method = self.options.get('sum_method', 'explicit')
+        sum_tol = self.options.get('sum_tol', 1.e-10, 'real')
+        sum_iterations = self.options.get('sum_iterations', 100, int)
+        sum_method = self.options.get('sum_method', 'explicit', str)
 
         R = self._starting_right_TR(X)
 
@@ -1060,9 +1060,9 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             sum_iterations : int
                 Maximum number of iterations for the explicit summation (default sum_iterations=100).
         """
-        sum_tol = self.options.get('sum_tol', 1.e-10)
-        sum_iterations = self.options.get('sum_iterations', 100)
-        sum_method = self.options.get('sum_method', 'explicit')
+        sum_tol = self.options.get('sum_tol', 1.e-10, 'real')
+        sum_iterations = self.options.get('sum_iterations', 100, int)
+        sum_method = self.options.get('sum_method', 'explicit', str)
 
         # shift unit cell to the left to include all excitations
         self.shift_unit_cell = None

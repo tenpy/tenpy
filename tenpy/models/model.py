@@ -298,7 +298,7 @@ class Model(Hdf5Exportable):
             else:
                 savings *= 1/mod
         if hasattr(self, 'options'):
-            savings = self.options.get("mem_saving_factor", savings)
+            savings = self.options.get("mem_saving_factor", savings, 'real')
         return savings
 
 
@@ -1823,7 +1823,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self.options = model_params = asConfig(model_params, self.name)
         self._called_CouplingMPOModel_init = True
         self.manually_call_init_H = getattr(self, 'manually_call_init_H', False)
-        explicit_plus_hc = model_params.get('explicit_plus_hc', False)
+        explicit_plus_hc = model_params.get('explicit_plus_hc', False, bool)
         # 1-4) initialize lattice
         lat = self.init_lattice(model_params)
         # 5) initialize CouplingModel
@@ -1847,7 +1847,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         in `init_terms` by defining your own model, as outlined in :doc:`/intro/model`.
         """
         H_MPO = self.calc_H_MPO()
-        if self.options.get('sort_mpo_legs', False):
+        if self.options.get('sort_mpo_legs', False, bool):
             H_MPO.sort_legcharges()
         MPOModel.__init__(self, self.lat, H_MPO)
         if isinstance(self, NearestNeighborModel):
@@ -1929,8 +1929,8 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         elif not isinstance(lat, Lattice):
             raise ValueError("invalid type for model_params['lattice'], got " + repr(lat))
         if lat is None:  # only provided LatticeClass
-            bc_MPS = model_params.get('bc_MPS', 'finite')
-            order = model_params.get('order', 'default')
+            bc_MPS = model_params.get('bc_MPS', 'finite', str)
+            order = model_params.get('order', 'default', str)
             sites = self.init_sites(model_params)
             if isinstance(sites, tuple) and sites[0] is not None and \
                     not isinstance(sites[0], Site):
@@ -1939,17 +1939,17 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             else:
                 species_sites = None
             bc_x = 'open' if bc_MPS == 'finite' else 'periodic'
-            bc_x = model_params.get('bc_x', bc_x)
+            bc_x = model_params.get('bc_x', bc_x, str)
             if bc_MPS != 'finite' and bc_x == 'open':
                 raise ValueError("You need to use 'periodic' `bc_x` for infinite/segment systems!")
             if LatticeClass.dim == 1:  # 1D lattice
-                L = model_params.get('L', 2)
+                L = model_params.get('L', 2, int)
                 # 4) lattice
                 lat = LatticeClass(L, sites, order=order, bc=bc_x, bc_MPS=bc_MPS)
             elif LatticeClass.dim == 2:  # 2D lattice
-                Lx = model_params.get('Lx', 1)
-                Ly = model_params.get('Ly', 4)
-                bc_y = model_params.get('bc_y', 'cylinder')
+                Lx = model_params.get('Lx', 1, int)
+                Ly = model_params.get('Ly', 4, int)
+                bc_y = model_params.get('bc_y', 'cylinder', str)
                 assert bc_y in ['cylinder', 'ladder', 'open', 'periodic']
                 if bc_y == 'cylinder':
                     bc_y = 'periodic'
@@ -2016,7 +2016,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             :class:`~tenpy.models.lattice.MultiSpeciesLattice` should be used.
         """
         # example:
-        #     conserve = model_params.get('conserve', 'best')
+        #     conserve = model_params.get('conserve', 'best', str)
         #     if conserve == 'best':
         #         # might check other model_params to see what's actually best possible
         #         conserve = 'Sz'
