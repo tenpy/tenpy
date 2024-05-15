@@ -1308,8 +1308,8 @@ class MPO:
                 reduces cut for Schmidt values to `trunc_weight * svd_min`
         """
         options = asConfig(options, "zip_up")
-        m_temp = options.get('m_temp', 2)
-        trunc_weight = options.get('trunc_weight', 1.)
+        m_temp = options.get('m_temp', 2, int)
+        trunc_weight = options.get('trunc_weight', 1., 'real')
         trunc_params = options.subconfig('trunc_params')
         relax_trunc = trunc_params.copy()  # relaxed truncation criteria
         relax_trunc['chi_max'] *= m_temp

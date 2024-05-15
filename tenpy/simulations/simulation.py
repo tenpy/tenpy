@@ -238,7 +238,7 @@ class Simulation:
         self.cache = CacheFile.open()
         self.grouped = 1
         self.final_processing = False
-        self.max_errors_before_abort = self.options.get('max_errors_before_abort', 10)
+        self.max_errors_before_abort = self.options.get('max_errors_before_abort', 10, int)
 
     def __enter__(self):
         self.init_cache()
@@ -395,7 +395,7 @@ class Simulation:
                 Dictionary with parameters for the cache, see
                 :meth:`~tenpy.tools.cache.CacheFile.open`.
         """
-        cache_threshold_chi = self.options.get("cache_threshold_chi", 2000)
+        cache_threshold_chi = self.options.get("cache_threshold_chi", 2000, int)
         chi = get_recursive(self.options, "algorithm_params.trunc_params.chi_max", default=None)
         if chi is not None and chi < cache_threshold_chi:
             self.options.touch("cache_params")
@@ -461,7 +461,7 @@ class Simulation:
             self.logger.info("initial state as given")  # nothing to do
             # but avoid warnings about unused parameters
             self.options.touch('initial_state_builder_class', 'initial_state_params')
-        if self.options.get('save_psi', True):
+        if self.options.get('save_psi', True, bool):
             self.results['psi'] = self.psi
 
     def group_sites_for_algorithm(self):
@@ -479,8 +479,8 @@ class Simulation:
                 Use this if you want to run TEBD with a model that was originally next-nearest
                 neighbor.
         """
-        group_sites = self.grouped = self.options.get("group_sites", 1)
-        to_NN = self.options.get("group_to_NearestNeighborModel", False)
+        group_sites = self.grouped = self.options.get("group_sites", 1, int)
+        to_NN = self.options.get("group_to_NearestNeighborModel", False, bool)
         if group_sites < 1:
             raise ValueError("invalid `group_sites` = " + str(group_sites))
         if group_sites > 1:
@@ -582,11 +582,11 @@ class Simulation:
                 If True, call `psi.canonical_form()` on the state used for measurement.
         """
         self._connect_measurements()
-        if self.options.get('measure_initial', True):
+        if self.options.get('measure_initial', True, bool):
             self.make_measurements()  # sets up self.results['measurements'] if necessary
 
     def _connect_measurements(self):
-        if self.options.get('use_default_measurements', True):
+        if self.options.get('use_default_measurements', True, bool):
             def_meas = self.default_measurements + self.model.get_extra_default_measurements()
         else:
             def_meas = []
@@ -594,7 +594,7 @@ class Simulation:
         for entry in def_meas + con_meas:
             # (module_name, func_name, kwargs=None, priority=0) = entry
             self._connect_measurements_fct(*entry)
-        measure_at_alg = self.options.get('measure_at_algorithm_checkpoints', False)
+        measure_at_alg = self.options.get('measure_at_algorithm_checkpoints', False, bool)
         if measure_at_alg:
 
             def make_simulation_measurements(algorithm):
@@ -756,7 +756,7 @@ class Simulation:
         model :
             Model matching `psi` (in terms of indexing, MPS order, grouped sites, ...)
         """
-        if self.options.get("canonicalize_before_measurement", False):
+        if self.options.get("canonicalize_before_measurement", False, bool):
             if psi is self.psi:
                 psi = psi.copy()  # make copy before
             psi.canonical_form()
@@ -1070,7 +1070,7 @@ class Simulation:
                     continue
                 if v.dtype != np.dtype(object):
                     measurements[k] = v
-        if self.options.get('save_resume_data', self.options['save_psi']):
+        if self.options.get('save_resume_data', self.options['save_psi'], bool):
             results['resume_data'] = self.get_resume_data()
         return results
 
@@ -1106,7 +1106,7 @@ class Simulation:
                 saving takes longer than 10% of `save_every_x_seconds`.
                 Use ``0.`` to force saving at each checkpoint.
         """
-        save_every = self.options.get('save_every_x_seconds', None)
+        save_every = self.options.get('save_every_x_seconds', None, 'real')
         now = time.time()
         if save_every is not None and now - self._last_save > save_every:
             self.save_results()

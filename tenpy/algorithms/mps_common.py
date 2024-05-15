@@ -135,7 +135,7 @@ class Sweep(Algorithm):
         super().__init__(psi, model, options, **kwargs)
         options = self.options
 
-        self.combine = options.get('combine', False)
+        self.combine = options.get('combine', False, bool)
         self.finite = self.psi.finite
         self.lanczos_params = options.subconfig('lanczos_params')
         self.mixer = None  # set to an actual mixer (if at all) in :meth:`mixer_activate``
@@ -248,7 +248,7 @@ class Sweep(Algorithm):
 
         # initial sweeps of the environment (without mixer)
         if not self.finite:
-            start_env = self.options.get('start_env', 1)
+            start_env = self.options.get('start_env', 1, int)
             self.environment_sweeps(start_env)
 
     def _init_mpo_env(self, H, init_env_data):
@@ -364,7 +364,7 @@ class Sweep(Algorithm):
             if new_chi_max is not None:
                 logger.info("Setting chi_max=%d", new_chi_max)
                 self.trunc_params['chi_max'] = new_chi_max
-                if self.options.get('chi_list_reactivates_mixer', True):
+                if self.options.get('chi_list_reactivates_mixer', True, bool):
                     self.mixer_activate()
 
         # the actual sweep
@@ -856,9 +856,9 @@ class IterativeSweeps(Sweep):
         should_break : bool
             If ``True``, the main loop in :meth:`run` is broken.
         """
-        min_sweeps = self.options.get('min_sweeps', 1)
-        max_sweeps = self.options.get('max_sweeps', 1000)
-        max_seconds = 3600 * self.options.get('max_hours', 24 * 365)
+        min_sweeps = self.options.get('min_sweeps', 1, int)
+        max_sweeps = self.options.get('max_sweeps', 1000, int)
+        max_seconds = 3600 * self.options.get('max_hours', 24 * 365, 'real')
         
         if self.sweeps > max_sweeps:
             if self.is_converged():
@@ -1561,10 +1561,10 @@ class Mixer:
 
     def __init__(self, options, sweep_activated=0):
         self.options = options = asConfig(options, 'Mixer')
-        self.amplitude = options.get('amplitude', self._default_amplitude)
-        self.decay = decay = options.get('decay', self._default_decay)
+        self.amplitude = options.get('amplitude', self._default_amplitude, 'real')
+        self.decay = decay = options.get('decay', self._default_decay, 'real')
         assert decay is None or decay >= 1.
-        self.disable_after = disable_after = options.get('disable_after', self._default_disable_after)
+        self.disable_after = disable_after = options.get('disable_after', self._default_disable_after, int)
         assert disable_after is None or disable_after > 0
         self.sweep_activated = sweep_activated
 
@@ -2162,9 +2162,9 @@ class VariationalCompression(IterativeSweeps):
 
     def pre_run_initialize(self):
         super().pre_run_initialize()
-        max_sweeps = self._max_sweeps = self.options.get("max_sweeps", 2)
-        min_sweeps = self._min_sweeps = self.options.get("min_sweeps", 1)
-        tol_diff = self._tol_theta_diff = self.options.get("tol_theta_diff", 1.e-8)
+        max_sweeps = self._max_sweeps = self.options.get("max_sweeps", 2, int)
+        min_sweeps = self._min_sweeps = self.options.get("min_sweeps", 1, int)
+        tol_diff = self._tol_theta_diff = self.options.get("tol_theta_diff", 1.e-8, 'real')
         if min_sweeps == max_sweeps and tol_diff is not None:
             warnings.warn("VariationalCompression with min_sweeps=max_sweeps: "
                           "we recommend to set tol_theta_diff=None to avoid overhead")
@@ -2220,7 +2220,7 @@ class VariationalCompression(IterativeSweeps):
             resume_data = {}
         init_env_data = resume_data.get("init_env_data", {})
         old_psi = self.psi.copy()
-        start_env_sites = self.options.get('start_env_sites', 2)
+        start_env_sites = self.options.get('start_env_sites', 2, int)
         if start_env_sites is not None and not self.psi.finite:
             init_env_data['start_env_sites'] = start_env_sites
         if self.env is None:
@@ -2370,7 +2370,7 @@ class VariationalApplyMPO(VariationalCompression):
         init_env_data = resume_data.get("init_env_data", {})
         old_psi = self.psi.copy()
         start_env_sites = 0 if self.psi.finite else self.psi.L
-        start_env_sites = self.options.get("start_env_sites", start_env_sites)
+        start_env_sites = self.options.get("start_env_sites", start_env_sites, int)
         if start_env_sites is not None:
             init_env_data['start_env_sites'] = start_env_sites
         # note: we need explicit `start_env_sites` since `bra` != `ket`, so we can't converge

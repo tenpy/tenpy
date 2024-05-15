@@ -90,7 +90,7 @@ def run(psi, model, options, **kwargs):
     """
     # initialize the engine
     options = asConfig(options, 'DMRG')
-    active_sites = options.get('active_sites', 2)
+    active_sites = options.get('active_sites', 2, int)
     if active_sites == 1:
         engine = SingleSiteDMRGEngine(psi, model, options, **kwargs)
     elif active_sites == 2:
@@ -205,10 +205,10 @@ class DMRGEngine(IterativeSweeps):
 
     def __init__(self, psi, model, options, **kwargs):
         options = asConfig(options, self.__class__.__name__)
-        self.diag_method = options.get('diag_method', 'default')
+        self.diag_method = options.get('diag_method', 'default', str)
         self._entropy_approx = [None] * psi.L  # always left of a given site
         super().__init__(psi, model, options, **kwargs)
-        self.N_sweeps_check = self.options.get('N_sweeps_check', 1 if self.psi.finite else 10)
+        self.N_sweeps_check = self.options.get('N_sweeps_check', 1 if self.psi.finite else 10, int)
         default_min_sweeps = int(1.5 * self.N_sweeps_check)
         if self.chi_list is not None:
             default_min_sweeps = max(max(self.chi_list.keys()), default_min_sweeps)
@@ -279,19 +279,19 @@ class DMRGEngine(IterativeSweeps):
         """
         options = self.options
         # parameters for lanczos
-        p_tol_to_trunc = options.get('P_tol_to_trunc', 0.05)
+        p_tol_to_trunc = options.get('P_tol_to_trunc', 0.05, 'real')
         if p_tol_to_trunc is not None:
             svd_min = self.trunc_params.silent_get('svd_min', 0.)
             svd_min = 0. if svd_min is None else svd_min
             trunc_cut = self.trunc_params.silent_get('trunc_cut', 0.)
             trunc_cut = 0. if trunc_cut is None else trunc_cut
             p_tol_min = max(1.e-30, svd_min**2 * p_tol_to_trunc, trunc_cut**2 * p_tol_to_trunc)
-            p_tol_min = options.get('P_tol_min', p_tol_min)
-            p_tol_max = options.get('P_tol_max', 1.e-4)
-        e_tol_to_trunc = options.get('E_tol_to_trunc', None)
+            p_tol_min = options.get('P_tol_min', p_tol_min, 'real')
+            p_tol_max = options.get('P_tol_max', 1.e-4, 'real')
+        e_tol_to_trunc = options.get('E_tol_to_trunc', None, 'real')
         if e_tol_to_trunc is not None:
-            e_tol_min = options.get('E_tol_min', 5.e-16)
-            e_tol_max = options.get('E_tol_max', 1.e-4)
+            e_tol_min = options.get('E_tol_min', 5.e-16, 'real')
+            e_tol_max = options.get('E_tol_max', 1.e-4, 'real')
 
         # energy and entropy before the iteration:
         if len(self.sweep_stats['E']) < 1:  # first iteration
@@ -323,7 +323,7 @@ class DMRGEngine(IterativeSweeps):
 
         # update environment
         if not self.finite:
-            update_env = options.get('update_env', self.N_sweeps_check // 2)
+            update_env = options.get('update_env', self.N_sweeps_check // 2, int)
             self.environment_sweeps(update_env)
 
         # update statistics
@@ -400,8 +400,8 @@ class DMRGEngine(IterativeSweeps):
                 Convergence if the relative change of the entropy in each step
                 satisfies ``|Delta S|/S < max_S_err``
         """
-        max_E_err = self.options.get('max_E_err', 1.e-8)
-        max_S_err = self.options.get('max_S_err', 1.e-5)
+        max_E_err = self.options.get('max_E_err', 1.e-8, 'real')
+        max_S_err = self.options.get('max_S_err', 1.e-5, 'real')
         E = self.sweep_stats['E'][-1]
         Delta_E = self.sweep_stats['Delta_E'][-1]
         Delta_S = self.sweep_stats['Delta_S'][-1]
@@ -464,11 +464,11 @@ class DMRGEngine(IterativeSweeps):
         if self.mixer is not None:
             return
         norm_err = np.linalg.norm(self.psi.norm_test())
-        norm_tol = self.options.get('norm_tol', 1.e-5)
-        norm_tol_final = self.options.get('norm_tol_final', 1.e-10)
+        norm_tol = self.options.get('norm_tol', 1.e-5, 'real')
+        norm_tol_final = self.options.get('norm_tol_final', 1.e-10, 'real')
         if not self.finite:
             update_env = self.options['update_env']
-            norm_tol_iter = self.options.get('norm_tol_iter', 5)
+            norm_tol_iter = self.options.get('norm_tol_iter', 5, int)
         if norm_tol is None or (norm_err < norm_tol and norm_err < norm_tol_final):
             return
         if warn and norm_err > norm_tol:
@@ -749,7 +749,7 @@ class DMRGEngine(IterativeSweeps):
 
         if self.diag_method == 'default':
             # use ED for small matrix dimensions, but lanczos by default
-            max_N = self.options.get('max_N_for_ED', 400)
+            max_N = self.options.get('max_N_for_ED', 400, int)
             if self.eff_H.N < max_N:
                 E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
             else:

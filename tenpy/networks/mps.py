@@ -6236,7 +6236,7 @@ class InitialStateBuilder:
                 Can be recursive (separated by '/'), see :func:`tenpy.tools.misc.get_recursive`.
         """
         filename = self.options['filename']
-        data_key = self.options.get('data_key', "psi")
+        data_key = self.options.get('data_key', "psi", str)
         self.logger.info("loading initial state from %r, key %r", filename, data_key)
         if filename.endswith('.h5') or filename.endswith('.hdf5'):
             with hdf5_io.h5py.File(filename, 'r') as f:
@@ -6265,7 +6265,7 @@ class InitialStateBuilder:
             p_state = self.options['product_state']
         self.check_filling(p_state)
         dtype = self.options.get('dtype', self.model_dtype)
-        allow_incommensurate = self.options.get('allow_incommensurate', False)
+        allow_incommensurate = self.options.get('allow_incommensurate', False, bool)
         psi = MPS.from_lat_product_state(self.lattice, p_state, dtype=dtype,
                                          allow_incommensurate=allow_incommensurate)
         return psi
@@ -6475,8 +6475,8 @@ class InitialStateBuilder:
         method_name = self.options['randomized_from_method']
         method = getattr(self, method_name)
         psi = method()
-        close_1 = self.options.get('randomize_close_1', False)
-        canonicalize = self.options.get('randomize_canonicalize', not close_1)
+        close_1 = self.options.get('randomize_close_1', False, bool)
+        canonicalize = self.options.get('randomize_canonicalize', not close_1, bool)
         params = {'N_steps': 10, 'trunc_params': {'chi_max': max(psi.chi + [100])}}
         params = self.options.subconfig('randomize_params', params)
         psi.perturb(params, close_1=close_1, canonicalize=canonicalize)

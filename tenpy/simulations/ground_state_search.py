@@ -55,7 +55,7 @@ class GroundStateSearch(Simulation):
                 output.
         """
         super().init_algorithm(**kwargs)
-        if self.options.get("save_stats", True):
+        if self.options.get("save_stats", True, bool):
             for name in ['sweep_stats', 'update_stats']:
                 stats = getattr(self.engine, name, None)
                 if stats is not None:
@@ -144,7 +144,8 @@ class PlaneWaveExcitations(GroundStateSearch):
         # initialize original state
         self.psi = gs_data['psi']  # no copy!
         assert isinstance(self.psi, MPS) or isinstance(self.psi, UniformMPS)
-        if np.linalg.norm(self.psi.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
+        tol = self.options.get('orthogonal_norm_tol', 1.e-12, 'real')
+        if np.linalg.norm(self.psi.norm_test()) > tol:
             if isinstance(self.psi, MPS):
                 self.logger.info("call psi.canonical_form() on ground state")
                 self.psi.canonical_form()
@@ -165,7 +166,7 @@ class PlaneWaveExcitations(GroundStateSearch):
             H = self.model.H_MPO
             env_data = MPOTransferMatrix.find_init_LP_RP(H, self.psi, 0, None,
                                                          guess_init_env_data)
-            write_back = self.options.get('write_back_converged_ground_state_environments', False)
+            write_back = self.options.get('write_back_converged_ground_state_environments', False, bool)
         self.init_env_data = env_data
 
         if write_back:
@@ -223,7 +224,7 @@ class PlaneWaveExcitations(GroundStateSearch):
             self._backup_filename = orig_backup_fn
 
     def run_algorithm(self):
-        N_excitations = self.options.get("N_excitations", 1)
+        N_excitations = self.options.get("N_excitations", 1, int)
         switch_charge_sector = self.options.get("switch_charge_sector", None)
         momentum = self.options["momentum"]
         self.results['qtotal_diff'] = switch_charge_sector
@@ -323,7 +324,7 @@ class OrthogonalExcitations(GroundStateSearch):
         self.orthogonal_to = orthogonal_to
         self.excitations = resume_data.get('excitations', [])
         self.results['excitation_energies'] = []
-        if self.options.get('save_psi', True):
+        if self.options.get('save_psi', True, bool):
             self.results['excitations'] = self.excitations
         self.init_env_data = {}
 
@@ -394,7 +395,7 @@ class OrthogonalExcitations(GroundStateSearch):
 
         self.ground_state = psi0 = data['psi']
         resume_data = data.get('resume_data', {})
-        if np.linalg.norm(psi0.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
+        if np.linalg.norm(psi0.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12, 'real'):
             self.logger.info("call psi.canonical_form() on ground state")
             psi0.canonical_form()
         if psi0.bc == 'infinite':
@@ -435,12 +436,12 @@ class OrthogonalExcitations(GroundStateSearch):
         write_back : bool
             Whether we should call :meth:`write_converged_environments`.
         """
-        enlarge = self.options.get('segment_enlarge', None)
-        first = self.options.get('segment_first', 0)
-        last = self.options.get('segment_last', None)
+        enlarge = self.options.get('segment_enlarge', None, int)
+        first = self.options.get('segment_first', 0, int)
+        last = self.options.get('segment_last', None, int)
         self.model = model_inf.extract_segment(first, last, enlarge)
         first, last = self.model.lat.segment_first_last
-        write_back = self.options.get('write_back_converged_ground_state_environments', False)
+        write_back = self.options.get('write_back_converged_ground_state_environments', False, bool)
         if resume_data.get('converged_environments', False):
             self.logger.info("use converged environments from ground state file")
             env_data = resume_data['init_env_data']
@@ -501,7 +502,7 @@ class OrthogonalExcitations(GroundStateSearch):
         """
         if len(self.orthogonal_to) == 0 and not self.loaded_from_checkpoint:
             self.psi = self.ground_state  # will switch charge sector in init_algorithm()
-            if self.options.get('save_psi', True):
+            if self.options.get('save_psi', True, bool):
                 self.results['psi'] = self.psi
             return
         builder_class = self.options.get('initial_state_builder_class', 'ExcitationInitialState')
@@ -514,7 +515,7 @@ class OrthogonalExcitations(GroundStateSearch):
             initial_state_builder = Builder(self.model.lat, params, self.model.dtype)
         self.psi = initial_state_builder.run()
 
-        if self.options.get('save_psi', True):
+        if self.options.get('save_psi', True, bool):
             self.results['psi'] = self.psi
 
     def init_algorithm(self, **kwargs):
@@ -582,14 +583,14 @@ class OrthogonalExcitations(GroundStateSearch):
         assert not np.all(qtotal_diff == 0)
 
     def run_algorithm(self):
-        N_excitations = self.options.get("N_excitations", 1)
+        N_excitations = self.options.get("N_excitations", 1, int)
         ground_state_energy = self.results['ground_state_energy']
         self.logger.info("reference ground state energy: %.14f", ground_state_energy)
         if ground_state_energy > - 1.e-7:
             # the orthogonal projection does not lead to a different ground state!
             lanczos_params = self.engine.lanczos_params
             if self.engine.diag_method != 'lanczos' or \
-                    ground_state_energy + 0.5 * lanczos_params.get('E_shift', 0.) > 0:
+                    ground_state_energy + 0.5 * lanczos_params.get('E_shift', 0., 'real') > 0:
                 # the factor of 0.5 is somewhat arbitrary, to ensure that
                 # also excitations have energy < 0
                 raise ValueError("You need to set use diag_method='lanczos' and small enough "
@@ -601,7 +602,8 @@ class OrthogonalExcitations(GroundStateSearch):
 
             self.results['excitation_energies'].append(E - ground_state_energy)
             self.logger.info("excitation energy: %.14f", E - ground_state_energy)
-            if np.linalg.norm(psi.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
+            tol = self.options.get('orthogonal_norm_tol', 1.e-12, 'real')
+            if np.linalg.norm(psi.norm_test()) > tol:
                 self.logger.info("call psi.canonical_form() on excitation")
                 psi.canonical_form()
             self.excitations.append(psi)
@@ -638,7 +640,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.excitations = resume_data.get('excitations', [])
         self.results['excitation_energies'] = []
         self.results['excitation_energies_MPO'] = []
-        if self.options.get('save_psi', True):
+        if self.options.get('save_psi', True, bool):
             self.results['excitations'] = self.excitations
         self.init_env_data = {}
         self._gs_data_alpha = gs_data_alpha
@@ -699,10 +701,11 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.ground_state_orig_alpha = psi0_alpha = gs_data_alpha['psi']  # no copy!
         self.ground_state_orig_beta = psi0_beta = gs_data_beta['psi']  # no copy!
         assert self.ground_state_orig_alpha.L == self.ground_state_orig_beta.L
-        if np.linalg.norm(psi0_alpha.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
+        tol = self.options.get('orthogonal_norm_tol', 1.e-12, 'real')
+        if np.linalg.norm(psi0_alpha.norm_test()) > tol:
             self.logger.info("call psi.canonical_form() on left ground state")
             psi0_alpha.canonical_form()
-        if np.linalg.norm(psi0_beta.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
+        if np.linalg.norm(psi0_beta.norm_test()) > tol:
             self.logger.info("call psi.canonical_form() on right ground state")
             psi0_beta.canonical_form()
 
@@ -805,10 +808,14 @@ class TopologicalExcitations(OrthogonalExcitations):
 
     def _extract_segment_from_finite(self, psi0_fin_alpha, psi0_fin_beta, model_fin):
         """ Extract segment from finite MPS. """
-        first = self.options.get('segment_first', 0)
-        last = self.options.get('segment_last', None)
+        first = self.options.get('segment_first', 0, int)
+        last = self.options.get('segment_last', None, int)
         # boundary should be defined in terms of the ORIGINAL MPS and NOT first.
-        boundary = self.options.get('segment_boundary', (last-first)//2 + first if last is not None else (psi0_fin_alpha.L-first)//2 + first)
+        boundary = self.options.get(
+            'segment_boundary',
+            (last-first)//2 + first if last is not None else (psi0_fin_alpha.L-first)//2 + first,
+            int
+        )
         assert first < boundary
         if last is not None:
             assert boundary < last
@@ -851,26 +858,30 @@ class TopologicalExcitations(OrthogonalExcitations):
         return ground_state_seg, qtotal_diff, False, False
 
     def _extract_segment_from_infinite(self, psi0_inf_alpha, psi0_inf_beta, model_inf, resume_data_alpha, resume_data_beta):
-        enlarge = self.options.get('segment_enlarge', None)
-        first = self.options.get('segment_first', 0)
+        enlarge = self.options.get('segment_enlarge', None, int)
+        first = self.options.get('segment_first', 0, int)
         if enlarge is not None:
             assert first == 0
-        last = self.options.get('segment_last', None)
+        last = self.options.get('segment_last', None, int)
 
         assert (enlarge is None) ^ (last is None), "'enlarge' xor 'last' must be not None."
-        boundary = self.options.get('segment_boundary', (last - first) // 2 + first if enlarge is None else (enlarge//2)*psi0_inf_alpha.L + first) # boundary should be measured from the SAME site as 'first' and not w.r.t. 'first'.
+        boundary = self.options.get(
+            'segment_boundary',
+            (last - first) // 2 + first if enlarge is None else (enlarge//2)*psi0_inf_alpha.L + first,
+            int
+        ) # boundary should be measured from the SAME site as 'first' and not w.r.t. 'first'.
         assert first < boundary
         if last is not None:
             assert boundary < last
         else:
             assert boundary < enlarge * psi0_inf_alpha.L
-        write_back = self.options.get('write_back_converged_ground_state_environments', False)
+        write_back = self.options.get('write_back_converged_ground_state_environments', False, bool)
 
         self.model = model_inf.extract_segment(first, last, enlarge)
         first, last = self.model.lat.segment_first_last
         H = model_inf.H_MPO
 
-        gauge = self.options.get('gauge', 'rho')
+        gauge = self.options.get('gauge', 'rho', str)
         if resume_data_alpha.get('converged_environments', False):
             self.logger.info("use converged environments from left ground state file")
             self.init_env_data_alpha = resume_data_alpha['init_env_data'] # Environments for infinite ground states
@@ -921,7 +932,7 @@ class TopologicalExcitations(OrthogonalExcitations):
 
 
     def _glue_segments(self, seg_alpha, seg_beta, inf_alpha, inf_beta, model, indices):
-        join_method = self.join_method = self.options.get('join_method', "average charge")
+        join_method = self.join_method = self.options.get('join_method', "average charge", str)
         switch_charge_sector = self.options.get("switch_charge_sector", None)
         if inf_alpha.finite or inf_beta.finite:
             assert join_method == "most probable charge"
@@ -1107,7 +1118,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.logger.info("Calculate reference energy by contracting environments")
         first, last = self.results['segment_first_last']
         seg_alpha = psi0_alpha.extract_segment(first, last)
-        gauge = self.options.get('gauge', 'rho')
+        gauge = self.options.get('gauge', 'rho', str)
 
         # This is expensive but more accurate than E0 + epsilon*L
         env_alpha = MPOEnvironment(seg_alpha, self.model.H_MPO, seg_alpha, **self.env_data_alpha)
@@ -1189,7 +1200,7 @@ class ExcitationInitialState(InitialStateBuilder):
         super().__init__(sim.model.lat, options, sim.model.dtype)
 
     def from_orthogonal(self):
-        if self.options.get('use_highest_excitation', True):
+        if self.options.get('use_highest_excitation', True, bool):
             psi = self.sim.orthogonal_to[-1]
         else:
             psi = self.sim.ground_state
@@ -1200,6 +1211,6 @@ class ExcitationInitialState(InitialStateBuilder):
 
     def _perturb(self, psi):
         randomize_params = self.options.subconfig('randomize_params')
-        close_1 = self.options.get('randomize_close_1', True)
+        close_1 = self.options.get('randomize_close_1', True, bool)
         psi.perturb(randomize_params, close_1=close_1, canonicalize=False)
         return psi

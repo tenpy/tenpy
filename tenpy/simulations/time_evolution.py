@@ -152,7 +152,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
                 self._init_from_gs_data(ground_state_data)
 
         # will be read out in init_state
-        self.gs_energy = self.options.get('gs_energy', None)
+        self.gs_energy = self.options.get('gs_energy', None, 'real')
         self.operator_t = self.options['operator_t']
         # generate info for operator before time evolution as subconfig
         self.operator_t0_config = self.options.subconfig('operator_t0')
@@ -195,7 +195,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
             self.apply_operator_t0_to_psi()
 
         # check for saving
-        if self.options.get('save_psi', True):
+        if self.options.get('save_psi', True, bool):
             self.results['psi'] = self.psi
             self.results['psi_ground_state'] = self.psi_ground_state
 

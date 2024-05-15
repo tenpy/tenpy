@@ -113,16 +113,20 @@ class KrylovBased:
         self.psi0 = psi0.copy()
         self._psi0_norm = None
         self.options = options = asConfig(options, self.__class__.__name__)
-        self.N_min = options.get('N_min', 2)
-        self.N_max = options.get('N_max', 20)
+        self.N_min = options.get('N_min', 2, int)
+        self.N_max = options.get('N_max', 20, int)
         self.N_cache = self.N_max
-        self.P_tol = options.get('P_tol', 1.e-14)
-        self.min_gap = options.get('min_gap', 1.e-12)
-        self.reortho = options.get('reortho', False)
-        self.E_shift = options.get('E_shift', None)
+        self.P_tol = options.get('P_tol', 1.e-14, 'real')
+        self.min_gap = options.get('min_gap', 1.e-12, 'real')
+        self.reortho = options.get('reortho', False, bool)
+        self.E_shift = options.get('E_shift', None, 'real')
         if self.N_min < 2:
             raise ValueError("Should perform at least 2 steps.")
-        self._cutoff = options.get('cutoff', np.finfo(psi0.dtype if not isinstance(psi0, list) else psi0[0].dtype).eps * 100)
+        self._cutoff = options.get(
+            'cutoff',
+            np.finfo(psi0.dtype if not isinstance(psi0, list) else psi0[0].dtype).eps * 100,
+            'real'
+        )
         if self.E_shift is not None:
             if isinstance(self.H, OrthogonalNpcLinearOperator):
                 self.H.orig_operator = ShiftNpcLinearOperator(self.H.orig_operator, self.E_shift)
@@ -189,10 +193,10 @@ class KrylovBased:
 class GMRES():
     def __init__(self, A, x, b, options):
         self.options = options = asConfig(options, self.__class__.__name__)
-        self.N_min = options.get('N_min', 5)
-        self.N_max = options.get('N_max', 20)
-        self.restart = options.get('restart', 10)
-        self.res = self.options.get('res', 1.e-8)
+        self.N_min = options.get('N_min', 5, int)
+        self.N_max = options.get('N_max', 20, int)
+        self.restart = options.get('restart', 10, int)
+        self.res = self.options.get('res', 1.e-8, 'real')
         self.A = A
         self.b = b.copy()
         self.x = x.copy() # Initial guess
@@ -315,9 +319,9 @@ class Arnoldi(KrylovBased):
     """
     def __init__(self, H, psi0, options):
         super().__init__(H, psi0, options)
-        self.E_tol = self.options.get('E_tol', np.inf)
-        self.which = self.options.get('which', 'LM')
-        self.num_ev = self.options.get('num_ev', 1)  # number of desired eigenvectors
+        self.E_tol = self.options.get('E_tol', np.inf, 'real')
+        self.which = self.options.get('which', 'LM', str)
+        self.num_ev = self.options.get('num_ev', 1, int)  # number of desired eigenvectors
 
     def run(self):
         """Find the ground state of H.
@@ -461,8 +465,8 @@ class LanczosGroundState(KrylovBased):
 
     def __init__(self, H, psi0, options):
         super().__init__(H, psi0, options)
-        self.E_tol = self.options.get('E_tol', np.inf)
-        self.N_cache = self.options.get('N_cache', self.N_max)
+        self.E_tol = self.options.get('E_tol', np.inf, 'real')
+        self.N_cache = self.options.get('N_cache', self.N_max, int)
         if self.N_cache < 2:
             raise ValueError("Need to cache at least two vectors.")
 
@@ -697,8 +701,8 @@ def lanczos_arpack(H, psi, options={}):
     """
     options = asConfig(options, "Lanczos")
     H_flat, psi_flat = FlatHermitianOperator.from_guess_with_pipe(H.matvec, psi, dtype=H.dtype)
-    tol = options.get('P_tol', 1.e-14)
-    N_min = options.get('N_min', None)
+    tol = options.get('P_tol', 1.e-14, 'real')
+    N_min = options.get('N_min', None, int)
     Es, Vs = H_flat.eigenvectors(num_ev=1, which='SA', v0=psi_flat, tol=tol, ncv=N_min)
     psi0 = Vs[0].split_legs(0).itranspose(psi.get_leg_labels())
     return Es[0], psi0
