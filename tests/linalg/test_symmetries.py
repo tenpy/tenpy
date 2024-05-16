@@ -427,8 +427,7 @@ def check_F_symbols(sym: symmetries.Symmetry, sector_sextets, sector_unitarity_t
 
         assert F.shape == shape  # shape
         if np.any([np.array_equal(charge, sym.trivial_sector) for charge in [a, b, c]]):
-            id = np.identity(int(np.prod(shape)**0.5)).reshape(shape)
-            assert_array_almost_equal(F, id)  # for trivial sector
+            assert_array_almost_equal(F, np.eye(shape[0] * shape[1]).reshape(shape))  # for trivial sector
 
     for charges in sector_unitarity_test: # unitarity
         a, b, c, d, e, g = charges
@@ -442,8 +441,7 @@ def check_F_symbols(sym: symmetries.Symmetry, sector_sextets, sector_unitarity_t
                 F2 = sym.f_symbol(a, b, c, d, g, f).conj()
                 res += np.tensordot(F1, F2, axes=[[2,3], [2,3]])
         if e == g:
-            id = np.diag(np.ones(shape[0] * shape[1]))
-            assert_array_almost_equal(res, id.reshape(shape))
+            assert_array_almost_equal(res, np.eye(shape[0] * shape[1]).reshape(shape))
         else:
             assert_array_almost_equal(res, np.zeros(shape))
             
@@ -480,8 +478,7 @@ def check_C_symbols(sym: symmetries.Symmetry, sector_sextets, sector_unitarity_t
 
         assert C.shape == shape  # shape
         if np.any([np.array_equal(charge, sym.trivial_sector) for charge in [b, c]]):
-            id = np.identity(int(np.prod(shape)**0.5)).reshape(shape)
-            assert_array_almost_equal(C, id)  # for trivial sector
+            assert_array_almost_equal(C, np.eye(shape[0] * shape[1]).reshape(shape))  # for trivial sector
 
     for charges in sector_unitarity_test: # unitarity
         c, a, b, d, e, g = charges
@@ -495,8 +492,7 @@ def check_C_symbols(sym: symmetries.Symmetry, sector_sextets, sector_unitarity_t
                 C2 = sym.c_symbol(a, b, c, d, g, f).conj()
                 res += np.tensordot(C1, C2, axes=[[2,3], [2,3]])
         if e == g:
-            id = np.diag(np.ones(shape[0] * shape[1]))
-            assert_array_almost_equal(res, id.reshape(shape))
+            assert_array_almost_equal(res, np.eye(shape[0] * shape[1]).reshape(shape))
         else:
             assert_array_almost_equal(res, np.zeros(shape))
 
