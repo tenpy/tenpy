@@ -1,6 +1,6 @@
 # Copyright (C) TeNPy Developers, GNU GPLv3
 from __future__ import annotations
-from abc import ABC
+from abc import ABCMeta
 from typing import TYPE_CHECKING, Callable, Iterator
 from math import prod
 import numpy as np
@@ -232,7 +232,7 @@ class FusionTreeData:
 # TODO do we need to inherit from ABC again?? (same in abelian and no_symmetry)
 # TODO eventually remove BlockBackend inheritance, it is not needed,
 #      jakob only keeps it around to make his IDE happy  (same in abelian and no_symmetry)
-class FusionTreeBackend(Backend, BlockBackend, ABC):
+class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     
     DataCls = FusionTreeData
 

@@ -21,7 +21,7 @@ Changes compared to old np_conserved:
 # Copyright (C) TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 
-from abc import ABC
+from abc import ABCMeta
 from typing import TYPE_CHECKING, Callable
 import numpy as np
 from numpy import ndarray
@@ -128,7 +128,7 @@ class AbelianBackendData:
     # TODO (JU) implement __iter__ like in FusionTreeData to yield from zip(block, block_inds)?
         
 
-class AbelianBackend(Backend, BlockBackend, ABC):
+class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
     """Backend for Abelian group symmetries.
 
     Notes

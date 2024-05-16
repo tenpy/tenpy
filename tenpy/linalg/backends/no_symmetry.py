@@ -1,6 +1,6 @@
 # Copyright (C) TeNPy Developers, GNU GPLv3
 from __future__ import annotations
-from abc import ABC
+from abc import ABCMeta
 from typing import TYPE_CHECKING, Callable
 import numpy as np
 
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 #  jakob only keeps it around to make his IDE happy
 
 
-class NoSymmetryBackend(Backend, BlockBackend, ABC):
+class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     """Abstract base class for backends that do not enforce any symmetry.
 
     Notes
