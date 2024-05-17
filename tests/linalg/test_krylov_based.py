@@ -29,10 +29,10 @@ def test_lanczos_gs(compatible_backend, make_compatible_space, N_cache, tol):
     if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend) and isinstance(leg.symmetry, tp.ProductSymmetry):
         # TODO
         with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented'):
-            _ = H.to_numpy_ndarray()
+            _ = H.to_numpy()
         return
 
-    H_np = H.to_numpy_ndarray()
+    H_np = H.to_numpy()
     H_op = sparse.TensorLinearOperator(H, which_leg=1)
     npt.assert_allclose(H_np, H_np.conj().transpose())  # make sure we generated a hermitian operator
     E_np, psi_np = np.linalg.eigh(H_np)
@@ -54,7 +54,7 @@ def test_lanczos_gs(compatible_backend, make_compatible_space, N_cache, tol):
     print(f'<psi0|H|psi0> / E0 = 1. + {psi0_H_psi0 / E0 - 1.}')
     assert (abs(psi0_H_psi0 / E0 - 1.) < tol)
     print(f'<psi0_np|H_np|psi0_np> / E0_np = {np.inner(psi0_np.conj(), np.dot(H_np, psi0_np)) / E0_np}')
-    ov = np.inner(psi0.to_numpy_ndarray().conj(), psi0_np)
+    ov = np.inner(psi0.to_numpy().conj(), psi0_np)
     print(f'|<psi0|psi0_np>| = {abs(ov)}')
     assert abs(1. - abs(ov)) < tol
 
@@ -77,7 +77,7 @@ def test_lanczos_gs(compatible_backend, make_compatible_space, N_cache, tol):
         print(f'<psi1|H|psi1> / E1 = 1. + {psi1_H_psi1 / E1 - 1.}')
         assert (abs(psi1_H_psi1 / E1 - 1.) < 100 * tol)  # TODO why does this need such large tolerance?
         print(f'<psi1_np|H_np|psi1_np> / E1_np = {np.inner(psi1_np.conj(), np.dot(H_np, psi1_np)) / E1_np}')
-        ov = np.inner(psi1.to_numpy_ndarray().conj(), psi1_np)
+        ov = np.inner(psi1.to_numpy().conj(), psi1_np)
         print(f'|<psi1|psi1_np>| = {abs(ov)}')
         assert (abs(1. - abs(ov)) < tol)
         for psi_prev in orthogonal_to:
@@ -123,29 +123,29 @@ def test_lanczos_evolve(compatible_backend, make_compatible_space, N_cache, tol)
     if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend) and isinstance(leg.symmetry, tp.ProductSymmetry):
         # TODO
         with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented'):
-            _ = H.to_numpy_ndarray()
+            _ = H.to_numpy()
         return
     
     if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend):
         # TODO
         with pytest.raises(AssertionError, match='norm not preserved'):
-            _ = H.to_numpy_ndarray()
+            _ = H.to_numpy()
         return
     
-    H_np = H.to_numpy_ndarray()
+    H_np = H.to_numpy()
     npt.assert_allclose(H_np, H_np.conj().transpose())  # make sure we generated a hermitian operator
 
     sector = leg.sectors[0]
     psi_init = tensors.ChargedTensor.random_uniform(legs=[leg], charge=sector, backend=backend)
 
-    psi_init_np = psi_init.to_numpy_ndarray()
+    psi_init_np = psi_init.to_numpy()
 
     lanc = krylov_based.LanczosEvolution(H_op, psi_init, {'N_cache': N_cache})
     for delta in [-0.1j, 0.1j, 1.j, 0.1, 1.]:
         psi_final_np = expm(H_np * delta).dot(psi_init_np)
         norm = np.linalg.norm(psi_final_np)
         psi_final, N = lanc.run(delta, normalize=False)
-        diff = np.linalg.norm(psi_final.to_numpy_ndarray() - psi_final_np)
+        diff = np.linalg.norm(psi_final.to_numpy() - psi_final_np)
         print("norm(|psi_final> - |psi_final_flat>)/norm = ", diff / norm)  # should be 1.
         assert diff / norm < tol
         psi_final2, N = lanc.run(delta, normalize=True)
@@ -175,10 +175,10 @@ def test_arnoldi(compatible_backend, make_compatible_space, which, N_max=20):
     if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend) and isinstance(leg.symmetry, tp.ProductSymmetry):
         # TODO
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
-            _ = H.to_numpy_ndarray()
+            _ = H.to_numpy()
         return
     
-    H_np = H.to_numpy_ndarray()
+    H_np = H.to_numpy()
     E_np, psi_np = np.linalg.eig(H_np)
     if which == 'LM':
         i = np.argmax(np.abs(E_np))
@@ -209,6 +209,6 @@ def test_arnoldi(compatible_backend, make_compatible_space, which, N_max=20):
     assert (abs(psi0_H_psi0 / E0 - 1.) < tol)
     print("<psi0_flat|H_flat|psi0_flat> / E0_flat = ", end=' ')
     print(np.inner(psi0_np.conj(), np.dot(H_np, psi0_np)) / E0_np)
-    ov = np.inner(psi0.to_numpy_ndarray().conj(), psi0_np)
+    ov = np.inner(psi0.to_numpy().conj(), psi0_np)
     print("|<psi0|psi0_flat>|=", abs(ov))
     assert (abs(1. - abs(ov)) < tol)

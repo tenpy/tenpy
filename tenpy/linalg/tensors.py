@@ -340,7 +340,7 @@ class Tensor(metaclass=ABCMeta):
         """
         return [self.legs[idx] for idx in self.get_leg_idcs(which_legs)]
 
-    def to_numpy_ndarray(self, leg_order: list[int | str] = None, numpy_dtype=None) -> np.ndarray:
+    def to_numpy(self, leg_order: list[int | str] = None, numpy_dtype=None) -> np.ndarray:
         """Convert to a numpy array"""
         block = self.to_dense_block(leg_order=leg_order)
         return self.backend.block_to_numpy(block, numpy_dtype=numpy_dtype)
@@ -3569,7 +3569,7 @@ def is_scalar(obj) -> bool:
 def norm(t: Tensor, order=None) -> float:
     """Norm of a tensor.
 
-    Equivalent to ``np.linalg.norm(a.to_numpy_ndarray().flatten(), order)``.
+    Equivalent to ``np.linalg.norm(a.to_numpy().flatten(), order)``.
     TODO is this statement true for general nonabelian symmetries?
 
     In contrast to numpy, we don't distinguish between matrices and vectors, but rather

@@ -8,7 +8,7 @@ import qr_tenpy
 def setup_benchmark(**kwargs):
     assert kwargs.get('block_backend', 'numpy') == 'numpy'
     a, q_legs, r_legs = qr_tenpy.setup_benchmark(**kwargs)
-    return a.to_numpy_ndarray(), q_legs, r_legs
+    return a.to_numpy(), q_legs, r_legs
 
 
 def benchmark(data):

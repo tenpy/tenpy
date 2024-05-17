@@ -67,13 +67,13 @@ def test_Tensor_classmethods(make_compatible_tensor, num_domain_legs):
 
     if (isinstance(backend, FusionTreeBackend)) and (isinstance(T.symmetry, ProductSymmetry)):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
-            numpy_block = T.to_numpy_ndarray()
+            numpy_block = T.to_numpy()
         return
     
     legs = T.legs
     dims = tuple(T.shape)
 
-    numpy_block = T.to_numpy_ndarray()
+    numpy_block = T.to_numpy()
     dense_block = backend.block_from_numpy(numpy_block)
 
     print('checking from_dense_block')
@@ -90,7 +90,7 @@ def test_Tensor_classmethods(make_compatible_tensor, num_domain_legs):
     print('checking from numpy')
     tens = tensors.BlockDiagonalTensor.from_dense_block(numpy_block, legs=legs, backend=backend, tol=1e-7)
     tens.test_sanity()
-    data = tens.to_numpy_ndarray()
+    data = tens.to_numpy()
     npt.assert_array_almost_equal_nulp(data, numpy_block, 100)
 
     # TODO from_block_func, from_numpy_func
@@ -100,17 +100,17 @@ def test_Tensor_classmethods(make_compatible_tensor, num_domain_legs):
     print('checking zero')
     tens = tensors.BlockDiagonalTensor.zero(legs, backend=backend)
     tens.test_sanity()
-    npt.assert_array_almost_equal_nulp(tens.to_numpy_ndarray(), np.zeros(dims), 10)
+    npt.assert_array_almost_equal_nulp(tens.to_numpy(), np.zeros(dims), 10)
 
     print('checking eye (1 -> 1 legs)')
     tens = tensors.BlockDiagonalTensor.eye(legs[0], backend=backend)
     tens.test_sanity()
-    npt.assert_array_equal(tens.to_numpy_ndarray(), np.eye(legs[0].dim))
+    npt.assert_array_equal(tens.to_numpy(), np.eye(legs[0].dim))
     
     print('checking eye (2 -> 2 legs)')
     tens = tensors.BlockDiagonalTensor.eye(legs[:2], backend=backend)
     tens.test_sanity()
-    res = tens.to_numpy_ndarray()
+    res = tens.to_numpy()
     expect = np.eye(dims[0])[:, None, None, :] * np.eye(dims[1])[None, :, :, None]
     
     npt.assert_almost_equal(res, expect)
@@ -215,13 +215,13 @@ def test_Tensor_methods(make_compatible_tensor, make_compatible_space):
     repr(tens3)
 
     print('convert to dense')
-    dense1 = tens1.to_numpy_ndarray()
-    dense2 = tens2.to_numpy_ndarray()
-    dense3 = tens3.to_numpy_ndarray()
+    dense1 = tens1.to_numpy()
+    dense2 = tens2.to_numpy()
+    dense3 = tens3.to_numpy()
 
     print('check addition + multiplication')
     neg_t3 = -tens3
-    npt.assert_array_equal(neg_t3.to_numpy_ndarray(), -dense3)
+    npt.assert_array_equal(neg_t3.to_numpy(), -dense3)
     a = 42
     b = 17
     with pytest.raises(ValueError) as err:
@@ -230,9 +230,9 @@ def test_Tensor_methods(make_compatible_tensor, make_compatible_space):
     tens1.set_labels(['foo', 'a', 'b'])
     tens2.set_labels(['foo', 'a', 'b'])
     res = a * tens1 - b * tens2
-    npt.assert_almost_equal(res.to_numpy_ndarray(), a * dense1 - b * dense2)
+    npt.assert_almost_equal(res.to_numpy(), a * dense1 - b * dense2)
     res = tens1 / a + tens2 / b
-    npt.assert_almost_equal(res.to_numpy_ndarray(), dense1 / a + dense2 / b)
+    npt.assert_almost_equal(res.to_numpy(), dense1 / a + dense2 / b)
     # TODO check strict label behavior!
 
     with pytest.raises(TypeError):
@@ -465,10 +465,10 @@ def test_tdot(make_compatible_space, make_compatible_sectors, make_compatible_te
 
     if isinstance(tensors_[0].backend, FusionTreeBackend) and isinstance(a.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
-            dense_ = [t.to_numpy_ndarray() for t in tensors_]
+            dense_ = [t.to_numpy() for t in tensors_]
         return  # TODO
     
-    dense_ = [t.to_numpy_ndarray() for t in tensors_]
+    dense_ = [t.to_numpy() for t in tensors_]
 
     checks = [("single leg", 0, 1, 1, 1, 'b', 'b*'),
               ("two legs", 0, 1, [0, 1], [2, 1], ['a', 'b'], ['a*', 'b*']),
@@ -491,8 +491,8 @@ def test_tdot(make_compatible_space, make_compatible_sectors, make_compatible_te
         if len(expect.shape) > 0:
             res1.test_sanity()
             res2.test_sanity()
-            res1_d = res1.to_numpy_ndarray()
-            res2_d = res2.to_numpy_ndarray()
+            res1_d = res1.to_numpy()
+            res2_d = res2.to_numpy()
             npt.assert_array_almost_equal(res1_d, expect)
             npt.assert_array_almost_equal(res2_d, expect)
         else: # got scalar, but we can compare it to 0-dim ndarray
@@ -510,10 +510,10 @@ def test_outer(make_compatible_tensor):
 
     if isinstance(tensors_[0].backend, FusionTreeBackend) and isinstance(tensors_[0].symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
-            dense_ = [t.to_numpy_ndarray() for t in tensors_]
+            dense_ = [t.to_numpy() for t in tensors_]
         return  # TODO
     
-    dense_ = [t.to_numpy_ndarray() for t in tensors_]
+    dense_ = [t.to_numpy() for t in tensors_]
 
     for i, j  in [(0, 1), (0, 2), (0, 0), (2, 2)]:
         print(i, j)
@@ -526,7 +526,7 @@ def test_outer(make_compatible_tensor):
         
         res = tensors.outer(tensors_[i], tensors_[j])
         res.test_sanity()
-        npt.assert_array_almost_equal(res.to_numpy_ndarray(), expect)
+        npt.assert_array_almost_equal(res.to_numpy(), expect)
         if i != j:
             assert res.labels_are(*(tensors_[i].labels + tensors_[j].labels))
         else:
@@ -539,10 +539,10 @@ def test_permute_legs(make_compatible_tensor):
 
     if isinstance(t.backend, FusionTreeBackend) and isinstance(t.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
-            d = t.to_numpy_ndarray()
+            d = t.to_numpy()
         return  # TODO
     
-    d = t.to_numpy_ndarray()
+    d = t.to_numpy()
     for perm in [[0, 2, 1, 3], [3, 2, 1, 0], [1, 0, 3, 2], [0, 1, 2, 3], [0, 3, 2, 1]]:
         expect = d.transpose(perm)
 
@@ -553,7 +553,7 @@ def test_permute_legs(make_compatible_tensor):
         
         res = t.permute_legs(perm)
         res.test_sanity()
-        npt.assert_array_equal(res.to_numpy_ndarray(), expect)
+        npt.assert_array_equal(res.to_numpy(), expect)
         assert res.labels == [labels[i] for i in perm]
 
 
@@ -564,8 +564,8 @@ def test_inner(make_compatible_tensor):
     t3 = make_compatible_tensor(legs=t2.legs, labels=t2.labels)
 
     for t_i, t_j, perm in [(t0, t1, ['a']), (t2, t3, ['b', 'c', 'a'])]:
-        d_i = t_i.to_numpy_ndarray()
-        d_j = t_j.to_numpy_ndarray()
+        d_i = t_i.to_numpy()
+        d_j = t_j.to_numpy()
 
         expect = np.inner(d_i.flatten().conj(), d_j.flatten())
         if t_j.num_legs > 0:
@@ -591,14 +591,14 @@ def test_trace(make_compatible_space, make_compatible_tensor):
 
     if isinstance(t1.backend, FusionTreeBackend) and isinstance(t1.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
-            d1 = t1.to_numpy_ndarray()
+            d1 = t1.to_numpy()
         return  # TODO
     
-    d1 = t1.to_numpy_ndarray()
+    d1 = t1.to_numpy()
     t2 = make_compatible_tensor(legs=[a, b, a.dual, b.dual], labels=['a', 'b', 'a*', 'b*'])
-    d2 = t2.to_numpy_ndarray()
+    d2 = t2.to_numpy()
     t3 = make_compatible_tensor(legs=[a, None, b, a.dual, b.dual], labels=['a', 'c', 'b', 'a*', 'b*'])
-    d3 = t3.to_numpy_ndarray()
+    d3 = t3.to_numpy()
 
     print('single legpair - full')
     expected = np.trace(d1, axis1=0, axis2=1)
@@ -616,7 +616,7 @@ def test_trace(make_compatible_space, make_compatible_tensor):
     res = tensors.trace(t2, 'b*', 'b')
     res.test_sanity()
     assert res.labels_are('a', 'a*')
-    npt.assert_array_almost_equal_nulp(res.to_numpy_ndarray(), expected, 100)
+    npt.assert_array_almost_equal_nulp(res.to_numpy(), expected, 100)
 
     print('two legpairs - full')
     expected = np.trace(d2, axis1=1, axis2=3).trace(axis1=0, axis2=1)
@@ -628,7 +628,7 @@ def test_trace(make_compatible_space, make_compatible_tensor):
     res = tensors.trace(t3, ['a', 'b*'], ['a*', 'b'])
     res.test_sanity()
     assert res.labels_are('c')
-    npt.assert_array_almost_equal_nulp(res.to_numpy_ndarray(), expected, 100)
+    npt.assert_array_almost_equal_nulp(res.to_numpy(), expected, 100)
 
 
 def test_conj_hconj(make_compatible_tensor):
@@ -636,10 +636,10 @@ def test_conj_hconj(make_compatible_tensor):
 
     if isinstance(tens.backend, FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
-            expect = np.conj(tens.to_numpy_ndarray())
+            expect = np.conj(tens.to_numpy())
         return  # TODO
     
-    expect = np.conj(tens.to_numpy_ndarray())
+    expect = np.conj(tens.to_numpy())
     assert np.linalg.norm(expect.imag) > 0 , "expect complex data!"
 
     if isinstance(tens.backend, FusionTreeBackend):
@@ -651,7 +651,7 @@ def test_conj_hconj(make_compatible_tensor):
     res.test_sanity()
     assert res.labels == ['a*', 'b*', None]
     assert [l1.can_contract_with(l2) for l1, l2 in zip(res.legs, tens.legs)]
-    assert np.allclose(res.to_numpy_ndarray(), expect)
+    assert np.allclose(res.to_numpy(), expect)
 
     print('hconj 1-site operator')
     leg_a = tens.legs[0]
@@ -661,7 +661,7 @@ def test_conj_hconj(make_compatible_tensor):
     assert op_hc.labels == op.labels
     assert op_hc.legs == op.legs
     _ = op + op_hc  # just check if it runs
-    npt.assert_array_equal(op_hc.to_numpy_ndarray(), np.conj(op.to_numpy_ndarray()).T)
+    npt.assert_array_equal(op_hc.to_numpy(), np.conj(op.to_numpy()).T)
     
     print('hconj 2-site op')
     leg_b = tens.legs[1]
@@ -672,8 +672,8 @@ def test_conj_hconj(make_compatible_tensor):
     assert op2_hc.labels == op2.labels
     assert op2_hc.legs == op2.legs
     _ = op2 + op2_hc  # just check if it runs
-    expect = np.transpose(np.conj(op2.to_numpy_ndarray()), [2, 3, 0, 1])
-    npt.assert_array_equal(op2_hc.to_numpy_ndarray(), expect)
+    expect = np.transpose(np.conj(op2.to_numpy()), [2, 3, 0, 1])
+    npt.assert_array_equal(op2_hc.to_numpy(), expect)
     
 
 def test_combine_split(make_compatible_tensor):
@@ -681,10 +681,10 @@ def test_combine_split(make_compatible_tensor):
 
     if isinstance(tens.backend, FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
-            dense = tens.to_numpy_ndarray()
+            dense = tens.to_numpy()
         return  # TODO
     
-    dense = tens.to_numpy_ndarray()
+    dense = tens.to_numpy()
     d0, d1, d2, d3 = dims = tuple(tens.shape)
 
     print('check by idx')
@@ -702,7 +702,7 @@ def test_combine_split(make_compatible_tensor):
     split = tensors.split_legs(res, 1)
     split.test_sanity()
     assert split.labels == ['a', 'b', 'c', 'd']
-    npt.assert_equal(split.to_numpy_ndarray(), dense)
+    npt.assert_equal(split.to_numpy(), dense)
 
     print('check by label')
     res = tensors.combine_legs(tens, ['b', 'd'])
@@ -711,7 +711,7 @@ def test_combine_split(make_compatible_tensor):
     split = tensors.split_legs(res, '(b.d)')
     split.test_sanity()
     assert split.labels == ['a', 'b', 'd', 'c']
-    assert np.allclose(split.to_numpy_ndarray(), dense.transpose([0, 1, 3, 2]))
+    assert np.allclose(split.to_numpy(), dense.transpose([0, 1, 3, 2]))
 
     print('check splitting a non-combined leg raises')
     with pytest.raises(ValueError):
@@ -737,7 +737,7 @@ def test_combine_split(make_compatible_tensor):
     split = tensors.split_legs(res)
     split.test_sanity()
     assert split.labels == ['b', 'd', 'c', 'a']
-    npt.assert_equal(split.to_numpy_ndarray(), dense.transpose([1, 3, 2, 0]))
+    npt.assert_equal(split.to_numpy(), dense.transpose([1, 3, 2, 0]))
 
     print('check _fuse_spaces')
     sectors1, mults1, fusion_outcomes_sort1, metadata1 = _fuse_spaces(
@@ -764,14 +764,14 @@ def test_combine_split(make_compatible_tensor):
         split = tensors.split_legs(res, '(b.d)')
         split.test_sanity()
         assert split.labels == ['a', 'b', 'd', 'c']
-        assert np.allclose(split.to_numpy_ndarray(), dense.transpose([0, 1, 3, 2]))
+        assert np.allclose(split.to_numpy(), dense.transpose([0, 1, 3, 2]))
 
 
 @pytest.mark.xfail  # TODO
 def test_combine_legs_basis_trafo(make_compatible_tensor):
     tens = make_compatible_tensor(labels=['a', 'b', 'c'], max_blocks=5, max_block_size=5)
     a, b, c = tens.shape
-    dense = tens.to_numpy_ndarray()  # [a, b, c]
+    dense = tens.to_numpy()  # [a, b, c]
     combined = tensors.combine_legs(tens, ['a', 'b'])
     dense_combined = combined.to_dense_block()  # [(a.b), c]
 
@@ -812,10 +812,10 @@ def test_norm(make_compatible_tensor, num_legs):
     if isinstance(tens.backend, FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
         if tens.data.num_domain_legs >= 2 or tens.data.num_codomain_legs >= 2:  # otherwise fusion tensors are not needed
             with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
-                expect = np.linalg.norm(tens.to_numpy_ndarray())
+                expect = np.linalg.norm(tens.to_numpy())
             return  # TODO
     
-    expect = np.linalg.norm(tens.to_numpy_ndarray())
+    expect = np.linalg.norm(tens.to_numpy())
     res = tensors.norm(tens)
     assert np.allclose(res, expect)
 
@@ -865,9 +865,9 @@ def test_squeeze_legs(make_compatible_tensor, compatible_symmetry):
 
     if isinstance(tens.backend, FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
-            dense = tens.to_numpy_ndarray()
+            dense = tens.to_numpy()
         return  # TODO
-    dense = tens.to_numpy_ndarray()
+    dense = tens.to_numpy()
 
     print('squeezing all legs (default arg)')
 
@@ -879,19 +879,19 @@ def test_squeeze_legs(make_compatible_tensor, compatible_symmetry):
     res = tensors.squeeze_legs(tens)
     res.test_sanity()
     assert res.labels == ['a', 'c']
-    npt.assert_array_equal(res.to_numpy_ndarray(), dense[:, 0, :, 0, 0])
+    npt.assert_array_equal(res.to_numpy(), dense[:, 0, :, 0, 0])
 
     print('squeeze specific leg by idx')
     res = tensors.squeeze_legs(tens, 1)
     res.test_sanity()
     assert res.labels == ['a', 'c', 'd', 'e']
-    npt.assert_array_equal(res.to_numpy_ndarray(), dense[:, 0, :, :, :])
+    npt.assert_array_equal(res.to_numpy(), dense[:, 0, :, :, :])
 
     print('squeeze legs by labels')
     res = tensors.squeeze_legs(tens, ['b', 'e'])
     res.test_sanity()
     assert res.labels == ['a', 'c', 'd']
-    npt.assert_array_equal(res.to_numpy_ndarray(), dense[:, 0, :, :, 0])
+    npt.assert_array_equal(res.to_numpy(), dense[:, 0, :, :, 0])
 
 
 def test_add_trivial_leg(make_compatible_tensor):
@@ -908,8 +908,8 @@ def test_add_trivial_leg(make_compatible_tensor):
     B.test_sanity()
     assert B.labels == ['a', 'xY', 'b', 'c']
     assert [leg.is_dual for leg in B.legs] == [A.legs[0].is_dual, False, A.legs[1].is_dual, True]
-    expect = A.to_numpy_ndarray()[:, None, :, None]
-    B_np = B.to_numpy_ndarray()
+    expect = A.to_numpy()[:, None, :, None]
+    B_np = B.to_numpy()
     npt.assert_array_equal(B_np, expect)
     C = B.squeeze_legs()
     assert tensors.almost_equal(A, C)
@@ -926,8 +926,8 @@ def test_scale_axis(make_compatible_tensor):
         return  # TODO
     
     d = tensors.DiagonalTensor.random_uniform(t.legs[0], second_leg_dual=True, backend=t.backend)
-    expect = np.tensordot(t.to_numpy_ndarray(), d.to_numpy_ndarray(), (0, 1))
-    res = tensors.tdot(t, d, 0, 1).to_numpy_ndarray()
+    expect = np.tensordot(t.to_numpy(), d.to_numpy(), (0, 1))
+    res = tensors.tdot(t, d, 0, 1).to_numpy()
     npt.assert_almost_equal(expect, res)
 
 
@@ -1041,8 +1041,8 @@ def test_flip_leg_duality(make_compatible_tensor, which_legs):
             assert res.legs[i].is_dual == (not T.legs[i].is_dual)
         else:
             assert res.legs[i] == T.legs[i]
-    T_np = T.to_numpy_ndarray()
-    res_np = res.to_numpy_ndarray()
+    T_np = T.to_numpy()
+    res_np = res.to_numpy()
     npt.assert_array_almost_equal_nulp(T_np, res_np, 100)
 
 
@@ -1130,7 +1130,7 @@ def test_Mask(np_random, make_compatible_space, compatible_backend):
     assert mask.all() == np.all(blockmask)
     assert mask.any() == np.any(blockmask)
 
-    as_tensor_arr = mask.as_Tensor().to_numpy_ndarray()
+    as_tensor_arr = mask.as_Tensor().to_numpy()
     as_tensor_expect = np.zeros((len(blockmask), num_kept))
     as_tensor_expect[indices, np.arange(num_kept)] = 1.
     npt.assert_array_equal(as_tensor_arr, as_tensor_expect)
@@ -1178,8 +1178,8 @@ def test_apply_Mask_Tensor(make_compatible_tensor, compatible_backend, num_legs)
     mask = make_compatible_tensor(legs=[T.legs[0], None], cls=tensors.Mask)
     masked = T.apply_mask(mask, 0)
     masked.test_sanity()
-    npt.assert_array_almost_equal_nulp(T.to_numpy_ndarray()[mask.numpymask],
-                                       masked.to_numpy_ndarray(),
+    npt.assert_array_almost_equal_nulp(T.to_numpy()[mask.numpymask],
+                                       masked.to_numpy(),
                                        10)
 
 
@@ -1196,8 +1196,8 @@ def test_apply_Mask_DiagonalTensor(make_compatible_tensor, compatible_backend):
     masked = T.apply_mask(mask, 0)
     assert isinstance(masked, tensors.BlockDiagonalTensor)
     masked.test_sanity()
-    npt.assert_array_almost_equal_nulp(T.to_numpy_ndarray()[mask.numpymask],
-                                       masked.to_numpy_ndarray(),
+    npt.assert_array_almost_equal_nulp(T.to_numpy()[mask.numpymask],
+                                       masked.to_numpy(),
                                        10)
     # mask both legs
     masked = T._apply_mask_both_legs(mask)
@@ -1226,13 +1226,13 @@ def test_apply_Mask_ChargedTensor(make_compatible_tensor, num_legs):
     mask = make_compatible_tensor(legs=[T.legs[0], None], cls=tensors.Mask)
     masked = T.apply_mask(mask, 0)
     masked.test_sanity()
-    npt.assert_array_almost_equal_nulp(T.to_numpy_ndarray()[mask.numpymask],
-                                       masked.to_numpy_ndarray(),
+    npt.assert_array_almost_equal_nulp(T.to_numpy()[mask.numpymask],
+                                       masked.to_numpy(),
                                        10)
     # last leg
     mask = make_compatible_tensor(legs=[T.legs[-1], None], cls=tensors.Mask)
     masked = T.apply_mask(mask, -1)
     masked.test_sanity()
-    npt.assert_array_almost_equal_nulp(T.to_numpy_ndarray()[..., mask.numpymask],
-                                       masked.to_numpy_ndarray(),
+    npt.assert_array_almost_equal_nulp(T.to_numpy()[..., mask.numpymask],
+                                       masked.to_numpy(),
                                        10)
