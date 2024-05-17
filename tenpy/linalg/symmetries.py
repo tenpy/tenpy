@@ -12,14 +12,28 @@ import numpy as np
 
 from .dtypes import Dtype
 
-__all__ = ['Sector', 'SectorArray', 'FusionStyle', 'BraidingStyle', 'Symmetry', 'ProductSymmetry',
-           'GroupSymmetry', 'AbelianGroup', 'NoSymmetry', 'U1Symmetry', 'ZNSymmetry', 'SU2Symmetry',
-           'FermionParity', 'FibonacciAnyonCategory', 'no_symmetry', 'z2_symmetry', 'z3_symmetry',
-           'z4_symmetry', 'z5_symmetry', 'z6_symmetry', 'z7_symmetry', 'z8_symmetry', 'z9_symmetry',
-           'u1_symmetry', 'fermion_parity', 'IsingAnyonCategory', 'SU3_3AnyonCategory',
-           'QuantumDoubleZNAnyonCategory', 'SU2_kAnyonCategory', 'ZNAnyonCategory', 'ZNAnyonCategory2',
-           'double_semion_category', 'fibonacci_anyon_category', 'ising_anyon_category', 'semion_category', 'toric_code_category'
+__all__ = ['SymmetryError', 'Sector', 'SectorArray', 'FusionStyle', 'BraidingStyle',
+           # symmetry base-classes
+           'Symmetry', 'ProductSymmetry', 'GroupSymmetry', 'AbelianGroup',
+           # abelian groups
+           'NoSymmetry', 'U1Symmetry', 'ZNSymmetry',
+           # non-abelian groups
+           'SU2Symmetry',
+           # anyons
+           'FermionParity', 'FibonacciAnyonCategory', 'IsingAnyonCategory', 'SU3_3AnyonCategory',
+           'QuantumDoubleZNAnyonCategory', 'SU2_kAnyonCategory', 'ZNAnyonCategory',
+           'ZNAnyonCategory2',
+           # concrete instances
+           'no_symmetry', 'u1_symmetry', 'z2_symmetry', 'z3_symmetry', 'z4_symmetry', 'z5_symmetry', 'z6_symmetry',
+           'z7_symmetry', 'z8_symmetry', 'z9_symmetry',
+           'fermion_parity', 'fibonacci_anyon_category', 'ising_anyon_category',
+           'double_semion_category', 'semion_category', 'toric_code_category',
            ]
+
+
+class SymmetryError(Exception):
+    """An exception that is raised whenever something is not possible or not allowed due to symmetry"""
+    pass
 
 
 Sector = npt.NDArray[np.int_]
@@ -79,12 +93,17 @@ class BraidingStyle(Enum):
 
 
 class Symmetry(metaclass=ABCMeta):
-    """Base class for symmetries that impose a block-structure on tensors
+    r"""Base class for symmetries that impose a block-structure on tensors
 
     Attributes
     ----------
     fusion_style: :class:`FusionStyle`
     braiding_style: :class:`BraidingStyle`
+    can_be_dropped: bool
+        If the symmetry could be dropped to :class:`NoSymmetry` while preserving the structure.
+        This is e.g. the case for :class:`GroupSymmetry` subclasses.
+        This means that there is a well-defined notion of a basis of graded vector spaces and of
+        dense array representations of symmetric Tensor. See notes below.
     trivial_sector: Sector
         The trivial sector of the symmetry.
         For a group this is the "symmetric" sector, where the group acts trivially.
@@ -104,16 +123,37 @@ class Symmetry(metaclass=ABCMeta):
         If the symmetry is abelian.  An abelian symmetry is characterized by ``FusionStyle.single``,
         which implies that all sectors are one-dimensional.
         Note that this does *not* imply that it is a group, as the braiding may not be bosonic!
-    """
-    
-    has_fusion_tensor: bool
-    """Whether the symmetry defines :meth:`fusion_tensor`."""
 
+    Notes
+    -----
+    Some symmetries, can in principle be dropped to :class:`NoSymmetry`.
+    We call this property :attr:`can_be_dropped`. Currently, only :class:`GroupSymmetry` subclasses
+    and their products have this property.
+    It implies that all operations that may be carried out on symmetric objects have a corresponding
+    operation on a non-symmetric counterpart. For example, a symmetric space :math:`A` has a
+    corresponding space :math:`\mathbb{C}^n_A`, without further structure.
+    It "corresponds" to :math:`A` in the sense that it has the same properties, e.g. same dimension,
+    and that there are compatible operations (tensor product, direct sum, ...) such that::
+
+        symmetric :math:`A`  -------- (operation) --->   symmetric :math:`B`
+                |                                                 |
+             (drop symm)                                       (drop symm)
+                |                                                 |
+                v                                                 v
+        :math:`\mathbb{C}^{n_A}`  --- (operation) --->   :math:`\mathbb{C}^{n_B}`
+
+    commutes.
+    The same goes for tensors, i.e. for symmetric tensors there are corresponding non-symmetric
+    tensors which we may manipulate instead. This means that if *and only if* the symmetry has this
+    property does it make sense to between symmetric tensors and e.g. numpy arrays, which we can
+    think of as tensors with :class:`NoSymmetry`. Additionally, the concept of a basis only makes
+    sense in exactly these cases.
+    """
+
+    can_be_dropped: bool = False  # set to False by default. must override for ``True``.
+    
     fusion_tensor_dtype = None
     """The dtype of fusion tensors, if available. Set to ``None`` otherwise."""
-
-    qdims_are_integer: bool
-    """Whether all quantum dimensions are integer (and sector_dim is implemented)"""
     
     def __init__(self, fusion_style: FusionStyle, braiding_style: BraidingStyle, trivial_sector: Sector,
                  group_name: str, num_sectors: int | float, descriptive_name: str | None = None):
@@ -184,8 +224,9 @@ class Symmetry(metaclass=ABCMeta):
 
     def _fusion_tensor(self, a: Sector, b: Sector, c: Sector, Z_a: bool, Z_b: bool) -> np.ndarray:
         """Internal implementation of :meth:`fusion_tensor`. Can assume that inputs are valid."""
-        msg = f'fusion_tensor is not implemented for {self.__class__.__name__}'
-        raise NotImplementedError(msg)
+        if not self.can_be_dropped:
+            raise SymmetryError(f'fusion tensor can not be written as array for {self}')
+        raise NotImplementedError('should be implemented by subclass')
 
     def Z_iso(self, a: Sector) -> np.ndarray:
         r"""The Z isomorphism :math:`Z_{\bar{a}} : \bar{a}^* \to a`.
@@ -211,8 +252,9 @@ class Symmetry(metaclass=ABCMeta):
         -------
         The matrix elements as a [d_a, d_a] numpy array.
         """
-        msg = f'Z_iso is not implemented for {self.__class__.__name__}'
-        raise NotImplementedError(msg)
+        if not self.can_be_dropped:
+            raise SymmetryError(f'Z iso can not be written as array for {self}')
+        raise NotImplementedError('should be implemented by subclass')
 
     def all_sectors(self) -> SectorArray:
         """If there are finitely many sectors, return all of them. Else raise a ValueError.
@@ -222,7 +264,7 @@ class Symmetry(metaclass=ABCMeta):
         """
         if self.num_sectors == np.inf:
             msg = f'{type(self)} has infinitely many sectors.'
-            raise ValueError(msg)
+            raise SymmetryError(msg)
 
         raise NotImplementedError
 
@@ -257,14 +299,13 @@ class Symmetry(metaclass=ABCMeta):
     def sector_dim(self, a: Sector) -> int:
         """The dimension of a sector, as an unstructured space (i.e. if we drop the symmetry).
 
-        For group symmetries, this coincides with the quantum dimension computed by :meth:`qdim`.
-
-        Note that this concept does not make sense for some anyonic symmetries.
-        TODO actually, does it make sense for *any* anyonic symmetry ...?
-        We raise in that case.
+        For bosonic braiding style, e.g. for group symmetries, this coincides with the quantum
+        dimension computed by :meth:`qdim`.
+        For other braiding styles, 
         """
-        # TODO should we have some custom error class for "you cant do this because of symmetry stuff"
-        raise ValueError(f'sector_dim is not supported for {self.__class__.__name__}')
+        if not self.can_be_dropped:
+            raise SymmetryError(f'sector_dim is not supported for {self}.')
+        return int(np.round(self.qdim()))
 
     def batch_sector_dim(self, a: SectorArray) -> np.ndarray:
         """sector_dim of every sector (row) in a"""
@@ -424,7 +465,7 @@ class Symmetry(metaclass=ABCMeta):
                 self.can_fuse_to(f, c, d)
             ])
             if not is_correct:
-                raise ValueError('Sectors are not consistent with fusion rules.')
+                raise SymmetryError('Sectors are not consistent with fusion rules.')
         return self._f_symbol(a, b, c, d, e, f)
 
     def b_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
@@ -456,7 +497,7 @@ class Symmetry(metaclass=ABCMeta):
         if _DO_FUSION_INPUT_CHECKS:
             is_correct = self.can_fuse_to(a, b, c)
             if not is_correct:
-                raise ValueError('Sectors are not consistent with fusion rules.')
+                raise SymmetryError('Sectors are not consistent with fusion rules.')
         return self._b_symbol(a, b, c)
 
     def r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
@@ -492,7 +533,7 @@ class Symmetry(metaclass=ABCMeta):
         if _DO_FUSION_INPUT_CHECKS:
             is_correct = self.can_fuse_to(a, b, c)
             if not is_correct:
-                raise ValueError('Sectors are not consistent with fusion rules.')
+                raise SymmetryError('Sectors are not consistent with fusion rules.')
         return self._r_symbol(a, b, c)
 
     def c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
@@ -526,7 +567,7 @@ class Symmetry(metaclass=ABCMeta):
                 self.can_fuse_to(f, b, d)
             ])
             if not is_correct:
-                raise ValueError('Sectors are not consistent with fusion rules.')
+                raise SymmetryError('Sectors are not consistent with fusion rules.')
         return self._c_symbol(a, b, c, d, e, f)
 
     def fusion_tensor(self, a: Sector, b: Sector, c: Sector, Z_a: bool = False, Z_b: bool = False
@@ -555,7 +596,7 @@ class Symmetry(metaclass=ABCMeta):
         if _DO_FUSION_INPUT_CHECKS:
             is_correct = self.can_fuse_to(a, b, c)
             if not is_correct:
-                raise ValueError('Sectors are not consistent with fusion rules.')
+                raise SymmetryError('Sectors are not consistent with fusion rules.')
         return self._fusion_tensor(a, b, c, Z_a, Z_b)
 
 
@@ -586,8 +627,7 @@ class ProductSymmetry(Symmetry):
         nesting is flattened, i.e. ``[*others, psymm]`` is translated to
         ``[*others, *psymm.factors]`` for a :class:`ProductSymmetry` ``psymm``.
     """
-    has_fusion_tensor = None  # overridden by __init__
-    qdims_are_integer = None  # overridden by __init__
+    can_be_dropped = None  # set by __init__
 
     def __init__(self, factors: list[Symmetry]):
         flat_factors = []
@@ -613,8 +653,7 @@ class ProductSymmetry(Symmetry):
             num_sectors=np.prod([symm.num_sectors for symm in flat_factors]),
             descriptive_name=descriptive_name
         )
-        self.has_fusion_tensor = all(f.has_fusion_tensor for f in flat_factors)
-        self.qdims_are_integer = all(f.qdims_are_integer for f in flat_factors)
+        self.can_be_dropped = all(f.can_be_dropped for f in flat_factors)
         dtypes = [f.fusion_tensor_dtype for f in flat_factors]
         if None in dtypes:
             self.fusion_tensor_dtype = None
@@ -786,7 +825,7 @@ class ProductSymmetry(Symmetry):
     def all_sectors(self) -> SectorArray:
         if self.num_sectors == np.inf:
             msg = f'{self} has infinitely many sectors.'
-            raise ValueError(msg)
+            raise SymmetryError(msg)
 
         # construct like in fusion_outcomes
         colon = slice(None, None, None)
@@ -856,8 +895,7 @@ class GroupSymmetry(Symmetry, metaclass=_ABCFactorSymmetryMeta):
     be used to check if a given `ProductSymmetry` *instance* is a group-symmetry.
     See examples in docstring of :class:`AbelianGroup`.
     """
-    has_fusion_tensor = True
-    qdims_are_integer = True
+    can_be_dropped = True
     
     def __init__(self, fusion_style: FusionStyle, trivial_sector: Sector, group_name: str,
                  num_sectors: int | float, descriptive_name: str | None = None):
@@ -1208,8 +1246,6 @@ class FermionParity(Symmetry):
     Allowed sectors are arrays with a single entry; either ``[0]`` (even) or ``1`` (odd).
     The parity is the number of fermions in a given state modulo 2.
     """
-    has_fusion_tensor = True
-    qdims_are_integer = True
     fusion_tensor_dtype = Dtype.float64
     _one_2D = np.ones((1, 1), dtype=int)
     _one_2D_float = np.ones((1, 1), dtype=float)
@@ -1298,9 +1334,6 @@ class FermionParity(Symmetry):
     def all_sectors(self) -> SectorArray:
         return np.arange(2, dtype=int)[:, None]
 
-    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector, Z_a: bool, Z_b: bool) -> np.ndarray:
-        return self._one_4D_float
-
     def Z_iso(self, a: Sector) -> np.ndarray:
         return self._one_2D_float
 
@@ -1318,8 +1351,6 @@ class ZNAnyonCategory(Symmetry):
 
     The anyon category corresponding to opposite handedness is obtained for `N` and `N-n` (or `-n`).
     """
-    has_fusion_tensor = False
-    qdims_are_integer = True
     _one_1D = np.ones((1,), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
@@ -1412,8 +1443,6 @@ class ZNAnyonCategory2(Symmetry):
 
     The anyon category corresponding to opposite handedness is obtained for `N` and `N-n` (or `-n`).
     """
-    has_fusion_tensor = False
-    qdims_are_integer = True
     _one_1D = np.ones((1,), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
@@ -1500,8 +1529,6 @@ class QuantumDoubleZNAnyonCategory(Symmetry):
 
     This is not a simple product for two `ZNAnyonCategory`s; there are nontrivial R-symbols.
     """
-    has_fusion_tensor = False
-    qdims_are_integer = True
     _one_2D = np.ones((1, 1), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
@@ -1589,8 +1616,6 @@ class FibonacciAnyonCategory(Symmetry):
         Considering anyons of different handedness is necessary for doubled models like,
         e.g., the anyons realized in the Levin-Wen string-net models.
     """
-    has_fusion_tensor = False  
-    qdims_are_integer = False
     _fusion_map = {  # key: number of tau in fusion input
         0: np.array([[0]]),  # 1 x 1 = 1
         1: np.array([[1]]),  # 1 x t = t = t x 1
@@ -1689,8 +1714,6 @@ class IsingAnyonCategory(Symmetry):
         anyon model. Different `nu` correspond to different topological twists of the Ising anyons.
         The Ising anyon model of opposite handedness is obtained for `-nu`.
     """
-    has_fusion_tensor = False
-    qdims_are_integer = False
     _fusion_map = {  # 1: vacuum, σ: Ising anyon, ψ: fermion
         0: np.array([[0]]),  # 1 x 1 = 1
         1: np.array([[1]]),  # 1 x σ = σ = σ x 1
@@ -1809,8 +1832,6 @@ class SU2_kAnyonCategory(Symmetry):
         Considering anyons of different handedness is necessary for doubled models like,
         e.g., the anyons realized in the Levin-Wen string-net models.
     """
-    has_fusion_tensor = False
-    qdims_are_integer = False
     _one_1D = np.ones((1,), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
@@ -1959,10 +1980,6 @@ class SU3_3AnyonCategory(Symmetry):
     The notion of handedness does not make sense for this specific anyon model since it
     only exchanges the two fusion multiplicities of anyon `8`.
     """
-
-    # TODO: discuss qdims_are_integer, sector_dim
-    has_fusion_tensor = False
-    qdims_are_integer = True
     _one_1D = np.ones((1,), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
     _fusion_map = {  # notation: 10- = \bar{10}

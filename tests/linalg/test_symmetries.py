@@ -237,11 +237,11 @@ def common_checks(sym: symmetries.Symmetry, example_sectors, example_sectors_low
     assert_array_equal(sym.dual_sector(sym.trivial_sector), sym.trivial_sector)
 
     # check fusion tensors, if available
-    if sym.has_fusion_tensor:
+    if sym.can_be_dropped:
         check_fusion_tensor(sym, example_sectors, np_random)
         check_symbols_via_fusion_tensors(sym, example_sectors, np_random)
     else:
-        with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented for'):
+        with pytest.raises(symmetries.SymmetryError, match='fusion tensor can not be written as array'):
             _ = sym.fusion_tensor(sym.trivial_sector, sym.trivial_sector, sym.trivial_sector)
 
     # check N symbol

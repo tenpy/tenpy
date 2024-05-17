@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 from .dummy_config import printoptions
 from .misc import duplicate_entries, join_as_many_as_possible
 from .dummy_config import config
-from .symmetries import AbelianGroup, Symmetry
+from .symmetries import AbelianGroup, Symmetry, SymmetryError
 from .spaces import VectorSpace, ProductSpace, Sector, SectorArray
 from .backends.backend_factory import get_backend
 from .backends.abstract_backend import Block, Backend
@@ -1172,10 +1172,9 @@ class BlockDiagonalTensor(SymmetricTensor):
         idcs : list of int
             One index per leg, each in the range ``0 <= idx < leg.dim``.
         """
-        if not self.symmetry.has_fusion_tensor:
+        if not self.symmetry.can_be_dropped:
             msg = f'Tensors with {self.symmetry} do not allow access to individual tensor entries'
-            # TODO other error class? SymmetryError or something?
-            raise ValueError(msg)
+            raise SymmetryError(msg)
 
         sectors = [leg.idx_to_sector(idx) for idx, leg in zip(idcs, self.legs)]
         if len(idcs) == 0:

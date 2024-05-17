@@ -66,7 +66,7 @@ def test_Tensor_classmethods(make_compatible_tensor, num_domain_legs):
     backend = T.backend
 
     if (isinstance(backend, FusionTreeBackend)) and (isinstance(T.symmetry, ProductSymmetry)):
-        with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented for ProductSymmetry'):
+        with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             numpy_block = T.to_numpy_ndarray()
         return
     
@@ -464,7 +464,7 @@ def test_tdot(make_compatible_space, make_compatible_sectors, make_compatible_te
         assert t.num_parameters > 0, f'tensor {n} has 0 free parameters'
 
     if isinstance(tensors_[0].backend, FusionTreeBackend) and isinstance(a.symmetry, ProductSymmetry):
-        with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented'):
+        with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             dense_ = [t.to_numpy_ndarray() for t in tensors_]
         return  # TODO
     
@@ -509,7 +509,7 @@ def test_outer(make_compatible_tensor):
     tensors_ = [make_compatible_tensor(labels=labels) for labels in [['a'], ['b'], ['c', 'd']]]
 
     if isinstance(tensors_[0].backend, FusionTreeBackend) and isinstance(tensors_[0].symmetry, ProductSymmetry):
-        with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented'):
+        with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             dense_ = [t.to_numpy_ndarray() for t in tensors_]
         return  # TODO
     
@@ -538,7 +538,7 @@ def test_permute_legs(make_compatible_tensor):
     t = make_compatible_tensor(labels=labels)
 
     if isinstance(t.backend, FusionTreeBackend) and isinstance(t.symmetry, ProductSymmetry):
-        with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented'):
+        with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             d = t.to_numpy_ndarray()
         return  # TODO
     
@@ -590,7 +590,7 @@ def test_trace(make_compatible_space, make_compatible_tensor):
     t1 = make_compatible_tensor(legs=[a, a.dual], labels=['a', 'a*'])
 
     if isinstance(t1.backend, FusionTreeBackend) and isinstance(t1.symmetry, ProductSymmetry):
-        with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented'):
+        with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             d1 = t1.to_numpy_ndarray()
         return  # TODO
     
@@ -635,7 +635,7 @@ def test_conj_hconj(make_compatible_tensor):
     tens = make_compatible_tensor(labels=['a', 'b', None])
 
     if isinstance(tens.backend, FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
-        with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented'):
+        with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             expect = np.conj(tens.to_numpy_ndarray())
         return  # TODO
     
@@ -680,7 +680,7 @@ def test_combine_split(make_compatible_tensor):
     tens = make_compatible_tensor(labels=['a', 'b', 'c', 'd'], max_blocks=5, max_block_size=5)
 
     if isinstance(tens.backend, FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
-        with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented'):
+        with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             dense = tens.to_numpy_ndarray()
         return  # TODO
     
@@ -811,7 +811,7 @@ def test_norm(make_compatible_tensor, num_legs):
 
     if isinstance(tens.backend, FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
         if tens.data.num_domain_legs >= 2 or tens.data.num_codomain_legs >= 2:  # otherwise fusion tensors are not needed
-            with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented'):
+            with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
                 expect = np.linalg.norm(tens.to_numpy_ndarray())
             return  # TODO
     
@@ -864,7 +864,7 @@ def test_squeeze_legs(make_compatible_tensor, compatible_symmetry):
         pytest.skip("can't generate non-triv leg")
 
     if isinstance(tens.backend, FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
-        with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented'):
+        with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             dense = tens.to_numpy_ndarray()
         return  # TODO
     dense = tens.to_numpy_ndarray()

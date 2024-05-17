@@ -174,7 +174,7 @@ def test_arnoldi(compatible_backend, make_compatible_space, which, N_max=20):
 
     if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend) and isinstance(leg.symmetry, tp.ProductSymmetry):
         # TODO
-        with pytest.raises(NotImplementedError, match='fusion_tensor is not implemented'):
+        with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             _ = H.to_numpy_ndarray()
         return
     

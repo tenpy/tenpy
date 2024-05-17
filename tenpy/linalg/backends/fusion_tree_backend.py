@@ -295,7 +295,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return self.block_item(a.blocks[0])
 
     def to_dense_block(self, a: BlockDiagonalTensor) -> Block:
-        assert a.symmetry.has_fusion_tensor
+        assert a.symmetry.can_be_dropped
         J = len(a.data.codomain.spaces)
         K = len(a.data.domain.spaces)
         num_legs = J + K
@@ -398,7 +398,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def from_dense_block(self, a: Block, legs: list[VectorSpace], num_domain_legs: int,
                          tol: float = 1e-8) -> FusionTreeData:
         sym = legs[0].symmetry
-        assert sym.has_fusion_tensor
+        assert sym.can_be_dropped
         # convert to internal basis order, where the sectors are sorted and contiguous
         a = self.apply_basis_perm(a, legs)
         domain, codomain = _make_domain_codomain(legs, num_domain_legs=num_domain_legs, backend=self)
