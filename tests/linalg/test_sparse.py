@@ -203,7 +203,8 @@ def test_NumpyArrayLinearOperator_sector(make_compatible_space, make_compatible_
         H_op = sparse.NumpyArrayLinearOperator.from_Tensor(
             H, legs1=['a*', 'b*'], legs2=['a', 'b'], charge_sector=sector
         )
-    psi_init = tensors.ChargedTensor.random_uniform(legs=[a, b], charge=sector, labels=['a', 'b'])
+    psi_init = tensors.ChargedTensor.random_uniform(legs=[a, b], charge=sector, labels=['a', 'b'],
+                                                    dummy_leg_state=[1])
     psi_init_np = H_op.tensor_to_flat_array(psi_init)
     #
     E, psi = scipy.sparse.linalg.eigsh(H_op, k, v0=psi_init_np, which='SA')

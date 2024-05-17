@@ -41,7 +41,7 @@ def test_lanczos_gs(compatible_backend, make_compatible_space, N_cache, tol):
     # detect in which charge sector the groundstate lives
     sector, = tensors.detect_sectors_from_block(backend.block_from_numpy(psi0_np), legs=[leg], backend=backend)
     # TODO having to take the dual here is pretty unintuitive...
-    psi_init = tensors.ChargedTensor.random_uniform(legs=[leg], charge=sector, backend=backend)
+    psi_init = tensors.ChargedTensor.random_uniform(legs=[leg], charge=sector, backend=backend, dummy_leg_state=[1.])
 
     E0, psi0, N = krylov_based.lanczos(H_op, psi_init, {'N_cache': N_cache})
     assert abs(psi0.norm() - 1.) < tol
@@ -136,7 +136,7 @@ def test_lanczos_evolve(compatible_backend, make_compatible_space, N_cache, tol)
     npt.assert_allclose(H_np, H_np.conj().transpose())  # make sure we generated a hermitian operator
 
     sector = leg.sectors[0]
-    psi_init = tensors.ChargedTensor.random_uniform(legs=[leg], charge=sector, backend=backend)
+    psi_init = tensors.ChargedTensor.random_uniform(legs=[leg], charge=sector, backend=backend, dummy_leg_state=[1])
 
     psi_init_np = psi_init.to_numpy()
 
@@ -189,7 +189,7 @@ def test_arnoldi(compatible_backend, make_compatible_space, which, N_max=20):
     E0_np, psi0_np = E_np[i], psi_np[:, i]
 
     sector, = tensors.detect_sectors_from_block(backend.block_from_numpy(psi0_np), legs=[leg], backend=backend)
-    psi_init = tensors.ChargedTensor.random_uniform(legs=[leg], charge=sector, backend=backend)
+    psi_init = tensors.ChargedTensor.random_uniform(legs=[leg], charge=sector, backend=backend, dummy_leg_state=[1])
 
     engine = krylov_based.Arnoldi(H_op, psi_init, {'which': which, 'num_ev': 1, 'N_max': N_max})
 
