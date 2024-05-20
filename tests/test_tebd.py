@@ -26,13 +26,18 @@ def test_trotter_decomposition():
 
             
 @pytest.mark.slow
-@pytest.mark.parametrize('bc_MPS, which_engine, compute_err',
-                         [('finite', 'standard', None),
-                          ('infinite', 'standard', None),
-                          ('finite', 'qr', True),
-                          ('infinite', 'qr', True),
-                          ('finite', 'qr', False)])
-def test_tebd(bc_MPS, which_engine, compute_err, g=0.5):
+@pytest.mark.parametrize('bc_MPS, which_engine, compute_err, use_eig_based_svd',
+                         [('finite', 'standard', None, None),
+                          ('infinite', 'standard', None, None),
+                          ('finite', 'qr', True, False),
+                          ('infinite', 'qr', True, False),
+                          ('finite', 'qr', False, False),
+                          ('finite', 'qr', True, True),
+                          ('infinite', 'qr', True, True),
+                          ('finite', 'qr', False, True)])
+
+@pytest.mark.filterwarnings("ignore:_eig_based_svd is nonsensical on CPU!!")
+def test_tebd(bc_MPS, which_engine, compute_err, use_eig_based_svd, g=0.5):
     L = 2 if bc_MPS == 'infinite' else 6
     #  xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS=bc_MPS)
     #  M = XXZChain(xxz_pars)
@@ -87,6 +92,10 @@ def test_tebd(bc_MPS, which_engine, compute_err, g=0.5):
         assert (abs(abs(ov) - 1.) < 1.e-7)
 
         # Test real time TEBD: should change on an eigenstate
+        if use_eig_based_svd is not None:
+            tebd_param.update(
+                use_eig_based_svd=use_eig_based_svd,
+            )
         Sold = np.average(psi.entanglement_entropy())
         for i in range(3):
             engine.run()
@@ -96,6 +105,10 @@ def test_tebd(bc_MPS, which_engine, compute_err, g=0.5):
         assert (abs(Sold - Snew) < 1.e-5)  # somehow we need larger tolerance here....
 
     if bc_MPS == 'infinite':
+        if use_eig_based_svd is not None:
+            tebd_param.update(
+                use_eig_based_svd=use_eig_based_svd,
+            )
         Etebd = np.average(M.bond_energies(psi))
         Eexact = e0_transverse_ising(g)
         print("E_TEBD={Etebd:.14f} vs E_exact={Eex:.14f}".format(Etebd=Etebd, Eex=Eexact))
