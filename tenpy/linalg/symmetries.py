@@ -7,6 +7,7 @@ from functools import reduce, lru_cache
 
 from numpy import typing as npt
 import numpy as np
+import math
 
 from .dtypes import Dtype
 
@@ -555,7 +556,7 @@ class ProductSymmetry(Symmetry):
             braiding_style=max((f.braiding_style for f in flat_factors), key=lambda style: style.value),
             trivial_sector=np.concatenate([f.trivial_sector for f in flat_factors]),
             group_name=' ⨉ '.join(f.group_name for f in flat_factors),
-            num_sectors=np.prod([symm.num_sectors for symm in flat_factors]),
+            num_sectors=math.prod([symm.num_sectors for symm in flat_factors]),
             descriptive_name=descriptive_name
         )
         self.has_fusion_tensor = all(f.has_fusion_tensor for f in flat_factors)
@@ -760,12 +761,45 @@ class ProductSymmetry(Symmetry):
             dims.append(f_i.qdim(a_i))
         return np.prod(dims)
 
-    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
-                  ) -> np.ndarray:
-        raise NotImplementedError  # TODO
+    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector ) -> np.ndarray:
+        #print(self.factors)
+
+        contributions = []
+        for i, f_i in enumerate(self.factors):      #self =Fibonacci_L x Fibonacci_R Product symmetry i=index f_i= FibonacciGrading left, FibonacciGrading right
+
+            a_k = a[self.sector_slices[i]:self.sector_slices[i + 1]]
+            b_k = b[self.sector_slices[i]:self.sector_slices[i + 1]]
+            c_k = c[self.sector_slices[i]:self.sector_slices[i + 1]]
+            d_k = d[self.sector_slices[i]:self.sector_slices[i + 1]]
+            e_k = e[self.sector_slices[i]:self.sector_slices[i + 1]]
+            f_k = f[self.sector_slices[i]:self.sector_slices[i + 1]]
+
+
+            contributions.append(f_i._f_symbol(a_k, b_k, c_k, d_k, e_k, f_k)) #[μ,ν,κ,λ]
+
+
+        Fs=np.multiply(contributions[0],contributions[1])
+        for i in contributions[2:]:
+            Fs = np.kron(Fs,i)
+
+        return Fs
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
-        raise NotImplementedError  # TODO
+
+        contributions = []
+        for i, f_i in enumerate(self.factors):
+            a_k = a[self.sector_slices[i]:self.sector_slices[i + 1]]
+            b_k = b[self.sector_slices[i]:self.sector_slices[i + 1]]
+            c_k = c[self.sector_slices[i]:self.sector_slices[i + 1]]
+
+            contributions.append(f_i._r_symbol(a_k, b_k, c_k))
+
+        rsym=np.kron(contributions[0],contributions[1])
+        for i in contributions[2:]:
+            rsym=np.kron(rsym,i)
+
+        return rsym
+
 
 
 class _ABCFactorSymmetryMeta(ABCMeta):

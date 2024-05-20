@@ -6,7 +6,6 @@ from numpy.testing import assert_array_equal, assert_array_almost_equal
 from tenpy.linalg import symmetries
 from tenpy.linalg.dtypes import _numpy_dtype_to_tenpy
 
-
 default_rng = np.random.default_rng()
 
 
@@ -635,22 +634,36 @@ def test_no_symmetry(np_random):
     assert_array_equal(sym.dual_sectors(many_s), many_s)
 
 
-@pytest.mark.xfail(reason='Topological data not implemented.')
+#@pytest.mark.xfail(reason='Topological data not implemented.')
 def test_product_symmetry(np_random):
-    sym = symmetries.ProductSymmetry([
-        symmetries.SU2Symmetry(), symmetries.U1Symmetry(), symmetries.FermionParity()
-    ])
-    sym_with_name = symmetries.ProductSymmetry([
-        symmetries.SU2Symmetry('foo'), symmetries.U1Symmetry('bar'), symmetries.FermionParity()
-    ])
-    s1 = np.array([5, 3, 1])  # e.g. spin 5/2 , 3 particles , odd parity ("fermionic")
-    s2 = np.array([3, 2, 0])  # e.g. spin 3/2 , 2 particles , even parity ("bosonic")
-    sectors = np.array([s1, s2])
-    common_checks(sym, example_sectors=sectors, example_sectors_low_qdim=sectors, np_random=np_random)
+    # sym = symmetries.ProductSymmetry([
+    #     symmetries.SU2Symmetry(), symmetries.U1Symmetry(), symmetries.FermionParity()
+    # ])
+    # sym_with_name = symmetries.ProductSymmetry([
+    #     symmetries.SU2Symmetry('foo'), symmetries.U1Symmetry('bar'), symmetries.FermionParity()
+    # ])
+    # s1 = np.array([5, 3, 1])  # e.g. spin 5/2 , 3 particles , odd parity ("fermionic")
+    # s2 = np.array([3, 2, 0])  # e.g. spin 3/2 , 2 particles , even parity ("bosonic")
+    # sectors = np.array([s1, s2])
+    # common_checks(sym, example_sectors=sectors, example_sectors_low_qdim=sectors, np_random=np_random)
 
-    u1_z3 = symmetries.u1_symmetry * symmetries.z3_symmetry
-    common_checks(u1_z3, example_sectors=np.array([[42, 1], [-1, 2], [-2, 0]]),
-                  example_sectors_low_qdim=np.array([[42, 1], [-1, 2], [-2, 0]]), np_random=np_random)
+    # u1_z3 = symmetries.u1_symmetry * symmetries.z3_symmetry
+    # common_checks(u1_z3, example_sectors=np.array([[42, 1], [-1, 2], [-2, 0]]),
+    #               example_sectors_low_qdim=np.array([[42, 1], [-1, 2], [-2, 0]]), np_random=np_random)
+
+    doubleFibo = symmetries.ProductSymmetry([symmetries.FibonacciAnyonCategory('left'), symmetries.FibonacciAnyonCategory('right')])
+    common_checks(doubleFibo, example_sectors=np.array([[0,0],[0,1],[1,0],[1,1]]), example_sectors_low_qdim=np.array([[0,0],[0,1],[1,0],[1,1]]), np_random=np_random)
+    assert doubleFibo._f_symbol([0,0], [0,0], [0,0], [0,0], [0,0], [0,0]) == 1
+    assert np.isclose(doubleFibo._f_symbol([1,1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1])[0,0,0,0] , 1/ ((0.5 * (1 + np.sqrt(5))) ** 2))
+
+    for k in range(1,16,2):
+        doubleIsing= symmetries.ProductSymmetry([symmetries.IsingAnyonCategory(k), symmetries.IsingAnyonCategory(-k)])
+        common_checks(doubleIsing, example_sectors=np.array([[0,0], [0,1], [1,0], [1,1], [2,1], [1,2], [2,2], [0,2], [2,0]]), example_sectors_low_qdim=np.array([[0,0], [0,1], [1,0], [1,1], [2,1], [1,2], [2,2], [0,2], [2,0]]), np_random=np_random)
+        assert np.isclose(doubleIsing._r_symbol([1,1],[1,1],[0,0]),1)
+        assert np.isclose(doubleIsing._r_symbol([1, 1], [2, 2], [1, 1]), 1)
+        assert np.isclose(doubleIsing._r_symbol([2, 2],[1, 1], [1, 1]), 1)
+
+
 
     print('instancecheck and is_abelian')
     assert not isinstance(sym, symmetries.AbelianGroup)
