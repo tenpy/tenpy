@@ -2453,29 +2453,44 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
         """Given a new two-site wave function `theta`, split it and save it in :attr:`psi`."""
         i0 = self.i0
         new_psi = self.psi
-        # old_A0 = new_psi.get_B(i0, form='A')
+
         expand = self._expansion_rate(i0)
-        U, S, VH, err, renormalize = decompose_theta_qr_based(self.psi.get_B(i0, 'B'), self.psi.get_B(i0+1, 'B'), theta,
-                                              self.trunc_params, 
-                                              expand=expand, 
-                                              use_eig_based_svd=False,
-                                              need_A_L=True,
-                                              compute_err=self.options.get('compute_err', True),
-                                              min_block_increase = self.options.get('cbe_min_block_increase', 1)) 
-                                            # qtotal_LR=[old_A0.qtotal, None] <- what about this?
-        A0 = U.split_legs(['(vL.p)'])
-        B1 = VH.split_legs(['(p.vR)'])
+        use_eig_based_svd = self.options.get('use_eig_based_svd', False)
+        if use_eig_based_svd:
+            # TODO: Adapt VariationalApplyMPO that it can handle 'Th' form to allow EIG based SVD.
+            raise NotImplementedError("VariationalApplyMPO cannot handle 'Th' form.")
+        t_L, S, t_R, form, err, renormalize = decompose_theta_qr_based(
+                                                old_B_L=new_psi.get_B(i0, 'B'), old_B_R=new_psi.get_B(i0+1, 'B'), 
+                                                theta=theta, get_left_side=self.move_right,
+                                                expand=expand, min_block_increase = self.options.get('cbe_min_block_increase', 1),
+                                                use_eig_based_svd=use_eig_based_svd,
+                                                trunc_params=self.trunc_params, 
+                                                compute_err=self.options.get('compute_err', True),
+                                                need_other_side=True)
+        T_L = t_L.split_legs(['(vL.p)'])
+        T_R = t_R.split_legs(['(p.vR)'])
+        U, VH = None, None
+        if self.move_right:
+            U = t_L
+        else:
+            VH = t_R
         self.renormalize.append(renormalize)
-        # first compare to old best guess to check convergence of the sweeps
+
+        # compare to old best guess to check convergence of the sweeps
         if self._tol_theta_diff is not None and self.update_LP_RP[0] == False:
             theta_old = new_psi.get_theta(i0)
-            theta_new_trunc = npc.tensordot(A0.scale_axis(S, 'vR'), B1, ['vR', 'vL'])
+            if use_eig_based_svd:
+                theta_new_trunc = npc.tensordot(T_L, T_R, ['vR', 'vL'])
+            else:
+                theta_new_trunc = npc.tensordot(T_L.scale_axis(S, 'vR'), T_R, ['vR', 'vL'])
             theta_new_trunc.iset_leg_labels(['vL', 'p0', 'p1', 'vR'])
             ov = npc.inner(theta_new_trunc, theta_old, do_conj=True, axes='labels')
             theta_diff = 1. - abs(ov)
             self._theta_diff.append(theta_diff)
-        # now set the new tensors to the MPS
-        new_psi.set_B(i0, A0, form='A')  # left-canonical
-        new_psi.set_B(i0 + 1, B1, form='B')  # right-canonical
+        
+        # set the new tensors to the MPS
+        new_psi.set_B(i0, T_L, form=form[0])
+        new_psi.set_B(i0+1, T_R, form=form[1])
         new_psi.set_SR(i0, S)
+        
         return {'U': U, 'VH': VH, 'err': err}

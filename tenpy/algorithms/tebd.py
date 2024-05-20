@@ -645,12 +645,14 @@ class QRBasedTEBDEngine(TEBDEngine):
         theta = C.scale_axis(self.psi.get_SL(i0), 'vL')
         theta = theta.combine_legs([('vL', 'p0'), ('p1', 'vR')], qconj=[+1, -1])
 
-        A_L, S, B_R, trunc_err, renormalize = decompose_theta_qr_based(
-            B_L=self.psi.get_B(i0, 'B'), B_R=self.psi.get_B(i1, 'B'),
-            theta=theta, trunc_params=self.trunc_params, expand = expand,
+        A_L, S, B_R, forms, trunc_err, renormalize = decompose_theta_qr_based(
+            old_B_L=self.psi.get_B(i0, 'B'), old_B_R=self.psi.get_B(i1, 'B'),
+            theta=theta, get_left_side=False,
+            expand=expand, min_block_increase=self.options.get('cbe_min_block_increase', 1),
             use_eig_based_svd=self.options.get('use_eig_based_svd', False),
-            need_A_L=False, compute_err=self.options.get('compute_err', True),
-            min_block_increase=self.options.get('cbe_min_block_increase', 1)
+            trunc_params=self.trunc_params,
+            compute_err=self.options.get('compute_err', True),
+            need_other_side=False,
         )
 
         B_L = npc.tensordot(C.combine_legs(('p1', 'vR'), pipes=theta.legs[1]),
@@ -681,12 +683,14 @@ class QRBasedTEBDEngine(TEBDEngine):
             # see todo comment in _eig_based_svd
             raise NotImplementedError('update_bond_imag does not (yet) support eig based SVD')
 
-        A_L, S, B_R, trunc_err, renormalize = decompose_theta_qr_based(
-            B_L=self.psi.get_B(i0, 'B'), B_R=self.psi.get_B(i1, 'B'),
-            theta=theta, trunc_params=self.trunc_params, expand = expand,
+        A_L, S, B_R, form, trunc_err, renormalize = decompose_theta_qr_based(
+            old_B_L=self.psi.get_B(i0, 'B'), old_B_R=self.psi.get_B(i1, 'B'),
+            theta=theta, get_left_side=False,
+            expand = expand, min_block_increase=self.options.get('cbe_min_block_increase', 1),
             use_eig_based_svd=self.options.get('use_eig_based_svd', False),
-            need_A_L=True, compute_err=self.options.get('compute_err', True),
-            min_block_increase=self.options.get('cbe_min_block_increase', 1)
+            trunc_params=self.trunc_params,
+            compute_err=self.options.get('compute_err', True), 
+            need_other_side=True,
         )
         A_L = A_L.split_legs(0)
         B_R = B_R.split_legs(1)
