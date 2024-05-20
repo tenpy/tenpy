@@ -8,7 +8,7 @@ import svd_tenpy
 def setup_benchmark(**kwargs):
     assert kwargs.get('block_backend', 'numpy') == 'numpy'
     a, u_legs, vh_legs = svd_tenpy.setup_benchmark(**kwargs)
-    return a.to_numpy_ndarray(), u_legs, vh_legs
+    return a.to_numpy(), u_legs, vh_legs
 
 
 def benchmark(data):

@@ -183,7 +183,7 @@ def test_NumpyArrayLinearOperator_sector(make_compatible_space, make_compatible_
     
     H = H + H.conj()
     #
-    H_np = H.to_numpy_ndarray(leg_order=['a', 'b*', 'a*', 'b'])
+    H_np = H.to_numpy(leg_order=['a', 'b*', 'a*', 'b'])
     H_mat = np.transpose(H_np, [0, 3, 2, 1]).reshape([a.dim * b.dim, a.dim * b.dim])
     E_np, psi_np = np.linalg.eigh(H_mat)
     E0_np, psi0_np = E_np[0], psi_np[:, 0]
@@ -203,7 +203,8 @@ def test_NumpyArrayLinearOperator_sector(make_compatible_space, make_compatible_
         H_op = sparse.NumpyArrayLinearOperator.from_Tensor(
             H, legs1=['a*', 'b*'], legs2=['a', 'b'], charge_sector=sector
         )
-    psi_init = tensors.ChargedTensor.random_uniform(legs=[a, b], charge=sector, labels=['a', 'b'])
+    psi_init = tensors.ChargedTensor.random_uniform(legs=[a, b], charge=sector, labels=['a', 'b'],
+                                                    dummy_leg_state=[1])
     psi_init_np = H_op.tensor_to_flat_array(psi_init)
     #
     E, psi = scipy.sparse.linalg.eigsh(H_op, k, v0=psi_init_np, which='SA')
@@ -228,7 +229,7 @@ def test_gram_schmidt(make_compatible_tensor, num_legs, num_vecs=5, tol=1e-15):
     vecs_new = sparse.gram_schmidt(vecs_old)  # rtol=tol is too small for some random spaces
     assert len(vecs_new) <= len(vecs_old)
     ovs = np.zeros((len(vecs_new), len(vecs_new)), dtype=np.complex128)
-    vecs = [v.to_numpy_ndarray().flatten() for v in vecs_new]
+    vecs = [v.to_numpy().flatten() for v in vecs_new]
     for i, v in enumerate(vecs):
         for j, w in enumerate(vecs):
             ovs[i, j] = np.inner(v.conj(), w)

@@ -8,7 +8,7 @@ import tdot_tenpy
 def setup_benchmark(**kwargs):
     assert kwargs.get('block_backend', 'numpy') == 'numpy'
     a, b, legs1, legs2 = tdot_tenpy.setup_benchmark(**kwargs)
-    return a.to_numpy_ndarray(), b.to_numpy_ndarray(), (legs1, legs2)
+    return a.to_numpy(), b.to_numpy(), (legs1, legs2)
 
 
 def benchmark(data):

@@ -33,7 +33,7 @@ def test_svd(make_compatible_tensor, new_vh_leg_dual, all_labels, l_labels, r_la
     assert set(l_labels + r_labels) == set(all_labels)
     print(f'leg bipartition {all_labels} -> {l_labels} & {r_labels}')
     T: tensors.BlockDiagonalTensor = make_compatible_tensor(labels=all_labels, max_block_size=3)
-    #  T_dense = T.to_numpy_ndarray()
+    #  T_dense = T.to_numpy()
 
     if isinstance(T.backend, backends.FusionTreeBackend):
         # TODO
@@ -67,7 +67,7 @@ def test_svd(make_compatible_tensor, new_vh_leg_dual, all_labels, l_labels, r_la
     assert tensors.almost_equal(tensors.eye_like(Ud_U), Ud_U)
     assert tensors.almost_equal(tensors.eye_like(Vd_V), Vd_V)
     # check singular values
-    T_np = T.to_numpy_ndarray(leg_order=l_labels + r_labels)
+    T_np = T.to_numpy(leg_order=l_labels + r_labels)
     l_dim = np.prod(T_np.shape[:len(l_labels)])
     r_dim = np.prod(T_np.shape[len(l_labels):])
     S_np = np.linalg.svd(T_np.reshape(l_dim, r_dim), compute_uv=False, full_matrices=False)
@@ -104,7 +104,7 @@ def test_truncated_svd(make_compatible_tensor, new_vh_leg_dual, svd_min, normali
     assert S.legs[0].is_dual == new_vh_leg_dual
     assert S.legs[1].is_dual == (not new_vh_leg_dual)
     assert Vd.get_leg('cl').is_dual == new_vh_leg_dual
-    T_np = T.to_numpy_ndarray(leg_order=['l1', 'l2', 'r1', 'r2'])
+    T_np = T.to_numpy(leg_order=['l1', 'l2', 'r1', 'r2'])
     l_dim = np.prod(T_np.shape[:2])
     r_dim = np.prod(T_np.shape[2:])
     S_np = np.linalg.svd(T_np.reshape(l_dim, r_dim), compute_uv=False, full_matrices=False)
@@ -176,7 +176,7 @@ def test_eig_based_svd(make_compatible_tensor, compute_u, compute_vh, new_vh_leg
         # they may be permuted, since the basis of the new leg is arbitrary
         # and they may differ by phase factors, which is a gauge freedom of the SVD
         overlaps = U.conj().tdot(svd_U, ['l1*', 'l2*'], ['l1', 'l2'])
-        assert_permuted_eye(np.abs(overlaps.to_numpy_ndarray()))
+        assert_permuted_eye(np.abs(overlaps.to_numpy()))
     # check Vh
     if compute_vh:
         Vh.test_sanity()
@@ -195,7 +195,7 @@ def test_eig_based_svd(make_compatible_tensor, compute_u, compute_vh, new_vh_leg
         # they may be permuted, since the basis of the new leg is arbitrary
         # and they may differ by phase factors, which is a gauge freedom of the SVD
         overlaps = Vh.tdot(svd_Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
-        assert_permuted_eye(np.abs(overlaps.to_numpy_ndarray()))
+        assert_permuted_eye(np.abs(overlaps.to_numpy()))
 
 
 @pytest.mark.parametrize('svd_min, normalize_to', [(1e-14, None), (1e-4, None), (1e-4, 2.7)])
@@ -255,7 +255,7 @@ def test_truncated_eig_based_svd(make_compatible_tensor, compute_u, compute_vh, 
         # they may be permuted, since the basis of the new leg is arbitrary
         # and they may differ by phase factors, which is a gauge freedom of the SVD
         overlaps = U.conj().tdot(svd_U, ['l1*', 'l2*'], ['l1', 'l2'])
-        assert_permuted_eye(np.abs(overlaps.to_numpy_ndarray()))
+        assert_permuted_eye(np.abs(overlaps.to_numpy()))
     # check Vh
     if compute_vh:
         Vh.test_sanity()
@@ -275,7 +275,7 @@ def test_truncated_eig_based_svd(make_compatible_tensor, compute_u, compute_vh, 
         # they may be permuted, since the basis of the new leg is arbitrary
         # and they may differ by phase factors, which is a gauge freedom of the SVD
         overlaps = Vh.tdot(svd_Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
-        assert_permuted_eye(np.abs(overlaps.to_numpy_ndarray()))
+        assert_permuted_eye(np.abs(overlaps.to_numpy()))
     # check other outputs
     npt.assert_almost_equal(err, svd_err)
     npt.assert_almost_equal(renormalize, svd_renormalize)
@@ -388,7 +388,7 @@ def test_eigh(make_compatible_tensor, make_compatible_space, real, sort, new_leg
     T = .5 * (T + T.conj())
 
     print('check that we have constructed a hermitian tensor')
-    T_np = T.to_numpy_ndarray(leg_order=['a', 'b', 'a*', 'b*'])
+    T_np = T.to_numpy(leg_order=['a', 'b', 'a*', 'b*'])
     npt.assert_allclose(T_np, T_np.conj().transpose([2, 3, 0, 1]))
 
     print('perform eigh and test_sanity')
@@ -466,8 +466,8 @@ def test_power_series_funcs(make_compatible_space, make_compatible_tensor, np_ra
         
         res = tp_func(tens, legs1=[0, 2], legs2=[3, 1])
         res.test_sanity()
-        res = res.to_numpy_ndarray()
-        np_matrix = tens.to_numpy_ndarray().transpose([0, 2, 3, 1]).reshape([d, d])
+        res = res.to_numpy()
+        np_matrix = tens.to_numpy().transpose([0, 2, 3, 1]).reshape([d, d])
         expect = np_func(np_matrix).reshape([d1, d2, d1, d2]).transpose([0, 3, 1, 2])
     elif mode == 'matrix':
         tens = make_compatible_tensor(legs=[leg, leg.dual], real=real, all_blocks=need_all_blocks)
@@ -479,8 +479,8 @@ def test_power_series_funcs(make_compatible_space, make_compatible_tensor, np_ra
         
         res = tp_func(tens)
         res.test_sanity()
-        res = res.to_numpy_ndarray()
-        expect = np_func(tens.to_numpy_ndarray())
+        res = res.to_numpy()
+        expect = np_func(tens.to_numpy())
     elif mode == 'diagonal':
         data = np_random.random((leg.dim,))
         if not real:
@@ -494,7 +494,7 @@ def test_power_series_funcs(make_compatible_space, make_compatible_tensor, np_ra
         tens = tensors.DiagonalTensor.from_diag(diag=data, first_leg=leg, backend=compatible_backend)
         res = tp_func(tens)
         res.test_sanity()
-        res = res.to_numpy_ndarray()
+        res = res.to_numpy()
         expect = np_func(np.diag(data))
     elif mode == 'scalar':
         data = np_random.random((1, 1))

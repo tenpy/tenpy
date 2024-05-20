@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 from .dummy_config import printoptions
 from .misc import duplicate_entries, join_as_many_as_possible
 from .dummy_config import config
-from .symmetries import AbelianGroup, Symmetry
+from .symmetries import AbelianGroup, Symmetry, SymmetryError
 from .spaces import VectorSpace, ProductSpace, Sector, SectorArray
 from .backends.backend_factory import get_backend
 from .backends.abstract_backend import Block, Backend
@@ -340,7 +340,7 @@ class Tensor(metaclass=ABCMeta):
         """
         return [self.legs[idx] for idx in self.get_leg_idcs(which_legs)]
 
-    def to_numpy_ndarray(self, leg_order: list[int | str] = None, numpy_dtype=None) -> np.ndarray:
+    def to_numpy(self, leg_order: list[int | str] = None, numpy_dtype=None) -> np.ndarray:
         """Convert to a numpy array"""
         block = self.to_dense_block(leg_order=leg_order)
         return self.backend.block_to_numpy(block, numpy_dtype=numpy_dtype)
@@ -1172,10 +1172,9 @@ class BlockDiagonalTensor(SymmetricTensor):
         idcs : list of int
             One index per leg, each in the range ``0 <= idx < leg.dim``.
         """
-        if not self.symmetry.has_fusion_tensor:
+        if not self.symmetry.can_be_dropped:
             msg = f'Tensors with {self.symmetry} do not allow access to individual tensor entries'
-            # TODO other error class? SymmetryError or something?
-            raise ValueError(msg)
+            raise SymmetryError(msg)
 
         sectors = [leg.idx_to_sector(idx) for idx, leg in zip(idcs, self.legs)]
         if len(idcs) == 0:
@@ -1689,27 +1688,36 @@ class BlockDiagonalTensor(SymmetricTensor):
 class ChargedTensor(Tensor):
     r"""Tensors which transform non-trivially under a symmetry.
 
-    While the :class:`SymmetricTensor` class describes tensors which are invariant under the
-    symmetry, the `ChargedTensor`s can have more general transformation properties.
-    An example would be operators that change the charge sector of a state when applied, such
-    as e.g. a boson creation operator if boson number is conserved or a spin raising operator
-    if magnetization is conserved.
+    This class represents two related but distinct concepts, which functionally behave
+    the same and thus share an implementation.
+    The first is the concept of a "charged tensor", which only makes sense if the symmetry
+    :attr:`~tenpy.linalg.symmetries.Symmetry.can_be_dropped`.
+    The second concept is that of a "hidden leg", which can be later retrieved.
 
-    We represent such charged objects as an invariant a composite object consisting of an
-    invariant Tensor with a designated dummy leg and a state that this leg is to be contracted with.
-    The interface is designed such that this implementation detail is hidden from the user and the
-    `ChargedTensor` is a valid :class:`Tensor` (which does *not* have the dummy leg in
-    its :attr:`legs`). The contraction with the :attr:`dummy_leg_state` (which is not a tensor!) is
-    kept track of only symbolically, i.e. the :attr:`invariant_part` is kept separately until
-    e.g. :meth:`item` is called.
+    The concept of a "charged tensor" arises in the context of group symmetries. A charged tensor,
+    unlike :class:`SymmetricTensor`s, transforms non-trivially under the symmetry group.
+    For concrete examples, consider on-site operators that change the charge sector of a state when
+    applied, such as e.g. a boson creation operator if boson number is conserved or a spin raising
+    operator if magnetization is conserved.
+    We represent such charged tensors as a composite object consisting of an invariant
+    :class:`SymmetricTensor` with a designated dummy leg and a state that this leg is to be
+    contracted with. The interface is designed such that this implementation detail is hidden from
+    the user and the `ChargedTensor` is a valid :class:`Tensor` (which does *not* have the dummy
+    leg in its :attr:`legs`). The contraction with the :attr:`dummy_leg_state` (which is not
+    symmetric and hence not a tensor!) is kept track of only symbolically, i.e.
+    the :attr:`invariant_part` is kept separately until e.g. :meth:`item` is called.
+
     Contracting two `ChargedTensor`s via :meth:`tdot` can result in a `Tensor` if the dummy legs
     allow it. This would occur e.g. when forming the boson occupation number :math:`b^\dagger b`,
     which is a `SymmetricTensor` from `ChargedTensor`s.
+    TODO revise if this should happen automatically, or if an explicit as_Tensor call should be made
 
-    We even allow the :attr:`dummy_leg` state to remain unspecified. This effectively allows an
-    extra leg to be hidden from algorithms and retrieved later.
-    This allow, for example, to evaluate correlation functions of more general operators, such
-    as e.g. simulating :math:`\langle S_i^x(t) S_j^x(0) \rangle` with :math:`S^z` conservation.
+    The second concept of a "hidden leg" also uses an invariant :class:`SymmetricTensor` with an
+    additional "dummy" leg, but does not specify a state on that leg.
+    Thus, it is a well-defined concept for all symmetries.
+    In essence, it allows the dummy leg to be hidden from functions/algorithms and be retrieved
+    later. This allows, for example, to evaluate correlation functions of more general operators,
+    such as e.g. simulating :math:`\langle S_i^x(t) S_j^x(0) \rangle` with :math:`S^z` conservation.
     The :math:`S^x` operator, when using :math:`S^z` conservation, is a `ChargedTensor` with a
     two-dimensional dummy leg. But, for the correlation function, we do not actually need a state
     for that leg, we just need to contract it with the dummy leg of the other :math:`S^x`, after
@@ -1721,12 +1729,10 @@ class ChargedTensor(Tensor):
     invariant_part:
         The symmetry-invariant part. the dummy leg is the last of its legs.
     dummy_leg_state: block | None
-        The state that the dummy leg is contracted with.
-        If a backend-specific block of shape ``(dummy_leg.dim,)``, these are coefficients in the
-        basis described by ``dummy_leg``.
-        ``None`` is equivalent to ``[1.]`` if the dummy leg is one-dimensional. Otherwise it means
-        that the state is not specified and methods like :meth:`item` which need the explicit state
-        will error.
+        Either ``None`` to signal that the dummy leg is just a hidden leg.
+        Or a backend-specific block of shape ``(dummy_leg.dim,)``, defining a charged tensor
+        which transforms non-trivially under the symmetry (see notes above); only allowed for
+        group symmetries.
 
     Notes
     -----
@@ -1734,11 +1740,14 @@ class ChargedTensor(Tensor):
     """
     _DUMMY_LABEL = '!'  # canonical label for the dummy leg
 
-    def __init__(self, invariant_part: BlockDiagonalTensor, dummy_leg_state=None):
+    def __init__(self, invariant_part: BlockDiagonalTensor, dummy_leg_state: Block | None):
         assert invariant_part.num_codomain_legs > 0  # dummy leg must be in codomain
         if dummy_leg_state is None:
             dtype = invariant_part.dtype
         else:
+            if not invariant_part.symmetry.can_be_dropped:
+                msg = f'ChargedTensor with dummy_leg_state is not well-defined for this symmetry.'
+                raise SymmetryError(msg)
             dtype = Dtype.common(invariant_part.dtype,
                                  invariant_part.backend.block_dtype(dummy_leg_state))
         if invariant_part.labels[-1] is None:
@@ -1767,22 +1776,15 @@ class ChargedTensor(Tensor):
     @classmethod
     def from_block_func(cls, func, legs: VectorSpace | list[VectorSpace], charge: VectorSpace | Sector,
                         backend=None, labels: list[str | None] = None, func_kwargs={},
-                        shape_kw: str = None, dtype: Dtype = None, num_domain_legs: int = 0
+                        shape_kw: str = None, dtype: Dtype = None, num_domain_legs: int = 0,
+                        dummy_leg_state=None
                         ) -> ChargedTensor:
         assert 0 <= num_domain_legs <= len(legs)
         dummy_leg = cls._dummy_leg_from_charge(charge, symmetry=legs[0].symmetry)
         inv = BlockDiagonalTensor.from_block_func(func=func, legs=legs + [dummy_leg], backend=backend,
                                      labels=labels + [cls._DUMMY_LABEL], func_kwargs=func_kwargs,
                                      shape_kw=shape_kw, dtype=dtype, num_domain_legs=num_domain_legs)
-        shape = (dummy_leg.dim,)
-        if shape_kw is not None:
-            block = func(**{shape_kw: shape}, **func_kwargs)
-        else:
-            block = func(shape, **func_kwargs)
-        # TODO allow to specify the dummy_leg_state instead?
-        if dtype is not None:
-            block = inv.backend.block_to_dtype(block, dtype)
-        return ChargedTensor(invariant_part=inv, dummy_leg_state=block)
+        return ChargedTensor(invariant_part=inv, dummy_leg_state=dummy_leg_state)
 
     @classmethod
     def from_dense_block(cls, block, legs: list[VectorSpace], backend=None, dtype: Dtype=None,
@@ -1879,7 +1881,7 @@ class ChargedTensor(Tensor):
             data=backend.inv_part_from_flat_block_single_sector(block=block, leg=leg, dummy_leg=dummy_leg),
             legs=[leg, dummy_leg], num_domain_legs=0, backend=backend, labels=[label, cls._DUMMY_LABEL]
         )
-        return cls(inv_part, dummy_leg_state=None)
+        return cls(inv_part, dummy_leg_state=inv_part.backend.as_block([1]))
 
     @classmethod
     def from_numpy_func(cls, func, legs: VectorSpace | list[VectorSpace], charge: VectorSpace | Sector,
@@ -1903,7 +1905,10 @@ class ChargedTensor(Tensor):
 
     @classmethod
     def from_tensor(cls, tens: BlockDiagonalTensor) -> ChargedTensor:
-        return ChargedTensor(invariant_part=add_trivial_leg(tens, pos=-1))
+        return ChargedTensor(
+            invariant_part=add_trivial_leg(tens, pos=-1),
+            dummy_leg_state=tens.backend.ones_block((1,), dtype=tens.dtype)
+        )
 
     @classmethod
     def from_two_dummy_legs(cls, invariant_part: BlockDiagonalTensor, leg1: int, state1: Block | None, leg2: int,
@@ -1949,6 +1954,8 @@ class ChargedTensor(Tensor):
             legs=legs + [dummy_leg], backend=backend, labels=labels + [cls._DUMMY_LABEL],
             dtype=dtype, num_domain_legs=num_domain_legs
         )
+        if dummy_leg_state is not None:
+            dummy_leg_state = inv.backend.as_block(dummy_leg_state)
         return ChargedTensor(invariant_part=inv, dummy_leg_state=dummy_leg_state)
 
     @classmethod
@@ -1957,6 +1964,7 @@ class ChargedTensor(Tensor):
 
     def flip_dummy_leg_duality(self) -> ChargedTensor:
         """Like :func:`flip_leg_duality` but for the dummy leg"""
+        # TODO does this conj the dummy_leg_state ?
         inv = self.invariant_part.flip_leg_duality(-1).relabel({'!*': '!'})
         return ChargedTensor(invariant_part=inv, dummy_leg_state=self.dummy_leg_state)
 
@@ -1985,7 +1993,7 @@ class ChargedTensor(Tensor):
         raise NotImplementedError  # TODO
 
     def as_Tensor(self) -> BlockDiagonalTensor:
-        """If possible, convert self to a Tensor. Otherwise raise a ValueError.
+        """If possible, convert self to a Tensor. Otherwise raise a SymmetryError.
 
         It is possible to convert a ChargedTensor to a Tensor if and only if the dummy leg only
         contains the trivial sector.
@@ -1996,11 +2004,12 @@ class ChargedTensor(Tensor):
         """
         if not np.all(self.dummy_leg._non_dual_sectors[:] == self.symmetry.trivial_sector[None, :]):
             raise ValueError('ChargedTensor with non-trivial charge could not be converted to Tensor.')
+        if self.dummy_leg_state is None:
+            msg = 'Can not convert to Tensor. dummy_leg_state is unspecified.'
+            raise SymmetryError(msg)
         if self.dummy_leg.dim == 1:
-            return self._dummy_leg_state_item() * self.invariant_part.squeeze_legs(-1)
-        elif self.dummy_leg_state is None:
-            msg = 'Can not convert to Tensor. dummy_leg_state is unspecified and dummy_leg.dim > 1.'
-            raise ValueError(msg)  # TODO which type of error?
+            factor = self.backend.block_item(self.dummy_leg_state)
+            return factor * self.invariant_part.squeeze_legs(-1)
         state = BlockDiagonalTensor.from_dense_block(self.dummy_leg_state, legs=[self.dummy_leg], backend=self.backend)
         return self.invariant_part.tdot(state, -1, 0)
 
@@ -2012,6 +2021,8 @@ class ChargedTensor(Tensor):
         --------
         from_flat_block_single_sector
         """
+        if self.dummy_leg_state is None:
+            raise ValueError('Unspecified dummy_leg_state')
         if self.num_legs > 1:
             raise ValueError('Expected a single leg')
         if self.dummy_leg.num_sectors != 1 or self.dummy_leg.multiplicities[0] != 1:
@@ -2020,7 +2031,7 @@ class ChargedTensor(Tensor):
             # TODO how to handle multi-dim sectors? should cooperate with from_flat_block_single_sector
             raise NotImplementedError
         block = self.backend.inv_part_to_flat_block_single_sector(self.invariant_part)
-        return self._dummy_leg_state_item() * block
+        return self.backend.block_item(self.dummy_leg_state) * block
 
     # --------------------------------------------
     # Overriding methods from Tensor
@@ -2046,8 +2057,7 @@ class ChargedTensor(Tensor):
                      f'dual={self.dummy_leg.is_dual}, sectors={self.dummy_leg.sectors}')
         lines.append(f'{indent}* Dummy Leg state:')
         if self.dummy_leg_state is None:
-            state_repr = '[1.]' if self.dummy_leg.dim == 1 else 'unspecified'
-            lines.append(f'{indent}  {state_repr}')
+            lines.append(f'{indent}  unspecified')
         else:
             lines.extend(self.backend._block_repr_lines(self.dummy_leg_state, indent=indent + '  '),
                         max_width=70, max_lines=3)
@@ -2104,14 +2114,11 @@ class ChargedTensor(Tensor):
 
     def conj(self) -> ChargedTensor:
         if self.dummy_leg_state is None:
-            if self.dummy_leg.dim == 1:
-                dummy_leg_state = None  # conj([1.]) == [1.]
-            else:
-                # TODO think about this case carefully. We could just also do dummy_leg_state = None
-                # i.e. the state is still unspecified. Could it cause problems that we then did not
-                # keep track of the conj? Probably not, if the state is unspecified, you cant expect
-                # tenpy to keep track of what happens to it...
-                raise NotImplementedError
+            # TODO think about this case carefully. We could just also do dummy_leg_state = None
+            # i.e. the state is still unspecified. Could it cause problems that we then did not
+            # keep track of the conj? Probably not, if the state is unspecified, you cant expect
+            # tenpy to keep track of what happens to it...
+            raise NotImplementedError
         else:
             dummy_leg_state = self.backend.block_conj(self.dummy_leg_state)
         inv = self.invariant_part.conj().relabel({'!*': '!'})
@@ -2141,8 +2148,11 @@ class ChargedTensor(Tensor):
     def norm(self, order=None) -> float:
         if order is None:
             order = 2
+        if self.dummy_leg_state is None:
+            raise ValueError('dummy_leg_state unspecified.')
         if self.dummy_leg.dim == 1:
-            return self._dummy_leg_state_item() * self.invariant_part.norm(order=order)
+            factor = self.backend.block_item(self.dummy_leg_state)
+            return factor * self.invariant_part.norm(order=order)
         else:
             warnings.warn('Converting ChargedTensor to dense block for `norm`', stacklevel=2)
             return self.backend.block_norm(self.to_dense_block(), order=order)
@@ -2167,10 +2177,8 @@ class ChargedTensor(Tensor):
     def to_dense_block(self, leg_order: list[int | str] = None) -> Block:
         invariant_block = self.backend.to_dense_block(self.invariant_part)
         if self.dummy_leg_state is None:
-            factor = self._dummy_leg_state_item()  # this raises if self.dummy_leg.dim > 1
-            block = factor * self.backend.block_squeeze_legs(invariant_block, [-1])
-        else:
-            block = self.backend.block_tdot(invariant_block, self.dummy_leg_state, [-1], [0])
+            raise ValueError('dummy_leg_state not specified')
+        block = self.backend.block_tdot(invariant_block, self.dummy_leg_state, [-1], [0])
         if leg_order is not None:
             block = self.backend.block_permute_axes(block, self.get_leg_idcs(leg_order))
         return block
@@ -2183,8 +2191,11 @@ class ChargedTensor(Tensor):
                              dummy_leg_state=self.dummy_leg_state)
 
     def _get_element(self, idcs: list[int]) -> float | complex:
+        if self.dummy_leg_state is None:
+            raise ValueError('dummy_leg_state unspecified.')
         if self.dummy_leg.dim == 1:
-            return self._dummy_leg_state_item() * self.invariant_part._get_element(idcs + [0])
+            factor = self.backend.block_item(self.dummy_leg_state)
+            return factor * self.invariant_part._get_element(idcs + [0])
         masks = [Mask.from_indices([idx], leg) for idx, leg in zip(idcs, self.legs)]
         return self._getitem_apply_masks(masks, legs=list(range(self.num_legs))).item()
 
@@ -2197,11 +2208,12 @@ class ChargedTensor(Tensor):
         )
 
     def _set_element(self, idcs: list[int], value: float | complex) -> None:
-        try:
-            factor = self._dummy_leg_state_item()
-        except ValueError:
+        if self.dummy_leg_state is None:
+            raise ValueError('dummy_leg_state unspecified.')
+        if self.dummy_leg.dim > 1:
             msg = 'Can not set elements of ChargedTensor with non-trivial dummy leg'
-            raise ValueError(msg) from None
+            raise ValueError(msg)
+        factor = self.backend.block_item(self.dummy_leg_state)
         self.invariant_part._set_element(idcs + [0], value / factor)
 
     # --------------------------------------------
@@ -2236,9 +2248,13 @@ class ChargedTensor(Tensor):
             other = other.flip_dummy_leg_duality()
         if self.dummy_leg != other.dummy_leg:
             return False
-
+        if (self.dummy_leg_state is None) != (other.dummy_leg_state is None):
+            raise ValueError('Mismatch: defined and undefined dummy_leg_state')
+        if self.dummy_leg_state is None:
+            return self.invariant_part.almost_equal(other.invariant_part, atol=atol, rtol=rtol)
+        backend = get_same_backend(self, other)
         if self.dummy_leg.dim == 1:
-            factor = self._dummy_leg_state_item() / other._dummy_leg_state_item()
+            factor = backend.block_item(self.dummy_leg_state) / backend.block_item(other.dummy_leg_state)
             return self.invariant_part.almost_equal(factor * other.invariant_part, atol=atol, rtol=rtol)
         else:
             # The decomposition into invariant part and non-invariant state is not unique,
@@ -2253,6 +2269,8 @@ class ChargedTensor(Tensor):
 
     def inner(self, other: Tensor, do_conj: bool = True, legs1: list[int | str] = None,
               legs2: list[int | str]  = None) -> float | complex:
+        if self.dummy_leg_state is None:
+            raise ValueError('dummy_leg_state unspecified')
         leg_order_2 = self._input_checks_inner(other, do_conj=do_conj, legs1=legs1, legs2=legs2)
         if isinstance(other, (DiagonalTensor, BlockDiagonalTensor)):
             # other is not charged and thus lives in the trivial sector of the parent space.
@@ -2262,6 +2280,8 @@ class ChargedTensor(Tensor):
                 return Dtype.common(self.dtype, other.dtype).zero_scalar
             return self_projected.inner(other, do_conj=do_conj, legs1=legs1, legs2=legs2)
         if isinstance(other, ChargedTensor):
+            if other.dummy_leg_state is None:
+                raise ValueError('dummy_leg_state unspecified')
             # OPTIMIZE could directly return 0 if the two tensors have completely different charges
             backend = get_same_backend(self, other)
             # contract the invariant parts with each other and convert do dense block
@@ -2271,23 +2291,10 @@ class ChargedTensor(Tensor):
             res = inv1.tdot(other.invariant_part, legs1=list(range(self.num_legs)), legs2=leg_order_2)
             res = res.to_dense_block()
             # contract with state on dummy leg of self
-            if self.dummy_leg_state is not None:
-                state = backend.block_conj(self.dummy_leg_state) if do_conj else self.dummy_leg_state
-                res = backend.block_tdot(state, res, 0, 0)
-            elif self.dummy_leg.dim == 1:
-                factor = self._dummy_leg_state_item()
-                if do_conj:
-                    factor = backend.block_conj(factor)
-                res = factor * backend.block_squeeze_legs(res, [0])
-            else:
-                raise ValueError('Can not inner with unspecified dummy_leg_state')
+            state = backend.block_conj(self.dummy_leg_state) if do_conj else self.dummy_leg_state
+            res = backend.block_tdot(state, res, 0, 0)
             # contract with state on dummy leg of other
-            if other.dummy_leg_state is not None:
-                res = backend.block_tdot(res, other.dummy_leg_state, 0, 0)
-            elif other.dummy_leg.dim == 1:
-                res = other._dummy_leg_state_item() * backend.block_squeeze_legs(res, [0])
-            else:
-                raise ValueError('Can not inner with unspecified dummy_leg_state')
+            res = backend.block_tdot(res, other.dummy_leg_state, 0, 0)
             return backend.block_item(res)
         if isinstance(other, Mask):
             # use that leg_order_2 is either [0, 1] or [1, 0]
@@ -2350,27 +2357,19 @@ class ChargedTensor(Tensor):
             raise TypeError(f"unsupported operand type(s) for +: 'ChargedTensor' and '{type(other)}'")
         if self.dummy_leg != other.dummy_leg:
             raise ValueError('Can not add ChargedTensors with different dummy legs')
-        try:
-            factor = self._dummy_leg_state_item() / other._dummy_leg_state_item()
-        except ValueError:
-            msg = 'Can not add ChargedTensors unless dummy_leg is one-dimensional'
-            raise ValueError(msg) from None
-        return ChargedTensor(invariant_part=self.invariant_part + factor * other.invariant_part,
-                             dummy_leg_state=self.dummy_leg_state)
+        if (self.dummy_leg_state is None) != (other.dummy_leg_state is None):
+            raise ValueError('Can not add ChargedTensors with specified and unspecified dummy_leg_state')
+        if self.dummy_leg_state is None:
+            return ChargedTensor(self.invariant_part + other.invariant_part, dummy_leg_state=None)
+        if self.dummy_leg.dim == 1:
+            factor = self.backend.block_item(self.dummy_leg_state) / self.backend.block_item(other.dummy_leg_state)
+            return ChargedTensor(self.invariant_part + factor * other.invariant_part,
+                                 dummy_leg_state=self.dummy_leg_state)
+        raise NotImplementedError  # TODO can we cover the remaining case somehow? might be impossible.
 
     # --------------------------------------------
     # Internal utility methods
     # --------------------------------------------
-
-    def _dummy_leg_state_item(self) -> float | complex:
-        """If the dummy leg is one-dimensional, return the single item of the dummy_leg_state.
-        Otherwise raise a ValueError"""
-        if self.dummy_leg.dim != 1:
-            raise ValueError('Leg is not one-dimensional')
-        if self.dummy_leg_state is None:
-            return 1.
-        else:
-            return self.backend.block_item(self.dummy_leg_state)
 
     @staticmethod
     def _dummy_leg_from_charge(charge: VectorSpace | Sector, symmetry: Symmetry):
@@ -3570,7 +3569,7 @@ def is_scalar(obj) -> bool:
 def norm(t: Tensor, order=None) -> float:
     """Norm of a tensor.
 
-    Equivalent to ``np.linalg.norm(a.to_numpy_ndarray().flatten(), order)``.
+    Equivalent to ``np.linalg.norm(a.to_numpy().flatten(), order)``.
     TODO is this statement true for general nonabelian symmetries?
 
     In contrast to numpy, we don't distinguish between matrices and vectors, but rather
@@ -3901,8 +3900,10 @@ def tensor_from_block(block: Block, legs: list[VectorSpace], backend: Backend,
         return BlockDiagonalTensor.from_dense_block(block, legs=legs, backend=backend, labels=labels,
                                                     num_domain_legs=num_domain_legs)
     else:
+        assert dummy_leg.dim == 1
         return ChargedTensor.from_dense_block(block, legs=legs, backend=backend, labels=labels,
-                                              charge=dummy_leg, num_domain_legs=num_domain_legs)
+                                              charge=dummy_leg, num_domain_legs=num_domain_legs,
+                                              dummy_leg_state=backend.as_block([1]))
 
 
 # ##################################

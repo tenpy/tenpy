@@ -51,13 +51,13 @@ def test_site(np_random, block_backend, symmetry_backend, use_sym):
     op3_dense = np.diag(np.arange(10, 10 + dim))
     s.add_symmetric_operator('op3', op3_dense)
     assert isinstance(s.get_op('op3'), la.DiagonalTensor)
-    npt.assert_equal(s.get_op('op3').to_numpy_ndarray(), op3_dense)
-    npt.assert_equal(s['op3'].to_numpy_ndarray(), op3_dense)
+    npt.assert_equal(s.get_op('op3').to_numpy(), op3_dense)
+    npt.assert_equal(s['op3'].to_numpy(), op3_dense)
 
     # TODO reintroduce when mini-language is revised
     # npt.assert_equal(
-    #     s.get_op('silly_op op2').to_numpy_ndarray(),
-    #     npc.tensordot(op1, op2, [1, 0]).to_numpy_ndarray())
+    #     s.get_op('silly_op op2').to_numpy(),
+    #     npc.tensordot(op1, op2, [1, 0]).to_numpy())
     
     if use_sym:
         leg2 = leg.drop_symmetry(1)
@@ -68,8 +68,8 @@ def test_site(np_random, block_backend, symmetry_backend, use_sym):
     s2 = copy.deepcopy(s)
     s2.change_leg(leg2)
     for name in ['silly_op', 'op2', 'op3']:
-        s_op = s.get_op(name).to_numpy_ndarray()
-        s2_op = s2.get_op(name).to_numpy_ndarray()
+        s_op = s.get_op(name).to_numpy()
+        s2_op = s2.get_op(name).to_numpy()
         npt.assert_equal(s_op, s2_op)
 
 
@@ -128,11 +128,11 @@ def check_spin_algebra(s, SpSmSz=['Sp', 'Sm', 'Sz'], SxSy=['Sx', 'Sy']):
 
     `S` should be a :class:`site.Site`. Set `SxSy` to `None` to ignore Sx and Sy.
     """
-    Sp, Sm, Sz = [s.get_op(name).to_numpy_ndarray() for name in SpSmSz]
+    Sp, Sm, Sz = [s.get_op(name).to_numpy() for name in SpSmSz]
     npt.assert_almost_equal(commutator(Sz, Sp), Sp, 13)
     npt.assert_almost_equal(commutator(Sz, Sm), -Sm, 13)
     if SxSy is not None:
-        Sx, Sy = [s.get_op(name).to_numpy_ndarray() for name in SxSy]
+        Sx, Sy = [s.get_op(name).to_numpy() for name in SxSy]
         npt.assert_equal(Sx + 1.j * Sy, Sp)
         npt.assert_equal(Sx - 1.j * Sy, Sm)
         for i in range(3):
@@ -154,14 +154,14 @@ def check_same_operators(sites):
     charged_ops = {}
     for s in sites:
         for name, op in s.symmetric_ops.items():
-            op = op.to_numpy_ndarray()
+            op = op.to_numpy()
             if name in symmetric_ops:  # only as far as defined before
                 npt.assert_equal(op, symmetric_ops[name])
             else:
                 symmetric_ops[name] = op
         for name, op in s.charged_ops.items():
-            op_L = op.op_L.to_numpy_ndarray()
-            op_R = op.op_R.to_numpy_ndarray()
+            op_L = op.op_L.to_numpy()
+            op_R = op.op_R.to_numpy()
             if name in charged_ops:
                 L, R = charged_ops[name]
                 npt.assert_equal(op_L, L)
@@ -286,8 +286,8 @@ def test_fermion_site(any_backend):
         s.test_sanity()
         for op in s.all_op_names:
             assert s.hc_ops[op] == hcs[op]
-        C, Cd, N = s['C'].to_numpy_ndarray(), s['Cd'].to_numpy_ndarray(), s['N'].to_numpy_ndarray()
-        Id, JW = s.Id.to_numpy_ndarray(), s.JW.to_numpy_ndarray()
+        C, Cd, N = s['C'].to_numpy(), s['Cd'].to_numpy(), s['N'].to_numpy()
+        Id, JW = s.Id.to_numpy(), s.JW.to_numpy()
         npt.assert_equal(np.dot(Cd, C), N)
         npt.assert_equal(anticommutator(Cd, C), Id)
         npt.assert_equal(np.dot(Cd, C), N)
@@ -333,11 +333,11 @@ def test_spin_half_fermion_site(any_backend):
         s.test_sanity()
         for op in s.all_op_names:
             assert s.hc_ops[op] == hcs[op]
-        Id, JW = s.Id.to_numpy_ndarray(), s.JW.to_numpy_ndarray()
-        Cu, Cd = s['Cu'].to_numpy_ndarray(), s['Cd'].to_numpy_ndarray()
-        Cdu, Cdd = s['Cdu'].to_numpy_ndarray(), s['Cdd'].to_numpy_ndarray()
-        Nu, Nd = s['Nu'].to_numpy_ndarray(), s['Nd'].to_numpy_ndarray()
-        Ntot, NuNd = s['Ntot'].to_numpy_ndarray(), s['NuNd'].to_numpy_ndarray()
+        Id, JW = s.Id.to_numpy(), s.JW.to_numpy()
+        Cu, Cd = s['Cu'].to_numpy(), s['Cd'].to_numpy()
+        Cdu, Cdd = s['Cdu'].to_numpy(), s['Cdd'].to_numpy()
+        Nu, Nd = s['Nu'].to_numpy(), s['Nd'].to_numpy()
+        Ntot, NuNd = s['Ntot'].to_numpy(), s['NuNd'].to_numpy()
         npt.assert_equal(np.dot(Cdu, Cu), Nu)
         npt.assert_equal(np.dot(Cdd, Cd), Nd)
         npt.assert_equal(Nu + Nd, Ntot)
@@ -398,11 +398,11 @@ def test_spin_half_hole_site(any_backend):
         s.test_sanity()
         for op in s.all_op_names:
             assert s.hc_ops[op] == hcs[op]
-        JW = s.JW.to_numpy_ndarray()
-        Cu, Cd = s['Cu'].to_numpy_ndarray(), s['Cd'].to_numpy_ndarray()
-        Cdu, Cdd = s['Cdu'].to_numpy_ndarray(), s['Cdd'].to_numpy_ndarray()
-        Nu, Nd = s['Nu'].to_numpy_ndarray(), s['Nd'].to_numpy_ndarray()
-        Ntot = s['Ntot'].to_numpy_ndarray()
+        JW = s.JW.to_numpy()
+        Cu, Cd = s['Cu'].to_numpy(), s['Cd'].to_numpy()
+        Cdu, Cdd = s['Cdu'].to_numpy(), s['Cdd'].to_numpy()
+        Nu, Nd = s['Nu'].to_numpy(), s['Nd'].to_numpy()
+        Ntot = s['Ntot'].to_numpy()
         npt.assert_equal(np.dot(Cdu, Cu), Nu)
         npt.assert_equal(np.dot(Cdd, Cd), Nd)
         npt.assert_equal(Nu + Nd, Ntot)
@@ -456,9 +456,9 @@ def test_boson_site(any_backend, Nmax):
         s.test_sanity()
         for op in s.all_op_names:
             assert s.hc_ops[op] == hcs[op]
-        B = s['B'].to_numpy_ndarray()
-        Bd = s['Bd'].to_numpy_ndarray()
-        N = s['N'].to_numpy_ndarray()
+        B = s['B'].to_numpy()
+        Bd = s['Bd'].to_numpy()
+        N = s['N'].to_numpy()
         npt.assert_array_almost_equal_nulp(np.dot(Bd, B), N, 2)
         expect_commutator = np.eye(s.dim)
         expect_commutator[-1, -1] = -Nmax  # commutation relation violated due to truncated space
@@ -502,8 +502,8 @@ def test_clock_site(any_backend, q):
             assert s.hc_ops[op] == hcs[op]
         # check clock algebra
         w = np.exp(2.j * np.pi / q)
-        X = s['X'].to_numpy_ndarray()
-        Z = s['Z'].to_numpy_ndarray()
+        X = s['X'].to_numpy()
+        Z = s['Z'].to_numpy()
         Z_pow_q = Z
         X_pow_q = X
         for _ in range(q - 1):
@@ -547,10 +547,10 @@ def test_set_common_symmetry(any_backend):
     spin1 = site.SpinSite(S=1, conserve=conserve_S, backend=any_backend)
     ferm = site.SpinHalfFermionSite(conserve_N=conserve_N, conserve_S=conserve_S)
     boson = site.BosonSite(Nmax=2, conserve=conserve_N, backend=any_backend)
-    spin_ops = {name: op.to_numpy_ndarray() for name, op in spin.symmetric_ops.items()}
-    spin1_ops = {name: op.to_numpy_ndarray() for name, op in spin1.symmetric_ops.items()}
-    ferm_ops = {name: op.to_numpy_ndarray() for name, op in ferm.symmetric_ops.items()}
-    boson_ops = {name: op.to_numpy_ndarray() for name, op in boson.symmetric_ops.items()}
+    spin_ops = {name: op.to_numpy() for name, op in spin.symmetric_ops.items()}
+    spin1_ops = {name: op.to_numpy() for name, op in spin1.symmetric_ops.items()}
+    ferm_ops = {name: op.to_numpy() for name, op in ferm.symmetric_ops.items()}
+    boson_ops = {name: op.to_numpy() for name, op in boson.symmetric_ops.items()}
     # TODO also checks on charged ops?
 
     for symmetry_combine, expect_symm in [('by_name', expect_symm_Sz_N),
@@ -563,10 +563,10 @@ def test_set_common_symmetry(any_backend):
         spin.test_sanity()
         ferm.test_sanity()
         for op_name, op_np in spin_ops.items():
-            op_np2 = spin.get_op(op_name).to_numpy_ndarray()
+            op_np2 = spin.get_op(op_name).to_numpy()
             npt.assert_equal(op_np, op_np2)
         for op_name, op_np in ferm_ops.items():
-            op_np2 = ferm.get_op(op_name).to_numpy_ndarray()
+            op_np2 = ferm.get_op(op_name).to_numpy()
             npt.assert_equal(op_np, op_np2)
 
         # reset the modified sites
@@ -582,10 +582,10 @@ def test_set_common_symmetry(any_backend):
     ferm.test_sanity()
     spin.test_sanity()
     for op_name, op_np in spin_ops.items():
-        op_np2 = spin.get_op(op_name).to_numpy_ndarray()
+        op_np2 = spin.get_op(op_name).to_numpy()
         npt.assert_equal(op_np, op_np2, err_msg=f'{op_name=}')
     for op_name, op_np in ferm_ops.items():
-        op_np2 = ferm.get_op(op_name).to_numpy_ndarray()
+        op_np2 = ferm.get_op(op_name).to_numpy()
         npt.assert_equal(op_np, op_np2, err_msg=f'{op_name=}')
 
     # reset the modified sites
@@ -610,5 +610,5 @@ def test_set_common_symmetry(any_backend):
         s.test_sanity()
         assert s.symmetry == new_symmetry
         for op_name, op_np in expect_ops.items():
-            op_np2 = s.get_op(op_name).to_numpy_ndarray()
+            op_np2 = s.get_op(op_name).to_numpy()
             npt.assert_equal(op_np, op_np2, err_msg=f'{name=} {op_name=}')
