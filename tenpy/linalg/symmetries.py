@@ -1573,7 +1573,7 @@ class QuantumDoubleZNAnyonCategory(Symmetry):
         Symmetry.__init__(self,
                           fusion_style=FusionStyle.single,
                           braiding_style=BraidingStyle.anyonic,
-                          trivial_sector=np.array([0], dtype=int),
+                          trivial_sector=np.array([0, 0], dtype=int),
                           group_name='QuantumDoubleZNAnyonCategory',
                           num_sectors=N**2, descriptive_name=None)
 
@@ -1876,40 +1876,40 @@ class SU2_kAnyonCategory(Symmetry):
         self.handedness = handedness
         self._q = np.exp(2j * np.pi / (k + 2))
 
-        self._r = {}
-        for i in range((self.k + 1)**3):
-            jj1 = i % (self.k + 1)
-            jj2 = i // (self.k + 1) % (self.k + 1)
-            jj = i // (self.k + 1)**2 % (self.k + 1)
-            if jj > jj1 + jj2 or jj < abs(jj1 - jj2) or jj1 * jj2 == 0:
-                continue  # do not save trivial R-symbols
-            factor = (-1)**((jj - jj1 - jj2) / 2)
-            factor *= self._q**(( jj*(jj+2) - jj1*(jj1+2) - jj2*(jj2+2) ) / 8)
-            self._r[i] = factor * self._one_1D
-
-        self._f = {}
-        self._convert_to_key = np.array([(self.k + 1)**i for i in range(6)])
-        for i in range((self.k + 1)**6):
-            jj1 = i % (self.k + 1)
-            jj2 = i // (self.k + 1) % (self.k + 1)
-            jj3 = i // (self.k + 1)**2 % (self.k + 1)
-            jj12 = i // (self.k + 1)**3 % (self.k + 1)
-            jj23 = i // (self.k + 1)**4 % (self.k + 1)
-            jj = i // (self.k + 1)**5 % (self.k + 1)
-            if jj1 * jj2 * jj3 == 0:  # do not save trivial F-symbols
-                continue
-            jsymbol = self._j_symbol(jj1, jj2, jj12, jj3, jj, jj23)
-            if jsymbol != 0:
-                prefactor = (-1)**((jj + jj1 + jj2 + jj3) / 2)
-                prefactor *= np.sqrt(self._n_q(jj12 + 1) * self._n_q(jj23 + 1))
-                self._f[i] = prefactor * jsymbol * self._one_4D
-
         Symmetry.__init__(self,
                           fusion_style=FusionStyle.multiple_unique,
                           braiding_style=BraidingStyle.anyonic,
                           trivial_sector=np.array([0], dtype=int),
                           group_name='SU2_kAnyonCategory',
                           num_sectors=self.k+1, descriptive_name=None)
+
+        self._r = {}
+        for jj1, jj2, jj in product(range(self.k + 1), repeat=3):
+            if jj > jj1 + jj2 or jj < abs(jj1 - jj2) or jj1 * jj2 == 0:
+                continue  # do not save trivial R-symbols
+            factor = (-1)**((jj - jj1 - jj2) / 2)
+            factor *= self._q**(( jj*(jj+2) - jj1*(jj1+2) - jj2*(jj2+2) ) / 8)
+            if self.handedness == 'right':
+                factor = factor.conj()
+            self._r[(jj1, jj2, jj)] = factor * self._one_1D
+
+        self._f = {}
+        for jj1, jj2, jj3, jj, jj12, jj23 in product(range(self.k + 1), repeat=6):
+            if jj1 * jj2 * jj3 == 0:  # do not save trivial F-symbols
+                continue
+            jsymbol = self._j_symbol(jj1, jj2, jj12, jj3, jj, jj23)
+            if jsymbol != 0:
+                prefactor = (-1)**((jj + jj1 + jj2 + jj3) / 2)
+                prefactor *= np.sqrt(self._n_q(jj12 + 1) * self._n_q(jj23 + 1))
+                self._f[(jj1, jj2, jj3, jj, jj23, jj12)] = prefactor * jsymbol * self._one_4D
+
+        self._c = {}
+        for jj1, jj2, jj3, jj, jj12, jj13 in product([np.array([i]) for i in range(self.k + 1)], repeat=6):
+            if jj2[0] * jj3[0] == 0:  # do not save trivial F-symbols
+                continue
+            if (self.can_fuse_to(jj1, jj2, jj12) and self.can_fuse_to(jj12, jj3, jj) and
+                    self.can_fuse_to(jj1, jj3, jj13) and self.can_fuse_to(jj13, jj2, jj)):
+                self._c[(jj1[0], jj2[0], jj3[0], jj[0], jj12[0], jj13[0])] = super()._c_symbol(jj1, jj2, jj3, jj, jj12, jj13)
 
     def _n_q(self, n: int) -> float:
         return (self._q**(.5*n) - self._q**(-.5*n)) / (self._q**.5 - self._q**-.5)
@@ -1976,7 +1976,7 @@ class SU2_kAnyonCategory(Symmetry):
     def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
                   ) -> np.ndarray:
         try:  # nontrivial F-symbols
-            return self._f[np.sum(self._convert_to_key * np.concatenate([a, b, c, e, f, d]))]
+            return self._f[(a[0], b[0], c[0], d[0], e[0], f[0])]
         except KeyError:
             return self._one_4D
 
@@ -1991,12 +1991,15 @@ class SU2_kAnyonCategory(Symmetry):
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         try:  # nontrivial R-symbols
-            return self._r[np.sum(self._convert_to_key[:3] * np.concatenate([a, b, c]))]
+            return self._r[(a[0], b[0], c[0])]
         except KeyError:
             return self._one_1D
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
-        return super()._c_symbol(a, b, c, d, e, f)
+        try:
+            return self._c[(a[0], b[0], c[0], d[0], e[0], f[0])]
+        except KeyError:
+            return self._one_4D
 
     def all_sectors(self) -> SectorArray:
         return np.arange(self.k + 1, dtype=int)[:, None]
