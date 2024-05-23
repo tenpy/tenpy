@@ -7,7 +7,7 @@ import numpy as np
 from .abstract_backend import Backend, BlockBackend, Data, DiagonalData, Block
 from ..dtypes import Dtype
 from ..symmetries import no_symmetry, Symmetry
-from ..spaces import VectorSpace, ProductSpace
+from ..spaces import Space, ElementarySpace, ProductSpace
 
 __all__ = ['NoSymmetryBackend']
 
@@ -75,33 +75,33 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def diagonal_to_block(self, a: DiagonalTensor) -> Block:
         return self.apply_basis_perm(a.data, [a.legs[0]], inv=True)
 
-    def from_dense_block(self, a: Block, legs: list[VectorSpace], num_domain_legs: int,
+    def from_dense_block(self, a: Block, legs: list[Space], num_domain_legs: int,
                          tol: float = 1e-8) -> Data:
         assert all(leg.symmetry == no_symmetry for leg in legs)
         return self.apply_basis_perm(a, legs)
 
-    def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
+    def diagonal_from_block(self, a: Block, leg: Space) -> DiagonalData:
         return self.apply_basis_perm(a, [leg])
 
-    def mask_from_block(self, a: Block, large_leg: VectorSpace, small_leg: VectorSpace
+    def mask_from_block(self, a: Block, large_leg: Space, small_leg: ElementarySpace
                         ) -> DiagonalData:
         data = self.block_to_dtype(a, Dtype.bool)
         data = self.apply_basis_perm(data, [large_leg])
         return data
 
-    def from_block_func(self, func, legs: list[VectorSpace], num_domain_legs: int, func_kwargs={}):
+    def from_block_func(self, func, legs: list[Space], num_domain_legs: int, func_kwargs={}):
         return func(tuple(l.dim for l in legs), **func_kwargs)
 
-    def diagonal_from_block_func(self, func, leg: VectorSpace, func_kwargs={}) -> DiagonalData:
+    def diagonal_from_block_func(self, func, leg: Space, func_kwargs={}) -> DiagonalData:
         return func((leg.dim,), **func_kwargs)
 
-    def zero_data(self, legs: list[VectorSpace], dtype: Dtype, num_domain_legs: int):
+    def zero_data(self, legs: list[Space], dtype: Dtype, num_domain_legs: int):
         return self.zero_block(shape=[l.dim for l in legs], dtype=dtype)
 
-    def zero_diagonal_data(self, leg: VectorSpace, dtype: Dtype) -> DiagonalData:
+    def zero_diagonal_data(self, leg: Space, dtype: Dtype) -> DiagonalData:
         return self.zero_block(shape=[leg.dim], dtype=dtype)
 
-    def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
+    def eye_data(self, legs: list[Space], dtype: Dtype) -> Data:
         # Note: the identity has the same matrix elements in all ONB, so ne need to consider
         #       the basis perms.
         return self.eye_block(legs=[l.dim for l in legs], dtype=dtype)
@@ -117,15 +117,15 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return self.block_tdot(a.data, b.data, axs_a, axs_b)
 
     def svd(self, a: BlockDiagonalTensor, new_vh_leg_dual: bool, algorithm: str | None, compute_u: bool,
-            compute_vh: bool) -> tuple[Data, DiagonalData, Data, VectorSpace]:
+            compute_vh: bool) -> tuple[Data, DiagonalData, Data, ElementarySpace]:
         u, s, vh = self.matrix_svd(a.data, algorithm=algorithm, compute_u=compute_u, compute_vh=compute_vh)
-        new_leg = VectorSpace.from_trivial_sector(len(s), is_real=a.legs[0].is_real, is_dual=new_vh_leg_dual)
+        new_leg = ElementarySpace.from_trivial_sector(len(s), is_dual=new_vh_leg_dual)
         return u, s, vh, new_leg
 
-    def qr(self, a: BlockDiagonalTensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:
+    def qr(self, a: BlockDiagonalTensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, ElementarySpace]:
         q, r = self.matrix_qr(a.data, full=full)
         new_leg_dim = self.block_shape(r)[0]
-        new_leg = VectorSpace.from_trivial_sector(new_leg_dim, is_dual=new_r_leg_dual, is_real=a.legs[0].is_real)
+        new_leg = ElementarySpace.from_trivial_sector(new_leg_dim, is_dual=new_r_leg_dual)
         return q, r, new_leg
 
     def outer(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor) -> Data:
@@ -151,11 +151,15 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def conj(self, a: BlockDiagonalTensor | DiagonalTensor) -> Data | DiagonalData:
         return self.block_conj(a.data)
 
-    def combine_legs(self, a: BlockDiagonalTensor, combine_slices: list[int, int], product_spaces: list[ProductSpace], new_axes: list[int], final_legs: list[VectorSpace]) -> Data:
+    def combine_legs(self, a: BlockDiagonalTensor, combine_slices: list[int, int],
+                     product_spaces: list[ProductSpace], new_axes: list[int],
+                     final_legs: list[Space]) -> Data:
         return self.block_combine_legs(a.data, combine_slices)
 
-    def split_legs(self, a: BlockDiagonalTensor, leg_idcs: list[int], final_legs: list[VectorSpace]) -> Data:
-        return self.block_split_legs(a.data, leg_idcs, [[s.dim for s in a.legs[i].spaces] for i in leg_idcs])
+    def split_legs(self, a: BlockDiagonalTensor, leg_idcs: list[int],
+                   final_legs: list[Space]) -> Data:
+        return self.block_split_legs(a.data, leg_idcs, [[s.dim for s in a.legs[i].spaces]
+                                                        for i in leg_idcs])
 
     def add_trivial_leg(self, a: BlockDiagonalTensor, pos: int, to_domain: bool) -> Data:
         return self.block_add_axis(a.data, pos)
@@ -179,13 +183,13 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def mul(self, a: float | complex, b: BlockDiagonalTensor) -> Data:
         return self.block_mul(a, b.data)
 
-    def infer_leg(self, block: Block, legs: list[VectorSpace | None], is_dual: bool = False,
-                  is_real: bool = False) -> VectorSpace:
+    def infer_leg(self, block: Block, legs: list[Space | None], is_dual: bool = False,
+                  is_real: bool = False) -> ElementarySpace:
         idx, *more = [n for n, leg in enumerate(legs) if leg is None]
         if more:
             raise ValueError('Can only infer one leg')
         dim = self.block_shape(block)[idx]
-        return VectorSpace.from_trivial_sector(dim, is_dual=is_dual, is_real=is_real)
+        return ElementarySpace.from_trivial_sector(dim, is_dual=is_dual)
 
     def get_element(self, a: BlockDiagonalTensor, idcs: list[int]) -> complex | float | bool:
         return self.get_block_element(a.data, idcs)
@@ -231,14 +235,15 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def eigh(self, a: BlockDiagonalTensor, sort: str = None) -> tuple[DiagonalData, Data]:
         return self.block_eigh(a.data, sort=sort)
 
-    def from_flat_block_trivial_sector(self, block: Block, leg: VectorSpace) -> Data:
+    def from_flat_block_trivial_sector(self, block: Block, leg: Space) -> Data:
         assert self.block_shape(block) == (leg.dim,)
         return self.apply_basis_perm(block, [leg])
 
     def to_flat_block_trivial_sector(self, tensor: BlockDiagonalTensor) -> Block:
         return self.apply_basis_perm(tensor.data, tensor.legs, inv=True)
 
-    def inv_part_from_flat_block_single_sector(self, block: Block, leg: VectorSpace, dummy_leg: VectorSpace) -> Data:
+    def inv_part_from_flat_block_single_sector(self, block: Block, leg: Space,
+                                               dummy_leg: ElementarySpace) -> Data:
         block = self.apply_basis_perm(block, [leg])
         return self.block_add_axis(block, pos=1)
 
@@ -246,5 +251,5 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return self.apply_basis_perm(tensor.data[:, 0], [tensor.legs[0]], inv=True)
 
     def flip_leg_duality(self, tensor: BlockDiagonalTensor, which_legs: list[int],
-                         flipped_legs: list[VectorSpace], perms: list[np.ndarray]) -> Data:
+                         flipped_legs: list[Space], perms: list[np.ndarray]) -> Data:
         return tensor.data

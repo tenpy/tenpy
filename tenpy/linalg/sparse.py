@@ -17,7 +17,7 @@ from typing import Literal
 import numpy as np
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator, ArpackNoConvergence
 
-from .spaces import VectorSpace, ProductSpace, Sector
+from .spaces import Space, ElementarySpace, ProductSpace, Sector
 from .tensors import Tensor, Shape, BlockDiagonalTensor, ChargedTensor, tdot, eye_like, zero_like
 from .backends.abstract_backend import Backend
 from .dtypes import Dtype
@@ -327,7 +327,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
         Function with signature ``tenpy_matvec(vec: Tensor) -> Tensor`.
         Has to return a tensor with the same legs and has to be linear.
         Unless `labels` are given, the leg order of the output must be the same as for the input.
-    legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`
+    legs : list of :class:`~tenpy.linalg.spaces.ElementarySpace`
         The legs of a Tensor that `tenpy_matvec` can act on.
     backend : :class:`~tenpy.linalg.backends.abstract_backend.Backend`
         The backend for self
@@ -344,7 +344,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
     ----------
     tenpy_matvec : callable
         Function with signature ``tenpy_matvec(vec: Tensor) -> Tensor`.
-    legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`
+    legs : list of :class:`~tenpy.linalg.spaces.Space`
         The legs of a Tensor that `tenpy_matvec` can act on.
     backend : :class:`~tenpy.linalg.backends.abstract_backend.Backend`
         The backend for self
@@ -368,7 +368,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
     shape : (int, int)
         The shape of self as an operator on 1D numpy arrays
     """
-    def __init__(self, tenpy_matvec, legs: list[VectorSpace], backend: Backend, dtype,
+    def __init__(self, tenpy_matvec, legs: list[Space], backend: Backend, dtype,
                  labels: list[str] = None,
                  charge_sector: None | Sector | Literal['trivial'] = 'trivial'):
         self.tenpy_matvec = tenpy_matvec

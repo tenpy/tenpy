@@ -32,7 +32,7 @@ from ..linalg.backends import Backend, Block
 from ..linalg.matrix_operations import exp
 from ..linalg.symmetries import (ProductSymmetry, Symmetry, SU2Symmetry, U1Symmetry, ZNSymmetry,
                              no_symmetry, SectorArray)
-from ..linalg.spaces import VectorSpace, ProductSpace
+from ..linalg.spaces import Space, ElementarySpace, ProductSpace
 from ..linalg.misc import make_stride
 from ..tools.misc import find_subclass
 from ..tools.hdf5_io import Hdf5Exportable
@@ -56,9 +56,9 @@ class Site(Hdf5Exportable):
     """Collects information about a single local site of a lattice.
 
     This class defines what the local basis states are via the :attr:`leg`, which defines the order
-    of basis states (:attr:`VectorSpace.basis_perm`) and how the symmetry acts on them (by assigning
-    them to :attr:`VectorSpace.sectors`). It also provides :attr:`state_labels` for the basis.
-    A `Site` instance therefore already determines which symmetry is explicitly used.
+    of basis states (:attr:`ElementarySpace.basis_perm`) and how the symmetry acts on them
+    (by assigning them to :attr:`Space.sectors`). It also provides :attr:`state_labels` for the
+    basis. A `Site` instance therefore already determines which symmetry is explicitly used.
     Using the same "kind" of physical site (typically a particular subclass of `Site`),
     but using different symmetries requires *different* `Site` instances.
     
@@ -94,7 +94,7 @@ class Site(Hdf5Exportable):
 
     Parameters
     ----------
-    leg : :class:`~tenpy.linalg.spaces.VectorSpace`
+    leg : :class:`~tenpy.linalg.spaces.Space`
         The Hilbert space associated with the site. Defines the basis and the symmetry.
     backend : :class:`~tenpy.linalg.backends.Backend`, optional
         The backend used to create the identity operator and possibly convert non-tensor operators
@@ -107,7 +107,7 @@ class Site(Hdf5Exportable):
 
     Attributes
     ----------
-    leg : :class:`~tenpy.linalg.spaces.VectorSpace`
+    leg : :class:`~tenpy.linalg.spaces.Space`
         The Hilbert space associated with the site. Defines the basis and the symmetry.
     state_labels : {str: int}
         Labels for the local basis states. Maps from label to index of the state in the basis.
@@ -128,7 +128,7 @@ class Site(Hdf5Exportable):
         their hermitian conjugates. Use :meth:`get_hc_op_name` to obtain entries.
     """
     
-    def __init__(self, leg: VectorSpace, backend: Backend = None,
+    def __init__(self, leg: Space, backend: Backend = None,
                  state_labels: list[str] = None, JW: DiagonalTensor | Block = None):
         self.leg = leg
         self.state_labels = {}
@@ -477,19 +477,18 @@ class Site(Hdf5Exportable):
                 return other_name
         return None
 
-    def change_leg(self, new_leg: VectorSpace = None):
+    def change_leg(self, new_leg: Space = None):
         """Change the :attr:`leg` of the site in-place.
 
         Assumes that the :attr:`state_labels` are still valid.
 
         Parameters
         ----------
-        new_leg : :class:`VectorSpace` | None
+        new_leg : :class:`Space` | None
             The new leg to be used. If ``None``, use trivial charges.
         """
         if new_leg is None:
-            new_leg = VectorSpace.from_trivial_sector(dim=self.dim, symmetry=self.symmetry,
-                                                      is_real=self.leg.is_real)
+            new_leg = ElementarySpace.from_trivial_sector(dim=self.dim, symmetry=self.symmetry)
         self.leg = new_leg
         old_symmetric_ops = self.symmetric_ops
         self.symmetric_ops = {}
@@ -703,15 +702,15 @@ class GroupedSite(Site):
         elif symmetry_combine == 'independent':
             legs = []
             all_symmetries = [site.leg.symmetry for site in sites]
-            res_symmetry = ProductSymmetry(all_symmetries)
             for i, site in enumerate(sites):
                 # define the new leg to be in the trivial sector for all symmetries...
                 independent_gradings = [
-                    VectorSpace.from_trivial_sector(dim=site.dim, symmetry=s) for s in all_symmetries
+                    ElementarySpace.from_trivial_sector(dim=site.dim, symmetry=s)
+                    for s in all_symmetries
                 ]
-                # ... except for "its own" symmetry_
+                # ... except for "its own" symmetry
                 independent_gradings[i] = site.leg
-                legs.append(VectorSpace.from_independent_symmetries(independent_gradings, res_symmetry))
+                legs.append(ElementarySpace.from_independent_symmetries(independent_gradings))
         else:
             raise ValueError("Unknown option for `symmetry_combine`: " + repr(symmetry_combine))
         # change sites to have the new legs
@@ -1165,13 +1164,13 @@ class SpinHalfSite(Site):
     def __init__(self, conserve: str = 'Sz', backend: Backend = None):
         # make leg
         if conserve == 'Stot':
-            leg = VectorSpace(symmetry=SU2Symmetry('Stot'), sectors=[[1]])
+            leg = ElementarySpace(symmetry=SU2Symmetry('Stot'), sectors=[[1]])
         elif conserve == 'Sz':
-            leg = VectorSpace.from_sectors(U1Symmetry('2*Sz'), [[1], [-1]])
+            leg = ElementarySpace.from_sectors(U1Symmetry('2*Sz'), [[1], [-1]])
         elif conserve == 'parity':
-            leg = VectorSpace.from_sectors(ZNSymmetry(2, 'parity_Sz'), [[1], [0]])
+            leg = ElementarySpace.from_sectors(ZNSymmetry(2, 'parity_Sz'), [[1], [0]])
         elif conserve == 'None':
-            leg = VectorSpace.from_trivial_sector(2)
+            leg = ElementarySpace.from_trivial_sector(2)
         else:
             raise ValueError(f'invalid `conserve`: {conserve}')
         # initialize Site
@@ -1183,7 +1182,7 @@ class SpinHalfSite(Site):
         # operators : Svec, Sz, Sigmaz, Sp, Sm
         if conserve == 'Stot':
             # vector transforms under spin-1 irrep -> sector == [2 * J] == [2]
-            dummy_leg = VectorSpace(leg.symmetry, sectors=[[2]])
+            dummy_leg = ElementarySpace(leg.symmetry, sectors=[[2]])
             Svec_inv = BlockDiagonalTensor.from_block_func(
                 self.backend.ones_block, backend=self.backend, legs=[leg, leg.dual, dummy_leg],
                 labels=['p', 'p*', '!']
@@ -1279,13 +1278,13 @@ class SpinSite(Site):
         Sm = np.transpose(Sp)  # no need to conj, Sp is real
         # make leg
         if conserve == 'Stot':
-            leg = VectorSpace(symmetry=SU2Symmetry('Stot'), sectors=[[d - 1]])
+            leg = ElementarySpace(symmetry=SU2Symmetry('Stot'), sectors=[[d - 1]])
         elif conserve == 'Sz':
-            leg = VectorSpace.from_sectors(U1Symmetry('2*Sz'), two_Sz[:, None])
+            leg = ElementarySpace.from_sectors(U1Symmetry('2*Sz'), two_Sz[:, None])
         elif conserve == 'parity':
-            leg = VectorSpace.from_basis(ZNSymmetry(2, 'parity_Sz'), np.arange(d)[:, None] % 2)
+            leg = ElementarySpace.from_basis(ZNSymmetry(2, 'parity_Sz'), np.arange(d)[:, None] % 2)
         elif conserve == 'None':
-            leg = VectorSpace.from_trivial_sector(d)
+            leg = ElementarySpace.from_trivial_sector(d)
         else:
             raise ValueError(f'invalid `conserve`: {conserve}')
         # initialize Site
@@ -1295,7 +1294,7 @@ class SpinSite(Site):
         self.state_labels['up'] = self.state_labels[names[-1]]
         # operators : Svec, Sz, Sp, Sm
         if conserve == 'Stot':
-            dummy_leg = VectorSpace(leg.symmetry, sectors=[[2]])
+            dummy_leg = ElementarySpace(leg.symmetry, sectors=[[2]])
             Svec_inv = BlockDiagonalTensor.from_block_func(
                 self.backend.ones_block, legs=[leg, leg.dual, dummy_leg],
                 labels=['p', 'p*', '!']
@@ -1388,11 +1387,11 @@ class FermionSite(Site):
     def __init__(self, conserve: str = 'N', filling: float = 0.5, backend: Backend = None):
         # make leg
         if conserve == 'N':
-            leg = VectorSpace.from_sectors(U1Symmetry('N'), [[0], [1]])
+            leg = ElementarySpace.from_sectors(U1Symmetry('N'), [[0], [1]])
         elif conserve == 'parity':
-            leg = VectorSpace.from_sectors(ZNSymmetry(2, 'parity_N'), [[0], [1]])
+            leg = ElementarySpace.from_sectors(ZNSymmetry(2, 'parity_N'), [[0], [1]])
         elif conserve == 'None':
-            leg = VectorSpace.from_trivial_sector(2)
+            leg = ElementarySpace.from_trivial_sector(2)
         else:
             raise ValueError(f'invalid `conserve`: {conserve}')
         # initialize site
@@ -1552,13 +1551,13 @@ class SpinHalfFermionSite(Site):
             raise ValueError(f'invalid `conserve_S`: {conserve_S}')
         # make leg
         if sym_N is None and sym_S is None:
-            leg = VectorSpace.from_trivial_sector(4)
+            leg = ElementarySpace.from_trivial_sector(4)
         elif sym_N is None:
-            leg = VectorSpace.from_basis(sym_S, sectors_S[:, None])
+            leg = ElementarySpace.from_basis(sym_S, sectors_S[:, None])
         elif sym_S is None:
-            leg = VectorSpace.from_basis(sym_N, sectors_N[:, None])
+            leg = ElementarySpace.from_basis(sym_N, sectors_N[:, None])
         else:
-            leg = VectorSpace.from_basis(sym_N * sym_S, np.stack([sectors_N, sectors_S], axis=1))
+            leg = ElementarySpace.from_basis(sym_N * sym_S, np.stack([sectors_N, sectors_S], axis=1))
         self.conserve_N = conserve_N
         self.conserve_S = conserve_S
         self.filling = filling
@@ -1573,7 +1572,7 @@ class SpinHalfFermionSite(Site):
             sector = [2]  # spin 1
             if sym_N is not None:
                 sector.append(0)
-            dummy_leg = VectorSpace(leg.symmetry, sectors=[sector])
+            dummy_leg = ElementarySpace(leg.symmetry, sectors=[sector])
             # the only allowed blocks by charge rule for legs [p, p*, dummy] the sectors [1, 1, 2],
             # i.e. acting on the spin 1/2 doublet [up, down].
             # This means that the same construction as for the SpinHalfSite works here too.
@@ -1697,13 +1696,13 @@ class SpinHalfHoleSite(Site):
             raise ValueError(f'invalid `conserve_S`: {conserve_S}')
         # make leg
         if sym_N is None and sym_S is None:
-            leg = VectorSpace.from_trivial_sector(3)
+            leg = ElementarySpace.from_trivial_sector(3)
         elif sym_N is None:
-            leg = VectorSpace.from_basis(sym_S, sectors_S[:, None])
+            leg = ElementarySpace.from_basis(sym_S, sectors_S[:, None])
         elif sym_S is None:
-            leg = VectorSpace.from_basis(sym_N, sectors_N[:, None])
+            leg = ElementarySpace.from_basis(sym_N, sectors_N[:, None])
         else:
-            leg = VectorSpace.from_basis(sym_N * sym_S, np.stack([sectors_N, sectors_S], axis=1))
+            leg = ElementarySpace.from_basis(sym_N * sym_S, np.stack([sectors_N, sectors_S], axis=1))
         # initialize Site
         self.conserve_N = conserve_N
         self.conserve_S = conserve_S
@@ -1718,7 +1717,7 @@ class SpinHalfHoleSite(Site):
             sector = [2]  # spin 1
             if sym_N is not None:
                 sector.append(0)
-            dummy_leg = VectorSpace(leg.symmetry, sectors=[sector])
+            dummy_leg = ElementarySpace(leg.symmetry, sectors=[sector])
             # the only allowed blocks by charge rule for legs [p, p*, dummy] the sectors [1, 1, 2],
             # i.e. acting on the spin 1/2 doublet [up, down].
             # This means that the same construction as for the SpinHalfSite works here too.
@@ -1819,11 +1818,11 @@ class BosonSite(Site):
         N = np.arange(d)
         # build leg
         if conserve == 'N':
-            leg = VectorSpace.from_sectors(U1Symmetry('N'), N[:, None])
+            leg = ElementarySpace.from_sectors(U1Symmetry('N'), N[:, None])
         elif conserve == 'parity':
-            leg = VectorSpace.from_sectors(ZNSymmetry(2, 'parity_N'), N[:, None] % 2)
+            leg = ElementarySpace.from_sectors(ZNSymmetry(2, 'parity_N'), N[:, None] % 2)
         elif conserve == 'None':
-            leg = VectorSpace.from_trivial_sector(d)
+            leg = ElementarySpace.from_trivial_sector(d)
         else:
             raise ValueError(f'invalid `conserve`: {conserve}')
         # initialize Site
@@ -1992,9 +1991,9 @@ class ClockSite(Site):
             raise ValueError(f'invalid q: {q}')
         # make leg
         if conserve == 'Z':
-            leg = VectorSpace.from_basis(ZNSymmetry(q, 'clock_phase'), np.arange(q)[:, None])
+            leg = ElementarySpace.from_basis(ZNSymmetry(q, 'clock_phase'), np.arange(q)[:, None])
         elif conserve == 'None':
-            leg = VectorSpace.from_trivial_sector(q)
+            leg = ElementarySpace.from_trivial_sector(q)
         else:
             raise ValueError(f'invalid `conserve`: {conserve}')
         # initialize Site

@@ -1,6 +1,13 @@
-"""
+r"""
 
-TODO put this in the proper place:
+
+.. _tensor_leg_labels:
+
+Leg Labels
+----------
+
+TODO elaborate
+
 The following characters have special meaning in labels and should be avoided:
 `(`, `.`, `)`, `?`, `!` and `*`.
 
@@ -10,16 +17,13 @@ The following characters have special meaning in labels and should be avoided:
 Tensors as Maps
 ---------------
 
-The FusionTree backend partitions the legs into domain and codomain.
-At the level of tensors, we need to allow optional control over how the legs are partitioned,
-for optimization purposes.
-For the other backends, it has no effect, but we still keep track of it.
+We can view :math:`m \times n` matrices either as linear maps
+:math:`\mathbb{C}^n \to \mathbb{C}^m` or as elements of the space
+:math:`\mathbb{C}^n \otimes \mathbb{C}^m^*`, which is known in the context of mixed state
+density matrices as "vectorization".
 
-DiagonalTensors and Masks always have one of their legs in the domain, one in the codomain.
-ChargedTensors always have their dummy leg in the codomain.
-
-TODO elaborate, this is a stub explanation.
-TODO num_domain_legs more in tests
+Similarly, we can view any tensor, i.e. elements of tensor product spaces as linear maps.
+TODO elaborate.
 
 """
 # Copyright (C) TeNPy Developers, GNU GPLv3
@@ -40,7 +44,7 @@ from .dummy_config import printoptions
 from .misc import duplicate_entries, join_as_many_as_possible
 from .dummy_config import config
 from .symmetries import AbelianGroup, Symmetry, SymmetryError
-from .spaces import VectorSpace, ProductSpace, Sector, SectorArray
+from .spaces import Space, ElementarySpace, ProductSpace, Sector, SectorArray
 from .backends.backend_factory import get_backend
 from .backends.abstract_backend import Block, Backend
 from .dtypes import Dtype
@@ -68,7 +72,7 @@ class Shape:
     Can be indexed by integer (leg position) or string (leg label).
     """
 
-    def __init__(self, legs: list[VectorSpace], num_domain_legs: int, labels: list[str | None] = None):
+    def __init__(self, legs: list[Space], num_domain_legs: int, labels: list[str | None] = None):
         self.legs = legs
         if labels is None:
             labels = [None] * len(legs)
@@ -152,24 +156,24 @@ class Tensor(metaclass=ABCMeta):
     """Common abstract base class for tensors.
 
     .. note ::
-        TODO write clean text about VectorSpace.basis_perm and how it affects internal storage.
+        TODO write clean text about ElementarySpace.basis_perm and how it affects internal storage.
 
     Parameters
     ----------
-    legs : list[VectorSpace]
+    legs : list[Space]
         The legs of the Tensor
     backend: :class:`~tenpy.linalg.backends.abstract_backend.Backend`, optional
         The backend for the Tensor
     labels : list[str | None] | None
         Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
     """
-    def __init__(self, legs: list[VectorSpace], backend: Backend, labels: list[str | None] | None,
+    def __init__(self, legs: list[Space], backend: Backend, labels: list[str | None] | None,
                  dtype: Dtype, num_domain_legs: int):
         if backend is None:
             self.backend = backend = get_backend(legs[0].symmetry)
         else:
             self.backend = backend
-        self.legs = legs = [backend.add_leg_metadata(l) for l in legs]
+        self.legs = legs = legs[:]  # FIXME rm ok?
         self.shape = Shape(legs=legs, num_domain_legs=num_domain_legs, labels=labels)
         self.num_legs = len(legs)
         self.symmetry = legs[0].symmetry
@@ -312,7 +316,7 @@ class Tensor(metaclass=ABCMeta):
         else:
             return list(map(self.get_leg_idx, which_legs))
 
-    def get_leg(self, which_leg: int | str) -> VectorSpace:
+    def get_leg(self, which_leg: int | str) -> Space:
         """Get a single leg of the tensor
 
         Parameters
@@ -326,7 +330,7 @@ class Tensor(metaclass=ABCMeta):
         """
         return self.legs[self.get_leg_idx(which_leg)]
 
-    def get_legs(self, which_legs: int | str | list[int | str]) -> list[VectorSpace]:
+    def get_legs(self, which_legs: int | str | list[int | str]) -> list[Space]:
         """Get a number of legs of the tensor
 
         Parameters
@@ -621,7 +625,7 @@ class Tensor(metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def zero(cls, legs: VectorSpace | list[VectorSpace], backend=None, labels: list[str | None] = None,
+    def zero(cls, legs: Space | list[Space], backend=None, labels: list[str | None] = None,
              dtype: Dtype = Dtype.float64) -> Tensor:
         """A zero tensor"""
         ...
@@ -637,7 +641,7 @@ class Tensor(metaclass=ABCMeta):
         """Apply a mask to one of the legs, projecting to a smaller leg.
 
         If the masked leg is a :class:`ProductSpace`, the product structure is dropped while masking
-        and the masked leg will be only a :class:`VectorSpace`, not a :class:`ProductSpace`.
+        and the masked leg will be only a :class:`ElementarySpace`, not a :class:`ProductSpace`.
         See notes below.
 
         Parameters
@@ -805,12 +809,11 @@ class BlockDiagonalTensor(SymmetricTensor):
         of tensors with the given symmetry.
         data about the symmetry is contained in the legs.
     backend : :class:`~tenpy.linalg.backends.abstract_backend.Backend`
-    legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`
-        These may be instances of a backend-specific subclass of :class:`~tenpy.linalg.spaces.VectorSpace`
+    legs : list of :class:`~tenpy.linalg.spaces.Space`
     labels : list of {``None``, str}
     """
 
-    def __init__(self, data, legs: list[VectorSpace], num_domain_legs: int, backend=None,
+    def __init__(self, data, legs: list[Space], num_domain_legs: int, backend=None,
                  labels: list[str | None] | None = None):
         """
         This constructor is not user-friendly.
@@ -821,7 +824,7 @@ class BlockDiagonalTensor(SymmetricTensor):
         ----------
         data
             The numerical data ("free parameters") comprising the tensor. type is backend-specific
-        legs : list[VectorSpace]
+        legs : list[Space]
             The legs of the Tensor
         num_domain_legs : int
             How many of the legs are in the domain. See :ref:`tensors_as_maps`.
@@ -848,7 +851,7 @@ class BlockDiagonalTensor(SymmetricTensor):
     # --------------------------------------------
 
     @classmethod
-    def eye(cls, legs: VectorSpace | list[VectorSpace], backend=None,
+    def eye(cls, legs: Space | list[Space], backend=None,
             labels: list[str | None] = None, dtype: Dtype = Dtype.float64) -> BlockDiagonalTensor:
         """The identity map on a group of legs, as a tensor with twice as many legs.
 
@@ -860,7 +863,7 @@ class BlockDiagonalTensor(SymmetricTensor):
         ----------
         backend : :class:`~tenpy.linalg.backends.abstract_backend.Backend`
             The backend for the Tensor
-        legs : (list of) VectorSpace
+        legs : (list of) Space
             *Half* of the legs of the result.
             The result has legs ``[*legs, *(l.dual for l in reversed(legs))]``,
             the given `legs` followed by their respective duals in reverse order.
@@ -875,7 +878,7 @@ class BlockDiagonalTensor(SymmetricTensor):
             backend = get_backend(legs[0].symmetry)
         legs = to_iterable(legs)
         half_leg_num = len(legs)
-        legs = [backend.add_leg_metadata(leg) for leg in legs]
+        # legs = [backend.add_leg_metadata(leg) for leg in legs]  # FIXME
         data = backend.eye_data(legs=legs, dtype=dtype)
         legs = legs + [leg.dual for leg in reversed(legs)]
         if labels is None:
@@ -888,7 +891,7 @@ class BlockDiagonalTensor(SymmetricTensor):
         return cls(data=data, backend=backend, legs=legs, num_domain_legs=half_leg_num, labels=labels)
 
     @classmethod
-    def from_block_func(cls, func, legs: list[VectorSpace], backend=None,
+    def from_block_func(cls, func, legs: list[Space], backend=None,
                         labels: list[str | None] = None, func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None, num_domain_legs: int = 0
                         ) -> BlockDiagonalTensor:
@@ -905,7 +908,7 @@ class BlockDiagonalTensor(SymmetricTensor):
             If no `shape_kw` is given, it is called as ``func(shape, **func_kwargs)``,
             otherwise as ``func(**{shape_kw: shape}, **func_kwargs)``,
             where `shape` is a tuple of int.
-        legs : list of VectorSpace
+        legs : list of Space
             The legs of the result.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.Backend`
             The backend for the tensor
@@ -926,7 +929,7 @@ class BlockDiagonalTensor(SymmetricTensor):
         """
         if backend is None:
             backend = get_backend(legs[0].symmetry)
-        legs = [backend.add_leg_metadata(leg) for leg in legs]
+        # legs = [backend.add_leg_metadata(leg) for leg in legs]  # FIXME
 
         if shape_kw is not None:
             def block_func(shape):
@@ -947,7 +950,7 @@ class BlockDiagonalTensor(SymmetricTensor):
         return res
 
     @classmethod
-    def from_dense_block(cls, block, legs: list[VectorSpace], backend=None, dtype: Dtype=None,
+    def from_dense_block(cls, block, legs: list[Space], backend=None, dtype: Dtype=None,
                          labels: list[str | None] = None, tol: float = 1e-8,
                          num_domain_legs: int = 0) -> BlockDiagonalTensor:
         """Convert a dense block of the backend to a Tensor.
@@ -959,8 +962,8 @@ class BlockDiagonalTensor(SymmetricTensor):
             can be converted using :meth:`BlockBackend.as_block`.
             This includes e.g. nested python iterables or numpy arrays.
             The block should be given in the "public" basis order of the `legs`, e.g.
-            according to :attr:`VectorSpace.sectors_of_basis`.
-        legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`, optional
+            according to :attr:`ElementarySpace.sectors_of_basis`.
+        legs : list of :class:`~tenpy.linalg.spaces.Space`, optional
             The vectorspaces associated with legs of the tensors. This specifies the symmetry.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.Backend`, optional
             The backend for the Tensor
@@ -985,13 +988,13 @@ class BlockDiagonalTensor(SymmetricTensor):
         return cls(data=data, backend=backend, legs=legs, num_domain_legs=num_domain_legs, labels=labels)
 
     @classmethod
-    def from_flat_block_trivial_sector(cls, leg: VectorSpace, block: Block, backend: Backend,
+    def from_flat_block_trivial_sector(cls, leg: Space, block: Block, backend: Backend,
                                        label: str = None) -> BlockDiagonalTensor:
         """Create a single-leg `Tensor` from the *part of* the coefficients in the trivial sector.
 
         Parameters
         ----------
-        leg : :class:`~tenpy.linalg.spaces.VectorSpace`
+        leg : :class:`~tenpy.linalg.spaces.Space`
             The single leg of the resulting tensor
         block : backend-specific Block
             The block of shape ``(M,)`` where ``M`` is the multiplicity of the trivial sector in `leg`.
@@ -1009,7 +1012,7 @@ class BlockDiagonalTensor(SymmetricTensor):
                    legs=[leg], num_domain_legs=0, labels=[label])
 
     @classmethod
-    def from_numpy_func(cls, func, legs: list[VectorSpace], backend=None,
+    def from_numpy_func(cls, func, legs: list[Space], backend=None,
                         labels: list[str | None] = None, func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None, num_domain_legs: int = 0
                         ) -> BlockDiagonalTensor:
@@ -1027,7 +1030,7 @@ class BlockDiagonalTensor(SymmetricTensor):
             If no `shape_kw` is given, it is called as ``func(shape, **func_kwargs)``,
             otherwise as ``func(**{shape_kw: shape}, **func_kwargs)``,
             where `shape` is a tuple of int.
-        legs : list of VectorSpace
+        legs : list of Space
             The legs of the result.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.Backend`
             The backend for the tensor
@@ -1048,7 +1051,7 @@ class BlockDiagonalTensor(SymmetricTensor):
         """
         if backend is None:
             backend = get_backend(legs[0].symmetry)
-        legs = [backend.add_leg_metadata(leg) for leg in legs]
+        # FIXME have removed add_metadata. that ok?
 
         if shape_kw is not None:
             def block_func(shape):
@@ -1066,7 +1069,7 @@ class BlockDiagonalTensor(SymmetricTensor):
                    labels=labels)
 
     @classmethod
-    def random_normal(cls, legs: VectorSpace | list[VectorSpace] = None,
+    def random_normal(cls, legs: Space | list[Space] = None,
                       mean: BlockDiagonalTensor | None = None, sigma: float = 1.,
                       backend=None, labels: list[str | None] = None, dtype: Dtype = None,
                       num_domain_legs: int = 0) -> BlockDiagonalTensor:
@@ -1084,7 +1087,7 @@ class BlockDiagonalTensor(SymmetricTensor):
 
         Parameters
         ----------
-        legs : (list of) VectorSpace
+        legs : (list of) Space
             If `mean` is given, this argument is ignored and legs are the same as those of `mean`.
             Otherwise, the legs of the result.
         mean : Tensor | None
@@ -1118,14 +1121,14 @@ class BlockDiagonalTensor(SymmetricTensor):
             backend = get_backend(legs[0].symmetry)
         if dtype is None:
             dtype = Dtype.float64
-        legs = [backend.add_leg_metadata(leg) for leg in legs]
+        # legs = [backend.add_leg_metadata(leg) for leg in legs]  # FIXME
         kwargs = dict(dtype=dtype, sigma=sigma)
         data = backend.from_block_func(backend.block_random_normal, legs, num_domain_legs, kwargs)
         return cls(data=data, backend=backend, legs=legs, num_domain_legs=num_domain_legs,
                    labels=labels)
 
     @classmethod
-    def random_uniform(cls, legs: VectorSpace | list[VectorSpace], backend=None,
+    def random_uniform(cls, legs: Space | list[Space], backend=None,
                        labels: list[str | None] = None, dtype: Dtype = Dtype.float64,
                        num_domain_legs: int = 0) -> BlockDiagonalTensor:
         """Generate a tensor whose block-entries (i.e. the free parameters of tensors compatible with
@@ -1140,7 +1143,7 @@ class BlockDiagonalTensor(SymmetricTensor):
 
         Parameters
         ----------
-        legs : (list of) VectorSpace
+        legs : (list of) Space
             The legs of the result.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.Backend`
             The backend for the tensor
@@ -1153,7 +1156,7 @@ class BlockDiagonalTensor(SymmetricTensor):
         """
         if backend is None:
             backend = get_backend(legs[0].symmetry)
-        legs = [backend.add_leg_metadata(leg) for leg in legs]
+        # legs = [backend.add_leg_metadata(leg) for leg in legs]  # FIXME
         data = backend.from_block_func(backend.block_random_uniform, legs, num_domain_legs,
                                        func_kwargs=dict(dtype=dtype))
         return cls(data=data, backend=backend, legs=legs, num_domain_legs=num_domain_legs, labels=labels)
@@ -1213,14 +1216,14 @@ class BlockDiagonalTensor(SymmetricTensor):
     # --------------------------------------------
     
     @classmethod
-    def zero(cls, legs: VectorSpace | list[VectorSpace],
+    def zero(cls, legs: Space | list[Space],
              backend=None, labels: list[str | None] = None,
              dtype: Dtype = Dtype.float64, num_domain_legs: int = 0) -> BlockDiagonalTensor:
         """Empty Tensor with zero entries (not stored explicitly in most backends).
 
         Parameters
         ----------
-        legs : (list of) VectorSpace
+        legs : (list of) Space
             The legs of the Tensor.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.Backend`
             The backend for the Tensor.
@@ -1232,7 +1235,7 @@ class BlockDiagonalTensor(SymmetricTensor):
             How many of the legs should be in the domain. See :ref:`tensors_as_maps`.
 
         """
-        legs = [backend.add_leg_metadata(leg) for leg in legs]
+        # legs = [backend.add_leg_metadata(leg) for leg in legs]    # FIXME
         if backend is None:
             backend = get_backend(legs[0].symmetry)
         data = backend.zero_data(legs=legs, dtype=dtype, num_domain_legs=num_domain_legs)
@@ -1254,7 +1257,7 @@ class BlockDiagonalTensor(SymmetricTensor):
             assert to_domain is not True
             to_domain = False
         data = self.backend.add_trivial_leg(self, pos=pos, to_domain=to_domain)
-        new_leg = VectorSpace.from_trivial_sector(1, symmetry=self.symmetry, is_dual=is_dual)
+        new_leg = ElementarySpace.from_trivial_sector(1, symmetry=self.symmetry, is_dual=is_dual)
         legs = self.legs[:pos] + [new_leg] + self.legs[pos:]
         labels = self.labels[:pos] + [label] + self.labels[pos:]
         res = BlockDiagonalTensor(
@@ -1621,7 +1624,9 @@ class BlockDiagonalTensor(SymmetricTensor):
     # --------------------------------------------
 
     def make_ProductSpace(self, legs: int | str | list[int | str], _is_dual=None) -> ProductSpace:
-        return ProductSpace(self.get_legs(legs), _is_dual=_is_dual, backend=self.backend)
+        # FIXME is_dual ???
+        # FIXME is this really needed??
+        return ProductSpace(self.get_legs(legs), backend=self.backend)
 
     def _combine_legs_make_ProductSpace(self, combine_leg_idcs, product_spaces, product_spaces_dual):
         """Argument parsing for :meth:`combine_legs`: make missing ProductSpace legs.
@@ -1646,10 +1651,11 @@ class BlockDiagonalTensor(SymmetricTensor):
                 legs = [self.legs[a] for a in leg_idcs]
                 if len(legs) != len(product_space.spaces):
                     raise ValueError("passed ProductSpace has wrong number of legs")
-                if legs[0].is_dual != product_space.spaces[0].is_dual:
-                    # TODO: should we just implicitly flip?
-                    raise ValueError("Wrong `is_dual` flag of ProductSpace")
-                for self_leg, given_space in zip(legs, product_space.spaces):
+                # FIXME tmp rmed check
+                # if legs[0].is_dual != product_space.spaces[0].is_dual:
+                #     # TODO: should we just implicitly flip?
+                #     raise ValueError("Wrong `is_dual` flag of ProductSpace")
+                for self_leg, given_space in zip(legs, product_space.factors):
                     if self_leg != given_space:
                         msg = f'`product_spaces[{i:d}]` is incompatible with the legs to be combined'
                         raise ValueError(msg)
@@ -1745,6 +1751,7 @@ class ChargedTensor(Tensor):
         if dummy_leg_state is None:
             dtype = invariant_part.dtype
         else:
+            assert len(dummy_leg_state) == invariant_part.legs[-1].dim
             if not invariant_part.symmetry.can_be_dropped:
                 msg = f'ChargedTensor with dummy_leg_state is not well-defined for this symmetry.'
                 raise SymmetryError(msg)
@@ -1774,7 +1781,7 @@ class ChargedTensor(Tensor):
     # --------------------------------------------
 
     @classmethod
-    def from_block_func(cls, func, legs: VectorSpace | list[VectorSpace], charge: VectorSpace | Sector,
+    def from_block_func(cls, func, legs: Space | list[Space], charge: Space | Sector,
                         backend=None, labels: list[str | None] = None, func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None, num_domain_legs: int = 0,
                         dummy_leg_state=None
@@ -1787,9 +1794,9 @@ class ChargedTensor(Tensor):
         return ChargedTensor(invariant_part=inv, dummy_leg_state=dummy_leg_state)
 
     @classmethod
-    def from_dense_block(cls, block, legs: list[VectorSpace], backend=None, dtype: Dtype=None,
+    def from_dense_block(cls, block, legs: list[Space], backend=None, dtype: Dtype=None,
                          labels: list[str | None] = None, tol: float = 1e-8,
-                         charge: VectorSpace | Sector = None, dummy_leg_state=None,
+                         charge: Space | Sector = None, dummy_leg_state=None,
                          num_domain_legs: int = 0) -> ChargedTensor:
         """Convert a dense block of the backend to a ChargedTensor, if possible.
 
@@ -1801,7 +1808,7 @@ class ChargedTensor(Tensor):
             The data to be converted, a backend-specific block or some data that
             can be converted using :meth:`BlockBackend.as_block`. This includes e.g.
             nested python iterables or numpy arrays.
-        legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`, optional
+        legs : list of :class:`~tenpy.linalg.spaces.Space`, optional
             The vectorspaces associated with legs of the tensors. Contains symmetry data.
             Does not contain the dummy leg.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.Backend`, optional
@@ -1814,10 +1821,10 @@ class ChargedTensor(Tensor):
         tol : float
             Tolerance for checking if a block is symmetric. We check if
             ``norm(block - symmetric_components) < tol * norm(block)``.
-        charge : VectorSpace or Sector, optional
+        charge : Space or Sector, optional
             The charge, specified either via the dummy leg of the :class:`ChargedTensor` or
             via the sector that the tensor should live in.
-            As such, a sector is equivalent to `VectorSpace(symmetry, sectors=[charge]).dual`.
+            As such, a sector is equivalent to `ElementarySpace(symmetry, sectors=[charge]).dual`.
             Note the `.dual`! The charge-rule for the invariant part then forces the composite
             ChargedTensor to be in the specified sector.
             If not given, it is inferred from the largest (by magnitude) entry of the block.
@@ -1847,7 +1854,7 @@ class ChargedTensor(Tensor):
         return cls(invariant_part, dummy_leg_state=dummy_leg_state)
 
     @classmethod
-    def from_flat_block_single_sector(cls, leg: VectorSpace, block: Block, sector: Sector,
+    def from_flat_block_single_sector(cls, leg: Space, block: Block, sector: Sector,
                                       backend: Backend, label: str = None) -> ChargedTensor:
         """Create a single-leg `ChargedTensor` from the *part of* the coefficients in the given sector.
 
@@ -1856,7 +1863,7 @@ class ChargedTensor(Tensor):
 
         Parameters
         ----------
-        leg : :class:`~tenpy.linalg.spaces.VectorSpace`
+        leg : :class:`~tenpy.linalg.spaces.Space`
             The single leg of the resulting tensor.
         block : backend-specific Block
             The block of shape ``(D * M,)`` where ``M`` is the multiplicity of the given `sector`
@@ -1884,7 +1891,7 @@ class ChargedTensor(Tensor):
         return cls(inv_part, dummy_leg_state=inv_part.backend.as_block([1]))
 
     @classmethod
-    def from_numpy_func(cls, func, legs: VectorSpace | list[VectorSpace], charge: VectorSpace | Sector,
+    def from_numpy_func(cls, func, legs: Space | list[Space], charge: Space | Sector,
                         backend=None, labels: list[str | None] = None, func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None, num_domain_legs: int = 0
                         ) -> ChargedTensor:
@@ -1943,7 +1950,7 @@ class ChargedTensor(Tensor):
         return res
     
     @classmethod
-    def random_uniform(cls, legs: VectorSpace | list[VectorSpace], charge: VectorSpace | Sector,
+    def random_uniform(cls, legs: Space | list[Space], charge: Space | Sector,
                        backend=None, labels: list[str | None] = None, dtype: Dtype = Dtype.float64,
                        dummy_leg_state=None, num_domain_legs: int = 0) -> ChargedTensor:
         legs = to_iterable(legs)
@@ -2002,7 +2009,7 @@ class ChargedTensor(Tensor):
         --------
         project_to_invariant
         """
-        if not np.all(self.dummy_leg._non_dual_sectors[:] == self.symmetry.trivial_sector[None, :]):
+        if not np.all(self.dummy_leg.sectors[:] == self.symmetry.trivial_sector[None, :]):
             raise ValueError('ChargedTensor with non-trivial charge could not be converted to Tensor.')
         if self.dummy_leg_state is None:
             msg = 'Can not convert to Tensor. dummy_leg_state is unspecified.'
@@ -2068,10 +2075,10 @@ class ChargedTensor(Tensor):
     # --------------------------------------------
     
     @classmethod
-    def zero(cls, legs: VectorSpace | list[VectorSpace], dummy_leg: VectorSpace,
+    def zero(cls, legs: Space | list[Space], dummy_leg: Space,
              backend=None, labels: list[str | None] = None, dtype: Dtype = Dtype.float64,
              dummy_leg_state=None, num_domain_legs: int = 0) -> ChargedTensor:
-        if isinstance(legs, VectorSpace):
+        if isinstance(legs, Space):
             legs = [legs]
         if labels is None:
             labels = [None] * len(legs)
@@ -2372,11 +2379,11 @@ class ChargedTensor(Tensor):
     # --------------------------------------------
 
     @staticmethod
-    def _dummy_leg_from_charge(charge: VectorSpace | Sector, symmetry: Symmetry):
-        if isinstance(charge, VectorSpace):
-            return charge
+    def _dummy_leg_from_charge(charge: Space | Sector, symmetry: Symmetry):
+        if isinstance(charge, Space):
+            return charge.as_ElementarySpace()
         assert symmetry.is_valid_sector(charge)
-        return VectorSpace(symmetry, sectors=[charge], multiplicities=[1]).dual
+        return ElementarySpace(symmetry, sectors=[charge], multiplicities=[1]).dual
 
 
 class DiagonalTensor(SymmetricTensor):
@@ -2388,7 +2395,7 @@ class DiagonalTensor(SymmetricTensor):
     ----------
     data
         The numerical data ("free parameters") comprising the tensor. type is backend-specific
-    first_leg : VectorSpace
+    first_leg : Space
         The first leg of this tensor.
     second_leg_dual : bool
         Wether the second leg is the dual of the first (default) or the same.
@@ -2399,7 +2406,7 @@ class DiagonalTensor(SymmetricTensor):
     labels : list[str | None] | None
         Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
     """
-    def __init__(self, data, first_leg: VectorSpace, second_leg_dual: bool = True, backend=None,
+    def __init__(self, data, first_leg: Space, second_leg_dual: bool = True, backend=None,
                  labels: list[str | None] = None):
         self.data = data
         self.second_leg_dual = second_leg_dual
@@ -2429,7 +2436,7 @@ class DiagonalTensor(SymmetricTensor):
         return self.backend.block_to_numpy(block)
 
     @classmethod
-    def eye(cls, first_leg: VectorSpace, backend=None, labels: list[str | None] = None,
+    def eye(cls, first_leg: Space, backend=None, labels: list[str | None] = None,
             dtype: Dtype = Dtype.float64) -> DiagonalTensor:
         if backend is None:
             backend = get_backend(first_leg.symmetry)
@@ -2443,7 +2450,7 @@ class DiagonalTensor(SymmetricTensor):
         )
 
     @classmethod
-    def from_block_func(cls, func, first_leg: VectorSpace, second_leg_dual: bool = True,
+    def from_block_func(cls, func, first_leg: Space, second_leg_dual: bool = True,
                         backend=None, labels: list[str | None] = None, func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None) -> DiagonalTensor:
         if backend is None:
@@ -2468,7 +2475,7 @@ class DiagonalTensor(SymmetricTensor):
         return res
 
     @classmethod
-    def from_diag(cls, diag: Block, first_leg: VectorSpace, second_leg_dual: bool = True,
+    def from_diag(cls, diag: Block, first_leg: Space, second_leg_dual: bool = True,
                   backend=None, labels: list[str | None] = None) -> DiagonalTensor:
         """Convert a dense 1D block containing the diagonal entries to a DiagonalTensor.
 
@@ -2490,7 +2497,7 @@ class DiagonalTensor(SymmetricTensor):
                    labels=labels)
 
     @classmethod
-    def from_numpy_func(cls, func, first_leg: VectorSpace, second_leg_dual: bool = True,
+    def from_numpy_func(cls, func, first_leg: Space, second_leg_dual: bool = True,
                         backend=None, labels: list[str | None] = None, func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None) -> DiagonalTensor:
         if backend is None:
@@ -2541,7 +2548,7 @@ class DiagonalTensor(SymmetricTensor):
                    backend=tens.backend, labels=tens.labels)
 
     @classmethod
-    def random_normal(cls, first_leg: VectorSpace = None, second_leg_dual: bool = None,
+    def random_normal(cls, first_leg: Space = None, second_leg_dual: bool = None,
                       mean: DiagonalTensor = None, sigma: float = 1., backend=None,
                       labels: list[str | None] = None, dtype: Dtype = None
                       ) -> DiagonalTensor:
@@ -2571,7 +2578,7 @@ class DiagonalTensor(SymmetricTensor):
                    labels=labels)
 
     @classmethod
-    def random_uniform(cls, first_leg: VectorSpace, second_leg_dual: bool = True, backend=None,
+    def random_uniform(cls, first_leg: Space, second_leg_dual: bool = True, backend=None,
                        labels: list[str | None] = None, dtype: Dtype = Dtype.float64
                        ) -> DiagonalTensor:
         if backend is None:
@@ -2730,7 +2737,7 @@ class DiagonalTensor(SymmetricTensor):
     # --------------------------------------------
     
     @classmethod
-    def zero(cls, first_leg: VectorSpace, second_leg_dual: bool = True, backend=None,
+    def zero(cls, first_leg: Space, second_leg_dual: bool = True, backend=None,
              labels: list[str | None] = None, dtype: Dtype = Dtype.float64) -> DiagonalTensor:
         if backend is None:
             backend = get_backend(first_leg.symmetry)
@@ -2965,21 +2972,22 @@ class Mask(Tensor):
     data
         The numerical data (i.e. boolean flags) comprising the mask. type is backend-specific.
         Should have boolean dtype.
-    large_leg : VectorSpace
+    large_leg : Space
         The larger leg that can be projected with this mask.
         The resulting mask has `mask.legs[0] == large_leg.dual`, which can be contracted with
         the `large_leg`.
-    small_leg : VectorSpace
+    small_leg : ElementarySpace
+        FIXME condition for duality
         The small leg, i.e. the masked / projected version of `large_leg`.
-        Should have same :attr:`VectorSpace.is_dual` as `large_leg`.
+        Should have same :attr:`ElementarySpace.is_dual` as `large_leg`.
     backend: :class:`~tenpy.linalg.backends.abstract_backend.Backend`, optional
         The backend for the Tensor
     labels : list[str | None] | None
         Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
     """
-    def __init__(self, data, large_leg: VectorSpace, small_leg: VectorSpace, backend=None,
+    def __init__(self, data, large_leg: Space, small_leg: ElementarySpace, backend=None,
                  labels: list[str | None] = None):
-        assert small_leg.is_subspace_of(large_leg)
+        assert small_leg.is_subspace_of(large_leg.as_ElementarySpace())
         self.data = data
         if backend is None:
             backend = get_backend(large_leg.symmetry)
@@ -3003,7 +3011,7 @@ class Mask(Tensor):
         return self.backend.diagonal_to_block(self)
     
     @property
-    def large_leg(self) -> VectorSpace:
+    def large_leg(self) -> Space:
         """The large leg that can be projected using this mask."""
         return self.legs[0].dual
 
@@ -3013,19 +3021,19 @@ class Mask(Tensor):
         return self.backend.block_to_numpy(self.blockmask)
 
     @property
-    def small_leg(self) -> VectorSpace:
+    def small_leg(self) -> ElementarySpace:
         """The slice of :attr:`large_leg` that the mask projects to."""
         return self.legs[1]
 
     @classmethod
-    def eye(cls, large_leg: VectorSpace, backend=None, labels: list[str | None] = None) -> Mask:
+    def eye(cls, large_leg: Space, backend=None, labels: list[str | None] = None) -> Mask:
         """The identity mask, that keeps all basis elements."""
         # OPTIMIZE
         return cls.from_blockmask(np.ones(large_leg.dim, dtype=bool), large_leg=large_leg,
                                   backend=backend, labels=labels)
 
     @classmethod
-    def from_blockmask(cls, blockmask: Block, large_leg: VectorSpace, backend: Backend = None,
+    def from_blockmask(cls, blockmask: Block, large_leg: Space, backend: Backend = None,
                    labels: list[str | None] = None) -> Mask:
         """Create a Mask from a 1D boolean block.
 
@@ -3056,7 +3064,7 @@ class Mask(Tensor):
                                   large_leg=diag.legs[0], backend=diag.backend, labels=diag.labels)
 
     @classmethod
-    def from_indices(cls, indices: int | list[int] | np.ndarray | slice, large_leg: VectorSpace,
+    def from_indices(cls, indices: int | list[int] | np.ndarray | slice, large_leg: Space,
                      backend: Backend = None, labels: list[str | None] = None) -> Mask:
         """Create a Mask from the indices that are kept.
 
@@ -3178,13 +3186,13 @@ class Mask(Tensor):
     # --------------------------------------------
     
     @classmethod
-    def zero(cls, large_leg: VectorSpace, backend=None, labels: list[str | None] = None) -> Mask:
+    def zero(cls, large_leg: Space, backend=None, labels: list[str | None] = None) -> Mask:
         """The zero mask, that discards all basis elements."""
         if backend is None:
             backend = get_backend(symmetry=large_leg.symmetry)
         data = backend.zero_diagonal_data(leg=large_leg, dtype=Dtype.bool)
-        small_leg = VectorSpace.null_space(symmetry=large_leg.symmetry, is_real=large_leg.is_real,
-                                           is_dual=large_leg.is_dual)
+        
+        small_leg = ElementarySpace.from_null_space(symmetry=large_leg.symmetry, is_dual=large_leg.is_bra_space)
         return cls(data=data, large_leg=large_leg, small_leg=small_leg, backend=backend)
 
     def add_trivial_leg(self, label: str = None, is_dual: bool = False, pos: int = -1,
@@ -3453,7 +3461,7 @@ def conj(t: Tensor) -> Tensor:
     return t.conj()
 
 
-def detect_sectors_from_block(block: Block, legs: list[VectorSpace], backend: Backend
+def detect_sectors_from_block(block: Block, legs: list[Space], backend: Backend
                               ) -> SectorArray:
     """Detect the symmetry sectors of a dense block.
 
@@ -3663,8 +3671,7 @@ def tdot(t1: Tensor, t2: Tensor,
     Contraction of two tensors.
 
     A number of legs of `t1`, indicated by `legs1` are contracted with the *same* number of legs
-    of `t2`, indicated by `legs2`.
-    The pairs of legs need to be mutually dual (see :meth:`VectorSpace.can_contract_with`).
+    of `t2`, indicated by `legs2`. The pairs of legs need to be mutually dual.
 
     The legs of the resulting tensor are in "numpy-style" order, i.e. first the uncontracted legs
     of `t1`, then those of `t2`.
@@ -3858,7 +3865,7 @@ def get_same_backend(*tensors: Tensor, error_msg: str = 'Incompatible backends.'
     return backend
 
 
-def tensor_from_block(block: Block, legs: list[VectorSpace], backend: Backend,
+def tensor_from_block(block: Block, legs: list[Space], backend: Backend,
                       labels: list[str] = None, num_domain_legs: int = 0
                       ) -> ChargedTensor | BlockDiagonalTensor:
     """Assume the block lives in a single symmetry sector and convert to tensor.
@@ -3867,7 +3874,7 @@ def tensor_from_block(block: Block, legs: list[VectorSpace], backend: Backend,
     ----------
     block : backend-specific block
         The data to convert.
-    legs : list of :class:`VectorSpace`
+    legs : list of :class:`Space`
         The legs of the resulting tensor. Length must match number of axes of `block`.
     backend : :class:`Backend`
         The backend for the resulting tensor.
@@ -3895,7 +3902,7 @@ def tensor_from_block(block: Block, legs: list[VectorSpace], backend: Backend,
         #   b) leave that as is (allow multi-dimensional dummy_leg) and adjust docs accordingly
         raise NotImplementedError
     assert all(leg.symmetry == symmetry for leg in legs[1:])
-    dummy_leg = ProductSpace([VectorSpace(symmetry, [s]) for s in sectors]).dual.as_VectorSpace()
+    dummy_leg = ProductSpace([ElementarySpace(symmetry, [s]) for s in sectors]).as_ElementarySpace().dual
     if np.all(dummy_leg.sectors == symmetry.trivial_sector[None, :]):
         return BlockDiagonalTensor.from_dense_block(block, legs=legs, backend=backend, labels=labels,
                                                     num_domain_legs=num_domain_legs)

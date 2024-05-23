@@ -115,12 +115,12 @@ def get_random_leg(symmetry: symmetries.Symmetry, dim: int, num_sectors: int):
     assert len(multiplicities) == num_sectors
     sectors = random_symmetry_sectors(symmetry=symmetry, np_random=np.random, len_=num_sectors)
     assert len(sectors) == num_sectors
-    res = spaces.VectorSpace.from_sectors(symmetry=symmetry, sectors=sectors, multiplicities=multiplicities)
+    res = spaces.ElementarySpace.from_sectors(symmetry=symmetry, sectors=sectors, multiplicities=multiplicities)
     res.test_sanity()
     return res
 
 
-def get_compatible_leg(legs: list[spaces.VectorSpace]) -> spaces.VectorSpace:
+def get_compatible_leg(legs: list[spaces.Space]) -> spaces.ElementarySpace:
     """return a leg such that a tensor with ``legs + [result]`` allows a non-zero # of blocks."""
     fully_compatible = spaces.ProductSpace(legs).dual
     num_sectors = legs[0].num_sectors
@@ -143,7 +143,7 @@ def get_compatible_leg(legs: list[spaces.VectorSpace]) -> spaces.VectorSpace:
     assert len(np.unique(sectors, axis=0)) == len(sectors)
 
     assert sectors.shape == (num_sectors, fully_compatible.symmetry.sector_ind_len)
-    res = spaces.VectorSpace.from_sectors(
+    res = spaces.ElementarySpace.from_sectors(
         symmetry=fully_compatible.symmetry, sectors=sectors,
         multiplicities=get_random_multiplicities(dim=dim, num_sectors=num_sectors),
     )
@@ -152,7 +152,7 @@ def get_compatible_leg(legs: list[spaces.VectorSpace]) -> spaces.VectorSpace:
 
 
 def get_random_tensor(symmetry: symmetries.Symmetry, backend: Backend,
-                      legs: list[spaces.VectorSpace | None], leg_dim: int, sectors_per_leg: int,
+                      legs: list[spaces.ElementarySpace | None], leg_dim: int, sectors_per_leg: int,
                       real: bool = False):
     assert sectors_per_leg <= leg_dim
 
@@ -191,13 +191,13 @@ def get_qmod(sym):
     raise NotImplementedError
 
 
-def convert_VectorSpace_to_LegCharge(leg: spaces.VectorSpace, old_tenpy, chinfo=None):
-    """Convert a v2.0 VectorSpace to a v0.x LegCharge"""
+def convert_Space_to_LegCharge(leg: spaces.Space, old_tenpy, chinfo=None):
+    """Convert a v2.0 Space to a v0.x/v1.x LegCharge"""
     if chinfo is None:
         chinfo = old_tenpy.linalg.charges.ChargeInfo(get_qmod(leg.symmetry))
     slices = np.insert(np.cumsum(leg.multiplicities), 0, 0)
     assert slices.shape == (leg.num_sectors + 1,)
-    charges = leg._non_dual_sectors
+    charges = leg.sectors
     assert charges.shape == (leg.num_sectors, leg.symmetry.sector_ind_len)
     qconj = -1 if leg.is_dual else +1
     if chinfo.qnumber == 0:
@@ -218,7 +218,7 @@ def convert_Tensor_to_Array(a: BlockDiagonalTensor, old_tenpy, chinfo=None):
     assert isinstance(a.backend, AbelianBackend)
     if chinfo is None:
         chinfo = old_tenpy.linalg.charges.ChargeInfo(get_qmod(a.symmetry))
-    legs = [convert_VectorSpace_to_LegCharge(l, old_tenpy, chinfo) for l in a.legs]
+    legs = [convert_Space_to_LegCharge(l, old_tenpy, chinfo) for l in a.legs]
     res = old_tenpy.linalg.np_conserved.Array(legs)
     res._data = a.data.blocks
     res._qdata = a.data.block_inds

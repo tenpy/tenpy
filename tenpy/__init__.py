@@ -3,7 +3,7 @@
 TeNPy is a library for algorithms working with tensor networks,
 e.g., matrix product states and -operators,
 designed to study the physics of strongly correlated quantum systems.
-The code is intended to be accessible for newcommers
+The code is intended to be accessible for newcomers
 and yet powerful enough for day-to-day research.
 """
 # Copyright (C) TeNPy Developers, GNU GPLv3

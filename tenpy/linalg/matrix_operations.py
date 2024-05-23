@@ -609,8 +609,8 @@ def eigh(a: Tensor, legs1: list[int | str] = None, legs2: list[int | str] = None
     U : Tensor
         A tensor containing the normalized eigenvectors. It is unitary, in the sense that combining
         the leading legs yields a unitary matrix. Legs are ``[*a.get_legs(legs1), new_leg]``,
-        where ``new_leg = ProductSpace(*a.get_legs(leg1)).as_VectorSpace().dual``.
-        In particular, the new leg is always a plain `VectorSpace`, never a `ProductSpace`.
+        where ``new_leg = ProductSpace(*a.get_legs(leg1)).as_ElementarySpace().dual``.
+        In particular, the new leg is always a `ElementarySpace`, never a `ProductSpace`.
     """
     # TODO (JU) should we support `UPLO` arg? (use lower or upper triangular part)
     if not isinstance(a, BlockDiagonalTensor):
@@ -625,14 +625,14 @@ def eigh(a: Tensor, legs1: list[int | str] = None, legs2: list[int | str] = None
     if need_combine:
         U_leg_0 = ProductSpace([a.legs[i1] for i1 in idcs1], backend=backend)
         a = a.combine_legs(idcs1, idcs2, product_spaces=[U_leg_0, U_leg_0.dual])
-        D_leg_0 = U_leg_0.as_VectorSpace()
+        D_leg_0 = U_leg_0.as_ElementarySpace()
         U_leg_1 = D_leg_0.dual
     else:
         if idcs1[0] == 1:  # implies idcs1 == [1], idcs2 == [0]
             a = a.permute_legs([1, 0])
         U_leg_0 = a.legs[0]
-        D_leg_0 = U_leg_0.as_VectorSpace()
-        U_leg_1 = a.legs[1].as_VectorSpace()
+        D_leg_0 = U_leg_0.as_ElementarySpace()
+        U_leg_1 = a.legs[1].as_ElementarySpace()
     
     d_data, u_data = backend.eigh(a, sort=sort)
 

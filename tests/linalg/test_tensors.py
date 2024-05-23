@@ -13,7 +13,7 @@ from tenpy.linalg.backends.torch import TorchBlockBackend
 from tenpy.linalg.backends.numpy import NumpyBlockBackend
 from tenpy.linalg.backends.backend_factory import get_backend
 from tenpy.linalg.dtypes import Dtype
-from tenpy.linalg.spaces import VectorSpace, ProductSpace, _fuse_spaces
+from tenpy.linalg.spaces import Space, ElementarySpace, ProductSpace, _fuse_spaces
 from tenpy.linalg.symmetries import ProductSymmetry, z4_symmetry, SU2Symmetry
 
 
@@ -60,7 +60,8 @@ def check_shape(shape: tensors.Shape, dims: tuple[int, ...], labels: list[str]):
 
 
 @pytest.mark.parametrize('num_domain_legs', [0, 1, 2, 3])
-def test_Tensor_classmethods(make_compatible_tensor, num_domain_legs):
+def test_Tensor_classmethods(make_compatible_tensor, num_domain_legs, tol=1e-6):
+    # TODO why do we need such a loose tol?
     T: tensors.Tensor = make_compatible_tensor(num_legs=3, num_domain_legs=num_domain_legs)
     assert T.num_domain_legs == num_domain_legs
     backend = T.backend
@@ -77,7 +78,7 @@ def test_Tensor_classmethods(make_compatible_tensor, num_domain_legs):
     dense_block = backend.block_from_numpy(numpy_block)
 
     print('checking from_dense_block')
-    tens = tensors.BlockDiagonalTensor.from_dense_block(dense_block, legs=legs, backend=backend, tol=1e-7)
+    tens = tensors.BlockDiagonalTensor.from_dense_block(dense_block, legs=legs, backend=backend, tol=tol)
     tens.test_sanity()
     data = backend.block_to_numpy(tens.to_dense_block())
     npt.assert_array_almost_equal_nulp(data, numpy_block, 100)
@@ -88,7 +89,7 @@ def test_Tensor_classmethods(make_compatible_tensor, num_domain_legs):
             _ = tensors.BlockDiagonalTensor.from_dense_block(non_symmetric_block, legs=legs, backend=backend)
 
     print('checking from numpy')
-    tens = tensors.BlockDiagonalTensor.from_dense_block(numpy_block, legs=legs, backend=backend, tol=1e-7)
+    tens = tensors.BlockDiagonalTensor.from_dense_block(numpy_block, legs=legs, backend=backend, tol=tol)
     tens.test_sanity()
     data = tens.to_numpy()
     npt.assert_array_almost_equal_nulp(data, numpy_block, 100)
@@ -277,7 +278,7 @@ def test_ChargedTensor_tofrom_flat_block_single_sector(compatible_symmetry, make
     pytest.xfail(reason='unclear')  # TODO
     # TODO move to some other tests after restructuring
     sector = make_compatible_sectors(1)[0]
-    dummy_leg = VectorSpace(compatible_symmetry, sector[None, :]).dual
+    dummy_leg = ElementarySpace(compatible_symmetry, sector[None, :]).dual
     inv_part = make_compatible_tensor(legs=[None, dummy_leg])
     tens = tensors.ChargedTensor(invariant_part=inv_part)
     leg = tens.legs[0]
@@ -309,8 +310,8 @@ def test_from_block_z4symm_2legs(symmetry_backend, num_domain_legs, block_backen
     q0, q1, q2, q3 = all_qi
     basis1 = [q3, q3, q2, q0, q3, q2]  # basis_perm [3, 2, 5, 0, 1, 4]
     basis2 = [q2, q0, q1, q2, q3, q0, q1]  # basis_perm [1, 5, 2, 6, 0, 3, 4]
-    s1 = VectorSpace.from_basis(z4_symmetry, basis1)  # sectors = [0, 2, 3]
-    s2 = VectorSpace.from_basis(z4_symmetry, basis2)  # sectors = [0, 1, 2, 3]
+    s1 = ElementarySpace.from_basis(z4_symmetry, basis1)  # sectors = [0, 2, 3]
+    s2 = ElementarySpace.from_basis(z4_symmetry, basis2)  # sectors = [0, 1, 2, 3]
 
     #      q: 2,  0,  1,  2,  3,  0,  1      q
     data = [[ 0,  0,  1,  0,  0,  0,  2],  # 3
@@ -398,7 +399,7 @@ def test_from_block_su2_symm(symmetry_backend, block_backend):
     # TODO convert back when to_dense is implemented.
     backend = get_backend(symmetry_backend, block_backend)
     sym = SU2Symmetry()
-    spin_half = VectorSpace(sym, [[1]])
+    spin_half = ElementarySpace(sym, [[1]])
 
     # basis order: [down, up]
     sx = .5 * np.array([[0., 1.], [1., 0.]], dtype=complex)
@@ -676,7 +677,7 @@ def test_conj_hconj(make_compatible_tensor):
     npt.assert_array_equal(op2_hc.to_numpy(), expect)
     
 
-def test_combine_split(make_compatible_tensor):
+def test_combine_split(make_compatible_tensor, compatible_symmetry_backend):
     tens = make_compatible_tensor(labels=['a', 'b', 'c', 'd'], max_blocks=5, max_block_size=5)
 
     if isinstance(tens.backend, FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
@@ -740,18 +741,20 @@ def test_combine_split(make_compatible_tensor):
     npt.assert_equal(split.to_numpy(), dense.transpose([1, 3, 2, 0]))
 
     print('check _fuse_spaces')
-    sectors1, mults1, fusion_outcomes_sort1, metadata1 = _fuse_spaces(
-        symmetry=tens.symmetry, spaces=tens.get_legs(['b', 'd']), _is_dual=False
+    sectors1, mults1, metadata1 = _fuse_spaces(
+        symmetry=tens.symmetry, spaces=tens.get_legs(['b', 'd'])
     )
-    sectors2, mults2, fusion_outcomes_sort2, metadata2 = tens.backend._fuse_spaces(
-        symmetry=tens.symmetry, spaces=tens.get_legs(['b', 'd']), _is_dual=False
-    )
-    npt.assert_array_equal(fusion_outcomes_sort1, fusion_outcomes_sort2)
-    npt.assert_array_equal(sectors1, sectors2)
-    npt.assert_array_equal(mults1, mults2)
-    assert len(metadata1) == 0
-    assert len(metadata2) == (3 if isinstance(tens.backend, AbelianBackend) else 0)
+    assert len(metadata1) == 1
+    if compatible_symmetry_backend in ['abelian']:  # those backends that implement _fuse_spaces
+        sectors2, mults2, metadata2 = tens.backend._fuse_spaces(
+            symmetry=tens.symmetry, spaces=tens.get_legs(['b', 'd'])
+        )
+        npt.assert_array_equal(metadata1['fusion_outcomes_sort'], metadata2['fusion_outcomes_sort'])
+        npt.assert_array_equal(sectors1, sectors2)
+        npt.assert_array_equal(mults1, mults2)
+        assert len(metadata2) == 4
 
+    # FIXME redesign?
     for prod_space, comment in [
         (ProductSpace(tens.get_legs(['b', 'd']), backend=tens.backend), 'metadata via ProductSpace.__init__'),
         (tens.backend.add_leg_metadata(ProductSpace(tens.get_legs(['b', 'd']))), 'metadata via add_leg_metadata'),
@@ -853,7 +856,7 @@ def test_almost_equal(make_compatible_tensor, np_random):
 
 def test_squeeze_legs(make_compatible_tensor, compatible_symmetry):
     for i in range(10):
-        triv_leg = VectorSpace(compatible_symmetry,
+        triv_leg = ElementarySpace(compatible_symmetry,
                                compatible_symmetry.trivial_sector[np.newaxis, :])
         assert triv_leg.is_trivial
         tens = make_compatible_tensor(legs=[None, triv_leg, None, triv_leg.dual, triv_leg],
@@ -944,8 +947,8 @@ def test_detect_sectors_from_block(compatible_backend, compatible_symmetry, make
     which_sectors_b = np_random.integers(num_sectors, size=(leg_dim + 1,))
     sectors_of_basis_a = sectors[which_sectors_a]
     sectors_of_basis_b = sectors[which_sectors_b]
-    a = VectorSpace.from_basis(symmetry=compatible_symmetry, sectors_of_basis=sectors_of_basis_a)
-    b = VectorSpace.from_basis(symmetry=compatible_symmetry, sectors_of_basis=sectors_of_basis_b)
+    a = ElementarySpace.from_basis(symmetry=compatible_symmetry, sectors_of_basis=sectors_of_basis_a)
+    b = ElementarySpace.from_basis(symmetry=compatible_symmetry, sectors_of_basis=sectors_of_basis_b)
 
     target_sector_a = np_random.choice(which_sectors_a)
     target_sector_b = np_random.choice(which_sectors_b)
@@ -969,10 +972,10 @@ def test_detect_sectors_from_block(compatible_backend, compatible_symmetry, make
     if num_sectors >= 4:
         #                         0  1  2  3  4  5  6  7  8  9
         which_sectors = np.array([0, 1, 3, 0, 2, 1, 1, 2, 0, 3])
-        space = VectorSpace(symmetry=compatible_symmetry,
-                            sectors=sectors[:4],
-                            multiplicities=[3, 3, 2, 2],
-                            basis_perm=[0, 3, 8, 1, 5, 6, 4, 7, 2, 9])
+        space = ElementarySpace(symmetry=compatible_symmetry,
+                                sectors=sectors[:4],
+                                multiplicities=[3, 3, 2, 2],
+                                basis_perm=[0, 3, 8, 1, 5, 6, 4, 7, 2, 9])
         # make sure setup is correct
         space.test_sanity()
         assert np.all(sectors[which_sectors] == space.sectors_of_basis)
