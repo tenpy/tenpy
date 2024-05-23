@@ -9,16 +9,17 @@ from tenpy.linalg import spaces, backends, symmetries
 def test_vector_space(any_symmetry, make_any_sectors, np_random):
     sectors = make_any_sectors(10)
     sectors = sectors[np.lexsort(sectors.T)]
+    dual_sectors = any_symmetry.dual_sectors(sectors)
+    dual_sectors_sort = np.lexsort(dual_sectors.T)
     mults = np_random.integers(1, 10, size=len(sectors))
 
     # TODO (JU) test real (as in "not complex") vectorspaces
 
-    s1 = spaces.VectorSpace(symmetry=any_symmetry, sectors=sectors, multiplicities=mults)
-    s2 = spaces.VectorSpace.from_trivial_sector(dim=8)
+    s1 = spaces.ElementarySpace(symmetry=any_symmetry, sectors=sectors, multiplicities=mults)
+    s2 = spaces.ElementarySpace.from_trivial_sector(dim=8)
 
-    print('checking VectorSpace.sectors')
+    print('checking ElementarySpace.sectors')
     npt.assert_array_equal(s2.sectors, symmetries.no_symmetry.trivial_sector[None, :])
-    npt.assert_array_equal(s1.dual.sectors, any_symmetry.dual_sectors(s1.sectors))
 
     print('checking str and repr')
     _ = str(s1)
@@ -27,31 +28,37 @@ def test_vector_space(any_symmetry, make_any_sectors, np_random):
     _ = repr(s2)
 
     print('checking duality and equality')
-    assert s1 == s1
-    assert s1 != s1.dual
+    assert_spaces_equal(s1, s1)
+    s1_dual = s1.dual
+    assert s1 != s1_dual
     assert s1 != s2
     wrong_mults = mults.copy()
     if len(mults) > 2:
         wrong_mults[-2] += 1
     else:
         wrong_mults[0] += 1
-    assert s1 != spaces.VectorSpace(symmetry=any_symmetry, sectors=sectors, multiplicities=wrong_mults)
-    assert s1.dual == spaces.VectorSpace(symmetry=any_symmetry, sectors=sectors, multiplicities=mults, _is_dual=True)
-    assert s1.can_contract_with(s1.dual)
-    assert not s1.can_contract_with(s1)
-    assert not s1.can_contract_with(s2)
+    assert s1 != spaces.ElementarySpace(symmetry=any_symmetry, sectors=sectors, multiplicities=wrong_mults)
+    npt.assert_array_equal(s1_dual.sectors, dual_sectors[dual_sectors_sort])
+    npt.assert_array_equal(s1_dual.multiplicities, s1.multiplicities[dual_sectors_sort])
+    assert s1_dual.symmetry == s1.symmetry
+    assert s1_dual.is_dual is True
+    #
+    s1_modified = spaces.ElementarySpace(s1.symmetry, sectors=s1.sectors, multiplicities=s1.multiplicities,
+                                         is_dual=not s1.is_dual, basis_perm=s1._basis_perm)
+    assert s1 != s1_modified
+    assert s1_modified == s1.with_opposite_duality()
 
     print('checking is_trivial')
     assert not s1.is_trivial
     assert not s2.is_trivial
-    assert spaces.VectorSpace.from_trivial_sector(dim=1).is_trivial
-    assert spaces.VectorSpace(symmetry=any_symmetry, sectors=any_symmetry.trivial_sector[np.newaxis, :]).is_trivial
+    assert spaces.ElementarySpace.from_trivial_sector(dim=1).is_trivial
+    assert spaces.ElementarySpace(symmetry=any_symmetry, sectors=any_symmetry.trivial_sector[np.newaxis, :]).is_trivial
 
     print('checking is_subspace_of')
-    same_sectors_less_mults = spaces.VectorSpace(
+    same_sectors_less_mults = spaces.ElementarySpace(
         symmetry=any_symmetry, sectors=sectors, multiplicities=[max(1, m - 1) for m in mults]
     )
-    same_sectors_different_mults = spaces.VectorSpace(
+    same_sectors_different_mults = spaces.ElementarySpace(
        symmetry=any_symmetry, sectors=sectors,
        multiplicities=[max(1, m + (+1 if i % 2 == 0 else -1)) for i, m in enumerate(mults)]
     )  # but at least one mult is larger than for s1
@@ -63,10 +70,10 @@ def test_vector_space(any_symmetry, make_any_sectors, np_random):
         # both of which have multiple entries
         which1 = [0]
         which2 = [-1]
-    fewer_sectors1 = spaces.VectorSpace(symmetry=any_symmetry, sectors=[sectors[i] for i in which1],
-                                        multiplicities=[mults[i] for i in which1])
-    fewer_sectors2 = spaces.VectorSpace(symmetry=any_symmetry, sectors=[sectors[i] for i in which2],
-                                        multiplicities=[mults[i] for i in which2])
+    fewer_sectors1 = spaces.ElementarySpace(symmetry=any_symmetry, sectors=[sectors[i] for i in which1],
+                                            multiplicities=[mults[i] for i in which1])
+    fewer_sectors2 = spaces.ElementarySpace(symmetry=any_symmetry, sectors=[sectors[i] for i in which2],
+                                            multiplicities=[mults[i] for i in which2])
     assert s1.is_subspace_of(s1)
     assert not s1.dual.is_subspace_of(s1)
     assert same_sectors_less_mults.is_subspace_of(s1)
@@ -103,7 +110,7 @@ def test_vector_space(any_symmetry, make_any_sectors, np_random):
     for expect in [2, 3, 4]:
         expect = expect % s1.num_sectors
         assert s1.sectors_where(s1.sectors[expect]) == expect
-        assert s1._non_dual_sectors_where(s1._non_dual_sectors[expect]) == expect
+        assert s1.sectors_where(s1.sectors[expect]) == expect
         assert s1.sector_multiplicity(s1.sectors[expect]) == s1.multiplicities[expect]
 
     print('check from_basis')
@@ -111,7 +118,7 @@ def test_vector_space(any_symmetry, make_any_sectors, np_random):
         with pytest.raises(ValueError, match='Sectors must appear in whole multiplets'):
             bad_sectors = np.array([0, 1, 1, 1, 2, 2, 2])[:, None]
             # have three basis vectors for 2-dimensional spin-1/2
-            _ = spaces.VectorSpace.from_basis(symmetry=any_symmetry, sectors_of_basis=bad_sectors)
+            _ = spaces.ElementarySpace.from_basis(symmetry=any_symmetry, sectors_of_basis=bad_sectors)
         
         # spins 0, 1/2 and 1, each two times
         #                         0  1  2  3  4  5  6  7  8  9  10 11
@@ -137,7 +144,7 @@ def test_vector_space(any_symmetry, make_any_sectors, np_random):
             expect_sectors = sectors[:3]
         expect_mults = np.sum(which_sectors[:, None] == np.arange(len(expect_sectors))[None, :], axis=0)
         sectors_of_basis = sectors[which_sectors]
-    space = spaces.VectorSpace.from_basis(symmetry=any_symmetry, sectors_of_basis=sectors_of_basis)
+    space = spaces.ElementarySpace.from_basis(symmetry=any_symmetry, sectors_of_basis=sectors_of_basis)
     npt.assert_array_equal(space.sectors, expect_sectors)
     npt.assert_array_equal(space.multiplicities, expect_mults)
     npt.assert_array_equal(space.basis_perm, expect_basis_perm)
@@ -145,7 +152,7 @@ def test_vector_space(any_symmetry, make_any_sectors, np_random):
     npt.assert_array_equal(space.sectors_of_basis, sectors_of_basis)
 
 
-def test_VectorSpace_from_sectors(any_symmetry, make_any_sectors, np_random):
+def test_ElementarySpace_from_sectors(any_symmetry, make_any_sectors, np_random):
     sectors = np.concatenate([make_any_sectors(5) for _ in range(5)])
     multiplicities = np_random.integers(1, 5, size=len(sectors))
     dim = np.sum(multiplicities * any_symmetry.batch_sector_dim(sectors))
@@ -168,7 +175,8 @@ def test_VectorSpace_from_sectors(any_symmetry, make_any_sectors, np_random):
     )
     expect_mults = np.sum(mult_contributions, axis=1)
     #
-    res = spaces.VectorSpace.from_sectors(any_symmetry, sectors, multiplicities, basis_perm)
+    res = spaces.ElementarySpace.from_sectors(symmetry=any_symmetry, sectors=sectors,
+                                              multiplicities=multiplicities, basis_perm=basis_perm)
     res.test_sanity()
     assert np.all(res.sectors == expect_sectors)
     assert np.all(res.multiplicities == expect_mults)
@@ -178,7 +186,7 @@ def test_VectorSpace_from_sectors(any_symmetry, make_any_sectors, np_random):
     internal_basis = np.array(internal_basis)
     public_basis = np.zeros_like(internal_basis)
     public_basis[res.basis_perm] = internal_basis
-    assert np.all(public_basis == expect_public_basis)
+    npt.assert_array_equal(public_basis, expect_public_basis)
 
 
 def test_take_slice(make_any_space, any_symmetry, np_random):
@@ -186,7 +194,7 @@ def test_take_slice(make_any_space, any_symmetry, np_random):
         sectors = np.array([0, 1, 2, 4])[:, None]
         mults = np.array([3, 1, 2, 2])
         basis_perm = np.array([19, 20, 17, 2, 9, 16, 8, 3, 0, 4, 11, 13, 5, 15, 12, 14, 10, 7, 1, 18, 6])
-        space = spaces.VectorSpace(any_symmetry, sectors, mults, basis_perm)
+        space = spaces.ElementarySpace(any_symmetry, sectors, mults, basis_perm)
 
         # build an allowed and an illegal mask in the internal basis order
         keep_states = []
@@ -204,7 +212,7 @@ def test_take_slice(make_any_space, any_symmetry, np_random):
             _ = space.take_slice(illegal_mask)
     else:
         assert any_symmetry.is_abelian, 'Need to design test differently for non-abelian symm'
-        space: spaces.VectorSpace = make_any_space()
+        space: spaces.ElementarySpace = make_any_space()
         mask = np_random.choice([True, False], size=space.dim)
 
     small = space.take_slice(mask)
@@ -215,63 +223,71 @@ def test_take_slice(make_any_space, any_symmetry, np_random):
     npt.assert_array_equal(x[mask][small.basis_perm], x[space.basis_perm][internal_mask])
 
 
-def test_product_space(any_symmetry, make_any_sectors, np_random):
-    sectors = make_any_sectors(10)  # note: may be fewer, if symmetry doesnt have enough
-    mults = np_random.integers(1, 10, size=len(sectors))
+def test_ProductSpace(make_any_space):
+    """Test TensorProduct and ProductSpace"""
+    V1, V2, V3 = [make_any_space() for _ in range(3)]
 
-    # TODO (JU) test real (as in "not complex") vectorspaces
+    examples = [
+        spaces.ProductSpace([V1, V2, V3]),  # (V1 x V2 x V3)
+        spaces.ProductSpace([V1, V2]),  # (V1 x V2)
+        spaces.ProductSpace([spaces.ProductSpace([V1, V2]), V3]),  # ((V1 x V2) x V3)
+        spaces.ProductSpace([V2.dual, V3]),  # V2* x V3
+        spaces.ProductSpace([V3.dual, V2]),  # V3* x V2
+        spaces.ProductSpace([V2]),  # V2
+        spaces.ProductSpace([], symmetry=V1.symmetry),  # Cbb
+    ]
+    expected_duals = [
+        spaces.ProductSpace([V3.dual, V2.dual, V1.dual]),
+        spaces.ProductSpace([V2.dual, V1.dual]),  # (V1 x V2)
+        spaces.ProductSpace([V3.dual, spaces.ProductSpace([V2.dual, V1.dual])]),
+        spaces.ProductSpace([V3.dual, V2]),  # V3* x V2
+        spaces.ProductSpace([V2.dual, V3]),  # V2* x V3
+        spaces.ProductSpace([V2.dual]),  # V2
+        spaces.ProductSpace([], symmetry=V1.symmetry),  # Cbb
+    ]
+    with pytest.raises(ValueError, match='If spaces is empty, the symmetry arg is required.'):
+        _ = spaces.ProductSpace([])
+    with pytest.raises(symmetries.SymmetryError, match='Incompatible symmetries.'):
+        weird_symmetry = symmetries.u1_symmetry * symmetries.u1_symmetry
+        _ = spaces.ProductSpace([V1], symmetry=weird_symmetry)
 
-    s1 = spaces.VectorSpace.from_sectors(symmetry=any_symmetry, sectors=sectors, multiplicities=mults)
-    s2 = spaces.VectorSpace.from_sectors(symmetry=any_symmetry, sectors=sectors[:2], multiplicities=mults[:2])
-    s3 = spaces.VectorSpace.from_sectors(symmetry=any_symmetry, sectors=sectors[::2], multiplicities=mults[::2])
+    for n, p1 in enumerate(examples):
+        print(f'{n}=')
+        print(p1)
+        
+        p1.test_sanity()
+        _ = str(p1)
+        _ = repr(p1)
 
-    p1 = spaces.ProductSpace([s1, s2, s3])
-    p2 = spaces.ProductSpace([s1, s2])
-    p3 = spaces.ProductSpace([spaces.ProductSpace([s1, s2]), s3])
+        print('  checking __eq__')
+        for m, p2 in enumerate(examples):
+            # by construction, expect equality exactly if m == n
+            assert (p1 == p2) == (n == m)
+        assert p1 != V1
+        assert p1 != V2
+        assert p1 != V3
 
-    npt.assert_array_equal(p1.sectors, p3.sectors)
+        print('  checking .dual')
+        p1_dual = p1.dual
+        for m, p2 in enumerate(expected_duals):
+            # by construction, expect equality exactly if m == n
+            assert (p1_dual == p2) == (n == m)
+        
+        _ = p1.as_ElementarySpace()
 
-    _ = str(p1)
-    _ = str(p3)
-    _ = repr(p1)
-    _ = repr(p3)
-
-    assert p1 == p1
-    assert p1 != s1
-    assert s1 != p1
-    assert p1 != p3
-    assert p2 == spaces.ProductSpace([s1.dual, s2.dual], _is_dual=True).dual
-    for p in [p1, p2, p3]:
-        assert p.can_contract_with(p.dual)
-    assert p2 == spaces.ProductSpace([s1, s2], _is_dual=True).flip_is_dual()
-    
-    assert p2.can_contract_with(spaces.ProductSpace([s1.dual, s2.dual], _is_dual=False).flip_is_dual())
-    assert p2.can_contract_with(spaces.ProductSpace([s1.dual, s2.dual]))  # check default _is_dual
-    assert p2.can_contract_with(spaces.ProductSpace([s1.dual, s2.dual], _is_dual=True))
-    
-    p1_s = p1.as_VectorSpace()
-    assert isinstance(p1_s, spaces.VectorSpace)
-    assert np.all(p1_s.sectors == p1.sectors)
-    assert np.all(p1_s.multiplicities == p1.multiplicities)
-    assert not p1_s.is_equal_or_dual(p1)
-    assert p1_s != p1
-    assert p1 != p1_s
-
-    # check empty product
-    empty_product = spaces.ProductSpace([], symmetry=any_symmetry, is_real=s1.is_real)
-    monoidal_unit = spaces.VectorSpace.from_trivial_sector(1, any_symmetry)
-    _ = str(empty_product)
-    _ = repr(empty_product)
-    assert empty_product != p1
-    assert empty_product != monoidal_unit
-    assert empty_product.as_VectorSpace() == monoidal_unit
-
+    print('empty product is monoidal unit?')
+    empty_product = spaces.ProductSpace([], symmetry=V1.symmetry)
+    assert np.all(empty_product.sectors == V1.symmetry.trivial_sector)
+    assert np.all(empty_product.multiplicities == np.ones(1, dtype=int))
+    monoidal_unit = spaces.ElementarySpace.from_trivial_sector(dim=1, symmetry=V1.symmetry)
+    assert empty_product.as_ElementarySpace() == monoidal_unit
+        
 
 def test_ProductSpace_SU2():
     sym = symmetries.SU2Symmetry()
-    a = spaces.VectorSpace(sym, [[0], [3], [2]], [2, 3, 4])
-    b = spaces.VectorSpace(sym, [[1], [4]], [5, 6])
-    c = spaces.VectorSpace(sym, [[0], [3], [1]], [3, 1, 2])
+    a = spaces.ElementarySpace(sym, [[0], [3], [2]], [2, 3, 4])
+    b = spaces.ElementarySpace(sym, [[1], [4]], [5, 6])
+    c = spaces.ElementarySpace(sym, [[0], [3], [1]], [3, 1, 2])
 
     ab = spaces.ProductSpace([a, b])
     # a     b           fusion
@@ -282,7 +298,6 @@ def test_ProductSpace_SU2():
     # 3/2   2              18      18      18      18
     # 1     1/2            20      20
     # 1     2                  24      24      24
-    # COUNTS
     npt.assert_array_equal(ab.sectors, np.array([1, 2, 3, 4, 5, 6, 7])[:, None])
     npt.assert_array_equal(ab.multiplicities, np.array([48, 39, 38, 51, 18, 24, 18]))
 
@@ -295,7 +310,6 @@ def test_ProductSpace_SU2():
     # 3/2   2      1*6          6       6       6       6
     # 1/2   1/2    2*5     10      10
     # 1/2   2      2*6                 12      12
-    # COUNTS
     npt.assert_array_equal(bc.sectors, np.array([0, 1, 2, 3, 4, 5, 7])[:, None])
     npt.assert_array_equal(bc.multiplicities, np.array([10, 21, 15, 18, 23, 18, 6]))
 
@@ -333,7 +347,7 @@ def test_ProductSpace_SU2():
 def test_get_basis_transformation():
     # TODO expand this
     even, odd = [0], [1]
-    spin1 = spaces.VectorSpace.from_basis(symmetries.z2_symmetry, [even, odd, even])
+    spin1 = spaces.ElementarySpace.from_basis(symmetries.z2_symmetry, [even, odd, even])
     assert np.array_equal(spin1.sectors, [even, odd])
     assert np.array_equal(spin1.basis_perm, [0, 2, 1])
     backend = backends.get_backend(block_backend='numpy', symmetry='abelian')
@@ -356,14 +370,14 @@ def test_get_basis_transformation():
     assert np.all(perm == expect)
 
 
-# TODO systematically test VectorSpace class methods
+# TODO systematically test ElementarySpace class methods
 
 
 def test_direct_sum(make_any_space, max_mult=5, max_sectors=5):
     a = make_any_space(max_mult=max_mult, max_sectors=max_sectors)
     b = make_any_space(max_mult=max_mult, max_sectors=max_sectors, is_dual=a.is_dual)
     c = make_any_space(max_mult=max_mult, max_sectors=max_sectors, is_dual=a.is_dual)
-    assert a == spaces.VectorSpace.direct_sum(a)
+    assert a == spaces.ElementarySpace.direct_sum(a)
     d = a.direct_sum(b, c)
     expect = np.concatenate([leg.sectors_of_basis for leg in [a, b, c]], axis=0)
     npt.assert_array_equal(d.sectors_of_basis, expect)
@@ -382,7 +396,7 @@ def test_str_repr(make_any_space, str_max_lines=20, repr_max_lines=20):
     space = make_any_space(max_sectors=20)
 
     print('----------------------')
-    print('VectorSpace.__repr__()')
+    print('ElementarySpace.__repr__()')
     print('----------------------')
     res = repr(space)
     assert len(res) <= repr_max_len
@@ -392,7 +406,7 @@ def test_str_repr(make_any_space, str_max_lines=20, repr_max_lines=20):
     print()
     print()
     print('----------------------')
-    print('VectorSpace.__str__() ')
+    print('ElementarySpace.__str__() ')
     print('----------------------')
     res = str(space)
     assert len(res) <= str_max_len
@@ -421,3 +435,30 @@ def test_str_repr(make_any_space, str_max_lines=20, repr_max_lines=20):
         assert len(res) <= str_max_len
         assert res.count('\n') <= str_max_lines
         print(res)
+
+
+# FIXME move to some testing tools module?
+def assert_spaces_equal(space1: spaces.Space, space2: spaces.Space):
+    if isinstance(space1, spaces.ElementarySpace):
+        assert isinstance(space2, spaces.ElementarySpace), 'mismatching types'
+        assert space1.is_dual == space2.is_dual, 'mismatched is_dual'
+        assert space1.symmetry == space2.symmetry, 'mismatched symmetry'
+        assert space1.num_sectors == space2.num_sectors, 'mismatched num_sectors'
+        assert np.all(space1.multiplicities == space2.multiplicities), 'mismatched multiplicities'
+        assert np.all(space1.sectors == space2.sectors), 'mismatched sectors'
+        if (space1._basis_perm is not None) or (space2._basis_perm is not None):
+            # otherwise both are trivial and this match
+            assert np.all(space1.basis_perm == space2.basis_perm), 'mismatched basis_perm'
+    elif isinstance(space1, spaces.ProductSpace):
+        assert isinstance(space2, spaces.ProductSpace), 'mismatching types'
+        assert space1.num_spaces == space2.num_spaces
+        for n, (s1, s2) in enumerate(zip(space1.spaces, space2.spaces)):
+            try:
+                assert_spaces_equal(s1, s2)
+            except AssertionError as e:
+                raise AssertionError(f'Mismatched spaces[{n}]: {str(e)}') from None
+    else:
+        raise ValueError('Not a known Space type')
+
+    # should have checked all conditions already, but just to be sure do this again
+    assert space1 == space2

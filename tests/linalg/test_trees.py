@@ -6,7 +6,7 @@ import pytest
 
 from tenpy.linalg import trees
 from tenpy.linalg.symmetries import Symmetry, ProductSymmetry
-from tenpy.linalg.spaces import VectorSpace, ProductSpace
+from tenpy.linalg.spaces import Space, ElementarySpace, ProductSpace
 from tenpy.linalg.dtypes import Dtype
 from tenpy.linalg.backends.backend_factory import get_backend
 
@@ -59,7 +59,7 @@ def test_fusion_trees(any_symmetry: Symmetry, make_any_sectors, np_random):
     uncoupled = some_sectors[:5]
     are_dual = np_random.choice([True, False], size=len(uncoupled), replace=True)
     # find the allowed coupled sectors
-    allowed = ProductSpace([VectorSpace(any_symmetry, [a]) for a in uncoupled]).sectors
+    allowed = ProductSpace([ElementarySpace(any_symmetry, [a]) for a in uncoupled]).sectors
     some_allowed = np_random.choice(allowed, axis=0)
     print(f'  uncoupled={", ".join(map(str, uncoupled))}   coupled={some_allowed}')
     it = trees.fusion_trees(any_symmetry, uncoupled, some_allowed, are_dual=are_dual)
@@ -116,9 +116,9 @@ def check_to_block(symmetry, backend, uncoupled, np_random, dtype):
         expect_dtype = dtype
         
     uncoupled_dims = symmetry.batch_sector_dim(uncoupled)
-    spaces = [VectorSpace(symmetry, [a]) for a in uncoupled]
+    spaces = [ElementarySpace(symmetry, [a]) for a in uncoupled]
     domain = ProductSpace(spaces, backend)
-    coupled = np_random.choice(domain._non_dual_sectors)
+    coupled = np_random.choice(domain.sectors)
     coupled_dim = symmetry.sector_dim(coupled)
     all_trees = list(trees.fusion_trees(symmetry, uncoupled, coupled))
     all_blocks = [t.as_block(backend, dtype) for t in all_trees]

@@ -10,7 +10,7 @@ from tenpy.linalg.spaces import ProductSpace
 def test_block_sizes(any_symmetry, make_any_space, make_any_sectors, block_backend, num_spaces):
     backend = get_backend('fusion_tree', block_backend)
     spaces = [make_any_space() for _ in range(num_spaces)]
-    domain = ProductSpace(spaces, backend, any_symmetry)
+    domain = ProductSpace(spaces, symmetry=any_symmetry, backend=backend)
 
     for coupled in make_any_sectors(10):
         expect = sum(fusion_tree_backend.forest_block_size(domain, uncoupled, coupled)

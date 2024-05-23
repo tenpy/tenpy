@@ -135,8 +135,8 @@ def make_any_sectors(any_symmetry, np_random):
 
 @pytest.fixture
 def make_any_space(any_symmetry, np_random):
-    def make(max_sectors: int = 5, max_mult: int = 5, is_dual: bool = None) -> spaces.VectorSpace:
-        # return VectorSpace
+    def make(max_sectors: int = 5, max_mult: int = 5, is_dual: bool = None) -> spaces.ElementarySpace:
+        # return ElementarySpace
         return random_vector_space(any_symmetry, max_sectors, max_mult, is_dual, np_random=np_random)
     return make
 
@@ -197,8 +197,8 @@ def make_compatible_sectors(compatible_symmetry, np_random):
 
 @pytest.fixture
 def make_compatible_space(compatible_symmetry, np_random):
-    def make(max_sectors: int = 5, max_mult: int = 5, is_dual: bool = None) -> spaces.VectorSpace:
-        # returns VectorSpace
+    def make(max_sectors: int = 5, max_mult: int = 5, is_dual: bool = None) -> spaces.ElementarySpace:
+        # returns ElementarySpace
         return random_vector_space(compatible_symmetry, max_sectors, max_mult, is_dual, np_random=np_random)
     return make
 
@@ -294,7 +294,7 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, make_compati
                 new_leg = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
                 # make sure leg has the trivial space, so we can allow some blocks
                 if new_leg.sector_multiplicity(compatible_symmetry.trivial_sector) == 0:
-                    sectors = new_leg._non_dual_sectors
+                    sectors = new_leg.sectors
                     where = np_random.choice(len(sectors))
                     sectors[where] = compatible_symmetry.trivial_sector
                     # have potentially replaced higher-dimensional sectors with one-dimensional trivial sectors
@@ -302,7 +302,7 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, make_compati
                     # correct for that by increasing the multiplicities of the trivial sectors.
                     mults = new_leg.multiplicities
                     mults[where] *= compatible_symmetry.sector_dim(sectors[where])  
-                    new_leg = spaces.VectorSpace.from_sectors(
+                    new_leg = spaces.ElementarySpace.from_sectors(
                         new_leg.symmetry, sectors, mults, new_leg.basis_perm
                     )
             else:
@@ -383,8 +383,8 @@ def random_vector_space(symmetry, max_num_blocks=5, max_block_size=5, is_dual=No
     mults = np_random.integers(min_mult, max_block_size, size=(len(sectors),), endpoint=True)
     dim = np.sum(symmetry.batch_sector_dim(sectors) * mults)
     basis_perm = np_random.permutation(dim) if np_random.random() < 0.7 else None
-    res = spaces.VectorSpace(
-        symmetry, sectors, mults, basis_perm=basis_perm, is_real=False
+    res = spaces.ElementarySpace(
+        symmetry, sectors, mults, basis_perm=basis_perm,
     )
     if (is_dual is None and np_random.random() < 0.5) or (is_dual is True):
         res = res.dual
@@ -441,7 +441,7 @@ def randomly_drop_blocks(res: tensors.BlockDiagonalTensor | tensors.DiagonalTens
 def find_compatible_leg(others, max_sectors: int, max_mult: int, extra_sectors=None,
                         np_random=np.random.default_rng()):
     """Find a leg such that ``[*others, new_leg]`` allows non-zero tensors."""
-    prod = spaces.ProductSpace(others).as_VectorSpace()
+    prod = spaces.ProductSpace(others).as_ElementarySpace()
     sectors = prod.symmetry.dual_sectors(prod.sectors)
     mults = prod.multiplicities
     if len(sectors) > max_sectors:
@@ -465,7 +465,7 @@ def find_compatible_leg(others, max_sectors: int, max_mult: int, extra_sectors=N
     sectors = sectors[order]
     mults = mults[order]
     
-    res = spaces.VectorSpace(prod.symmetry, sectors, mults)
+    res = spaces.ElementarySpace(prod.symmetry, sectors, mults)
 
     # check that it actually worked
     assert spaces.ProductSpace([*others, res]).sector_multiplicity(prod.symmetry.trivial_sector) > 0

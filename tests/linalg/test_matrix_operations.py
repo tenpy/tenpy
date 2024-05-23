@@ -400,7 +400,7 @@ def test_eigh(make_compatible_tensor, make_compatible_space, real, sort, new_leg
     assert U.dtype == T.dtype
 
     print('checking legs and labels')
-    new_leg = spaces.ProductSpace([a, b]).as_VectorSpace().dual
+    new_leg = spaces.ProductSpace([a, b]).as_ElementarySpace().dual
     if new_leg.is_dual != new_leg_dual:
         new_leg = new_leg.flip_is_dual()
     assert D.legs == [new_leg.dual, new_leg]

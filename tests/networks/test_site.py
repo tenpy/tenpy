@@ -32,7 +32,7 @@ def test_site(np_random, block_backend, symmetry_backend, use_sym):
         sym = la.no_symmetry
     dim = 8
     some_sectors = random_symmetry_sectors(sym, num=dim, sort=False, np_random=np_random)
-    leg = la.VectorSpace.from_basis(sym, np_random.choice(some_sectors, size=dim, replace=True))
+    leg = la.ElementarySpace.from_basis(sym, np_random.choice(some_sectors, size=dim, replace=True))
     assert leg.dim == dim
     op1 = la.BlockDiagonalTensor.random_uniform([leg, leg.dual], backend, labels=['p', 'p*'])
     labels = [f'x{i:d}' for i in range(10, 10 + dim)]

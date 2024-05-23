@@ -11,7 +11,7 @@ from .abstract_backend import (
 )
 from ..dtypes import Dtype
 from ..symmetries import Sector, SectorArray, Symmetry, FusionStyle
-from ..spaces import VectorSpace, ProductSpace
+from ..spaces import Space, ElementarySpace, ProductSpace
 from ..trees import FusionTree, fusion_trees
 
 if TYPE_CHECKING:
@@ -98,21 +98,19 @@ def _tree_block_iter(data: FusionTreeData, backend: BlockBackend):
             i2_forest += forest_block_width
 
 
-def _make_domain_codomain(legs: list[VectorSpace], num_domain_legs: int = 0, backend=None
+def _make_domain_codomain(legs: list[Space], num_domain_legs: int = 0, backend=None
                           ) -> tuple[ProductSpace, ProductSpace]:
     assert 0 <= num_domain_legs <= len(legs)
     num_codomain_legs = len(legs) - num_domain_legs
     # need to pass symmetry and is_real, since codomain or domain might be the empty product.
     symmetry = legs[0].symmetry
-    is_real = legs[0].is_real
     domain = ProductSpace([l.dual for l in reversed(legs[num_codomain_legs:])], backend=backend,
-                          symmetry=symmetry, is_real=is_real, _is_dual=False)
-    codomain = ProductSpace(legs[:num_codomain_legs], backend=backend, symmetry=symmetry,
-                            is_real=is_real, _is_dual=False)
+                          symmetry=symmetry)
+    codomain = ProductSpace(legs[:num_codomain_legs], backend=backend, symmetry=symmetry)
     return domain, codomain
 
 
-def _iter_sectors_mults_slices(spaces: list[VectorSpace], symmetry: Symmetry
+def _iter_sectors_mults_slices(spaces: list[Space], symmetry: Symmetry
                                ) -> Iterator[tuple[SectorArray, list[int], list[slice]]]:
     """Helper iterator over all combinations of sectors and respective mults and slices.
     
@@ -165,7 +163,7 @@ class FusionTreeData:
 
             T.legs == [W.dual for W in domain.spaces] + codomain.spaces[::-1]
         
-        OPTIMIZE Should we use list[VectorSpace] instead of ProductSpace to save some
+        OPTIMIZE Should we use list[Space] instead of ProductSpace to save some
                  potential overhead from ProductSpace.__init__ computing its sectors?
                  Having these coupled sectors is *sometimes* useful.
                  Not clear right now if it always is.
@@ -304,7 +302,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         # build in internal basis order first, then apply permutations in the end
         # build in codomain/domain leg order first, then permute legs in the end
         # [i1,...,iJ,j1,...,jK]
-        shape = [leg.dim for leg in a.data.codomain.spaces] + [leg.dim for leg in a.data.domain]
+        shape = [leg.dim for leg in a.data.codomain.spaces] + [leg.dim for leg in a.data.domain.spaces]
         res = self.zero_block(shape, dtype)
         for coupled, block in zip(a.data.coupled_sectors, a.data.blocks):
             i1 = 0  # start row index of the current forest block
@@ -395,7 +393,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def diagonal_to_block(self, a: DiagonalTensor) -> Block:
         raise NotImplementedError  # TODO
 
-    def from_dense_block(self, a: Block, legs: list[VectorSpace], num_domain_legs: int,
+    def from_dense_block(self, a: Block, legs: list[Space], num_domain_legs: int,
                          tol: float = 1e-8) -> FusionTreeData:
         sym = legs[0].symmetry
         assert sym.can_be_dropped
@@ -412,8 +410,8 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         coupled_sectors = []
         blocks = []
         norm_sq_projected = 0
-        for i, _ in _iter_common_sorted_arrays(domain._non_dual_sectors, codomain._non_dual_sectors):
-            coupled = domain._non_dual_sectors[i]
+        for i, _ in _iter_common_sorted_arrays(domain.sectors, codomain.sectors):
+            coupled = domain.sectors[i]
             dim_c = sym.sector_dim(coupled)
               # OPTIMIZE could be sth like np.empty
             block = self.zero_block([block_size(codomain, coupled), block_size(domain, coupled)], dtype)
@@ -528,19 +526,19 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         num_beta_trees = len(beta_tree_iter)
         return num_alpha_trees, num_beta_trees
 
-    def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
+    def diagonal_from_block(self, a: Block, leg: Space) -> DiagonalData:
         raise NotImplementedError('diagonal_from_block not implemented')  # TODO
 
-    def mask_from_block(self, a: Block, large_leg: VectorSpace, small_leg: VectorSpace) -> DiagonalData:
+    def mask_from_block(self, a: Block, large_leg: Space, small_leg: ElementarySpace) -> DiagonalData:
         raise NotImplementedError('mask_from_block not implemented')  # TODO
 
-    def from_block_func(self, func, legs: list[VectorSpace], num_domain_legs: int, func_kwargs={}
+    def from_block_func(self, func, legs: list[Space], num_domain_legs: int, func_kwargs={}
                         ) -> FusionTreeData:
         domain, codomain = _make_domain_codomain(legs, num_domain_legs=num_domain_legs, backend=self)
         coupled_sectors = []
         blocks = []
-        for i, _ in _iter_common_sorted_arrays(domain._non_dual_sectors, codomain._non_dual_sectors):
-            coupled = domain._non_dual_sectors[i]
+        for i, _ in _iter_common_sorted_arrays(domain.sectors, codomain.sectors):
+            coupled = domain.sectors[i]
             shape = (block_size(codomain, coupled), block_size(domain, coupled))
             coupled_sectors.append(coupled)
             blocks.append(func(shape, **func_kwargs))
@@ -553,26 +551,26 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         dtype = self.block_dtype(sample_block)
         return FusionTreeData(coupled_sectors, blocks, domain, codomain, dtype)
 
-    def diagonal_from_block_func(self, func, leg: VectorSpace, func_kwargs={}) -> DiagonalData:
+    def diagonal_from_block_func(self, func, leg: Space, func_kwargs={}) -> DiagonalData:
         raise NotImplementedError('diagonal_from_block_func not implemented')  # TODO
 
-    def zero_data(self, legs: list[VectorSpace], dtype: Dtype, num_domain_legs: int) -> FusionTreeData:
+    def zero_data(self, legs: list[Space], dtype: Dtype, num_domain_legs: int) -> FusionTreeData:
         domain, codomain = _make_domain_codomain(legs, num_domain_legs=num_domain_legs, backend=self)
         return FusionTreeData(coupled_sectors=codomain.symmetry.empty_sector_array, blocks=[],
                               domain=domain, codomain=codomain, dtype=dtype)
 
-    def zero_diagonal_data(self, leg: VectorSpace, dtype: Dtype) -> DiagonalData:
+    def zero_diagonal_data(self, leg: Space, dtype: Dtype) -> DiagonalData:
         raise NotImplementedError('zero_diagonal_data not implemented')  # TODO
 
-    def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> FusionTreeData:
+    def eye_data(self, legs: list[Space], dtype: Dtype) -> FusionTreeData:
         # Note: the identity has the same matrix elements in all ONB, so ne need to consider
         #       the basis perms.
         # all_legs = legs + [leg.dual for leg in legs[::-1]]
         # domain == [l.dual for l in all_legs[J:]] == legs
         # codomain == all_legs[:J] == legs
         # which makes intuitive sense, this is what we want from the identity *map*.
-        domain = ProductSpace(legs, backend=self, _is_dual=False)
-        coupled_sectors = domain._non_dual_sectors
+        domain = ProductSpace(legs, backend=self)
+        coupled_sectors = domain.sectors
         blocks = [self.eye_matrix(block_size(domain, c), dtype) for c in coupled_sectors]
         return FusionTreeData(coupled_sectors, blocks, domain, domain, dtype)
 
@@ -638,13 +636,13 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         raise NotImplementedError('tdot not implemented')  # TODO
 
     def svd(self, a: BlockDiagonalTensor, new_vh_leg_dual: bool, algorithm: str | None,
-            compute_u: bool, compute_vh: bool) -> tuple[Data, DiagonalData, Data, VectorSpace]:
+            compute_u: bool, compute_vh: bool) -> tuple[Data, DiagonalData, Data, ElementarySpace]:
         # TODO need to redesign Backend.svd specification! need to allow more than two legs!
         # TODO need to be able to specify levels of braiding in general case!
         raise NotImplementedError('svd not implemented')  # TODO
 
     def qr(self, a: BlockDiagonalTensor, new_r_leg_dual: bool, full: bool
-           ) -> tuple[Data, Data, VectorSpace]:
+           ) -> tuple[Data, Data, ElementarySpace]:
         # TODO do SVD first, comments there apply.
         raise NotImplementedError('qr not implemented')  # TODO
 
@@ -679,11 +677,11 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def combine_legs(self, a: BlockDiagonalTensor, combine_slices: list[int, int],
                      product_spaces: list[ProductSpace], new_axes: list[int],
-                     final_legs: list[VectorSpace]) -> Data:
+                     final_legs: list[Space]) -> Data:
         raise NotImplementedError('combine_legs not implemented')  # TODO
         
     def split_legs(self, a: BlockDiagonalTensor, leg_idcs: list[int],
-                   final_legs: list[VectorSpace]) -> Data:
+                   final_legs: list[Space]) -> Data:
         # TODO do we need metadata to split, like in abelian?
         raise NotImplementedError('split_legs not implemented')  # TODO
 
@@ -756,8 +754,8 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
             dtype = self.block_dtype(blocks[0])
         return FusionTreeData(b.data.coupled_sectors, blocks, b.data.domain, b.data.codomain, dtype)
 
-    def infer_leg(self, block: Block, legs: list[VectorSpace | None], is_dual: bool = False,
-                  is_real: bool = False) -> VectorSpace:
+    def infer_leg(self, block: Block, legs: list[Space | None], is_dual: bool = False,
+                  is_real: bool = False) -> ElementarySpace:
         raise NotImplementedError('infer_leg not implemented')  # TODO
 
     def get_element(self, a: BlockDiagonalTensor, idcs: list[int]) -> complex | float | bool:
@@ -810,20 +808,20 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         # TODO do SVD first, comments there apply.
         raise NotImplementedError('eigh not implemented')  # TODO
 
-    def from_flat_block_trivial_sector(self, block: Block, leg: VectorSpace) -> Data:
+    def from_flat_block_trivial_sector(self, block: Block, leg: Space) -> Data:
         raise NotImplementedError('from_flat_block_trivial_sector not implemented')  # TODO
 
     def to_flat_block_trivial_sector(self, tensor: BlockDiagonalTensor) -> Block:
         raise NotImplementedError('to_flat_block_trivial_sector not implemented')  # TODO
 
-    def inv_part_from_flat_block_single_sector(self, block: Block, leg: VectorSpace,
-                                               dummy_leg: VectorSpace) -> Data:
+    def inv_part_from_flat_block_single_sector(self, block: Block, leg: Space,
+                                               dummy_leg: ElementarySpace) -> Data:
         raise NotImplementedError('inv_part_from_flat_block_single_sector not implemented')  # TODO
 
     def inv_part_to_flat_block_single_sector(self, tensor: BlockDiagonalTensor) -> Block:
         raise NotImplementedError('inv_part_to_flat_block_single_sector not implemented')  # TODO
 
     def flip_leg_duality(self, tensor: BlockDiagonalTensor, which_legs: list[int],
-                         flipped_legs: list[VectorSpace], perms: list[np.ndarray]) -> Data:
+                         flipped_legs: list[Space], perms: list[np.ndarray]) -> Data:
         # TODO think carefully about what this means.
         raise NotImplementedError('flip_leg_duality not implemented')  # TODO
