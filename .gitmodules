@@ -5,5 +5,5 @@
 	path = doc/toycodes
 	url = https://github.com/tenpy/tenpy_toycodes
 [submodule "tenpy/linalg/generate_clebsch_gordon"]
-	path = tenpy/linalg/generate_clebsch_gordon
+	path = tenpy/linalg/generate_clebsch_gordan
 	url = git@github.com:tenpy/clebsch_gordan_coefficients.git
