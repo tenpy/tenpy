@@ -605,6 +605,7 @@ def decompose_theta_qr_based(old_B_L: npc.Array, old_B_R: npc.Array, theta: npc.
             if use_eig_based_svd:
                 t_R = npc.tensordot(Xi, B_R, ['vR', 'vL'])
                 t_R = npc.tensordot(U.iconj(), t_R, ['vL*', 'vL']).ireplace_label('vR*', 'vL')
+                t_R *= 1/npc.norm(t_R)
                 form[1] = 'Th'
             else:
                 t_R = npc.tensordot(Vd, B_R, ['vR', 'vL'])
@@ -614,6 +615,7 @@ def decompose_theta_qr_based(old_B_L: npc.Array, old_B_R: npc.Array, theta: npc.
             if use_eig_based_svd:
                 t_L = npc.tensordot(A_L, Xi, ['vR', 'vL'])
                 t_L = npc.tensordot(t_L, Vd.iconj(), ['vR', 'vR*']).ireplace_label('vL*', 'vR')
+                t_L *= 1/npc.norm(t_L)
                 form[0] = 'Th'
             else:
                 t_L = npc.tensordot(A_L, U, ['vR', 'vL'])

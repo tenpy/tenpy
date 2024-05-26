@@ -2455,10 +2455,7 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
         new_psi = self.psi
 
         expand = self._expansion_rate(i0)
-        use_eig_based_svd = self.options.get('use_eig_based_svd', False)
-        if use_eig_based_svd:
-            # TODO: Adapt VariationalApplyMPO that it can handle 'Th' form to allow EIG based SVD.
-            raise NotImplementedError("VariationalApplyMPO cannot handle 'Th' form.")
+        use_eig_based_svd = self.options.get('use_eig_based_svd', False)        
         t_L, S, t_R, form, err, renormalize = decompose_theta_qr_based(
                                                 old_B_L=new_psi.get_B(i0, 'B'), old_B_R=new_psi.get_B(i0+1, 'B'), 
                                                 theta=theta, get_left_side=self.move_right,
