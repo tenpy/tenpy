@@ -1,0 +1,2 @@
+- fix expectation values during the imaginary evolution with :class:`tenpy.algorithms.purification.PurificationTEBD` by calling 
+  :meth:`~tenpy.networks.mps.PurificationMPS.canonical_form`.

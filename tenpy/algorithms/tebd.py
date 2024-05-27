@@ -154,7 +154,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             step = 0
             while (DeltaE > max_error_E):
                 if self.psi.finite and TrotterOrder == 2:
-                    self.update_imag(N_steps)
+                    self.update_imag(N_steps, call_canonical_form=False)
                 else:
                     self.evolve(N_steps, delta_tau)
                 step += N_steps
@@ -468,17 +468,26 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         self._trunc_err_bonds[i] = self._trunc_err_bonds[i] + trunc_err
         return trunc_err
 
-    def update_imag(self, N_steps):
+    def update_imag(self, N_steps, call_canonical_form=True):
         """Perform an update suitable for imaginary time evolution.
 
         Instead of the even/odd brick structure used for ordinary TEBD,
         we 'sweep' from left to right and right to left, similar as DMRG.
-        Thanks to that, we are actually able to preserve the canonical form.
+        Thanks to that, we are able to preserve at least the orthonormality
+        of the canoncial form.
+
 
         Parameters
         ----------
         N_steps : int
             The number of steps for which the whole lattice should be updated.
+        call_canonical_from : bool
+            The singular values saved in the MPS are not exactly correct after the update,
+            since the non-unitary update on other bonds can change them.
+            To fix this, we call `psi.canonical_form` at the end.
+            Since this is about as a expensive as a single sweep, we allow to disable it,
+            e.g. during the imaginary evolution looking for ground states where the intermediate
+            results is not so critical.
 
         Returns
         -------
@@ -513,6 +522,9 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         self.evolved_time = self.evolved_time + N_steps * self._U_param['tau']
         self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
         # (this is done to avoid problems of users storing self.trunc_err after each `update`)
+        if call_canonical_form:
+            # get correct singular values on all bonds to fix expectation values
+            self.psi.canonical_form()
         return trunc_err
 
     def update_bond_imag(self, i, U_bond):

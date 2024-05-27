@@ -114,7 +114,9 @@ class PurificationTEBD(tebd.TEBDEngine):
         self.used_disentangler = get_disentangler(str(method), self)
 
     def run_imaginary(self, beta):
-        """Run imaginary time evolution to cool down to the given `beta`.
+        """Run imaginary time evolution to cool down by the given `beta`.
+
+        Applies imaginary time evolution `exp(-beta H)` to :attr:`psi`.
 
         Note that we don't change the `norm` attribute of the MPS, i.e. normalization is preserved.
 
@@ -128,7 +130,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         delta_t = self.options.get('dt', 0.1)
         TrotterOrder = 2  # currently, imaginary time evolution works only for second order.
         self.calc_U(TrotterOrder, delta_t, type_evo='imag')
-        self.update_imag(N_steps=int(beta / delta_t + 0.5))
+        self.update_imag(N_steps=int(beta / delta_t + 0.5), call_canonical_form=True)
         logger.info(
             "--> beta=%(beta).6f, E_bond=%(E).10f, max(S)=%(S).10f", {
                 'beta': -self.evolved_time.imag,
