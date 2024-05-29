@@ -1850,7 +1850,6 @@ class SU2_kAnyonCategory(Symmetry):
     """:math:`SU(2)_k` anyon category.
 
     .. todo ::
-        Implement C-symbols without fallback? -> need to save them
         We probably want to introduce the option to save and load R-symbols, F-symbols, etc.
         Otherwise, for "large" k, constructing the data takes too much time
 
@@ -1885,31 +1884,22 @@ class SU2_kAnyonCategory(Symmetry):
 
         self._r = {}
         for jj1, jj2, jj in product(range(self.k + 1), repeat=3):
-            if jj > jj1 + jj2 or jj < abs(jj1 - jj2) or jj1 * jj2 == 0:
-                continue  # do not save trivial R-symbols
+            if jj > jj1 + jj2 or jj < abs(jj1 - jj2) or jj1 * jj2 == 0 or jj1 < jj2:
+                continue  # do not save trivial R-symbols and use symmetry jj1 <-> jj2
             factor = (-1)**((jj - jj1 - jj2) / 2)
             factor *= self._q**(( jj*(jj+2) - jj1*(jj1+2) - jj2*(jj2+2) ) / 8)
             if self.handedness == 'right':
                 factor = factor.conj()
             self._r[(jj1, jj2, jj)] = factor * self._one_1D
 
-        self._f = {}
+        self._6j = {}
         for jj1, jj2, jj3, jj, jj12, jj23 in product(range(self.k + 1), repeat=6):
-            if jj1 * jj2 * jj3 == 0:  # do not save trivial F-symbols
+            if not (jj1 == np.max([jj1, jj2, jj3, jj, jj12, jj23]) and
+                                    jj2 == np.max([jj2, jj, jj12, jj23])):
                 continue
             jsymbol = self._j_symbol(jj1, jj2, jj12, jj3, jj, jj23)
             if jsymbol != 0:
-                prefactor = (-1)**((jj + jj1 + jj2 + jj3) / 2)
-                prefactor *= np.sqrt(self._n_q(jj12 + 1) * self._n_q(jj23 + 1))
-                self._f[(jj1, jj2, jj3, jj, jj23, jj12)] = prefactor * jsymbol * self._one_4D
-
-        self._c = {}
-        for jj1, jj2, jj3, jj, jj12, jj13 in product([np.array([i]) for i in range(self.k + 1)], repeat=6):
-            if jj2[0] * jj3[0] == 0:  # do not save trivial F-symbols
-                continue
-            if (self.can_fuse_to(jj1, jj2, jj12) and self.can_fuse_to(jj12, jj3, jj) and
-                    self.can_fuse_to(jj1, jj3, jj13) and self.can_fuse_to(jj13, jj2, jj)):
-                self._c[(jj1[0], jj2[0], jj3[0], jj[0], jj12[0], jj13[0])] = super()._c_symbol(jj1, jj2, jj3, jj, jj12, jj13)
+                self._6j[(jj1, jj2, jj12, jj3, jj, jj23)] = jsymbol
 
     def _n_q(self, n: int) -> float:
         return (self._q**(.5*n) - self._q**(-.5*n)) / (self._q**.5 - self._q**-.5)
@@ -1975,8 +1965,35 @@ class SU2_kAnyonCategory(Symmetry):
 
     def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
                   ) -> np.ndarray:
+        # The q-deformed 6j symbols have the same symmetries as the usual SU(2) 6j symbols.
+        # We can get all f symbols from the cases 6j symbols for 
+        # a == np.max([a, b, c, d, e, f]) and b == np.max([b, c, e, f]).
+        # I.e., we need to exchange the charges accordingly
+
+        # need to compute before exchanging charges
+        factor = np.sqrt( self._n_q(e[0]+1) * self._n_q(f[0]+1) )
+        factor *= (-1)**((a[0] + b[0] + c[0] + d[0]) / 2)
+
+        argm = np.argmax([a, c, b, d, f, e])
+        if argm > 1:
+            if argm // 2 == 1:
+                a, c, b, d = b, d, a, c
+            else:
+                a, c, f, e = f, e, a, c
+
+        argm_ = np.argmax([b, d, f, e])
+        if argm_ > 1:
+            b, d, f, e = f, e, b, d
+
+        if argm % 2 == 1 and argm_  % 2 == 1:
+            a, c, b, d = c, a, d, b
+        elif argm % 2 == 1:
+            a, c, f, e = c, a, e, f
+        elif argm_ % 2 == 1:
+            b, d, f, e = d, b, e, f
+
         try:  # nontrivial F-symbols
-            return self._f[(a[0], b[0], c[0], d[0], e[0], f[0])]
+            return factor * self._6j[(a[0], b[0], f[0], c[0], d[0], e[0])] * self._one_4D
         except KeyError:
             return self._one_4D
 
@@ -1990,16 +2007,15 @@ class SU2_kAnyonCategory(Symmetry):
         return np.sin((a.flatten() + 1) * np.pi / (self.k + 2)) / np.sin(np.pi / (self.k + 2))
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        if a[0] < b[0]:
+            a, b = b, a
         try:  # nontrivial R-symbols
             return self._r[(a[0], b[0], c[0])]
         except KeyError:
             return self._one_1D
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
-        try:
-            return self._c[(a[0], b[0], c[0], d[0], e[0], f[0])]
-        except KeyError:
-            return self._one_4D
+        return super()._c_symbol(a, b, c, d, e, f)
 
     def all_sectors(self) -> SectorArray:
         return np.arange(self.k + 1, dtype=int)[:, None]
