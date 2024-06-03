@@ -25,9 +25,8 @@ import copy
 from typing import TypeVar, Type
 from functools import partial, reduce
 
-from ..linalg.tensors import (Tensor, BlockDiagonalTensor, SymmetricTensor, ChargedTensor,
-                              DiagonalTensor, almost_equal, eye_like, tensor_from_block, angle,
-                              real_if_close)
+from ..linalg.tensors import (Tensor, SymmetricTensor, SymmetricTensor, ChargedTensor,
+                              DiagonalTensor, almost_equal, angle, real_if_close)
 from ..linalg.backends import Backend, Block
 from ..linalg.matrix_operations import exp
 from ..linalg.symmetries import (ProductSymmetry, Symmetry, SU2Symmetry, U1Symmetry, ZNSymmetry,
@@ -185,7 +184,7 @@ class Site(Hdf5Exportable):
         assert 'JW' in self.need_JW_string
         assert 'Id' not in self.need_JW_string
         # check Id, JW, JW_exponent operators
-        assert almost_equal(self.Id, eye_like(self.Id))
+        assert almost_equal(self.Id, SymmetricTensor.from_eye([self.leg], backend=self.backend))
         assert almost_equal(exp(1.j * np.pi * self.JW_exponent), self.JW)
         # check self.hc_ops
         for name1, name2 in self.hc_ops.items():
@@ -277,7 +276,7 @@ class Site(Hdf5Exportable):
                 op = tensor_from_block(op, legs=[self.leg, self.leg.dual], backend=self.backend,
                                        labels=['p', 'p*'])
         if cls is Tensor:
-            if isinstance(op, BlockDiagonalTensor):
+            if isinstance(op, SymmetricTensor):
                 try:
                     op = DiagonalTensor.from_tensor(op, check_offdiagonal=True)
                 except ValueError:
@@ -286,14 +285,14 @@ class Site(Hdf5Exportable):
             if isinstance(op, ChargedTensor):
                 op = op.as_Tensor()
             assert isinstance(op, SymmetricTensor)
-            if (cls is not BlockDiagonalTensor) and isinstance(op, BlockDiagonalTensor):
+            if (cls is not SymmetricTensor) and isinstance(op, SymmetricTensor):
                 try:
                     op = DiagonalTensor.from_tensor(op, check_offdiagonal=True)
                 except ValueError:
                     # if cls is SymmetricTensor, we try converting to diagonal and ignore failure
                     if cls is DiagonalTensor:
                         raise
-            if (cls is BlockDiagonalTensor) and isinstance(op, DiagonalTensor):
+            if (cls is SymmetricTensor) and isinstance(op, DiagonalTensor):
                 op = op.as_Tensor()
         elif cls is ChargedTensor:
             if isinstance(op, SymmetricTensor):
@@ -1183,7 +1182,7 @@ class SpinHalfSite(Site):
         if conserve == 'Stot':
             # vector transforms under spin-1 irrep -> sector == [2 * J] == [2]
             dummy_leg = ElementarySpace(leg.symmetry, sectors=[[2]])
-            Svec_inv = BlockDiagonalTensor.from_block_func(
+            Svec_inv = SymmetricTensor.from_block_func(
                 self.backend.ones_block, backend=self.backend, legs=[leg, leg.dual, dummy_leg],
                 labels=['p', 'p*', '!']
             )
@@ -1295,7 +1294,7 @@ class SpinSite(Site):
         # operators : Svec, Sz, Sp, Sm
         if conserve == 'Stot':
             dummy_leg = ElementarySpace(leg.symmetry, sectors=[[2]])
-            Svec_inv = BlockDiagonalTensor.from_block_func(
+            Svec_inv = SymmetricTensor.from_block_func(
                 self.backend.ones_block, legs=[leg, leg.dual, dummy_leg],
                 labels=['p', 'p*', '!']
             )
@@ -1576,7 +1575,7 @@ class SpinHalfFermionSite(Site):
             # the only allowed blocks by charge rule for legs [p, p*, dummy] the sectors [1, 1, 2],
             # i.e. acting on the spin 1/2 doublet [up, down].
             # This means that the same construction as for the SpinHalfSite works here too.
-            Svec_invariant_part = BlockDiagonalTensor.from_block_func(
+            Svec_invariant_part = SymmetricTensor.from_block_func(
                 self.backend.ones_block, backend=self.backend, legs=[leg, leg.dual, dummy_leg],
                 labels=['p', 'p*', '!']
             )
@@ -1721,7 +1720,7 @@ class SpinHalfHoleSite(Site):
             # the only allowed blocks by charge rule for legs [p, p*, dummy] the sectors [1, 1, 2],
             # i.e. acting on the spin 1/2 doublet [up, down].
             # This means that the same construction as for the SpinHalfSite works here too.
-            Svec_inv = BlockDiagonalTensor.from_block_func(
+            Svec_inv = SymmetricTensor.from_block_func(
                 self.backend.ones_block, backend=self.backend, legs=[leg, leg.dual, dummy_leg],
                 labels=['p', 'p*', '!']
             )

@@ -66,11 +66,40 @@ make_compatible_block          compatible_backend      RNG for blocks with ``com
                                                        ``make(size, real=False)``
 -----------------------------  ----------------------  -------------------------------------------
 make_compatible_tensor         compatible_backend      RNG for tensors with ``compatible_backend``.
+                                                       Signature see below.
 =============================  ======================  ===========================================
 
-The signature for ``make_compatible_tensor`` is
-``make(legs=None, num_legs=None, labels=None, max_blocks=5, max_block_size=5, real=False,
-       empty_ok=False, all_blocks=False, cls=tensors.BlockDiagonalTensor, num_domain_legs=0)``
+The function returned by the fixture ``make_compatible_tensor`` has the following inputs::
+
+    codomain, domain:
+        Both the domain and the codomain can be specified in the following four ways:
+        1) ``None``.
+            For the codomain, this means a random space if cls is DiagonalTensor or Mask.
+            For SymmetricTensor or ChargedTensor, codomain may not be None
+            For the domain, this means "the same as codomain" for DiagonalTensor, a random space
+            that contains the codomain for Mask and an empty domain for Symmetric/Charged Tensor.
+        2) an integer
+            The respective number of legs is randomly generated.
+        3) a list
+            Each entry specifies a leg. It can already be a space. A str specifies the label
+            for that leg and is otherwise equivalent to None. None means to generate a random leg
+        4) a ProductSpace
+            The finished (co)domain
+        For Symmetric/Charged Tensor, if any legs are generated, this is done in such a way
+        as to guarantee that the resulting tensor allows some blocks.
+    labels: list[str | None] (default: all None)
+        The labels for the resulting tensor. Note that labels can also be specified via (co)domain.
+    *
+    max_blocks: int (default 5)
+        The maximum number of blocks for the resulting tensor
+    max_block_size: int (default 5)
+        The maximum multiplicity of any sector.
+    empty_ok: bool (default False)
+        If an empty tensor (with no allowed blocks) is ok, or should raise.
+    all_blocks: bool (default False)
+        If all allowed blocks should be filled, or if some should be dropped randomly
+    cls: Tensor subtype
+        The type of tensor to create: SymmetricTensor, DiagonalTensor, Mask or ChargedTensor
 
 """
 # Copyright (C) TeNPy Developers, GNU GPLv3
@@ -214,125 +243,213 @@ def make_compatible_block(compatible_backend, np_random):
 @pytest.fixture
 def make_compatible_tensor(compatible_backend, compatible_symmetry, make_compatible_block,
                            make_compatible_space, np_random):
-    """Tensor RNG.
-
-    legs may contain any or all ``None`` entries.
-    Those will be filled randomly, but tuned such that the result can have free parameters.
-    """
-    def make(legs=None, num_legs=None, labels=None,
-             max_blocks=5, max_block_size=5, real=False, empty_ok=False, all_blocks=False,
-             cls=tensors.BlockDiagonalTensor, num_domain_legs=0):
-        # return tensor of type cls
-        
-        # deal with tensor classes with constrained legs first
-        if cls is tensors.DiagonalTensor:
-            if legs is None:
-                legs = [None, None]
-            assert len(legs) == 2
-            if legs[0] is not None:
-                leg = legs[0]
-                assert legs[1] is None or legs[0].can_contract_with(legs[1])
-            elif legs[1] is not None:
-                leg = legs[1].dual
+    """Tensor RNG."""
+    def make(codomain: list[spaces.Space | str | None] | spaces.ProductSpace | int = None,
+             domain: list[spaces.Space | str | None] | spaces.ProductSpace | int = None,
+             labels: list[str | None] = None,
+             *,
+             max_blocks=5, max_block_size=5, empty_ok=False, all_blocks=False,
+             cls=tensors.SymmetricTensor):
+        # 0) default for codomain
+        if codomain is None:
+            if cls in [tensors.SymmetricTensor, tensors. ChargedTensor]:
+                raise ValueError('codomain is required.')
+            elif cls in [tensors.DiagonalTensor, tensors.Mask]:
+                codomain = [None]
             else:
-                leg = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
+                raise ValueError
+        
+        # 1) deal with strings in codomain / domain.
+        # ======================================================================================
+        if isinstance(codomain, spaces.ProductSpace):
+            num_codomain = codomain.num_spaces
+            codomain_complete = True
+            codomain_labels = [None] * len(codomain)
+        else:
+            if isinstance(codomain, int):
+                codomain = [None] * codomain
+            num_codomain = len(codomain)
+            codomain_labels = [None] * len(codomain)
+            for n, sp in enumerate(codomain):
+                if isinstance(sp, str):
+                    codomain_labels[n] = sp
+                    codomain[n] = None
+            codomain_complete = (None not in codomain)
+        #
+        if domain is None:
+            if cls in [tensors.SymmetricTensor, tensors.ChargedTensor]:
+                domain = []
+            if cls in [tensors.DiagonalTensor, tensors.Mask]:
+                domain = [None]
+        if isinstance(domain, spaces.ProductSpace):
+            num_domain = domain.num_spaces
+            domain_labels = [None] * len(domain)
+            domain_complete = True
+        else:
+            if isinstance(domain, int):
+                domain = [None] * domain
+            num_domain = len(domain)
+            domain_labels = [None] * len(domain)
+            for n, sp in enumerate(domain):
+                if isinstance(sp, str):
+                    domain_labels[n] = sp
+                    domain[n] = None
+            domain_complete = (None not in domain)
+        #
+        num_legs = num_codomain + num_domain
+        if labels is None:
+            labels = [None] * num_legs
+        for n, l in enumerate(codomain_labels):
+            if l is None:
+                continue
+            assert labels[n] is None
+            labels[n] = l
+        for n, l in enumerate(domain_labels):
+            if l is None:
+                continue
+            assert labels[-1-n] is None
+            labels[-1-n] = l
+        #
+        # 2) Deal with other tensor types
+        # ======================================================================================
+        if cls is tensors.ChargedTensor:
+            charge_leg = make_compatible_space(max_sectors=1, max_mult=1, is_dual=False)
+            if isinstance(domain, spaces.ProductSpace):
+                inv_domain = domain.left_multiply(charge_leg, backend=compatible_backend)
+            else:
+                inv_domain = [charge_leg, *domain]
+            inv_labels = [tensors.ChargedTensor._CHARGE_LEG_LABEL, *labels]
+            inv_part = make(codomain=codomain, domain=inv_domain, labels=labels,
+                            max_blocks=max_blocks, max_block_size=max_block_size, empty_ok=empty_ok,
+                            all_blocks=all_blocks, cls=tensors.SymmetricTensor)
+            res = tensors.ChargedTensor(inv_part, charged_state=[1])
+            res.test_sanity()
+            return res
+        #
+        if cls is tensors.DiagonalTensor:
+            # fill in legs.
+            if isinstance(codomain, spaces.ProductSpace):
+                assert codomain.num_spaces == 1
+                leg = codomain.spaces[0]
+                if isinstance(domain, spaces.ProductSpace):
+                    assert domain == codomain
+                else:
+                    assert len(domain) == 1
+                    assert domain[0] is None or domain[0] == leg
+            else:
+                assert len(codomain) == 1
+                if isinstance(domain, spaces.ProductSpace):
+                    assert domain.num_spaces == 1
+                    leg = domain.spaces[0]
+                    assert codomain[0] is None or codomain[0] == leg
+                else:
+                    assert len(domain) == 1
+                    if domain[0] is None and codomain[0] is None:
+                        leg = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
+                    elif domain[0] is None:
+                        leg = codomain[0]
+                    elif codomain[0] is None:
+                        leg = domain[0]
+                    else:
+                        leg = codomain[0]
+                        assert domain[0] == leg
+            #
             res = tensors.DiagonalTensor.from_block_func(
-                make_compatible_block, leg, backend=compatible_backend, func_kwargs=dict(real=real)
+                make_compatible_block, leg=leg, backend=compatible_backend, labels=labels
             )
             if not all_blocks:
                 res = randomly_drop_blocks(res, max_blocks=max_blocks, empty_ok=empty_ok,
-                                        np_random=np_random)
+                                           np_random=np_random)
             res.test_sanity()
             return res
-        
+        #
         if cls is tensors.Mask:
-            if legs is None:
-                legs = [None, None]
-            assert len(legs) == 2
-            if legs[0] is None and legs[1] is None:
-                large_leg = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
-                small_leg = None
-            elif legs[1] is None:
-                large_leg = legs[0].dual
-                small_leg = None
-            elif legs[0] is None:
-                raise NotImplementedError  # TODO need to generate a larger leg that "contains" legs[1]
+            if isinstance(codomain, spaces.ProductSpace):
+                assert codomain.num_spaces == 1
+                small_leg = codomain.spaces[0]
+            elif codomain is None:
+                small_leg is None
             else:
-                raise NotImplementedError  # TODO need to generate random mask that *fits* legs[1]
-            blockmask = np_random.choice([True, False], large_leg.dim)
-            res = tensors.Mask.from_blockmask(blockmask, large_leg, compatible_backend, labels)
-            res.test_sanity()
-            return res
-
-        # parse legs
-        if legs is None:
-            if num_legs is None and labels is None:
-                raise ValueError('Need to specify number of legs via ``legs``, ``num_legs`` or ``labels``')
-            elif num_legs is None:
-                num_legs = len(labels)
-            elif labels is None:
-                labels = [None] * num_legs
+                assert len(codomain) == 1
+                small_leg = codomain[0]
+            if isinstance(domain, spaces.ProductSpace):
+                assert domain.num_spaces == 1
+                large_leg = domain.spaces[0]
+            elif domain is None:
+                large_leg = None
             else:
-                assert num_legs == len(labels)
-            legs = [None] * num_legs
+                assert len(domain) == 1
+                large_leg = domain[0]
+            #
+            if large_leg is None:
+                if small_leg is None:
+                    large_leg = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
+                else:
+                    extra = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
+                    large_leg = small_leg.direct_sum(extra)
+            return tensors.Mask.from_random(large_leg=large_leg, small_leg=small_leg,
+                                            backend=compatible_backend, p_keep=.6,
+                                            np_random=np_random)
+        #
+        # 3) Fill in missing legs
+        # ======================================================================================
+        if (not codomain_complete) and (not domain_complete):
+            # can just fill up the codomain with random legs.
+            for n, sp in enumerate(codomain):
+                if sp is None:
+                    codomain[n] = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
+            codomain = spaces.ProductSpace(codomain, symmetry=compatible_symmetry, backend=compatible_backend)
+            codomain_complete = True
+        if not codomain_complete:
+            # can assume that domain is complete
+            if not isinstance(domain, spaces.ProductSpace):
+                domain = spaces.ProductSpace(domain, symmetry=compatible_symmetry, backend=compatible_backend)
+            missing = [n for n, sp in enumerate(codomain) if sp is None]
+            for n in missing[:-1]:
+                codomain[n] = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
+            last = missing[-1]
+            partial_codomain = spaces.ProductSpace(codomain[:last] + codomain[last + 1:],
+                                                   symmetry=compatible_symmetry,
+                                                   backend=compatible_backend)
+            leg = find_last_leg(same=partial_codomain, opposite=domain, max_sectors=max_blocks,
+                                max_mult=max_block_size)
+            codomain = partial_codomain.insert_multiply(leg, last, backend=compatible_backend)
+        elif not domain_complete:
+            # can assume codomain is complete
+            if not isinstance(codomain, spaces.ProductSpace):
+                codomain = spaces.ProductSpace(codomain, symmetry=compatible_symmetry, backend=compatible_backend)
+            missing = [n for n, sp in enumerate(domain) if sp is None]
+            for n in missing[:-1]:
+                domain[n] = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
+            last = missing[-1]
+            partial_domain = spaces.ProductSpace(domain[:last] + domain[last + 1:],
+                                                 symmetry=compatible_symmetry,
+                                                 backend=compatible_backend)
+            leg = find_last_leg(same=partial_domain, opposite=codomain, max_sectors=max_blocks,
+                                max_mult=max_block_size)
+            domain = partial_domain.insert_multiply(leg, last, backend=compatible_backend)
         else:
-            if num_legs is None:
-                num_legs = len(legs)
-            assert num_legs == len(legs)
-            if labels is None:
-                labels = [None] * num_legs
-            assert len(labels) == num_legs
-        
-        # fill in missing legs
-        missing_leg_pos = list(np_random.permuted([i for i, l in enumerate(legs) if l is None]))
-        while len(missing_leg_pos) > 1:
-            which = missing_leg_pos.pop()
-            legs[which] = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
-        if len(missing_leg_pos) > 0:
-            which, = missing_leg_pos
-            if len(legs) == 1:
-                new_leg = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
-                # make sure leg has the trivial space, so we can allow some blocks
-                if new_leg.sector_multiplicity(compatible_symmetry.trivial_sector) == 0:
-                    sectors = new_leg.sectors
-                    where = np_random.choice(len(sectors))
-                    sectors[where] = compatible_symmetry.trivial_sector
-                    # have potentially replaced higher-dimensional sectors with one-dimensional trivial sectors
-                    # this would reduce dim and make basis_perm invalid.
-                    # correct for that by increasing the multiplicities of the trivial sectors.
-                    mults = new_leg.multiplicities
-                    mults[where] *= compatible_symmetry.sector_dim(sectors[where])  
-                    new_leg = spaces.ElementarySpace.from_sectors(
-                        new_leg.symmetry, sectors, mults, new_leg.basis_perm
-                    )
-            else:
-                new_leg = find_compatible_leg(legs[:which] + legs[which + 1:],
-                                              max_sectors=max_blocks, max_mult=max_block_size)
-            legs[which] = new_leg
-        
-        if cls is tensors.BlockDiagonalTensor:
-            res = tensors.BlockDiagonalTensor.from_block_func(
-                make_compatible_block, legs, compatible_backend, labels,
-                func_kwargs=dict(real=real), num_domain_legs=num_domain_legs
-            )
-            if not all_blocks:
-                res = randomly_drop_blocks(res, max_blocks, empty_ok=empty_ok, np_random=np_random)
-            res.test_sanity()
-            return res
-        
-        if cls is tensors.ChargedTensor:
-            dummy_leg = make_compatible_space(max_sectors=1, max_mult=1, is_dual=False)
-            res = tensors.ChargedTensor.from_block_func(
-                make_compatible_block, legs, dummy_leg, compatible_backend, labels,
-                func_kwargs=dict(real=real), num_domain_legs=num_domain_legs
-            )
-            if not all_blocks:
-                res.invariant_part = randomly_drop_blocks(res.invariant_part, max_blocks,
-                                                          empty_ok=empty_ok, np_random=np_random)
-            res.test_sanity()
-            return res
-        raise ValueError(f'Invalid tensor cls: {cls}')
+            if not isinstance(codomain, spaces.ProductSpace):
+                codomain = spaces.ProductSpace(codomain, symmetry=compatible_symmetry, backend=compatible_backend)
+            if not isinstance(domain, spaces.ProductSpace):
+                domain = spaces.ProductSpace(domain, symmetry=compatible_symmetry, backend=compatible_backend)
+        #
+        # 3) Finish up
+        # ======================================================================================
+        if not cls is tensors.SymmetricTensor:
+            raise ValueError(f'Unknown tensor cls: {cls}')
+    
+        res = tensors.SymmetricTensor.from_block_func(
+            make_compatible_block, codomain=codomain, domain=domain, backend=compatible_backend,
+            labels=labels
+        )
+        if not all_blocks:
+            res = randomly_drop_blocks(res, max_blocks=max_blocks, empty_ok=empty_ok,
+                                        np_random=np_random)
+        res.test_sanity()
+        return res
     return make
+
 
 # RANDOM GENERATION
 
@@ -392,12 +509,14 @@ def random_vector_space(symmetry, max_num_blocks=5, max_block_size=5, is_dual=No
     return res
 
 
-def randomly_drop_blocks(res: tensors.BlockDiagonalTensor | tensors.DiagonalTensor,
+def randomly_drop_blocks(res: tensors.SymmetricTensor | tensors.DiagonalTensor,
                          max_blocks: int | None, empty_ok: bool, np_random=np.random.default_rng()):
     
     if isinstance(res.backend, backends.NoSymmetryBackend):
         # nothing to do
         return res
+    if not isinstance(res.backend, (backends.AbelianBackend, backends.FusionTreeBackend)):
+        raise NotImplementedError
 
     num_blocks = len(res.data.blocks)
     min_blocks = 0 if empty_ok else 1
@@ -438,11 +557,23 @@ def randomly_drop_blocks(res: tensors.BlockDiagonalTensor | tensors.DiagonalTens
     raise ValueError('Backend not recognized')
 
 
-def find_compatible_leg(others, max_sectors: int, max_mult: int, extra_sectors=None,
-                        np_random=np.random.default_rng()):
-    """Find a leg such that ``[*others, new_leg]`` allows non-zero tensors."""
-    prod = spaces.ProductSpace(others).as_ElementarySpace()
-    sectors = prod.symmetry.dual_sectors(prod.sectors)
+def find_last_leg(same: spaces.ProductSpace, opposite: spaces.ProductSpace,
+                  max_sectors: int, max_mult: int,
+                  extra_sectors=None, np_random=np.random.default_rng()):
+    """Find a leg such that the resulting tensor allows some non-zero blocks
+
+    Parameters
+    ----------
+    same, opposite
+        The domain and codomain of the resulting tensor, up the missing leg.
+        Same is the one of the two that the resulting leg should be added to.
+    max_sectors, max_mult
+        Upper bounds for the number of sectors and the multiplicities, resp.
+    extra_sectors
+        If given, extra sectors to mix in
+    """
+    prod = spaces.ProductSpace.from_partial_products(same.dual, opposite)
+    sectors = prod.sectors
     mults = prod.multiplicities
     if len(sectors) > max_sectors:
         which = np_random.choice(len(sectors), size=max_sectors, replace=False, shuffle=False)
@@ -464,11 +595,13 @@ def find_compatible_leg(others, max_sectors: int, max_mult: int, extra_sectors=N
     order = np.lexsort(sectors.T)
     sectors = sectors[order]
     mults = mults[order]
-    
-    res = spaces.ElementarySpace(prod.symmetry, sectors, mults)
-
+    #
+    res = spaces.ElementarySpace(prod.symmetry, sectors=sectors, multiplicities=mults)
+    #
     # check that it actually worked
-    assert spaces.ProductSpace([*others, res]).sector_multiplicity(prod.symmetry.trivial_sector) > 0
+    # OPTIMIZE remove?
+    parent_space = spaces.ProductSpace.from_partial_products(same.left_multiply(res), opposite.dual)
+    assert parent_space.sector_multiplicity(same.symmetry.trivial_sector) > 0
     res.test_sanity()
 
     return res

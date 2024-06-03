@@ -6,7 +6,7 @@ import warnings
 from numbers import Number
 from typing import Callable
 from .spaces import ProductSpace
-from .tensors import DiagonalTensor, Tensor, BlockDiagonalTensor, Mask, ChargedTensor, tdot, _dual_leg_label
+from .tensors import DiagonalTensor, Tensor, SymmetricTensor, Mask, ChargedTensor, tdot, _dual_leg_label
 from .backends.abstract_backend import Block
 from ..tools.misc import inverse_permutation, to_iterable
 from ..tools.params import asConfig
@@ -39,9 +39,9 @@ def _svd(a: Tensor, u_legs: list[int | str], vh_legs: list[int | str],
         if U_inherits_charge and compute_u:
             perm = list(range(U.num_legs))
             perm[-2:] = [-1, -2]
-            U = ChargedTensor(U.permute_legs(perm), dummy_leg_state=a.dummy_leg_state)
+            U = ChargedTensor(U.permute_legs(perm), charged_state=a.charged_state)
         if (not U_inherits_charge) and compute_vh:
-            Vh = ChargedTensor(Vh, dummy_leg_state=a.dummy_leg_state)
+            Vh = ChargedTensor(Vh, charged_state=a.charged_state)
         return U, S, Vh
 
     l_u, l_su, l_sv, l_vh = _svd_new_labels(new_labels)
@@ -76,7 +76,7 @@ def _svd(a: Tensor, u_legs: list[int | str], vh_legs: list[int | str],
         Vh.set_labels([l_vh, a.labels[vh_idcs[0]]])
         return U, S, Vh
 
-    if isinstance(a, BlockDiagonalTensor):
+    if isinstance(a, SymmetricTensor):
         need_combine = (len(u_idcs) != 1 or len(vh_idcs) != 1)
         original_labels = a.labels
         if need_combine:
@@ -87,7 +87,7 @@ def _svd(a: Tensor, u_legs: list[int | str], vh_legs: list[int | str],
                                                          algorithm=algorithm, compute_u=compute_u,
                                                          compute_vh=compute_vh)
         if compute_u:
-            U = BlockDiagonalTensor(u_data, legs=[a.legs[0], new_leg.dual], num_domain_legs=0,
+            U = SymmetricTensor(u_data, legs=[a.legs[0], new_leg.dual], num_domain_legs=0,
                                     backend=a.backend)
             if need_combine:
                 U = U.split_legs(0)
@@ -96,7 +96,7 @@ def _svd(a: Tensor, u_legs: list[int | str], vh_legs: list[int | str],
             U = None
         S = DiagonalTensor(s_data, first_leg=new_leg, second_leg_dual=True, backend=a.backend, labels=[l_su, l_sv])
         if compute_vh:
-            Vh = BlockDiagonalTensor(vh_data, legs=[new_leg, a.legs[1]], num_domain_legs=0,
+            Vh = SymmetricTensor(vh_data, legs=[new_leg, a.legs[1]], num_domain_legs=0,
                                      backend=a.backend)
             if need_combine:
                 Vh = Vh.split_legs(1)
@@ -472,7 +472,7 @@ def qr(a: Tensor, q_legs: list[int | str] = None, r_legs: list[int | str] = None
     --------
     lq
     """
-    if not isinstance(a, BlockDiagonalTensor):
+    if not isinstance(a, SymmetricTensor):
         raise NotImplementedError  # TODO ChargedTensor support
 
     a_labels = a.labels
@@ -486,8 +486,8 @@ def qr(a: Tensor, q_legs: list[int | str] = None, r_legs: list[int | str] = None
 
     q_data, r_data, new_leg = a.backend.qr(a, new_r_leg_dual, full=full)
 
-    Q = BlockDiagonalTensor(q_data, legs=[a.legs[0], new_leg.dual], num_domain_legs=1, backend=a.backend)
-    R = BlockDiagonalTensor(r_data, legs=[new_leg, a.legs[1]], num_domain_legs=1, backend=a.backend)
+    Q = SymmetricTensor(q_data, legs=[a.legs[0], new_leg.dual], num_domain_legs=1, backend=a.backend)
+    R = SymmetricTensor(r_data, legs=[new_leg, a.legs[1]], num_domain_legs=1, backend=a.backend)
     if need_combine:
         R = R.split_legs(1)
         Q = Q.split_legs(0)
@@ -521,7 +521,7 @@ def lq(a: Tensor, l_legs: list[int | str] = None, q_legs: list[int | str] = None
     --------
     qr
     """
-    if not isinstance(a, BlockDiagonalTensor):
+    if not isinstance(a, SymmetricTensor):
         raise NotImplementedError  # TODO ChargedTensor support
     
     a_labels = a.labels
@@ -535,10 +535,10 @@ def lq(a: Tensor, l_legs: list[int | str] = None, q_legs: list[int | str] = None
 
     q_data, r_data, new_leg = a.backend.qr(a, new_r_leg_dual=new_l_leg_dual, full=full)
     # transpose back, since we build the LQ from RQ of a.T
-    Q = BlockDiagonalTensor(
+    Q = SymmetricTensor(
         q_data, legs=[a.legs[0], new_leg.dual], num_domain_legs=1, backend=a.backend
     ).permute_legs([1, 0])
-    L = BlockDiagonalTensor(
+    L = SymmetricTensor(
         r_data, legs=[new_leg, a.legs[1]], num_domain_legs=1, backend=a.backend
     ).permute_legs([1, 0])
     if need_combine:
@@ -613,11 +613,18 @@ def eigh(a: Tensor, legs1: list[int | str] = None, legs2: list[int | str] = None
         In particular, the new leg is always a `ElementarySpace`, never a `ProductSpace`.
     """
     # TODO (JU) should we support `UPLO` arg? (use lower or upper triangular part)
-    if not isinstance(a, BlockDiagonalTensor):
+    if not isinstance(a, SymmetricTensor):
         raise TypeError(f'eigh not supported for type {type(a)}')
+    
+    raise NotImplementedError  # TODO
+    # needs revision
+
     idcs1, idcs2 = leg_bipartition(a, legs1, legs2)
     assert len(idcs1) == len(idcs2)
+
+    # TODO can_contract_with was removed. should probably check codomain == domain after permuting?
     incompatible = [(i1, i2) for i1, i2 in zip(idcs1, idcs2) if not a.legs[i1].can_contract_with(a.legs[i2])]
+    
     if incompatible:
         raise ValueError(f'Incompatible leg pairs: {", ".join(map(str, incompatible))}')
     need_combine = (len(idcs1) > 1)
@@ -650,7 +657,7 @@ def eigh(a: Tensor, legs1: list[int | str] = None, legs2: list[int | str] = None
         raise ValueError(msg)
     D = DiagonalTensor(d_data, first_leg=D_leg_0, second_leg_dual=True, backend=backend,
                        labels=[lb, lc])
-    U = BlockDiagonalTensor(u_data, legs=[U_leg_0, U_leg_1], num_domain_legs=1, backend=backend,
+    U = SymmetricTensor(u_data, legs=[U_leg_0, U_leg_1], num_domain_legs=1, backend=backend,
                             labels=[a.labels[0], la])
 
     if U_leg_1.is_dual != new_leg_dual:
@@ -752,7 +759,7 @@ def exp(t: Tensor | complex | float, legs1: list[int | str] = None,
     legs1, legs2 : list[int | str], optional
         Which of the legs belong to "matrix rows" vs "columns". See :func:`leg_bipartition`.
     """
-    if isinstance(t, BlockDiagonalTensor):
+    if isinstance(t, SymmetricTensor):
         return _act_block_diagonal_square_matrix(t, legs1, legs2, t.backend.matrix_exp)
     if isinstance(t, DiagonalTensor):
         return t._elementwise_unary(t.backend.block_exp)
@@ -780,7 +787,7 @@ def log(t: Tensor | complex | float, legs1: list[int | str] = None,
     """
     # TODO it is a bit annoying that the dtype depends on values for real inputs.
     #      we get a real log for positive definite matrices and complex otherwise.
-    if isinstance(t, BlockDiagonalTensor):
+    if isinstance(t, SymmetricTensor):
         return _act_block_diagonal_square_matrix(t, legs1, legs2, t.backend.matrix_log)
     if isinstance(t, DiagonalTensor):
         return t._elementwise_unary(t.backend.block_log)
@@ -807,12 +814,14 @@ def _act_block_diagonal_square_matrix(t: Tensor,
     """
     idcs1, idcs2 = leg_bipartition(t, legs1, legs2)
     assert len(idcs1) == len(idcs2)
+    raise NotImplementedError  # TODO
+    # TODO can_contract_with was removed. should probably check codomain == domain after permuting?
     assert all(t.legs[i1].can_contract_with(t.legs[i2]) for i1, i2 in zip(idcs1, idcs2))
     if len(idcs1) > 1:
         pipe = t.make_ProductSpace(idcs1)
         t = t.combine_legs(idcs1, idcs2, product_spaces=[pipe, pipe.dual], new_axes=[0, 1])
     res_data = t.backend.act_block_diagonal_square_matrix(t, block_method)
-    res = BlockDiagonalTensor(res_data, backend=t.backend, legs=t.legs,
+    res = SymmetricTensor(res_data, backend=t.backend, legs=t.legs,
                               num_domain_legs=t.num_domain_legs, labels=t.labels)
     if len(idcs1) > 1:
         res = res.split_legs()

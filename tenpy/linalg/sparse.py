@@ -18,7 +18,7 @@ import numpy as np
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator, ArpackNoConvergence
 
 from .spaces import Space, ElementarySpace, ProductSpace, Sector
-from .tensors import Tensor, Shape, BlockDiagonalTensor, ChargedTensor, tdot, eye_like, zero_like
+from .tensors import Tensor, SymmetricTensor, ChargedTensor, tdot, zero_like
 from .backends.abstract_backend import Backend
 from .dtypes import Dtype
 from ..tools.math import speigs, speigsh
@@ -44,7 +44,7 @@ class LinearOperator(metaclass=ABCMeta):
     """
     acts_on = None  # Derived classes should set this as a class attribute
     
-    def __init__(self, vector_shape: Shape, dtype: Dtype):
+    def __init__(self, vector_shape: Shape, dtype: Dtype):  # TODO Shape removed
         self.vector_shape = vector_shape
         self.dtype = dtype
 
@@ -99,9 +99,11 @@ class TensorLinearOperator(LinearOperator):
     which_legs : int or str
         Which leg of `tensor` is to be contracted on matvec.
     """
-    def __init__(self, tensor: BlockDiagonalTensor, which_leg: int | str = -1):
+    def __init__(self, tensor: SymmetricTensor, which_leg: int | str = -1):
         if tensor.num_legs > 2:
             raise ValueError('Expected a two-leg tensor')
+        raise NotImplementedError  # TODO
+        # TODO can_contract_with was removed. should probably check codomain == domain after permuting?
         if not tensor.legs[0].can_contract_with(tensor.legs[1]):
             raise ValueError('Expected contractible legs')
         self.which_leg = which_leg = tensor.get_leg_idx(which_leg)
@@ -388,7 +390,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
         ScipyLinearOperator.__init__(self, dtype=dtype, shape=self.shape)
 
     @classmethod
-    def from_Tensor(cls, tensor: BlockDiagonalTensor, legs1: list[int | str], legs2: list[int | str],
+    def from_Tensor(cls, tensor: SymmetricTensor, legs1: list[int | str], legs2: list[int | str],
                     charge_sector: None | Sector | Literal['trivial'] = 'trivial'
                     ) -> NumpyArrayLinearOperator:
         """Create a :class:`NumpyArrayLinearOperator` from a tensor that acts via contraction (`tdot`).
@@ -420,6 +422,8 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
                 vec_contr_legs.append(res_legs[l])
             else:
                 vec_contr_legs.extend(tensor.get_legs(l))
+        raise NotImplementedError  # TODO
+        # TODO can_contract_with was removed. should probably check codomain == domain after permuting?
         if not all(l_t.can_contract_with(l_v) for l_t, l_v in zip(tensor_contr_legs, vec_contr_legs)):
             raise ValueError('Expected contractible legs')
 
@@ -450,6 +454,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
             A tensor that `tenpy_matvec` can act on.
             If a ChargedTensor, expect a single sector on the dummy leg, which is used as the
             :attr:`charge_sector`.
+            TODO revise this. purge the "dummy" language, its now "charged"
         dtype
             The *numpy* dtype of the operator. Per default, the dtype of `vector` is used.
 
@@ -532,7 +537,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
             #  "stack" ChargedTensors?
             raise NotImplementedError
         elif isinstance(self._charge_sector, str) and self._charge_sector == 'trivial':
-            tens = BlockDiagonalTensor.from_flat_block_trivial_sector(
+            tens = SymmetricTensor.from_dense_block_trivial_sector(
                 leg=self.domain, block=self.backend.block_from_numpy(vec), backend=self.backend
             )
             res = tens.split_legs(0)
@@ -555,7 +560,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
             raise NotImplementedError
         elif isinstance(self._charge_sector, str) and self._charge_sector == 'trivial':
             res = tens.combine_legs(list(range(tens.num_legs)), product_spaces=[self.domain])
-            res = res.to_flat_block_trivial_sector()
+            res = res.to_dense_block_trivial_sector()
         else:
             res = tens.combine_legs(list(range(tens.num_legs)), product_spaces=[self.domain])
             res = res.to_flat_block_single_sector()

@@ -46,9 +46,20 @@ class ArrayApiBlockBackend(BlockBackend):
             None: None,
         }
         
-    def as_block(self, a) -> Block:
-        # OPTIMIZE force float or complex dtype without multiplying
-        return 1. * self._api.asarray(a)
+    def as_block(self, a, dtype: Dtype = None, return_dtype: bool = False) -> Block:
+        block = self._api.asarray(a, dtype=self.backend_dtype_map[dtype])
+        if dtype != Dtype.bool:
+            # force float or complex dtype without multiplying
+            block = 1. * block
+        if return_dtype:
+            return block, self.tenpy_dtype_map[block.dtype]
+        return block
+
+    def block_all(self, a) -> bool:
+        return self._api.all(a)
+        
+    def block_any(self, a) -> bool:
+        return self._api.any(a)
 
     def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]) -> Block:
         return self._api.tensordot(a, b, (idcs_a, idcs_b))
@@ -227,6 +238,9 @@ class ArrayApiBlockBackend(BlockBackend):
 
     def block_from_mask(self, mask: Block, dtype: Dtype) -> Block:
         raise NotImplementedError  # TODO
+
+    def block_sum(self, a: Block, ax: int) -> Block:
+        return self._api.sum(a, axis=ax)
 
     def block_sum_all(self, a: Block) -> float | complex:
         return self._api.sum(a)

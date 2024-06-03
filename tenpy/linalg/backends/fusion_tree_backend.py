@@ -6,8 +6,8 @@ from math import prod
 import numpy as np
 
 from .abstract_backend import (
-    Backend, BlockBackend, Block, Data, DiagonalData, _iter_common_sorted_arrays,
-    _iter_common_noncommon_sorted_arrays
+    Backend, BlockBackend, Block, Data, DiagonalData, iter_common_sorted_arrays,
+    iter_common_noncommon_sorted_arrays, conventional_leg_order
 )
 from ..dtypes import Dtype
 from ..symmetries import Sector, SectorArray, Symmetry, FusionStyle
@@ -17,7 +17,7 @@ from ..trees import FusionTree, fusion_trees
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import BlockDiagonalTensor, DiagonalTensor, Mask
+    from ..tensors import SymmetricTensor, DiagonalTensor, Mask
 
 
 __all__ = ['block_size', 'forest_block_size', 'tree_block_size', 'forest_block_slice',
@@ -98,18 +98,6 @@ def _tree_block_iter(data: FusionTreeData, backend: BlockBackend):
             i2_forest += forest_block_width
 
 
-def _make_domain_codomain(legs: list[Space], num_domain_legs: int = 0, backend=None
-                          ) -> tuple[ProductSpace, ProductSpace]:
-    assert 0 <= num_domain_legs <= len(legs)
-    num_codomain_legs = len(legs) - num_domain_legs
-    # need to pass symmetry and is_real, since codomain or domain might be the empty product.
-    symmetry = legs[0].symmetry
-    domain = ProductSpace([l.dual for l in reversed(legs[num_codomain_legs:])], backend=backend,
-                          symmetry=symmetry)
-    codomain = ProductSpace(legs[:num_codomain_legs], backend=backend, symmetry=symmetry)
-    return domain, codomain
-
-
 def _iter_sectors_mults_slices(spaces: list[Space], symmetry: Symmetry
                                ) -> Iterator[tuple[SectorArray, list[int], list[slice]]]:
     """Helper iterator over all combinations of sectors and respective mults and slices.
@@ -162,11 +150,6 @@ class FusionTreeData:
         They comprise the legs of the tensor as::
 
             T.legs == [W.dual for W in domain.spaces] + codomain.spaces[::-1]
-        
-        OPTIMIZE Should we use list[Space] instead of ProductSpace to save some
-                 potential overhead from ProductSpace.__init__ computing its sectors?
-                 Having these coupled sectors is *sometimes* useful.
-                 Not clear right now if it always is.
     """
     def __init__(self, coupled_sectors: SectorArray, blocks: list[Block], domain: ProductSpace,
                  codomain: ProductSpace, dtype: Dtype):
@@ -234,20 +217,11 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     
     DataCls = FusionTreeData
 
-    def test_data_sanity(self, a: BlockDiagonalTensor | DiagonalTensor | Mask, is_diagonal: bool):
+    def test_data_sanity(self, a: SymmetricTensor | DiagonalTensor | Mask, is_diagonal: bool):
         super().test_data_sanity(a, is_diagonal=is_diagonal)
         # check domain and codomain
-        assert a.data.num_domain_legs == a.num_domain_legs
-        for n in range(a.num_domain_legs):
-            # domain: duals of second part, in reverse order
-            assert a.legs[-1-n] == a.data.domain.spaces[n].dual
-        for n in range(a.num_codomain_legs):
-            # codomain: first part of legs
-            assert a.legs[n] == a.data.codomain.spaces[n]
-        assert a.data.domain.is_dual is False
-        assert a.data.codomain.is_dual is False
-        assert all(not isinstance(s, ProductSpace) for s in a.data.codomain.spaces)
-        assert all(not isinstance(s, ProductSpace) for s in a.data.domain.spaces)
+        assert a.data.codomain == a.codomain
+        assert a.data.domain == a.domain
         # coupled sectors must be lexsorted
         perm = np.lexsort(a.data.coupled_sectors.T)
         assert np.all(perm == np.arange(len(perm)))
@@ -255,15 +229,12 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         assert len(a.data.coupled_sectors) == len(a.data.blocks)
         for c, block in zip(a.data.coupled_sectors, a.data.blocks):
             assert a.symmetry.is_valid_sector(c)
-            # shape correct?
             expect_shape = (block_size(a.data.codomain, c), block_size(a.data.domain, c))
             if is_diagonal:
                 assert expect_shape[0] == expect_shape[1]
                 expect_shape = (expect_shape[0],)
             assert all(dim > 0 for dim in expect_shape), 'should skip forbidden block'
-            assert self.block_shape(block) == expect_shape, 'wrong block shapes'
-            # check matching dtype
-            assert self.block_dtype(block) == a.data.dtype
+            self.test_block_sanity(block, expect_shape=expect_shape, expect_dtype=a.dtype)
 
     def test_mask_sanity(self, a: Mask):
         raise NotImplementedError  # TODO
@@ -272,12 +243,11 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     #  related methods:
     #   - test_leg_sanity
     #   - _fuse_spaces
-    #   - add_leg_metadata
 
     def get_dtype_from_data(self, a: FusionTreeData) -> Dtype:
         return a.dtype
 
-    def to_dtype(self, a: BlockDiagonalTensor, dtype: Dtype) -> FusionTreeData:
+    def to_dtype(self, a: SymmetricTensor, dtype: Dtype) -> FusionTreeData:
         blocks = [self.block_to_dtype(block, dtype) for block in a.data.blocks]
         return FusionTreeData(a.data.coupled_sectors, blocks, a.data.domain, a.data.codomain, dtype)
 
@@ -292,7 +262,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
             return a.dtype.zero_scalar
         return self.block_item(a.blocks[0])
 
-    def to_dense_block(self, a: BlockDiagonalTensor) -> Block:
+    def to_dense_block(self, a: SymmetricTensor) -> Block:
         assert a.symmetry.can_be_dropped
         J = len(a.data.codomain.spaces)
         K = len(a.data.domain.spaces)
@@ -337,7 +307,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         # permute leg order [i1,...,iJ,j1,...,jK] -> [i1,...,iJ,jK,...,j1]
         res = self.block_permute_axes(res, [*range(J), *reversed(range(J, J + K))])
         # apply permutation to public basis order
-        res = self.apply_basis_perm(res, a.legs, inv=True)
+        res = self.apply_basis_perm(res, conventional_leg_order(a), inv=True)
         return res
 
     def _get_forest_block_contribution(self, block, sym: Symmetry, codomain, domain, coupled,
@@ -391,29 +361,38 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return entries, num_alpha_trees, num_beta_trees
 
     def diagonal_to_block(self, a: DiagonalTensor) -> Block:
-        raise NotImplementedError  # TODO
+        assert a.symmetry.can_be_dropped
+        res = self.zero_block([a.leg.dim], a.dtype)
+        for i, j in iter_common_sorted_arrays(a.leg.sectors, a.data.coupled_sectors):
+            coupled = a.leg.sectors[i]
+            symmetry_data = self.ones_block([a.symmetry.sector_dim(coupled)], dtype=a.dtype)
+            degeneracy_data = a.data.blocks[j]
+            entries = self.block_outer(symmetry_data, degeneracy_data)
+            entries = self.block_reshape(entries, (-1,))
+            res[slice(*a.leg.slices[i])] = entries
+        res = self.apply_basis_perm(res, [a.leg], inv=True)
+        return res
 
-    def from_dense_block(self, a: Block, legs: list[Space], num_domain_legs: int,
-                         tol: float = 1e-8) -> FusionTreeData:
-        sym = legs[0].symmetry
+    def from_dense_block(self, a: Block, codomain: ProductSpace, domain: ProductSpace, tol: float
+                         ) -> FusionTreeData:
+        sym = codomain.symmetry
         assert sym.can_be_dropped
         # convert to internal basis order, where the sectors are sorted and contiguous
-        a = self.apply_basis_perm(a, legs)
-        domain, codomain = _make_domain_codomain(legs, num_domain_legs=num_domain_legs, backend=self)
+        a = self.apply_basis_perm(a, conventional_leg_order(codomain, domain))
         J = len(codomain.spaces)
         K = len(domain.spaces)
+        num_legs = J + K
         # [i1,...,iJ,jK,...,j1] -> [i1,...,iJ,j1,...,jK]
-        a = self.block_permute_axes(a, [*range(J), *reversed(range(J, J + K))])
+        a = self.block_permute_axes(a, [*range(J), *reversed(range(J, num_legs))])
         dtype = Dtype.common(self.block_dtype(a), sym.fusion_tensor_dtype)
-        num_legs = len(legs)
         # main loop: iterate over coupled sectors and construct the respective block.
         coupled_sectors = []
         blocks = []
         norm_sq_projected = 0
-        for i, _ in _iter_common_sorted_arrays(domain.sectors, codomain.sectors):
+        for i, _ in iter_common_sorted_arrays(domain.sectors, codomain.sectors):
             coupled = domain.sectors[i]
             dim_c = sym.sector_dim(coupled)
-              # OPTIMIZE could be sth like np.empty
+            # OPTIMIZE could be sth like np.empty
             block = self.zero_block([block_size(codomain, coupled), block_size(domain, coupled)], dtype)
             # iterate over uncoupled sectors / forest-blocks within the block
             i1 = 0  # start row index of the current forest block
@@ -464,6 +443,10 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                 raise ValueError(msg)
         coupled_sectors = np.asarray(coupled_sectors, int)
         return FusionTreeData(coupled_sectors, blocks, domain, codomain, dtype)
+    
+    def from_random_normal(self, codomain: ProductSpace, domain: ProductSpace, sigma: float,
+                           dtype: Dtype) -> Data:
+        raise NotImplementedError  # TODO
 
     def _add_forest_block_entries(self, block, entries, sym: Symmetry, codomain, domain, coupled,
                                 dim_c, a_sectors, b_sectors, tree_block_width, tree_block_height,
@@ -526,63 +509,95 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         num_beta_trees = len(beta_tree_iter)
         return num_alpha_trees, num_beta_trees
 
-    def diagonal_from_block(self, a: Block, leg: Space) -> DiagonalData:
-        raise NotImplementedError('diagonal_from_block not implemented')  # TODO
-
-    def mask_from_block(self, a: Block, large_leg: Space, small_leg: ElementarySpace) -> DiagonalData:
-        raise NotImplementedError('mask_from_block not implemented')  # TODO
-
-    def from_block_func(self, func, legs: list[Space], num_domain_legs: int, func_kwargs={}
-                        ) -> FusionTreeData:
-        domain, codomain = _make_domain_codomain(legs, num_domain_legs=num_domain_legs, backend=self)
-        coupled_sectors = []
+    def diagonal_from_block(self, a: Block, co_domain: ProductSpace, tol: float) -> DiagonalData:
+        dtype = self.block_dtype(a)
+        a = self.apply_basis_perm(a, co_domain.spaces)
+        coupled_sectors = co_domain.sectors
         blocks = []
-        for i, _ in _iter_common_sorted_arrays(domain.sectors, codomain.sectors):
-            coupled = domain.sectors[i]
-            shape = (block_size(codomain, coupled), block_size(domain, coupled))
-            coupled_sectors.append(coupled)
-            blocks.append(func(shape, **func_kwargs))
+        for coupled, mult, slc in zip(co_domain.sectors, co_domain.multiplicities, co_domain.slices):
+            dim_c = co_domain.symmetry.sector_dim(coupled)
+            entries = self.block_reshape(a[slice(*slc)], (dim_c, mult))
+            # project onto the identity on the coupled sector
+            block = self.block_sum(entries, 0) / dim_c
+            projected = self.block_outer(self.ones_block([dim_c], dtype=dtype), block)
+            if self.block_norm(entries - projected) > tol * self.block_norm(entries):
+                raise ValueError('Block is not symmetric up to tolerance.')
+            blocks.append(block)
+        return FusionTreeData(coupled_sectors, blocks, co_domain, co_domain, dtype)
+
+    def diagonal_from_sector_block_func(self, func, co_domain: ProductSpace) -> DiagonalData:
+        coupled_sectors = co_domain.sectors
+        blocks = [func((block_size(co_domain, coupled),), coupled) for coupled in coupled_sectors]
         if len(blocks) > 0:
             sample_block = blocks[0]
             coupled_sectors = np.asarray(coupled_sectors, int)
         else:
-            sample_block = func((1,) * len(legs), **func_kwargs)
+            sample_block = func((1,), co_domain.symmetry.trivial_sector)
+            coupled_sectors = co_domain.symmetry.empty_sector_array
+        dtype = self.block_dtype(sample_block)
+        return FusionTreeData(coupled_sectors, blocks, co_domain, co_domain, dtype)
+
+    def diagonal_all(self, a: DiagonalTensor) -> bool:
+        raise NotImplementedError
+
+    def diagonal_any(self, a: DiagonalTensor) -> bool:
+        raise NotImplementedError
+    
+    def mask_from_block(self, a: Block, large_leg: Space, small_leg: ElementarySpace) -> DiagonalData:
+        raise NotImplementedError('mask_from_block not implemented')  # TODO
+
+    def mask_unary_operand(self, mask: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
+        raise NotImplementedError
+        
+    def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
+        raise NotImplementedError
+
+    def diagonal_to_mask(self, tens: DiagonalTensor) -> tuple[DiagonalData, ElementarySpace]:
+        raise NotImplementedError
+
+    def from_sector_block_func(self, func, codomain: ProductSpace, domain: ProductSpace) -> FusionTreeData:
+        coupled_sectors = []
+        blocks = []
+        for i, _ in iter_common_sorted_arrays(domain.sectors, codomain.sectors):
+            coupled = domain.sectors[i]
+            shape = (block_size(codomain, coupled), block_size(domain, coupled))
+            coupled_sectors.append(coupled)
+            blocks.append(func(shape, coupled))
+        if len(blocks) > 0:
+            sample_block = blocks[0]
+            coupled_sectors = np.asarray(coupled_sectors, int)
+        else:
+            sample_block = func((1, 1), codomain.symmetry.trivial_sector)
             coupled_sectors = domain.symmetry.empty_sector_array
         dtype = self.block_dtype(sample_block)
         return FusionTreeData(coupled_sectors, blocks, domain, codomain, dtype)
 
-    def diagonal_from_block_func(self, func, leg: Space, func_kwargs={}) -> DiagonalData:
-        raise NotImplementedError('diagonal_from_block_func not implemented')  # TODO
-
-    def zero_data(self, legs: list[Space], dtype: Dtype, num_domain_legs: int) -> FusionTreeData:
-        domain, codomain = _make_domain_codomain(legs, num_domain_legs=num_domain_legs, backend=self)
+    def zero_data(self, codomain: ProductSpace, domain: ProductSpace, dtype: Dtype
+                  ) -> FusionTreeData:
         return FusionTreeData(coupled_sectors=codomain.symmetry.empty_sector_array, blocks=[],
                               domain=domain, codomain=codomain, dtype=dtype)
 
-    def zero_diagonal_data(self, leg: Space, dtype: Dtype) -> DiagonalData:
-        raise NotImplementedError('zero_diagonal_data not implemented')  # TODO
+    def zero_diagonal_data(self, co_domain: ProductSpace, dtype: Dtype) -> DiagonalData:
+        return FusionTreeData(coupled_sectors=co_domain.symmetry.empty_sector_array, blocks=[],
+                              domain=co_domain, codomain=co_domain, dtype=dtype)
 
-    def eye_data(self, legs: list[Space], dtype: Dtype) -> FusionTreeData:
+    def eye_data(self, co_domain: ProductSpace, dtype: Dtype) -> FusionTreeData:
         # Note: the identity has the same matrix elements in all ONB, so ne need to consider
         #       the basis perms.
-        # all_legs = legs + [leg.dual for leg in legs[::-1]]
-        # domain == [l.dual for l in all_legs[J:]] == legs
-        # codomain == all_legs[:J] == legs
-        # which makes intuitive sense, this is what we want from the identity *map*.
-        domain = ProductSpace(legs, backend=self)
-        coupled_sectors = domain.sectors
-        blocks = [self.eye_matrix(block_size(domain, c), dtype) for c in coupled_sectors]
-        return FusionTreeData(coupled_sectors, blocks, domain, domain, dtype)
+        coupled_sectors = co_domain.sectors
+        blocks = [self.eye_matrix(block_size(co_domain, c), dtype) for c in coupled_sectors]
+        return FusionTreeData(coupled_sectors, blocks, co_domain, co_domain, dtype)
 
-    def copy_data(self, a: BlockDiagonalTensor) -> FusionTreeData:
+    def copy_data(self, a: SymmetricTensor) -> FusionTreeData:
         return FusionTreeData(
             coupled_sectors=a.data.coupled_sectors.copy(),  # OPTIMIZE do we need to copy these?
             blocks=[self.block_copy(block) for block in a.data.blocks],
             codomain=a.data.codomain, domain=a.data.domain
         )
 
-    def _data_repr_lines(self, a: BlockDiagonalTensor, indent: str, max_width: int,
+    def _data_repr_lines(self, a: SymmetricTensor, indent: str, max_width: int,
                          max_lines: int) -> list[str]:
+        raise NotImplementedError  # TODO not yet reviewed
         from ..dummy_config import printoptions
         if len(a.data.blocks) == 0:
             return [f'{indent}* Data : no non-zero blocks']
@@ -629,68 +644,69 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                 ]
         return lines
 
-    def tdot(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, axs_a: list[int],
+    def tdot(self, a: SymmetricTensor, b: SymmetricTensor, axs_a: list[int],
              axs_b: list[int]) -> Data:
         # TODO need to be able to specify levels of braiding in general case!
         # TODO offer separate planar version? or just high
         raise NotImplementedError('tdot not implemented')  # TODO
 
-    def svd(self, a: BlockDiagonalTensor, new_vh_leg_dual: bool, algorithm: str | None,
+    def svd(self, a: SymmetricTensor, new_vh_leg_dual: bool, algorithm: str | None,
             compute_u: bool, compute_vh: bool) -> tuple[Data, DiagonalData, Data, ElementarySpace]:
         # TODO need to redesign Backend.svd specification! need to allow more than two legs!
         # TODO need to be able to specify levels of braiding in general case!
         raise NotImplementedError('svd not implemented')  # TODO
 
-    def qr(self, a: BlockDiagonalTensor, new_r_leg_dual: bool, full: bool
+    def qr(self, a: SymmetricTensor, new_r_leg_dual: bool, full: bool
            ) -> tuple[Data, Data, ElementarySpace]:
         # TODO do SVD first, comments there apply.
         raise NotImplementedError('qr not implemented')  # TODO
 
-    def outer(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor) -> Data:
+    def outer(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
         # TODO what target leg order is easiest? does it match the one specified in Backend.outer?
         raise NotImplementedError('outer not implemented')  # TODO
 
-    def inner(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, do_conj: bool,
+    def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_conj: bool,
               axs2: list[int] | None) -> complex:
         raise NotImplementedError('inner not implemented')  # TODO
     
-    def permute_legs(self, a: BlockDiagonalTensor, permutation: list[int] | None, num_domain_legs: int
-                     ) -> Data:
-        # TODO need to specify levels for braiding and partitioning into domain / codomain
+    def permute_legs(self, a: SymmetricTensor, **kw) -> Data:
+        # TODO decide signature
         raise NotImplementedError('permute_legs not implemented')  # TODO
 
-    def trace_full(self, a: BlockDiagonalTensor, idcs1: list[int], idcs2: list[int]
+    def trace_full(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int]
                    ) -> float | complex:
         raise NotImplementedError('trace_full not implemented')  # TODO
 
-    def trace_partial(self, a: BlockDiagonalTensor, idcs1: list[int], idcs2: list[int],
+    def trace_partial(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int],
                       remaining_idcs: list[int]) -> Data:
         raise NotImplementedError('trace_partial not implemented')  # TODO
 
     def diagonal_tensor_trace_full(self, a: DiagonalTensor) -> float | complex:
         raise NotImplementedError('diagonal_tensor_trace_full not implemented')  # TODO
 
-    def conj(self, a: BlockDiagonalTensor | DiagonalTensor) -> Data | DiagonalData:
+    def conj(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
         # TODO what does this even mean? transpose of dagger?
         # TODO should we offer transpose and dagger too?
         raise NotImplementedError('conj not implemented')  # TODO
 
-    def combine_legs(self, a: BlockDiagonalTensor, combine_slices: list[int, int],
+    def combine_legs(self, a: SymmetricTensor, combine_slices: list[int, int],
                      product_spaces: list[ProductSpace], new_axes: list[int],
                      final_legs: list[Space]) -> Data:
         raise NotImplementedError('combine_legs not implemented')  # TODO
         
-    def split_legs(self, a: BlockDiagonalTensor, leg_idcs: list[int],
+    def split_legs(self, a: SymmetricTensor, leg_idcs: list[int],
                    final_legs: list[Space]) -> Data:
         # TODO do we need metadata to split, like in abelian?
         raise NotImplementedError('split_legs not implemented')  # TODO
 
-    def add_trivial_leg(self, a: BlockDiagonalTensor, pos: int, to_domain: bool) -> Data:
+    def add_trivial_leg(self, a: SymmetricTensor, legs_pos: int, add_to_domain: bool,
+                        co_domain_pos: int, new_codomain: ProductSpace, new_domain: ProductSpace
+                        ) -> Data:
         raise NotImplementedError('add_trivial_leg not implemented')  # TODO
 
-    def almost_equal(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, rtol: float, atol: float
+    def almost_equal(self, a: SymmetricTensor, b: SymmetricTensor, rtol: float, atol: float
                      ) -> bool:
-        for i, j in _iter_common_noncommon_sorted_arrays(a.data.coupled_sectors, b.data.coupled_sectors):
+        for i, j in iter_common_noncommon_sorted_arrays(a.data.coupled_sectors, b.data.coupled_sectors):
             if j is None:
                 if self.block_max_abs(a.data.blocks[i]) > atol:
                     return False
@@ -702,10 +718,10 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                     return False
         return True
 
-    def squeeze_legs(self, a: BlockDiagonalTensor, idcs: list[int]) -> Data:
+    def squeeze_legs(self, a: SymmetricTensor, idcs: list[int]) -> Data:
         raise NotImplementedError('squeeze_legs not implemented')  # TODO
 
-    def norm(self, a: BlockDiagonalTensor | DiagonalTensor, order: int | float = 2) -> float:
+    def norm(self, a: SymmetricTensor | DiagonalTensor, order: int | float = 2) -> float:
         # OPTIMIZE should we offer the square-norm instead?
         if order != 2:
             raise ValueError(f'{self} only supports 2-norm.')
@@ -714,18 +730,18 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
             norm_sq += a.symmetry.sector_dim(coupled) * (self.block_norm(block) ** 2)
         return self.block_sqrt(norm_sq)
 
-    def act_block_diagonal_square_matrix(self, a: BlockDiagonalTensor,
+    def act_block_diagonal_square_matrix(self, a: SymmetricTensor,
                                          block_method: Callable[[Block], Block]) -> Data:
         raise NotImplementedError('act_block_diagonal_square_matrix not implemented')  # TODO
 
-    def add(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor) -> Data:
+    def add(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
         assert a.data.num_domain_legs == b.data.num_domain_legs
         dtype = a.data.dtype.common(b.data.dtype)
         a_blocks = [self.block_to_dtype(_a, dtype) for _a in a.data.blocks]
         b_blocks = [self.block_to_dtype(_b, dtype) for _b in b.data.blocks]
         blocks = []
         coupled_sectors = []
-        for i, j in _iter_common_noncommon_sorted_arrays(a.data.coupled_sectors, b.data.coupled_sectors):
+        for i, j in iter_common_noncommon_sorted_arrays(a.data.coupled_sectors, b.data.coupled_sectors):
             if i is None:
                 blocks.append(b_blocks[j])
                 coupled_sectors.append(b.data.coupled_sectors[j])
@@ -741,9 +757,9 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
             coupled_sectors = np.array(coupled_sectors)
         return FusionTreeData(coupled_sectors, blocks, a.data.domain, a.data.codomain, dtype)
 
-    def mul(self, a: float | complex, b: BlockDiagonalTensor) -> Data:
+    def mul(self, a: float | complex, b: SymmetricTensor) -> Data:
         if a == 0.:
-            return self.zero_data(b.legs, b.data.dtype, b.num_domain_legs)
+            return self.zero_data(b.codomain, b.domain, b.dtype)
         blocks = [self.block_mul(a, T) for T in b.data.blocks]
         if len(blocks) == 0:
             if isinstance(a, float):
@@ -758,13 +774,13 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                   is_real: bool = False) -> ElementarySpace:
         raise NotImplementedError('infer_leg not implemented')  # TODO
 
-    def get_element(self, a: BlockDiagonalTensor, idcs: list[int]) -> complex | float | bool:
+    def get_element(self, a: SymmetricTensor, idcs: list[int]) -> complex | float | bool:
         raise NotImplementedError('get_element not implemented')  # TODO
 
     def get_element_diagonal(self, a: DiagonalTensor, idx: int) -> complex | float | bool:
         raise NotImplementedError('get_element_diagonal not implemented')  # TODO
 
-    def set_element(self, a: BlockDiagonalTensor, idcs: list[int], value: complex | float) -> Data:
+    def set_element(self, a: SymmetricTensor, idcs: list[int], value: complex | float) -> Data:
         # TODO not sure this can even be done sensibly, one entry of the dense block
         #      affects in general many entries of the blocks.
         raise NotImplementedError('set_element not implemented')  # TODO
@@ -775,7 +791,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         #      affects in general many entries of the blocks.
         raise NotImplementedError('set_element_diagonal not implemented')  # TODO
 
-    def diagonal_data_from_full_tensor(self, a: BlockDiagonalTensor, check_offdiagonal: bool
+    def diagonal_data_from_full_tensor(self, a: SymmetricTensor, check_offdiagonal: bool
                                        ) -> DiagonalData:
         raise NotImplementedError('diagonal_data_from_full_tensor not implemented')  # TODO
 
@@ -785,43 +801,94 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def full_data_from_mask(self, a: Mask, dtype: Dtype) -> Data:
         raise NotImplementedError('full_data_from_mask not implemented')  # TODO
 
-    def scale_axis(self, a: BlockDiagonalTensor, b: DiagonalTensor, leg: int) -> Data:
+    def scale_axis(self, a: SymmetricTensor, b: DiagonalTensor, leg: int) -> Data:
         raise NotImplementedError('scale_axis not implemented')  # TODO
 
     # TODO how does entropy work here, should it consider quantum dimensions?
 
     def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs,
                                    maps_zero_to_zero: bool) -> DiagonalData:
-        raise NotImplementedError('diagonal_elementwise_unary not implemented')  # TODO
+        if maps_zero_to_zero:
+            blocks = [func(b, **func_kwargs) for b in a.data.blocks]
+            coupled_sectors = a.data.coupled_sectors
+        else:
+            coupled_sectors = a.domain.sectors
+            blocks = []
+            for i, j in iter_common_noncommon_sorted_arrays(coupled_sectors, a.data.coupled_sectors):
+                if j is None:
+                    block = self.zero_block([block_size(a.domain, coupled_sectors[i])], dtype=a.dtype)
+                else:
+                    block = a.data.blocks[j]
+                blocks.append(func(block, **func_kwargs))
+        if len(blocks) > 0:
+            dtype = self.block_dtype(blocks[0])
+        else:
+            dtype = self.block_dtype(func(self.ones_block([1], dtype=a.dtype), **func_kwargs))
+        return FusionTreeData(coupled_sectors=coupled_sectors, blocks=blocks,
+                              domain=a.data.domain, codomain=a.data.codomain, dtype=dtype)
 
     def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
                                     func_kwargs, partial_zero_is_zero: bool) -> DiagonalData:
-        raise NotImplementedError('diagonal_elementwise_binary not implemented')  # TODO
+        a_coupled = a.data.coupled_sectors
+        b_coupled = b.data.coupled_sectors
+        if partial_zero_is_zero:
+            blocks = []
+            coupled_sectors = []
+            for i, j in iter_common_sorted_arrays(a_coupled, b_coupled):
+                coupled = a_coupled[i]
+                coupled_sectors.append(coupled)
+                blocks.append(func(a.data.blocks[i], b.data.blocks[j], **func_kwargs))
+        else:
+            i_a = 0  # during the loop: a_coupled[:i_a] was already visited
+            i_b = 0  # same for b_coupled
+            coupled_sectors = a.domain.sectors
+            blocks = []
+            for coupled  in coupled_sectors:
+                if np.all(coupled == a_coupled[i_a]):
+                    a_block = a.data.block[i_a]
+                    i_a += 1
+                else:
+                    a_block = self.zero_block([block_size(a.domain, coupled)], dtype=a.dtype)
+                if np.all(coupled == b_coupled[i_b]):
+                    b_block = b.data.block[i_b]
+                    i_b += 1
+                else:
+                    b_block = self.zero_block([block_size(a.domain, coupled)], dtype=b.dtype)
+                blocks.append(func(a_block, b_block, **func_kwargs))
+        if len(blocks) > 0:
+            dtype = self.block_dtype(blocks[0])
+        else:
+            a_block = self.ones_block([1], dtype=a.dtype)
+            b_block = self.ones_block([1], dtype=b.dtype)
+            example_block = func(a_block, b_block, **func_kwargs)
+            dtype = self.block_dtype(example_block)
+        return FusionTreeData(coupled_sectors=coupled_sectors, blocks=blocks, domain=a.data.domain,
+                              codomain=a.data.codomain, dtype=dtype)
 
-    def apply_mask_to_Tensor(self, tensor: BlockDiagonalTensor, mask: Mask, leg_idx: int) -> Data:
+    def apply_mask_to_Tensor(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int) -> Data:
         raise NotImplementedError('apply_mask_to_Tensor not implemented')  # TODO
 
     def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
         raise NotImplementedError('apply_mask_to_DiagonalTensor not implemented')  # TODO
 
-    def eigh(self, a: BlockDiagonalTensor, sort: str = None) -> tuple[DiagonalData, Data]:
+    def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
         # TODO do SVD first, comments there apply.
         raise NotImplementedError('eigh not implemented')  # TODO
 
-    def from_flat_block_trivial_sector(self, block: Block, leg: Space) -> Data:
-        raise NotImplementedError('from_flat_block_trivial_sector not implemented')  # TODO
+    def from_dense_block_trivial_sector(self, block: Block, leg: Space) -> Data:
+        raise NotImplementedError('from_dense_block_trivial_sector not implemented')  # TODO
 
-    def to_flat_block_trivial_sector(self, tensor: BlockDiagonalTensor) -> Block:
-        raise NotImplementedError('to_flat_block_trivial_sector not implemented')  # TODO
+    def to_dense_block_trivial_sector(self, tensor: SymmetricTensor) -> Block:
+        raise NotImplementedError('to_dense_block_trivial_sector not implemented')  # TODO
 
-    def inv_part_from_flat_block_single_sector(self, block: Block, leg: Space,
-                                               dummy_leg: ElementarySpace) -> Data:
-        raise NotImplementedError('inv_part_from_flat_block_single_sector not implemented')  # TODO
+    def inv_part_from_dense_block_single_sector(self, vector: Block, space: Space,
+                                               charge_leg: ElementarySpace) -> Data:
+        raise NotImplementedError('inv_part_from_dense_block_single_sector not implemented')  # TODO
 
-    def inv_part_to_flat_block_single_sector(self, tensor: BlockDiagonalTensor) -> Block:
+    def inv_part_to_flat_block_single_sector(self, tensor: SymmetricTensor) -> Block:
         raise NotImplementedError('inv_part_to_flat_block_single_sector not implemented')  # TODO
 
-    def flip_leg_duality(self, tensor: BlockDiagonalTensor, which_legs: list[int],
+    def flip_leg_duality(self, tensor: SymmetricTensor, which_legs: list[int],
                          flipped_legs: list[Space], perms: list[np.ndarray]) -> Data:
         # TODO think carefully about what this means.
         raise NotImplementedError('flip_leg_duality not implemented')  # TODO

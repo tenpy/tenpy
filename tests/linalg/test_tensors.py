@@ -5,306 +5,265 @@ import numpy.testing as npt
 import pytest
 import operator
 
-from tenpy.linalg import tensors
-from tenpy.linalg.backends.no_symmetry import NoSymmetryBackend
-from tenpy.linalg.backends.abelian import AbelianBackend
-from tenpy.linalg.backends.fusion_tree_backend import FusionTreeBackend
-from tenpy.linalg.backends.torch import TorchBlockBackend
-from tenpy.linalg.backends.numpy import NumpyBlockBackend
+from tenpy.linalg import tensors, backends
 from tenpy.linalg.backends.backend_factory import get_backend
 from tenpy.linalg.dtypes import Dtype
 from tenpy.linalg.spaces import Space, ElementarySpace, ProductSpace, _fuse_spaces
 from tenpy.linalg.symmetries import ProductSymmetry, z4_symmetry, SU2Symmetry
 
 
+def test_base_Tensor(make_compatible_space, compatible_backend):
 
-def random_block(shape, backend):
-    if isinstance(backend, NumpyBlockBackend):
-        return np.random.random(shape)
-    elif isinstance(backend, TorchBlockBackend):
-        import torch
-        return torch.randn(shape)
+    class DummyTensor(tensors.Tensor):
+        """Want to test the Tensor class directly.
 
+        This overrides the abstractmethods, so we can actually make instances.
+        """
 
-# TODO tests for ChargedTensor, also as input for tdot etc
-# TODO DiagonalTensor
+        def copy(self, deep=True) -> tensors.Tensor:
+            raise NotImplementedError
 
+        def to_dense_block(self, leg_order: list[int | str] = None, dtype: Dtype = None):
+            raise NotImplementedError
 
-def check_shape(shape: tensors.Shape, dims: tuple[int, ...], labels: list[str]):
-    shape.test_sanity()
-
-    # check attributes
-    assert shape.dims == list(dims)
-    assert shape._labels == labels
-    assert shape.labels == labels
-
-    # check iter
-    assert tuple(shape) == dims
-    n = 0
-    for d in shape:
-        assert d == dims[n]
-        n += 1
-
-    # check __getitem__
-    for n, label in enumerate(labels):
-        # indexing by string label
-        if label is not None:
-            assert shape[label] == dims[n]
-        # indexing by integer
-        assert shape[n] == dims[n]
-    assert shape[1:] == list(dims)[1:]
-    with pytest.raises(IndexError):
-        _ = shape['label_that_shape_does_not_have']
-
-    assert shape.is_fully_labelled != (None in labels)
+        def as_SymmetricTensor(self) -> tensors.SymmetricTensor:
+            raise NotImplementedError
 
 
-@pytest.mark.parametrize('num_domain_legs', [0, 1, 2, 3])
-def test_Tensor_classmethods(make_compatible_tensor, num_domain_legs, tol=1e-6):
-    # TODO why do we need such a loose tol?
-    T: tensors.Tensor = make_compatible_tensor(num_legs=3, num_domain_legs=num_domain_legs)
-    assert T.num_domain_legs == num_domain_legs
-    backend = T.backend
+    a, b, c, d, e = [make_compatible_space() for _ in range(5)]
 
-    if (isinstance(backend, FusionTreeBackend)) and (isinstance(T.symmetry, ProductSymmetry)):
-        with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
-            numpy_block = T.to_numpy()
-        return
+    print('checking different labels input formats')
+    tens1 = DummyTensor([a, b, c], [d, e], backend=compatible_backend, labels=None, dtype=Dtype.float64)
+    tens1.test_sanity()
+    assert tens1._labels == [None] * 5
     
-    legs = T.legs
-    dims = tuple(T.shape)
+    tens2 = DummyTensor([a, b, c], [d, e], backend=compatible_backend,
+                        labels=['a', 'b', 'c', 'e*', 'd*'], dtype=Dtype.float64)
+    tens2.test_sanity()
+    assert tens2._labels == ['a', 'b', 'c', 'e*', 'd*']
+    
+    tens3 = DummyTensor([a, b, c], [d, e], backend=compatible_backend,
+                        labels=[['a', None, None], ['d*', 'e*']], dtype=Dtype.float64)
+    tens3.test_sanity()
+    assert tens3._labels == ['a', None, None, 'e*', 'd*']
+    
+    tens4 = DummyTensor([a, b, c], [d, e], backend=compatible_backend,
+                        labels=[['a', None, None], None], dtype=Dtype.float64)
+    tens4.test_sanity()
+    assert tens4._labels == ['a', None, None, None, None]
+
+    print('checking .legs , .num_(co)domain_legs')
+    for t in [tens1, tens2, tens3, tens4]:
+        assert t.legs == [a, b, c, e.dual, d.dual]
+        assert t.num_legs == 5
+        assert t.num_codomain_legs == 3
+        assert t.num_domain_legs == 2
+        assert t.num_parameters <= t.size
+        t.parent_space.test_sanity()
+
+    with pytest.raises(TypeError, match='does not support == comparison'):
+        _ = tens1 == tens2
+
+    print('checking .(co)domain_labels')
+    assert tens1.codomain_labels == [None] * 3
+    assert tens1.domain_labels == [None] * 2
+    assert tens2.codomain_labels == ['a', 'b', 'c']
+    assert tens2.domain_labels == ['d*', 'e*']
+    assert tens3.codomain_labels == ['a', None, None]
+    assert tens3.domain_labels == ['d*', 'e*']
+    assert tens4.codomain_labels == ['a', None, None]
+    assert tens4.domain_labels == [None, None]
+
+    print('checking .is_fully_labelled')
+    assert not tens1.is_fully_labelled
+    assert tens2.is_fully_labelled
+    assert not tens3.is_fully_labelled
+    assert not tens4.is_fully_labelled
+
+    print('check setting labels')
+    tens1.labels = ['e', 'b', 'f', 'c', 'x']
+    assert tens1._labels == ['e', 'b', 'f', 'c', 'x']
+
+    print('check relabel')
+    tens1.relabel(dict(e='xx', x='e'))
+    assert tens1._labels == ['xx', 'b', 'f', 'c', 'e']
+
+    print('check _parse_leg_idx')
+    assert tens1._parse_leg_idx(1) == (False, 1, 1)
+    assert tens1._parse_leg_idx(3) == (True, 1, 3)
+    assert tens1._parse_leg_idx(-1) == (True, 0, 4)
+    assert tens1._parse_leg_idx(-3) == (False, 2, 2)
+    assert tens2._parse_leg_idx('a') == (False, 0, 0)
+    assert tens2._parse_leg_idx('e*') == (True, 1, 3)
+
+    print('check get_leg')
+    assert tens2.get_leg(0) == a
+    assert tens2.get_leg('b') == b
+    assert tens2.get_leg('e*') == e.dual
+
+    print('check has_label')
+    assert tens2.has_label('a')
+    assert tens2.has_label('a', 'b', 'e*')
+    assert not tens2.has_label('foo')
+    assert not tens2.has_label('a', 'b', '42')
+
+
+@pytest.mark.parametrize('leg_nums', [(1, 1), (2, 1), (3, 0), (0, 3)],
+                         ids=['1->1', '1->2', '0->3', '3->0'])
+def test_SymmetricTensor(make_compatible_tensor, make_compatible_space, leg_nums):
+    T: tensors.SymmetricTensor = make_compatible_tensor(*leg_nums)
+    T2: tensors.SymmetricTensor = make_compatible_tensor(codomain=T.codomain, domain=T.domain)
+    backend = T.backend
+    
+    T.test_sanity()
+    assert T.num_codomain_legs == leg_nums[0]
+    assert T.num_domain_legs == leg_nums[1]
+
+    print('checking to_numpy')
+    if (isinstance(backend, backends.FusionTreeBackend)) and (isinstance(T.symmetry, ProductSymmetry)):
+        if T.codomain.num_spaces > 1 or T.domain.num_spaces > 1:
+            # if both have at most one leg, we actually dont need fusion tensors to convert.
+            with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
+                numpy_block = T.to_numpy()
+            return
 
     numpy_block = T.to_numpy()
     dense_block = backend.block_from_numpy(numpy_block)
 
     print('checking from_dense_block')
-    tens = tensors.BlockDiagonalTensor.from_dense_block(dense_block, legs=legs, backend=backend, tol=tol)
-    tens.test_sanity()
-    data = backend.block_to_numpy(tens.to_dense_block())
-    npt.assert_array_almost_equal_nulp(data, numpy_block, 100)
-    #
-    if T.num_parameters < T.parent_space.dim:  # otherwise all blocks are symmetric
-        non_symmetric_block = dense_block + tens.backend.block_random_uniform(dims, dtype=T.dtype)
-        with pytest.raises(ValueError, match='Block is not symmetric'):
-            _ = tensors.BlockDiagonalTensor.from_dense_block(non_symmetric_block, legs=legs, backend=backend)
-
-    print('checking from numpy')
-    tens = tensors.BlockDiagonalTensor.from_dense_block(numpy_block, legs=legs, backend=backend, tol=tol)
-    tens.test_sanity()
-    data = tens.to_numpy()
-    npt.assert_array_almost_equal_nulp(data, numpy_block, 100)
-
-    # TODO from_block_func, from_numpy_func
-
-    # TODO random_uniform, random_normal
-
-    print('checking zero')
-    tens = tensors.BlockDiagonalTensor.zero(legs, backend=backend)
-    tens.test_sanity()
-    npt.assert_array_almost_equal_nulp(tens.to_numpy(), np.zeros(dims), 10)
-
-    print('checking eye (1 -> 1 legs)')
-    tens = tensors.BlockDiagonalTensor.eye(legs[0], backend=backend)
-    tens.test_sanity()
-    npt.assert_array_equal(tens.to_numpy(), np.eye(legs[0].dim))
-    
-    print('checking eye (2 -> 2 legs)')
-    tens = tensors.BlockDiagonalTensor.eye(legs[:2], backend=backend)
-    tens.test_sanity()
-    res = tens.to_numpy()
-    expect = np.eye(dims[0])[:, None, None, :] * np.eye(dims[1])[None, :, :, None]
-    
-    npt.assert_almost_equal(res, expect)
-
-
-def test_Tensor_methods(make_compatible_tensor, make_compatible_space):
-    T = make_compatible_tensor(num_legs=3)  # compatible legs where we can have blocks
-    backend = T.backend
-    legs = T.legs
-    dims = tuple(T.shape)
-
-    data1 = T.data
-    data2 = make_compatible_tensor(legs=legs).data
-
-    print('checking __init__ with labels=None')
-    tens1 = tensors.BlockDiagonalTensor(data1, legs=legs, num_domain_legs=0, backend=backend, labels=None)
-    tens1.test_sanity()
-
-    print('checking __init__, partially labelled')
-    labels2 = [None, 'a', 'b']
-    tens2 = tensors.BlockDiagonalTensor(data2, legs=legs, num_domain_legs=0, backend=backend, labels=labels2)
-    tens2.test_sanity()
-
-    print('checking __init__, fully labelled')
-    labels3 = ['foo', 'a', 'b']
-    tens3 = tensors.BlockDiagonalTensor(data1, legs=legs, num_domain_legs=0, backend=backend, labels=labels3)
-    tens3.test_sanity()
-
-    check_shape(tens1.shape, dims=dims, labels=[None, None, None])
-    check_shape(tens2.shape, dims=dims, labels=labels2)
-    check_shape(tens3.shape, dims=dims, labels=labels3)
-
-    print('check size')
-    assert tens3.size == np.prod(dims)
-
-    print('check num_parameters')
-    if isinstance(backend, NoSymmetryBackend):
-        expect = np.prod(backend.block_shape(data1))
-    elif isinstance(backend, AbelianBackend):
-        tensor_with_all_blocks = tensors.BlockDiagonalTensor.from_block_func(
-            func=backend.zero_block, legs=legs, backend=backend,
-            func_kwargs=dict(dtype=Dtype.float64)
-        )
-        expect = sum(np.prod(backend.block_shape(block)) for block in tensor_with_all_blocks.data.blocks)
-    else:
-        pytest.xfail(f'Dont know how to construct expected num_parameters for {type(backend)}')
-    assert tens3.num_parameters == expect
-
-    print('check is_fully_labelled')
-    assert not tens1.is_fully_labelled
-    assert not tens2.is_fully_labelled
-    assert tens3.is_fully_labelled
-
-    print('check has_label')
-    assert tens3.has_label('a')
-    assert tens3.has_label('a', 'foo')
-    assert not tens3.has_label('bar')
-    assert not tens3.has_label('a', 'bar')
-
-    print('check labels_are')
-    assert tens3.labels_are('foo', 'a', 'b')
-    assert tens3.labels_are('a', 'foo', 'b')
-    assert not tens3.labels_are('a', 'foo', 'b', 'bar')
-
-    print('check setting labels')
-    tens3.set_labels(['i', 'j', 'k'])
-    assert tens3.labels_are('i', 'j', 'k')
-    tens3.labels = ['foo', 'a', 'b']
-    assert tens3.labels_are('foo', 'a', 'b')
-
-    print('check get_leg_idx')
-    assert tens3.get_leg_idx(0) == 0
-    assert tens3.get_leg_idx(-1) == 2
-    with pytest.raises(ValueError):
-        tens3.get_leg_idx(10)
-    assert tens3.get_leg_idx('foo') == 0
-    assert tens3.get_leg_idx('a') == 1
-    with pytest.raises(ValueError):
-        tens3.get_leg_idx('bar')
-    with pytest.raises(TypeError):
-        tens3.get_leg_idx(None)
-
-    print('check get_leg_idcs')
-    assert tens3.get_leg_idcs('foo') == [0]
-    assert tens3.get_leg_idcs(['foo', 'b', 1]) == [0, 2, 1]
-
-    print('check item')
-    triv_legs = [make_compatible_space(1, 1) for _ in range(2)]
-    for leg in triv_legs[:]:
-        triv_legs.append(leg.dual)
-    assert all(leg.dim == 1 for leg in triv_legs)
-    data4 = make_compatible_tensor(legs=triv_legs, real=True).data
-    tens4 = tensors.BlockDiagonalTensor(data4, num_domain_legs=0, backend=backend, legs=triv_legs)
-    tens4_item = backend.data_item(data4)
-    # not a good test, but the best we can do backend independent:
-    assert tens4.item() == tens4_item
-
-    print('check str and repr')
-    str(tens1)
-    str(tens3)
-    repr(tens1)
-    repr(tens3)
-
-    print('convert to dense')
-    dense1 = tens1.to_numpy()
-    dense2 = tens2.to_numpy()
-    dense3 = tens3.to_numpy()
-
-    print('check addition + multiplication')
-    neg_t3 = -tens3
-    npt.assert_array_equal(neg_t3.to_numpy(), -dense3)
-    a = 42
-    b = 17
-    with pytest.raises(ValueError) as err:
-        res = a * tens1 - b * tens2
-    assert "labelled tensors must be *fully* labelled" in err.value.args[0]  # TODO: check other config values?
-    tens1.set_labels(['foo', 'a', 'b'])
-    tens2.set_labels(['foo', 'a', 'b'])
-    res = a * tens1 - b * tens2
-    npt.assert_almost_equal(res.to_numpy(), a * dense1 - b * dense2)
-    res = tens1 / a + tens2 / b
-    npt.assert_almost_equal(res.to_numpy(), dense1 / a + dense2 / b)
-    # TODO check strict label behavior!
-
-    with pytest.raises(TypeError):
-        tens1 == tens2
-
-    print('check conversions, float, complex, array')
-    tens4.set_labels(['i', 'j', 'i*', 'j*'])
-    assert isinstance(float(tens4), float)
-    npt.assert_equal(float(tens4), float(tens4_item))
-    assert isinstance(complex(tens4 + 2.j * tens4), complex)
-    npt.assert_equal(complex(tens4 + 2.j * tens4), complex(tens4_item + 2.j * tens4_item))
-
-    with pytest.warns(UserWarning, match='converting complex to real, only return real part!'):
-        r = float(tens4 + 2.j * tens4)
-    assert r == tens4_item
-
-
-def test_Tensor_tofrom_flat_block_trivial_sector(make_compatible_tensor):
-    # TODO move to some other tests after restructuring
-    tens = make_compatible_tensor(labels=['a'])
-    leg, = tens.legs
-    block_size = leg.sector_multiplicity(tens.symmetry.trivial_sector)
-
-    if isinstance(tens.backend, FusionTreeBackend):
-        with pytest.raises(NotImplementedError, match='to_flat_block_trivial_sector not implemented'):
-            block = tens.to_flat_block_trivial_sector()
-        return  # TODO
-    
-    block = tens.to_flat_block_trivial_sector()
-    assert tens.backend.block_shape(block) == (block_size,)
-    tens2 = tensors.BlockDiagonalTensor.from_flat_block_trivial_sector(leg=leg, block=block, backend=tens.backend, label='a')
-    tens2.test_sanity()
-    assert tensors.almost_equal(tens, tens2)
-    block2 = tens2.to_flat_block_trivial_sector()
-    npt.assert_array_almost_equal_nulp(tens.backend.block_to_numpy(block),
-                                       tens.backend.block_to_numpy(block2),
-                                       100)
-
-
-def test_ChargedTensor_tofrom_flat_block_single_sector(compatible_symmetry, make_compatible_sectors,
-                                                       make_compatible_tensor):
-    pytest.xfail(reason='unclear')  # TODO
-    # TODO move to some other tests after restructuring
-    sector = make_compatible_sectors(1)[0]
-    dummy_leg = ElementarySpace(compatible_symmetry, sector[None, :]).dual
-    inv_part = make_compatible_tensor(legs=[None, dummy_leg])
-    tens = tensors.ChargedTensor(invariant_part=inv_part)
-    leg = tens.legs[0]
-    block_size = leg.sector_multiplicity(sector)
-
-    block = tens.to_flat_block_single_sector()
-    assert tens.backend.block_shape(block) == (block_size,)
-    tens2 = tensors.ChargedTensor.from_flat_block_single_sector(
-        leg=leg, block=block, sector=sector, backend=tens.backend
+    tens = tensors.SymmetricTensor.from_dense_block(
+        dense_block, codomain=T.codomain, domain=T.domain, backend=backend
     )
-    tens2.test_sanity()
-    assert tens2.dummy_leg == tens.dummy_leg
-    assert tensors.almost_equal(tens, tens2)
-    block2 = tens2.to_flat_block_single_sector()
-    npt.assert_array_almost_equal_nulp(tens.backend.block_to_numpy(block),
-                                       tens.backend.block_to_numpy(block2),
-                                       100)
-    # check detect_sectors_from_block while we are at it
-    dense_block = tens.to_dense_block()
-    detected, = tensors.detect_sectors_from_block(block=dense_block, legs=[leg], backend=tens.backend)
-    npt.assert_array_equal(detected, sector)
+    tens.test_sanity()
+    npt.assert_allclose(tens.to_numpy(), numpy_block)
+    if T.num_parameters < T.size:  # otherwise all blocks are symmetric
+        non_symmetric_block = dense_block + tens.backend.block_random_uniform(T.shape, dtype=T.dtype)
+        with pytest.raises(ValueError, match='Block is not symmetric'):
+            _ = tensors.SymmetricTensor.from_dense_block(
+                non_symmetric_block, codomain=T.codomain, domain=T.domain, backend=backend
+            )
+
+    # TODO: missing coverage:
+    # - from_block_func / from_sector_block_func
+    # - random_uniform / random_normal
+    # - diagonal
+
+    print('checking from_zero')
+    zero_tens = tensors.SymmetricTensor.from_zero(codomain=T.codomain, domain=T.domain, backend=backend)
+    zero_tens.test_sanity()
+    npt.assert_array_almost_equal_nulp(zero_tens.to_numpy(), np.zeros(T.shape), 10)
+    
+    print('checking from_eye')
+    which = T.codomain if T.codomain.num_spaces > 0 else T.domain
+    if which.num_spaces > 2:
+        # otherwise it gets a bit expensive to compute
+        which = ProductSpace(which.spaces[:2], backend=backend)
+    labels=list('abcdefg')[:len(which)]
+    tens = tensors.SymmetricTensor.from_eye(which, backend=T.backend, labels=labels)
+    expect_from_backend = backend.block_to_numpy(
+        backend.eye_block([leg.dim for leg in which.spaces], dtype=T.dtype)
+    )
+    res = tens.to_numpy()
+    if which.num_spaces == 1:
+        expect_explicit = np.eye(which.dim)
+    elif which.num_spaces == 2:
+        expect_explicit = (np.eye(which.spaces[0].dim)[:, None, None, :]
+                           * np.eye(which.spaces[1].dim)[None, :, :, None])
+    elif which.num_spaces == 3:
+        expect_explicit = (np.eye(which.spaces[0].dim)[:, None, None, None, None, :]
+                           * np.eye(which.spaces[1].dim)[None, :, None, None, :, None]
+                           * np.eye(which.spaces[2].dim)[None, None, :, :, None, None])
+    else:
+        raise RuntimeError('Need to adjust test design')
+    npt.assert_allclose(expect_from_backend, expect_explicit)
+    npt.assert_allclose(res, expect_explicit, rtol=1e-7, atol=1e-10)
+
+    print('checking repr and str')
+    _ = str(T)
+    _ = repr(T)
+    _ = str(zero_tens)
+    _ = repr(zero_tens)
+
+    # TODO reactivate
+    # print('check addition and multiplication')
+    # numpy_block2 = T2.to_numpy()
+    # npt.assert_allclose((-T).to_numpy(), -numpy_block)
+    # npt.assert_allclose((42.3 * T).to_numpy(), 42.3 * numpy_block)
+    # npt.assert_allclose((T / 2.j).to_numpy(), numpy_block / 2.j)
+    # npt.assert_allclose((T + T2).to_numpy(), numpy_block + numpy_block2)
+    # npt.assert_allclose((T - T2).to_numpy(), numpy_block - numpy_block2)
+
+    # TODO reactivate
+    # print('check float conversion etc')
+    # a, b, c, d = [make_compatible_space(max_sectors=1, max_mult=1) for _ in range(4)]
+    # T_scalar: tensors.SymmetricTensor = make_compatible_tensor([a, b], [c, d])
+    # value = T_scalar.to_numpy().item()
+    # npt.assert_allclose(float(T_scalar), value)
+    # npt.assert_allclose(complex(T_scalar), value)
+
+
+def test_DiagonalTensor(make_compatible_tensor):
+    T: tensors.DiagonalTensor = make_compatible_tensor(cls=tensors.DiagonalTensor)
+    T.test_sanity()
+
+    print('checking diagonal_as_numpy')
+    np_diag = T.diagonal_as_numpy()
+
+    print('checking from_diag_block')
+    tens = tensors.DiagonalTensor.from_diag_block(np_diag, leg=T.leg, backend=T.backend)
+    tens.test_sanity()
+    res = tens.diagonal_as_numpy()
+    npt.assert_array_almost_equal_nulp(res, np_diag, 100)
+
+    print('checking to_numpy')
+    np_full = T.to_numpy()
+    npt.assert_array_almost_equal_nulp(np_full, np.diag(np_diag), 100)
+
+    print('checking from zero')
+    zero_tens = tensors.DiagonalTensor.from_zero(T.leg, backend=T.backend)
+    zero_tens.test_sanity()
+    npt.assert_array_almost_equal_nulp(zero_tens.diagonal_as_numpy(), np.zeros_like(np_diag), 100)
+
+    print('checking from eye')
+    tens = tensors.DiagonalTensor.from_eye(T.leg, backend=T.backend)
+    tens.test_sanity()
+    npt.assert_array_almost_equal_nulp(tens.diagonal_as_numpy(), np.ones_like(np_diag), 100)
+
+    # TODO from_random_*
+    # TODO from_tensor
+
+    print('checking repr and str')
+    _ = str(T)
+    _ = repr(T)
+    _ = str(zero_tens)
+    _ = repr(zero_tens)
+
+    # TODO elementwise dunder methods. loop over operator.XXX functions?
+    # TODO float(), complex(), bool()
+
+
+def test_Mask(make_compatible_tensor):
+    with pytest.raises(NotImplementedError):
+        T: tensors.Mask = make_compatible_tensor(cls=tensors.Mask)
+        T.test_sanity()
+    # TODO expand
+
+
+def test_ChargedTensor():
+    pass  # TODO
 
 
 @pytest.mark.parametrize('symmetry_backend', ['abelian', pytest.param('fusion_tree', marks=pytest.mark.FusionTree)])
-@pytest.mark.parametrize('num_domain_legs', [0, 1, 2])
-def test_from_block_z4symm_2legs(symmetry_backend, num_domain_legs, block_backend):
+def test_explicit_blocks(symmetry_backend, block_backend):
+    """Do detailed tests with concrete examples.
+
+    Convert a small dense block to a Tensor.
+    Construct the expected data (blocks) manually and compare.
+
+    This is useful e.g. for debugging from_dense_block and to check that the data format is
+    what we expect.
+    """
+    
     backend = get_backend(symmetry_backend, block_backend)
     all_qi = z4_symmetry.all_sectors()
     q0, q1, q2, q3 = all_qi
@@ -313,15 +272,20 @@ def test_from_block_z4symm_2legs(symmetry_backend, num_domain_legs, block_backen
     s1 = ElementarySpace.from_basis(z4_symmetry, basis1)  # sectors = [0, 2, 3]
     s2 = ElementarySpace.from_basis(z4_symmetry, basis2)  # sectors = [0, 1, 2, 3]
 
-    #      q: 2,  0,  1,  2,  3,  0,  1      q
-    data = [[ 0,  0,  1,  0,  0,  0,  2],  # 3
-            [ 0,  0,  3,  0,  0,  0,  4],  # 3
-            [ 5,  0,  0,  6,  0,  0,  0],  # 2
-            [ 0,  7,  0,  0,  0,  8,  0],  # 0
-            [ 0,  0,  9,  0,  0,  0, 10],  # 3
-            [11,  0,  0, 12,  0,  0,  0]]  # 2
 
-    # after applying the basis perm
+    print(f'\n\nBOTH LEGS IN CODOMAIN:\n')
+
+    #             s2 : 2,  0,  1,  2,  3,  0,  1     s1
+    data = np.array([[ 0,  0,  1,  0,  0,  0,  2],  # 3 
+                     [ 0,  0,  3,  0,  0,  0,  4],  # 3 
+                     [ 5,  0,  0,  6,  0,  0,  0],  # 2 
+                     [ 0,  7,  0,  0,  0,  8,  0],  # 0 
+                     [ 0,  0,  9,  0,  0,  0, 10],  # 3 
+                     [11,  0,  0, 12,  0,  0,  0]], # 2
+                    dtype=float)
+
+    print('after applying basis perm:')
+    print(data[np.ix_(s1.basis_perm, s2.basis_perm)])
     # q: 0   0   1   1   2   2   3       q
     # [[ 7.  8.  0.  0.  0.  0.  0.]     0
     #  [ 0.  0.  0.  0.  5.  6.  0.]     2
@@ -329,96 +293,251 @@ def test_from_block_z4symm_2legs(symmetry_backend, num_domain_legs, block_backen
     #  [ 0.  0.  1.  2.  0.  0.  0.]     3
     #  [ 0.  0.  3.  4.  0.  0.  0.]     3
     #  [ 0.  0.  9. 10.  0.  0.  0.]]    3
-    
-    block = backend.block_from_numpy(np.asarray(data, dtype=float))
-    t = tensors.BlockDiagonalTensor.from_dense_block(
-        block, [s1, s2], backend=backend, num_domain_legs=num_domain_legs
-    )
-    t.test_sanity()
-    assert t.num_domain_legs == num_domain_legs
-    assert t.num_codomain_legs == 2 - num_domain_legs
-    # explicitly check the ``t.data`` vs what we expect
-    block_0 = np.asarray([[7, 8]])
-    block_1 = np.asarray([[1, 2], [3, 4], [9, 10]])
-    block_2 = np.asarray([[5, 6], [11, 12]])
+    block_00 = np.asarray([[7, 8]])
+    block_31 = np.asarray([[1, 2], [3, 4], [9, 10]])
+    block_22 = np.asarray([[5, 6], [11, 12]])
 
+    # non-symmetric block:
+    non_symmetric_data = data.copy()
+    non_symmetric_data[0, 0] = 42
+    with pytest.raises(ValueError, match='not symmetric'):
+        t = tensors.SymmetricTensor.from_dense_block(non_symmetric_data, codomain=[s1, s2],
+                                                    backend=backend)
+    # now continue with the symmetric block
+
+    t = tensors.SymmetricTensor.from_dense_block(data, codomain=[s1, s2], backend=backend)
+    t.test_sanity()
+    
+    # explicitly check the ``t.data`` vs what we expect
     if symmetry_backend == 'abelian':
-        expect_block_inds = np.array([
-            [0, 0],  # q=0, q=0
-            [2, 1],  # q=2, q=2
-            [1, 2],  # q=1, q=3
-        ])
-        assert np.all(t.data.block_inds == expect_block_inds)
-        expect_blocks = [backend.block_from_numpy(b) for b in [block_0, block_1, block_2]]
+        # listing this in an order such that the resulting block_inds are lexsorted:
+        # blocks allowed for q:   [] -> [0, 0]  ;  [] -> [3, 1]  ;  [] -> [2, 2]
+        # indices in .sectors:    [] -> [0, 0]  ;  [] -> [2, 1]  ;  [] -> [1, 2]
+        expect_block_inds = np.array([[0, 0], [2, 1], [1, 2]])
+        expect_blocks = [block_00, block_31, block_22]
+        #
+        valid_block_inds = backends.abelian._valid_block_inds(t.codomain, t.domain)
+        npt.assert_array_equal(expect_block_inds, valid_block_inds)
+        #
         assert len(expect_blocks) == len(t.data.blocks)
         for i, (actual, expect) in enumerate(zip(t.data.blocks, expect_blocks)):
             print(f'checking blocks[{i}]')
-            assert backend.block_allclose(actual, expect)
+            npt.assert_array_almost_equal_nulp(t.backend.block_to_numpy(actual), expect, 100)
     
-    elif symmetry_backend == 'fusion_tree' and num_domain_legs == 0:
+    elif symmetry_backend == 'fusion_tree':
         assert np.all(t.data.coupled_sectors == q0[None, :])
-        forest_block_q0_q0 = block_0.reshape((-1, 1))
-        forest_block_q1_q3 = block_2.reshape((-1, 1))
-        forest_block_q2_q2 = block_1.reshape((-1, 1))
-        expect_block = np.concatenate([forest_block_q0_q0, forest_block_q1_q3, forest_block_q2_q2],
-                                      axis=0)
-        expect_block = backend.block_from_numpy(expect_block)
+        forest_block_00 = block_00.reshape((-1, 1))
+        forest_block_22 = block_22.reshape((-1, 1))
+        forest_block_31 = block_31.reshape((-1, 1))
+        # forest blocks are sorted C-style, i.e. first by first row.
+        expect_block = np.concatenate([forest_block_00, forest_block_22, forest_block_31], axis=0)
         assert len(t.data.blocks) == 1
-        assert backend.block_allclose(t.data.blocks[0], expect_block)
-        # [array([[ 7.,  8.,  1.,  3.,  9.,  2.,  4., 10.,  5., 11.,  6., 12.]])]
-    
-    elif symmetry_backend == 'fusion_tree' and num_domain_legs == 1:
-        # codomain: [s1]  , sector=[0, 2, 3]
-        # domain: [s2.dual], sectors=[0, 3, 2, 1]
-        # coupled sectors are sectors of the codomain.
-        expect_sectors = [q0, q2, q3]
-        expect_blocks = [block_0, block_2, block_1]  # block_1 appears with coupled sector [3].
-        assert np.all(t.data.coupled_sectors == np.array(expect_sectors))
-        for expect, actual in zip(expect_blocks, t.data.blocks):
-            assert backend.block_allclose(actual, expect)
+        actual = t.backend.block_to_numpy(t.data.blocks[0])
+        npt.assert_array_almost_equal_nulp(actual, expect_block, 100)
 
-    elif symmetry_backend == 'fusion_tree' and num_domain_legs == 2:
-        assert np.all(t.data.coupled_sectors == q0[None, :])
-        expect_block = np.concatenate([block_0, block_1.T.reshape((1, -1)), block_2.T.reshape((1, -1))],
-                                      axis=1)
-        expect_block = backend.block_from_numpy(expect_block)
-        assert len(t.data.blocks) == 1
-        assert backend.block_allclose(t.data.blocks[0], expect_block)
-        # [array([[ 7.,  8.,  1.,  3.,  9.,  2.,  4., 10.,  5., 11.,  6., 12.]])]
-    
     else:
-        raise RuntimeError('should have covered all cases above.')
+        raise RuntimeError
+    
+    # check conversion back
+    npt.assert_array_almost_equal_nulp(t.to_numpy(), data)
+    
+    # =======================================================
+    # =======================================================
+    # =======================================================
+    print(f'\n\nONE LEG EACH IN DOMAIN AND CODOMAIN:\n')
+    # note that this setup changes the charge rule! different entries are now allowed than before
+
+    #             s2 : 2,  0,  1,  2,  3,  0,  1     s1
+    data = np.array([[ 0,  0,  0,  0, -1,  0,  0],  # 3 
+                     [ 0,  0,  0,  0, -2,  0,  0],  # 3 
+                     [ 5,  0,  0,  6,  0,  0,  0],  # 2 
+                     [ 0,  7,  0,  0,  0,  8,  0],  # 0 
+                     [ 0,  0,  0,  0, -3,  0,  0],  # 3 
+                     [11,  0,  0, 12,  0,  0,  0]], # 2
+                    dtype=float)
+
+    print('after applying basis perm:')
+    print(data[np.ix_(s1.basis_perm, s2.basis_perm)])
+    # q: 0   0   1   1   2   2   3      q
+    # [[ 7.  8.  0.  0.  0.  0.  0.]    0
+    #  [ 0.  0.  0.  0.  5.  6.  0.]    2
+    #  [ 0.  0.  0.  0. 11. 12.  0.]    2
+    #  [ 0.  0.  0.  0.  0.  0. -1.]    3
+    #  [ 0.  0.  0.  0.  0.  0. -2.]    3
+    #  [ 0.  0.  0.  0.  0.  0. -3.]]   3
+    block_00 = np.asarray([[7, 8]])
+    block_22 = np.asarray([[5, 6], [11, 12]])
+    block_33 = np.asarray([[-1], [-2], [-3]])
+    
+    # non-symmetric block:
+    non_symmetric_data = data.copy()
+    non_symmetric_data[0, 0] = 42
+    with pytest.raises(ValueError, match='not symmetric'):
+        t = tensors.SymmetricTensor.from_dense_block(
+            non_symmetric_data, codomain=[s1], domain=[s2], backend=backend
+        )
+    # now continue with the symmetric block
+
+    t = tensors.SymmetricTensor.from_dense_block(
+        data, codomain=[s1], domain=[s2], backend=backend
+    )
+    t.test_sanity()
+
+    # explicitly check the ``t.data`` vs what we expect
+    if symmetry_backend == 'abelian':
+        # listing this in an order such that the resulting block_inds are lexsorted:
+        # blocks allowed for q:   [0] -> [0]  ;  [2] -> [2]  ;  [3] -> [3]
+        # indices in .sectors:    [0] -> [0]  ;  [2] -> [1]  ;  [3] -> [2]
+        # block_inds row:         [0, 0]      ;  [1, 2]      ;  [2, 3]
+        expect_block_inds = np.array([[0, 0], [1, 2], [2, 3]])
+        expect_blocks = [block_00, block_22, block_33]
+        #
+        valid_block_inds = backends.abelian._valid_block_inds(t.codomain, t.domain)
+        npt.assert_array_equal(expect_block_inds, valid_block_inds)
+        #
+        assert len(expect_blocks) == len(t.data.blocks)
+        for i, (actual, expect) in enumerate(zip(t.data.blocks, expect_blocks)):
+            print(f'checking blocks[{i}]')
+            npt.assert_array_almost_equal_nulp(t.backend.block_to_numpy(actual), expect, 100)
+    
+    elif symmetry_backend == 'fusion_tree':
+        expect_coupled = np.stack([q0, q2, q3])
+        npt.assert_array_equal(t.data.coupled_sectors, expect_coupled)
+        expect_blocks = [block_00, block_22, block_33]
+        assert len(expect_blocks) == len(t.data.blocks)
+        for i, (actual, expect) in enumerate(zip(t.data.blocks, expect_blocks)):
+            print(f'checking blocks[{i}]')
+            npt.assert_array_almost_equal_nulp(t.backend.block_to_numpy(actual), expect, 100)
+
+    else:
+        raise RuntimeError
 
     # check conversion back
-    data_reconstructed = t.to_dense_block()
-    assert backend.block_allclose(data_reconstructed, data)
+    npt.assert_array_almost_equal_nulp(t.to_numpy(), data)
+    
+    # =======================================================
+    # =======================================================
+    # =======================================================
+    print(f'\n\nFOUR LEG EXAMPLE (2 -> 2):\n')
+    s = ElementarySpace.from_basis(z4_symmetry, [q1, q0, q2])  # basis_perm [1, 0, 2]
+    data = np.zeros((3, 3, 3, 3), float)
+    # set the allowed elements manually
+    # note the leg order for the dense array is [*codomain, *reversed(domain)] !!
+    #                        SECTORS PER LEG  |  DOMAIN -> coupled -> CODOMAIN
+    data[1, 1, 1, 1] = 1   # [0, 0, 0, 0]     |  [0, 0] -> 0 -> [0, 0]
+    data[1, 1, 2, 2] = 2   # [0, 0, 2, 2]     |  [2, 2] -> 0 -> [0, 0]
+    data[2, 2, 1, 1] = 3   # [2, 2, 0, 0]     |  [0, 0] -> 0 -> [2, 2]
+    data[2, 2, 2, 2] = 4   # [2, 2, 2, 2]     |  [2, 2] -> 0 -> [2, 2]
+    #
+    data[0, 1, 0, 1] = 5   # [1, 0, 1, 0]     |  [0, 1] -> 1 -> [1, 0]
+    data[0, 1, 1, 0] = 6   # [1, 0, 0, 1]     |  [1, 0] -> 1 -> [1, 0]
+    #
+    data[0, 0, 0, 0] = 7   # [1, 1, 1, 1]     |  [1, 1] -> 2 -> [1, 1]
+    data[0, 0, 1, 2] = 8   # [1, 1, 0, 2]     |  [2, 0] -> 2 -> [1, 1]
+    data[1, 2, 0, 0] = 9   # [0, 2, 1, 1]     |  [1, 1] -> 2 -> [0, 2]
+    data[1, 2, 1, 2] = 10  # [0, 2, 0, 2]     |  [2, 0] -> 2 -> [0, 2]
+    #
+    data[0, 2, 0, 2] = 11  # [1, 2, 1, 2]     |  [2, 1] -> 3 -> [1, 2]
+    data[0, 2, 2, 0] = 12  # [1, 2, 2, 1]     |  [1, 2] -> 3 -> [1, 2]
+    data[2, 0, 0, 2] = 13  # [2, 1, 1, 2]     |  [2, 1] -> 3 -> [2, 1]
+    data[2, 0, 2, 0] = 14  # [2, 1, 2, 1]     |  [1, 2] -> 3 -> [2, 1]
+
+    # non-symmetric block:
+    non_symmetric_data = data.copy()
+    non_symmetric_data[0, 0, 1, 1] = 42
+    with pytest.raises(ValueError, match='not symmetric'):
+        t = tensors.SymmetricTensor.from_dense_block(
+            non_symmetric_data, codomain=[s, s], domain=[s, s], backend=backend
+        )
+    # now continue with the symmetric block
+
+    t = tensors.SymmetricTensor.from_dense_block(
+        data, codomain=[s, s], domain=[s, s], backend=backend
+    )
+    t.test_sanity()
+    
+    # explicitly check the ``t.data`` vs what we expect
+    if symmetry_backend == 'abelian':
+        # all sectors appear only once, so each allowed entry is its own block.
+        # In this case, the value of a sector is also its index in s.sectors
+        # Thus the block inds are just the "SECTORS PER LEG" above.
+        expect_block_inds = np.asarray([
+            [0, 0, 0, 0], [0, 0, 2, 2], [2, 2, 0, 0], [2, 2, 2, 2],
+            [1, 0, 1, 0], [1, 0, 0, 1],
+            [1, 1, 1, 1], [1, 1, 0, 2], [0, 2, 1, 1], [0, 2, 0, 2],
+            [1, 2, 1, 2], [1, 2, 2, 1], [2, 1, 1, 2], [2, 1, 2, 1]
+        ], dtype=int)
+        expect_blocks = [np.asarray([[x]], dtype=float) for x in range(1, 15)]
+        perm = np.lexsort(expect_block_inds.T)
+        expect_block_inds = expect_block_inds[perm]
+        expect_blocks = [expect_blocks[n] for n in perm]
+        #
+        # have not set all entries, so expect_block_inds should be a subset of _valid_block_inds
+        valid_block_inds = backends.abelian._valid_block_inds(t.codomain, t.domain)
+        for i, j in backends.abstract_backend.iter_common_noncommon_sorted_arrays(expect_block_inds, valid_block_inds):
+            assert j is not None  # j=None would mean that the row of expect_block_inds is not in valid_block_inds
+            actual_block = t.backend.block_to_numpy(t.data.blocks[j])
+            if i is None:
+                expect_block = np.zeros_like(actual_block)
+            else:
+                expect_block = expect_blocks[i]
+            npt.assert_array_almost_equal_nulp(actual_block, expect_block, 100)
+
+    elif symmetry_backend == 'fusion_tree':
+        expect_coupled = np.stack([q0, q1, q2, q3])
+        npt.assert_array_equal(t.data.coupled_sectors, expect_coupled)
+        #
+        # build the blocks for fixed coupled sectors
+        # note: when setting the data we listed the uncoupled sectors of the domain
+
+        #      dom uncoupled:  (0, 0)  ;  (2, 2)  |  codom uncoupled:
+        block_0 = np.asarray([[    1,         2],   #  (0, 0)
+                              [    3,         4]],  #  (2, 2)
+                             dtype=float)
+        #      dom uncoupled:  (0, 1)  ;  (1, 0)  |  codom uncoupled:
+        block_1 = np.asarray([[    0,         0],   #  (0, 1)
+                              [    5,         6]],  #  (1, 0)
+                             dtype=float)
+        #      dom uncoupled:  (0, 2)  ;  (1, 1)  ;  (2, 0)  |  codom uncoupled:
+        block_2 = np.asarray([[    0,         9,        10],   #  (0, 2)
+                              [    0,         7,         8],   #  (1, 1)
+                              [    0,         0,         0]],  #  (2, 0)
+                             dtype=float)
+        #      dom uncoupled:  (1, 2)  ;  (2, 1)  |  codom uncoupled:
+        block_3 = np.asarray([[   12,        11],   #  (1, 2)
+                              [   14,        13]],  #  (2, 1)
+                             dtype=float)
+        expect_blocks = [block_0, block_1, block_2, block_3]
+        assert len(expect_blocks) == len(t.data.blocks)
+        for i, (actual, expect) in enumerate(zip(t.data.blocks, expect_blocks)):
+            print(f'checking blocks[{i}]')
+            npt.assert_array_almost_equal_nulp(t.backend.block_to_numpy(actual), expect, 100)
+
+    else:
+        raise RuntimeError
 
 
 @pytest.mark.parametrize('symmetry_backend', [pytest.param('fusion_tree', marks=pytest.mark.FusionTree)])
 def test_from_block_su2_symm(symmetry_backend, block_backend):
-    # TODO convert back when to_dense is implemented.
     backend = get_backend(symmetry_backend, block_backend)
     sym = SU2Symmetry()
     spin_half = ElementarySpace(sym, [[1]])
 
-    # basis order: [down, up]
+    # basis order: [down, up]  ->  might look unusual
     sx = .5 * np.array([[0., 1.], [1., 0.]], dtype=complex)
     sy = .5 * np.array([[0., 1.j], [-1.j, 0]], dtype=complex)
     sz = .5 * np.array([[-1., 0.], [0., +1.]], dtype=complex)
     heisenberg_4 = sum(si[:, :, None, None] * si[None, None, :, :] for si in [sx, sy, sz])  # [p1, p1*, p2, p2*]
     print(heisenberg_4.transpose([0, 2, 1, 3]).reshape((4, 4)))
-    # construct in a specific leg-order where we know what the blocks should be.
     heisenberg_4 = np.transpose(heisenberg_4, [0, 2, 3, 1])  # [p1, p2, p2*, p1*]
 
-    tens_4 = tensors.BlockDiagonalTensor.from_dense_block(
-        heisenberg_4, [spin_half, spin_half, spin_half.dual, spin_half.dual],
-        backend, labels=['p1', 'p2', 'p2*', 'p1*'], num_domain_legs=2,
+    tens_4 = tensors.SymmetricTensor.from_dense_block(
+        heisenberg_4, codomain=[spin_half, spin_half], domain=[spin_half, spin_half],
+        backend=backend, labels=[['p1', 'p2'], ['p1*', 'p2*']]
     )
     tens_4.test_sanity()
     assert np.all(tens_4.data.coupled_sectors == np.array([[0], [2]]))  # spin 0, spin 1
-    # in this leg order, the blocks come from maps
-    # [p1, p2] --X--> [coupled] --block--> [coupled] --Y--> [p1, p2].
-    # Thus, the blocks are the eigenvalue of the Heisenberg coupling in the fixed total spin sectors
+    # The blocks are the eigenvalue of the Heisenberg coupling in the fixed total spin sectors
     # For singlet states (coupled=spin-0), we have eigenvalue -3/4
     # For triplet states (coupled=spin-1), we have eigenvalue +1/4
     expect_spin_0 = -3 / 4  
@@ -437,10 +556,14 @@ def test_from_block_su2_symm(symmetry_backend, block_backend):
     assert backend.block_allclose(recovered_block, heisenberg_4)
 
 
-def test_tdot(make_compatible_space, make_compatible_sectors, make_compatible_tensor):
+# TODO old test below
+
+
+def OLD_test_tdot(make_compatible_space, make_compatible_sectors, make_compatible_tensor):
     # define legs such that a tensor with the following combinations all allow non-zero num_parameters
     # [a, b] , [a, b, c*] , [a, b, d*]
-    from conftest import find_compatible_leg
+    return  # TODO adapt to domain -> codomain
+    from conftest import find_last_leg
     a = make_compatible_space()
     b = find_compatible_leg([a], max_sectors=3, max_mult=3, extra_sectors=make_compatible_sectors(3))
     c = find_compatible_leg([a, b], max_sectors=3, max_mult=3, extra_sectors=make_compatible_sectors(3)).dual
@@ -464,7 +587,7 @@ def test_tdot(make_compatible_space, make_compatible_sectors, make_compatible_te
         # charge conservation
         assert t.num_parameters > 0, f'tensor {n} has 0 free parameters'
 
-    if isinstance(tensors_[0].backend, FusionTreeBackend) and isinstance(a.symmetry, ProductSymmetry):
+    if isinstance(tensors_[0].backend, backends.FusionTreeBackend) and isinstance(a.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             dense_ = [t.to_numpy() for t in tensors_]
         return  # TODO
@@ -482,7 +605,7 @@ def test_tdot(make_compatible_space, make_compatible_sectors, make_compatible_te
         print('tdot: contract ', comment)
         expect = np.tensordot(dense_[i], dense_[j], (ax_i, ax_j))
 
-        if isinstance(tensors_[0].backend, FusionTreeBackend):
+        if isinstance(tensors_[0].backend, backends.FusionTreeBackend):
             with pytest.raises(NotImplementedError, match='tdot not implemented'):        
                 res1 = tensors.tdot(tensors_[i], tensors_[j], ax_i, ax_j)
             return  # TODO
@@ -506,10 +629,10 @@ def test_tdot(make_compatible_space, make_compatible_sectors, make_compatible_te
     #  - same dim and sectors but same is_dual
 
 
-def test_outer(make_compatible_tensor):
+def OLD_test_outer(make_compatible_tensor):
     tensors_ = [make_compatible_tensor(labels=labels) for labels in [['a'], ['b'], ['c', 'd']]]
 
-    if isinstance(tensors_[0].backend, FusionTreeBackend) and isinstance(tensors_[0].symmetry, ProductSymmetry):
+    if isinstance(tensors_[0].backend, backends.FusionTreeBackend) and isinstance(tensors_[0].symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             dense_ = [t.to_numpy() for t in tensors_]
         return  # TODO
@@ -520,7 +643,7 @@ def test_outer(make_compatible_tensor):
         print(i, j)
         expect = np.tensordot(dense_[i], dense_[j], axes=0)
 
-        if isinstance(tensors_[0].backend, FusionTreeBackend):
+        if isinstance(tensors_[0].backend, backends.FusionTreeBackend):
             with pytest.raises(NotImplementedError, match='outer not implemented'):
                 res = tensors.outer(tensors_[i], tensors_[j])
             return  # TODO
@@ -534,11 +657,11 @@ def test_outer(make_compatible_tensor):
             assert all(l is None for l in res.labels)
 
 
-def test_permute_legs(make_compatible_tensor):
+def OLD_test_permute_legs(make_compatible_tensor):
     labels = list('abcd')
     t = make_compatible_tensor(labels=labels)
 
-    if isinstance(t.backend, FusionTreeBackend) and isinstance(t.symmetry, ProductSymmetry):
+    if isinstance(t.backend, backends.FusionTreeBackend) and isinstance(t.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             d = t.to_numpy()
         return  # TODO
@@ -547,7 +670,7 @@ def test_permute_legs(make_compatible_tensor):
     for perm in [[0, 2, 1, 3], [3, 2, 1, 0], [1, 0, 3, 2], [0, 1, 2, 3], [0, 3, 2, 1]]:
         expect = d.transpose(perm)
 
-        if isinstance(t.backend, FusionTreeBackend):
+        if isinstance(t.backend, backends.FusionTreeBackend):
             with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
                 res = t.permute_legs(perm)
             return  # TODO
@@ -558,7 +681,7 @@ def test_permute_legs(make_compatible_tensor):
         assert res.labels == [labels[i] for i in perm]
 
 
-def test_inner(make_compatible_tensor):
+def OLD_test_inner(make_compatible_tensor):
     t0 = make_compatible_tensor(labels=['a'])
     t1 = make_compatible_tensor(legs=t0.legs, labels=t0.labels)
     t2 = make_compatible_tensor(labels=['a', 'b', 'c'])
@@ -571,7 +694,7 @@ def test_inner(make_compatible_tensor):
         expect = np.inner(d_i.flatten().conj(), d_j.flatten())
         if t_j.num_legs > 0:
 
-            if isinstance(t0.backend, FusionTreeBackend):
+            if isinstance(t0.backend, backends.FusionTreeBackend):
                 with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
                     t_j = t_j.permute_legs(perm)
                 return  # TODO
@@ -585,12 +708,12 @@ def test_inner(make_compatible_tensor):
         npt.assert_allclose(res, expect)
 
 
-def test_trace(make_compatible_space, make_compatible_tensor):
+def OLD_test_trace(make_compatible_space, make_compatible_tensor):
     a = make_compatible_space(3, 3)
     b = make_compatible_space(4, 3)
     t1 = make_compatible_tensor(legs=[a, a.dual], labels=['a', 'a*'])
 
-    if isinstance(t1.backend, FusionTreeBackend) and isinstance(t1.symmetry, ProductSymmetry):
+    if isinstance(t1.backend, backends.FusionTreeBackend) and isinstance(t1.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             d1 = t1.to_numpy()
         return  # TODO
@@ -604,7 +727,7 @@ def test_trace(make_compatible_space, make_compatible_tensor):
     print('single legpair - full')
     expected = np.trace(d1, axis1=0, axis2=1)
 
-    if isinstance(t1.backend, FusionTreeBackend):
+    if isinstance(t1.backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError, match='trace_full not implemented'):
             res = tensors.trace(t1, 'a*', 'a')
         return  # TODO
@@ -632,10 +755,10 @@ def test_trace(make_compatible_space, make_compatible_tensor):
     npt.assert_array_almost_equal_nulp(res.to_numpy(), expected, 100)
 
 
-def test_conj_hconj(make_compatible_tensor):
+def OLD_test_conj_hconj(make_compatible_tensor):
     tens = make_compatible_tensor(labels=['a', 'b', None])
 
-    if isinstance(tens.backend, FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
+    if isinstance(tens.backend, backends.FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             expect = np.conj(tens.to_numpy())
         return  # TODO
@@ -643,7 +766,7 @@ def test_conj_hconj(make_compatible_tensor):
     expect = np.conj(tens.to_numpy())
     assert np.linalg.norm(expect.imag) > 0 , "expect complex data!"
 
-    if isinstance(tens.backend, FusionTreeBackend):
+    if isinstance(tens.backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError, match='conj not implemented'):
             res = tensors.conj(tens)
         return  # TODO
@@ -677,10 +800,10 @@ def test_conj_hconj(make_compatible_tensor):
     npt.assert_array_equal(op2_hc.to_numpy(), expect)
     
 
-def test_combine_split(make_compatible_tensor, compatible_symmetry_backend):
+def OLD_test_combine_split(make_compatible_tensor, compatible_symmetry_backend):
     tens = make_compatible_tensor(labels=['a', 'b', 'c', 'd'], max_blocks=5, max_block_size=5)
 
-    if isinstance(tens.backend, FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
+    if isinstance(tens.backend, backends.FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             dense = tens.to_numpy()
         return  # TODO
@@ -690,7 +813,7 @@ def test_combine_split(make_compatible_tensor, compatible_symmetry_backend):
 
     print('check by idx')
 
-    if isinstance(tens.backend, FusionTreeBackend):
+    if isinstance(tens.backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError, match='combine_legs not implemented'):
             res = tensors.combine_legs(tens, [1, 2])
         return  # TODO
@@ -754,7 +877,6 @@ def test_combine_split(make_compatible_tensor, compatible_symmetry_backend):
         npt.assert_array_equal(mults1, mults2)
         assert len(metadata2) == 4
 
-    # FIXME redesign?
     for prod_space, comment in [
         (ProductSpace(tens.get_legs(['b', 'd']), backend=tens.backend), 'metadata via ProductSpace.__init__'),
         (tens.backend.add_leg_metadata(ProductSpace(tens.get_legs(['b', 'd']))), 'metadata via add_leg_metadata'),
@@ -771,7 +893,7 @@ def test_combine_split(make_compatible_tensor, compatible_symmetry_backend):
 
 
 @pytest.mark.xfail  # TODO
-def test_combine_legs_basis_trafo(make_compatible_tensor):
+def OLD_test_combine_legs_basis_trafo(make_compatible_tensor):
     tens = make_compatible_tensor(labels=['a', 'b', 'c'], max_blocks=5, max_block_size=5)
     a, b, c = tens.shape
     dense = tens.to_numpy()  # [a, b, c]
@@ -792,11 +914,11 @@ def test_combine_legs_basis_trafo(make_compatible_tensor):
     npt.assert_array_almost_equal_nulp(dense_combined, reconstruct_combined, 100)
 
 
-def test_is_scalar(make_compatible_tensor, make_compatible_space):
+def OLD_test_is_scalar(make_compatible_tensor, make_compatible_space):
     for s in [1, 0., 1.+2.j, np.int64(123), np.float64(2.345), np.complex128(1.+3.j)]:
         assert tensors.is_scalar(s)
-    triv_leg = make_compatible_space(1, 1)
-    scalar_tens = make_compatible_tensor(legs=[triv_leg, triv_leg.dual])
+    trivial_leg = make_compatible_space(1, 1)
+    scalar_tens = make_compatible_tensor(legs=[trivial_leg, trivial_leg.dual])
     assert tensors.is_scalar(scalar_tens)
     # generate non-scalar tensor
     for i in range(20):
@@ -809,10 +931,10 @@ def test_is_scalar(make_compatible_tensor, make_compatible_space):
 
 
 @pytest.mark.parametrize('num_legs,', [1, 3])
-def test_norm(make_compatible_tensor, num_legs):
+def OLD_test_norm(make_compatible_tensor, num_legs):
     tens = make_compatible_tensor(num_legs=num_legs)
 
-    if isinstance(tens.backend, FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
+    if isinstance(tens.backend, backends.FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
         if tens.data.num_domain_legs >= 2 or tens.data.num_codomain_legs >= 2:  # otherwise fusion tensors are not needed
             with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
                 expect = np.linalg.norm(tens.to_numpy())
@@ -823,7 +945,7 @@ def test_norm(make_compatible_tensor, num_legs):
     assert np.allclose(res, expect)
 
 
-def test_almost_equal(make_compatible_tensor, np_random):
+def OLD_test_almost_equal(make_compatible_tensor, np_random):
     for i in range(10):
         t1 = make_compatible_tensor(labels=['a', 'b', 'c'])
         t_diff = make_compatible_tensor(t1.legs, labels=['a', 'b', 'c'])
@@ -841,7 +963,7 @@ def test_almost_equal(make_compatible_tensor, np_random):
     data1 = np_random.random(leg.dim)
     data2 = data1 + 1e-7 * np_random.random(leg.dim)
 
-    if isinstance(t1.backend, FusionTreeBackend):
+    if isinstance(t1.backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError, match='diagonal_from_block not implemented'):
             t1 = tensors.DiagonalTensor.from_diag(data1, leg, backend=t1.backend)
         return  # TODO
@@ -854,19 +976,19 @@ def test_almost_equal(make_compatible_tensor, np_random):
     # TODO check all combinations of tensor types...
 
 
-def test_squeeze_legs(make_compatible_tensor, compatible_symmetry):
+def OLD_test_squeeze_legs(make_compatible_tensor, compatible_symmetry):
     for i in range(10):
-        triv_leg = ElementarySpace(compatible_symmetry,
+        trivial_leg = Space(compatible_symmetry,
                                compatible_symmetry.trivial_sector[np.newaxis, :])
-        assert triv_leg.is_trivial
-        tens = make_compatible_tensor(legs=[None, triv_leg, None, triv_leg.dual, triv_leg],
+        assert trivial_leg.is_trivial
+        tens = make_compatible_tensor(legs=[None, trivial_leg, None, trivial_leg.dual, trivial_leg],
                                       labels=list('abcde'))
         if not tens.legs[0].is_trivial and not tens.legs[2].is_trivial:
             break
     else:
-        pytest.skip("can't generate non-triv leg")
+        pytest.skip("can't generate non-trivial leg")
 
-    if isinstance(tens.backend, FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
+    if isinstance(tens.backend, backends.FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             dense = tens.to_numpy()
         return  # TODO
@@ -874,7 +996,7 @@ def test_squeeze_legs(make_compatible_tensor, compatible_symmetry):
 
     print('squeezing all legs (default arg)')
 
-    if isinstance(tens.backend, FusionTreeBackend):
+    if isinstance(tens.backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError, match='squeeze_legs not implemented'):
             res = tensors.squeeze_legs(tens)
         return  # TODO
@@ -897,10 +1019,10 @@ def test_squeeze_legs(make_compatible_tensor, compatible_symmetry):
     npt.assert_array_equal(res.to_numpy(), dense[:, 0, :, :, 0])
 
 
-def test_add_trivial_leg(make_compatible_tensor):
+def OLD_test_add_trivial_leg(make_compatible_tensor):
     A = make_compatible_tensor(labels=['a', 'b'])
 
-    if isinstance(A.backend, FusionTreeBackend):
+    if isinstance(A.backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError, match='add_trivial_leg not implemented'):
             B = tensors.add_trivial_leg(A, 'c', is_dual=True)
         return  # TODO
@@ -918,12 +1040,12 @@ def test_add_trivial_leg(make_compatible_tensor):
     assert tensors.almost_equal(A, C)
 
 
-def test_scale_axis(make_compatible_tensor):
+def OLD_test_scale_axis(make_compatible_tensor):
     # TODO eventually this will be covered by tdot tests, when allowing combinations of Tensor and DiagonalTensor
     #  But I want to use it already now to debug backend.scale_axis()
     t = make_compatible_tensor(num_legs=3, max_blocks=4, max_block_size=4)
 
-    if isinstance(t.backend, FusionTreeBackend):
+    if isinstance(t.backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError, match='diagonal_from_block_func not implemented'):
             d = tensors.DiagonalTensor.random_uniform(t.legs[0], second_leg_dual=True, backend=t.backend)
         return  # TODO
@@ -934,7 +1056,7 @@ def test_scale_axis(make_compatible_tensor):
     npt.assert_almost_equal(expect, res)
 
 
-def test_detect_sectors_from_block(compatible_backend, compatible_symmetry, make_compatible_sectors,
+def OLD_test_detect_sectors_from_block(compatible_backend, compatible_symmetry, make_compatible_sectors,
                                    np_random):
     num_sectors = int(min(4, compatible_symmetry.num_sectors))
     leg_dim = 5
@@ -947,8 +1069,8 @@ def test_detect_sectors_from_block(compatible_backend, compatible_symmetry, make
     which_sectors_b = np_random.integers(num_sectors, size=(leg_dim + 1,))
     sectors_of_basis_a = sectors[which_sectors_a]
     sectors_of_basis_b = sectors[which_sectors_b]
-    a = ElementarySpace.from_basis(symmetry=compatible_symmetry, sectors_of_basis=sectors_of_basis_a)
-    b = ElementarySpace.from_basis(symmetry=compatible_symmetry, sectors_of_basis=sectors_of_basis_b)
+    a = Space.from_basis(symmetry=compatible_symmetry, sectors_of_basis=sectors_of_basis_a)
+    b = Space.from_basis(symmetry=compatible_symmetry, sectors_of_basis=sectors_of_basis_b)
 
     target_sector_a = np_random.choice(which_sectors_a)
     target_sector_b = np_random.choice(which_sectors_b)
@@ -972,7 +1094,7 @@ def test_detect_sectors_from_block(compatible_backend, compatible_symmetry, make
     if num_sectors >= 4:
         #                         0  1  2  3  4  5  6  7  8  9
         which_sectors = np.array([0, 1, 3, 0, 2, 1, 1, 2, 0, 3])
-        space = ElementarySpace(symmetry=compatible_symmetry,
+        space = Space(symmetry=compatible_symmetry,
                                 sectors=sectors[:4],
                                 multiplicities=[3, 3, 2, 2],
                                 basis_perm=[0, 3, 8, 1, 5, 6, 4, 7, 2, 9])
@@ -989,7 +1111,7 @@ def test_detect_sectors_from_block(compatible_backend, compatible_symmetry, make
             npt.assert_array_equal(sector, sectors[which])
 
 
-def test_elementwise_function_decorator():
+def OLD_test_elementwise_function_decorator():
     assert tensors.sqrt.__doc__ == 'The square root of a number, elementwise.'
 
 
@@ -1000,7 +1122,7 @@ def test_elementwise_function_decorator():
                                                  ('real_if_close', 1e-12), ('real_if_close', 1),
                                                  ('sqrt', 0),
                                                  ])
-def test_elementwise_functions(make_compatible_space, compatible_backend, np_random, function, data_imag):
+def OLD_test_elementwise_functions(make_compatible_space, compatible_backend, np_random, function, data_imag):
     leg = make_compatible_space()
     np_func = getattr(np, function)  # e.g. np.real
     tp_func = getattr(tensors, function)  # e.g. tenpy.linalg.tensors.real
@@ -1008,7 +1130,7 @@ def test_elementwise_functions(make_compatible_space, compatible_backend, np_ran
     if data_imag > 0:
         data = data + data_imag * np_random.random((leg.dim,))
 
-    if isinstance(compatible_backend, FusionTreeBackend):
+    if isinstance(compatible_backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError, match='diagonal_from_block not implemented'):
             tens = tensors.DiagonalTensor.from_diag(diag=data, first_leg=leg, backend=compatible_backend)
         return  # TODO
@@ -1027,10 +1149,10 @@ def test_elementwise_functions(make_compatible_space, compatible_backend, np_ran
 
 
 @pytest.mark.parametrize('which_legs', [[0], [-1], ['b'], ['a', 'b', 'c', 'd'], ['b', -2]])
-def test_flip_leg_duality(make_compatible_tensor, which_legs):
-    T: tensors.BlockDiagonalTensor = make_compatible_tensor(labels=['a', 'b', 'c', 'd'])
+def OLD_test_flip_leg_duality(make_compatible_tensor, which_legs):
+    T: tensors.SymmetricTensor = make_compatible_tensor(labels=['a', 'b', 'c', 'd'])
 
-    if isinstance(T.backend, FusionTreeBackend):
+    if isinstance(T.backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError, match='flip_leg_duality not implemented'):
             res = tensors.flip_leg_duality(T, *which_legs)
         return  # TODO
@@ -1049,7 +1171,7 @@ def test_flip_leg_duality(make_compatible_tensor, which_legs):
     npt.assert_array_almost_equal_nulp(T_np, res_np, 100)
 
 
-def test_str_repr(make_compatible_tensor, str_max_lines=30, repr_max_lines=30):
+def OLD_test_str_repr(make_compatible_tensor, str_max_lines=30, repr_max_lines=30):
     """Check if str and repr work. Automatically, we can only check if they run at all.
     To check if the output is sensible and useful, a human should look at it.
     Run ``pytest -rP -k test_str_repr > output.txt`` to see the output.
@@ -1082,7 +1204,7 @@ def test_str_repr(make_compatible_tensor, str_max_lines=30, repr_max_lines=30):
         print(res)
 
 
-def test_Mask(np_random, make_compatible_space, compatible_backend):
+def OLD_test_Mask(np_random, make_compatible_space, compatible_backend):
     large_leg = make_compatible_space()
     blockmask = np_random.choice([True, False], size=large_leg.dim)
     num_kept = sum(blockmask)
@@ -1090,7 +1212,7 @@ def test_Mask(np_random, make_compatible_space, compatible_backend):
     if not large_leg.symmetry.is_abelian:
         pytest.skip('Need to design a valid blockmask!')
 
-    if isinstance(compatible_backend, FusionTreeBackend):
+    if isinstance(compatible_backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError, match='mask_from_block not implemented'):
             mask = tensors.Mask.from_blockmask(blockmask, large_leg=large_leg, backend=compatible_backend)
         return  # TODO
@@ -1166,14 +1288,14 @@ def test_Mask(np_random, make_compatible_space, compatible_backend):
 
 
 @pytest.mark.parametrize('num_legs', [1, 3])
-def test_apply_Mask_Tensor(make_compatible_tensor, compatible_backend, num_legs):
-    T: tensors.BlockDiagonalTensor = make_compatible_tensor(num_legs=num_legs)
+def OLD_test_apply_Mask_Tensor(make_compatible_tensor, compatible_backend, num_legs):
+    T: tensors.SymmetricTensor = make_compatible_tensor(num_legs=num_legs)
 
     if not T.symmetry.is_abelian:
         # TODO
         pytest.skip('Need to re-design make_compatible_tensor fixture to generate valid masks.')
 
-    if isinstance(T.backend, FusionTreeBackend):
+    if isinstance(T.backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError, match='mask_from_block not implemented'):
             mask = make_compatible_tensor(legs=[T.legs[0], None], cls=tensors.Mask)
         return  # TODO
@@ -1186,8 +1308,8 @@ def test_apply_Mask_Tensor(make_compatible_tensor, compatible_backend, num_legs)
                                        10)
 
 
-def test_apply_Mask_DiagonalTensor(make_compatible_tensor, compatible_backend):
-    if isinstance(compatible_backend, FusionTreeBackend):
+def OLD_test_apply_Mask_DiagonalTensor(make_compatible_tensor, compatible_backend):
+    if isinstance(compatible_backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError, match='diagonal_from_block_func not implemented'):
             T: tensors.DiagonalTensor = make_compatible_tensor(cls=tensors.DiagonalTensor)
         return  # TODO
@@ -1197,7 +1319,7 @@ def test_apply_Mask_DiagonalTensor(make_compatible_tensor, compatible_backend):
     mask = make_compatible_tensor(legs=[T.legs[0], None], cls=tensors.Mask)
     # mask only one leg
     masked = T.apply_mask(mask, 0)
-    assert isinstance(masked, tensors.BlockDiagonalTensor)
+    assert isinstance(masked, tensors.SymmetricTensor)
     masked.test_sanity()
     npt.assert_array_almost_equal_nulp(T.to_numpy()[mask.numpymask],
                                        masked.to_numpy(),
@@ -1212,8 +1334,8 @@ def test_apply_Mask_DiagonalTensor(make_compatible_tensor, compatible_backend):
 
 
 @pytest.mark.parametrize('num_legs', [1, 3])
-def test_apply_Mask_ChargedTensor(make_compatible_tensor, num_legs):
-    pytest.xfail('Fixture generates ChargedTensor with unspecified dummy_leg_state')
+def OLD_test_apply_Mask_ChargedTensor(make_compatible_tensor, num_legs):
+    pytest.xfail('Fixture generates ChargedTensor with unspecified charged_state')
     
     T: tensors.ChargedTensor = make_compatible_tensor(num_legs=num_legs, cls=tensors.ChargedTensor)
     # first leg
@@ -1240,3 +1362,87 @@ def test_apply_Mask_ChargedTensor(make_compatible_tensor, num_legs):
     npt.assert_array_almost_equal_nulp(T.to_numpy()[..., mask.numpymask],
                                        masked.to_numpy(),
                                        10)
+
+
+
+def check_shape(shape: 'tensors.Shape', dims: tuple[int, ...], labels: list[str]):
+    shape.test_sanity()
+
+    # check attributes
+    assert shape.dims == list(dims)
+    assert shape._labels == labels
+    assert shape.labels == labels
+
+    # check iter
+    assert tuple(shape) == dims
+    n = 0
+    for d in shape:
+        assert d == dims[n]
+        n += 1
+
+    # check __getitem__
+    for n, label in enumerate(labels):
+        # indexing by string label
+        if label is not None:
+            assert shape[label] == dims[n]
+        # indexing by integer
+        assert shape[n] == dims[n]
+    assert shape[1:] == list(dims)[1:]
+    with pytest.raises(IndexError):
+        _ = shape['label_that_shape_does_not_have']
+
+    assert shape.is_fully_labelled != (None in labels)
+
+
+
+
+def OLD_test_Tensor_tofrom_dense_block_trivial_sector(make_compatible_tensor):
+    # TODO move to SymmetricTensor test?
+    tens = make_compatible_tensor(labels=['a'])
+    leg, = tens.legs
+    block_size = leg.sector_multiplicity(tens.symmetry.trivial_sector)
+
+    if isinstance(tens.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError, match='to_dense_block_trivial_sector not implemented'):
+            block = tens.to_dense_block_trivial_sector()
+        return  # TODO
+    
+    block = tens.to_dense_block_trivial_sector()
+    assert tens.backend.block_shape(block) == (block_size,)
+    tens2 = tensors.SymmetricTensor.from_dense_block_trivial_sector(leg=leg, block=block, backend=tens.backend, label='a')
+    tens2.test_sanity()
+    assert tensors.almost_equal(tens, tens2)
+    block2 = tens2.to_dense_block_trivial_sector()
+    npt.assert_array_almost_equal_nulp(tens.backend.block_to_numpy(block),
+                                       tens.backend.block_to_numpy(block2),
+                                       100)
+
+
+def OLD_test_ChargedTensor_tofrom_flat_block_single_sector(compatible_symmetry, make_compatible_sectors,
+                                                       make_compatible_tensor):
+    pytest.xfail(reason='unclear')  # TODO
+    # TODO revise this. purge the "dummy" language, its now "charged"
+    # TODO move to ChargedTensor test?
+    sector = make_compatible_sectors(1)[0]
+    dummy_leg = Space(compatible_symmetry, sector[None, :]).dual
+    inv_part = make_compatible_tensor(legs=[None, dummy_leg])
+    tens = tensors.ChargedTensor(invariant_part=inv_part)
+    leg = tens.legs[0]
+    block_size = leg.sector_multiplicity(sector)
+
+    block = tens.to_flat_block_single_sector()
+    assert tens.backend.block_shape(block) == (block_size,)
+    tens2 = tensors.ChargedTensor.from_flat_block_single_sector(
+        leg=leg, block=block, sector=sector, backend=tens.backend
+    )
+    tens2.test_sanity()
+    assert tens2.dummy_leg == tens.dummy_leg
+    assert tensors.almost_equal(tens, tens2)
+    block2 = tens2.to_flat_block_single_sector()
+    npt.assert_array_almost_equal_nulp(tens.backend.block_to_numpy(block),
+                                       tens.backend.block_to_numpy(block2),
+                                       100)
+    # check detect_sectors_from_block while we are at it
+    dense_block = tens.to_dense_block()
+    detected, = tensors.detect_sectors_from_block(block=dense_block, legs=[leg], backend=tens.backend)
+    npt.assert_array_equal(detected, sector)

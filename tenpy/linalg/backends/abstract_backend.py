@@ -6,7 +6,7 @@ Also contains some private utility function used by multiple backend modules.
 # Copyright (C) TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod
-from typing import TypeVar, TYPE_CHECKING, Callable
+from typing import TypeVar, TYPE_CHECKING, Callable, Iterator
 from math import prod
 import numpy as np
 
@@ -14,13 +14,15 @@ from ..symmetries import Symmetry
 from ..spaces import Space, ElementarySpace, ProductSpace
 from ..dtypes import Dtype
 
-__all__ = ['Data', 'DiagonalData', 'Block', 'Backend', 'BlockBackend']
+__all__ = ['Data', 'DiagonalData', 'Block', 'Backend', 'BlockBackend', 'conventional_leg_order',
+           'iter_common_sorted', 'iter_common_sorted_arrays', 'iter_common_nonstrict_sorted_arrays',
+           'iter_common_noncommon_sorted_arrays']
 
 
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import BlockDiagonalTensor, DiagonalTensor, Mask
+    from ..tensors import SymmetricTensor, DiagonalTensor, Mask
 
 # placeholder for a backend-specific type that holds all data of a tensor
 #  (except the symmetry data stored in its legs)
@@ -62,7 +64,7 @@ class Backend(metaclass=ABCMeta):
     """
     DataCls = None  # to be set by subclasses
 
-    def test_data_sanity(self, a: BlockDiagonalTensor | DiagonalTensor, is_diagonal: bool):
+    def test_data_sanity(self, a: SymmetricTensor | DiagonalTensor, is_diagonal: bool):
         # subclasses will typically call super().test_data_sanity(a)
         assert isinstance(a.data, self.DataCls), str(type(a.data))
 
@@ -84,31 +86,19 @@ class Backend(metaclass=ABCMeta):
     def _fuse_spaces(self, symmetry: Symmetry, spaces: list[Space]):
         """Backends may override the behavior of linalg.spaces._fuse_spaces in order to compute
         their backend-specific metadata alongside the sectors.
-
-        Note that the implementation of ``ProductSpace.dual`` assumes that the metadata of the
-        resulting dual space is the same as for the original space.
-        FIXME this true still? if yes use it, if no delete.
         """
         raise NotImplementedError
 
-    def get_leg_metadata(self, leg: Space) -> dict:  # FIXME uniform signature
+    def get_leg_metadata(self, leg: Space) -> dict:
+        """Get just the metadata returned by :meth:`_fuse_spaces`, without the sectors."""
         return {}
-
-    def leg_has_metadata(self, leg: Space) -> bool:
-        return True
-
-    def add_leg_metadata(self, leg: Space) -> Space:
-        if self.leg_has_metadata(leg):
-            return leg
-        leg.metadata.update(self.get_leg_metadata(leg))
-        return leg
 
     @abstractmethod
     def get_dtype_from_data(self, a: Data) -> Dtype:
         ...
 
     @abstractmethod
-    def to_dtype(self, a: BlockDiagonalTensor, dtype: Dtype) -> Data:
+    def to_dtype(self, a: SymmetricTensor, dtype: Dtype) -> Data:
         """cast to given dtype. No copy if already has dtype."""
         ...
 
@@ -116,25 +106,27 @@ class Backend(metaclass=ABCMeta):
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
         ...
 
-    def is_real(self, a: BlockDiagonalTensor) -> bool:
+    def is_real(self, a: SymmetricTensor) -> bool:
         """If the Tensor is comprised of real numbers.
         Complex numbers with small or zero imaginary part still cause a `False` return."""
         # FusionTree backend might implement this differently.
         return a.dtype.is_real
 
-    def item(self, a: BlockDiagonalTensor | DiagonalTensor) -> float | complex:
+    def item(self, a: SymmetricTensor | DiagonalTensor) -> float | complex:
         """Assumes that tensor is a scalar (i.e. has only one entry).
         Returns that scalar as python float or complex"""
         return self.data_item(a.data)
 
     @abstractmethod
     def data_item(self, a: Data | DiagonalData) -> float | complex:
-        """Assumes that data is a scalar (i.e. has only one entry).
-        Returns that scalar as python float or complex"""
+        """Assumes that data is a scalar (as defined in tensors.is_scalar).
+        
+        Return that scalar as python float or complex
+        """
         ...
 
     @abstractmethod
-    def to_dense_block(self, a: BlockDiagonalTensor) -> Block:
+    def to_dense_block(self, a: SymmetricTensor) -> Block:
         """Forget about symmetry structure and convert to a single block.
         This includes a permutation of the basis, specified by the legs of `a`.
         (see e.g. ElementarySpace.basis_perm).
@@ -154,8 +146,8 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def from_dense_block(self, a: Block, legs: list[Space], num_domain_legs: int,
-                         tol: float = 1e-8) -> Data:
+    def from_dense_block(self, a: Block, codomain: ProductSpace, domain: ProductSpace, tol: float
+                         ) -> Data:
         """Convert a dense block to the data for a symmetric tensor.
         
         If the block is not symmetric, measured by ``allclose(a, projected, atol, rtol)``,
@@ -166,13 +158,18 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def diagonal_from_block(self, a: Block, leg: Space) -> DiagonalData:
+    def diagonal_from_block(self, a: Block, co_domain: ProductSpace, tol: float) -> DiagonalData:
         """DiagonalData from a 1D block.
         This includes a permutation of the basis, specified by the legs of `a`.
         (see e.g. ElementarySpace.basis_perm).
         """
         ...
 
+    @abstractmethod
+    def diagonal_from_sector_block_func(self, func, co_domain: ProductSpace) -> DiagonalData:
+        """Generate diagonal data from a function ``func(shape: tuple[int], coupled: Sector) -> Block``."""
+        ...
+        
     @abstractmethod
     def mask_from_block(self, a: Block, large_leg: Space, small_leg: ElementarySpace
                         ) -> DiagonalData:
@@ -184,51 +181,59 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def from_block_func(self, func, legs: list[Space], num_domain_legs: int, func_kwargs={}
-                        ) -> Data:
-        """Generate tensor data from a function ``func(shape: tuple[int]) -> Block``."""
+    def diagonal_to_mask(self, tens: DiagonalTensor) -> tuple[DiagonalData, ElementarySpace]:
+        """Convert a DiagonalTensor to a Mask.
+
+        Returns ``mask_data, small_leg``.
+        """
         ...
 
     @abstractmethod
-    def diagonal_from_block_func(self, func, leg: Space, func_kwargs={}) -> DiagonalData:
+    def from_sector_block_func(self, func, codomain: ProductSpace, domain: ProductSpace) -> Data:
+        """Generate tensor data from a function ``func(shape: tuple[int], coupled: Sector) -> Block``."""
         ...
 
     @abstractmethod
-    def zero_data(self, legs: list[Space], dtype: Dtype, num_domain_legs: int) -> Data:
+    def from_random_normal(self, codomain: ProductSpace, domain: ProductSpace, sigma: float,
+                           dtype: Dtype) -> Data:
+        ...
+
+    @abstractmethod
+    def zero_data(self, codomain: ProductSpace, domain: ProductSpace, dtype: Dtype) -> Data:
         """Data for a zero tensor"""
         ...
 
     @abstractmethod
-    def zero_diagonal_data(self, leg: Space, dtype: Dtype) -> DiagonalData:
+    def zero_diagonal_data(self, co_domain: ProductSpace, dtype: Dtype) -> DiagonalData:
         ...
 
     @abstractmethod
-    def eye_data(self, legs: list[Space], dtype: Dtype) -> Data:
-        """Data for :meth:``BlockDiagonalTensor.eye``.
+    def eye_data(self, co_domain: ProductSpace, dtype: Dtype) -> Data:
+        """Data for :meth:``SymmetricTensor.eye``.
 
         The result has legs ``first_legs + [l.dual for l in reversed(firs_legs)]``.
         """
         ...
 
     @abstractmethod
-    def copy_data(self, a: BlockDiagonalTensor | DiagonalTensor) -> Data | DiagonalData:
+    def copy_data(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
         """Return a copy, such that future in-place operations on the output data do not affect the input data"""
         ...
 
     @abstractmethod
-    def _data_repr_lines(self, a: BlockDiagonalTensor, indent: str, max_width: int, max_lines: int) -> list[str]:
+    def _data_repr_lines(self, a: SymmetricTensor, indent: str, max_width: int, max_lines: int) -> list[str]:
         """helper function for Tensor.__repr__ ; return a list of strs which are the lines
         comprising the ``"* Data:"``section.
         indent is to be placed in front of every line"""
         ...
 
     @abstractmethod
-    def tdot(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, axs_a: list[int], axs_b: list[int]) -> Data:
+    def tdot(self, a: SymmetricTensor, b: SymmetricTensor, axs_a: list[int], axs_b: list[int]) -> Data:
         """Tensordot i.e. pairwise contraction"""
         ...
 
     @abstractmethod
-    def svd(self, a: BlockDiagonalTensor, new_vh_leg_dual: bool, algorithm: str | None, compute_u: bool,
+    def svd(self, a: SymmetricTensor, new_vh_leg_dual: bool, algorithm: str | None, compute_u: bool,
             compute_vh: bool) -> tuple[Data, DiagonalData, Data, ElementarySpace]:
         """SVD of a Matrix, `a` has only two legs (often ProductSpace).
         
@@ -251,7 +256,7 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def qr(self, a: BlockDiagonalTensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, ElementarySpace]:
+    def qr(self, a: SymmetricTensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, ElementarySpace]:
         """QR decomposition of a Tensor `a` with two legs.
 
         The legs of `a` may be :class:`~tenpy.linalg.spaces.ProductSpace`
@@ -266,11 +271,11 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def outer(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor) -> Data:
+    def outer(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
         ...
 
     @abstractmethod
-    def inner(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, do_conj: bool, axs2: list[int] | None) -> float | complex:
+    def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_conj: bool, axs2: list[int] | None) -> float | complex:
         """
         inner product of <a|b>, both of which are given as ket-like vectors
         (i.e. in C^N, the entries of a would need to be conjugated before multiplying with entries of b)
@@ -281,16 +286,15 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def permute_legs(self, a: BlockDiagonalTensor, permutation: list[int] | None,
-                     num_domain_legs: int) -> Data:
+    def permute_legs(self, a: SymmetricTensor, **kw) -> Data:  # TODO decide signature
         ...
 
     @abstractmethod
-    def trace_full(self, a: BlockDiagonalTensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
+    def trace_full(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
         ...
 
     @abstractmethod
-    def trace_partial(self, a: BlockDiagonalTensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
+    def trace_partial(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
         ...
 
     @abstractmethod
@@ -298,11 +302,11 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def conj(self, a: BlockDiagonalTensor | DiagonalTensor) -> Data | DiagonalData:
+    def conj(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
         ...
 
     @abstractmethod
-    def combine_legs(self, a: BlockDiagonalTensor, combine_slices: list[int, int],
+    def combine_legs(self, a: SymmetricTensor, combine_slices: list[int, int],
                      product_spaces: list[ProductSpace], new_axes: list[int],
                      final_legs: list[Space]) -> Data:
         """combine legs of `a` (without transpose).
@@ -314,35 +318,32 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def split_legs(self, a: BlockDiagonalTensor, leg_idcs: list[int], final_legs: list[Space]) -> Data:
+    def split_legs(self, a: SymmetricTensor, leg_idcs: list[int], final_legs: list[Space]) -> Data:
         """split multiple product space legs."""
         ...
 
     @abstractmethod
-    def add_trivial_leg(self, a: BlockDiagonalTensor, pos: int, to_domain: bool) -> Data:
+    def add_trivial_leg(self, a: SymmetricTensor, legs_pos: int, add_to_domain: bool,
+                        co_domain_pos: int, new_codomain: ProductSpace, new_domain: ProductSpace
+                        ) -> Data:
         ...
 
     @abstractmethod
-    def almost_equal(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, rtol: float, atol: float) -> bool:
+    def almost_equal(self, a: SymmetricTensor, b: SymmetricTensor, rtol: float, atol: float) -> bool:
         ...
-        
-    def almost_equal_diagonal(self, a: DiagonalTensor, b: DiagonalTensor, rtol: float, atol: float
-                              ) -> bool:
-        # for most backends, almost_equal will just work, but if not, backends may override this.
-        return self.almost_equal(a, b, rtol, atol)
 
     @abstractmethod
-    def squeeze_legs(self, a: BlockDiagonalTensor, idcs: list[int]) -> Data:
+    def squeeze_legs(self, a: SymmetricTensor, idcs: list[int]) -> Data:
         """Assume the legs at given indices are trivial and get rid of them"""
         ...
 
     @abstractmethod
-    def norm(self, a: BlockDiagonalTensor | DiagonalTensor, order: int | float = 2) -> float:
+    def norm(self, a: SymmetricTensor | DiagonalTensor, order: int | float = 2) -> float:
         """Norm of a tensor. order has already been parsed and is a number"""
         ...
 
     @abstractmethod
-    def act_block_diagonal_square_matrix(self, a: BlockDiagonalTensor, block_method: Callable[[Block], Block]
+    def act_block_diagonal_square_matrix(self, a: SymmetricTensor, block_method: Callable[[Block], Block]
                                          ) -> Data:
         """Apply functions like exp() and log() on a (square) block-diagonal `a`.
 
@@ -356,11 +357,11 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def add(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor) -> Data:
+    def add(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
         ...
 
     @abstractmethod
-    def mul(self, a: float | complex, b: BlockDiagonalTensor) -> Data:
+    def mul(self, a: float | complex, b: SymmetricTensor) -> Data:
         ...
 
     @abstractmethod
@@ -371,7 +372,7 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def get_element(self, a: BlockDiagonalTensor, idcs: list[int]) -> complex | float | bool:
+    def get_element(self, a: SymmetricTensor, idcs: list[int]) -> complex | float | bool:
         """Get a single scalar element from a tensor.
 
         TODO we might have a bit of redundancy in checking / parsing the indices
@@ -399,7 +400,7 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def set_element(self, a: BlockDiagonalTensor, idcs: list[int], value: complex | float) -> Data:
+    def set_element(self, a: SymmetricTensor, idcs: list[int], value: complex | float) -> Data:
         """Return a copy of the data of a tensor, with a single element changed.
 
         Parameters
@@ -432,10 +433,11 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def diagonal_data_from_full_tensor(self, a: BlockDiagonalTensor, check_offdiagonal: bool) -> DiagonalData:
+    def diagonal_data_from_full_tensor(self, a: SymmetricTensor, check_offdiagonal: bool
+                                       ) -> DiagonalData:
         """Get the DiagonalData corresponding to a tensor with two legs.
-        Can assume that the two legs are either equal or dual.
-        FIXME should we still allow that?
+
+        Can assume that domain and codomain consist of the same single leg.
         """
         ...
 
@@ -448,7 +450,7 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def scale_axis(self, a: BlockDiagonalTensor, b: DiagonalTensor, leg: int) -> Data:
+    def scale_axis(self, a: SymmetricTensor, b: DiagonalTensor, leg: int) -> Data:
         """Scale axis ``leg`` of ``a`` with ``b``, then permute legs to move the scaled leg to given position"""
         ...
 
@@ -477,7 +479,17 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def apply_mask_to_Tensor(self, tensor: BlockDiagonalTensor, mask: Mask, leg_idx: int) -> Data:
+    def diagonal_all(self, a: DiagonalTensor) -> bool:
+        """Assumes a boolean DiagonalTensor. If all entries are True."""
+        ...
+
+    @abstractmethod
+    def diagonal_any(self, a: DiagonalTensor) -> bool:
+        """Assumes a boolean DiagonalTensor. If any entry is True."""
+        ...
+
+    @abstractmethod
+    def apply_mask_to_Tensor(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int) -> Data:
         ...
 
     @abstractmethod
@@ -485,7 +497,7 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def eigh(self, a: BlockDiagonalTensor, sort: str = None) -> tuple[DiagonalData, Data]:
+    def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
         """Eigenvalue decomposition of a 2-leg hermitian tensor
 
         Parameters
@@ -498,40 +510,80 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def from_flat_block_trivial_sector(self, block: Block, leg: Space) -> Data:
+    def from_dense_block_trivial_sector(self, block: Block, leg: Space) -> Data:
         """Data of a single-leg `Tensor` from the *part of* the coefficients in the trivial sector."""
         ...
 
     @abstractmethod
-    def to_flat_block_trivial_sector(self, tensor: BlockDiagonalTensor) -> Block:
+    def to_dense_block_trivial_sector(self, tensor: SymmetricTensor) -> Block:
         """Single-leg tensor to the *part of* the coefficients in the trivial sector."""
         ...
 
     @abstractmethod
-    def inv_part_from_flat_block_single_sector(self, block: Block, leg: Space,
-                                               dummy_leg: ElementarySpace) -> Data:
-        """Data for the invariant part used in ChargedTensor.from_flat_block_single_sector"""
+    def inv_part_from_dense_block_single_sector(self, vector: Block, space: Space,
+                                               charge_leg: ElementarySpace) -> Data:
+        """Data for the invariant part used in ChargedTensor.from_dense_block_single_sector"""
         ...
 
     @abstractmethod
-    def inv_part_to_flat_block_single_sector(self, tensor: BlockDiagonalTensor) -> Block:
-        """Inverse of inv_part_from_flat_block_single_sector"""
+    def inv_part_to_flat_block_single_sector(self, tensor: SymmetricTensor) -> Block:
+        """Inverse of inv_part_from_dense_block_single_sector"""
         ...
 
     @abstractmethod
-    def flip_leg_duality(self, tensor: BlockDiagonalTensor, which_legs: list[int],
+    def flip_leg_duality(self, tensor: SymmetricTensor, which_legs: list[int],
                          flipped_legs: list[Space], perms: list[np.ndarray]) -> Data:
+        ...
+
+    @abstractmethod
+    def mask_unary_operand(self, mask: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
+        """Elementwise function acting on a mask.
+
+        returns ``mask_data, new_small_leg``
+        """
+        ...
+        
+    @abstractmethod
+    def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
+        """Elementwise binary function acting on two masks.
+
+        returns ``mask_data, new_small_leg``
+        """
         ...
 
 
 class BlockBackend(metaclass=ABCMeta):
     """Abstract base class that defines the operation on dense blocks."""
     svd_algorithms: list[str]  # first is default
+    BlockCls = None  # to be set by subclass
 
     @abstractmethod
-    def as_block(self, a) -> Block:
-        """Convert objects to blocks. Should support blocks, numpy arrays, nested python containers.
-        May support more."""
+    def as_block(self, a, dtype: Dtype = None, return_dtype: bool = False
+                 ) -> Block | tuple[Block, Dtype]:
+        """Convert objects to blocks.
+
+        Should support blocks, numpy arrays, nested python containers. May support more.
+        Convert to `dtype`, if given.
+
+        TODO make sure to emit warning on complex -> float!
+
+        Returns
+        -------
+        block: Block
+            The new block
+        dtype: Dtype, optional
+            The new dtype of the block. Only returned if `return_dtype`.
+        """
+        ...
+
+    @abstractmethod
+    def block_all(self, a) -> bool:
+        """Require a boolean block. If all of its entries are True"""
+        ...
+        
+    @abstractmethod
+    def block_any(self, a) -> bool:
+        """Require a boolean block. If any of its entries are True"""
         ...
     
     @abstractmethod
@@ -876,6 +928,11 @@ class BlockBackend(metaclass=ABCMeta):
         return block * factors[tuple(idx)]
 
     @abstractmethod
+    def block_sum(self, a: Block, ax: int) -> Block:
+        """The sum over a single axis."""
+        ...
+
+    @abstractmethod
     def block_sum_all(self, a: Block) -> float | complex:
         """The sum of all entries of the block.
         If the block contains boolean values, this should return the number of ``True`` entries.
@@ -932,12 +989,13 @@ class BlockBackend(metaclass=ABCMeta):
 
     def apply_basis_perm(self, block: Block, legs: list[Space], inv: bool = False) -> Block:
         """Apply basis_perm of a ElementarySpace (or its inverse) on every axis of a dense block"""
-        # OPTIMIZE should we special-case None for "no permutation to do"?
-        # FIXME ProductSpace has no perm.
-        if inv:
-            perms = [leg.inverse_basis_perm for leg in legs]
-        else:
-            perms = [leg.basis_perm for leg in legs]
+        perms = []
+        for leg in legs:
+            p = leg._inverse_basis_perm if inv else leg._basis_perm
+            if p is None:
+                # OPTIMIZE support None in apply_leg_permutations, to skip permuting that leg? 
+                p = np.arange(leg.dim)
+            perms.append(p)
         return self.apply_leg_permutations(block, perms)
 
     def block_argsort(self, block: Block, sort: str = None, axis: int = 0) -> Block:
@@ -995,15 +1053,34 @@ class BlockBackend(metaclass=ABCMeta):
         """Like :meth:`block_argsort` but can assume real valued block, and sort ascending"""
         ...
 
+    def test_block_sanity(self, block, expect_shape: tuple[int, ...] | None = None,
+                          expect_dtype: Dtype | None = None):
+        assert isinstance(block, self.BlockCls), 'wrong block type'
+        if expect_shape is not None:
+            assert self.block_shape(block) == expect_shape, 'wrong block shape'
+        if expect_dtype is not None:
+            assert self.block_dtype(block) == expect_dtype, 'wrong block dtype'
 
-def _iter_common_sorted(a, b):
+
+def conventional_leg_order(tensor_or_codomain: SymmetricTensor | ProductSpace,
+                           domain: ProductSpace = None) -> Iterator[Space]:
+    if domain is None:
+        codomain = tensor_or_codomain.codomain
+        domain = tensor_or_codomain.domain
+    else:
+        codomain = tensor_or_codomain
+    yield from codomain.spaces
+    yield from reversed(domain.spaces)
+
+
+def iter_common_sorted(a, b):
     """Yield indices ``i, j`` for which ``a[i] == b[j]``.
 
     *Assumes* that `a` and `b` are strictly ascending 1D arrays.
     Given that, it is equivalent to (but faster than)
     ``[(i, j) for j, i in itertools.product(range(len(b)), range(len(a)) if a[i] == b[j]]``
     """
-    # when we call this function, we basically wanted _iter_common_sorted_arrays,
+    # when we call this function, we basically wanted iter_common_sorted_arrays,
     # but used strides to merge multiple columns to avoid too much python loops
     # for C-implementation, this is definitely no longer necessary.
     l_a = len(a)
@@ -1022,7 +1099,7 @@ def _iter_common_sorted(a, b):
     return res
 
 
-def _iter_common_sorted_arrays(a, b):
+def iter_common_sorted_arrays(a, b):
     """Yield indices ``i, j`` for which ``a[i, :] == b[j, :]``.
 
     *Assumes* that `a` and `b` are strictly lex-sorted (according to ``np.lexsort(a.T)``).
@@ -1048,10 +1125,10 @@ def _iter_common_sorted_arrays(a, b):
     # done
 
 
-def _iter_common_nonstrict_sorted_arrays(a, b):
+def iter_common_nonstrict_sorted_arrays(a, b):
     """Yield indices ``i, j`` for which ``a[i, :] == b[j, :]``.
 
-    Like _iter_common_sorted_arrays, but allows duplicate rows in `a`.
+    Like iter_common_sorted_arrays, but allows duplicate rows in `a`.
     I.e. `a.T` is lex-sorted, but not strictly. `b.T` is still assumed to be strictly lexsorted.
     """
     l_a, d_a = a.shape
@@ -1068,12 +1145,12 @@ def _iter_common_nonstrict_sorted_arrays(a, b):
                 break
         else:  # (no break)
             yield (i, j)
-            # difference to _iter_common_sorted_arrays:
+            # difference to iter_common_sorted_arrays:
             # dont increase j because a[i + 1] might also match b[j]
             i += 1
 
 
-def _iter_common_noncommon_sorted_arrays(a, b):
+def iter_common_noncommon_sorted_arrays(a, b):
     """Yield the following pairs ``i, j`` of indices:
 
     - Matching entries, i.e. ``(i, j)`` such that ``all(a[i, :] == b[j, :])``

@@ -117,7 +117,7 @@ def check_to_block(symmetry, backend, uncoupled, np_random, dtype):
         
     uncoupled_dims = symmetry.batch_sector_dim(uncoupled)
     spaces = [ElementarySpace(symmetry, [a]) for a in uncoupled]
-    domain = ProductSpace(spaces, backend)
+    domain = ProductSpace(spaces, backend=backend)
     coupled = np_random.choice(domain.sectors)
     coupled_dim = symmetry.sector_dim(coupled)
     all_trees = list(trees.fusion_trees(symmetry, uncoupled, coupled))

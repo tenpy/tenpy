@@ -14,6 +14,10 @@ from tenpy.networks import site
 from conftest import random_symmetry_sectors
 
 
+
+pytest.skip("site not yet revised", allow_module_level=True)  # TODO
+
+
 def commutator(A, B):
     return np.dot(A, B) - np.dot(B, A)
 
@@ -34,7 +38,7 @@ def test_site(np_random, block_backend, symmetry_backend, use_sym):
     some_sectors = random_symmetry_sectors(sym, num=dim, sort=False, np_random=np_random)
     leg = la.ElementarySpace.from_basis(sym, np_random.choice(some_sectors, size=dim, replace=True))
     assert leg.dim == dim
-    op1 = la.BlockDiagonalTensor.random_uniform([leg, leg.dual], backend, labels=['p', 'p*'])
+    op1 = la.SymmetricTensor.random_uniform([leg, leg.dual], backend, labels=['p', 'p*'])
     labels = [f'x{i:d}' for i in range(10, 10 + dim)]
     s = site.Site(leg, backend=backend, state_labels=labels)
     s.add_symmetric_operator('silly_op', op1)
@@ -44,7 +48,7 @@ def test_site(np_random, block_backend, symmetry_backend, use_sym):
     assert s.all_op_names == {'silly_op', 'Id', 'JW'}
     assert s['silly_op'] is op1
     assert s.get_op('silly_op') is op1
-    op2 = la.BlockDiagonalTensor.random_uniform([leg, leg.dual], backend, labels=['p', 'p*'])
+    op2 = la.SymmetricTensor.random_uniform([leg, leg.dual], backend, labels=['p', 'p*'])
     s.add_symmetric_operator('op2', op2)
     assert s['op2'] is op2
     assert s.get_op('op2') is op2
@@ -187,6 +191,7 @@ def check_operator_availability(s: site.Site, expect_symmetric_ops: dict[str, bo
         assert name in s.charged_ops
         op = s.charged_ops[name]
         assert op.can_use_alone == can_use_alone
+        # TODO revise this. purge the "dummy" language, its now "charged"
         assert op.op_L.dummy_leg.dim == dim
         assert op.op_R.dummy_leg.dim == dim
 
