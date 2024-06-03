@@ -235,6 +235,10 @@ class Symmetry(metaclass=ABCMeta):
         """Internal implementation of :meth:`r_symbol`. Can assume that inputs are valid."""
         ...
 
+    @property
+    def has_symmetric_braid(self) -> bool:
+        return self.braiding_style <= BraidingStyle.fermionic
+
     def _fusion_tensor(self, a: Sector, b: Sector, c: Sector, Z_a: bool, Z_b: bool) -> np.ndarray:
         """Internal implementation of :meth:`fusion_tensor`. Can assume that inputs are valid."""
         if not self.can_be_dropped:
@@ -298,11 +302,23 @@ class Symmetry(metaclass=ABCMeta):
         # stack the outcomes along the trivial first axis
         return np.concatenate([self.fusion_outcomes(s_a, s_b) for s_a, s_b in zip(a, b)], axis=0)
 
+    def multiple_fusion(self, *sectors: Sector) -> Sector:
+        # OPTIMIZE ?
+        return self.multiple_fusion_broadcast(*(a[None, :] for a in sectors))[0, :]
+
     def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
         """This method allows optimized fusion in the case of FusionStyle.single.
 
         It generalizes :meth:`fusion_outcomes_broadcast` to more than two fusion inputs.
         """
+        if len(sectors) == 0:
+            return self.trivial_sector[None, :]
+        if len(sectors) == 1:
+            return sectors[0]
+        return self._multiple_fusion_broadcast(*sectors)
+
+    def _multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray: 
+        """Internal version of :meth:`multiple_fusion_broadcast`. May assume ``len(sectors) >= 2``."""
         return reduce(self.fusion_outcomes_broadcast, sectors)
 
     def can_fuse_to(self, a: Sector, b: Sector, c: Sector) -> bool:
@@ -736,10 +752,10 @@ class ProductSymmetry(Symmetry):
         # it remains to concatenate them along the last axis
         return np.concatenate(components, axis=-1)
 
-    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+    def _multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
         components = []
         for i, f_i in enumerate(self.factors):
-            sectors_i = (s[:, self.sector_slices[i]:self.sector_slices[i + 1]] for s in sectors)
+            sectors_i = tuple(s[:, self.sector_slices[i]:self.sector_slices[i + 1]] for s in sectors)
             c_i = f_i.multiple_fusion_broadcast(*sectors_i)
             components.append(c_i)
         return np.concatenate(components, axis=-1)
@@ -1067,7 +1083,7 @@ class NoSymmetry(AbelianGroup):
     def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
         return a
 
-    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+    def _multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
         return sectors[0]
 
     def dual_sector(self, a: Sector) -> Sector:
@@ -1112,7 +1128,7 @@ class U1Symmetry(AbelianGroup):
     def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
         return a + b
 
-    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+    def _multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
         return sum(sectors)
 
     def dual_sector(self, a: Sector) -> Sector:
@@ -1167,7 +1183,7 @@ class ZNSymmetry(AbelianGroup):
     def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
         return (a + b) % self.N
 
-    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+    def _multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
         return sum(sectors) % self.N
 
     def dual_sector(self, a: Sector) -> Sector:
@@ -1318,7 +1334,7 @@ class FermionParity(Symmetry):
         # unequal sectors fuse to odd parity i.e. to `1 == (0 + 1) % 2 == (1 + 0) % 2`
         return (a + b) % 2
 
-    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+    def _multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
         return sum(sectors) % 2
 
     def sector_dim(self, a: Sector) -> int:
@@ -1426,7 +1442,7 @@ class ZNAnyonCategory(Symmetry):
     def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
         return (a + b) % self.N
 
-    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+    def _multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
         return sum(sectors) % self.N
 
     def sector_dim(self, a: Sector) -> int:
@@ -1519,7 +1535,7 @@ class ZNAnyonCategory2(Symmetry):
     def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
         return (a + b) % self.N
 
-    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+    def _multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
         return sum(sectors) % self.N
 
     def sector_dim(self, a: Sector) -> int:
@@ -1602,7 +1618,7 @@ class QuantumDoubleZNAnyonCategory(Symmetry):
     def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
         return (a + b) % self.N
 
-    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+    def _multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
         return sum(sectors) % self.N
 
     def sector_dim(self, a: Sector) -> int:

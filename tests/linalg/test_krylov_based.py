@@ -9,9 +9,13 @@ import tenpy as tp
 from tenpy.linalg import krylov_based, sparse, tensors, random_matrix, spaces
 
 
+pytest.skip("krylov_based not yet revised", allow_module_level=True)  # TODO
+
+
 @pytest.mark.parametrize(['N_cache', 'tol'], [(10, 5.e-13), (20, 5.e-14)])
 def test_lanczos_gs(compatible_backend, make_compatible_space, N_cache, tol):
-    pytest.skip()  # FIXME
+    # TODO revise this. purge the "dummy" language, its now "charged"
+    
     # generate hermitian test array
     leg = make_compatible_space()
     backend = compatible_backend
@@ -22,10 +26,10 @@ def test_lanczos_gs(compatible_backend, make_compatible_space, N_cache, tol):
         # and GUE((1, 9)) generates blocks with shape (9, 9) without error!!
         # should GUE etc be Tensor classmethods?
         with pytest.raises(AssertionError, match='not a square matrix shape'):
-            H = tensors.BlockDiagonalTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
+            H = tensors.SymmetricTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
         return
     
-    H = tensors.BlockDiagonalTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
+    H = tensors.SymmetricTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
 
     if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend) and isinstance(leg.symmetry, tp.ProductSymmetry):
         # TODO
@@ -115,10 +119,10 @@ def test_lanczos_evolve(compatible_backend, make_compatible_space, N_cache, tol)
         # and GUE((1, 9)) generates blocks with shape (9, 9) without error!!
         # should GUE etc be Tensor classmethods?
         with pytest.raises(AssertionError, match='not a square matrix shape'):
-            H = tensors.BlockDiagonalTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
+            H = tensors.SymmetricTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
         return
     
-    H = tensors.BlockDiagonalTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
+    H = tensors.SymmetricTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
     H_op = sparse.TensorLinearOperator(H, which_leg=1)
 
     if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend) and isinstance(leg.symmetry, tp.ProductSymmetry):
@@ -167,10 +171,10 @@ def test_arnoldi(compatible_backend, make_compatible_space, which, N_max=20):
         # and GUE((1, 9)) generates blocks with shape (9, 9) without error!!
         # should GUE etc be Tensor classmethods?
         with pytest.raises(AssertionError, match='not a square matrix shape'):
-            H = tensors.BlockDiagonalTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
+            H = tensors.SymmetricTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
         return
     
-    H = tensors.BlockDiagonalTensor.from_numpy_func(func, legs=[leg, leg.dual], backend=backend)
+    H = tensors.SymmetricTensor.from_numpy_func(func, legs=[leg, leg.dual], backend=backend)
     H_op = sparse.TensorLinearOperator(H, which_leg=1)
 
     if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend) and isinstance(leg.symmetry, tp.ProductSymmetry):

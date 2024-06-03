@@ -7,7 +7,7 @@ from tenpy.linalg.backends.abstract_backend import Backend
 from tenpy.linalg.backends.numpy import NumpyBlockBackend
 from tenpy.linalg.backends.no_symmetry import NoSymmetryBackend
 from tenpy.linalg.backends.abelian import AbelianBackend
-from tenpy.linalg.tensors import BlockDiagonalTensor
+from tenpy.linalg.tensors import SymmetricTensor
 
 
 def random_symmetry_sectors(symmetry: symmetries.Symmetry, np_random: np.random.Generator, len_=None
@@ -172,7 +172,7 @@ def get_random_tensor(symmetry: symmetries.Symmetry, backend: Backend,
             res = res + 1.j * np.random.normal(size=size)
         return res
 
-    return BlockDiagonalTensor.from_numpy_func(func=random_block, legs=legs, backend=backend)
+    return SymmetricTensor.from_numpy_func(func=random_block, legs=legs, backend=backend)
 
 
 def get_qmod(sym):
@@ -205,7 +205,7 @@ def convert_Space_to_LegCharge(leg: spaces.Space, old_tenpy, chinfo=None):
     return old_tenpy.linalg.charges.LegCharge(chinfo, slices, charges, qconj)
 
 
-def convert_Tensor_to_Array(a: BlockDiagonalTensor, old_tenpy, chinfo=None):
+def convert_Tensor_to_Array(a: SymmetricTensor, old_tenpy, chinfo=None):
     """Convert a v2.0 Tensor to a v0.x Array
 
     If given, use chinfo, otherwise generate it from `a.symmetry`.

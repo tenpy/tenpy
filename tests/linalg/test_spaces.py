@@ -437,7 +437,7 @@ def test_str_repr(make_any_space, str_max_lines=20, repr_max_lines=20):
         print(res)
 
 
-# FIXME move to some testing tools module?
+# TODO move to some testing tools module?
 def assert_spaces_equal(space1: spaces.Space, space2: spaces.Space):
     if isinstance(space1, spaces.ElementarySpace):
         assert isinstance(space2, spaces.ElementarySpace), 'mismatching types'

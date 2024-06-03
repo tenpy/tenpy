@@ -836,6 +836,8 @@ class ProductSpace(Space):
             else:
                 _metadata = backend.get_leg_metadata(self)
         self.metadata = _metadata
+        self._basis_perm = None
+        self._inverse_basis_perm = None
 
     def test_sanity(self):
         assert isinstance(self.metadata, dict)

@@ -17,7 +17,7 @@ __all__ = ['TorchBlockBackend', 'NoSymmetryTorchBackend', 'AbelianTorchBackend',
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import BlockDiagonalTensor
+    from ..tensors import SymmetricTensor
 
 
 class TorchBlockBackend(BlockBackend):
@@ -51,9 +51,19 @@ class TorchBlockBackend(BlockBackend):
         self.BlockCls = torch.Tensor
         super().__init__(**kwargs)
     
-    def as_block(self, a) -> Block:
-        block = torch_module.as_tensor(a, device=self.device)
-        return 1. * block  # OPTIMIZE convert type to at least float without multiplying?
+    def as_block(self, a, dtype: Dtype = None, return_dtype: bool = False) -> Block:
+        block = torch_module.as_tensor(a, dtype=self.backend_dtype_map[dtype], device=self.device)
+        if dtype != Dtype.bool:
+            block = 1. * block  # force int to float.
+        if return_dtype:
+            return block, self.tenpy_dtype_map[block.dtype]
+        return block
+
+    def block_all(self, a) -> bool:
+        return torch_module.all(a)
+        
+    def block_any(self, a) -> bool:
+        return torch_module.any(a)
 
     def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]) -> Block:
         return torch_module.tensordot(a, b, (idcs_a, idcs_b))
@@ -221,6 +231,9 @@ class TorchBlockBackend(BlockBackend):
         res = torch_module.zeros((M, N), dtype=self.backend_dtype_map[dtype])
         res[mask, torch_module.arange(N)] = 1
         return res
+
+    def block_sum(self, a: Block, ax: int) -> Block:
+        return torch_module.sum(a, ax)
 
     def block_sum_all(self, a: Block) -> float | complex:
         return torch_module.sum(a)

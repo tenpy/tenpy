@@ -21,10 +21,19 @@ class NumpyBlockBackend(BlockBackend):
     tenpy_dtype_map = _numpy_dtype_to_tenpy
     backend_dtype_map = _tenpy_dtype_to_numpy
     
-    def as_block(self, a) -> Block:
-        block = np.asarray(a)
-        dtype = np.promote_types(block.dtype, float)  # at least float
-        return block.astype(dtype, copy=False)
+    def as_block(self, a, dtype: Dtype = None, return_dtype: bool = False) -> Block:
+        block = np.asarray(a, dtype=self.backend_dtype_map[dtype])
+        if np.issubdtype(block.dtype, np.integer):
+            block = block.astype(np.float64, copy=False)
+        if return_dtype:
+            return block, self.tenpy_dtype_map[block.dtype]
+        return block
+    
+    def block_all(self, a) -> bool:
+        return np.all(a)
+        
+    def block_any(self, a) -> bool:
+        return np.any(a)
 
     def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]) -> Block:
         return np.tensordot(a, b, (idcs_a, idcs_b))
@@ -211,6 +220,9 @@ class NumpyBlockBackend(BlockBackend):
         res = np.zeros((M, N), dtype=self.backend_dtype_map[dtype])
         res[mask, np.arange(N)] = 1
         return res
+
+    def block_sum(self, a: Block, ax: int) -> Block:
+        return np.sum(a, axis=ax)
 
     def block_sum_all(self, a: Block) -> float | complex:
         return np.sum(a)
