@@ -178,7 +178,8 @@ def sample_sector_unitarity_test(symmetry: symmetries.Symmetry, sectors_low_qdim
                                             num_samples=len(abc_list), np_rng=np_rng)
 
 
-def common_checks(sym: symmetries.Symmetry, example_sectors, example_sectors_low_qdim, np_random):
+def common_checks(sym: symmetries.Symmetry, example_sectors, example_sectors_low_qdim, np_random,
+                  skip_fusion_tensor=False):
     """Common consistency checks to be performed on a symmetry instance.
 
     Assumes example_sectors are duplicate free.
@@ -202,7 +203,6 @@ def common_checks(sym: symmetries.Symmetry, example_sectors, example_sectors_low
     sector_unitarity_test = list(sample_sector_unitarity_test(sym, example_sectors_low_qdim,
                                                               num_samples=10, accept_fewer=True,
                                                               np_rng=np_random))
-    
     
     assert sym.trivial_sector.shape == (sym.sector_ind_len,)
     assert sym.is_valid_sector(sym.trivial_sector)
@@ -236,7 +236,9 @@ def common_checks(sym: symmetries.Symmetry, example_sectors, example_sectors_low
     assert_array_equal(sym.dual_sector(sym.trivial_sector), sym.trivial_sector)
 
     # check fusion tensors, if available
-    if sym.can_be_dropped:
+    if skip_fusion_tensor:
+        pass
+    elif sym.can_be_dropped:
         check_fusion_tensor(sym, example_sectors, np_random)
         check_symbols_via_fusion_tensors(sym, example_sectors, np_random)
     else:
@@ -636,23 +638,8 @@ def test_no_symmetry(np_random):
     assert_array_equal(sym.dual_sectors(many_s), many_s)
 
 
-#@pytest.mark.xfail(reason='Topological data not implemented.')
+# @pytest.mark.xfail(reason='Topological data not implemented.')
 def test_product_symmetry(np_random):
-    # sym = symmetries.ProductSymmetry([
-    #     symmetries.SU2Symmetry(), symmetries.U1Symmetry(), symmetries.FermionParity()
-    # ])
-    # sym_with_name = symmetries.ProductSymmetry([
-    #     symmetries.SU2Symmetry('foo'), symmetries.U1Symmetry('bar'), symmetries.FermionParity()
-    # ])
-    # s1 = np.array([5, 3, 1])  # e.g. spin 5/2 , 3 particles , odd parity ("fermionic")
-    # s2 = np.array([3, 2, 0])  # e.g. spin 3/2 , 2 particles , even parity ("bosonic")
-    # sectors = np.array([s1, s2])
-    # common_checks(sym, example_sectors=sectors, example_sectors_low_qdim=sectors, np_random=np_random)
-
-    # u1_z3 = symmetries.u1_symmetry * symmetries.z3_symmetry
-    # common_checks(u1_z3, example_sectors=np.array([[42, 1], [-1, 2], [-2, 0]]),
-    #               example_sectors_low_qdim=np.array([[42, 1], [-1, 2], [-2, 0]]), np_random=np_random)
-
     doubleFibo = symmetries.ProductSymmetry([symmetries.FibonacciAnyonCategory('left'), symmetries.FibonacciAnyonCategory('right')])
     common_checks(doubleFibo, example_sectors=np.array([[0,0],[0,1],[1,0],[1,1]]), example_sectors_low_qdim=np.array([[0,0],[0,1],[1,0],[1,1]]), np_random=np_random)
     assert doubleFibo._f_symbol([0,0], [0,0], [0,0], [0,0], [0,0], [0,0]) == 1
@@ -664,8 +651,23 @@ def test_product_symmetry(np_random):
         assert np.isclose(doubleIsing._r_symbol([1,1],[1,1],[0,0]),1)
         assert np.isclose(doubleIsing._r_symbol([1, 1], [2, 2], [1, 1]), 1)
         assert np.isclose(doubleIsing._r_symbol([2, 2],[1, 1], [1, 1]), 1)
+        
+    sym = symmetries.ProductSymmetry([
+        symmetries.SU2Symmetry(), symmetries.U1Symmetry(), symmetries.FermionParity()
+    ])
+    sym_with_name = symmetries.ProductSymmetry([
+        symmetries.SU2Symmetry('foo'), symmetries.U1Symmetry('bar'), symmetries.FermionParity()
+    ])
+    s1 = np.array([5, 3, 1])  # e.g. spin 5/2 , 3 particles , odd parity ("fermionic")
+    s2 = np.array([3, 2, 0])  # e.g. spin 3/2 , 2 particles , even parity ("bosonic")
+    sectors = np.array([s1, s2])
+    common_checks(sym, example_sectors=sectors, example_sectors_low_qdim=sectors,
+                  np_random=np_random, skip_fusion_tensor=True)  # TODO dont skip!
 
-
+    u1_z3 = symmetries.u1_symmetry * symmetries.z3_symmetry
+    common_checks(u1_z3, example_sectors=np.array([[42, 1], [-1, 2], [-2, 0]]),
+                  example_sectors_low_qdim=np.array([[42, 1], [-1, 2], [-2, 0]]),
+                  np_random=np_random, skip_fusion_tensor=True)  # TODO dont skip!
 
     print('instancecheck and is_abelian')
     assert not isinstance(sym, symmetries.AbelianGroup)
