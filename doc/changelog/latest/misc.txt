@@ -1,2 +1,0 @@
-- fix that :meth:`~tenpy.networks.mps.MPS.compute_K` didn't use the argument `expect_mean_k`.
-- allow to directly pass ``yaml_contents=...`` in :func:`~tenpy.tools.params.load_yaml_with_py_eval`.

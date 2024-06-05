@@ -1,0 +1,33 @@
+[v1.0.2] - 2024-06-05
+=====================
+
+Release Notes
+-------------
+This version only introduces small changes, listed below.
+
+
+Changelog
+---------
+
+Backwards incompatible changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- nothing
+
+Added
+^^^^^
+Changed
+^^^^^^^
+- allow to directly pass ``yaml_contents=...`` in :func:`~tenpy.tools.params.load_yaml_with_py_eval`.
+
+- Issue warnings if config options with unexpected types are read out
+
+
+Fixed
+^^^^^
+
+- fix `str(TermList)` formatting to add brackets if multiple operators act on single site
+
+- fix expectation values during the imaginary evolution with :class:`tenpy.algorithms.purification.PurificationTEBD` by calling 
+  :meth:`~tenpy.networks.mps.PurificationMPS.canonical_form`.
+
+- fix that :meth:`~tenpy.networks.mps.MPS.compute_K` didn't use the argument `expect_mean_k`.
