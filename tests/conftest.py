@@ -550,7 +550,7 @@ def randomly_drop_blocks(res: tensors.SymmetricTensor | tensors.DiagonalTensor,
         res.data = backends.FusionTreeData(
             coupled_sectors=res.data.coupled_sectors[which, :],
             blocks=[res.data.blocks[n] for n in which],
-            domain=res.data.domain, codomain=res.data.codomain, dtype=res.data.dtype
+            dtype=res.data.dtype
         )
         return res
 
