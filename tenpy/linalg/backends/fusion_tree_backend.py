@@ -360,7 +360,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         num_beta_trees = len(beta_tree_iter)
         return entries, num_alpha_trees, num_beta_trees
 
-    def diagonal_to_block(self, a: DiagonalTensor) -> Block:
+    def diagonal_tensor_to_block(self, a: DiagonalTensor) -> Block:
         assert a.symmetry.can_be_dropped
         res = self.zero_block([a.leg.dim], a.dtype)
         for i, j in iter_common_sorted_arrays(a.leg.sectors, a.data.coupled_sectors):
