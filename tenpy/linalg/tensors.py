@@ -1282,7 +1282,7 @@ class DiagonalTensor(SymmetricTensor):
         return self
 
     def diagonal_as_block(self, dtype: Dtype = None) -> Block:
-        res = self.backend.diagonal_to_block(self)
+        res = self.backend.diagonal_tensor_to_block(self)
         if dtype is not None:
             res = self.backend.block_to_dtype(res, dtype)
         return res
@@ -1511,7 +1511,7 @@ class Mask(Tensor):
         return self.small_leg.dim > 0
 
     def as_block_mask(self) -> Block:
-        return self.backend.diagonal_to_block(self)
+        return self.backend.diagonal_tensor_to_block(self)
 
     def as_numpy_mask(self) -> np.ndarray:
         return self.backend.block_to_numpy(self.as_block_mask(), numpy_dtype=bool)

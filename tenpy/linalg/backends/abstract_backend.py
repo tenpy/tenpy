@@ -223,7 +223,7 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def diagonal_to_block(self, a: DiagonalTensor) -> Block:
+    def diagonal_tensor_to_block(self, a: DiagonalTensor) -> Block:
         """Forget about symmetry structure and convert the diagonals of the blocks
         to a single 1D block.
         This is the diagonal of the respective non-symmetric 2D tensor.

@@ -130,7 +130,7 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def diagonal_tensor_trace_full(self, a: DiagonalTensor) -> float | complex:
         return self.block_sum_all(a.data)
 
-    def diagonal_to_block(self, a: DiagonalTensor) -> Block:
+    def diagonal_tensor_to_block(self, a: DiagonalTensor) -> Block:
         return self.apply_basis_perm(a.data, [a.leg], inv=True)
 
     def diagonal_to_mask(self, tens: DiagonalTensor) -> tuple[DiagonalData, ElementarySpace]:
