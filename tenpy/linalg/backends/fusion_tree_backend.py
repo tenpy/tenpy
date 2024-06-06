@@ -490,7 +490,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                 for a_sectors, m_dims, j1 in _iter_sectors_mults_slices(codomain.spaces, sym):
                     a_dims = sym.batch_sector_dim(a_sectors)
                     tree_block_height = tree_block_size(codomain, a_sectors)
-                    entries = a[*j1, *j2]  # [(a1,m1),...,(aJ,mJ), (b1,n1),...,(bK,nK)]
+                    entries = a[(*j1, *j2)]  # [(a1,m1),...,(aJ,mJ), (b1,n1),...,(bK,nK)]
                     # reshape to [a1,m1,...,aJ,mJ, b1,n1,...,bK,nK]
                     shape = [0] * (2 * num_legs)
                     shape[::2] = [*a_dims, *b_dims]
@@ -703,7 +703,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                     shape = [d_a * m for d_a, m in zip(a_dims, m_dims)] \
                             + [d_b * n for d_b, n in zip(b_dims, n_dims)]
                     entries = self.block_reshape(entries, shape)
-                    res[*j1, *j2] += entries
+                    res[(*j1, *j2)] += entries
                     i1 += forest_b_height  # move down by one forest-block
                 i1 = 0  # reset to the top of the block
                 i2 += forest_b_width  # move right by one forest-block
