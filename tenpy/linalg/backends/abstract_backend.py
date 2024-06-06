@@ -173,15 +173,6 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def diagonal_data_from_full_tensor(self, a: SymmetricTensor, check_offdiagonal: bool
-                                       ) -> DiagonalData:
-        """Get the DiagonalData corresponding to a tensor with two legs.
-
-        Can assume that domain and codomain consist of the same single leg.
-        """
-        ...
-
-    @abstractmethod
     def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
                                     func_kwargs, partial_zero_is_zero: bool
                                     ) -> DiagonalData:
@@ -218,6 +209,15 @@ class Backend(metaclass=ABCMeta):
         """Generate diagonal data from a function ``func(shape: tuple[int], coupled: Sector) -> Block``."""
         ...
        
+    @abstractmethod
+    def diagonal_tensor_from_full_tensor(self, a: SymmetricTensor, check_offdiagonal: bool
+                                       ) -> DiagonalData:
+        """Get the DiagonalData corresponding to a tensor with two legs.
+
+        Can assume that domain and codomain consist of the same single leg.
+        """
+        ...
+
     @abstractmethod
     def diagonal_tensor_trace_full(self, a: DiagonalTensor) -> float | complex:
         ...
@@ -395,7 +395,7 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def norm(self, a: SymmetricTensor | DiagonalTensor, order: int | float = 2) -> float:
+    def norm(self, a: SymmetricTensor | DiagonalTensor) -> float:
         """Norm of a tensor. order has already been parsed and is a number"""
         ...
 

@@ -1126,7 +1126,7 @@ class DiagonalTensor(SymmetricTensor):
         """
         assert tens.num_legs == 2
         assert tens.domain == tens.codomain
-        data = tens.backend.diagonal_data_from_full_tensor(tens, check_offdiagonal=check_offdiagonal)
+        data = tens.backend.diagonal_tensor_from_full_tensor(tens, check_offdiagonal=check_offdiagonal)
         return cls(data=data, leg=tens.codomain.spaces[0], backend=tens.backend, labels=tens.labels)
 
     @classmethod

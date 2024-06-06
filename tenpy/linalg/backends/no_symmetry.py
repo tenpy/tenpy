@@ -58,142 +58,14 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         assert self.block_shape(a.data) == (a.legs[0].dim,)
         assert self.block_sum_all(a.data) == a.legs[1].dim
 
-    def get_dtype_from_data(self, a: Data) -> Dtype:
-        return self.block_dtype(a)
+    # ABSTRACT METHODS:
 
-    def to_dtype(self, a: SymmetricTensor, dtype: Dtype) -> Data:
-        return self.block_to_dtype(a.data, dtype)
+    def act_block_diagonal_square_matrix(self, a: SymmetricTensor, block_method: Callable[[Block], Block]
+                                         ) -> Data:
+        return block_method(a.data)
 
-    def supports_symmetry(self, symmetry: Symmetry) -> bool:
-        return symmetry == no_symmetry
-
-    def data_item(self, a: Data | DiagonalData) -> float | complex:
-        return self.block_item(a)
-
-    def to_dense_block(self, a: SymmetricTensor) -> Block:
-        return self.apply_basis_perm(a.data, a.legs, inv=True)
-
-    def diagonal_to_block(self, a: DiagonalTensor) -> Block:
-        return self.apply_basis_perm(a.data, [a.leg], inv=True)
-
-    def from_dense_block(self, a: Block, codomain: ProductSpace, domain: ProductSpace, tol: float
-                         ) -> Data:
-        assert codomain.symmetry == domain.symmetry == no_symmetry
-        return self.apply_basis_perm(a, list(conventional_leg_order(codomain, domain)))
-
-    def diagonal_from_block(self, a: Block, co_domain: ProductSpace, tol: float) -> DiagonalData:
-        return self.apply_basis_perm(a, co_domain.spaces)
-
-    def diagonal_from_sector_block_func(self, func, co_domain: ProductSpace) -> DiagonalData:
-        coupled = co_domain.symmetry.trivial_sector
-        shape = (co_domain.dim,)
-        return func(shape, coupled)
-
-    def mask_from_block(self, a: Block, large_leg: Space, small_leg: ElementarySpace
-                        ) -> DiagonalData:
-        data = self.apply_basis_perm(data, [large_leg])
-        return data
-
-    def mask_unary_operand(self, mask: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
-        raise NotImplementedError
-        
-    def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
-        raise NotImplementedError
-    
-    def diagonal_to_mask(self, tens: DiagonalTensor) -> tuple[DiagonalData, ElementarySpace]:
-        raise NotImplementedError  # TODO
-
-    def from_sector_block_func(self, func, codomain: ProductSpace, domain: ProductSpace) -> Data:
-        """Generate tensor data from a function ``func(shape: tuple[int], coupled: Sector) -> Block``."""
-        coupled = codomain.symmetry.trivial_sector
-        shape = tuple(l.dim for l in conventional_leg_order(codomain, domain))
-        return func(shape, coupled)
-
-    def from_random_normal(self, codomain: ProductSpace, domain: ProductSpace, sigma: float,
-                           dtype: Dtype) -> Data:
-        raise NotImplementedError  # TODO
-
-    def zero_data(self, codomain: ProductSpace, domain: ProductSpace, dtype: Dtype):
-        return self.zero_block(shape=[l.dim for l in conventional_leg_order(codomain, domain)],
-                               dtype=dtype)
-
-    def zero_diagonal_data(self, co_domain: ProductSpace, dtype: Dtype) -> DiagonalData:
-        return self.zero_block(shape=[co_domain.dim], dtype=dtype)
-
-    def eye_data(self, co_domain: ProductSpace, dtype: Dtype) -> Data:
-        # Note: the identity has the same matrix elements in all ONB, so ne need to consider
-        #       the basis perms.
-        return self.eye_block(legs=[l.dim for l in co_domain.spaces], dtype=dtype)
-
-    def copy_data(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
-        return self.block_copy(a.data)
-
-    def _data_repr_lines(self, a: SymmetricTensor, indent: str, max_width: int, max_lines: int):
-        raise NotImplementedError  # TODO not yet reviewed
-        return [f'{indent}* Data:'] + self._block_repr_lines(a.data, indent=indent + '  ', max_width=max_width,
-                                                            max_lines=max_lines - 1)
-
-    def tdot(self, a: SymmetricTensor, b: SymmetricTensor, axs_a: list[int], axs_b: list[int]) -> Data:
-        # TODO interface may change
-        raise NotImplementedError  # TODO not yet reviewed
-        return self.block_tdot(a.data, b.data, axs_a, axs_b)
-
-    def svd(self, a: SymmetricTensor, new_vh_leg_dual: bool, algorithm: str | None, compute_u: bool,
-            compute_vh: bool) -> tuple[Data, DiagonalData, Data, ElementarySpace]:
-        raise NotImplementedError  # TODO not yet reviewed
-        u, s, vh = self.matrix_svd(a.data, algorithm=algorithm, compute_u=compute_u, compute_vh=compute_vh)
-        new_leg = ElementarySpace.from_trivial_sector(len(s), is_dual=new_vh_leg_dual)
-        return u, s, vh, new_leg
-
-    def qr(self, a: SymmetricTensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, ElementarySpace]:
-        raise NotImplementedError  # TODO not yet reviewed
-        q, r = self.matrix_qr(a.data, full=full)
-        new_leg_dim = self.block_shape(r)[0]
-        new_leg = ElementarySpace.from_trivial_sector(new_leg_dim, is_dual=new_r_leg_dual)
-        return q, r, new_leg
-
-    def outer(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
-        raise NotImplementedError  # TODO not yet reviewed
-        return self.block_outer(a.data, b.data)
-
-    def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_conj: bool, axs2: list[int] | None) -> complex:
-        raise NotImplementedError  # TODO not yet reviewed
-        return self.block_inner(a.data, b.data, do_conj=do_conj, axs2=axs2)
-
-    def permute_legs(self, a: SymmetricTensor, **kw) -> Data:
-        # TODO decide signature
-        raise NotImplementedError  # TODO not yet reviewed
-        if permutation is None:
-            return a.data
-        return self.block_permute_axes(a.data, permutation)
-
-    def trace_full(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
-        raise NotImplementedError  # TODO not yet reviewed
-        return self.block_trace_full(a.data, idcs1, idcs2)
-
-    def trace_partial(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
-        raise NotImplementedError  # TODO not yet reviewed
-        return self.block_trace_partial(a.data, idcs1, idcs2, remaining_idcs)
-
-    def diagonal_tensor_trace_full(self, a: DiagonalTensor) -> float | complex:
-        raise NotImplementedError  # TODO not yet reviewed
-        return self.block_sum_all(a.data)
-
-    def conj(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
-        raise NotImplementedError  # TODO not yet reviewed
-        return self.block_conj(a.data)
-
-    def combine_legs(self, a: SymmetricTensor, combine_slices: list[int, int],
-                     product_spaces: list[ProductSpace], new_axes: list[int],
-                     final_legs: list[Space]) -> Data:
-        raise NotImplementedError  # TODO not yet reviewed
-        return self.block_combine_legs(a.data, combine_slices)
-
-    def split_legs(self, a: SymmetricTensor, leg_idcs: list[int],
-                   final_legs: list[Space]) -> Data:
-        raise NotImplementedError  # TODO not yet reviewed
-        return self.block_split_legs(a.data, leg_idcs, [[s.dim for s in a.legs[i].spaces]
-                                                        for i in leg_idcs])
+    def add(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
+        return self.block_add(a.data, b.data)
 
     def add_trivial_leg(self, a: SymmetricTensor, legs_pos: int, add_to_domain: bool,
                         co_domain_pos: int, new_codomain: ProductSpace, new_domain: ProductSpace
@@ -203,32 +75,107 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def almost_equal(self, a: SymmetricTensor, b: SymmetricTensor, rtol: float, atol: float) -> bool:
         return self.block_allclose(a.data, b.data, rtol=rtol, atol=atol)
 
-    def squeeze_legs(self, a: SymmetricTensor, idcs: list[int]) -> Data:
+    def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
+        return self.apply_mask_to_block(tensor.data, mask.data, ax=0)
+
+    def apply_mask_to_Tensor(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int) -> Data:
+        return self.apply_mask_to_block(tensor.data, mask.data, ax=leg_idx)
+
+    def combine_legs(self, a: SymmetricTensor, combine_slices: list[int, int],
+                     product_spaces: list[ProductSpace], new_axes: list[int],
+                     final_legs: list[Space]) -> Data:
         raise NotImplementedError  # TODO not yet reviewed
-        return self.block_squeeze_legs(a.data, idcs)
+        return self.block_combine_legs(a.data, combine_slices)
 
-    def norm(self, a: SymmetricTensor | DiagonalTensor, order: int | float = 2) -> float:
-        return self.block_norm(a.data, order=order)
+    def conj(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
+        return self.block_conj(a.data)
 
-    def act_block_diagonal_square_matrix(self, a: SymmetricTensor, block_method: Callable[[Block], Block]
-                                         ) -> Data:
-        raise NotImplementedError  # TODO not yet reviewed
-        return block_method(a.data)
+    def copy_data(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
+        return self.block_copy(a.data)
 
-    def add(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
-        return self.block_add(a.data, b.data)
+    def data_item(self, a: Data | DiagonalData) -> float | complex:
+        return self.block_item(a)
 
-    def mul(self, a: float | complex, b: SymmetricTensor) -> Data:
-        return self.block_mul(a, b.data)
+    def _data_repr_lines(self, a: SymmetricTensor, indent: str, max_width: int, max_lines: int):
+        block_lines = self._block_repr_lines(a.data, indent=indent + '  ', max_width=max_width,
+                                             max_lines=max_lines - 1)
+        return [f'{indent}* Data:', *block_lines]
 
-    def infer_leg(self, block: Block, legs: list[Space | None], is_dual: bool = False,
-                  is_real: bool = False) -> ElementarySpace:
-        raise NotImplementedError  # TODO not yet reviewed
-        idx, *more = [n for n, leg in enumerate(legs) if leg is None]
-        if more:
-            raise ValueError('Can only infer one leg')
-        dim = self.block_shape(block)[idx]
-        return ElementarySpace.from_trivial_sector(dim, is_dual=is_dual)
+    def diagonal_all(self, a: DiagonalTensor) -> bool:
+        return self.block_all(a.data)
+
+    def diagonal_any(self, a: DiagonalTensor) -> bool:
+        return self.block_any(a.data)
+
+    def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
+                                    func_kwargs, partial_zero_is_zero: bool
+                                    ) -> DiagonalData:
+        return func(a.data, b.data, **func_kwargs)
+    
+    def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs, maps_zero_to_zero: bool
+                                   ) -> DiagonalData:
+        return func(a.data, **func_kwargs)
+    
+    def diagonal_from_block(self, a: Block, co_domain: ProductSpace, tol: float) -> DiagonalData:
+        return self.apply_basis_perm(a, co_domain.spaces)
+
+    def diagonal_from_sector_block_func(self, func, co_domain: ProductSpace) -> DiagonalData:
+        coupled = co_domain.symmetry.trivial_sector
+        shape = (co_domain.dim,)
+        return func(shape, coupled)
+
+    def diagonal_tensor_from_full_tensor(self, a: SymmetricTensor, check_offdiagonal: bool) -> DiagonalData:
+        return self.block_get_diagonal(a.data, check_offdiagonal=check_offdiagonal)
+
+    def diagonal_tensor_trace_full(self, a: DiagonalTensor) -> float | complex:
+        return self.block_sum_all(a.data)
+
+    def diagonal_to_block(self, a: DiagonalTensor) -> Block:
+        return self.apply_basis_perm(a.data, [a.leg], inv=True)
+
+    def diagonal_to_mask(self, tens: DiagonalTensor) -> tuple[DiagonalData, ElementarySpace]:
+        raise NotImplementedError  # TODO
+
+    def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
+        return self.block_eigh(a.data, sort=sort)
+
+    def eye_data(self, co_domain: ProductSpace, dtype: Dtype) -> Data:
+        # Note: the identity has the same matrix elements in all ONB, so ne need to consider
+        #       the basis perms.
+        return self.eye_block(legs=[l.dim for l in co_domain.spaces], dtype=dtype)
+
+    def flip_leg_duality(self, tensor: SymmetricTensor, which_legs: list[int],
+                         flipped_legs: list[Space], perms: list[np.ndarray]) -> Data:
+        return tensor.data
+
+    def from_dense_block(self, a: Block, codomain: ProductSpace, domain: ProductSpace, tol: float
+                         ) -> Data:
+        return self.apply_basis_perm(a, conventional_leg_order(codomain, domain))
+
+    def from_dense_block_trivial_sector(self, block: Block, leg: Space) -> Data:
+        # there are no other sectors, so this is just the unmodified block.
+        assert self.block_shape(block) == (leg.dim,)
+        return self.apply_basis_perm(block, [leg])
+
+    def from_random_normal(self, codomain: ProductSpace, domain: ProductSpace, sigma: float,
+                           dtype: Dtype) -> Data:
+        shape = [leg.dim for leg in conventional_leg_order(codomain, domain)]
+        return self.block_random_normal(shape, dtype=dtype, sigma=sigma)
+
+    def from_sector_block_func(self, func, codomain: ProductSpace, domain: ProductSpace) -> Data:
+        """Generate tensor data from a function ``func(shape: tuple[int], coupled: Sector) -> Block``."""
+        coupled = codomain.symmetry.trivial_sector
+        shape = tuple(l.dim for l in conventional_leg_order(codomain, domain))
+        return func(shape, coupled)
+
+    def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
+        return self.block_from_diagonal(a.data)
+
+    def full_data_from_mask(self, a: Mask, dtype: Dtype) -> Data:
+        return self.block_from_mask(a.data, dtype=dtype)
+
+    def get_dtype_from_data(self, a: Data) -> Dtype:
+        return self.block_dtype(a)
 
     def get_element(self, a: SymmetricTensor, idcs: list[int]) -> complex | float | bool:
         return self.get_block_element(a.data, idcs)
@@ -237,6 +184,66 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         # a.data is a single 1D block
         return self.get_block_element(a.data, [idx])
 
+    def infer_leg(self, block: Block, legs: list[Space | None], is_dual: bool = False
+                  ) -> ElementarySpace:
+        idx, *more = [n for n, leg in enumerate(legs) if leg is None]
+        if more:
+            raise ValueError('Can only infer one leg')
+        dim = self.block_shape(block)[idx]
+        return ElementarySpace.from_trivial_sector(dim, is_dual=is_dual)
+
+    def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_conj: bool, axs2: list[int] | None) -> complex:
+        raise NotImplementedError  # TODO not yet reviewed
+        return self.block_inner(a.data, b.data, do_conj=do_conj, axs2=axs2)
+
+    def inv_part_from_dense_block_single_sector(self, vector: Block, space: Space,
+                                                charge_leg: ElementarySpace) -> Data:
+        block = self.apply_basis_perm(vector, [space])
+        return self.block_add_axis(block, pos=1)
+
+    def inv_part_to_dense_block_single_sector(self, tensor: SymmetricTensor) -> Block:
+        return self.apply_basis_perm(tensor.data[:, 0], [tensor.legs[0]], inv=True)
+
+    def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
+        data = func(mask1.data, mask2.data)
+        raise NotImplementedError
+    
+    def mask_from_block(self, a: Block, large_leg: Space, small_leg: ElementarySpace
+                        ) -> DiagonalData:
+        data = self.apply_basis_perm(data, [large_leg])
+        return data
+
+    def mask_unary_operand(self, mask: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
+        data = func(mask.data)
+        raise NotImplementedError
+        
+    def mul(self, a: float | complex, b: SymmetricTensor) -> Data:
+        return self.block_mul(a, b.data)
+
+    def norm(self, a: SymmetricTensor | DiagonalTensor) -> float:
+        return self.block_norm(a.data)
+
+    def outer(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
+        raise NotImplementedError  # TODO not yet reviewed. careful with leg order!
+        return self.block_outer(a.data, b.data)
+
+    def permute_legs(self, a: SymmetricTensor, **kw) -> Data:
+        # TODO decide signature
+        raise NotImplementedError  # TODO not yet reviewed
+        if permutation is None:
+            return a.data
+        return self.block_permute_axes(a.data, permutation)
+
+    def qr(self, a: SymmetricTensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, ElementarySpace]:
+        raise NotImplementedError  # TODO not yet reviewed
+        q, r = self.matrix_qr(a.data, full=full)
+        new_leg_dim = self.block_shape(r)[0]
+        new_leg = ElementarySpace.from_trivial_sector(new_leg_dim, is_dual=new_r_leg_dual)
+        return q, r, new_leg
+
+    def scale_axis(self, a: SymmetricTensor, b: DiagonalTensor, leg: int) -> Data:
+        return self.block_scale_axis(a.data, b.data, leg)
+
     def set_element(self, a: SymmetricTensor, idcs: list[int], value: complex | float) -> Data:
         return self.set_block_element(a.data, idcs, value)
 
@@ -244,63 +251,52 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
                              ) -> DiagonalData:
         return self.set_block_element(a.data, [idx], value)
     
-    def diagonal_data_from_full_tensor(self, a: SymmetricTensor, check_offdiagonal: bool) -> DiagonalData:
-        return self.block_get_diagonal(a.data, check_offdiagonal=check_offdiagonal)
-
-    def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
-        return self.block_from_diagonal(a.data)
-
-    def full_data_from_mask(self, a: Mask, dtype: Dtype) -> Data:
-        return self.block_from_mask(a.data, dtype=dtype)
-
-    def scale_axis(self, a: SymmetricTensor, b: DiagonalTensor, leg: int) -> Data:
+    def split_legs(self, a: SymmetricTensor, leg_idcs: list[int],
+                   final_legs: list[Space]) -> Data:
         raise NotImplementedError  # TODO not yet reviewed
-        return self.block_scale_axis(a.data, b.data, leg)
+        return self.block_split_legs(a.data, leg_idcs, [[s.dim for s in a.legs[i].spaces]
+                                                        for i in leg_idcs])
 
-    def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs, maps_zero_to_zero: bool
-                                   ) -> DiagonalData:
-        return func(a.data, **func_kwargs)
+    def squeeze_legs(self, a: SymmetricTensor, idcs: list[int]) -> Data:
+        return self.block_squeeze_legs(a.data, idcs)
 
-    def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
-                                    func_kwargs, partial_zero_is_zero: bool
-                                    ) -> DiagonalData:
-        return func(a.data, b.data, **func_kwargs)
+    def supports_symmetry(self, symmetry: Symmetry) -> bool:
+        return symmetry == no_symmetry
 
-    def diagonal_all(self, a: DiagonalTensor) -> bool:
-        return self.block_all(a.data)
-
-    def diagonal_any(self, a: DiagonalTensor) -> bool:
-        return self.block_any(a.data)
-
-    def apply_mask_to_Tensor(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int) -> Data:
-        return self.apply_mask_to_block(tensor.data, mask.data, ax=leg_idx)
-
-    def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
-        return self.apply_mask_to_block(tensor.data, mask.data, ax=0)
-
-    def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
+    def svd(self, a: SymmetricTensor, new_vh_leg_dual: bool, algorithm: str | None, compute_u: bool,
+            compute_vh: bool) -> tuple[Data, DiagonalData, Data, ElementarySpace]:
+        # TODO interface may change
         raise NotImplementedError  # TODO not yet reviewed
-        return self.block_eigh(a.data, sort=sort)
+        u, s, vh = self.matrix_svd(a.data, algorithm=algorithm, compute_u=compute_u, compute_vh=compute_vh)
+        new_leg = ElementarySpace.from_trivial_sector(len(s), is_dual=new_vh_leg_dual)
+        return u, s, vh, new_leg
 
-    def from_dense_block_trivial_sector(self, block: Block, leg: Space) -> Data:
+    def tdot(self, a: SymmetricTensor, b: SymmetricTensor, axs_a: list[int], axs_b: list[int]) -> Data:
+        # TODO interface may change
         raise NotImplementedError  # TODO not yet reviewed
-        assert self.block_shape(block) == (leg.dim,)
-        return self.apply_basis_perm(block, [leg])
+        return self.block_tdot(a.data, b.data, axs_a, axs_b)
+
+    def to_dense_block(self, a: SymmetricTensor) -> Block:
+        return self.apply_basis_perm(a.data, a.legs, inv=True)
 
     def to_dense_block_trivial_sector(self, tensor: SymmetricTensor) -> Block:
-        raise NotImplementedError  # TODO not yet reviewed
+        # there are no other sectors, so this is essentially the same as to_dense_block.
         return self.apply_basis_perm(tensor.data, tensor.legs, inv=True)
 
-    def inv_part_from_dense_block_single_sector(self, vector: Block, space: Space,
-                                               charge_leg: ElementarySpace) -> Data:
-        block = self.apply_basis_perm(vector, [space])
-        return self.block_add_axis(block, pos=1)
+    def to_dtype(self, a: SymmetricTensor, dtype: Dtype) -> Data:
+        return self.block_to_dtype(a.data, dtype)
 
-    def inv_part_to_dense_block_single_sector(self, tensor: SymmetricTensor) -> Block:
+    def trace_full(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
         raise NotImplementedError  # TODO not yet reviewed
-        return self.apply_basis_perm(tensor.data[:, 0], [tensor.legs[0]], inv=True)
+        return self.block_trace_full(a.data, idcs1, idcs2)
 
-    def flip_leg_duality(self, tensor: SymmetricTensor, which_legs: list[int],
-                         flipped_legs: list[Space], perms: list[np.ndarray]) -> Data:
+    def trace_partial(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
         raise NotImplementedError  # TODO not yet reviewed
-        return tensor.data
+        return self.block_trace_partial(a.data, idcs1, idcs2, remaining_idcs)
+
+    def zero_data(self, codomain: ProductSpace, domain: ProductSpace, dtype: Dtype):
+        return self.zero_block(shape=[l.dim for l in conventional_leg_order(codomain, domain)],
+                               dtype=dtype)
+
+    def zero_diagonal_data(self, co_domain: ProductSpace, dtype: Dtype) -> DiagonalData:
+        return self.zero_block(shape=[co_domain.dim], dtype=dtype)
