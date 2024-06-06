@@ -721,10 +721,8 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def squeeze_legs(self, a: SymmetricTensor, idcs: list[int]) -> Data:
         raise NotImplementedError('squeeze_legs not implemented')  # TODO
 
-    def norm(self, a: SymmetricTensor | DiagonalTensor, order: int | float = 2) -> float:
+    def norm(self, a: SymmetricTensor | DiagonalTensor) -> float:
         # OPTIMIZE should we offer the square-norm instead?
-        if order != 2:
-            raise ValueError(f'{self} only supports 2-norm.')
         norm_sq = 0
         for coupled, block in zip(a.data.coupled_sectors, a.data.blocks):
             norm_sq += a.symmetry.sector_dim(coupled) * (self.block_norm(block) ** 2)
@@ -771,7 +769,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return FusionTreeData(b.data.coupled_sectors, blocks, b.data.domain, b.data.codomain, dtype)
 
     def infer_leg(self, block: Block, legs: list[Space | None], is_dual: bool = False,
-                  is_real: bool = False) -> ElementarySpace:
+                  ) -> ElementarySpace:
         raise NotImplementedError('infer_leg not implemented')  # TODO
 
     def get_element(self, a: SymmetricTensor, idcs: list[int]) -> complex | float | bool:
@@ -791,9 +789,9 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         #      affects in general many entries of the blocks.
         raise NotImplementedError('set_element_diagonal not implemented')  # TODO
 
-    def diagonal_data_from_full_tensor(self, a: SymmetricTensor, check_offdiagonal: bool
+    def diagonal_tensor_from_full_tensor(self, a: SymmetricTensor, check_offdiagonal: bool
                                        ) -> DiagonalData:
-        raise NotImplementedError('diagonal_data_from_full_tensor not implemented')  # TODO
+        raise NotImplementedError('diagonal_tensor_from_full_tensor not implemented')  # TODO
 
     def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
         raise NotImplementedError('full_data_from_diagonal_tensor not implemented')  # TODO

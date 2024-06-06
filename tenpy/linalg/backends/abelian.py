@@ -1265,10 +1265,9 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         block_inds = block_inds[:, keep]
         return AbelianBackendData(a.data.dtype, blocks, block_inds, is_sorted=True)
 
-    def norm(self, a: SymmetricTensor | DiagonalTensor, order: int | float = 2) -> float:
-        raise NotImplementedError  # TODO not yet reviewed
-        block_norms = [self.block_norm(b, order=order) for b in a.data.blocks]
-        return np.linalg.norm(block_norms, ord=order)
+    def norm(self, a: SymmetricTensor | DiagonalTensor) -> float:
+        block_norms = [self.block_norm(b, order=2) for b in a.data.blocks]
+        return np.linalg.norm(block_norms, ord=2)
 
     def act_block_diagonal_square_matrix(self, a: SymmetricTensor, block_method: Callable[[Block], Block]
                                          ) -> Data:
@@ -1334,8 +1333,8 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
             dtype = self.block_dtype(blocks[0])
         return AbelianBackendData(dtype, blocks, b.data.block_inds, is_sorted=True)
 
-    def infer_leg(self, block: Block, legs: list[Space | None], is_dual: bool = False,
-                  is_real: bool = False) -> ElementarySpace:
+    def infer_leg(self, block: Block, legs: list[Space | None], is_dual: bool = False
+                  ) -> ElementarySpace:
         raise NotImplementedError  # TODO not yet reviewed
         raise NotImplementedError  # TODO
         # TODO how to handle ChargedTensor vs Tensor?
@@ -1405,7 +1404,7 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return AbelianBackendData(dtype=a.data.dtype, blocks=blocks, block_inds=a.data.blocks_inds,
                                   is_sorted=True)
 
-    def diagonal_data_from_full_tensor(self, a: SymmetricTensor, check_offdiagonal: bool) -> DiagonalData:
+    def diagonal_tensor_from_full_tensor(self, a: SymmetricTensor, check_offdiagonal: bool) -> DiagonalData:
         raise NotImplementedError  # TODO not yet reviewed
         blocks = [self.block_get_diagonal(block, check_offdiagonal) for block in a.data.blocks]
         return AbelianBackendData(a.dtype, blocks, a.data.block_inds, is_sorted=True)
