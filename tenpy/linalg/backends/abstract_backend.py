@@ -64,12 +64,19 @@ class Backend(metaclass=ABCMeta):
     """
     DataCls = None  # to be set by subclasses
 
+    def __repr__(self):
+        return f'{type(self).__name__}'
+
+    def __str__(self):
+        return f'{type(self).__name__}'
+
+    def item(self, a: SymmetricTensor | DiagonalTensor) -> float | complex:
+        """Assumes that tensor is a scalar (i.e. has only one entry).
+        Returns that scalar as python float or complex"""
+        return self.data_item(a.data)
+    
     def test_data_sanity(self, a: SymmetricTensor | DiagonalTensor, is_diagonal: bool):
         # subclasses will typically call super().test_data_sanity(a)
-        assert isinstance(a.data, self.DataCls), str(type(a.data))
-
-    def test_mask_sanity(self, a: Mask):
-        # subclasses will typically call super().test_mask_sanity(a)
         assert isinstance(a.data, self.DataCls), str(type(a.data))
 
     def test_leg_sanity(self, leg: Space):
@@ -77,271 +84,12 @@ class Backend(metaclass=ABCMeta):
         assert isinstance(leg, Space)
         leg.test_sanity()
 
-    def __repr__(self):
-        return f'{type(self).__name__}'
+    def test_mask_sanity(self, a: Mask):
+        # subclasses will typically call super().test_mask_sanity(a)
+        assert isinstance(a.data, self.DataCls), str(type(a.data))
 
-    def __str__(self):
-        return f'{type(self).__name__}'
-
-    def _fuse_spaces(self, symmetry: Symmetry, spaces: list[Space]):
-        """Backends may override the behavior of linalg.spaces._fuse_spaces in order to compute
-        their backend-specific metadata alongside the sectors.
-        """
-        raise NotImplementedError
-
-    def get_leg_metadata(self, leg: Space) -> dict:
-        """Get just the metadata returned by :meth:`_fuse_spaces`, without the sectors."""
-        return {}
-
-    @abstractmethod
-    def get_dtype_from_data(self, a: Data) -> Dtype:
-        ...
-
-    @abstractmethod
-    def to_dtype(self, a: SymmetricTensor, dtype: Dtype) -> Data:
-        """cast to given dtype. No copy if already has dtype."""
-        ...
-
-    @abstractmethod
-    def supports_symmetry(self, symmetry: Symmetry) -> bool:
-        ...
-
-    def is_real(self, a: SymmetricTensor) -> bool:
-        """If the Tensor is comprised of real numbers.
-        Complex numbers with small or zero imaginary part still cause a `False` return."""
-        # FusionTree backend might implement this differently.
-        return a.dtype.is_real
-
-    def item(self, a: SymmetricTensor | DiagonalTensor) -> float | complex:
-        """Assumes that tensor is a scalar (i.e. has only one entry).
-        Returns that scalar as python float or complex"""
-        return self.data_item(a.data)
-
-    @abstractmethod
-    def data_item(self, a: Data | DiagonalData) -> float | complex:
-        """Assumes that data is a scalar (as defined in tensors.is_scalar).
-        
-        Return that scalar as python float or complex
-        """
-        ...
-
-    @abstractmethod
-    def to_dense_block(self, a: SymmetricTensor) -> Block:
-        """Forget about symmetry structure and convert to a single block.
-        This includes a permutation of the basis, specified by the legs of `a`.
-        (see e.g. ElementarySpace.basis_perm).
-        """
-        ...
-
-    @abstractmethod
-    def diagonal_to_block(self, a: DiagonalTensor) -> Block:
-        """Forget about symmetry structure and convert the diagonals of the blocks
-        to a single 1D block.
-        This is the diagonal of the respective non-symmetric 2D tensor.
-        This includes a permutation of the basis, specified by the legs of `a`.
-        (see e.g. ElementarySpace.basis_perm).
-
-        Equivalent to self.block_get_diagonal(a.to_full_tensor().to_dense_block())
-        """
-        ...
-
-    @abstractmethod
-    def from_dense_block(self, a: Block, codomain: ProductSpace, domain: ProductSpace, tol: float
-                         ) -> Data:
-        """Convert a dense block to the data for a symmetric tensor.
-        
-        If the block is not symmetric, measured by ``allclose(a, projected, atol, rtol)``,
-        where ``projected`` is `a` projected to the space of symmetric tensors, raise a ``ValueError``.
-        This includes a permutation of the basis, specified by the legs of `a`.
-        (see e.g. ElementarySpace.basis_perm).
-        """
-        ...
-
-    @abstractmethod
-    def diagonal_from_block(self, a: Block, co_domain: ProductSpace, tol: float) -> DiagonalData:
-        """DiagonalData from a 1D block.
-        This includes a permutation of the basis, specified by the legs of `a`.
-        (see e.g. ElementarySpace.basis_perm).
-        """
-        ...
-
-    @abstractmethod
-    def diagonal_from_sector_block_func(self, func, co_domain: ProductSpace) -> DiagonalData:
-        """Generate diagonal data from a function ``func(shape: tuple[int], coupled: Sector) -> Block``."""
-        ...
-        
-    @abstractmethod
-    def mask_from_block(self, a: Block, large_leg: Space, small_leg: ElementarySpace
-                        ) -> DiagonalData:
-        """DiagonalData for a Mask from a 1D block.
-        
-        This includes a permutation of the basis, specified by the legs of `a`.
-        (see e.g. ElementarySpace.basis_perm).
-        """
-        ...
-
-    @abstractmethod
-    def diagonal_to_mask(self, tens: DiagonalTensor) -> tuple[DiagonalData, ElementarySpace]:
-        """Convert a DiagonalTensor to a Mask.
-
-        Returns ``mask_data, small_leg``.
-        """
-        ...
-
-    @abstractmethod
-    def from_sector_block_func(self, func, codomain: ProductSpace, domain: ProductSpace) -> Data:
-        """Generate tensor data from a function ``func(shape: tuple[int], coupled: Sector) -> Block``."""
-        ...
-
-    @abstractmethod
-    def from_random_normal(self, codomain: ProductSpace, domain: ProductSpace, sigma: float,
-                           dtype: Dtype) -> Data:
-        ...
-
-    @abstractmethod
-    def zero_data(self, codomain: ProductSpace, domain: ProductSpace, dtype: Dtype) -> Data:
-        """Data for a zero tensor"""
-        ...
-
-    @abstractmethod
-    def zero_diagonal_data(self, co_domain: ProductSpace, dtype: Dtype) -> DiagonalData:
-        ...
-
-    @abstractmethod
-    def eye_data(self, co_domain: ProductSpace, dtype: Dtype) -> Data:
-        """Data for :meth:``SymmetricTensor.eye``.
-
-        The result has legs ``first_legs + [l.dual for l in reversed(firs_legs)]``.
-        """
-        ...
-
-    @abstractmethod
-    def copy_data(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
-        """Return a copy, such that future in-place operations on the output data do not affect the input data"""
-        ...
-
-    @abstractmethod
-    def _data_repr_lines(self, a: SymmetricTensor, indent: str, max_width: int, max_lines: int) -> list[str]:
-        """helper function for Tensor.__repr__ ; return a list of strs which are the lines
-        comprising the ``"* Data:"``section.
-        indent is to be placed in front of every line"""
-        ...
-
-    @abstractmethod
-    def tdot(self, a: SymmetricTensor, b: SymmetricTensor, axs_a: list[int], axs_b: list[int]) -> Data:
-        """Tensordot i.e. pairwise contraction"""
-        ...
-
-    @abstractmethod
-    def svd(self, a: SymmetricTensor, new_vh_leg_dual: bool, algorithm: str | None, compute_u: bool,
-            compute_vh: bool) -> tuple[Data, DiagonalData, Data, ElementarySpace]:
-        """SVD of a Matrix, `a` has only two legs (often ProductSpace).
-        
-        Parameters
-        ----------
-        algorithm : str
-            (Backend-specific) algorithm to use for computing the SVD.
-            See e.g. the :attr:`~BlockBackend.svd_algorithms` attribute.
-            We also implement ``'eigh'`` for all backends.
-        compute_u, compute_vh : bool
-            Only for ``algorithm='eigh'``.
-        
-        Returns
-        -------
-        u, s, vh :
-            Data of corresponding tensors.
-        new_leg :
-            ElementarySpace the new leg of vh.
-        """
-        ...
-
-    @abstractmethod
-    def qr(self, a: SymmetricTensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, ElementarySpace]:
-        """QR decomposition of a Tensor `a` with two legs.
-
-        The legs of `a` may be :class:`~tenpy.linalg.spaces.ProductSpace`
-
-        Returns
-        -------
-        q, r:
-            Data of corresponding tensors.
-        new_leg : ElementarySpace
-            the new leg of r.
-        """
-        ...
-
-    @abstractmethod
-    def outer(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
-        ...
-
-    @abstractmethod
-    def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_conj: bool, axs2: list[int] | None) -> float | complex:
-        """
-        inner product of <a|b>, both of which are given as ket-like vectors
-        (i.e. in C^N, the entries of a would need to be conjugated before multiplying with entries of b)
-        axs2, if not None, gives the order of the axes of b.
-        If do_conj, a is assumed as a "ket vector", in the same space as b, which will need to be conjugated.
-        Otherwise, a is assumed as a "bra vector", in the dual space, s.t. no conj is needed.
-        """
-        ...
-
-    @abstractmethod
-    def permute_legs(self, a: SymmetricTensor, **kw) -> Data:  # TODO decide signature
-        ...
-
-    @abstractmethod
-    def trace_full(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
-        ...
-
-    @abstractmethod
-    def trace_partial(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
-        ...
-
-    @abstractmethod
-    def diagonal_tensor_trace_full(self, a: DiagonalTensor) -> float | complex:
-        ...
-
-    @abstractmethod
-    def conj(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
-        ...
-
-    @abstractmethod
-    def combine_legs(self, a: SymmetricTensor, combine_slices: list[int, int],
-                     product_spaces: list[ProductSpace], new_axes: list[int],
-                     final_legs: list[Space]) -> Data:
-        """combine legs of `a` (without transpose).
-
-        ``combine_slices[i]=(begin, end)`` sorted in ascending order of `begin` indicates that
-        ``a.legs[begin:end]`` is to be combined to `product_spaces[i]`, yielding `final_legs`.
-        `new_axes[i]` is the index of `product_spaces[i]` in `final_legs` (also fixed by `combine_slices`).
-        """
-        ...
-
-    @abstractmethod
-    def split_legs(self, a: SymmetricTensor, leg_idcs: list[int], final_legs: list[Space]) -> Data:
-        """split multiple product space legs."""
-        ...
-
-    @abstractmethod
-    def add_trivial_leg(self, a: SymmetricTensor, legs_pos: int, add_to_domain: bool,
-                        co_domain_pos: int, new_codomain: ProductSpace, new_domain: ProductSpace
-                        ) -> Data:
-        ...
-
-    @abstractmethod
-    def almost_equal(self, a: SymmetricTensor, b: SymmetricTensor, rtol: float, atol: float) -> bool:
-        ...
-
-    @abstractmethod
-    def squeeze_legs(self, a: SymmetricTensor, idcs: list[int]) -> Data:
-        """Assume the legs at given indices are trivial and get rid of them"""
-        ...
-
-    @abstractmethod
-    def norm(self, a: SymmetricTensor | DiagonalTensor, order: int | float = 2) -> float:
-        """Norm of a tensor. order has already been parsed and is a number"""
-        ...
-
+    # ABSTRACT METHODS
+    
     @abstractmethod
     def act_block_diagonal_square_matrix(self, a: SymmetricTensor, block_method: Callable[[Block], Block]
                                          ) -> Data:
@@ -361,14 +109,202 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def mul(self, a: float | complex, b: SymmetricTensor) -> Data:
+    def add_trivial_leg(self, a: SymmetricTensor, legs_pos: int, add_to_domain: bool,
+                        co_domain_pos: int, new_codomain: ProductSpace, new_domain: ProductSpace
+                        ) -> Data:
         ...
 
     @abstractmethod
-    def infer_leg(self, block: Block, legs: list[Space | None], is_dual: bool = False,
-                  is_real: bool = False) -> ElementarySpace:
-        """Infer a missing leg from the dense block"""
-        # TODO make it poss
+    def almost_equal(self, a: SymmetricTensor, b: SymmetricTensor, rtol: float, atol: float) -> bool:
+        ...
+
+    @abstractmethod
+    def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
+        ...
+
+    @abstractmethod
+    def apply_mask_to_Tensor(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int) -> Data:
+        ...
+
+    @abstractmethod
+    def combine_legs(self, a: SymmetricTensor, combine_slices: list[int, int],
+                     product_spaces: list[ProductSpace], new_axes: list[int],
+                     final_legs: list[Space]) -> Data:
+        """combine legs of `a` (without transpose).
+
+        ``combine_slices[i]=(begin, end)`` sorted in ascending order of `begin` indicates that
+        ``a.legs[begin:end]`` is to be combined to `product_spaces[i]`, yielding `final_legs`.
+        `new_axes[i]` is the index of `product_spaces[i]` in `final_legs` (also fixed by `combine_slices`).
+        """
+        ...
+
+    @abstractmethod
+    def conj(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
+        ...
+
+    @abstractmethod
+    def copy_data(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
+        """Return a copy, such that future in-place operations on the output data do not affect the input data"""
+        ...
+
+    @abstractmethod
+    def data_item(self, a: Data | DiagonalData) -> float | complex:
+        """Assumes that data is a scalar (as defined in tensors.is_scalar).
+        
+        Return that scalar as python float or complex
+        """
+        ...
+
+    @abstractmethod
+    def _data_repr_lines(self, a: SymmetricTensor, indent: str, max_width: int, max_lines: int) -> list[str]:
+        """helper function for Tensor.__repr__ ; return a list of strs which are the lines
+        comprising the ``"* Data:"``section.
+        indent is to be placed in front of every line"""
+        ...
+
+    @abstractmethod
+    def diagonal_all(self, a: DiagonalTensor) -> bool:
+        """Assumes a boolean DiagonalTensor. If all entries are True."""
+        ...
+
+    @abstractmethod
+    def diagonal_any(self, a: DiagonalTensor) -> bool:
+        """Assumes a boolean DiagonalTensor. If any entry is True."""
+        ...
+
+    @abstractmethod
+    def diagonal_data_from_full_tensor(self, a: SymmetricTensor, check_offdiagonal: bool
+                                       ) -> DiagonalData:
+        """Get the DiagonalData corresponding to a tensor with two legs.
+
+        Can assume that domain and codomain consist of the same single leg.
+        """
+        ...
+
+    @abstractmethod
+    def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
+                                    func_kwargs, partial_zero_is_zero: bool
+                                    ) -> DiagonalData:
+        """Return a modified copy of the data, resulting from applying an elementwise function.
+
+        Apply a function ``func(a_block: Block, b_block: Block, **kwargs) -> Block`` to all
+        pairs of elements.
+        Input tensors are both DiagonalTensor and have equal legs.
+        ``partial_zero_is_zero=True`` promises that ``func(any_block, zero_block) == zero_block``,
+        and similarly for the second argument.
+        """
+        ...
+
+    @abstractmethod
+    def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs, maps_zero_to_zero: bool
+                                   ) -> DiagonalData:
+        """Return a modified copy of the data, resulting from applying an elementwise function.
+
+        Apply ``func(block: Block, **kwargs) -> Block`` to all elements of a diagonal tensor.
+        ``maps_zero_to_zero=True`` promises that ``func(zero_block) == zero_block``.
+        """
+        ...
+
+    @abstractmethod
+    def diagonal_from_block(self, a: Block, co_domain: ProductSpace, tol: float) -> DiagonalData:
+        """DiagonalData from a 1D block.
+        This includes a permutation of the basis, specified by the legs of `a`.
+        (see e.g. ElementarySpace.basis_perm).
+        """
+        ...
+
+    @abstractmethod
+    def diagonal_from_sector_block_func(self, func, co_domain: ProductSpace) -> DiagonalData:
+        """Generate diagonal data from a function ``func(shape: tuple[int], coupled: Sector) -> Block``."""
+        ...
+       
+    @abstractmethod
+    def diagonal_tensor_trace_full(self, a: DiagonalTensor) -> float | complex:
+        ...
+
+    @abstractmethod
+    def diagonal_to_block(self, a: DiagonalTensor) -> Block:
+        """Forget about symmetry structure and convert the diagonals of the blocks
+        to a single 1D block.
+        This is the diagonal of the respective non-symmetric 2D tensor.
+        This includes a permutation of the basis, specified by the legs of `a`.
+        (see e.g. ElementarySpace.basis_perm).
+
+        Equivalent to self.block_get_diagonal(a.to_full_tensor().to_dense_block())
+        """
+        ...
+
+    @abstractmethod
+    def diagonal_to_mask(self, tens: DiagonalTensor) -> tuple[DiagonalData, ElementarySpace]:
+        """Convert a DiagonalTensor to a Mask.
+
+        Returns ``mask_data, small_leg``.
+        """
+        ...
+
+    @abstractmethod
+    def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
+        """Eigenvalue decomposition of a 2-leg hermitian tensor
+
+        Parameters
+        ----------
+        a
+        sort : {'m>', 'm<', '>', '<'}
+            How the eigenvalues are sorted *within* each charge block.
+            See :func:`argsort` for details.
+        """
+        ...
+
+    @abstractmethod
+    def eye_data(self, co_domain: ProductSpace, dtype: Dtype) -> Data:
+        """Data for :meth:``SymmetricTensor.eye``.
+
+        The result has legs ``first_legs + [l.dual for l in reversed(firs_legs)]``.
+        """
+        ...
+
+    @abstractmethod
+    def flip_leg_duality(self, tensor: SymmetricTensor, which_legs: list[int],
+                         flipped_legs: list[Space], perms: list[np.ndarray]) -> Data:
+        ...
+
+    @abstractmethod
+    def from_dense_block(self, a: Block, codomain: ProductSpace, domain: ProductSpace, tol: float
+                         ) -> Data:
+        """Convert a dense block to the data for a symmetric tensor.
+        
+        If the block is not symmetric, measured by ``allclose(a, projected, atol, rtol)``,
+        where ``projected`` is `a` projected to the space of symmetric tensors, raise a ``ValueError``.
+        This includes a permutation of the basis, specified by the legs of `a`.
+        (see e.g. ElementarySpace.basis_perm).
+        """
+        ...
+
+    @abstractmethod
+    def from_dense_block_trivial_sector(self, block: Block, leg: Space) -> Data:
+        """Data of a single-leg `Tensor` from the *part of* the coefficients in the trivial sector."""
+        ...
+
+    @abstractmethod
+    def from_random_normal(self, codomain: ProductSpace, domain: ProductSpace, sigma: float,
+                           dtype: Dtype) -> Data:
+        ...
+
+    @abstractmethod
+    def from_sector_block_func(self, func, codomain: ProductSpace, domain: ProductSpace) -> Data:
+        """Generate tensor data from a function ``func(shape: tuple[int], coupled: Sector) -> Block``."""
+        ...
+
+    @abstractmethod
+    def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
+        ...
+
+    @abstractmethod
+    def full_data_from_mask(self, a: Mask, dtype: Dtype) -> Data:
+        ...
+
+    @abstractmethod
+    def get_dtype_from_data(self, a: Data) -> Dtype:
         ...
 
     @abstractmethod
@@ -397,6 +333,98 @@ class Backend(metaclass=ABCMeta):
             The index for both legs. Checks have already been performed, i.e. we may assume that
             ``0 <= idx < leg.dim``
         """
+        ...
+
+    @abstractmethod
+    def infer_leg(self, block: Block, legs: list[Space | None], is_dual: bool = False,
+                  is_real: bool = False) -> ElementarySpace:
+        """Infer a missing leg from the dense block"""
+        # TODO make it poss
+        ...
+
+    @abstractmethod
+    def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_conj: bool, axs2: list[int] | None) -> float | complex:
+        """
+        inner product of <a|b>, both of which are given as ket-like vectors
+        (i.e. in C^N, the entries of a would need to be conjugated before multiplying with entries of b)
+        axs2, if not None, gives the order of the axes of b.
+        If do_conj, a is assumed as a "ket vector", in the same space as b, which will need to be conjugated.
+        Otherwise, a is assumed as a "bra vector", in the dual space, s.t. no conj is needed.
+        """
+        ...
+
+    @abstractmethod
+    def inv_part_from_dense_block_single_sector(self, vector: Block, space: Space,
+                                               charge_leg: ElementarySpace) -> Data:
+        """Data for the invariant part used in ChargedTensor.from_dense_block_single_sector"""
+        ...
+
+    @abstractmethod
+    def inv_part_to_dense_block_single_sector(self, tensor: SymmetricTensor) -> Block:
+        """Inverse of inv_part_from_dense_block_single_sector"""
+        ...
+
+    @abstractmethod
+    def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
+        """Elementwise binary function acting on two masks.
+
+        returns ``mask_data, new_small_leg``
+        """
+        ...
+
+    @abstractmethod
+    def mask_from_block(self, a: Block, large_leg: Space, small_leg: ElementarySpace
+                        ) -> DiagonalData:
+        """DiagonalData for a Mask from a 1D block.
+        
+        This includes a permutation of the basis, specified by the legs of `a`.
+        (see e.g. ElementarySpace.basis_perm).
+        """
+        ...
+
+    @abstractmethod
+    def mask_unary_operand(self, mask: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
+        """Elementwise function acting on a mask.
+
+        returns ``mask_data, new_small_leg``
+        """
+        ...
+        
+    @abstractmethod
+    def mul(self, a: float | complex, b: SymmetricTensor) -> Data:
+        ...
+
+    @abstractmethod
+    def norm(self, a: SymmetricTensor | DiagonalTensor, order: int | float = 2) -> float:
+        """Norm of a tensor. order has already been parsed and is a number"""
+        ...
+
+    @abstractmethod
+    def outer(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
+        ...
+
+    @abstractmethod
+    def permute_legs(self, a: SymmetricTensor, **kw) -> Data:  # TODO decide signature
+        ...
+
+    @abstractmethod
+    def qr(self, a: SymmetricTensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, ElementarySpace]:
+        """QR decomposition of a Tensor `a` with two legs.
+
+        The legs of `a` may be :class:`~tenpy.linalg.spaces.ProductSpace`
+
+        Returns
+        -------
+        q, r:
+            Data of corresponding tensors.
+        new_leg : ElementarySpace
+            the new leg of r.
+        """
+        ...
+
+    @abstractmethod
+    def scale_axis(self, a: SymmetricTensor, b: DiagonalTensor, leg: int) -> Data:
+        """Scale axis ``leg`` of ``a`` with ``b``, then permute legs to move the scaled leg to given position"""
         ...
 
     @abstractmethod
@@ -433,85 +461,53 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def diagonal_data_from_full_tensor(self, a: SymmetricTensor, check_offdiagonal: bool
-                                       ) -> DiagonalData:
-        """Get the DiagonalData corresponding to a tensor with two legs.
-
-        Can assume that domain and codomain consist of the same single leg.
-        """
+    def split_legs(self, a: SymmetricTensor, leg_idcs: list[int], final_legs: list[Space]) -> Data:
+        """split multiple product space legs."""
         ...
 
     @abstractmethod
-    def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
+    def squeeze_legs(self, a: SymmetricTensor, idcs: list[int]) -> Data:
+        """Assume the legs at given indices are trivial and get rid of them"""
         ...
 
     @abstractmethod
-    def full_data_from_mask(self, a: Mask, dtype: Dtype) -> Data:
+    def supports_symmetry(self, symmetry: Symmetry) -> bool:
         ...
 
     @abstractmethod
-    def scale_axis(self, a: SymmetricTensor, b: DiagonalTensor, leg: int) -> Data:
-        """Scale axis ``leg`` of ``a`` with ``b``, then permute legs to move the scaled leg to given position"""
-        ...
-
-    @abstractmethod
-    def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs, maps_zero_to_zero: bool
-                                   ) -> DiagonalData:
-        """Return a modified copy of the data, resulting from applying an elementwise function.
-
-        Apply ``func(block: Block, **kwargs) -> Block`` to all elements of a diagonal tensor.
-        ``maps_zero_to_zero=True`` promises that ``func(zero_block) == zero_block``.
-        """
-        ...
-
-    @abstractmethod
-    def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
-                                    func_kwargs, partial_zero_is_zero: bool
-                                    ) -> DiagonalData:
-        """Return a modified copy of the data, resulting from applying an elementwise function.
-
-        Apply a function ``func(a_block: Block, b_block: Block, **kwargs) -> Block`` to all
-        pairs of elements.
-        Input tensors are both DiagonalTensor and have equal legs.
-        ``partial_zero_is_zero=True`` promises that ``func(any_block, zero_block) == zero_block``,
-        and similarly for the second argument.
-        """
-        ...
-
-    @abstractmethod
-    def diagonal_all(self, a: DiagonalTensor) -> bool:
-        """Assumes a boolean DiagonalTensor. If all entries are True."""
-        ...
-
-    @abstractmethod
-    def diagonal_any(self, a: DiagonalTensor) -> bool:
-        """Assumes a boolean DiagonalTensor. If any entry is True."""
-        ...
-
-    @abstractmethod
-    def apply_mask_to_Tensor(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int) -> Data:
-        ...
-
-    @abstractmethod
-    def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
-        ...
-
-    @abstractmethod
-    def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
-        """Eigenvalue decomposition of a 2-leg hermitian tensor
-
+    def svd(self, a: SymmetricTensor, new_vh_leg_dual: bool, algorithm: str | None, compute_u: bool,
+            compute_vh: bool) -> tuple[Data, DiagonalData, Data, ElementarySpace]:
+        """SVD of a Matrix, `a` has only two legs (often ProductSpace).
+        
         Parameters
         ----------
-        a
-        sort : {'m>', 'm<', '>', '<'}
-            How the eigenvalues are sorted *within* each charge block.
-            See :func:`argsort` for details.
+        algorithm : str
+            (Backend-specific) algorithm to use for computing the SVD.
+            See e.g. the :attr:`~BlockBackend.svd_algorithms` attribute.
+            We also implement ``'eigh'`` for all backends.
+        compute_u, compute_vh : bool
+            Only for ``algorithm='eigh'``.
+        
+        Returns
+        -------
+        u, s, vh :
+            Data of corresponding tensors.
+        new_leg :
+            ElementarySpace the new leg of vh.
         """
         ...
 
     @abstractmethod
-    def from_dense_block_trivial_sector(self, block: Block, leg: Space) -> Data:
-        """Data of a single-leg `Tensor` from the *part of* the coefficients in the trivial sector."""
+    def tdot(self, a: SymmetricTensor, b: SymmetricTensor, axs_a: list[int], axs_b: list[int]) -> Data:
+        """Tensordot i.e. pairwise contraction"""
+        ...
+
+    @abstractmethod
+    def to_dense_block(self, a: SymmetricTensor) -> Block:
+        """Forget about symmetry structure and convert to a single block.
+        This includes a permutation of the basis, specified by the legs of `a`.
+        (see e.g. ElementarySpace.basis_perm).
+        """
         ...
 
     @abstractmethod
@@ -520,36 +516,44 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def inv_part_from_dense_block_single_sector(self, vector: Block, space: Space,
-                                               charge_leg: ElementarySpace) -> Data:
-        """Data for the invariant part used in ChargedTensor.from_dense_block_single_sector"""
+    def to_dtype(self, a: SymmetricTensor, dtype: Dtype) -> Data:
+        """cast to given dtype. No copy if already has dtype."""
         ...
 
     @abstractmethod
-    def inv_part_to_flat_block_single_sector(self, tensor: SymmetricTensor) -> Block:
-        """Inverse of inv_part_from_dense_block_single_sector"""
+    def trace_full(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
         ...
 
     @abstractmethod
-    def flip_leg_duality(self, tensor: SymmetricTensor, which_legs: list[int],
-                         flipped_legs: list[Space], perms: list[np.ndarray]) -> Data:
+    def trace_partial(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
         ...
 
     @abstractmethod
-    def mask_unary_operand(self, mask: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
-        """Elementwise function acting on a mask.
+    def zero_data(self, codomain: ProductSpace, domain: ProductSpace, dtype: Dtype) -> Data:
+        """Data for a zero tensor"""
+        ...
 
-        returns ``mask_data, new_small_leg``
+    @abstractmethod
+    def zero_diagonal_data(self, co_domain: ProductSpace, dtype: Dtype) -> DiagonalData:
+        ...
+
+    # OPTIONALLY OVERRIDE THESE
+
+    def _fuse_spaces(self, symmetry: Symmetry, spaces: list[Space]):
+        """Backends may override the behavior of linalg.spaces._fuse_spaces in order to compute
+        their backend-specific metadata alongside the sectors.
         """
-        ...
-        
-    @abstractmethod
-    def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
-        """Elementwise binary function acting on two masks.
+        raise NotImplementedError
 
-        returns ``mask_data, new_small_leg``
-        """
-        ...
+    def get_leg_metadata(self, leg: Space) -> dict:
+        """Get just the metadata returned by :meth:`_fuse_spaces`, without the sectors."""
+        return {}
+
+    def is_real(self, a: SymmetricTensor) -> bool:
+        """If the Tensor is comprised of real numbers.
+        Complex numbers with small or zero imaginary part still cause a `False` return."""
+        # FusionTree backend might implement this differently.
+        return a.dtype.is_real
 
 
 class BlockBackend(metaclass=ABCMeta):

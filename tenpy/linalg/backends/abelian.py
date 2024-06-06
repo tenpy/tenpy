@@ -1663,7 +1663,7 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
             block_inds=np.array([[bi, 0]])
         )
 
-    def inv_part_to_flat_block_single_sector(self, tensor: SymmetricTensor) -> Block:
+    def inv_part_to_dense_block_single_sector(self, tensor: SymmetricTensor) -> Block:
         raise NotImplementedError  # TODO not yet reviewed
         # TODO dont use legs! use conventional_leg_order / domain / codomain
         num_blocks = len(tensor.data.blocks)
@@ -1682,7 +1682,7 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
             dim = tensor.legs[0].multiplicities[bi]
             # no need to consider basis_perm, since its all 0 anyway
             return self.zero_block(shape=[dim], dtype=tensor.data.dtype)
-        raise ValueError  # should have been caught by input checks in ChargedTensor.to_flat_block_single_sector
+        raise ValueError  # should have been caught by input checks in ChargedTensor.to_dense_block_single_sector
 
     def flip_leg_duality(self, tensor: SymmetricTensor, which_legs: list[int],
                          flipped_legs: list[Space], perms: list[np.ndarray]) -> Data:

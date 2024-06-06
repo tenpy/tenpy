@@ -296,7 +296,7 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         block = self.apply_basis_perm(vector, [space])
         return self.block_add_axis(block, pos=1)
 
-    def inv_part_to_flat_block_single_sector(self, tensor: SymmetricTensor) -> Block:
+    def inv_part_to_dense_block_single_sector(self, tensor: SymmetricTensor) -> Block:
         raise NotImplementedError  # TODO not yet reviewed
         return self.apply_basis_perm(tensor.data[:, 0], [tensor.legs[0]], inv=True)
 

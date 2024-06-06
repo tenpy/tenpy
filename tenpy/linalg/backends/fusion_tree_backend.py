@@ -885,8 +885,8 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                                                charge_leg: ElementarySpace) -> Data:
         raise NotImplementedError('inv_part_from_dense_block_single_sector not implemented')  # TODO
 
-    def inv_part_to_flat_block_single_sector(self, tensor: SymmetricTensor) -> Block:
-        raise NotImplementedError('inv_part_to_flat_block_single_sector not implemented')  # TODO
+    def inv_part_to_dense_block_single_sector(self, tensor: SymmetricTensor) -> Block:
+        raise NotImplementedError('inv_part_to_dense_block_single_sector not implemented')  # TODO
 
     def flip_leg_duality(self, tensor: SymmetricTensor, which_legs: list[int],
                          flipped_legs: list[Space], perms: list[np.ndarray]) -> Data:

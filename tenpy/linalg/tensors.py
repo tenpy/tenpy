@@ -367,9 +367,15 @@ class Tensor(metaclass=ABCMeta):
             raise SymmetryError(f'Tensor.size is not defined for symmetry {self.symmetry}')
         return self.parent_space.dim
 
+    def __float__(self):
+        raise TypeError('float() of a tensor is not defined. Use tenpy.item() instead.')
+
     def __eq__(self, other):
         msg = f'{self.__class__.__name__} does not support == comparison. Use tenpy.almost_equal instead.'
         raise TypeError(msg)
+
+    def __complex__(self):
+        raise TypeError('complex() of a tensor is not defined. Use tenpy.item() instead.')
 
     def _parse_leg_idx(self, idx: int | str) -> tuple[bool, int, int]:
         """Parse a leg index or a leg label.

@@ -1418,7 +1418,7 @@ def OLD_test_Tensor_tofrom_dense_block_trivial_sector(make_compatible_tensor):
                                        100)
 
 
-def OLD_test_ChargedTensor_tofrom_flat_block_single_sector(compatible_symmetry, make_compatible_sectors,
+def OLD_test_ChargedTensor_tofrom_dense_block_single_sector(compatible_symmetry, make_compatible_sectors,
                                                        make_compatible_tensor):
     pytest.xfail(reason='unclear')  # TODO
     # TODO revise this. purge the "dummy" language, its now "charged"

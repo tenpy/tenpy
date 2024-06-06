@@ -542,7 +542,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
             )
             res = tens.split_legs(0)
         else:
-            tens = ChargedTensor.from_flat_block_single_sector(
+            tens = ChargedTensor.from_dense_block_single_sector(
                 leg=self.domain, block=self.backend.block_from_numpy(vec), sector=self._charge_sector,
                 backend=self.backend
             )
@@ -563,7 +563,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
             res = res.to_dense_block_trivial_sector()
         else:
             res = tens.combine_legs(list(range(tens.num_legs)), product_spaces=[self.domain])
-            res = res.to_flat_block_single_sector()
+            res = res.to_dense_block_single_sector()
         res = self.backend.block_to_numpy(res)
         assert res.shape == (self.shape[0],)
         return res
