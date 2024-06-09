@@ -217,8 +217,8 @@ class NumpyBlockBackend(BlockBackend):
     def block_from_mask(self, mask: Block, dtype: Dtype) -> Block:
         M, = mask.shape
         N = np.sum(mask)
-        res = np.zeros((M, N), dtype=self.backend_dtype_map[dtype])
-        res[mask, np.arange(N)] = 1
+        res = np.zeros((N, M), dtype=self.backend_dtype_map[dtype])
+        res[np.arange(N), mask] = 1
         return res
 
     def block_sum(self, a: Block, ax: int) -> Block:

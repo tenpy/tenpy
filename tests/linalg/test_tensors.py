@@ -242,11 +242,139 @@ def test_DiagonalTensor(make_compatible_tensor):
     # TODO float(), complex(), bool()
 
 
-def test_Mask(make_compatible_tensor):
-    with pytest.raises(NotImplementedError):
-        T: tensors.Mask = make_compatible_tensor(cls=tensors.Mask)
-        T.test_sanity()
-    # TODO expand
+def test_Mask(make_compatible_tensor, compatible_symmetry_backend, np_random):
+
+    if compatible_symmetry_backend == 'fusion_tree':
+        # necessary functions to create Masks from fixture are not implemented yet
+        with pytest.raises(NotImplementedError, match='diagonal_to_mask not implemented'):
+            make_compatible_tensor(cls=tensors.Mask)
+        return
+
+    M_projection: tensors.Mask = make_compatible_tensor(cls=tensors.Mask)
+    backend = M_projection.backend
+    symmetry = M_projection.symmetry
+    large_leg = M_projection.domain[0]
+    small_leg = M_projection.codomain[0]
+    
+    assert M_projection.is_projection is True
+    M_projection.test_sanity()
+    if symmetry.can_be_dropped:
+        M_projection_np = M_projection.as_numpy_mask()
+
+    print('checking inclusion Mask')
+    M_inclusion: tensors.Mask = tensors.dagger(M_projection)
+    assert M_inclusion.is_projection is False
+    M_inclusion.test_sanity()
+
+    print('checking properties')
+    assert M_projection.large_leg == large_leg
+    assert M_inclusion.large_leg == large_leg
+    assert M_projection.small_leg == small_leg
+    assert M_inclusion.small_leg == small_leg
+
+    print('checking from_eye')
+    for is_projection in [True, False]:
+        M_eye = tensors.Mask.from_eye(large_leg, is_projection=is_projection, backend=backend)
+        assert M_eye.is_projection is is_projection
+        M_eye.test_sanity()
+
+    if symmetry.can_be_dropped:
+        # checks that rely on dense block representations
+        print('checking from_block_mask / as_block_mask')
+        block_mask = np_random.choice([True, False], large_leg.dim, replace=True)
+        M = tensors.Mask.from_block_mask(block_mask, large_leg=large_leg, backend=backend)
+        M.test_sanity()
+        assert M.large_leg == large_leg
+        assert M.small_leg.dim == np.sum(block_mask)
+        npt.assert_array_equal(M.as_numpy_mask(), block_mask)
+        
+        print('checking from_indices')
+        indices = np.where(block_mask)[0]
+        M = tensors.Mask.from_indices(indices, large_leg=large_leg, backend=backend)
+        M.test_sanity()
+        assert M.large_leg == large_leg
+        assert M.small_leg.dim == np.sum(block_mask)
+        npt.assert_array_equal(M.as_numpy_mask(), block_mask)
+
+    print('checking from_DiagonalTensor / as_DiagonalTensor')
+    diag = M_projection.as_DiagonalTensor(dtype=Dtype.float32)
+    assert diag.leg == large_leg
+    assert diag.dtype == Dtype.float32
+    diag.test_sanity()
+    #
+    diag = M_projection.as_DiagonalTensor(dtype=Dtype.bool)
+    assert diag.leg == large_leg
+    assert diag.dtype == Dtype.bool
+    diag.test_sanity()
+    M = tensors.Mask.from_DiagonalTensor(diag)
+    if symmetry.can_be_dropped:
+        npt.assert_array_equal(M_projection_np, M.as_numpy_mask())
+    assert (M == M_projection).all()
+    #
+    diag = M_inclusion.as_DiagonalTensor(dtype=Dtype.bool)
+    assert diag.leg == large_leg
+    assert diag.dtype == Dtype.bool
+    diag.test_sanity()
+    M = tensors.Mask.from_DiagonalTensor(diag)  # should reproduce the *projection* Mask.
+    if symmetry.can_be_dropped:
+        npt.assert_array_equal(M_projection_np, M.as_numpy_mask())
+    assert (M == M_projection).all()
+    
+    print('checking from_random')
+    M = tensors.Mask.from_random(large_leg, small_leg=None, backend=backend)
+    M.test_sanity()
+    M2 = tensors.Mask.from_random(large_leg, small_leg=M.small_leg, backend=backend)
+    M2.test_sanity()
+    assert M2.small_leg == M.small_leg
+
+    print('checking from_zero')
+    M_zero = tensors.Mask.from_zero(large_leg, backend=backend)
+    M_zero.test_sanity()
+    assert M_zero.small_leg.dim == 0
+
+    print('checking bool()')
+    with pytest.raises(TypeError, match='The truth value of a Mask is ambiguous.'):
+        _ = bool(M_projection)
+
+    print('checking .any() and .all()')
+    assert M_projection.all() == np.all(M_projection_np)
+    assert M_inclusion.all() == np.all(M_projection_np)
+    assert M_projection.any() == np.any(M_projection_np)
+    assert M_inclusion.any() == np.any(M_projection_np)
+    assert M_eye.all()
+    assert M_eye.any()
+    assert not M_zero.all()
+    assert not M_zero.any()
+
+    print('checking to_numpy vs as_SymmetricTensor')
+    res_direct = M_projection.to_numpy()
+    M_SymmetricTensor = M_projection.as_SymmetricTensor(dtype=Dtype.float64)
+    assert M_SymmetricTensor.shape == M_projection.shape
+    M_SymmetricTensor.test_sanity()
+    res_via_Symmetric = M_SymmetricTensor.to_numpy()
+    npt.assert_allclose(res_via_Symmetric, res_direct)
+    print('   also for inclusion Mask')
+    res_direct = M_inclusion.to_numpy()
+    M_SymmetricTensor = M_inclusion.as_SymmetricTensor(dtype=Dtype.float64)
+    assert M_SymmetricTensor.shape == M_inclusion.shape
+    M_SymmetricTensor.test_sanity()
+    res_via_Symmetric = M_SymmetricTensor.to_numpy()
+    npt.assert_allclose(res_via_Symmetric, res_direct)
+
+    # TODO check binary operands: &, ==, !=, &, |, ^ :
+    #   left and right
+    #   with bool and with other mask
+    #   with projection Masks and with inclusion Masks
+    
+    # TODO check orthogonal complement, also for inclusion Mask!
+
+    print('checking repr and str')
+    _ = str(M_projection)
+    _ = repr(M_projection)
+    _ = str(M_inclusion)
+    _ = repr(M_inclusion)
+    _ = str(M_zero)
+    _ = repr(M_zero)
 
 
 def test_ChargedTensor():

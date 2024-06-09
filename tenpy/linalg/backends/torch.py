@@ -228,8 +228,8 @@ class TorchBlockBackend(BlockBackend):
     def block_from_mask(self, mask: Block, dtype: Dtype) -> Block:
         M, = mask.shape
         N = torch_module.sum(mask)
-        res = torch_module.zeros((M, N), dtype=self.backend_dtype_map[dtype])
-        res[mask, torch_module.arange(N)] = 1
+        res = torch_module.zeros((N, M), dtype=self.backend_dtype_map[dtype])
+        res[torch_module.arange(N), mask] = 1
         return res
 
     def block_sum(self, a: Block, ax: int) -> Block:

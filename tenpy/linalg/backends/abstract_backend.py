@@ -14,9 +14,9 @@ from ..symmetries import Symmetry
 from ..spaces import Space, ElementarySpace, ProductSpace
 from ..dtypes import Dtype
 
-__all__ = ['Data', 'DiagonalData', 'Block', 'Backend', 'BlockBackend', 'conventional_leg_order',
-           'iter_common_sorted', 'iter_common_sorted_arrays', 'iter_common_nonstrict_sorted_arrays',
-           'iter_common_noncommon_sorted_arrays']
+__all__ = ['Data', 'DiagonalData', 'MaskData', 'Block', 'Backend', 'BlockBackend',
+           'conventional_leg_order', 'iter_common_sorted', 'iter_common_sorted_arrays',
+           'iter_common_nonstrict_sorted_arrays', 'iter_common_noncommon_sorted_arrays']
 
 
 if TYPE_CHECKING:
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 #  (except the symmetry data stored in its legs)
 Data = TypeVar('Data')
 DiagonalData = TypeVar('DiagonalData')
+MaskData = TypeVar('MaskData')
 
 # placeholder for a backend-specific type that represents the blocks of symmetric tensors
 Block = TypeVar('Block')
@@ -143,12 +144,17 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def copy_data(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
+    def copy_data(self, a: SymmetricTensor | DiagonalTensor | MaskData
+                  ) -> Data | DiagonalData | MaskData:
         """Return a copy, such that future in-place operations on the output data do not affect the input data"""
         ...
 
     @abstractmethod
-    def data_item(self, a: Data | DiagonalData) -> float | complex:
+    def dagger(self, a: SymmetricTensor) -> Data:
+        ...
+
+    @abstractmethod
+    def data_item(self, a: Data | DiagonalData | MaskData) -> float | complex:
         """Assumes that data is a scalar (as defined in tensors.is_scalar).
         
         Return that scalar as python float or complex
@@ -198,10 +204,7 @@ class Backend(metaclass=ABCMeta):
 
     @abstractmethod
     def diagonal_from_block(self, a: Block, co_domain: ProductSpace, tol: float) -> DiagonalData:
-        """DiagonalData from a 1D block.
-        This includes a permutation of the basis, specified by the legs of `a`.
-        (see e.g. ElementarySpace.basis_perm).
-        """
+        """DiagonalData from a 1D block in *internal* basis order."""
         ...
 
     @abstractmethod
@@ -224,20 +227,18 @@ class Backend(metaclass=ABCMeta):
 
     @abstractmethod
     def diagonal_tensor_to_block(self, a: DiagonalTensor) -> Block:
-        """Forget about symmetry structure and convert the diagonals of the blocks
-        to a single 1D block.
+        """Forget about symmetry structure and convert to a single 1D block.
+        
         This is the diagonal of the respective non-symmetric 2D tensor.
-        This includes a permutation of the basis, specified by the legs of `a`.
-        (see e.g. ElementarySpace.basis_perm).
-
-        Equivalent to self.block_get_diagonal(a.to_full_tensor().to_dense_block())
+        In the *internal* basis order of the leg.
         """
         ...
 
     @abstractmethod
-    def diagonal_to_mask(self, tens: DiagonalTensor) -> tuple[DiagonalData, ElementarySpace]:
+    def diagonal_to_mask(self, tens: DiagonalTensor) -> tuple[MaskData, ElementarySpace]:
         """Convert a DiagonalTensor to a Mask.
 
+        May assume that dtype is bool.
         Returns ``mask_data, small_leg``.
         """
         ...
@@ -272,17 +273,21 @@ class Backend(metaclass=ABCMeta):
     def from_dense_block(self, a: Block, codomain: ProductSpace, domain: ProductSpace, tol: float
                          ) -> Data:
         """Convert a dense block to the data for a symmetric tensor.
+
+        Block is in the *internal* basis order of the respective legs and the leg order is
+        ``[*codomain, *reversed(domain)]``.
         
         If the block is not symmetric, measured by ``allclose(a, projected, atol, rtol)``,
         where ``projected`` is `a` projected to the space of symmetric tensors, raise a ``ValueError``.
-        This includes a permutation of the basis, specified by the legs of `a`.
-        (see e.g. ElementarySpace.basis_perm).
         """
         ...
 
     @abstractmethod
     def from_dense_block_trivial_sector(self, block: Block, leg: Space) -> Data:
-        """Data of a single-leg `Tensor` from the *part of* the coefficients in the trivial sector."""
+        """Data of a single-leg `Tensor` from the *part of* the coefficients in the trivial sector.
+
+        Is given in the *internal* basis order.
+        """
         ...
 
     @abstractmethod
@@ -301,6 +306,7 @@ class Backend(metaclass=ABCMeta):
 
     @abstractmethod
     def full_data_from_mask(self, a: Mask, dtype: Dtype) -> Data:
+        """May assume that the mask is a projection."""
         ...
 
     @abstractmethod
@@ -356,37 +362,57 @@ class Backend(metaclass=ABCMeta):
     @abstractmethod
     def inv_part_from_dense_block_single_sector(self, vector: Block, space: Space,
                                                charge_leg: ElementarySpace) -> Data:
-        """Data for the invariant part used in ChargedTensor.from_dense_block_single_sector"""
+        """Data for the invariant part used in ChargedTensor.from_dense_block_single_sector
+
+        The vector is given in the *internal* basis order of `spaces`.
+        """
         ...
 
     @abstractmethod
     def inv_part_to_dense_block_single_sector(self, tensor: SymmetricTensor) -> Block:
-        """Inverse of inv_part_from_dense_block_single_sector"""
+        """Inverse of inv_part_from_dense_block_single_sector
+
+        In the *internal* basis order of `spaces`.
+        """
         ...
 
     @abstractmethod
-    def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
+    def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[MaskData, ElementarySpace]:
         """Elementwise binary function acting on two masks.
 
+        May assume that both masks are a projection (from large to small leg)
+        and that the large legs match.
         returns ``mask_data, new_small_leg``
         """
         ...
 
     @abstractmethod
-    def mask_from_block(self, a: Block, large_leg: Space, small_leg: ElementarySpace
-                        ) -> DiagonalData:
-        """DiagonalData for a Mask from a 1D block.
-        
-        This includes a permutation of the basis, specified by the legs of `a`.
-        (see e.g. ElementarySpace.basis_perm).
+    def mask_dagger(self, mask: Mask) -> MaskData:
+        ...
+
+    @abstractmethod
+    def mask_from_block(self, a: Block, large_leg: Space) -> tuple[MaskData, ElementarySpace]:
+        """Data for a *projection* Mask, and the resulting small leg, from a 1D block.
+
+        a: 1D block, the Mask in *internal* basis order of `large_leg`.
         """
         ...
 
     @abstractmethod
-    def mask_unary_operand(self, mask: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
+    def mask_to_block(self, a: Mask) -> Block:
+        """As a block of the large_leg, in *internal* basis order."""
+        ...
+
+    @abstractmethod
+    def mask_to_diagonal(self, a: Mask, dtype: Dtype) -> DiagonalData:
+        ...
+
+    @abstractmethod
+    def mask_unary_operand(self, mask: Mask, func) -> tuple[MaskData, ElementarySpace]:
         """Elementwise function acting on a mask.
 
-        returns ``mask_data, new_small_leg``
+        May assume that mask is a projection (from large to small leg).
+        Returns ``mask_data, new_small_leg``
         """
         ...
         
@@ -424,7 +450,7 @@ class Backend(metaclass=ABCMeta):
 
     @abstractmethod
     def scale_axis(self, a: SymmetricTensor, b: DiagonalTensor, leg: int) -> Data:
-        """Scale axis ``leg`` of ``a`` with ``b``, then permute legs to move the scaled leg to given position"""
+        """Scale axis ``leg`` of ``a`` with ``b``."""
         ...
 
     @abstractmethod
@@ -503,16 +529,28 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def state_tensor_product(self, state1: Block, state2: Block, prod_space: ProductSpace):
+        """TODO clearly define what this should do in tensors.py first!
+
+        In particular regarding basis orders.
+        """
+        ...
+
+    @abstractmethod
     def to_dense_block(self, a: SymmetricTensor) -> Block:
         """Forget about symmetry structure and convert to a single block.
-        This includes a permutation of the basis, specified by the legs of `a`.
-        (see e.g. ElementarySpace.basis_perm).
+        
+        Return a block in the *internal* basis order of the respective legs,
+        with leg order ``[*codomain, *reversed(domain)]``.
         """
         ...
 
     @abstractmethod
     def to_dense_block_trivial_sector(self, tensor: SymmetricTensor) -> Block:
-        """Single-leg tensor to the *part of* the coefficients in the trivial sector."""
+        """Single-leg tensor to the *part of* the coefficients in the trivial sector.
+
+        In *internal* basis order.
+        """
         ...
 
     @abstractmethod
@@ -535,6 +573,10 @@ class Backend(metaclass=ABCMeta):
 
     @abstractmethod
     def zero_diagonal_data(self, co_domain: ProductSpace, dtype: Dtype) -> DiagonalData:
+        ...
+
+    @abstractmethod
+    def zero_mask_data(self, large_leg: Space) -> MaskData:
         ...
 
     # OPTIONALLY OVERRIDE THESE
@@ -612,6 +654,12 @@ class BlockBackend(metaclass=ABCMeta):
     def block_item(self, a: Block) -> float | complex:
         """Assumes that data is a scalar (i.e. has only one entry). Returns that scalar as python float or complex"""
         ...
+
+    def block_dagger(self, a: Block, num_codomain: int) -> Block:
+        """Permute axes ``[*axs[num_codomain:], *axs[:num_codomain]]`` and elementwise conj."""
+        num_legs = len(self.block_shape(a))
+        res = self.block_permute_axes(a, [*range(num_codomain, num_legs), *range(num_codomain)])
+        return self.block_conj(res)
 
     @abstractmethod
     def block_dtype(self, a: Block) -> Dtype:
@@ -918,7 +966,7 @@ class BlockBackend(metaclass=ABCMeta):
 
     @abstractmethod
     def block_from_mask(self, mask: Block, dtype: Dtype) -> Block:
-        """Return a (M, N) of numbers (float or complex dtype) from a 1D bool-valued block shape (M,)
+        """Return a (N, M) of numbers (float or complex dtype) from a 1D bool-valued block shape (M,)
         where N is the number of True entries. The result is the coefficient matrix of the projection map."""
         ...
 

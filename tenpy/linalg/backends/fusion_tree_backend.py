@@ -6,7 +6,7 @@ from math import prod
 import numpy as np
 
 from .abstract_backend import (
-    Backend, BlockBackend, Block, Data, DiagonalData, iter_common_sorted_arrays,
+    Backend, BlockBackend, Block, Data, DiagonalData, MaskData, iter_common_sorted_arrays,
     iter_common_noncommon_sorted_arrays, conventional_leg_order
 )
 from ..dtypes import Dtype
@@ -270,6 +270,9 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
             dtype=a.data.dtype
         )
 
+    def dagger(self, a: SymmetricTensor) -> Data:
+        raise NotImplementedError  # TODO
+
     def data_item(self, a: FusionTreeData) -> float | complex:
         if len(a.blocks) > 1:
             raise ValueError("More than 1 block!")
@@ -395,7 +398,6 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def diagonal_from_block(self, a: Block, co_domain: ProductSpace, tol: float) -> DiagonalData:
         dtype = self.block_dtype(a)
-        a = self.apply_basis_perm(a, co_domain.spaces)
         coupled_sectors = co_domain.sectors
         blocks = []
         for coupled, mult, slc in zip(co_domain.sectors, co_domain.multiplicities, co_domain.slices):
@@ -438,11 +440,10 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
             entries = self.block_outer(symmetry_data, degeneracy_data)
             entries = self.block_reshape(entries, (-1,))
             res[slice(*a.leg.slices[i])] = entries
-        res = self.apply_basis_perm(res, [a.leg], inv=True)
         return res
 
     def diagonal_to_mask(self, tens: DiagonalTensor) -> tuple[DiagonalData, ElementarySpace]:
-        raise NotImplementedError
+        raise NotImplementedError('diagonal_to_mask not implemented')
 
     def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
         # TODO do SVD first, comments there apply.
@@ -465,7 +466,6 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         sym = codomain.symmetry
         assert sym.can_be_dropped
         # convert to internal basis order, where the sectors are sorted and contiguous
-        a = self.apply_basis_perm(a, conventional_leg_order(codomain, domain))
         J = len(codomain.spaces)
         K = len(domain.spaces)
         num_legs = J + K
@@ -585,13 +585,22 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def inv_part_to_dense_block_single_sector(self, tensor: SymmetricTensor) -> Block:
         raise NotImplementedError('inv_part_to_dense_block_single_sector not implemented')  # TODO
 
-    def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
-        raise NotImplementedError
+    def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[MaskData, ElementarySpace]:
+        raise NotImplementedError('mask_binary_operand not implemented')
+    
+    def mask_dagger(self, mask: Mask) -> MaskData:
+        raise NotImplementedError('mask_dagger not implemented')
 
-    def mask_from_block(self, a: Block, large_leg: Space, small_leg: ElementarySpace) -> DiagonalData:
+    def mask_from_block(self, a: Block, large_leg: Space) -> tuple[MaskData, ElementarySpace]:
         raise NotImplementedError('mask_from_block not implemented')  # TODO
 
-    def mask_unary_operand(self, mask: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
+    def mask_to_block(self, a: Mask) -> Block:
+        raise NotImplementedError
+
+    def mask_to_diagonal(self, a: Mask, dtype: Dtype) -> DiagonalData:
+        raise NotImplementedError
+    
+    def mask_unary_operand(self, mask: Mask, func) -> tuple[MaskData, ElementarySpace]:
         raise NotImplementedError
         
     def mul(self, a: float | complex, b: SymmetricTensor) -> Data:
@@ -665,6 +674,10 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         # TODO offer separate planar version? or just high
         raise NotImplementedError('tdot not implemented')  # TODO
 
+    def state_tensor_product(self, state1: Block, state2: Block, prod_space: ProductSpace):
+        #TODO clearly define what this should do in tensors.py first!
+        raise NotImplementedError
+
     def to_dense_block(self, a: SymmetricTensor) -> Block:
         assert a.symmetry.can_be_dropped
         J = len(a.codomain.spaces)
@@ -709,8 +722,6 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                 i2 += forest_b_width  # move right by one forest-block
         # permute leg order [i1,...,iJ,j1,...,jK] -> [i1,...,iJ,jK,...,j1]
         res = self.block_permute_axes(res, [*range(J), *reversed(range(J, J + K))])
-        # apply permutation to public basis order
-        res = self.apply_basis_perm(res, conventional_leg_order(a), inv=True)
         return res
 
     def to_dense_block_trivial_sector(self, tensor: SymmetricTensor) -> Block:
@@ -736,6 +747,10 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def zero_diagonal_data(self, co_domain: ProductSpace, dtype: Dtype) -> DiagonalData:
         return FusionTreeData(coupled_sectors=co_domain.symmetry.empty_sector_array, blocks=[],
                               dtype=dtype)
+
+    def zero_mask_data(self, large_leg: Space) -> MaskData:
+        return FusionTreeData(coupled_sectors=large_leg.symmetry.empty_sector_array, blocks=[],
+                              dtype=Dtype.bool)
 
     # INTERNAL FUNCTIONS
 

@@ -4,10 +4,13 @@ from abc import ABCMeta
 from typing import TYPE_CHECKING, Callable
 import numpy as np
 
-from .abstract_backend import Backend, BlockBackend, Data, DiagonalData, Block, conventional_leg_order
+from .abstract_backend import (Backend, BlockBackend, Data, DiagonalData, MaskData, Block,
+                               conventional_leg_order)
 from ..dtypes import Dtype
 from ..symmetries import no_symmetry, Symmetry
 from ..spaces import Space, ElementarySpace, ProductSpace
+from ...tools.misc import rank_data
+
 
 __all__ = ['NoSymmetryBackend']
 
@@ -37,7 +40,7 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
             A single 1D Block. The diagonal of the corresponding 2D block of a ``Tensor``.
 
         - ``Mask``:
-            These bool values indicate which indices of the large leg are kept for the small leg.
+            The bool values indicate which indices of the large leg are kept for the small leg.
 
     """
     DataCls = "Block of BlockBackend"  # is dynamically set by __init__
@@ -51,12 +54,12 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         if is_diagonal:
             assert self.block_shape(a.data) == (a.legs[0].dim,), f'{self.block_shape(a)} != {(a.legs[0].dim,)}'
         else:
-            assert self.block_shape(a.data) == a.shape, f'{self.block_shape(a)} != {a.shape}'
+            assert self.block_shape(a.data) == a.shape, f'{self.block_shape(a.data)} != {a.shape}'
 
     def test_mask_sanity(self, a: Mask):
         super().test_mask_sanity(a)
-        assert self.block_shape(a.data) == (a.legs[0].dim,)
-        assert self.block_sum_all(a.data) == a.legs[1].dim
+        assert self.block_shape(a.data) == (a.large_leg.dim,)
+        assert self.block_sum_all(a.data) == a.small_leg.dim
 
     # ABSTRACT METHODS:
 
@@ -93,9 +96,12 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def copy_data(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
         return self.block_copy(a.data)
 
+    def dagger(self, a: SymmetricTensor) -> Data:
+        return self.block_dagger(a.data, num_codomain=a.num_codomain_legs)
+
     def data_item(self, a: Data | DiagonalData) -> float | complex:
         return self.block_item(a)
-
+    
     def _data_repr_lines(self, a: SymmetricTensor, indent: str, max_width: int, max_lines: int):
         block_lines = self._block_repr_lines(a.data, indent=indent + '  ', max_width=max_width,
                                              max_lines=max_lines - 1)
@@ -117,7 +123,7 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return func(a.data, **func_kwargs)
     
     def diagonal_from_block(self, a: Block, co_domain: ProductSpace, tol: float) -> DiagonalData:
-        return self.apply_basis_perm(a, co_domain.spaces)
+        return a
 
     def diagonal_from_sector_block_func(self, func, co_domain: ProductSpace) -> DiagonalData:
         coupled = co_domain.symmetry.trivial_sector
@@ -131,10 +137,19 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return self.block_sum_all(a.data)
 
     def diagonal_tensor_to_block(self, a: DiagonalTensor) -> Block:
-        return self.apply_basis_perm(a.data, [a.leg], inv=True)
+        return a.data
 
-    def diagonal_to_mask(self, tens: DiagonalTensor) -> tuple[DiagonalData, ElementarySpace]:
-        raise NotImplementedError  # TODO
+    def diagonal_to_mask(self, tens: DiagonalTensor) -> tuple[MaskData, ElementarySpace]:
+        large_leg = tens.leg
+        basis_perm = large_leg._basis_perm
+        data = tens.data
+        if basis_perm is not None:
+            basis_perm = rank_data(basis_perm[data])
+        small_leg = ElementarySpace.from_trivial_sector(
+            dim=self.block_sum_all(data), symmetry=large_leg.symmetry, is_dual=large_leg.is_dual,
+            basis_perm=basis_perm
+        )
+        return data, small_leg
 
     def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
         return self.block_eigh(a.data, sort=sort)
@@ -150,12 +165,11 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def from_dense_block(self, a: Block, codomain: ProductSpace, domain: ProductSpace, tol: float
                          ) -> Data:
-        return self.apply_basis_perm(a, conventional_leg_order(codomain, domain))
+        return a
 
     def from_dense_block_trivial_sector(self, block: Block, leg: Space) -> Data:
         # there are no other sectors, so this is just the unmodified block.
         assert self.block_shape(block) == (leg.dim,)
-        return self.apply_basis_perm(block, [leg])
 
     def from_random_normal(self, codomain: ProductSpace, domain: ProductSpace, sigma: float,
                            dtype: Dtype) -> Data:
@@ -198,24 +212,54 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def inv_part_from_dense_block_single_sector(self, vector: Block, space: Space,
                                                 charge_leg: ElementarySpace) -> Data:
-        block = self.apply_basis_perm(vector, [space])
-        return self.block_add_axis(block, pos=1)
+        return self.block_add_axis(vector, pos=1)
 
     def inv_part_to_dense_block_single_sector(self, tensor: SymmetricTensor) -> Block:
-        return self.apply_basis_perm(tensor.data[:, 0], [tensor.legs[0]], inv=True)
+        return tensor.data[:, 0]
 
-    def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
+    def mask_binary_operand(self, mask1: Mask, mask2: Mask, func
+                            ) -> tuple[DiagonalData, ElementarySpace]:
+        large_leg = mask1.large_leg
+        basis_perm = large_leg._basis_perm
         data = func(mask1.data, mask2.data)
-        raise NotImplementedError
+        if basis_perm is not None:
+            basis_perm = rank_data(basis_perm[data])
+        small_leg = ElementarySpace.from_trivial_sector(
+            dim=self.block_sum_all(data), symmetry=large_leg.symmetry, is_dual=large_leg.is_dual,
+            basis_perm=basis_perm
+        )
+        return data, small_leg
+
+    def mask_dagger(self, mask: Mask) -> MaskData:
+        return mask.data
     
-    def mask_from_block(self, a: Block, large_leg: Space, small_leg: ElementarySpace
-                        ) -> DiagonalData:
-        data = self.apply_basis_perm(data, [large_leg])
-        return data
+    def mask_from_block(self, a: Block, large_leg: Space) -> tuple[MaskData, ElementarySpace]:
+        basis_perm = large_leg._basis_perm
+        if basis_perm is not None:
+            basis_perm = rank_data(basis_perm[a])
+        small_leg = ElementarySpace.from_trivial_sector(
+            dim=self.block_sum_all(a), symmetry=large_leg.symmetry, is_dual=large_leg.is_dual,
+            basis_perm=basis_perm
+        )
+        return a, small_leg
+
+    def mask_to_block(self, a: Mask) -> Block:
+        return a.data
+
+    def mask_to_diagonal(self, a: Mask, dtype: Dtype) -> DiagonalData:
+        return self.block_to_dtype(a.data, dtype)
 
     def mask_unary_operand(self, mask: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
+        large_leg = mask.large_leg
+        basis_perm = large_leg._basis_perm
+        if basis_perm is not None:
+            basis_perm = rank_data(basis_perm[data])
         data = func(mask.data)
-        raise NotImplementedError
+        small_leg = ElementarySpace.from_trivial_sector(
+            dim=self.block_sum_all(data), symmetry=large_leg.symmetry, is_dual=large_leg.is_dual,
+            basis_perm=basis_perm
+        )
+        return data, small_leg
         
     def mul(self, a: float | complex, b: SymmetricTensor) -> Data:
         return self.block_mul(a, b.data)
@@ -276,12 +320,16 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         raise NotImplementedError  # TODO not yet reviewed
         return self.block_tdot(a.data, b.data, axs_a, axs_b)
 
+    def state_tensor_product(self, state1: Block, state2: Block, prod_space: ProductSpace):
+        #TODO clearly define what this should do in tensors.py first!
+        raise NotImplementedError
+
     def to_dense_block(self, a: SymmetricTensor) -> Block:
-        return self.apply_basis_perm(a.data, a.legs, inv=True)
+        return a.data
 
     def to_dense_block_trivial_sector(self, tensor: SymmetricTensor) -> Block:
         # there are no other sectors, so this is essentially the same as to_dense_block.
-        return self.apply_basis_perm(tensor.data, tensor.legs, inv=True)
+        return tensor.data
 
     def to_dtype(self, a: SymmetricTensor, dtype: Dtype) -> Data:
         return self.block_to_dtype(a.data, dtype)
@@ -297,6 +345,9 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def zero_data(self, codomain: ProductSpace, domain: ProductSpace, dtype: Dtype):
         return self.zero_block(shape=[l.dim for l in conventional_leg_order(codomain, domain)],
                                dtype=dtype)
+    
+    def zero_mask_data(self, large_leg: Space) -> MaskData:
+        return self.zero_block(shape=[large_leg.dim], dtype=Dtype.bool)
 
     def zero_diagonal_data(self, co_domain: ProductSpace, dtype: Dtype) -> DiagonalData:
         return self.zero_block(shape=[co_domain.dim], dtype=dtype)
