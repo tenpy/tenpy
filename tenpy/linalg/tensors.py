@@ -62,7 +62,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 import operator
 from types import EllipsisType
-from typing import TypeVar, Sequence
+from typing import TypeVar, Sequence, Iterator
 from numbers import Number, Integral
 import numpy as np
 import warnings
@@ -74,17 +74,20 @@ from .misc import duplicate_entries
 from .symmetries import SymmetryError
 from .spaces import Space, ElementarySpace, ProductSpace, Sector
 from .backends.backend_factory import get_backend
-from .backends.abstract_backend import Block, Backend
+from .backends.abstract_backend import Block, Backend, conventional_leg_order
 from .dtypes import Dtype
-from ..tools.misc import to_iterable
+from ..tools.misc import to_iterable, rank_data
 
 
 __all__ = ['Tensor', 'SymmetricTensor', 'DiagonalTensor', 'ChargedTensor', 'Mask',
            'add_trivial_leg', 'almost_equal', 'angle', 'apply_mask', 'bend_legs', 'combine_legs',
-           'conj', 'dagger', 'dot', 'entropy', 'imag', 'inner', 'is_scalar', 'item', 'move_leg',
-           'norm', 'outer', 'permute_legs', 'real', 'real_if_close', 'set_as_slice', 'split_legs',
-           'sqrt', 'squeeze_legs', 'tdot', 'trace', 'transpose', 'zero_like', 'get_same_backend',
-           'check_same_legs']
+           'conj', 'dagger', 'compose', 'entropy', 'imag', 'inner', 'is_scalar', 'item', 'move_leg',
+           'norm', 'outer', 'permute_legs', 'real', 'real_if_close', 'scale_axis', 'set_as_slice',
+           'split_legs', 'sqrt', 'squeeze_legs', 'tdot', 'trace', 'transpose', 'zero_like',
+           'get_same_backend', 'check_same_legs']
+
+
+# TENSOR CLASSES
 
 
 class Tensor(metaclass=ABCMeta):
@@ -311,10 +314,7 @@ class Tensor(metaclass=ABCMeta):
 
     @labels.setter
     def labels(self, labels):
-        assert not duplicate_entries(labels, ignore=[None])
-        assert len(labels) == self.num_legs
-        self._labels = labels[:]
-        self._labelmap = {label: legnum for legnum, label in enumerate(labels) if label is not None}
+        self.set_labels(labels)
 
     @functools.cached_property
     def legs(self) -> list[Space]:
@@ -376,6 +376,20 @@ class Tensor(metaclass=ABCMeta):
 
     def __complex__(self):
         raise TypeError('complex() of a tensor is not defined. Use tenpy.item() instead.')
+
+    def _as_codomain_leg(self, idx: int | str) -> Space:
+        """Return the leg, as if it was moved to the codomain."""
+        in_domain, co_domain_idx, _ = self._parse_leg_idx(idx)
+        if in_domain:
+            return self.domain[co_domain_idx].dual
+        return self.codomain[co_domain_idx]
+
+    def _as_domain_leg(self, idx: int | str) -> Space:
+        """Return the leg, as if it was moved to the domain."""
+        in_domain, co_domain_idx, _ = self._parse_leg_idx(idx)
+        if in_domain:
+            return self.domain[co_domain_idx]
+        return self.codomain[co_domain_idx].dual
 
     def _parse_leg_idx(self, idx: int | str) -> tuple[bool, int, int]:
         """Parse a leg index or a leg label.
@@ -440,6 +454,22 @@ class Tensor(metaclass=ABCMeta):
     def relabel(self, mapping: dict[str, str]) -> None:
         """Apply mapping to labels. In-place."""
         self.labels = [mapping.get(l, l) for l in self._labels]
+
+    def set_label(self, pos: int, label: str | None):
+        """Set a single label at given position, in-place.  Return the modified instance."""
+        if label in self._labels[:pos] or label in self._labels[pos + 1:]:
+            raise ValueError('Duplicate label')
+        self._labels[pos] = label
+        return self
+
+    def set_labels(self, labels: Sequence[list[str | None] | None] | list[str | None] | None):
+        """Set the given labels, in-place. Return the modified instance."""
+        labels = self._init_parse_labels(labels, codomain=self.codomain, domain=self.domain)
+        assert not duplicate_entries(labels, ignore=[None])
+        assert len(labels) == self.num_legs
+        self._labels = labels
+        self._labelmap = {label: legnum for legnum, label in enumerate(labels) if label is not None}
+        return self
 
     def to_numpy(self, leg_order: list[int | str] = None, numpy_dtype=None) -> np.ndarray:
         """Convert to a numpy array"""
@@ -604,9 +634,24 @@ class SymmetricTensor(Tensor):
             codomain=codomain, domain=domain, backend=backend
         )
         block, dtype = backend.as_block(block, dtype, return_dtype=True)
+        block = backend.apply_basis_perm(block, conventional_leg_order(codomain, domain))
         data = backend.from_dense_block(block, codomain=codomain, domain=domain, tol=tol)
         return cls(data, codomain=codomain, domain=domain, backend=backend, labels=labels)
 
+    @classmethod
+    def from_dense_block_trivial_sector(cls, vector: Block, space: Space,
+                                        backend: Backend | None = None, label: str | None = None
+                                        ) -> SymmetricTensor:
+        """Inverse of to_dense_block_trivial_sector. TODO"""
+        if backend is None:
+            backend = get_backend(symmetry=space.symmetry)
+        vector = backend.as_block(vector)
+        if space._basis_perm is not None:
+            i = space.sectors_where(space.symmetry.trivial_sector)
+            perm = rank_data(space.basis_perm[slice(*space.slices[i])])
+            vector = backend.apply_leg_permutations(vector, [perm])
+        raise NotImplementedError  # TODO
+    
     @classmethod
     def from_eye(cls, co_domain: list[Space] | ProductSpace,
                  backend: Backend | None = None,
@@ -847,6 +892,7 @@ class SymmetricTensor(Tensor):
 
     def to_dense_block(self, leg_order: list[int | str] = None, dtype: Dtype = None) -> Block:
         block = self.backend.to_dense_block(self)
+        block = self.backend.apply_basis_perm(block, conventional_leg_order(self), inv=True)
         if dtype is not None:
             block = self.backend.block_to_dtype(block, dtype)
         if leg_order is not None:
@@ -864,7 +910,14 @@ class SymmetricTensor(Tensor):
         from_dense_block_trivial_sector
         """
         assert self.num_legs == 1
-        return self.backend.to_dense_block_trivial_sector(self)
+        block = self.backend.to_dense_block_trivial_sector(self)
+        assert self.num_codomain_legs == 1  # TODO assuming this for now to construct the perm. should we keep that?
+        leg = self.codomain[0]
+        if leg._basis_perm is not None:
+            i = leg.sectors_where(self.symmetry.trivial_sector)
+            perm = np.argsort(leg.basis_perm[slice(*leg.slices[i])])
+            block = self.backend.apply_leg_permutations(block, [perm])
+        return block
 
 
 class DiagonalTensor(SymmetricTensor):
@@ -968,6 +1021,7 @@ class DiagonalTensor(SymmetricTensor):
             codomain=[leg], domain=[leg], backend=backend
         )
         diag = backend.as_block(diag, dtype=dtype)
+        diag = backend.apply_basis_perm(diag, [leg])
         return cls(
             data=backend.diagonal_from_block(diag, co_domain=co_domain, tol=tol),
             leg=leg, backend=backend, labels=labels
@@ -1161,7 +1215,7 @@ class DiagonalTensor(SymmetricTensor):
 
     def __bool__(self):
         if self.dtype == Dtype.bool and is_scalar(self):
-            return bool(self.item())
+            return bool(item(self))
         msg = 'The truth value of a non-scalar DiagonalTensor is ambiguous. Use a.any() or a.all()'
         raise ValueError(msg)
 
@@ -1283,6 +1337,7 @@ class DiagonalTensor(SymmetricTensor):
 
     def diagonal_as_block(self, dtype: Dtype = None) -> Block:
         res = self.backend.diagonal_tensor_to_block(self)
+        res = self.backend.apply_basis_perm(res, [self.leg], inv=True)
         if dtype is not None:
             res = self.backend.block_to_dtype(res, dtype)
         return res
@@ -1342,24 +1397,37 @@ class DiagonalTensor(SymmetricTensor):
 
 
 class Mask(Tensor):
-    r"""A boolean mask that can be used to project a leg.
+    r"""A boolean mask that can be used to project or enlarge a leg.
 
-    A mask is a special kind of projection map, that either keeps or discards any given sector.
+    Masks come in two versions: projections and inclusions.
+    A projection Mask is a special kind of projection map, that either keeps or discards any given
+    sector. It has a single leg, the :attr:`large_leg` in its domain and maps it to a single leg,
+    the :attr:`small_leg` in the codomain.
+    An inclusion Mask is the dagger of this projection Mask and maps from the small leg in the
+    domain to the large leg in the codomain.
 
     TODO think in detail about the basis_perm and how it interacts with masking...
+
+    Attributes
+    ----------
+    is_projection: bool
+        If the Mask is a projection or inclusion map (see class docstring above).
 
     Parameters
     ----------
     data
         The numerical data (i.e. boolean flags) comprising the mask. type is backend-specific.
         Should have boolean dtype.
-    large_leg: Space
-        The larger leg that can be projected with this mask.
-        This is the only leg in the domain.
-    small_leg: Space
-        The small leg, i.e. the masked/projected `large_leg`.
-        This is the only leg in the codomain. Should have same :attr:`Space.is_bra_space` as the
-        `large_leg`.
+    space_in: Space
+        The single space of the domain.
+        This is the large leg for projections or the small leg for inclusions.
+    space_out: Space
+        The single space of the codomain
+        This is the small leg for projections or the large leg for inclusions.
+    is_projection: bool, optional
+        If this Mask is a projection (from large to small) map.
+        Otherwise it is in inclusion map (from small to large).
+        Required if ``space_in == space_out``, since it is ambiguous in that case.
     backend: Backend, optional
         The backend of the tensor.
     labels: list[list[str | None]] | list[str | None] | None
@@ -1370,86 +1438,129 @@ class Mask(Tensor):
         to ``[*codomain_legs, *reversed(domain_legs)]``.
     """
     _forbidden_dtypes = [Dtype.float32, Dtype.float64, Dtype.complex64, Dtype.complex128]
-    
-    def __init__(self, data, large_leg: Space, small_leg: Space, backend: Backend | None = None,
+
+    def __init__(self, data, space_in: ElementarySpace, space_out: ElementarySpace,
+                 is_projection: bool = None, backend: Backend | None = None,
                  labels: Sequence[list[str | None] | None] | list[str | None] | None = None):
-        # TODO remove tests after developing?
-        assert isinstance(data, self.backend.DataCls)
-        assert small_leg.is_subspace_of(large_leg)
-        assert small_leg.is_bra_space == large_leg.is_bra_space
-        assert isinstance(small_leg, Space)
-        Tensor.__init__(self, codomain=[small_leg], domain=[large_leg], backend=backend,
+        if is_projection is None:
+            if space_in.dim == space_out.dim:
+                raise ValueError('Need to specify is_projection for equal spaces.')
+            is_projection = (space_in.dim > space_out.dim)
+        elif is_projection is True:
+            assert space_in.dim >= space_out.dim
+        elif is_projection is False:
+            assert space_in.dim <= space_out.dim
+        else:
+            raise TypeError('Invalid is_projection. Expected None or bool.')
+        self.is_projection = is_projection
+        if is_projection:
+            assert space_out.is_subspace_of(space_in)
+        else:
+            assert space_in.is_subspace_of(space_out)
+        assert space_out.is_dual == space_in.is_dual
+        assert isinstance(space_in, ElementarySpace)
+        assert isinstance(space_out, ElementarySpace)
+        Tensor.__init__(self, codomain=[space_out], domain=[space_in], backend=backend,
                         labels=labels, dtype=Dtype.bool)
+        assert isinstance(data, self.backend.DataCls)  # TODO rm check after testing?
         self.data = data
 
     def test_sanity(self):
         super().test_sanity()
         self.backend.test_mask_sanity(self)
         assert self.codomain.num_spaces == 1 == self.domain.num_spaces
-        assert self.large_leg.is_bra_space == self.small_leg.is_bra_space
+        assert self.large_leg.is_dual == self.small_leg.is_dual
         assert self.small_leg.is_subspace_of(self.large_leg)
         assert self.dtype == Dtype.bool
 
     @property
-    def large_leg(self) -> Space:
-        return self.domain.spaces[0]
+    def large_leg(self) -> ElementarySpace:
+        if self.is_projection:
+            return self.domain.spaces[0]
+        else:
+            return self.codomain.spaces[0]
 
     @property
-    def small_leg(self) -> Space:
-        return self.codomain.spaces[0]
+    def small_leg(self) -> ElementarySpace:
+        if self.is_projection:
+            return self.codomain.spaces[0]
+        else:
+            return self.domain.spaces[0]
 
     @classmethod
-    def from_eye(cls, large_leg: Space, backend: Backend | None = None,
+    def from_eye(cls, leg: ElementarySpace, is_projection: bool = True,
+                 backend: Backend | None = None,
                  labels: Sequence[list[str | None] | None] | list[str | None] | None = None):
-        """The identity map as a Mask, i.e. the mask that keeps everything and discard nothing.
+        """The identity map as a Mask, i.e. the mask that keeps all states and discards none.
 
         Parameters
         ----------
         large_leg, backend, labels:
             Arguments, like for constructor of :class:`Mask`.
+
+        See Also
+        --------
+        from_zero
+            The projection Mask, that discards all states and keeps none.
         """
-        codomain, domain, backend, symmetry = cls._init_parse_args(
-            codomain=[large_leg], domain=[large_leg], backend=backend
-        )
-        data = backend.diagonal_from_sector_block_func(
-            lambda shape, coupled: backend.ones_block(shape, dtype=Dtype.bool),
-            co_domain=codomain
-        )
-        return Mask(data, large_leg=large_leg, small_leg=large_leg, backend=backend, labels=labels)
+        diag = DiagonalTensor.from_eye(leg=leg, backend=backend, labels=labels, dtype=Dtype.bool)
+        res = cls.from_DiagonalTensor(diag)
+        if not is_projection:
+            return dagger(res)
+        return res
 
     @classmethod
     def from_block_mask(cls, block_mask: Block, large_leg: Space, backend: Backend | None = None,
                         labels: Sequence[list[str | None] | None] | list[str | None] | None = None):
+        """Create a projection Mask from a boolean block.
+
+        To get the related inclusion Mask, use :func:`dagger`.
+
+        Parameters
+        ----------
+        block_mask: Block
+            A boolean Block indicating for each basis element of the public basis, if it is kept.
+        large_leg: Space
+            The large leg, in the domain of the projection
+        backend, labels
+            Arguments, like for the constructor
+        """
         if not large_leg.symmetry.can_be_dropped:
             raise SymmetryError
         if backend is None:
             backend = get_backend(symmetry=large_leg.symmetry)
-        small_leg = large_leg.take_slice(np.asarray(block_mask, bool))
         block_mask = backend.as_block(block_mask, Dtype.bool)
-        return cls(
-            data=backend.mask_from_block(block_mask, large_leg=large_leg, small_leg=small_leg),
-            large_leg=large_leg, small_leg=small_leg, backend=backend, labels=labels
-        )
+        block_mask = backend.apply_basis_perm(block_mask, [large_leg])
+        data, small_leg = backend.mask_from_block(block_mask, large_leg=large_leg)
+        return cls(data=data, space_in=large_leg, space_out=small_leg, is_projection=True,
+                   backend=backend, labels=labels)
 
     @classmethod
     def from_DiagonalTensor(cls, diag: DiagonalTensor):
+        """Create a projection Mask from a boolean DiagonalTensor.
+
+        The resulting mask keeps exactly those basis elements for which the entry of `diag` is ``True``.
+        To get the related inclusion Mask, use the :func:`dagger`.
+        """
         assert diag.dtype == Dtype.bool
         data, small_leg = diag.backend.diagonal_to_mask(diag)
         return cls(
-            data=data, large_leg=diag.domain.spaces[0], small_leg=small_leg, backend=diag.backend,
-            labels=diag.labels
+            data=data, space_in=diag.domain.spaces[0], space_out=small_leg, is_projection=True,
+            backend=diag.backend, labels=diag.labels
         )
 
     @classmethod
     def from_indices(cls, indices: int | Sequence[int] | slice, large_leg: Space,
                      backend: Backend = None,
                      labels: Sequence[list[str | None] | None] | list[str | None] | None = None):
-        """Create a Mask from the indices that are kept.
+        """Create a projection Mask from the indices that are kept.
+
+        To get the related inclusion Mask, use :func:`dagger`.
 
         Parameters
         ----------
         indices
-            Valid index/indices for a 1D numpy array. The elements of the computational basis of
+            Valid index/indices for a 1D numpy array. The elements of the public basis of
             `large_leg` with these indices are kept by the projection.
         large_leg, backend, labels
             Same as for :meth:`Mask.__init__`.
@@ -1463,14 +1574,29 @@ class Mask(Tensor):
                     backend: Backend | None = None, p_keep: float = .5,
                     labels: Sequence[list[str | None] | None] | list[str | None] | None = None,
                     np_random: np.random.Generator = np.random.default_rng()):
-        """Create a random Mask."""
+        """Create a random projection Mask.
+
+        To get the related inclusion Mask, use :func:`dagger`.
+
+        Parameters
+        ----------
+        large_leg: Space
+            The large leg, in the domain of the projection
+        small_leg: Space, optional
+            The small leg. If given, must be a subspace of the `large_leg`.
+        backend, labels
+            Arguments, like for the constructor
+        p_keep: float, optional
+            If `small_leg` is not given, the probability that any single basis vector is kept.
+            Is ignored if `small_leg` is given, since it determines the number of kept basis vectors.
+        """
         
         if backend is None:
             backend = get_backend(symmetry=large_leg.symmetry)
             
         if small_leg is None:
             diag = DiagonalTensor.from_random_uniform(large_leg, backend=backend, labels=labels,
-                                                      dtype=Dtype.float64)
+                                                      dtype=Dtype.float32)
             cutoff = 2 * p_keep - 1  # diagonal entries are uniform in [-1, 1].
             return cls.from_DiagonalTensor(diag < cutoff)
 
@@ -1484,52 +1610,77 @@ class Mask(Tensor):
         diag = DiagonalTensor.from_sector_block_func(
             func, leg=large_leg, backend=backend, labels=labels, dtype=Dtype.bool
         )
-        return cls.from_DiagonalTensor(diag)
+        res = cls.from_DiagonalTensor(diag)
+        res.small_leg._basis_perm = small_leg._basis_perm
+        res.small_leg._inverse_basis_perm = small_leg._inverse_basis_perm
+        return res
 
     @classmethod
     def from_zero(cls, large_leg: Space, backend: Backend | None = None,
                   labels: Sequence[list[str | None] | None] | list[str | None] | None = None):
+        """The zero projection Mask, that discards all states and keeps none.
+
+        To get the related inclusion Mask, use :func:`dagger`.
+
+        Parameters
+        ----------
+        large_leg: Space
+            The large leg, in the domain of the projection
+        backend, labels
+            Arguments, like for the constructor
+
+        See Also
+        --------
+        from_eye
+            The projection (or inclusion) Mask that keeps all states
+        """
         if backend is None:
             backend = get_backend(symmetry=large_leg.symmetry)
-        data = backend.zero_diagonal_data(leg=large_leg, dtype=Dtype.bool)
-        small_leg = Space.from_null_space(symmetry=large_leg.symmetry,
+        data = backend.zero_mask_data(large_leg=large_leg)
+        small_leg = ElementarySpace.from_null_space(symmetry=large_leg.symmetry,
                                                     is_dual=large_leg.is_bra_space)
-        return Mask(data, large_leg=large_leg, small_leg=small_leg, backend=backend, labels=labels)
+        return cls(data, space_in=large_leg, space_out=small_leg, is_projection=True,
+                   backend=backend, labels=labels)
 
     def __bool__(self):
-        if is_scalar(self):
-            return bool(self.item())
-        msg = 'The truth value of a non-scalar DiagonalTensor is ambiguous. Use a.any() or a.all()'
-        raise ValueError(msg)
+        msg = 'The truth value of a Mask is ambiguous. Use a.any() or a.all()'
+        raise TypeError(msg)
     
     def all(self) -> bool:
         """If the mask keeps all basis elements"""
-        return self.small_leg.num_parameters == self.large_leg.num_parameters
+        # assuming subspace, it is enough to check that the total sector number is the same.
+        return np.sum(self.small_leg.multiplicities) == np.sum(self.large_leg.multiplicities)
 
     def any(self) -> bool:
         """If the mask keeps any basis elements"""
         return self.small_leg.dim > 0
 
     def as_block_mask(self) -> Block:
-        return self.backend.diagonal_tensor_to_block(self)
+        res = self.backend.mask_to_block(self)
+        return self.backend.apply_basis_perm(res, [self.large_leg], inv=True)
 
     def as_numpy_mask(self) -> np.ndarray:
         return self.backend.block_to_numpy(self.as_block_mask(), numpy_dtype=bool)
 
     def as_DiagonalTensor(self, dtype=Dtype.complex128) -> DiagonalTensor:
-        return DiagonalTensor(data=self.data, leg=self.large_leg, backend=self.backend,
-                              labels=self.labels)
+        return DiagonalTensor(data=self.backend.mask_to_diagonal(self, dtype=dtype),
+                              leg=self.large_leg, backend=self.backend, labels=self.labels)
 
     def as_SymmetricTensor(self, dtype=Dtype.complex128) -> SymmetricTensor:
-        return self.as_DiagonalTensor(dtype=dtype).as_SymmetricTensor()
+        if not self.is_projection:
+            # OPTIMIZE how hard is it to deal with inclusions in the backend?
+            return dagger(dagger(self).as_SymmetricTensor())
+        data = self.backend.full_data_from_mask(self, dtype)
+        return SymmetricTensor(data, codomain=self.codomain, domain=self.domain,
+                               backend=self.backend, labels=self.labels)
 
     def copy(self, deep=True) -> Mask:
         if deep:
             data = self.backend.copy_data(self)
         else:
             data = self.data
-        return Mask(data, large_leg=self.large_leg, small_leg=self.small_leg, backend=self.backend,
-                    labels=self.labels)
+        return Mask(data, space_in=self.large_leg, space_out=self.small_leg,
+                    is_projection=self.is_projection, backend=self.backend, labels=self.labels)
 
     def to_dense_block(self, leg_order: list[int | str] = None, dtype: Dtype = None) -> Block:
         # for Mask, defining via numpy is actually easier, to use numpy indexing
@@ -1539,19 +1690,26 @@ class Mask(Tensor):
 
     def to_numpy(self, leg_order: list[int | str] = None, numpy_dtype=None) -> np.ndarray:
         assert self.symmetry.can_be_dropped
-        M = self.large_leg.dim
-        n = self.small_leg.dim
         mask = self.as_numpy_mask()
-        res = np.zeros((M, n), numpy_dtype or bool)
-        res[mask, np.arange(n)] = 1
+        res = np.zeros(self.shape, numpy_dtype or bool)
+        m, n = self.shape
+        if self.is_projection:
+            res[np.arange(m), mask] = 1  # sets the appropriate dtype. e.g. sets ``True`` for bool.
+        else:
+            res[mask, np.arange(n)] = 1
         if leg_order is not None:
             res = np.transpose(res, self.get_leg_idcs(leg_order))
         return res
 
     def _unary_operand(self, func) -> Mask:
+        # operate on the respective projection
+        if not self.is_projection:
+            # OPTIMIZE: how hard is it to deal with inclusion Masks in the backends?
+            return dagger(dagger(self)._unary_operand(func))
+        
         data, small_leg = self.backend.mask_unary_operand(self, func)
-        return Mask(data, large_leg=self.large_leg, small_leg=small_leg, backend=self.backend,
-                    labels=self.labels)
+        return Mask(data, space_in=self.large_leg, space_out=small_leg,
+                    is_projection=True, backend=self.backend, labels=self.labels)
 
     def _binary_operand(self, other: bool | Mask, func, operand: str,
                         return_NotImplemented: bool = True) -> Mask:
@@ -1561,7 +1719,7 @@ class Mask(Tensor):
         Parameters
         ----------
         other
-            Either a bool or a Mask.
+            Either a bool or a Mask. If a Mask, must have same :attr:`is_projection`.
         func
             The function with signature
             ``func(self_block: Block, other_or_other_block: bool | Block) -> Block``
@@ -1570,25 +1728,38 @@ class Mask(Tensor):
         return_NotImplemented
             Whether `NotImplemented` should be returned on a non-scalar and non-`Tensor` other.
         """
+        # deal with non-Mask types
         if isinstance(other, bool):
             return self._unary_operand(lambda block: func(block, other))
-        
         elif isinstance(other, Mask):
-            backend = get_same_backend(self, other)
-            if self.domain != other.domain:
-                raise ValueError('Incompatible domain.')
-            data, small_leg = backend.mask_binary_operand(self, other, func)
-            return Mask(data, large_leg=self.large_leg, small_leg=small_leg, backend=backend,
-                        labels=_get_matching_labels(self.labels, other.labels))
+            pass
         elif return_NotImplemented and not isinstance(other, (Tensor, Number)):
             return NotImplemented
-        msg = f'Invalid types for operand "{operand}": {type(self)} and {type(other)}'
-        raise TypeError(msg)
+        else:
+            msg = f'Invalid types for operand "{operand}": {type(self)} and {type(other)}'
+            raise TypeError(msg)
+        # remaining case: other is Mask
+        if self.is_projection != other.is_projection:
+            raise ValueError('Mismatching is_projection.')
+        if not self.is_projection:
+            # OPTIMIZE how hard is it to deal with inclusions in the backend?
+            res_projection = dagger(self)._binary_operand(
+                dagger(other), func=func, operand=operand,
+                return_NotImplemented=return_NotImplemented
+            )
+            return dagger(res_projection)
+        backend = get_same_backend(self, other)
+        if self.domain != other.domain:
+            raise ValueError('Incompatible domain.')
+        data, small_leg = backend.mask_binary_operand(self, other, func)
+        return Mask(data, space_in=self.large_leg, space_out=small_leg,
+                    is_projection=self.is_projection, backend=backend,
+                    labels=_get_matching_labels(self.labels, other.labels))
 
     def _unary_operand(self, func) -> Mask:
         data, small_leg = self.backend.mask_unary_operand(self, func)
-        return Mask(data, large_leg=self.large_leg, small_leg=small_leg, backend=self.backend,
-                    labels=self.labels)
+        return Mask(data, space_in=self.large_leg, space_out=small_leg,
+                    is_projection=self.is_projection, backend=self.backend, labels=self.labels)
 
     def __and__(self, other):  # ``self & other``
         return self._binary_operand(other, operator.and_, '==')
@@ -1618,6 +1789,10 @@ class Mask(Tensor):
         return self._binary_operand(other, func=operator.xor, operand='^')
 
     def logical_not(self):
+        """Alias for :meth:`orthogonal_complement`"""
+        return self._unary_operand(operator.invert)
+
+    def orthogonal_complement(self):
         """The "opposite" Mask, that keeps exactly what self discards and vv."""
         return self._unary_operand(operator.invert)
 
@@ -1842,12 +2017,35 @@ class ChargedTensor(Tensor):
             # TODO how to handle multi-dim sectors? which dummy leg state to give?
             raise NotImplementedError
         charge_leg = ElementarySpace(space.symmetry, [sector])
+        vector = backend.as_block(vector)
+        if space._basis_perm is not None:
+            i = space.sectors_where(sector)
+            perm = rank_data(space.basis_perm[slice(*space.slices[i])])
+            vector = backend.apply_leg_permutations(vector, [perm])
         inv_data = backend.inv_part_from_dense_block_single_sector(
             vector=vector, space=space, charge_leg=charge_leg
         )
         inv_part = SymmetricTensor(inv_data, codomain=[space], domain=[charge_leg], backend=backend,
                                    labels=[[label, cls._CHARGE_LEG_LABEL]])
         return cls(inv_part, [1])
+
+    @classmethod
+    def from_two_charge_legs(cls, invariant_part: SymmetricTensor, state1: Block | None,
+                             state2: Block | None) -> ChargedTensor:
+        """Create a charged tensor from an invariant part with two charged legs.
+
+        Parameters
+        -
+        """
+        inv_part = combine_legs(invariant_part, -1, -2)
+        inv_part.set_label(-1, cls._CHARGE_LEG_LABEL)
+        if state1 is None and state2 is None:
+            state = None
+        elif state1 is None or state2 is None:
+            raise ValueError('Must specify either both or none of the states')
+        else:
+            state = invariant_part.backend.state_tensor_product(state1, state2, inv_part.domain[0])
+        return cls(inv_part, state)
 
     @classmethod
     def from_zero(cls, codomain: ProductSpace | list[Space],
@@ -1894,7 +2092,7 @@ class ChargedTensor(Tensor):
     def to_dense_block(self, leg_order: list[int | str] = None, dtype: Dtype = None) -> Block:
         if self.charged_state is None:
             raise ValueError('charged_state not specified.')
-        inv_block = self.backend.to_dense_block(self)
+        inv_block = self.invariant_part.to_dense_block(leg_order=None, dtype=dtype)
         block = self.backend.block_tdot(inv_block, self.charged_state, [-1], [0])
         if dtype is not None:
             block = self.backend.block_to_dtype(block, dtype)
@@ -1950,6 +2148,9 @@ def _elementwise_function(block_func: str, func_kwargs={}, maps_zero_to_zero=Fal
     return decorator
 
 
+# FUNCTIONS ON TENSORS
+
+
 def add_trivial_leg(tens: Tensor,
                     legs_pos: int = None, *, codomain_pos: int = None, domain_pos: int = None,
                     label: str = None, is_dual: bool = False):
@@ -1979,7 +2180,6 @@ def add_trivial_leg(tens: Tensor,
         but if `domain_pos` is given, we have ``result.domain[domain_pos].is_dual == is_dual``.
     """
     if isinstance(tens, (DiagonalTensor, Mask)):
-        warnings.warn('Converting DiagonalTensor to Tensor for add_trivial_leg', stacklevel=2)
         return add_trivial_leg(tens.as_SymmetricTensor(), legs_pos, codomain_pos=codomain_pos,
                                domain_pos=domain_pos, label=label, is_dual=is_dual)
 
@@ -2140,7 +2340,30 @@ def almost_equal(tensor_1: Tensor, tensor_2: Tensor, rtol: float = 1e-5, atol=1e
 
 
 def apply_mask(tensor: Tensor, mask: Mask, leg: int | str) -> Tensor:
-    ...  # TODO
+    """Apply a Mask to one leg of a tensor.
+
+    The leg order and labels of `tensor` are not changed.
+
+    The mask is transposed or daggered as needed, such that the result has a smaller leg
+    than the input `tensor`.
+    The large leg of the mask must be equal or dual to the specified leg of the tensor.
+
+    Graphically::
+
+        |       | | |          | | |
+        |       tensor         | m |
+        |       | | |          | | |
+        |       | | m          tensor
+        |       | | |          | | |
+
+    where ``m`` is the `mask` up to transpose and/or dagger.
+
+    See Also
+    --------
+    dot, tdot, scale_axis
+    """
+    in_domain, co_domain_idx, leg_idx = tensor._parse_leg_idx(leg)
+    raise NotImplementedError  # TODO
 
 
 def bend_legs(tensor: Tensor, num_codomain_legs: int = None, num_domain_legs: int = None) -> Tensor:
@@ -2161,9 +2384,10 @@ def bend_legs(tensor: Tensor, num_codomain_legs: int = None, num_domain_legs: in
         num_codomain_legs = tensor.num_legs - num_domain_legs
     else:
         assert num_codomain_legs + num_domain_legs == tensor.num_legs
-    return permute_legs(tensor,
-                        codomain=range(num_codomain_legs),
-                        domain=range(num_codomain_legs, tensor.num_legs))
+    return _permute_legs(tensor,
+                         codomain=range(num_codomain_legs),
+                         domain=range(num_codomain_legs, tensor.num_legs),
+                         err_msg='This should never raise.')
 
 
 def check_same_legs(t1: Tensor, t2: Tensor) -> tuple[list[int], list[int]] | None:
@@ -2327,7 +2551,7 @@ def combine_legs(tensor: Tensor,
         domain_idcs.extend(leg_idcs)
 
     # 2c) finally, do the permute
-    tensor = permute_legs(tensor, codomain_idcs, domain_idcs)
+    tensor = _permute_legs(tensor, codomain_idcs, domain_idcs)
 
     # 3) build new domain and codomain, labels
     # ==============================================================================================
@@ -2400,7 +2624,12 @@ def dagger(tensor: Tensor) -> Tensor:
     TODO doctest comparing ``tenpy.dagger -> to_numpy`` with ``to_numpy -> transpose().conj()``
     """
     if isinstance(tensor, Mask):
-        raise NotImplementedError  # TODO. revisit when "opposite Mask" is implemented
+        return Mask(
+            data=tensor.backend.mask_dagger(tensor),
+            space_in=tensor.codomain[0], space_out=tensor.domain[0],
+            is_projection=not tensor.is_projection, backend=tensor.backend,
+            labels=[_dual_leg_label(l) for l in reversed(tensor._labels)]
+        )
     if isinstance(tensor, DiagonalTensor):
         return tensor._elementwise_unary(tensor.backend.block_conj, maps_zero_to_zero=True)
     if isinstance(tensor, SymmetricTensor):
@@ -2420,14 +2649,65 @@ def dagger(tensor: Tensor) -> Tensor:
     raise TypeError
 
 
-def dot(A: Tensor, B: Tensor) -> Tensor:
-    r"""Tensor contraction as map composition. Requires ``A.domain == B.codomain``.
+def compose(tensor1: Tensor, tensor2: Tensor, relabel1: dict[str, str] = None,
+            relabel2: dict[str, str] = None) -> Tensor:
+    r"""Tensor contraction as map composition. Requires ``tensor1.domain == tensor2.codomain``.
+
+    Graphically::
+
+        |       |  |  |
+        |       tensor1
+        |        |  |
+        |       tensor2
+        |       |  |  |
 
     Returns
     -------
-    The composite map :math:`A \circ B` from ``B.domain`` to ``A.codomain``.
+    The composite map :math:`A \circ B` from ``B.domain`` to ``A.codomain``, as a Tensor.
+
+    See Also
+    --------
+    tdot, apply_mask, scale_axis
     """
-    raise NotImplementedError  # TODO
+    if tensor1.domain != tensor2.codomain:
+        raise ValueError('Incompatible legs')
+    
+    res_labels = [[relabel1.get(l, l) for l in tensor1.codomain_labels],
+                  [relabel2.get(l, l) for l in tensor2.domain_labels]]
+    if isinstance(tensor1, Mask):
+        return apply_mask(tensor2, tensor1, 0).set_labels(res_labels)
+    if isinstance(tensor2, Mask):
+        return apply_mask(tensor1, tensor2, -1).set_labels(res_labels)
+
+    if isinstance(tensor1, DiagonalTensor):
+        return scale_axis(tensor2, tensor1, 0).set_labels(res_labels)
+    if isinstance(tensor2, DiagonalTensor):
+        return scale_axis(tensor1, tensor2, -1).set_labels(res_labels)
+
+    if isinstance(tensor1, ChargedTensor) or isinstance(tensor2, ChargedTensor):
+        # OPTIMIZE dedicated implementation?
+        return tdot(tensor1, tensor2,
+                    list(reversed(range(tensor1.num_codomain_legs, tensor1.num_legs))),
+                    list(range(tensor2.num_codomain_legs)),
+                    relabel1=relabel1, relabel2=relabel2)
+
+    return _compose_SymmetricTensors(tensor1, tensor2, relabel1=relabel1, relabel2=relabel2)
+
+
+def _compose_SymmetricTensors(tensor1: SymmetricTensor, tensor2: SymmetricTensor,
+                              relabel1: dict[str, str] = None, relabel2: dict[str, str] = None
+                              ) -> SymmetricTensor:
+    """Restricted case of :func:`dot` where we assume that both tensors are SymmetricTensor.
+
+    Is used by both compose and tdot.
+    """
+    backend = get_same_backend(tensor1, tensor2)
+    return SymmetricTensor(
+        data=backend.compose(tensor1, tensor2),  # TODO impl, rename
+        codomain=tensor1.codomain, domain=tensor2.domain, backend=backend,
+        labels=[[relabel1.get(l, l) for l in tensor1.codomain_labels],
+                [relabel2.get(l, l) for l in tensor2.domain_labels]]
+    )
 
 
 def entropy(p: DiagonalTensor | Sequence[float], n=1):
@@ -2492,13 +2772,13 @@ def inner(A: Tensor, B: Tensor, do_dagger: bool = True) -> float | complex:
         # in this case, there is no benefit to having a dedicated backend function,
         # as the dot is cheap
         if do_dagger:
-            return trace(dot(dagger(A), B))
-        return trace(dot(A, B))
+            return trace(compose(dagger(A), B))
+        return trace(compose(A, B))
     if isinstance(B, (DiagonalTensor, Mask)):
         # same argument as above.
         if do_dagger:
-            return conj(trace(dot(dagger(B), A)))
-        return trace(dot(A, B))
+            return conj(trace(compose(dagger(B), A)))
+        return trace(compose(A, B))
 
     # remaining cases: both are either SymmetricTensor or ChargedTensor
     
@@ -2518,19 +2798,32 @@ def inner(A: Tensor, B: Tensor, do_dagger: bool = True) -> float | complex:
 
 
 def is_scalar(obj):
-    """If an object is a scalar. We count numbers as scalars and some specific :class:`Tensor`s.
+    """If an object is a scalar.
+
+    We count numbers as scalars, if they fulfill ``isinstance(obj, numbers.Number)``.
+    This is the case e.g. for builtin numbers
 
     A tensor counts as a scalar if both its domain and its codomain consist of the *same* single
     sector. For abelian group symmetries, this is equivalent to saying that ``tensor.to_numpy()``
     is an array with a single entry.
-
     In the general case, the consequence is that ``tensor.num_parameters == 1``.
-    TODO double-check that this statement is actually true.
     The tensor, as a map from codomain to domain must be a multiple of the identity on that single
     sector and the prefactor is the single free parameter.
     We can thus think of the tensor as equivalent to that single parameter, i.e. a scalar.
     """
-    raise NotImplementedError  # TODO
+    if isinstance(obj, Tensor):
+        if obj.domain.num_sectors != 1:
+            return False
+        if obj.codomain.num_sectors != 1:
+            return False
+        if not np.all(obj.domain.sectors == obj.codomain.sectors):
+            return False
+        if not np.all(obj.domain.multiplicities == 1):
+            return False
+        if not np.all(obj.codomain.multiplicities == 1):
+            return False
+        return True
+    return isinstance(obj, Number)
 
 
 def item(tensor: Tensor) -> float | complex | bool:
@@ -2612,7 +2905,65 @@ def outer(A: Tensor, B: Tensor):
     raise NotImplementedError  # TODO
 
 
-def permute_legs(tensor: Tensor, codomain: list[int | str], domain: list[int | str],
+def _permute_legs(tensor: Tensor, codomain: list[int | str] | None, domain: list[int | str] | None,
+                  levels: list[int] | dict[str | int, int] | None, err_msg: str = None
+                  ) -> Tensor:
+    """Internal implementation of :func:`permute_legs` that allows to specify the error msg.
+
+    Except for the additional `err_msg` arg, this has the same in-/outputs as :func:`permute_legs`.
+    If the `levels` are needed, but not given, an error with the specified message is raised.
+    This allows easier error handling when using ``_permute_legs`` as part of other functions.
+
+    The default error message is appropriate to *other* contexts, other than :func:`permute_legs`.
+    """
+    if codomain is None and domain is None:
+        raise ValueError('Need to specify either domain or codomain.')
+    elif codomain is None:
+        domain = tensor.get_leg_idcs(domain)
+        codomain = [n for n in range(tensor.num_legs) if n not in domain]
+    elif domain is None:
+        codomain = tensor.get_leg_idcs(codomain)
+        # to preserve order of Tensor.legs, need to put domain legs in descending order of their leg_idx
+        domain = [n for n in reversed(range(tensor.num_legs)) if n not in codomain]
+    else:
+        domain = tensor.get_leg_idcs(domain)
+        codomain = tensor.get_leg_idcs(codomain)
+        specified_legs = [*domain, *codomain]
+        duplicates = duplicate_entries(specified_legs)
+        missing = [n for n in range(tensor.num_legs) if n not in specified_legs]
+        if duplicates:
+            raise ValueError(f'Duplicate entries. By leg index: {", ".join(duplicates)}')
+        if missing:
+            raise ValueError(f'Missing legs. By leg index: {", ".join(missing)}')
+    if err_msg is None:
+        err_msg = ('Legs can not be permuted automatically. '
+                   'Explicitly use permute_legs() with specified levels first.')
+
+    if isinstance(tensor, Mask):
+        raise NotImplementedError  # TODO
+    if isinstance(tensor, DiagonalTensor):
+        raise NotImplementedError  # TODO
+    if isinstance(tensor, ChargedTensor):
+        if levels is not None:
+            # assign the highest level to the charge leg. since it does not move, it should not matter.
+            highest = max(levels) + 1
+            levels = [*levels, highest]
+        inv_part = _permute_legs(tensor.invariant_part, codomain=codomain, domain=[-1, *domain],
+                                 levels=levels, err_msg=err_msg)
+        return ChargedTensor(inv_part, charged_state=tensor.charged_state)
+
+    new_domain = ProductSpace([tensor._as_domain_leg(idx) for idx in domain],
+                              symmetry=tensor.symmetry, backend=tensor.backend)
+    new_codomain = ProductSpace([tensor._as_codomain_leg(idx) for idx in codomain],
+                                symmetry=tensor.symmetry, backend=tensor.backend)
+    data = tensor.backend.permute_legs(tensor, codomain_idcs=codomain, domain_idcs=domain,
+                                       new_codomain=new_codomain, new_domain=new_domain,
+                                       levels=levels)
+    labels = [[tensor._labels[n] for n in codomain], [tensor._labels[n] for n in domain]]
+    return SymmetricTensor(data, new_codomain, new_domain, backend=tensor.backend, labels=labels)
+
+
+def permute_legs(tensor: Tensor, codomain: list[int | str] = None, domain: list[int | str] = None,
                  levels: list[int] | dict[str | int, int] = None):
     """Permute the legs of a tensor by braiding legs and bending lines.
 
@@ -2623,7 +2974,10 @@ def permute_legs(tensor: Tensor, codomain: list[int | str], domain: list[int | s
     codomain, domain: list of {int | str}
         Which of the legs of `tensor`, specified by their position in ``tensor.legs`` or by
         string label, should end up in the (co)domain of the result.
-        Together, `codomain` and `domain` must comprise all legs of the original `tensor`.
+        Only one of the two is required; the other one is determined by using "the rest" of
+        the legs of `tensor`, such that their order in ``tensor.legs`` is unchanged.
+        Together, `codomain` and `domain` must comprise all legs of the original `tensor` without
+        duplicates.
     levels
         If the symmetry has symmetric braiding (e.g. for group symmetries, or fermions, see
         :attr:`Symmetry.braiding_style`), this argument is ignored.
@@ -2632,8 +2986,8 @@ def permute_legs(tensor: Tensor, codomain: list[int | str], domain: list[int | s
         Either as a list ``levels[leg_num]`` or as a dictionary ``levels[leg_num_or_label]``.
         If two legs are crossed at some point, the one with the higher level goes over the other.
     """
-    # TODO decide signature of backend function
-    raise NotImplementedError
+    return _permute_legs(tensor, codomain=codomain, domain=domain, levels=levels,
+                         err_msg='The given permutation requires levels, but none were given.')
 
 
 @_elementwise_function(block_func='block_real', maps_zero_to_zero=True)
@@ -2659,6 +3013,62 @@ def real_if_close(x: _ElementwiseType, tol: float = 100) -> _ElementwiseType:
     If `x` is close to real, the real part of `x`. Otherwise the original complex `x`.
     """
     return np.real_if_close(x, tol=tol)
+
+
+def scale_axis(tensor: Tensor, diag: DiagonalTensor, leg: int | str) -> Tensor:
+    """Contract one `leg` of  `tensor` with a diagonal tensor.
+
+    Leg order and labels of `tensor` are not changed.
+    The diagonal tensors leg ``diag.leg`` must be the same or the dual of the leg on the tensor,
+    if mismatched, the `diag` is automatically transposed, as needed.
+
+    Graphically::
+
+        |       | | |          | | |
+        |       tensor         | D |
+        |       | | |          | | |
+        |       | | D          tensor
+        |       | | |          | | |
+
+    Or is transposed as needed::
+
+        |       | | |     .---.
+        |       | | |     |   |              | | |
+        |       tensor    D   |      =       tensor 
+        |       | | |     |   |              | |    |
+        |       | |       |   |              | D.T  |
+        |       | .-------.   |              | |    |
+
+    where ``D.T == transpose(D)``.
+
+    See Also
+    --------
+    dot, tdot, apply_mask
+    """
+    # transpose if needed
+    in_domain, co_domain_idx, leg_idx = tensor._parse_leg_idx(leg)
+    if in_domain:
+        leg = tensor.domain[co_domain_idx]
+    else:
+        leg = tensor.codomain[co_domain_idx]
+    if leg == diag.leg:
+        pass
+    elif leg == diag.leg.dual:
+        diag = transpose(diag)
+    else:
+        raise ValueError('Incompatible legs')
+    
+    if isinstance(tensor, DiagonalTensor):
+        return tensor * diag
+    if isinstance(tensor, Mask):
+        # leg == 0 -> mask is on leg 1 of diagonal and vice versa
+        return apply_mask(diag.as_SymmetricTensor(), tensor, 1 - leg_idx)
+    if isinstance(tensor, ChargedTensor):
+        inv_part = scale_axis(tensor.invariant_part, diag, leg_idx)
+        return ChargedTensor(inv_part, tensor.charged_state)
+    backend = get_same_backend(tensor, diag)
+    return SymmetricTensor(backend.scale_axis(tensor, diag, leg_idx), codomain=tensor.codomain,
+                           domain=tensor.domain, backend=backend, labels=tensor._labels)
 
 
 def set_as_slice():
@@ -2687,8 +3097,111 @@ def squeeze_legs():
     raise NotImplementedError
 
 
-def tdot():
-    raise NotImplementedError  # TODO
+def tdot(tensor1: Tensor, tensor2: Tensor,
+         legs1: int | str | list[int | str], legs2: int | str | list[int | str],
+         relabel1: dict[str, str] = None, relabel2: dict[str, str] = None):
+    """Tensor contraction.
+
+    TODO elaborate
+
+    Parameters
+    ----------
+    TODO
+
+    Returns
+    -------
+        domain == tensor2_uncontracted
+        codomain == tensor1_uncontracted
+        TODO define order!
+        
+    See Also
+    --------
+    dot, apply_mask, scale_axis
+    """
+    # parse legs to list[int] and check they are valid
+    legs1 = tensor1.get_leg_idcs(to_iterable(legs1))
+    legs2 = tensor2.get_leg_idcs(to_iterable(legs2))
+    num_contr = len(legs1)
+    assert len(legs2) == num_contr
+    num_open_1 = tensor1.num_legs - num_contr
+    num_open_2 = tensor2.num_legs - num_contr
+    # TODO should we check uniqueness at this point?
+
+    # Deal with Masks: either return or reduce to SymmetricTensor
+    if isinstance(tensor1, Mask):
+        if num_contr == 0:
+            warnings.warn('Converting Mask to SymmetricTensor for non-contracting tdot')
+            tensor1 = tensor1.as_SymmetricTensor()
+        if num_contr == 1:
+            in_domain, co_domain_idx, leg_idx = tensor2._parse_leg_idx(legs2[0])
+            raise NotImplementedError  # TODO use apply_mask
+        if num_contr == 2:
+            raise NotImplementedError  # TODO use apply_mask, then partial trace
+    if isinstance(tensor2, Mask):
+        if num_contr == 0:
+            warnings.warn('Converting Mask to SymmetricTensor for non-contracting tdot')
+            tensor2 = tensor2.as_SymmetricTensor()
+        if num_contr == 1:
+            raise NotImplementedError  # TODO use apply_mask
+        if num_contr == 2:
+            raise NotImplementedError  # TODO use apply_mask, then partial trace
+
+    # Deal with DiagonalTensor: either return or reduce to SymmetricTensor
+    if isinstance(tensor1, DiagonalTensor):
+        if num_contr == 0:
+            warnings.warn('Converting DiagonalTensor to SymmetricTensor for non-contracting tdot')
+            tensor1 = tensor1.as_SymmetricTensor()
+        if num_contr == 1:
+            raise NotImplementedError  # TODO use scale_axis
+        if num_contr == 2:
+            raise NotImplementedError  # TODO use scale_axis, then partial trace
+    if isinstance(tensor2, DiagonalTensor):
+        if num_contr == 0:
+            warnings.warn('Converting DiagonalTensor to SymmetricTensor for non-contracting tdot')
+            tensor2 = tensor2.as_SymmetricTensor()
+        if num_contr == 1:
+            raise NotImplementedError  # TODO use scale_axis
+        if num_contr == 2:
+            raise NotImplementedError  # TODO use scale_axis, then partial trace
+
+    # Deal with ChargedTensor
+    if isinstance(tensor1, ChargedTensor) and isinstance(tensor2, ChargedTensor):
+        # note: its important that we have already used get_leg_idcs
+        if (tensor1.charged_state is None) != (tensor2.charged_state is None):
+            raise ValueError('Mismatched: specified and unspecified ChargedTensor.charged_state')
+        c = ChargedTensor._CHARGE_LEG_LABEL
+        c1 = c + '1'
+        c2 = c + '2'
+        inv_part = tdot(tensor1.invariant_part, tensor2.invariant_part, legs1=legs1, legs2=legs2,
+                        relabel1={**relabel1, c: c1}, relabel2={**relabel2, c: c2})
+        inv_part = move_leg(inv_part, c1, domain_pos=0)
+        return ChargedTensor.from_two_charge_legs(
+            inv_part, state1=tensor1.charged_state, state2=tensor2.charged_state,
+        )
+    if isinstance(tensor1, ChargedTensor):
+        inv_part = tdot(tensor1.invariant_part, tensor2, legs1=legs1, legs2=legs2,
+                        relabel1=relabel1, relabel2=relabel2)
+        inv_part = move_leg(inv_part, ChargedTensor._CHARGE_LEG_LABEL, domain_pos=0)
+        return ChargedTensor(inv_part, tensor1.charged_state)
+    if isinstance(tensor2, ChargedTensor):
+        inv_part = tdot(tensor1, tensor2.invariant_part, legs1=legs1, legs2=legs2,
+                        relabel1=relabel1, relabel2=relabel2)
+        return ChargedTensor(inv_part, tensor2.charged_state)
+
+    # Remaining case: both are SymmetricTenor
+    
+    if num_open_1 == 0 == num_open_2:
+        # if all legs are contracted, there is no need to move them all to t1.domain / t2.codomain.
+        # we just need to permute them such that t1.domain == t2.codomain and vice versa
+        J1, K1 = tensor1.num_codomain_legs, tensor1.num_domain_legs
+        t2_domain = [legs2[legs1.index(n)] for n in range(J1)]
+        t2_codomain = [legs2[legs1.index(n)] for n in reversed(range(J1, J1 + K1))]
+        t2 = _permute_legs(tensor2, t2_codomain, t2_domain)
+        return inner(tensor1, t2, do_dagger=False)
+
+    tensor1 = _permute_legs(tensor1, domain=legs1)
+    tensor2 = _permute_legs(tensor2, codomain=legs2)
+    return _compose_SymmetricTensors(tensor1, tensor2, relabel1=relabel1, relabel2=relabel2)
 
 
 def trace(tensor: Tensor,
@@ -2751,6 +3264,9 @@ def zero_like(tensor: Tensor) -> Tensor:
             dtype=tensor.dtype
         )
     raise TypeError
+
+
+# INTERNAL HELPER FUNCTIONS
 
 
 T = TypeVar('T')

@@ -435,6 +435,8 @@ class ElementarySpace(Space):
         is_real, is_dual : bool
             If the space should be real / dual.
         """
+        if dim == 0:
+            return cls.from_null_space(symmetry=symmetry, is_dual=is_dual)
         return cls(symmetry=symmetry, sectors=symmetry.trivial_sector[None, :],
                    multiplicities=[dim], is_dual=is_dual, basis_perm=basis_perm)
 
@@ -717,7 +719,8 @@ class ElementarySpace(Space):
         Parameters
         ----------
         blockmask : 1D array-like of bool
-            For every basis state of self, if it should be kept (``True``) or discarded (``False``).
+            For every basis state of self, in the public basis order,
+            if it should be kept (``True``) or discarded (``False``).
         """
         if not self.symmetry.can_be_dropped:
             msg = f'take_slice is meaningless for {self.symmetry}.'
@@ -725,6 +728,7 @@ class ElementarySpace(Space):
         blockmask = np.asarray(blockmask, dtype=bool)
         if self._basis_perm is not None:
             blockmask = blockmask[self._basis_perm]
+        #
         sectors = []
         mults = []
         for a, d_a, slc in zip(self.sectors, self.sector_dims, self.slices):
@@ -758,7 +762,7 @@ class ElementarySpace(Space):
         # this allows us to internally (e.g. in the abelian backend) store only 1D boolean masks
         # as blocks.
         #
-        # note that we have already converted blockmask to public_blockmask[self.basis_perm] above
+        # note blockmask is in the private basis order.
         basis_perm = rank_data(self.basis_perm[blockmask])
         return ElementarySpace(symmetry=self.symmetry, sectors=sectors, multiplicities=mults,
                                is_dual=self.is_dual, basis_perm=basis_perm)
@@ -894,6 +898,12 @@ class ProductSpace(Space):
                 raise KeyError(msg)
         return self.metadata[key]
 
+    def __getitem__(self, idx):
+        return self.spaces[idx]
+
+    def __iter__(self):
+        return iter(self.spaces)
+    
     def __len__(self):
         return self.num_spaces
 
