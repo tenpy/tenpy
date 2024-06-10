@@ -1,8 +1,6 @@
 """A collection of tests for tenpy.tools submodules."""
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
-
-import logging
 import numpy as np
 import numpy.testing as npt
 import itertools as it
@@ -11,7 +9,6 @@ from tenpy import tools
 import warnings
 import pytest
 import os.path
-import sys
 
 
 # TODO use fixtures, e.g. np_random

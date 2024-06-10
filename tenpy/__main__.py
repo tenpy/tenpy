@@ -4,5 +4,4 @@
 import tenpy
 
 if __name__ == "__main__":
-    import sys
     raise SystemExit(tenpy.console_main())

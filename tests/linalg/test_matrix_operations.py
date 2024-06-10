@@ -4,7 +4,6 @@ import numpy as np
 import scipy
 import numpy.testing as npt
 import pytest
-import warnings
 
 from tenpy.linalg import tensors, matrix_operations, spaces, ProductSymmetry, backends
 

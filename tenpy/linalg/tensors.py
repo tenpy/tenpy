@@ -61,7 +61,7 @@ it can be directly contracted with ``A``.
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 import operator
-from typing import TypeVar, Sequence, Iterator
+from typing import TypeVar, Sequence
 from numbers import Number, Integral
 import numpy as np
 import warnings

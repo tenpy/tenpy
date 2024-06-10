@@ -4,7 +4,7 @@ https://data-apis.org/array-api/latest/purpose_and_scope.html
 # Copyright (C) TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 
-from .abstract_backend import BlockBackend, Block, Data
+from .abstract_backend import BlockBackend, Block
 from .no_symmetry import NoSymmetryBackend
 from .fusion_tree_backend import FusionTreeBackend
 from .abelian import AbelianBackend

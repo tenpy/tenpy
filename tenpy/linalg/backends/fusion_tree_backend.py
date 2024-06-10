@@ -7,7 +7,7 @@ import numpy as np
 
 from .abstract_backend import (
     Backend, BlockBackend, Block, Data, DiagonalData, MaskData, iter_common_sorted_arrays,
-    iter_common_noncommon_sorted_arrays, conventional_leg_order
+    iter_common_noncommon_sorted_arrays
 )
 from ..dtypes import Dtype
 from ..symmetries import Sector, SectorArray, Symmetry, FusionStyle

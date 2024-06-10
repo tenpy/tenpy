@@ -17,8 +17,8 @@ from typing import Literal
 import numpy as np
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator, ArpackNoConvergence
 
-from .spaces import Space, ElementarySpace, ProductSpace, Sector
-from .tensors import Tensor, SymmetricTensor, ChargedTensor, tdot, zero_like
+from .spaces import Space, ProductSpace, Sector
+from .tensors import Tensor, SymmetricTensor, ChargedTensor
 from .backends.abstract_backend import Backend
 from .dtypes import Dtype
 from ..tools.math import speigs, speigsh
@@ -44,7 +44,7 @@ class LinearOperator(metaclass=ABCMeta):
     """
     acts_on = None  # Derived classes should set this as a class attribute
     
-    def __init__(self, vector_shape: Shape, dtype: Dtype):  # TODO Shape removed
+    def __init__(self, vector_shape, dtype: Dtype):  # TODO Shape removed
         self.vector_shape = vector_shape
         self.dtype = dtype
 
@@ -104,13 +104,13 @@ class TensorLinearOperator(LinearOperator):
             raise ValueError('Expected a two-leg tensor')
         raise NotImplementedError  # TODO
         # TODO can_contract_with was removed. should probably check codomain == domain after permuting?
-        if not tensor.legs[0].can_contract_with(tensor.legs[1]):
-            raise ValueError('Expected contractible legs')
-        self.which_leg = which_leg = tensor.get_leg_idx(which_leg)
-        self.other_leg = other_leg = 1 - which_leg
-        self.tensor = tensor
-        vector_shape = Shape(legs=[tensor.legs[other_leg]], num_domain_legs=0, labels=tensor.labels[other_leg])
-        super().__init__(vector_shape=vector_shape, dtype=tensor.dtype)
+        # if not tensor.legs[0].can_contract_with(tensor.legs[1]):
+        #     raise ValueError('Expected contractible legs')
+        # self.which_leg = which_leg = tensor.get_leg_idx(which_leg)
+        # self.other_leg = other_leg = 1 - which_leg
+        # self.tensor = tensor
+        # vector_shape = Shape(legs=[tensor.legs[other_leg]], num_domain_legs=0, labels=tensor.labels[other_leg])
+        # super().__init__(vector_shape=vector_shape, dtype=tensor.dtype)
 
     def matvec(self, vec: Tensor) -> Tensor:
         assert vec.num_legs == 1
@@ -209,9 +209,9 @@ class ShiftedLinearOperator(LinearOperatorWrapper):
     def matvec(self, vec: Tensor) -> Tensor:
         return self.original_operator.matvec(vec) + self.shift * vec
 
-    def to_tensor(self, **kw) -> Tensor:
-        res = self.original_operator.to_tensor(**kw)
-        return res + self.shift * eye_like(res)
+    # def to_tensor(self, **kw) -> Tensor:
+    #     res = self.original_operator.to_tensor(**kw)
+    #     return res + self.shift * eye_like(res)
 
     def adjoint(self):
         return ShiftedLinearOperator(original_operator=self.original_operator.adjoint(),
@@ -294,21 +294,21 @@ class ProjectedLinearOperator(LinearOperatorWrapper):
         raise NotImplementedError 
         # TODO adjust to changed leg convention (change convention of outer to match this?)
         #      or change conj accordingly? or implement a projector function |a><a|
-        res = self.original_operator.to_tensor(**kw)
-        P_ortho = zero_like(res)
-        for o in self.ortho_vecs:
-            P_ortho += o.outer(o.conj())
-        if self.project_operator:
-            P = eye_like(res) - P_ortho
-            N = self.vector_shape.num_legs
-            first = list(range(N))
-            last = list(range(N, 2 * N))
-            # TODO should we offer tdot(res, P, N) with N: int for this use case?
-            res = tdot(res, P, last, first)
-            res = tdot(P, res, last, first)
-        if self.penalty is not None:
-            res = res + self.penalty * P_ortho
-        return res
+        # res = self.original_operator.to_tensor(**kw)
+        # P_ortho = zero_like(res)
+        # for o in self.ortho_vecs:
+        #     P_ortho += o.outer(o.conj())
+        # if self.project_operator:
+        #     P = eye_like(res) - P_ortho
+        #     N = self.vector_shape.num_legs
+        #     first = list(range(N))
+        #     last = list(range(N, 2 * N))
+        #     # TODO should we offer tdot(res, P, N) with N: int for this use case?
+        #     res = tdot(res, P, last, first)
+        #     res = tdot(P, res, last, first)
+        # if self.penalty is not None:
+        #     res = res + self.penalty * P_ortho
+        # return res
         
     def adjoint(self) -> LinearOperator:
         return ProjectedLinearOperator(

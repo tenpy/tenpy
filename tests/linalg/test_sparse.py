@@ -5,7 +5,7 @@ import numpy.testing as npt
 import pytest
 import scipy
 
-from tenpy.linalg import sparse, tensors, spaces, backends
+from tenpy.linalg import sparse, tensors, backends
 from tenpy.linalg.backends.backend_factory import get_backend
 from tenpy.linalg.tensors import Tensor, SymmetricTensor, Dtype, almost_equal
 
@@ -17,7 +17,7 @@ pytest.skip("sparse not yet revised", allow_module_level=True)  # TODO
 
 
 class ScalingDummyOperator(sparse.LinearOperator):
-    def __init__(self, factor, vector_shape: 'Shape'):
+    def __init__(self, factor, vector_shape):
         super().__init__(vector_shape=vector_shape, dtype=Dtype.complex128)
         self.factor = factor
         self.some_weird_attribute = 'arbitrary value'
@@ -38,27 +38,27 @@ class ScalingDummyOperator(sparse.LinearOperator):
         return ScalingDummyOperator(np.conj(self.factor), self.vector_shape)
 
 
-class TensorDummyOperator(sparse.LinearOperator):
-    def __init__(self, tensor: SymmetricTensor):
-        assert tensor.labels == ['a', 'b*', 'a*', 'b']
-        acts_on = ['a', 'b']
-        # TODO should we be strict about num_domain_legs here?
-        vector_shape = Shape(legs=tensor.get_legs(acts_on), num_domain_legs=0, labels=acts_on)
-        super().__init__(vector_shape=vector_shape, dtype=tensor.dtype)
-        self.tensor = tensor
-        self.some_weird_attribute = 42
+# class TensorDummyOperator(sparse.LinearOperator):
+#     def __init__(self, tensor: SymmetricTensor):
+#         assert tensor.labels == ['a', 'b*', 'a*', 'b']
+#         acts_on = ['a', 'b']
+#         # TODO should we be strict about num_domain_legs here?
+#         vector_shape = Shape(legs=tensor.get_legs(acts_on), num_domain_legs=0, labels=acts_on)
+#         super().__init__(vector_shape=vector_shape, dtype=tensor.dtype)
+#         self.tensor = tensor
+#         self.some_weird_attribute = 42
 
-    def some_unrelated_function(self, x):
-        return 'buzz'
+#     def some_unrelated_function(self, x):
+#         return 'buzz'
 
-    def matvec(self, vec: Tensor) -> Tensor:
-        return self.tensor.tdot(vec, ['a*', 'b*'], ['a', 'b'])
+#     def matvec(self, vec: Tensor) -> Tensor:
+#         return self.tensor.tdot(vec, ['a*', 'b*'], ['a', 'b'])
 
-    def to_tensor(self, **kw) -> Tensor:
-        return self.tensor.permute_legs(['a', 'b', 'b*', 'a*'])
+#     def to_tensor(self, **kw) -> Tensor:
+#         return self.tensor.permute_legs(['a', 'b', 'b*', 'a*'])
 
-    def adjoint(self):
-        return TensorDummyOperator(self.tensor.conj())
+#     def adjoint(self):
+#         return TensorDummyOperator(self.tensor.conj())
 
 
 def check_to_tensor(op: sparse.LinearOperator, vec: Tensor):
@@ -72,44 +72,44 @@ def check_to_tensor(op: sparse.LinearOperator, vec: Tensor):
 
 def test_SumLinearOperator(make_compatible_tensor):
     vec = make_compatible_tensor(labels=['a', 'b'])
-    a, b = vec.legs
-    T = make_compatible_tensor(legs=[a, b.dual, a.dual, b], labels=['a', 'b*', 'a*', 'b'])
+    # a, b = vec.legs
+    # T = make_compatible_tensor(legs=[a, b.dual, a.dual, b], labels=['a', 'b*', 'a*', 'b'])
 
-    factor1 = 2.4
-    factor3 = 3.1 - 42.j
-    op1 = ScalingDummyOperator(factor1, vec.shape)
-    op2 = TensorDummyOperator(T)
-    op3 = ScalingDummyOperator(factor3, vec.shape)
+    # factor1 = 2.4
+    # factor3 = 3.1 - 42.j
+    # op1 = ScalingDummyOperator(factor1, vec.shape)
+    # op2 = TensorDummyOperator(T)
+    # op3 = ScalingDummyOperator(factor3, vec.shape)
 
-    print('single operator')
-    op = sparse.SumLinearOperator(op1)
-    # check matvec correct
+    # print('single operator')
+    # op = sparse.SumLinearOperator(op1)
+    # # check matvec correct
     
-    assert almost_equal(op.matvec(vec), factor1 *  vec)
-    # check access to attributes of original_operator
-    assert op.some_weird_attribute == 'arbitrary value'
-    assert op.some_unrelated_function(2) == 4
+    # assert almost_equal(op.matvec(vec), factor1 *  vec)
+    # # check access to attributes of original_operator
+    # assert op.some_weird_attribute == 'arbitrary value'
+    # assert op.some_unrelated_function(2) == 4
 
-    if isinstance(T.backend, backends.FusionTreeBackend):
-        with pytest.raises(NotImplementedError, match='permute_legs not implemented|combine_legs not implemented'):
-            check_to_tensor(op, vec)
-        return  # TODO
+    # if isinstance(T.backend, backends.FusionTreeBackend):
+    #     with pytest.raises(NotImplementedError, match='permute_legs not implemented|combine_legs not implemented'):
+    #         check_to_tensor(op, vec)
+    #     return  # TODO
     
-    check_to_tensor(op, vec)
+    # check_to_tensor(op, vec)
 
-    print('two operators')
-    op = sparse.SumLinearOperator(op2, op1)
-    assert almost_equal(op.matvec(vec), factor1 *  vec + T.tdot(vec, ['a*', 'b*'], ['a', 'b']))
-    assert op.some_weird_attribute == 42
-    assert op.some_unrelated_function(2) == 'buzz'
-    check_to_tensor(op, vec)
+    # print('two operators')
+    # op = sparse.SumLinearOperator(op2, op1)
+    # assert almost_equal(op.matvec(vec), factor1 *  vec + T.tdot(vec, ['a*', 'b*'], ['a', 'b']))
+    # assert op.some_weird_attribute == 42
+    # assert op.some_unrelated_function(2) == 'buzz'
+    # check_to_tensor(op, vec)
 
-    print('three operators')
-    op = sparse.SumLinearOperator(op1, op2, op3)
-    assert almost_equal(op.matvec(vec), (factor1 + factor3) * vec + T.tdot(vec, ['a*', 'b*'], ['a', 'b']))
-    assert op.some_weird_attribute == 'arbitrary value'
-    assert op.some_unrelated_function(2) == 4
-    check_to_tensor(op, vec)
+    # print('three operators')
+    # op = sparse.SumLinearOperator(op1, op2, op3)
+    # assert almost_equal(op.matvec(vec), (factor1 + factor3) * vec + T.tdot(vec, ['a*', 'b*'], ['a', 'b']))
+    # assert op.some_weird_attribute == 'arbitrary value'
+    # assert op.some_unrelated_function(2) == 4
+    # check_to_tensor(op, vec)
 
 
 def test_ShiftedLinearOperator(make_compatible_tensor):

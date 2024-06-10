@@ -273,8 +273,9 @@ class Site(Hdf5Exportable):
             if len(self.backend.block_shape(op)) == 1:
                 op = DiagonalTensor.from_diag(op, self.leg, backend=self.backend, labels=['p', 'p*'])
             else:
-                op = tensor_from_block(op, legs=[self.leg, self.leg.dual], backend=self.backend,
-                                       labels=['p', 'p*'])
+                raise NotImplementedError  # TODO
+                # op = tensor_from_block(op, legs=[self.leg, self.leg.dual], backend=self.backend,
+                #                        labels=['p', 'p*'])
         if cls is Tensor:
             if isinstance(op, SymmetricTensor):
                 try:
