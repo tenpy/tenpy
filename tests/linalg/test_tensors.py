@@ -685,6 +685,38 @@ def test_from_block_su2_symm(symmetry_backend, block_backend):
     assert backend.block_allclose(recovered_block, heisenberg_4)
 
 
+def test_str_repr(make_compatible_tensor, str_max_lines=30, repr_max_lines=30):
+    """Check if str and repr work. Automatically, we can only check if they run at all.
+    To check if the output is sensible and useful, a human should look at it.
+    Run ``pytest -rP -k test_str_repr > output.txt`` to see the output.
+    """
+    terminal_width = 80
+    str_max_len = terminal_width * str_max_lines
+    repr_max_len = terminal_width * str_max_lines
+    mps_tens = make_compatible_tensor(labels=['vL', 'p', 'vR'], codomain=1, domain=2)
+    local_op = make_compatible_tensor(labels=['p', 'p*'], codomain=1, domain=1)
+    for t in [mps_tens, local_op]:
+        print()
+        print()
+        print('----------------------')
+        print('__repr__()')
+        print('----------------------')
+        res = repr(t)
+        assert len(res) <= repr_max_len
+        assert res.count('\n') <= repr_max_lines
+        print(res)
+        
+        print()
+        print()
+        print('----------------------')
+        print('__str__()')
+        print('----------------------')
+        res = str(t)
+        assert len(res) <= str_max_len
+        assert res.count('\n') <= str_max_lines
+        print(res)
+
+
 # TODO old test below
 
 
@@ -1298,39 +1330,6 @@ def OLD_test_flip_leg_duality(make_compatible_tensor, which_legs):
     T_np = T.to_numpy()
     res_np = res.to_numpy()
     npt.assert_array_almost_equal_nulp(T_np, res_np, 100)
-
-
-def OLD_test_str_repr(make_compatible_tensor, str_max_lines=30, repr_max_lines=30):
-    """Check if str and repr work. Automatically, we can only check if they run at all.
-    To check if the output is sensible and useful, a human should look at it.
-    Run ``pytest -rP -k test_str_repr > output.txt`` to see the output.
-    """
-    terminal_width = 80
-    str_max_len = terminal_width * str_max_lines
-    repr_max_len = terminal_width * str_max_lines
-    mps_tens = make_compatible_tensor(labels=['vL', 'p', 'vR'])
-    local_state = make_compatible_tensor(labels=['p'])
-    local_op = make_compatible_tensor(labels=['p', 'p*'])
-    for t in [mps_tens, local_state, local_op]:
-        print()
-        print()
-        print('----------------------')
-        print('__repr__()')
-        print('----------------------')
-        res = repr(t)
-        assert len(res) <= repr_max_len
-        assert res.count('\n') <= repr_max_lines
-        print(res)
-        
-        print()
-        print()
-        print('----------------------')
-        print('__str__()')
-        print('----------------------')
-        res = str(t)
-        assert len(res) <= str_max_len
-        assert res.count('\n') <= str_max_lines
-        print(res)
 
 
 def OLD_test_Mask(np_random, make_compatible_space, compatible_backend):

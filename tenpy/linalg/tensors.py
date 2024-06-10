@@ -70,6 +70,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from .misc import duplicate_entries
+from .dummy_config import printoptions
 from .symmetries import SymmetryError
 from .spaces import Space, ElementarySpace, ProductSpace, Sector
 from .backends.backend_factory import get_backend
@@ -366,6 +367,9 @@ class Tensor(metaclass=ABCMeta):
             raise SymmetryError(f'Tensor.size is not defined for symmetry {self.symmetry}')
         return self.parent_space.dim
 
+    def __complex__(self):
+        raise TypeError('complex() of a tensor is not defined. Use tenpy.item() instead.')
+
     def __float__(self):
         raise TypeError('float() of a tensor is not defined. Use tenpy.item() instead.')
 
@@ -373,8 +377,13 @@ class Tensor(metaclass=ABCMeta):
         msg = f'{self.__class__.__name__} does not support == comparison. Use tenpy.almost_equal instead.'
         raise TypeError(msg)
 
-    def __complex__(self):
-        raise TypeError('complex() of a tensor is not defined. Use tenpy.item() instead.')
+    def __repr__(self):
+        indent = printoptions.indent * ' '
+        lines = [f'<{self.__class__.__name__}']
+        lines.extend(self._repr_header_lines(indent=indent))
+        # TODO skipped showing data. see commit 4bdaa5c for an old implementation of showing data.
+        lines.append('>')
+        return "\n".join(lines)
 
     def _as_codomain_leg(self, idx: int | str) -> Space:
         """Return the leg, as if it was moved to the codomain."""
@@ -420,6 +429,20 @@ class Tensor(metaclass=ABCMeta):
         else:
             co_domain_idx = idx
         return in_domain, co_domain_idx, idx
+
+    def _repr_header_lines(self, indent: str) -> list[str]:
+        codomain_labels = [self._labels[n] or f'?{n}'
+                           for n in range(self.num_codomain_legs)]
+        domain_labels = [self._labels[n] or f'?{n}'
+                         for n in reversed(range(self.num_codomain_legs, self.num_legs))]
+        lines = [
+            f'{indent}* Backend: {self.backend!s}',
+            f'{indent}* Symmetry: {self.symmetry!s}',
+            f'{indent}* Labels: {self._labels}',
+            f'{indent}* Shape: {self.shape}',
+            f'{indent}* Domain -> Codomain: {domain_labels} -> {codomain_labels}'
+        ]
+        return lines
 
     def get_leg(self, which_leg: int | str | list[int | str]) -> Space | list[Space]:
         """Basically ``self.legs[which_leg]``, but allows labels and multiple indices.
@@ -1331,6 +1354,13 @@ class DiagonalTensor(SymmetricTensor):
             raise TypeError(msg)
         return DiagonalTensor(data, leg=self.leg, backend=self.backend, labels=labels)
 
+    def copy(self, deep=True) -> SymmetricTensor:
+        if deep:
+            data = self.backend.copy_data(self)
+        else:
+            data = self.data
+        return DiagonalTensor(data, leg=self.leg, backend=self.backend, labels=self.labels)
+
     def diagonal(self) -> DiagonalTensor:
         return self
 
@@ -1379,14 +1409,7 @@ class DiagonalTensor(SymmetricTensor):
             self, func, func_kwargs=func_kwargs, maps_zero_to_zero=maps_zero_to_zero
         )
         return DiagonalTensor(data, self.leg, backend=self.backend, labels=self.labels)
-
-    def copy(self, deep=True) -> SymmetricTensor:
-        if deep:
-            data = self.backend.copy_data(self)
-        else:
-            data = self.data
-        return DiagonalTensor(data, leg=self.leg, backend=self.backend, labels=self.labels)
-
+    
     def to_dense_block(self, leg_order: list[int | str] = None, dtype: Dtype = None) -> Block:
         diag = self.diagonal_as_block(dtype=dtype)
         res = self.backend.block_from_diagonal(diag)
@@ -1680,7 +1703,7 @@ class Mask(Tensor):
             data = self.data
         return Mask(data, space_in=self.large_leg, space_out=self.small_leg,
                     is_projection=self.is_projection, backend=self.backend, labels=self.labels)
-
+    
     def to_dense_block(self, leg_order: list[int | str] = None, dtype: Dtype = None) -> Block:
         # for Mask, defining via numpy is actually easier, to use numpy indexing
         numpy_dtype = None if dtype is None else dtype.to_numpy_dtype()
@@ -2087,7 +2110,21 @@ class ChargedTensor(Tensor):
         if deep and self.charged_state is not None:
             charged_state = self.backend.block_copy(charged_state)
         return ChargedTensor(inv_part, charged_state)
-
+    
+    def _repr_header_lines(self, indent: str) -> list[str]:
+        lines = Tensor._repr_header_lines(self, indent=indent)
+        lines.append(f'{indent}* Charge Leg: dim={self.charge_leg.dim} sectors={self.charge_leg.sectors}')
+        start = f'{indent}* Charged State: '
+        if self.charged_state is None:
+            lines.append(f'{start}unspecified')
+        else:
+            state_lines = self.backend._block_repr_lines(
+                self.dummy_leg_state, indent=indent + '  ',
+                max_width=printoptions.linewidth - len(start), max_lines=1
+            )
+            lines.append(start + state_lines[0])
+        return lines
+    
     def to_dense_block(self, leg_order: list[int | str] = None, dtype: Dtype = None) -> Block:
         if self.charged_state is None:
             raise ValueError('charged_state not specified.')
