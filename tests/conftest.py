@@ -103,7 +103,7 @@ The function returned by the fixture ``make_compatible_tensor`` has the followin
 
 """
 # Copyright (C) TeNPy Developers, GNU GPLv3
-
+from __future__ import annotations
 import numpy as np
 import pytest
 from typing import Callable

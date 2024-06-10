@@ -61,7 +61,6 @@ it can be directly contracted with ``A``.
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 import operator
-from types import EllipsisType
 from typing import TypeVar, Sequence, Iterator
 from numbers import Number, Integral
 import numpy as np
@@ -3333,7 +3332,7 @@ def _normalize_idx(idx: int, length: int) -> int:
     return idx
 
 
-def _parse_idcs(idcs: T | Sequence[T | EllipsisType], length: int, fill: T = slice(None, None, None)
+def _parse_idcs(idcs: T | Sequence[T], length: int, fill: T = slice(None, None, None)
                 ) -> list[T]:
     """Parse a single index or sequence of indices to a list of given length by replacing Ellipsis
     (``...``) and missing entries at the back with `fill`.

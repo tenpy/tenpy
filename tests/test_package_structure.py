@@ -1,6 +1,6 @@
 """Tests if packages and modules define proper ``__all__``."""
 # Copyright (C) TeNPy Developers, GNU GPLv3
-
+from __future__ import annotations
 import types
 import tenpy
 
