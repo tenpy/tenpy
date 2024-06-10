@@ -2,22 +2,15 @@
 from __future__ import annotations
 from numpy import prod
 import numpy
-from typing import TYPE_CHECKING
 
 from .abelian import AbelianBackend
-from .abstract_backend import BlockBackend, Block, Data
+from .abstract_backend import BlockBackend, Block
 from .no_symmetry import NoSymmetryBackend
 from .fusion_tree_backend import FusionTreeBackend
 from ..dtypes import Dtype
 
 __all__ = ['TorchBlockBackend', 'NoSymmetryTorchBackend', 'AbelianTorchBackend',
            'FusionTreeTorchBackend']
-
-
-if TYPE_CHECKING:
-    # can not import Tensor at runtime, since it would be a circular import
-    # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import SymmetricTensor
 
 
 class TorchBlockBackend(BlockBackend):

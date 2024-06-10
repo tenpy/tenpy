@@ -22,7 +22,7 @@ Changes compared to old np_conserved:
 from __future__ import annotations
 
 from abc import ABCMeta
-from typing import TYPE_CHECKING, Callable, Iterator
+from typing import TYPE_CHECKING, Callable
 import numpy as np
 from numpy import ndarray
 
@@ -43,7 +43,7 @@ __all__ = ['AbelianBackendData', 'AbelianBackend']
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import SymmetricTensor, ChargedTensor, DiagonalTensor, Mask
+    from ..tensors import SymmetricTensor, DiagonalTensor, Mask
 
 
 def _valid_block_inds(codomain: ProductSpace, domain: ProductSpace):
@@ -867,15 +867,15 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def inv_part_from_dense_block_single_sector(self, vector: Block, space: Space,
                                                 charge_leg: ElementarySpace) -> Data:
         raise NotImplementedError  # TODO not yet reviewed
-        assert charge_leg.num_sectors == 1
-        bi = leg.sectors_where(leg.symmetry.dual_sector(charge_leg.sectors[0]))
-        assert bi is not None
-        assert self.block_shape(block) == (leg.multiplicities[bi],)
-        return AbelianBackendData(
-            dtype=self.block_dtype(block),
-            blocks=[self.block_add_axis(block, pos=1)],
-            block_inds=np.array([[bi, 0]])
-        )
+        # assert charge_leg.num_sectors == 1
+        # bi = leg.sectors_where(leg.symmetry.dual_sector(charge_leg.sectors[0]))
+        # assert bi is not None
+        # assert self.block_shape(block) == (leg.multiplicities[bi],)
+        # return AbelianBackendData(
+        #     dtype=self.block_dtype(block),
+        #     blocks=[self.block_add_axis(block, pos=1)],
+        #     block_inds=np.array([[bi, 0]])
+        # )
 
     def inv_part_to_dense_block_single_sector(self, tensor: SymmetricTensor) -> Block:
         raise NotImplementedError  # TODO not yet reviewed
@@ -1122,13 +1122,13 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def permute_legs(self, a: SymmetricTensor, **kw) -> Data:
         # TODO decide signature of backend function
         raise NotImplementedError  # TODO not yet reviewed
-        if permutation is None:
-            return a.data  # TODO copy?
-        blocks = a.data.blocks
-        blocks = [self.block_permute_axes(block, permutation) for block in a.data.blocks]
-        block_inds = a.data.block_inds[:, permutation]
-        data = AbelianBackendData(a.data.dtype, blocks, block_inds, is_sorted=False)
-        return data
+        # if permutation is None:
+        #     return a.data  # TODO copy?
+        # blocks = a.data.blocks
+        # blocks = [self.block_permute_axes(block, permutation) for block in a.data.blocks]
+        # block_inds = a.data.block_inds[:, permutation]
+        # data = AbelianBackendData(a.data.dtype, blocks, block_inds, is_sorted=False)
+        # return data
 
     def qr(self, a: SymmetricTensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, ElementarySpace]:
         raise NotImplementedError  # TODO not yet reviewed
@@ -1382,60 +1382,60 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def svd(self, a: SymmetricTensor, new_vh_leg_dual: bool, algorithm: str | None, compute_u: bool,
             compute_vh: bool) -> tuple[Data, DiagonalData, Data, ElementarySpace]:
         raise NotImplementedError  # TODO not yet reviewed
-        u_blocks = []
-        s_blocks = []
-        vh_blocks = []
-        for block in a.data.blocks:
-            u, s, vh = self.matrix_svd(block, algorithm=algorithm, compute_u=compute_u, compute_vh=compute_vh)
-            u_blocks.append(u)
-            s_blocks.append(s)
-            assert len(s) > 0
-            vh_blocks.append(vh)
+        # u_blocks = []
+        # s_blocks = []
+        # vh_blocks = []
+        # for block in a.data.blocks:
+        #     u, s, vh = self.matrix_svd(block, algorithm=algorithm, compute_u=compute_u, compute_vh=compute_vh)
+        #     u_blocks.append(u)
+        #     s_blocks.append(s)
+        #     assert len(s) > 0
+        #     vh_blocks.append(vh)
 
-        # TODO dont use legs! use conventional_leg_order / domain / codomain
-        leg_L, leg_R = a.legs
-        symmetry = a.legs[0].symmetry
-        block_inds_L, block_inds_R = a.data.block_inds.T  # columns of block_inds
-        # due to lexsort(a.data.block_inds.T), block_inds_R is sorted, but block_inds_L not.
+        # # TODO dont use legs! use conventional_leg_order / domain / codomain
+        # leg_L, leg_R = a.legs
+        # symmetry = a.legs[0].symmetry
+        # block_inds_L, block_inds_R = a.data.block_inds.T  # columns of block_inds
+        # # due to lexsort(a.data.block_inds.T), block_inds_R is sorted, but block_inds_L not.
 
-        # build new leg: add sectors in the order given by block_inds_R, which is sorted
-        leg_C_sectors = leg_R.sectors[block_inds_R]
-        # economic SVD (aka full_matrices=False) : len(s) = min(block.shape)
-        leg_C_mults = np.minimum(leg_L.multiplicities[block_inds_L], leg_R.multiplicities[block_inds_R])
-        block_inds_C = np.arange(len(s_blocks), dtype=int)
-        raise NotImplementedError  # TODO revise. duality.
-        # if new_vh_leg_dual != leg_R.is_dual:
-        #     # opposite dual flag in legs of vH => same _sectors
-        #     new_leg = Vector_Space(symmetry, leg_C_sectors, leg_C_mults, is_real=leg_R.is_real, _is_dual=new_vh_leg_dual)
-        # else:  # new_vh_leg_dual == leg_R.is_dual
-        #     # same dual flag in legs of vH => opposite _sectors => opposite sorting!!!
-        #     leg_C_sectors = symmetry.dual_sectors(leg_C_sectors)  # not sorted
-        #     sort = np.lexsort(leg_C_sectors.T)
-        #     block_inds_C = block_inds_C[sort]
-        #     new_leg = Vector_Space(symmetry, leg_C_sectors[sort], leg_C_mults[sort], is_real=leg_R.is_real, _is_dual=new_vh_leg_dual)
+        # # build new leg: add sectors in the order given by block_inds_R, which is sorted
+        # leg_C_sectors = leg_R.sectors[block_inds_R]
+        # # economic SVD (aka full_matrices=False) : len(s) = min(block.shape)
+        # leg_C_mults = np.minimum(leg_L.multiplicities[block_inds_L], leg_R.multiplicities[block_inds_R])
+        # block_inds_C = np.arange(len(s_blocks), dtype=int)
+        # raise NotImplementedError  # TODO revise. duality.
+        # # if new_vh_leg_dual != leg_R.is_dual:
+        # #     # opposite dual flag in legs of vH => same _sectors
+        # #     new_leg = Vector_Space(symmetry, leg_C_sectors, leg_C_mults, is_real=leg_R.is_real, _is_dual=new_vh_leg_dual)
+        # # else:  # new_vh_leg_dual == leg_R.is_dual
+        # #     # same dual flag in legs of vH => opposite _sectors => opposite sorting!!!
+        # #     leg_C_sectors = symmetry.dual_sectors(leg_C_sectors)  # not sorted
+        # #     sort = np.lexsort(leg_C_sectors.T)
+        # #     block_inds_C = block_inds_C[sort]
+        # #     new_leg = Vector_Space(symmetry, leg_C_sectors[sort], leg_C_mults[sort], is_real=leg_R.is_real, _is_dual=new_vh_leg_dual)
             
-        u_block_inds = np.column_stack([block_inds_L, block_inds_C])
-        s_block_inds = np.repeat(block_inds_C[:, None], 2, axis=1)
-        vh_block_inds = np.column_stack([block_inds_C, block_inds_R])
-        if new_vh_leg_dual == leg_R.is_dual:
-            # need to sort u_block_inds and s_block_inds
-            # since we lexsort with last column changing slowest, we need to sort block_inds_C only
-            sort = np.argsort(block_inds_C)
-            u_block_inds = u_block_inds[sort, :]
-            s_block_inds = s_block_inds[sort, :]
-            u_blocks = [u_blocks[i] for i in sort]
-            s_blocks = [s_blocks[i] for i in sort]
-        dtype = a.data.dtype
-        if compute_u:
-            u_data = AbelianBackendData(dtype, u_blocks, u_block_inds, is_sorted=True)
-        else:
-            u_data = None
-        s_data = AbelianBackendData(dtype.to_real, s_blocks, s_block_inds, is_sorted=True)
-        if compute_vh:
-            vh_data = AbelianBackendData(dtype, vh_blocks, vh_block_inds, is_sorted=True)
-        else:
-            vh_data = None
-        return u_data, s_data, vh_data, new_leg
+        # u_block_inds = np.column_stack([block_inds_L, block_inds_C])
+        # s_block_inds = np.repeat(block_inds_C[:, None], 2, axis=1)
+        # vh_block_inds = np.column_stack([block_inds_C, block_inds_R])
+        # if new_vh_leg_dual == leg_R.is_dual:
+        #     # need to sort u_block_inds and s_block_inds
+        #     # since we lexsort with last column changing slowest, we need to sort block_inds_C only
+        #     sort = np.argsort(block_inds_C)
+        #     u_block_inds = u_block_inds[sort, :]
+        #     s_block_inds = s_block_inds[sort, :]
+        #     u_blocks = [u_blocks[i] for i in sort]
+        #     s_blocks = [s_blocks[i] for i in sort]
+        # dtype = a.data.dtype
+        # if compute_u:
+        #     u_data = AbelianBackendData(dtype, u_blocks, u_block_inds, is_sorted=True)
+        # else:
+        #     u_data = None
+        # s_data = AbelianBackendData(dtype.to_real, s_blocks, s_block_inds, is_sorted=True)
+        # if compute_vh:
+        #     vh_data = AbelianBackendData(dtype, vh_blocks, vh_block_inds, is_sorted=True)
+        # else:
+        #     vh_data = None
+        # return u_data, s_data, vh_data, new_leg
 
     def tdot(self, a: SymmetricTensor, b: SymmetricTensor, axs_a: list[int], axs_b: list[int]) -> Data:
         raise NotImplementedError  # TODO not yet reviewed

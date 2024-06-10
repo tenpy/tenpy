@@ -252,9 +252,9 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def mask_unary_operand(self, mask: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
         large_leg = mask.large_leg
         basis_perm = large_leg._basis_perm
+        data = func(mask.data)
         if basis_perm is not None:
             basis_perm = rank_data(basis_perm[data])
-        data = func(mask.data)
         small_leg = ElementarySpace.from_trivial_sector(
             dim=self.block_sum_all(data), symmetry=large_leg.symmetry, is_dual=large_leg.is_dual,
             basis_perm=basis_perm
@@ -274,9 +274,9 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def permute_legs(self, a: SymmetricTensor, **kw) -> Data:
         # TODO decide signature
         raise NotImplementedError  # TODO not yet reviewed
-        if permutation is None:
-            return a.data
-        return self.block_permute_axes(a.data, permutation)
+        # if permutation is None:
+        #     return a.data
+        # return self.block_permute_axes(a.data, permutation)
 
     def qr(self, a: SymmetricTensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, ElementarySpace]:
         raise NotImplementedError  # TODO not yet reviewed

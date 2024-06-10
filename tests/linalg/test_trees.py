@@ -6,7 +6,7 @@ import pytest
 
 from tenpy.linalg import trees
 from tenpy.linalg.symmetries import Symmetry, ProductSymmetry
-from tenpy.linalg.spaces import Space, ElementarySpace, ProductSpace
+from tenpy.linalg.spaces import ElementarySpace, ProductSpace
 from tenpy.linalg.dtypes import Dtype
 from tenpy.linalg.backends.backend_factory import get_backend
 

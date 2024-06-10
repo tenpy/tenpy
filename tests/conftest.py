@@ -106,7 +106,6 @@ The function returned by the fixture ``make_compatible_tensor`` has the followin
 from __future__ import annotations
 import numpy as np
 import pytest
-from typing import Callable
 
 from tenpy.linalg import backends, spaces, symmetries, tensors
 

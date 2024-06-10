@@ -3,7 +3,6 @@
 from __future__ import annotations
 from typing import Sequence, TypeVar
 import numpy as np
-from functools import wraps
 
 __all__ = ['force_str_len', 'UNSPECIFIED', 'inverse_permutation', 'duplicate_entries',
            'join_as_many_as_possible', 'make_stride', 'find_row_differences', 'unstridify']

@@ -92,7 +92,6 @@ full_version = _get_full_version()
 def _get_version_summary():
     import numpy
     import scipy
-    import warnings
     summary = ("tenpy {tenpy_ver!s},\n"
                "git revision {git_rev!s} using\n"
                "python {python_ver!s}\n"

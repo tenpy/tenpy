@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Sequence, Iterator
 from .dummy_config import printoptions
 from .symmetries import (Sector, SectorArray, Symmetry, ProductSymmetry, no_symmetry, FusionStyle,
                          SymmetryError)
-from .misc import make_stride, find_row_differences, unstridify, join_as_many_as_possible, UNSPECIFIED
+from .misc import make_stride, find_row_differences, unstridify, UNSPECIFIED
 from ..tools.misc import inverse_permutation, rank_data, to_iterable
 from ..tools.string import format_like_list
 

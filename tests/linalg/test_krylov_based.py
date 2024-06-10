@@ -6,7 +6,7 @@ import numpy as np
 from scipy.linalg import expm
 
 import tenpy as tp
-from tenpy.linalg import krylov_based, sparse, tensors, random_matrix, spaces
+from tenpy.linalg import krylov_based, sparse, tensors, random_matrix
 
 
 pytest.skip("krylov_based not yet revised", allow_module_level=True)  # TODO
