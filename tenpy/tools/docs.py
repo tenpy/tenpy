@@ -1,6 +1,5 @@
-"""Tools for handling docstrings.
-"""
-# Copyright 2023 TeNPy Developers, GNU GPLv3
+"""Tools for handling docstrings."""
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 __all__ = ['amend_parent_docstring']
 

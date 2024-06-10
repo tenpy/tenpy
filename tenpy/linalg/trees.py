@@ -1,4 +1,5 @@
 """TODO module docstring"""
+# Copyright (C) TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 from typing import Iterator
 import numpy as np

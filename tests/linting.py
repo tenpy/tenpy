@@ -1,8 +1,29 @@
-"""Tests if packages and modules define proper ``__all__``."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+"""Perform linting checks.
+
+These are checks for coding guidelines, best practices etc.
+The code may still run fine even if these checks fail.
+We therefore consider them part of a linting routine and do *not* call them from pytest.
+"""
+
 from __future__ import annotations
 import types
 import tenpy
+import os
+
+
+def main(max_print_lines=30):
+    """Called when this script is called, e.g. via `python linting.py`"""
+    print('Checking __all__ attributes')
+    lines = check_dunder_all_recursive(tenpy)
+    if lines:
+        print()
+        print('\n'.join(lines[:max_print_lines]))
+        if len(lines) > max_print_lines:
+            print(f'... and {len(lines) - max_print_lines} more lines')
+        raise AssertionError
+    print('Checking copyright notices')
+    check_copyright_notice()
+    print('Done')
 
 
 # dunder_all_exceptions[check_module] is a list of exceptions for check_dunder_all_recursive(check_module)
@@ -14,6 +35,9 @@ dunder_all_exceptions = {
                               'no_symmetry', 'fusion_tree_backend', 'numpy', 'torch'],
     'tenpy.linalg.tensors': ['T', 'ElementwiseData', 'elementwise_function'],
 }
+copyright_exceptions = [
+    'tenpy/linalg/generate_clebsch_gordan'
+]
 
 
 def check_dunder_all_recursive(check_module, error_lines: list[str] = None):
@@ -74,11 +98,43 @@ def check_dunder_all_recursive(check_module, error_lines: list[str] = None):
     return error_lines
 
 
-def test_dunder_all(max_print_lines=100):
-    lines = check_dunder_all_recursive(tenpy)
-    if lines:
-        print()
-        print('\n'.join(lines[:max_print_lines]))
-        if len(lines) > max_print_lines:
-            print(f'... and {len(lines) - max_print_lines} more lines')
-        raise AssertionError
+def get_python_files(top):
+    """return list of all python files recursively in a `top` directory."""
+    python_files = []
+    for dirpath, dirnames, filenames in os.walk(top):
+        if '__pycache__' in dirnames:
+            del dirnames[dirnames.index('__pycache__')]
+        for fn in filenames:
+            if fn.endswith('.py') and fn != '_npc_helper.py':
+                # exclude _npc_helper.py generated in the egg by ``python setup.py install``
+                python_files.append(os.path.join(dirpath, fn))
+    return python_files
+
+
+def check_copyright_notice(max_lines=100):
+    tenpy_files = get_python_files(os.path.dirname(tenpy.__file__))
+    #  to check also files in examples/ and toycodes/ etc, if you have the full repository,
+    #  you can use the following:
+    # tenpy_files = get_python_files(os.path.dirname(os.path.dirname(tenpy.__file__)))
+    #  (but this doesn't work for the pip-installed tenpy, so you can only do it temporary!)
+    wrong_files = []
+    for fn in tenpy_files:
+        with open(fn, 'r') as f:
+            for line in f:
+                if line.startswith('# Copyright (C) TeNPy Developers, GNU GPLv3'):
+                    break
+            else:  # no break
+                is_exception = False
+                for e in copyright_exceptions:
+                    if e in fn:
+                        is_exception = True
+                if not is_exception:
+                    wrong_files.append(fn)
+    if wrong_files:
+        print('No / wrong copyright notices in the following files:')
+        for f in wrong_files[:max_lines]:
+            print(f)
+
+
+if __name__ == '__main__':
+    main()
