@@ -554,9 +554,9 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         block_inds = []
 
         ia = 0  # next block of a to process
-        bi_a = a_block_inds[ia, 0]  # block_ind of that block => it belongs to leg.sectors[bi_a]
+        bi_a = -1 if len(a_block_inds) == 0 else a_block_inds[ia, 0]  # block_ind of that block => it belongs to leg.sectors[bi_a]
         ib = 0  # next block of b to process
-        bi_b = b_block_inds[ib, 0]  # block_ind of that block => it belongs to leg.sectors[bi_b]
+        bi_b = -1 if len(b_block_inds) == 0 else b_block_inds[ib, 0]  # block_ind of that block => it belongs to leg.sectors[bi_b]
         #
         for i in range(leg.multiplicities):
             if i == bi_a:
@@ -908,9 +908,9 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         basis_perm_ranks = []
         #
         i1 = 0  # next block of mask1 to process
-        b1_i1 = mask1_block_inds[i1, 1]  # its block_ind for the large leg.
+        b1_i1 = -1 if len(mask1_block_inds) == 0 else mask1_block_inds[i1, 1]  # its block_ind for the large leg.
         i2 = 0
-        b2_i2 = mask2_block_inds[i2, 1]
+        b2_i2 = -1 if len(mask2_block_inds) == 0 else mask2_block_inds[i2, 1]
         #
         for sector_idx, (sector, slc) in enumerate(zip(large_leg.sectors, large_leg.slices)):
             if sector_idx == b1_i1:
@@ -1036,7 +1036,7 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         basis_perm_ranks = []
         #
         i = 0
-        b_i = mask_blocks_inds[i, 1]
+        b_i = -1 if len(mask_blocks_inds) == 0 else mask_blocks_inds[i, 1]
         for sector_idx, (sector, slc) in enumerate(zip(large_leg.sectors, large_leg.slices)):
             if sector_idx == b_i:
                 block = mask_blocks[i]
