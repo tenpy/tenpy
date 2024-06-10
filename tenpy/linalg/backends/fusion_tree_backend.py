@@ -205,29 +205,6 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                                          block_method: Callable[[Block], Block]) -> Data:
         raise NotImplementedError('act_block_diagonal_square_matrix not implemented')  # TODO
 
-    def add(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
-        assert a.num_domain_legs == b.num_domain_legs
-        dtype = a.data.dtype.common(b.data.dtype)
-        a_blocks = [self.block_to_dtype(_a, dtype) for _a in a.data.blocks]
-        b_blocks = [self.block_to_dtype(_b, dtype) for _b in b.data.blocks]
-        blocks = []
-        coupled_sectors = []
-        for i, j in iter_common_noncommon_sorted_arrays(a.data.coupled_sectors, b.data.coupled_sectors):
-            if i is None:
-                blocks.append(b_blocks[j])
-                coupled_sectors.append(b.data.coupled_sectors[j])
-            elif j is None:
-                blocks.append(a_blocks[i])
-                coupled_sectors.append(a.data.coupled_sectors[i])
-            else:
-                blocks.append(self.block_add(a_blocks[i], b_blocks[j]))
-                coupled_sectors.append(a.data.coupled_sectors[i])
-        if len(blocks) == 0:
-            coupled_sectors = a.symmetry.empty_sector_array
-        else:
-            coupled_sectors = np.array(coupled_sectors)
-        return FusionTreeData(coupled_sectors, blocks, dtype)
-
     def add_trivial_leg(self, a: SymmetricTensor, legs_pos: int, add_to_domain: bool,
                         co_domain_pos: int, new_codomain: ProductSpace, new_domain: ProductSpace
                         ) -> Data:
@@ -556,7 +533,8 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return FusionTreeData(coupled_sectors, blocks, dtype)
 
     def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
-        raise NotImplementedError('full_data_from_diagonal_tensor not implemented')  # TODO
+        blocks = [self.block_from_diagonal(block) for block in a.data.blocks]
+        return FusionTreeData(a.data.coupled_sectors, blocks, dtype=a.dtype)
 
     def full_data_from_mask(self, a: Mask, dtype: Dtype) -> Data:
         raise NotImplementedError('full_data_from_mask not implemented')  # TODO
@@ -585,6 +563,28 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def inv_part_to_dense_block_single_sector(self, tensor: SymmetricTensor) -> Block:
         raise NotImplementedError('inv_part_to_dense_block_single_sector not implemented')  # TODO
 
+    def linear_combination(self, a, v: SymmetricTensor, b, w: SymmetricTensor) -> Data:
+        dtype = v.data.dtype.common(w.data.dtype)
+        v_blocks = [self.block_to_dtype(_a, dtype) for _a in v.data.blocks]
+        w_blocks = [self.block_to_dtype(_b, dtype) for _b in w.data.blocks]
+        blocks = []
+        coupled_sectors = []
+        for i, j in iter_common_noncommon_sorted_arrays(v.data.coupled_sectors, w.data.coupled_sectors):
+            if i is None:
+                blocks.append(self.block_mul(b, w_blocks[j]))
+                coupled_sectors.append(w.data.coupled_sectors[j])
+            elif j is None:
+                blocks.append(self.block_mul(a, v_blocks[i]))
+                coupled_sectors.append(v.data.coupled_sectors[i])
+            else:
+                blocks.append(self.block_linear_combination(a, v_blocks[i], b, w_blocks[j]))
+                coupled_sectors.append(v.data.coupled_sectors[i])
+        if len(blocks) == 0:
+            coupled_sectors = v.symmetry.empty_sector_array
+        else:
+            coupled_sectors = np.array(coupled_sectors)
+        return FusionTreeData(coupled_sectors, blocks, dtype)
+        
     def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[MaskData, ElementarySpace]:
         raise NotImplementedError('mask_binary_operand not implemented')
     

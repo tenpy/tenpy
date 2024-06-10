@@ -245,35 +245,6 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         res_blocks = [self.block_to_dtype(block, dtype) for block in res_blocks]
         return AbelianBackendData(dtype, res_blocks, all_block_inds, is_sorted=True)
 
-    def add(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
-        a_blocks = a.data.blocks
-        b_blocks = b.data.blocks
-        a_block_inds = a.data.block_inds
-        b_block_inds = b.data.block_inds
-        # ensure common dtypes
-        common_dtype = a.dtype.common(b.dtype)
-        if a.data.dtype != common_dtype:
-            a_blocks = [self.block_to_dtype(T, common_dtype) for T in a_blocks]
-        if b.data.dtype != common_dtype:
-            b_blocks = [self.block_to_dtype(T, common_dtype) for T in b_blocks]
-        res_blocks = []
-        res_block_inds = []
-        for i, j in iter_common_noncommon_sorted_arrays(a_block_inds, b_block_inds):
-            if j is None:
-                res_blocks.append(a_blocks[i])
-                res_block_inds.append(a_block_inds[i])
-            elif i is None:
-                res_blocks.append(b_blocks[j])
-                res_block_inds.append(b_block_inds[j])
-            else:
-                res_blocks.append(self.block_add(a_blocks[i], b_blocks[j]))
-                res_block_inds.append(a_block_inds[i])
-        if len(res_block_inds) > 0:
-            res_block_inds = np.array(res_block_inds)
-        else:
-            res_block_inds = np.zeros((0, a.num_legs), int)
-        return AbelianBackendData(common_dtype, res_blocks, res_block_inds, is_sorted=True)
-
     def add_trivial_leg(self, a: SymmetricTensor, legs_pos: int, add_to_domain: bool,
                         co_domain_pos: int, new_codomain: ProductSpace, new_domain: ProductSpace
                         ) -> Data:
@@ -432,7 +403,7 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return AbelianBackendData(a.data.dtype, blocks, a.data.block_inds, is_sorted=True)
 
     def copy_data(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
-        blocks = [self.block_copy(b) for b in self.blocks]
+        blocks = [self.block_copy(b) for b in a.data.blocks]
         return AbelianBackendData(a.data.dtype, blocks, a.data.block_inds.copy(), is_sorted=True)
 
     def dagger(self, a: SymmetricTensor) -> Data:
@@ -893,6 +864,35 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
             return self.zero_block(shape=[dim], dtype=tensor.data.dtype)
         raise ValueError  # should have been caught by input checks in ChargedTensor.to_dense_block_single_sector
 
+    def linear_combination(self, a, v: SymmetricTensor, b, w: SymmetricTensor) -> Data:
+        v_blocks = v.data.blocks
+        w_blocks = w.data.blocks
+        v_block_inds = v.data.block_inds
+        w_block_inds = w.data.block_inds
+        # ensure common dtypes
+        common_dtype = v.dtype.common(w.dtype)
+        if v.data.dtype != common_dtype:
+            v_blocks = [self.block_to_dtype(T, common_dtype) for T in v_blocks]
+        if w.data.dtype != common_dtype:
+            w_blocks = [self.block_to_dtype(T, common_dtype) for T in w_blocks]
+        res_blocks = []
+        res_block_inds = []
+        for i, j in iter_common_noncommon_sorted_arrays(v_block_inds, w_block_inds):
+            if j is None:
+                res_blocks.append(self.block_mul(a, v_blocks[i]))
+                res_block_inds.append(v_block_inds[i])
+            elif i is None:
+                res_blocks.append(self.block_mul(b, w_blocks[j]))
+                res_block_inds.append(w_block_inds[j])
+            else:
+                res_blocks.append(self.block_linear_combination(a, v_blocks[i], b, w_blocks[j]))
+                res_block_inds.append(v_block_inds[i])
+        if len(res_block_inds) > 0:
+            res_block_inds = np.array(res_block_inds)
+        else:
+            res_block_inds = np.zeros((0, v.num_legs), int)
+        return AbelianBackendData(common_dtype, res_blocks, res_block_inds, is_sorted=True)
+        
     def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
         large_leg = mask1.large_leg
         basis_perm = large_leg._basis_perm

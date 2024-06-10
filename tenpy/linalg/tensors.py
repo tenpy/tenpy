@@ -367,6 +367,11 @@ class Tensor(metaclass=ABCMeta):
             raise SymmetryError(f'Tensor.size is not defined for symmetry {self.symmetry}')
         return self.parent_space.dim
 
+    def __add__(self, other):
+        if isinstance(other, Tensor):
+            return linear_combination(+1, self, +1, other)
+        return NotImplemented
+
     def __complex__(self):
         raise TypeError('complex() of a tensor is not defined. Use tenpy.item() instead.')
 
@@ -377,6 +382,17 @@ class Tensor(metaclass=ABCMeta):
     def __float__(self):
         raise TypeError('float() of a tensor is not defined. Use tenpy.item() instead.')
 
+    def __mul__(self, other):
+        if isinstance(other, Number):
+            return scalar_multiply(other, self)
+        return NotImplemented
+
+    def __neg__(self):
+        return scalar_multiply(-1, self)
+
+    def __pos__(self):
+        return self
+
     def __repr__(self):
         indent = printoptions.indent * ' '
         lines = [f'<{self.__class__.__name__}']
@@ -384,6 +400,25 @@ class Tensor(metaclass=ABCMeta):
         # TODO skipped showing data. see commit 4bdaa5c for an old implementation of showing data.
         lines.append('>')
         return "\n".join(lines)
+
+    def __rmul__(self, other):
+        if isinstance(other, Number):
+            return scalar_multiply(other, self)
+        return NotImplemented
+
+    def __sub__(self, other):
+        if isinstance(other, Tensor):
+            return linear_combination(+1, self, -1, other)
+        return NotImplemented
+    
+    def __truediv__(self, other):
+        if not isinstance(other, Number):
+            return NotImplemented
+        try:
+            inverse_other = 1. / other
+        except Exception:
+            raise ValueError('Tensor can only be divided by invertible scalars.') from None
+        return scalar_multiply(inverse_other, self)
 
     def _as_codomain_leg(self, idx: int | str) -> Space:
         """Return the leg, as if it was moved to the codomain."""
@@ -431,10 +466,23 @@ class Tensor(metaclass=ABCMeta):
         return in_domain, co_domain_idx, idx
 
     def _repr_header_lines(self, indent: str) -> list[str]:
-        codomain_labels = [self._labels[n] or f'?{n}'
-                           for n in range(self.num_codomain_legs)]
-        domain_labels = [self._labels[n] or f'?{n}'
-                         for n in reversed(range(self.num_codomain_legs, self.num_legs))]
+        codomain_labels = []
+        for n in range(self.num_codomain_legs):
+            l = self._labels[n]
+            if l is None:
+                codomain_labels.append(f'?{n}')
+            else:
+                codomain_labels.append(f'"{l}"')
+        codomain_labels = '[' + ', '.join(codomain_labels) + ']'
+        #
+        domain_labels = []
+        for n in reversed(range(self.num_codomain_legs, self.num_legs)):
+            l = self._labels[n]
+            if l is None:
+                domain_labels.append(f'?{n}')
+            else:
+                domain_labels.append(f'"{l}"')
+        domain_labels = '[' + ', '.join(domain_labels) + ']'
         lines = [
             f'{indent}* Backend: {self.backend!s}',
             f'{indent}* Symmetry: {self.symmetry!s}',
@@ -1392,7 +1440,7 @@ class DiagonalTensor(SymmetricTensor):
             raise ValueError('Incompatible legs')
         backend = get_same_backend(self, other)
         data = backend.diagonal_elementwise_binary(
-            self, other, func=func, func_kwargs=func_kwargs,
+            self, other, func=func, func_kwargs=func_kwargs or {},
             partial_zero_is_zero=partial_zero_is_zero
         )
         labels = _get_matching_labels(self._labels, other._labels)
@@ -1406,7 +1454,7 @@ class DiagonalTensor(SymmetricTensor):
         Set ``maps_zero_to_zero=True`` to promise that ``func(0) == 0``.
         """
         data = self.backend.diagonal_elementwise_unary(
-            self, func, func_kwargs=func_kwargs, maps_zero_to_zero=maps_zero_to_zero
+            self, func, func_kwargs=func_kwargs or {}, maps_zero_to_zero=maps_zero_to_zero
         )
         return DiagonalTensor(data, self.leg, backend=self.backend, labels=self.labels)
     
@@ -2873,6 +2921,45 @@ def item(tensor: Tensor) -> float | complex | bool:
     raise TypeError
 
 
+def linear_combination(a: Number, v: Tensor, b: Number, w: Tensor):
+    """The linear combination ``a * v + b * w``"""
+    # Note: We implement Tensor.__add__ and Tensor.__sub__ in terms of this function, so we cant
+    #       use them (or the ``+`` and ``-`` operations) here.
+    if (not isinstance(a, Number)) or (not isinstance(b, Number)):
+        msg = f'unsupported scalar types: {type(a).__name__}, {type(b).__name__}'
+        raise TypeError(msg)
+    if isinstance(v, DiagonalTensor) and isinstance(w, DiagonalTensor):
+        return DiagonalTensor._binary_operand(
+            v, w, func=lambda _v, _w: a * _v + b * _w, operand='linear_combination'
+        )
+    if isinstance(v, ChargedTensor) and isinstance(w, ChargedTensor):
+        if v.charge_leg != w.charge_leg:
+            raise ValueError('Can not add ChargedTensors with different dummy legs')
+        if (v.charged_state is None) != (w.charged_state is None):
+            raise ValueError('Can not add ChargedTensors with unspecified and specified charged_state')
+        if v.charged_state is None:
+            inv_part = linear_combination(a, v.invariant_part, b, w.invariant_part)
+            return ChargedTensor(inv_part, None)
+        if v.charge_leg.dim == 1:
+            factor = v.backend.block_item(v.charged_state) / v.backend.block_item(w.charged_state)
+            inv_part = linear_combination(a, v.invariant_part, factor * b, w.invariant_part)
+            return ChargedTensor(inv_part, v.charged_state)
+        raise NotImplementedError
+    if isinstance(v, ChargedTensor) or isinstance(w, ChargedTensor):
+        raise TypeError('Can not add ChargedTensor and non-charged tensor.')
+    # Remaining case: Mask, DiagonalTensor (but not both), SymmetricTensor
+    v = v.as_SymmetricTensor()
+    w = w.as_SymmetricTensor()
+    backend = get_same_backend(v, w)
+    assert v.codomain == w.codomain, 'Mismatched domain'
+    assert v.domain == w.domain, 'Mismatched domain'
+    return SymmetricTensor(
+        backend.linear_combination(a, v, b, w),
+        codomain=v.codomain, domain=v.domain, backend=backend,
+        labels=_get_matching_labels(v._labels, w._labels)
+    )
+
+
 def move_leg(tensor: Tensor, which_leg: int | str, *, codomain_pos: int = None, domain_pos: int = None):
     """Move one leg of a tensor to a specified position.
 
@@ -3044,6 +3131,30 @@ def real_if_close(x: _ElementwiseType, tol: float = 100) -> _ElementwiseType:
     If `x` is close to real, the real part of `x`. Otherwise the original complex `x`.
     """
     return np.real_if_close(x, tol=tol)
+
+
+def scalar_multiply(a: Number, v: Tensor) -> Tensor:
+    """The scalar multiplication ``a * v``"""
+    if not isinstance(a, Number):
+        msg = f'unsupported scalar type: {type(a).__name__}'
+        raise TypeError(msg)
+    if isinstance(v, DiagonalTensor):
+        return DiagonalTensor._elementwise_unary(v, func=lambda _v: a * _v, maps_zero_to_zero=True)
+    if isinstance(v, Mask):
+        v = v.as_SymmetricTensor()
+    if isinstance(v, ChargedTensor):
+        if v.charged_state is None:
+            inv_part = scalar_multiply(a, v.invariant_part)
+            charge_state = None
+        else:
+            inv_part = v.invariant_part
+            charged_state = v.backend.block_mul(a, v.charged_state)
+        return ChargedTensor(inv_part, charged_state)
+    # remaining case: SymmetricTensor
+    return SymmetricTensor(
+        v.backend.mul(a, v), codomain=v.codomain, domain=v.domain, backend=v.backend,
+        labels=v._labels
+    )
 
 
 def scale_axis(tensor: Tensor, diag: DiagonalTensor, leg: int | str) -> Tensor:

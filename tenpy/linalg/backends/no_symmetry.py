@@ -67,9 +67,6 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
                                          ) -> Data:
         return block_method(a.data)
 
-    def add(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
-        return self.block_add(a.data, b.data)
-
     def add_trivial_leg(self, a: SymmetricTensor, legs_pos: int, add_to_domain: bool,
                         co_domain_pos: int, new_codomain: ProductSpace, new_domain: ProductSpace
                         ) -> Data:
@@ -217,6 +214,9 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def inv_part_to_dense_block_single_sector(self, tensor: SymmetricTensor) -> Block:
         return tensor.data[:, 0]
 
+    def linear_combination(self, a, v: SymmetricTensor, b, w: SymmetricTensor) -> Data:
+        return self.block_linear_combination(a, v.data, b, w.data)
+        
     def mask_binary_operand(self, mask1: Mask, mask2: Mask, func
                             ) -> tuple[DiagonalData, ElementarySpace]:
         large_leg = mask1.large_leg

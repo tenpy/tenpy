@@ -317,8 +317,8 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, make_compati
                 inv_domain = domain.left_multiply(charge_leg, backend=compatible_backend)
             else:
                 inv_domain = [charge_leg, *domain]
-            inv_labels = [tensors.ChargedTensor._CHARGE_LEG_LABEL, *labels]
-            inv_part = make(codomain=codomain, domain=inv_domain, labels=labels,
+            inv_labels = [*labels, tensors.ChargedTensor._CHARGE_LEG_LABEL]
+            inv_part = make(codomain=codomain, domain=inv_domain, labels=inv_labels,
                             max_blocks=max_blocks, max_block_size=max_block_size, empty_ok=empty_ok,
                             all_blocks=all_blocks, cls=tensors.SymmetricTensor)
             res = tensors.ChargedTensor(inv_part, charged_state=[1])

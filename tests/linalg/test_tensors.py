@@ -13,6 +13,51 @@ from tenpy.linalg.spaces import Space, ElementarySpace, ProductSpace, _fuse_spac
 from tenpy.linalg.symmetries import ProductSymmetry, z4_symmetry, SU2Symmetry
 
 
+TENSOR_CLASSES = [tensors.DiagonalTensor,
+                  tensors.SymmetricTensor,
+                  tensors.Mask,
+                  tensors.ChargedTensor]
+
+
+@pytest.fixture(params=TENSOR_CLASSES)
+def make_compatible_tensor_any_class(request, make_compatible_tensor, compatible_symmetry_backend):
+    def make(num=None):
+        cls = request.param
+
+        if cls is tensors.Mask and compatible_symmetry_backend == 'fusion_tree':
+            with pytest.raises(NotImplementedError, match='diagonal_to_mask not implemented'):
+                _ = make_compatible_tensor(cls=cls)
+            pytest.skip()
+        
+        if cls in [tensors.DiagonalTensor, tensors.Mask]:
+            first = make_compatible_tensor(cls=cls)
+            if num is None:
+                return first
+            more = [make_compatible_tensor(codomain=first.codomain, domain=first.domain)
+                    for _ in range(num - 1)]
+            return first, *more
+        
+        first = make_compatible_tensor(codomain=2, domain=2, max_block_size=3, max_blocks=3,
+                                       cls=request.param)
+        if num is None:
+            return first
+        if cls is tensors.ChargedTensor:
+            more = []
+            for _ in range(num - 1):
+                inv_part = make_compatible_tensor(
+                    codomain=first.codomain, domain=first.invariant_part.domain,
+                    max_block_size=3, max_blocks=3, cls=tensors.SymmetricTensor,
+                    labels=first.invariant_part._labels
+                )
+                more.append(tensors.ChargedTensor(inv_part, first.charged_state))
+        else:
+            more = [make_compatible_tensor(codomain=first.codomain, domain=first.domain,
+                                           max_block_size=3, max_blocks=3, cls=cls)
+                    for _ in range(num - 1)]
+        return first, *more
+    return make
+
+
 def test_base_Tensor(make_compatible_space, compatible_backend):
 
     class DummyTensor(tensors.Tensor):

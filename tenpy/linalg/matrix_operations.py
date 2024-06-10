@@ -278,7 +278,7 @@ def truncated_svd(a: Tensor, u_legs: list[int | str] = None, vh_legs: list[int |
     else:
         # norm(S[mask]) == S_norm * new_norm
         renormalize = normalize_to / S_norm / new_norm
-        S = S._mul_scalar(renormalize)
+        S = S.multiply_scalar(renormalize)
     return U, S, V, err, renormalize
 
 
