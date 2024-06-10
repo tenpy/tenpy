@@ -370,12 +370,12 @@ class Tensor(metaclass=ABCMeta):
     def __complex__(self):
         raise TypeError('complex() of a tensor is not defined. Use tenpy.item() instead.')
 
-    def __float__(self):
-        raise TypeError('float() of a tensor is not defined. Use tenpy.item() instead.')
-
     def __eq__(self, other):
         msg = f'{self.__class__.__name__} does not support == comparison. Use tenpy.almost_equal instead.'
         raise TypeError(msg)
+
+    def __float__(self):
+        raise TypeError('float() of a tensor is not defined. Use tenpy.item() instead.')
 
     def __repr__(self):
         indent = printoptions.indent * ' '
@@ -1664,10 +1664,37 @@ class Mask(Tensor):
         return cls(data, space_in=large_leg, space_out=small_leg, is_projection=True,
                    backend=backend, labels=labels)
 
+    def __and__(self, other):  # ``self & other``
+        return self._binary_operand(other, operator.and_, '==')
+
     def __bool__(self):
         msg = 'The truth value of a Mask is ambiguous. Use a.any() or a.all()'
         raise TypeError(msg)
     
+    def __eq__(self, other):  # ``self == other``
+        return self._binary_operand(other, func=operator.eq, operand='==')
+
+    def __invert__(self):  # ``~self``
+        return self._unary_operand(operator.invert)
+
+    def __ne__(self, other):  # ``self != other``
+        return self._binary_operand(other, func=operator.ne, operand='!=')
+
+    def __or__(self, other):  # ``self | other``
+        return self._binary_operand(other, func=operator.or_, operand='|')
+
+    def __rand__(self, other):  # ``other & self``
+        return self._binary_operand(other, func=operator.and_, operand='&')
+
+    def __ror__(self, other):  # ``other | self``
+        return self._binary_operand(other, func=operator.or_, operand='|')
+
+    def __rxor__(self, other):  # ``other ^ self``
+        return self._binary_operand(other, func=operator.xor, operand='^')
+
+    def __xor__(self, other):  # ``self ^ other``
+        return self._binary_operand(other, func=operator.xor, operand='^')
+
     def all(self) -> bool:
         """If the mask keeps all basis elements"""
         # assuming subspace, it is enough to check that the total sector number is the same.
@@ -1695,43 +1722,6 @@ class Mask(Tensor):
         data = self.backend.full_data_from_mask(self, dtype)
         return SymmetricTensor(data, codomain=self.codomain, domain=self.domain,
                                backend=self.backend, labels=self.labels)
-
-    def copy(self, deep=True) -> Mask:
-        if deep:
-            data = self.backend.copy_data(self)
-        else:
-            data = self.data
-        return Mask(data, space_in=self.large_leg, space_out=self.small_leg,
-                    is_projection=self.is_projection, backend=self.backend, labels=self.labels)
-    
-    def to_dense_block(self, leg_order: list[int | str] = None, dtype: Dtype = None) -> Block:
-        # for Mask, defining via numpy is actually easier, to use numpy indexing
-        numpy_dtype = None if dtype is None else dtype.to_numpy_dtype()
-        as_numpy = self.to_numpy(leg_order=leg_order, numpy_dtype=numpy_dtype)
-        return self.backend.as_block(as_numpy, dtype=dtype)
-
-    def to_numpy(self, leg_order: list[int | str] = None, numpy_dtype=None) -> np.ndarray:
-        assert self.symmetry.can_be_dropped
-        mask = self.as_numpy_mask()
-        res = np.zeros(self.shape, numpy_dtype or bool)
-        m, n = self.shape
-        if self.is_projection:
-            res[np.arange(m), mask] = 1  # sets the appropriate dtype. e.g. sets ``True`` for bool.
-        else:
-            res[mask, np.arange(n)] = 1
-        if leg_order is not None:
-            res = np.transpose(res, self.get_leg_idcs(leg_order))
-        return res
-
-    def _unary_operand(self, func) -> Mask:
-        # operate on the respective projection
-        if not self.is_projection:
-            # OPTIMIZE: how hard is it to deal with inclusion Masks in the backends?
-            return dagger(dagger(self)._unary_operand(func))
-        
-        data, small_leg = self.backend.mask_unary_operand(self, func)
-        return Mask(data, space_in=self.large_leg, space_out=small_leg,
-                    is_projection=True, backend=self.backend, labels=self.labels)
 
     def _binary_operand(self, other: bool | Mask, func, operand: str,
                         return_NotImplemented: bool = True) -> Mask:
@@ -1778,38 +1768,14 @@ class Mask(Tensor):
                     is_projection=self.is_projection, backend=backend,
                     labels=_get_matching_labels(self.labels, other.labels))
 
-    def _unary_operand(self, func) -> Mask:
-        data, small_leg = self.backend.mask_unary_operand(self, func)
-        return Mask(data, space_in=self.large_leg, space_out=small_leg,
+    def copy(self, deep=True) -> Mask:
+        if deep:
+            data = self.backend.copy_data(self)
+        else:
+            data = self.data
+        return Mask(data, space_in=self.large_leg, space_out=self.small_leg,
                     is_projection=self.is_projection, backend=self.backend, labels=self.labels)
-
-    def __and__(self, other):  # ``self & other``
-        return self._binary_operand(other, operator.and_, '==')
-
-    def __eq__(self, other):  # ``self == other``
-        return self._binary_operand(other, func=operator.eq, operand='==')
-
-    def __invert__(self):  # ``~self``
-        return self._unary_operand(operator.invert)
-
-    def __ne__(self, other):  # ``self != other``
-        return self._binary_operand(other, func=operator.ne, operand='!=')
-
-    def __rand__(self, other):  # ``other & self``
-        return self._binary_operand(other, func=operator.and_, operand='&')
-
-    def __ror__(self, other):  # ``other | self``
-        return self._binary_operand(other, func=operator.or_, operand='|')
-
-    def __rxor__(self, other):  # ``other ^ self``
-        return self._binary_operand(other, func=operator.xor, operand='^')
-
-    def __or__(self, other):  # ``self | other``
-        return self._binary_operand(other, func=operator.or_, operand='|')
-
-    def __xor__(self, other):  # ``self ^ other``
-        return self._binary_operand(other, func=operator.xor, operand='^')
-
+    
     def logical_not(self):
         """Alias for :meth:`orthogonal_complement`"""
         return self._unary_operand(operator.invert)
@@ -1817,6 +1783,35 @@ class Mask(Tensor):
     def orthogonal_complement(self):
         """The "opposite" Mask, that keeps exactly what self discards and vv."""
         return self._unary_operand(operator.invert)
+
+    def to_dense_block(self, leg_order: list[int | str] = None, dtype: Dtype = None) -> Block:
+        # for Mask, defining via numpy is actually easier, to use numpy indexing
+        numpy_dtype = None if dtype is None else dtype.to_numpy_dtype()
+        as_numpy = self.to_numpy(leg_order=leg_order, numpy_dtype=numpy_dtype)
+        return self.backend.as_block(as_numpy, dtype=dtype)
+
+    def to_numpy(self, leg_order: list[int | str] = None, numpy_dtype=None) -> np.ndarray:
+        assert self.symmetry.can_be_dropped
+        mask = self.as_numpy_mask()
+        res = np.zeros(self.shape, numpy_dtype or bool)
+        m, n = self.shape
+        if self.is_projection:
+            res[np.arange(m), mask] = 1  # sets the appropriate dtype. e.g. sets ``True`` for bool.
+        else:
+            res[mask, np.arange(n)] = 1
+        if leg_order is not None:
+            res = np.transpose(res, self.get_leg_idcs(leg_order))
+        return res
+
+    def _unary_operand(self, func) -> Mask:
+        # operate on the respective projection
+        if not self.is_projection:
+            # OPTIMIZE: how hard is it to deal with inclusion Masks in the backends?
+            return dagger(dagger(self)._unary_operand(func))
+        
+        data, small_leg = self.backend.mask_unary_operand(self, func)
+        return Mask(data, space_in=self.large_leg, space_out=small_leg,
+                    is_projection=True, backend=self.backend, labels=self.labels)
 
 
 class ChargedTensor(Tensor):
