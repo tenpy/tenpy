@@ -185,23 +185,6 @@ def test_SymmetricTensor(make_compatible_tensor, make_compatible_space, leg_nums
     _ = str(zero_tens)
     _ = repr(zero_tens)
 
-    # TODO reactivate
-    # print('check addition and multiplication')
-    # numpy_block2 = T2.to_numpy()
-    # npt.assert_allclose((-T).to_numpy(), -numpy_block)
-    # npt.assert_allclose((42.3 * T).to_numpy(), 42.3 * numpy_block)
-    # npt.assert_allclose((T / 2.j).to_numpy(), numpy_block / 2.j)
-    # npt.assert_allclose((T + T2).to_numpy(), numpy_block + numpy_block2)
-    # npt.assert_allclose((T - T2).to_numpy(), numpy_block - numpy_block2)
-
-    # TODO reactivate
-    # print('check float conversion etc')
-    # a, b, c, d = [make_compatible_space(max_sectors=1, max_mult=1) for _ in range(4)]
-    # T_scalar: tensors.SymmetricTensor = make_compatible_tensor([a, b], [c, d])
-    # value = T_scalar.to_numpy().item()
-    # npt.assert_allclose(float(T_scalar), value)
-    # npt.assert_allclose(complex(T_scalar), value)
-
 
 def test_DiagonalTensor(make_compatible_tensor):
     T: tensors.DiagonalTensor = make_compatible_tensor(cls=tensors.DiagonalTensor)
@@ -715,6 +698,151 @@ def test_str_repr(make_compatible_tensor, str_max_lines=30, repr_max_lines=30):
         assert len(res) <= str_max_len
         assert res.count('\n') <= str_max_lines
         print(res)
+
+
+# TENSOR FUNCTIONS
+
+
+def test_add_trivial_leg():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_elementwise_functions():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_almost_equal():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_apply_mask():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_bend_legs():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_combine_legs():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_conj():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_dagger():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_compose():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_entropy():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_inner():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_is_scalar():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_item():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_linear_combination(make_compatible_tensor_any_class):
+    v, w = make_compatible_tensor_any_class(2)
+    assert v.domain == w.domain
+    assert v.codomain == w.codomain
+    
+    needs_fusion_tensor = type(v) in [tensors.SymmetricTensor, tensors.ChargedTensor] \
+        and isinstance(v.backend, backends.FusionTreeBackend)
+    if needs_fusion_tensor and isinstance(v.symmetry, ProductSymmetry):
+        with pytest.raises(NotImplementedError):
+            T_np = v.to_numpy()
+        return
+
+    v_np = v.to_numpy()
+    w_np = w.to_numpy()
+    for valid_scalar in [0, 1., 2. + 3.j, -42]:
+        res = tensors.linear_combination(valid_scalar, v, 2 * valid_scalar, w)
+        expect = valid_scalar * v_np + 2 * valid_scalar * w_np
+        npt.assert_allclose(res.to_numpy(), expect)
+    for invalid_scalar in [None, (1, 2), v, 'abc']:
+        with pytest.raises(TypeError, match='unsupported scalar types'):
+            _ = tensors.linear_combination(invalid_scalar, v, invalid_scalar, w)
+
+
+def test_move_leg():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_norm():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_outer():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_permute_legs():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_scalar_multiply(make_compatible_tensor_any_class):
+    T = make_compatible_tensor_any_class()
+    
+    needs_fusion_tensor = type(T) in [tensors.SymmetricTensor, tensors.ChargedTensor] \
+        and isinstance(T.backend, backends.FusionTreeBackend)
+    if needs_fusion_tensor and isinstance(T.symmetry, ProductSymmetry):
+        with pytest.raises(NotImplementedError):
+            T_np = T.to_numpy()
+        return
+    
+    T_np = T.to_numpy()
+    for valid_scalar in [0, 1., 2. + 3.j, -42]:
+        res = tensors.scalar_multiply(valid_scalar, T)
+        npt.assert_allclose(res.to_numpy(), valid_scalar * T_np)
+    for invalid_scalar in [None, (1, 2), T, 'abc']:
+        with pytest.raises(TypeError, match='unsupported scalar type'):
+            _ = tensors.scalar_multiply(invalid_scalar, T)
+
+
+def test_scale_axis():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_set_as_slice():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_split_legs():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_squeeze_legs():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_tdot():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_trace():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_transpose():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_zero_like():
+    pytest.skip('Test not written yet')  # TODO
 
 
 # TODO old test below
