@@ -106,10 +106,6 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def add(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
-        ...
-
-    @abstractmethod
     def add_trivial_leg(self, a: SymmetricTensor, legs_pos: int, add_to_domain: bool,
                         co_domain_pos: int, new_codomain: ProductSpace, new_domain: ProductSpace
                         ) -> Data:
@@ -374,6 +370,10 @@ class Backend(metaclass=ABCMeta):
 
         In the *internal* basis order of `spaces`.
         """
+        ...
+
+    @abstractmethod
+    def linear_combination(self, a, v: SymmetricTensor, b, w: SymmetricTensor) -> Data:
         ...
 
     @abstractmethod
@@ -889,8 +889,8 @@ class BlockBackend(metaclass=ABCMeta):
     def block_random_normal(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
         ...
 
-    def block_add(self, a: Block, b: Block) -> Block:
-        return a + b
+    def block_linear_combination(self, a, v: Block, b, w: Block) -> Block:
+        return a * v + b * w
 
     def block_mul(self, a: float | complex, b: Block) -> Block:
         return a * b

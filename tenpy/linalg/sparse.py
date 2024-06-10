@@ -681,5 +681,5 @@ def gram_schmidt(vecs: list[Tensor], rcond=1.e-14) -> list[Tensor]:
             vec = vec - ov * other
         n = vec.norm()
         if n > rcond:
-            res.append(vec._mul_scalar(1. / n))
+            res.append(vec.multiply_scalar(1. / n))
     return res

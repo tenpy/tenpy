@@ -177,7 +177,7 @@ class KrylovBased(metaclass=ABCMeta):
             # If you get this warning, you can try to set the parameters
             # `reortho`=True and `N_cache` >= `N_max`
             logger.warning("poorly conditioned H matrix in KrylovBased! |psi_0| = %f", psif_norm)
-        return psif._mul_scalar(1. / psif_norm)
+        return psif.multiply_scalar(1. / psif_norm)
 
     def _to_cache(self, psi):
         """add psi to cache, keep at most self.N_cache."""
@@ -245,7 +245,7 @@ class Arnoldi(KrylovBased):
         norm = w.norm()
         self.psi0 = w / norm
         for k in range(self.N_max):
-            w = w ._mul_scalar(1. / norm)
+            w = w .multiply_scalar(1. / norm)
             self._to_cache(w)
             w = self.H.matvec(w)
             for i, v_i in enumerate(self._cache):
