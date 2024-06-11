@@ -305,14 +305,26 @@ def common_checks(sym: symmetries.Symmetry, example_sectors, example_sectors_low
             )
 
     # check braiding style
-    #   TODO:
-    #    - if bosonic, check that twists are +1
-    #    - if <= fermionic, check that double braid is identity via R symbols, also twists are +-1
+    for a in example_sectors:  # check topological twist
+        if sym.braiding_style == symmetries.BraidingStyle.bosonic:
+            assert_array_almost_equal(sym.topological_twist(a), 1)
+        elif sym.braiding_style == symmetries.BraidingStyle.fermionic:
+            assert_array_almost_equal(sym.topological_twist(a)**2, 1)
 
+    if sym.braiding_style.value <= symmetries.BraidingStyle.fermionic.value:  # check R symbols
+        for a, b, c in sector_triples:
+            assert_array_almost_equal(sym.r_symbol(a, b, c)**2, np.ones(sym.n_symbol(a, b, c)))
+    
     # check fusion style
-    #   TODO:
-    #    - if single: check lengths of fusion_outcomes
-    #    - if <= multiple_unique: check N symbols to be in [0, 1]
+    if sym.fusion_style == symmetries.FusionStyle.single:
+        for a in example_sectors:
+            for b in example_sectors:
+                assert len(sym.fusion_outcomes(a, b)) == 1
+    
+    if sym.fusion_style.value <= symmetries.FusionStyle.multiple_unique.value:
+        for a, b, c in sector_triples:
+            # we check `== 1` and not `in [0, 1]` here since we iterate over sector_triples
+            assert sym.n_symbol(a, b, c) == 1
 
 
 def check_fusion_tensor(sym: symmetries.Symmetry, example_sectors, np_random):
