@@ -156,9 +156,8 @@ def test_base_Tensor(make_compatible_space, compatible_backend):
 
 @pytest.mark.parametrize('leg_nums', [(1, 1), (2, 1), (3, 0), (0, 3)],
                          ids=['1->1', '1->2', '0->3', '3->0'])
-def test_SymmetricTensor(make_compatible_tensor, make_compatible_space, leg_nums):
+def test_SymmetricTensor(make_compatible_tensor, leg_nums):
     T: tensors.SymmetricTensor = make_compatible_tensor(*leg_nums)
-    T2: tensors.SymmetricTensor = make_compatible_tensor(codomain=T.codomain, domain=T.domain)
     backend = T.backend
     
     T.test_sanity()
@@ -406,8 +405,65 @@ def test_Mask(make_compatible_tensor, compatible_symmetry_backend, np_random):
     _ = repr(M_zero)
 
 
-def test_ChargedTensor():
-    pass  # TODO
+@pytest.mark.parametrize('leg_nums', [(1, 1), (2, 1), (3, 0), (0, 3)],
+                         ids=['1->1', '1->2', '0->3', '3->0'])
+def test_ChargedTensor(make_compatible_tensor, make_compatible_sectors, compatible_symmetry, leg_nums):
+    T: tensors.ChargedTensor = make_compatible_tensor(*leg_nums, cls=tensors.ChargedTensor)
+    backend = T.backend
+
+    T.test_sanity()
+    assert T.num_codomain_legs == leg_nums[0]
+    assert T.num_domain_legs == leg_nums[1]
+
+    print('checking to_numpy')
+    if (isinstance(backend, backends.FusionTreeBackend)) and (isinstance(T.symmetry, ProductSymmetry)):
+        if T.codomain.num_spaces > 1 or T.domain.num_spaces > 0:
+            # if both have at most one leg, we actually dont need fusion tensors to convert.
+            with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
+                numpy_block = T.to_numpy()
+            return
+    numpy_block = T.to_numpy()
+    assert T.shape == numpy_block.shape
+    
+    print('checking from_zero')
+    zero_tens = tensors.ChargedTensor.from_zero(
+        codomain=T.codomain, domain=T.domain, charge=T.charge_leg, charged_state=T.charged_state,
+        backend=backend
+    )
+    zero_tens.test_sanity()
+    npt.assert_array_almost_equal_nulp(zero_tens.to_numpy(), np.zeros(T.shape), 10)
+
+    print('checking repr and str')
+    _ = str(T)
+    _ = repr(T)
+    _ = str(zero_tens)
+    _ = repr(zero_tens)
+
+    print('checking to/from dense_block_single_sector')
+    sector = make_compatible_sectors(1)[0]
+    charge_leg = ElementarySpace(compatible_symmetry, sector[None, :])
+    inv_part = make_compatible_tensor(codomain=1, domain=[charge_leg], labels=[None, '!'])
+    tens = tensors.ChargedTensor(inv_part, charged_state=[1])
+    leg = tens.codomain[0]
+    block_size = leg.sector_multiplicity(sector)
+
+    if isinstance(backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError):
+            _ = tens.to_dense_block_single_sector()
+        return
+    
+    block = tens.to_dense_block_single_sector()
+    assert backend.block_shape(block) == (block_size,)
+    tens2 = tensors.ChargedTensor.from_dense_block_single_sector(
+        vector=block, space=leg, sector=sector, backend=backend
+    )
+    tens2.test_sanity()
+    assert tens2.charge_leg == tens.charge_leg
+    assert tensors.almost_equal(tens, tens2)
+    block2 = tens2.to_dense_block_single_sector()
+    npt.assert_array_almost_equal_nulp(tens.backend.block_to_numpy(block),
+                                       tens.backend.block_to_numpy(block2),
+                                       100)
 
 
 @pytest.mark.parametrize('symmetry_backend', ['abelian', pytest.param('fusion_tree', marks=pytest.mark.FusionTree)])

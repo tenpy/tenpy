@@ -837,32 +837,24 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def inv_part_from_dense_block_single_sector(self, vector: Block, space: Space,
                                                 charge_leg: ElementarySpace) -> Data:
-        raise NotImplementedError  # TODO not yet reviewed
-        # assert charge_leg.num_sectors == 1
-        # bi = leg.sectors_where(leg.symmetry.dual_sector(charge_leg.sectors[0]))
-        # assert bi is not None
-        # assert self.block_shape(block) == (leg.multiplicities[bi],)
-        # return AbelianBackendData(
-        #     dtype=self.block_dtype(block),
-        #     blocks=[self.block_add_axis(block, pos=1)],
-        #     block_inds=np.array([[bi, 0]])
-        # )
+        assert charge_leg.num_sectors == 1
+        bi = space.sectors_where(charge_leg.sectors[0])
+        assert bi is not None
+        assert self.block_shape(vector) == (space.multiplicities[bi])
+        return AbelianBackendData(
+            dtype=self.block_dtype(vector),
+            blocks=[self.block_add_axis(vector, pos=1)],
+            block_inds=np.array([[bi, 0]])
+        )
 
     def inv_part_to_dense_block_single_sector(self, tensor: SymmetricTensor) -> Block:
-        raise NotImplementedError  # TODO not yet reviewed
-        # TODO dont use legs! use conventional_leg_order / domain / codomain
         num_blocks = len(tensor.data.blocks)
-        assert tensor.legs[1].num_sectors == 1
-        # find the block-index that the single allowed block has (or would have)
-        sector = tensor.legs[1].sectors[0]
-        bi = tensor.legs[0].sectors_where(tensor.symmetry.dual_sector(sector))
+        assert num_blocks <= 1
         if num_blocks == 1:
-            res = tensor.data.blocks[0][:, 0]
-            return res
-        elif num_blocks == 0:
-            dim = tensor.legs[0].multiplicities[bi]
-            return self.zero_block(shape=[dim], dtype=tensor.data.dtype)
-        raise ValueError  # should have been caught by input checks in ChargedTensor.to_dense_block_single_sector
+            return tensor.data.blocks[0][:, 0]
+        sector = tensor.domain[0].sectors[0]
+        dim = tensor.codomain[0].sector_multiplicity(sector)
+        return self.zero_block([dim], dtype=tensor.data.dtype)
 
     def linear_combination(self, a, v: SymmetricTensor, b, w: SymmetricTensor) -> Data:
         v_blocks = v.data.blocks

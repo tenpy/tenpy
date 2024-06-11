@@ -2009,7 +2009,7 @@ class ChargedTensor(Tensor):
         if not isinstance(charge, Space):
             sectors = np.asarray(charge, int)[None, :]
             charge = Space(domain.symmetry, sectors)
-        return domain.left_multiply(charge, backend=backend)
+        return domain.left_multiply(charge, backend=backend), charge
 
     @staticmethod
     def _parse_inv_labels(labels: Sequence[list[str | None] | None] | list[str | None] | None,
@@ -2123,7 +2123,7 @@ class ChargedTensor(Tensor):
             vector=vector, space=space, charge_leg=charge_leg
         )
         inv_part = SymmetricTensor(inv_data, codomain=[space], domain=[charge_leg], backend=backend,
-                                   labels=[[label, cls._CHARGE_LEG_LABEL]])
+                                   labels=[label, cls._CHARGE_LEG_LABEL])
         return cls(inv_part, [1])
 
     @classmethod
@@ -2194,7 +2194,7 @@ class ChargedTensor(Tensor):
             lines.append(f'{start}unspecified')
         else:
             state_lines = self.backend._block_repr_lines(
-                self.dummy_leg_state, indent=indent + '  ',
+                self.charged_state, indent=indent + '  ',
                 max_width=printoptions.linewidth - len(start), max_lines=1
             )
             lines.append(start + state_lines[0])
@@ -2210,6 +2210,25 @@ class ChargedTensor(Tensor):
         if leg_order is not None:
             block = self.backend.block_permute_axes(block, self._as_leg_idcs(leg_order))
         return block
+
+    def to_dense_block_single_sector(self) -> Block:
+        """Assumes a single-leg tensor living in a single sector and returns its components within
+        that sector.
+
+        See Also
+        --------
+        from_dense_block_single_sector
+        """
+        if self.charged_state is None:
+            raise ValueError('Unspecified charged_state')
+        if self.num_legs > 1:
+            raise ValueError('Expected a single leg')
+        if self.charge_leg.num_sectors != 1 or self.charge_leg.multiplicities[0] != 1:
+            raise ValueError('Not a single sector.')
+        if self.charge_leg.sector_dims[0] > 1:
+            raise NotImplementedError
+        block = self.backend.inv_part_to_dense_block_single_sector(self.invariant_part)
+        return self.backend.block_item(self.charged_state) * block
 
 
 _ElementwiseType = TypeVar('_ElementwiseType', Number, DiagonalTensor)
@@ -3343,7 +3362,7 @@ def scalar_multiply(a: Number, v: Tensor) -> Tensor:
     if isinstance(v, ChargedTensor):
         if v.charged_state is None:
             inv_part = scalar_multiply(a, v.invariant_part)
-            charge_state = None
+            charged_state = None
         else:
             inv_part = v.invariant_part
             charged_state = v.backend.block_mul(a, v.charged_state)
