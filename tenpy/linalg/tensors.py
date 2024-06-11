@@ -82,7 +82,7 @@ from ..tools.misc import to_iterable, rank_data
 __all__ = ['Tensor', 'SymmetricTensor', 'DiagonalTensor', 'ChargedTensor', 'Mask',
            'add_trivial_leg', 'almost_equal', 'angle', 'apply_mask', 'bend_legs', 'combine_legs',
            'conj', 'dagger', 'compose', 'entropy', 'imag', 'inner', 'is_scalar', 'item', 'move_leg',
-           'norm', 'outer', 'permute_legs', 'real', 'real_if_close', 'scale_axis', 'set_as_slice',
+           'norm', 'outer', 'permute_legs', 'real', 'real_if_close', 'scale_axis',
            'split_legs', 'sqrt', 'squeeze_legs', 'tdot', 'trace', 'transpose', 'zero_like',
            'get_same_backend', 'check_same_legs']
 
@@ -295,10 +295,18 @@ class Tensor(metaclass=ABCMeta):
         return self._labels[:self.num_codomain_legs]
 
     @property
+    def dagger(self) -> Tensor:
+        return dagger(self)
+
+    @property
     def domain_labels(self) -> list[str | None]:
         """The labels that refer to legs in the domain."""
         return self._labels[self.num_codomain_legs:][::-1]
-        
+
+    @property
+    def hc(self) -> Tensor:
+        return dagger(self)
+    
     @property
     def is_fully_labelled(self) -> bool:
         return (None not in self._labels)
@@ -366,6 +374,10 @@ class Tensor(metaclass=ABCMeta):
         if not self.symmetry.can_be_dropped:
             raise SymmetryError(f'Tensor.size is not defined for symmetry {self.symmetry}')
         return self.parent_space.dim
+
+    @property
+    def T(self) -> Tensor:
+        return transpose(self)
 
     def __add__(self, other):
         if isinstance(other, Tensor):
@@ -505,9 +517,23 @@ class Tensor(metaclass=ABCMeta):
             return self.domain.spaces[co_domain_idx].dual
         return self.codomain.spaces[co_domain_idx]
 
-    def get_leg_idcs(self, idcs: Sequence[int | str]) -> list[int]:
+    def get_leg_co_domain(self, which_leg: int | str) -> Space:
+        """Get the specified leg from the domain or codomain.
+
+        This is the same as :meth:`get_leg` if the leg is in the codomain, and the respective
+        dual if the leg is in the domain.
+        """
+        if not isinstance(which_leg, (Integral, str)):
+            # which_leg is a list
+            return list(map(self.get_leg, which_leg))
+        in_domain, co_domain_idx, _ = self._parse_leg_idx(which_leg)
+        if in_domain:
+            return self.domain.spaces[co_domain_idx].dual
+        return self.codomain.spaces[co_domain_idx]
+
+    def get_leg_idcs(self, idcs: int | str | Sequence[int | str]) -> list[int]:
         """Parse leg-idcs of leg-labels to leg-idcs (i.e. indices of :attr:`legs`)."""
-        return [self._parse_leg_idx(i) for i in idcs]
+        return [self._parse_leg_idx(i) for i in to_iterable(idcs)]
 
     def has_label(self, label: str, *more: str) -> bool:
         return (label in self._labels) and all(l in self._labels for l in more)
@@ -1015,6 +1041,12 @@ class DiagonalTensor(SymmetricTensor):
         Or a single flat list for all legs in the order of the :attr:`legs`,
         such that ``[codomain_labels, domain_labels]`` is equivalent
         to ``[*codomain_legs, *reversed(domain_legs)]``.
+
+    .. _diagonal_elementwise:
+    
+    Elementwise Functions
+    ---------------------
+    TODO elaborate
     """
     _forbidden_dtypes = []
     
@@ -2255,8 +2287,9 @@ def add_trivial_leg(tens: Tensor,
         The label for the new leg.
     is_dual: bool
         If we add a dual (bra-like) or ket-like leg.
-        If `leg_pos` is given, we have ``result.legs[leg_pos].is_dual == is_dual``,
-        but if `domain_pos` is given, we have ``result.domain[domain_pos].is_dual == is_dual``.
+        Note that if `leg_pos` is given, we have ``result.legs[leg_pos].is_dual == is_dual``,
+        but if `domain_pos` is given, we have ``result.domain[domain_pos].is_dual == is_dual``,
+        which are mutually opposite.
     """
     if isinstance(tens, (DiagonalTensor, Mask)):
         return add_trivial_leg(tens.as_SymmetricTensor(), legs_pos, codomain_pos=codomain_pos,
@@ -2327,7 +2360,7 @@ def add_trivial_leg(tens: Tensor,
 
 @_elementwise_function(block_func='block_angle', maps_zero_to_zero=True)
 def angle(x: _ElementwiseType) -> _ElementwiseType:
-    """The angle of a complex number, elementwise.
+    """The angle of a complex number, :ref:`elementwise <diagonal_elementwise>`.
 
     The counterclockwise angle from the positive real axis on the complex plane in the
     range (-pi, pi] with a real dtype. The angle of `0.` is `0.`.
@@ -2419,7 +2452,33 @@ def almost_equal(tensor_1: Tensor, tensor_2: Tensor, rtol: float = 1e-5, atol=1e
 
 
 def apply_mask(tensor: Tensor, mask: Mask, leg: int | str) -> Tensor:
-    """Apply a Mask to one leg of a tensor.
+    """Apply a Mask to one leg of a tensor, *projecting* it to a smaller leg.
+
+    We apply the mask via map composition::
+
+        |        │   │   │            │   │  ┏┷┓
+        |       ┏┷━━━┷━━━┷┓           │   │  ┃M┃
+        |       ┃ tensor  ┃           │   │  ┗┯┛
+        |       ┗┯━━━┯━━━┯┛    OR    ┏┷━━━┷━━━┷┓
+        |        │  ┏┷┓  │           ┃ tensor  ┃
+        |        │  ┃M┃  │           ┗┯━━━┯━━━┯┛
+        |        │  ┗┯┛  │            │   │   │
+        
+    where ``M`` is the `mask` up to transpose and/or dagger, which are automatically applied as
+    needed, such that the large leg of the mask is contracted with the tensor, and the
+    small leg is the resulting open leg
+
+    Parameters
+    ----------
+    tensor: Tensor
+        The tensor to project
+    mask: Mask
+        The mask used for the projection. Its large leg must be equal or dual to
+        the specified `leg` of the tensor.
+        The mask is automatically :func:`transpose`-d and/or :func:`dagger`-ed such that
+        it can be applied via map composition as shown above.
+    leg: int | str
+        Which leg of the tensor to project
 
     The leg order and labels of `tensor` are not changed.
 
@@ -2427,19 +2486,9 @@ def apply_mask(tensor: Tensor, mask: Mask, leg: int | str) -> Tensor:
     than the input `tensor`.
     The large leg of the mask must be equal or dual to the specified leg of the tensor.
 
-    Graphically::
-
-        |       | | |          | | |
-        |       tensor         | m |
-        |       | | |          | | |
-        |       | | m          tensor
-        |       | | |          | | |
-
-    where ``m`` is the `mask` up to transpose and/or dagger.
-
     See Also
     --------
-    dot, tdot, scale_axis
+    compose, tdot, scale_axis
     """
     in_domain, co_domain_idx, leg_idx = tensor._parse_leg_idx(leg)
     raise NotImplementedError  # TODO
@@ -2448,12 +2497,34 @@ def apply_mask(tensor: Tensor, mask: Mask, leg: int | str) -> Tensor:
 def bend_legs(tensor: Tensor, num_codomain_legs: int = None, num_domain_legs: int = None) -> Tensor:
     """Move legs between codomain and domain without changing the order of ``tensor.legs``.
 
+    For example::
+
+        |        │   ╭───────────╮
+        |        │   │   ╭───╮   │    ==    bend_legs(T, num_codomain_legs=1)
+        |       ┏┷━━━┷━━━┷┓  │   │    
+        |       ┃    T    ┃  │   │    ==    bend_legs(T, num_domain_legs=5)
+        |       ┗┯━━━┯━━━┯┛  │   │
+        |        │   │   │   │   │
+
+    or::
+
+        |        │   │   │   │
+        |       ┏┷━━━┷━━━┷┓  │
+        |       ┃    T    ┃  │        ==    bend_legs(T, num_codomain_legs=4)
+        |       ┗┯━━━┯━━━┯┛  │
+        |        │   │   ╰───╯        ==    bend_legs(T, num_codomain_legs=2)
+
     Parameters
     ----------
     tensor:
         The tensor to modify
     num_codomain_legs, num_domain_legs: int, optional
-        The desired number of legs in to (co-)domain. Only one is required.
+        The desired number of legs in the (co-)domain. Only one is required.
+
+    See Also
+    --------
+    permute_legs
+        More general permutations, including braids
     """
     if num_codomain_legs is None and num_domain_legs is None:
         raise ValueError
@@ -2470,7 +2541,12 @@ def bend_legs(tensor: Tensor, num_codomain_legs: int = None, num_domain_legs: in
 
 
 def check_same_legs(t1: Tensor, t2: Tensor) -> tuple[list[int], list[int]] | None:
-    """Check if two tensors have the same legs. Warn on labels that indicate a mix up."""
+    """Check if two tensors have the same legs.
+
+    If there are matching labels in mismatched positions (which indicates that the leg order
+    is mixed up by accident), the error message is amended accordingly on mismatched legs.
+    If the legs still match regardless, a warning is issued.
+    """
     incompatible_labels = False
     for n1, l1 in enumerate(t1._labels):
         n2 = t2._labelmap.get(l1, None)
@@ -2495,8 +2571,42 @@ def check_same_legs(t1: Tensor, t2: Tensor) -> tuple[list[int], list[int]] | Non
 def combine_legs(tensor: Tensor,
                  *which_legs: list[int | str],
                  combined_spaces: list[ProductSpace | None] = None,
+                 levels: list[int] | dict[str | int, int] = None,
                  ) -> Tensor:
     """Combine (multiple) groups of legs, each to a :class:`ProductSpace`.
+
+    If the legs to be combined are contiguous to begin with, the combination is just a grouping
+    of the legs::
+
+        |        ║          │    ║ 
+        |       ╭╨──┬───╮   │   ╭╨──╮
+        |       0   1   2   3   4   5
+        |      ┏┷━━━┷━━━┷━━━┷━━━┷━━━┷┓
+        |      ┃          T          ┃    ==   combine_legs(T, [0, 1, 2], [4, 5], [7, 8, 9])
+        |      ┗┯━━━┯━━━┯━━━┯━━━┯━━━┯┛
+        |      11  10   9   8   7   6
+        |       │   │   ╰───┴──╥╯   │
+        |       │   │          ║    │
+
+    In the general case, the legs are permuted first, to match that leg order.
+    If the symmetry does not have symmetric braids, the `levels` are required to specify the
+    chirality of the braids, like in :func:`permute_legs`. For example::
+
+        |             │      ║    │     │     │
+        |             │     ╭╨┬─╮ │     │     │
+        |             │     │ ╰─│─│─────│─────│───╮
+        |       ╭─────│─────│───╯ │     │     │   │
+        |       0     1     2     3     4     5   │
+        |      ┏┷━━━━━┷━━━━━┷━━━━━┷━━━━━┷━━━━━┷┓  │
+        |      ┃               T               ┃  │    ==   combine_legs(T, [2, 6, 0], [7, 10, 8])
+        |      ┗┯━━━━━┯━━━━━┯━━━━━┯━━━━━┯━━━━━┯┛  │
+        |      11    10     9     8     7     6   │
+        |       │     ╰─────│─────│──╮  │     ╰───╯
+        |       │           │     ╰──┴─╥╯
+        |       │           │          ║ 
+
+    TODO think again about the order of the product on the domain.
+         i.e. is the picture above given by ``[7, 10, 8]`` or ``[8, 10, 7]``?
 
     .. warning ::
         Combining legs introduces a basis-transformation. This is important to consider if
@@ -2510,12 +2620,15 @@ def combine_legs(tensor: Tensor,
     ----------
     tensor:
         The tensor whose legs should be combined.
-    *legs : tuple of list of {int | str}
+    *which_legs : list of {int | str}
         One or more groups of legs to combine.
     combined_spaces: list of {ProductSpace | None}, optional
         For each group of `legs`, the resulting ProductSpace can be passed to avoid recomputation.
         Must be the same legs as on the result described below. In particular, choosing the right
         duality depends on if the resulting combined leg ends up in domain or codomain.
+    levels: optional
+        Is ignored if the symmetry has symmetric braids. Otherwise, these levels specify the
+        chirality of any possible braids induced by permuting the legs. See :func:`permute_legs`.
 
     Returns
     -------
@@ -2528,10 +2641,6 @@ def combine_legs(tensor: Tensor,
     such that the ordering of non-participating legs is preserved.
     Then, each group is replaced by the appropriate product space, either in the domain or the
     codomain.
-
-    Notes
-    -----
-    TODO example
     """
 
     # 1) Deal with different tensor types. Reduce everything to SymmetricTensor.
@@ -2630,7 +2739,7 @@ def combine_legs(tensor: Tensor,
         domain_idcs.extend(leg_idcs)
 
     # 2c) finally, do the permute
-    tensor = _permute_legs(tensor, codomain_idcs, domain_idcs)
+    tensor = _permute_legs(tensor, codomain_idcs, domain_idcs, levels=levels)
 
     # 3) build new domain and codomain, labels
     # ==============================================================================================
@@ -2688,19 +2797,35 @@ def conj(tensor: Tensor):
 
 
 def dagger(tensor: Tensor) -> Tensor:
-    r"""The hermitian conjugate tensor.
+    r"""The hermitian conjugate tensor, a.k.a the dagger of a tensor.
 
-    For a tensor ``A: [V1, V2] -> [W1, W2]`` with ``A.legs == [W1, W2, V2.dual, V1.dual]``,
-    the dagger is given by ``dagger(A): [W1, W2] -> [V1, V2]`` with
-    ``dagger(A).legs == [V1, V2, W2.dual, W1.dual]``.
+    For a tensor with one leg each in (co-)domain (i.e. a matrix), this coincides with
+    the hermitian conjugate matrix :math:`(M^\dagger)_{i,j} = \bar{M}_{j, i}` .
+    For a tensor ``A: X -> Y`` the dagger is a map ``dagger(A): Y -> X``.
+    Thus the result has::
 
-    Any number of legs can be contracted between ``A`` and ``dagger(A)`` and the resulting legs
-    only depend on the input legs, not on their bipartition into domain and codomain.
+        dagger(A).codomain == A.domain
+        dagger(A).domain == A.codomain
+        dagger(A).legs == [leg.dual for leg in reversed(A.legs)]
+        dagger(A).labels == [_dual_leg_label(l) for l in reversed(A.labels)]
 
-    For a matrix (i.e. a two-leg tensor), the dagger is the hermitian conjugate,
-    given by :math:`(M^\dagger)_{i,j} = \bar{M}_{j, i}`.
+    Note that the resulting :attr:`Tensor.legs` only depend on the input :attr:`Tensor.legs`, not
+    on their bipartition into domain and codomain.
 
-    TODO doctest comparing ``tenpy.dagger -> to_numpy`` with ``to_numpy -> transpose().conj()``
+    Graphically::
+
+        |        a   b   c             e   d
+        |        │   │   │             │   │
+        |       ┏┷━━━┷━━━┷┓         ┏━━┷━━━┷━━┓
+        |       ┃    A    ┃         ┃dagger(A)┃
+        |       ┗━━┯━━━┯━━┛         ┗┯━━━┯━━━┯┛
+        |          │   │             │   │   │
+        |          e   d             a   b   c
+
+    Where ``a, b, c, d, e`` denote the legs in to (co-)domain.
+    
+    For labels, we toggle a duality marker, i.e. if ``A.labels == ['a', 'b', 'c', 'd*', 'e*']``,
+    then ``dagger(A).labels == ['e', 'd', 'c*', 'b*','a*'].
     """
     if isinstance(tensor, Mask):
         return Mask(
@@ -2734,15 +2859,19 @@ def compose(tensor1: Tensor, tensor2: Tensor, relabel1: dict[str, str] = None,
 
     Graphically::
 
-        |       |  |  |
-        |       tensor1
-        |        |  |
-        |       tensor2
-        |       |  |  |
+        |        │   │   │   │
+        |       ┏┷━━━┷━━━┷━━━┷┓
+        |       ┃   tensor1   ┃
+        |       ┗━━━━┯━━━┯━━━━┛
+        |            │   │
+        |       ┏━━━━┷━━━┷━━━━┓
+        |       ┃   tensor2   ┃
+        |       ┗━━┯━━━┯━━━┯━━┛
+        |          │   │   │
 
     Returns
     -------
-    The composite map :math:`A \circ B` from ``B.domain`` to ``A.codomain``, as a Tensor.
+    The composite map :math:`T_1 \circ T_2` from ``tensor2.domain`` to ``tensor1.codomain``.
 
     See Also
     --------
@@ -2766,9 +2895,9 @@ def compose(tensor1: Tensor, tensor2: Tensor, relabel1: dict[str, str] = None,
     if isinstance(tensor1, ChargedTensor) or isinstance(tensor2, ChargedTensor):
         # OPTIMIZE dedicated implementation?
         return tdot(tensor1, tensor2,
-                    list(reversed(range(tensor1.num_codomain_legs, tensor1.num_legs))),
-                    list(range(tensor2.num_codomain_legs)),
-                    relabel1=relabel1, relabel2=relabel2)
+                        list(reversed(range(tensor1.num_codomain_legs, tensor1.num_legs))),
+                        list(range(tensor2.num_codomain_legs)),
+                        relabel1=relabel1, relabel2=relabel2)
 
     return _compose_SymmetricTensors(tensor1, tensor2, relabel1=relabel1, relabel2=relabel2)
 
@@ -2776,7 +2905,7 @@ def compose(tensor1: Tensor, tensor2: Tensor, relabel1: dict[str, str] = None,
 def _compose_SymmetricTensors(tensor1: SymmetricTensor, tensor2: SymmetricTensor,
                               relabel1: dict[str, str] = None, relabel2: dict[str, str] = None
                               ) -> SymmetricTensor:
-    """Restricted case of :func:`dot` where we assume that both tensors are SymmetricTensor.
+    """Restricted case of :func:`compose` where we assume that both tensors are SymmetricTensor.
 
     Is used by both compose and tdot.
     """
@@ -2790,14 +2919,28 @@ def _compose_SymmetricTensors(tensor1: SymmetricTensor, tensor2: SymmetricTensor
 
 
 def entropy(p: DiagonalTensor | Sequence[float], n=1):
-    """The entropy of a probability distribution.
+    r"""The entropy of a probability distribution.
 
     Assumes that `p` is a probability distribution, i.e. real, non-negative and normalized to
     ``p.sum() == 1.``.
-    
+
+    For ``n==1``, we compute the von-Neumann entropy
+    :math:`S_\text{vN} = -\mathrm{Tr}[p \mathrm{log} p]`.
+    Otherwise, we compute the Renyi entropy
+    :math:`S_n = \frac{1}{1 - n} \mathrm{log} \mathrm{Tr}[p^n]`
+
+    Notes
+    -----
+    For non-abelian symmetries and anyonic gradings we have
+    :math:`p = \bigotimes_a \rho_a \mathbb{1}_a` with :math:`\rho_a \ge 0`
+    and :math:`\sum_a d_a \rho_a = 1`. The entropy is then obtained as
+    :math:`S_\text{vN} = \sum_a d_a \rho_a \mathrm{log} \rho_a` or
+    :math:`S_n = \frac{1}{1 - n} \mathrm{log} \sum_a d_a \rho_a^n` where :math:`d_a`
+    is the quantum dimension of sector :math:`a`. (See :meth:`Symmetry.qdim`.)
     """
     if isinstance(p, DiagonalTensor):
-        p = p.to_numpy()
+        # TODO assumes symmetry can be dropped!
+        p = p.to_numpy()  # OPTIMIZE
     else:
         p = np.asarray(p)
         p = np.real_if_close(p)
@@ -2821,12 +2964,25 @@ def get_same_backend(*tensors: Tensor, error_msg: str = 'Incompatible backends.'
 
 @_elementwise_function(block_func='block_imag', maps_zero_to_zero=True)
 def imag(x: _ElementwiseType) -> _ElementwiseType:
-    """The imaginary part of a complex number, elementwise."""
+    """The imaginary part of a complex number, :ref:`elementwise <diagonal_elementwise>`."""
     return np.imag(x)
 
 
 def inner(A: Tensor, B: Tensor, do_dagger: bool = True) -> float | complex:
-    r"""The frobenius inner product :math:`\langle A \vert B \rangle_\text{F}` of two tensors.
+    r"""The Frobenius inner product :math:`\langle A \vert B \rangle_\text{F}` of two tensors.
+
+    Graphically::
+
+        |          ╭───────────╮
+        |          │   ╭─────╮ │
+        |       ┏━━┷━━━┷━━┓  │ │
+        |       ┃    B    ┃  │ │
+        |       ┗┯━━━┯━━━┯┛  │ │
+        |       ┏┷━━━┷━━━┷┓  │ │
+        |       ┃dagger(A)┃  │ │
+        |       ┗━━┯━━━┯━━┛  │ │
+        |          │   ╰─────╯ │
+        |          ╰───────────╯
 
     Assumes that the two tensors have the same (co-)domains.
     The inner product is defined as :math:`\mathrm{Tr}[ A^\dagger \circ B]`.
@@ -2960,32 +3116,59 @@ def linear_combination(a: Number, v: Tensor, b: Number, w: Tensor):
     )
 
 
-def move_leg(tensor: Tensor, which_leg: int | str, *, codomain_pos: int = None, domain_pos: int = None):
+def move_leg(tensor: Tensor, which_leg: int | str, *, codomain_pos: int = None,
+             domain_pos: int = None, levels: list[int] | dict[str | int, int] | None = None
+             ) -> Tensor:
     """Move one leg of a tensor to a specified position.
 
-    TODO implement via permute_legs
-    TODO specify levels somehow?
-    OPTIMIZE direct implementation in fusion tree backend? have extra info for the sequence of needed braids.
+    Graphically::
+
+        |        │   ╭───│─╯ │
+        |       ┏┷━━━┷━━━┷━━━┷┓
+        |       ┃      T      ┃       ==    move_leg(T, 1, codomain_pos=-2)
+        |       ┗┯━━━┯━━━┯━━━┯┛
+        |        │   │   │   │
+
+    Or::
+    
+        |        │   │   ╭───│───╮
+        |       ┏┷━━━┷━━━┷━━━┷┓  │
+        |       ┃      T      ┃  │    ==    move_leg(T, 2, domain_pos=1)
+        |       ┗┯━━━┯━━━┯━━━┯┛  │
+        |        │ ╭─│───│───│───╯
+
+    Parameters
+    ----------
+    tensor: Tensor
+        The tensor to act on
+    which_leg: int | str
+        Which leg of the `tensor` to move, by index or by label.
+    codomain_pos: int, optional, keyword only
+        If given, move the leg to that position of the resulting codomain.
+    domain_pos: int, optional, keyword only
+        If given, move the lef to that position of the resulting domain.
+    levels: optional
+        Is ignored if the symmetry has symmetric braids. Otherwise, these levels specify the
+        chirality of any possible braids induced by permuting the legs. See :func:`permute_legs`.
     """
+    from_domain, co_domain_pos, leg_idx = tensor._parse_leg_idx(which_leg)
     if codomain_pos is not None:
         assert domain_pos is None
-        codomain_pos = _normalize_idx(codomain_pos, tensor.num_codomain_legs)
-        ...
+        new_codomain_size = tensor.num_codomain_legs + int(from_domain)
+        codomain_pos = _normalize_idx(codomain_pos, new_codomain_size)
     if domain_pos is not None:
         assert codomain_pos is None
-        domain_pos = _normalize_idx(domain_pos, tensor.num_domain_legs)
+        new_domain_size = tensor.num_domain_legs + int(not from_domain)
+        domain_pos = _normalize_idx(domain_pos, new_domain_size)
     raise NotImplementedError  # TODO
 
 
-def norm(tensor: Tensor) -> Tensor:
-    """The Frobenius norm of a Tensor.
+def norm(tensor: Tensor) -> float:
+    r"""The Frobenius norm of a Tensor.
 
-    TODO expand docs. See :meth:`inner`
-
-    See Also
-    --------
-    inner
-        The associated Frobenius inner product.
+    The norm is given by :math:`\Vert A \Vert_\text{F} = \sqrt{\langle A \vert A \rangle_\text{F}}`,
+    where :math:`\langle {-} \vert {-} \rangle_\text{F}` is the Frobenius inner product, implemented
+    in :func:`inner`.
     """
     if isinstance(tensor, Mask):
         # norm ** 2 = Tr(m^\dagger . m) = Tr(id_{small_leg}) = dim(small_leg)
@@ -3012,13 +3195,18 @@ def outer(A: Tensor, B: Tensor):
 
     The outer product of two maps :math:`A : W_A \to V_A` and :math:`B : W_B \to V_B` is
     a map :math:`A \otimes B : W_A \otimes W_B \to V_A \otimes V_B`.
-    Thus, as a tensor its legs are, up to a permutation, the legs of `A` plus the legs of `B`.
+
+    |        │   │   │   │            │   │     │   │
+    |       ┏┷━━━┷━━━┷━━━┷┓          ┏┷━━━┷┓   ┏┷━━━┷┓
+    |       ┃ outer(A, B) ┃    ==    ┃  A  ┃   ┃  B  ┃
+    |       ┗━━┯━━━┯━━━┯━━┛          ┗┯━━━┯┛   ┗━━┯━━┛
+    |          │   │   │              │   │       │
 
     Returns
     -------
-    The outer product :math:`A \otimes B`, which has
-    ``domain == ProductSpace.from_partial_products(A.domain, B.domain)``
-    and ``codomain == ProductSpace.from_partial_products(A.codomain, B.codomain)``.
+    The outer product :math:`A \otimes B`, with domain ``[*A.domain, *B.domain]`` and codomain
+    ``[*A.codomain, *B.codomain]``. Thus, the :attr:`Tensor.legs` are, *up to a permutation*,
+    the :attr:`Tensor.legs` of `A` plus the :attr:`Tensor.legs` of `B`.
     """
     raise NotImplementedError  # TODO
 
@@ -3085,6 +3273,16 @@ def permute_legs(tensor: Tensor, codomain: list[int | str] = None, domain: list[
                  levels: list[int] | dict[str | int, int] = None):
     """Permute the legs of a tensor by braiding legs and bending lines.
 
+    |       ╭───│───────│─────╮ │
+    |       │   │   ╭───│───╮ │ │
+    |       0   1   2   3   │ │ │
+    |      ┏┷━━━┷━━━┷━━━┷┓  │ │ │
+    |      ┃      T      ┃  │ │ │   =    permute_legs(T, [1, 3, -1], [5, 2, 4, 0])
+    |      ┗━━┯━━━┯━━━┯━━┛  │ │ │
+    |         6   5   4     │ │ │
+    |         ╰───│───│─────│─│─╯
+    |             │ ╭─│─────╯ │
+        
     Parameters
     ----------
     tensor: Tensor
@@ -3110,13 +3308,13 @@ def permute_legs(tensor: Tensor, codomain: list[int | str] = None, domain: list[
 
 @_elementwise_function(block_func='block_real', maps_zero_to_zero=True)
 def real(x: _ElementwiseType) -> _ElementwiseType:
-    """The real part of a complex number, elementwise."""
+    """The real part of a complex number, :ref:`elementwise <diagonal_elementwise>`."""
     return np.real(x)
 
 
 @_elementwise_function(block_func='block_real_if_close', func_kwargs=dict(tol=100), maps_zero_to_zero=True)
 def real_if_close(x: _ElementwiseType, tol: float = 100) -> _ElementwiseType:
-    """If the :func:`imag` part is close to 0, return the :func:`real` part. Elementwise.
+    """If close to real, return the :func:`real` part, :ref:`elementwise <diagonal_elementwise>`.
 
     Parameters
     ----------
@@ -3160,27 +3358,32 @@ def scalar_multiply(a: Number, v: Tensor) -> Tensor:
 def scale_axis(tensor: Tensor, diag: DiagonalTensor, leg: int | str) -> Tensor:
     """Contract one `leg` of  `tensor` with a diagonal tensor.
 
-    Leg order and labels of `tensor` are not changed.
+    Leg order, labels and legs of `tensor` are not changed.
     The diagonal tensors leg ``diag.leg`` must be the same or the dual of the leg on the tensor,
     if mismatched, the `diag` is automatically transposed, as needed.
 
     Graphically::
 
-        |       | | |          | | |
-        |       tensor         | D |
-        |       | | |          | | |
-        |       | | D          tensor
-        |       | | |          | | |
+        |        │   │   │            │   │  ┏┷┓
+        |       ┏┷━━━┷━━━┷┓           │   │  ┃D┃
+        |       ┃ tensor  ┃           │   │  ┗┯┛
+        |       ┗┯━━━┯━━━┯┛    OR    ┏┷━━━┷━━━┷┓
+        |        │  ┏┷┓  │           ┃ tensor  ┃
+        |        │  ┃D┃  │           ┗┯━━━┯━━━┯┛
+        |        │  ┗┯┛  │            │   │   │
 
-    Or is transposed as needed::
+    Or transpose as needed:
 
-        |       | | |     .---.
-        |       | | |     |   |              | | |
-        |       tensor    D   |      =       tensor 
-        |       | | |     |   |              | |    |
-        |       | |       |   |              | D.T  |
-        |       | .-------.   |              | |    |
-
+        |        │   │   │   │   │
+        |       ┏┷━━━┷━━━┷━━━┷━━━┷┓            │   │   │ 
+        |       ┃ tensor          ┃           ┏┷━━━┷━━━┷┓
+        |       ┗┯━━━┯━━━━━━━━━━━┯┛           ┃ tensor  ┃
+        |        │   │   ╭───╮   │      ==    ┗┯━━━┯━━━┯┛
+        |        │   │  ┏┷┓  │   │             │ ┏━┷━┓ │ 
+        |        │   │  ┃D┃  │   │             │ ┃D.T┃ │ 
+        |        │   │  ┗┯┛  │   │             │ ┗━┯━┛ │ 
+        |        │   ╰───╯   │   │
+    
     where ``D.T == transpose(D)``.
 
     See Also
@@ -3213,52 +3416,122 @@ def scale_axis(tensor: Tensor, diag: DiagonalTensor, leg: int | str) -> Tensor:
                            domain=tensor.domain, backend=backend, labels=tensor._labels)
 
 
-def set_as_slice():
-    # TODO define what this even means
-    raise NotImplementedError
+def split_legs(tensor: Tensor, legs: list[int | str] = None):
+    """Split legs that were previously combined using :func:`combine_legs`.
 
+    |       │   │   │   │   │   │
+    |       ╰╥──┴───╯   │   ╰╥──╯
+    |      ┏━┷━━━━━━━━━━┷━━━━┷━━━┓
+    |      ┃          T          ┃    ==    split_legs(T, [0, 2, 5])
+    |      ┗┯━━━┯━━━━━━━━━━┯━━━━┯┛
+    |       │   │   ╭───┬──╨╮   │
+    |       │   │   │   │   │   │
 
-def split_legs():
-    # TODO define signature and meaning.
-    # should be exact inverse of combine_legs if the legs where contiguous before combining.
-    # otherwise, should be its inverse up to a permute_legs
+    This is the inverse of :func:`combine_legs`, *only up to possible :func:`permute_legs`*!
+    
+    Parameters
+    ----------
+    tensor
+        The tensor to act on.
+    legs: list of int | str
+        Which legs to split. If ``None`` (default), all those legs that are :class:`ProductSpace`s
+        are split.
+    """
+    if isinstance(tensor, (DiagonalTensor, Mask)):
+        tensor = tensor.as_SymmetricTensor()
+    if isinstance(tensor, ChargedTensor):
+        if legs is not None:
+            legs = tensor.get_leg_idcs(legs)
+        return ChargedTensor(split_legs(tensor.invariant_part, legs), tensor.charged_state)
+    # remaining case: SymmetricTensor.
     raise NotImplementedError  # TODO
 
 
 @_elementwise_function(block_func='block_sqrt', maps_zero_to_zero=True)
 def sqrt(x: _ElementwiseType) -> _ElementwiseType:
-    """The square root of a number, elementwise."""
+    """The square root of a number, :ref:`elementwise <diagonal_elementwise>`."""
     return np.sqrt(x)
 
 
-def squeeze_legs():
+def squeeze_legs(tensor: Tensor, legs: int | str | list[int | str] = None) -> Tensor:
     """Remove trivial legs.
 
-    TODO elaborate, decide signature...
-    """
-    raise NotImplementedError
-
-
-def tdot(tensor1: Tensor, tensor2: Tensor,
-         legs1: int | str | list[int | str], legs2: int | str | list[int | str],
-         relabel1: dict[str, str] = None, relabel2: dict[str, str] = None):
-    """Tensor contraction.
-
-    TODO elaborate
+    A leg counts as trivial according to :attr:`Space.is_trivial`, i.e. if it consists of a single
+    copy of the trivial sector.
 
     Parameters
     ----------
-    TODO
+    tensor:
+        The tensor to act on.
+    legs: (list of) {int | str}
+        Which legs to squeeze. Squeezed legs must be trivial.
+        If ``None`` (default) all trivial legs are squeezed.
+    """
+    if legs is None:
+        legs = [n for n, l in enumerate(conventional_leg_order(tensor)) if l.is_trivial]
+    else:
+        legs = tensor.get_leg_idcs(legs)
+        if not all(tensor.get_leg_co_domain(n).is_trivial for n in legs):
+            raise ValueError('Can only squeeze trivial legs')
+    if len(legs) == 0:
+        return tensor
+    if isinstance(tensor, (DiagonalTensor, Mask)):
+        tensor = tensor.as_SymmetricTensor()
+    if isinstance(tensor, ChargedTensor):
+        return ChargedTensor(
+            squeeze_legs(tensor.invariant_part, legs=legs),
+            tensor.charged_state
+        )
+    # Remaining case: SymmetricTensor
+    raise NotImplementedError  # TODO
+
+
+def tdot(tensor1: Tensor, tensor2: Tensor,
+             legs1: int | str | list[int | str], legs2: int | str | list[int | str],
+             relabel1: dict[str, str] = None, relabel2: dict[str, str] = None):
+    """General tensor contraction, connecting arbitrary pairs of (matching!) legs.
+
+    For example::
+
+        |        │   ╭───│───│──╮
+        |        0   1   2   │  │
+        |       ┏┷━━━┷━━━┷┓  │  │
+        |       ┃    A    ┃  │  │
+        |       ┗┯━━━┯━━━┯┛  │  │
+        |        5   4   3   │  │
+        |    ╭───╯ ╭─╯   ╰───╯  │
+        |    │     │   ╭─────╮  │    ==    tdot(A, B, [1, 4, 5], [3, 0, 4])
+        |    │     0   1     │  │
+        |    │  ┏━━┷━━━┷━━┓  │  │
+        |    │  ┃    B    ┃  │  │
+        |    │  ┗┯━━━┯━━━┯┛  │  │
+        |    │   4   3   2   │  │
+        |    ╰───╯   ╰───│───│──╯
+
+    Parameters
+    ----------
+    tensor1, tensor2: Tensor
+        The two tensor to contract
+    legs1, legs2
+        Which legs to contract: ``legs1[n]`` on `tensor1` is contracted with ``legs2[n]`` on
+        `tensor2`.
+    relabel1, relabel2: dict[str, str], optional
+        A mapping of labels for each of the tensors. The result has labels, as if the
+        input tensors were relabelled accordingly before contraction.
 
     Returns
     -------
-        domain == tensor2_uncontracted
-        codomain == tensor1_uncontracted
-        TODO define order!
+    A tensor given by the contraction.
+    Its domain is formed by the uncontracted legs of `tensor2`, in *inverse* order and with
+    *opposite* duality compared to ``tensor2.legs``, i.e. like they were all in ``tensor2.domain``.
+    Its codomain, conversely, is given by the uncontracted legs of `tensor1`, in the same order
+    and with the same duality as in ``tensor1.legs``, i.e. like they were all in ``tensor1.codomain``.
+    Therefore, the ``result.legs`` are the uncontracted from ``tensor1.legs``, followed by the
+    uncontracted ``tensor2.legs``.
         
     See Also
     --------
-    dot, apply_mask, scale_axis
+    compose, apply_mask, scale_axis
     """
     # parse legs to list[int] and check they are valid
     legs1 = tensor1.get_leg_idcs(to_iterable(legs1))
@@ -3272,7 +3545,7 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
     # Deal with Masks: either return or reduce to SymmetricTensor
     if isinstance(tensor1, Mask):
         if num_contr == 0:
-            warnings.warn('Converting Mask to SymmetricTensor for non-contracting tdot')
+            warnings.warn('Converting Mask to SymmetricTensor for non-contracting contract()')
             tensor1 = tensor1.as_SymmetricTensor()
         if num_contr == 1:
             in_domain, co_domain_idx, leg_idx = tensor2._parse_leg_idx(legs2[0])
@@ -3281,7 +3554,7 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
             raise NotImplementedError  # TODO use apply_mask, then partial trace
     if isinstance(tensor2, Mask):
         if num_contr == 0:
-            warnings.warn('Converting Mask to SymmetricTensor for non-contracting tdot')
+            warnings.warn('Converting Mask to SymmetricTensor for non-contracting contract()')
             tensor2 = tensor2.as_SymmetricTensor()
         if num_contr == 1:
             raise NotImplementedError  # TODO use apply_mask
@@ -3291,7 +3564,7 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
     # Deal with DiagonalTensor: either return or reduce to SymmetricTensor
     if isinstance(tensor1, DiagonalTensor):
         if num_contr == 0:
-            warnings.warn('Converting DiagonalTensor to SymmetricTensor for non-contracting tdot')
+            warnings.warn('Converting DiagonalTensor to SymmetricTensor for non-contracting contract()')
             tensor1 = tensor1.as_SymmetricTensor()
         if num_contr == 1:
             raise NotImplementedError  # TODO use scale_axis
@@ -3299,7 +3572,7 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
             raise NotImplementedError  # TODO use scale_axis, then partial trace
     if isinstance(tensor2, DiagonalTensor):
         if num_contr == 0:
-            warnings.warn('Converting DiagonalTensor to SymmetricTensor for non-contracting tdot')
+            warnings.warn('Converting DiagonalTensor to SymmetricTensor for non-contracting contract()')
             tensor2 = tensor2.as_SymmetricTensor()
         if num_contr == 1:
             raise NotImplementedError  # TODO use scale_axis
@@ -3315,19 +3588,19 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
         c1 = c + '1'
         c2 = c + '2'
         inv_part = tdot(tensor1.invariant_part, tensor2.invariant_part, legs1=legs1, legs2=legs2,
-                        relabel1={**relabel1, c: c1}, relabel2={**relabel2, c: c2})
+                            relabel1={**relabel1, c: c1}, relabel2={**relabel2, c: c2})
         inv_part = move_leg(inv_part, c1, domain_pos=0)
         return ChargedTensor.from_two_charge_legs(
             inv_part, state1=tensor1.charged_state, state2=tensor2.charged_state,
         )
     if isinstance(tensor1, ChargedTensor):
         inv_part = tdot(tensor1.invariant_part, tensor2, legs1=legs1, legs2=legs2,
-                        relabel1=relabel1, relabel2=relabel2)
+                            relabel1=relabel1, relabel2=relabel2)
         inv_part = move_leg(inv_part, ChargedTensor._CHARGE_LEG_LABEL, domain_pos=0)
         return ChargedTensor(inv_part, tensor1.charged_state)
     if isinstance(tensor2, ChargedTensor):
         inv_part = tdot(tensor1, tensor2.invariant_part, legs1=legs1, legs2=legs2,
-                        relabel1=relabel1, relabel2=relabel2)
+                            relabel1=relabel1, relabel2=relabel2)
         return ChargedTensor(inv_part, tensor2.charged_state)
 
     # Remaining case: both are SymmetricTenor
@@ -3347,12 +3620,49 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
 
 
 def trace(tensor: Tensor,
-          legs1: int | str | list[int | str] | None = None,
-          legs2: int | str | list[int | str] | None = None):
+          *pairs: Sequence[int | str],
+          levels: list[int] | dict[str | int, int] | None = None):
     """Perform a (partial) trace.
 
-    TODO elaborate
-    By default, require that ``tensor.domain == tensor.codomain`` and perform the full trace.
+    By default, require that ``tensor.domain == tensor.codomain`` and perform the full trace::
+
+        |    ╭───────────────╮
+        |    │   ╭─────────╮ │
+        |    │   │   ╭───╮ │ │
+        |   ┏┷━━━┷━━━┷┓  │ │ │
+        |   ┃    A    ┃  │ │ │    ==    trace(A)
+        |   ┗┯━━━┯━━━┯┛  │ │ │
+        |    │   │   ╰───╯ │ │
+        |    │   ╰─────────╯ │
+        |    ╰───────────────╯
+
+    If `pairs` are specified, a number of partial traces are performed::
+
+        |    ╭───│───╮   ╭───╮
+        |    0   1   2   3   │
+        |   ┏┷━━━┷━━━┷━━━┷┓  │
+        |   ┃      A      ┃  │    ==   trace(A, (0, 2), (3, 5), (-2, 4))
+        |   ┗┯━━━┯━━━┯━━━┯┛  │
+        |    7   6   5   4   │
+        |    │   ╰───│───╯   │
+        |    │       ╰───────╯
+
+    Parameters
+    ----------
+    tensor: Tensor
+        The tensor to act on
+    *pairs:
+        A number of pairs, each describing two legs via index or via label.
+        Each pair is connected, realizing a partial trace
+    levels:
+        If `pairs` is given, the connectivity of the partial trace may induce braids.
+        For symmetries with non-symmetric braiding, these levels are used to determine the
+        chirality of those braids, like in :func:`permute_legs`.
+
+    Returns
+    -------
+    If all legs are traced, a python scalar.
+    If legs are left open, a tensor, whose legs are the untraced legs.
     """
     raise NotImplementedError  # TODO
 
@@ -3360,11 +3670,30 @@ def trace(tensor: Tensor,
 def transpose(tensor: Tensor) -> Tensor:
     r"""The transpose of a tensor.
 
-    For a map :math:`f: V \to W`, the transpose is a map :math:`f: W^* \to V^*`.
+    For a tensor with one leg each in (co-)domain (i.e. a matrix), this coincides with
+    the transpose matrix :math:`(M^\text{T})_{i,j} = M_{j, i}` .
+    For a map :math:`f: V \to W`, the transpose is a map :math:`f: W^* \to V^*`::
 
-    Returns
-    -------
-    TODO describe labels, leg order
+    |          │   │   │             ╭───────────╮
+    |          │   │   │             │ ╭─────╮   │     │ │ │
+    |       ┏━━┷━━━┷━━━┷━━┓          │ │  ┏━━┷━━━┷━━┓  │ │ │
+    |       ┃transpose(A) ┃    ==    │ │  ┃    A    ┃  │ │ │
+    |       ┗━━━━┯━━━┯━━━━┛          │ │  ┗┯━━━┯━━━┯┛  │ │ │
+    |            │   │               │ │   │   │   ╰───╯ │ │
+    |            │   │               │ │   │   ╰─────────╯ │
+    |            │   │               │ │   ╰───────────────╯
+
+    Thus the result has::
+
+        transpose(A).codomain == A.domain.dual == [V2.dual, V1.dual]  # if A.codomain == [V1, V2]
+        transpose(A).domain == A.codomain.dual == [W2.dual, W1.dual]  # if A.domain == [W1, W2]
+        transpose(A).legs == [V2.dual, V1.dual, W1, W2]  # compared to A.legs == [V1, V2, W2.dual, W1.dual]
+        transpose(A).labels == [*A.domain_labels, *A.codomain_labels]
+
+    Note that the resulting :attr:`Tensor.legs` depend not only on the input :attr:`Tensor.legs`,
+    but also on how they are partitioned into domain and codomain.
+
+    We use the "same" labels, up to the permutation.
     """
     if isinstance(tensor, Mask):
         raise NotImplementedError  # TODO
@@ -3390,6 +3719,7 @@ def transpose(tensor: Tensor) -> Tensor:
 
 
 def zero_like(tensor: Tensor) -> Tensor:
+    """Return a zero tensor with same type, dtype, legs, backend and labels."""
     if isinstance(tensor, Mask):
         return Mask.from_zero(large_leg=tensor.large_leg, backend=tensor.backend, labels=tensor.labels)
     if isinstance(tensor, DiagonalTensor):

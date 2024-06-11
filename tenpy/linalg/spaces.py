@@ -114,6 +114,11 @@ class Space(metaclass=ABCMeta):
     def dual(self):
         ...
 
+    @property
+    @abstractmethod
+    def is_trivial(self):
+        ...
+
     @abstractmethod
     def __eq__(self, other):
         ...
