@@ -2471,45 +2471,44 @@ def almost_equal(tensor_1: Tensor, tensor_2: Tensor, rtol: float = 1e-5, atol=1e
 
 
 def apply_mask(tensor: Tensor, mask: Mask, leg: int | str) -> Tensor:
-    """Apply a Mask to one leg of a tensor, *projecting* it to a smaller leg.
+    """Apply a projection Mask to one leg of a tensor, *projecting* it to a smaller leg.
 
+    The mask must be a projection, i.e. its large leg is at the bottom.
     We apply the mask via map composition::
 
-        |        │   │   │            │   │  ┏┷┓
-        |       ┏┷━━━┷━━━┷┓           │   │  ┃M┃
-        |       ┃ tensor  ┃           │   │  ┗┯┛
-        |       ┗┯━━━┯━━━┯┛    OR    ┏┷━━━┷━━━┷┓
-        |        │  ┏┷┓  │           ┃ tensor  ┃
-        |        │  ┃M┃  │           ┗┯━━━┯━━━┯┛
-        |        │  ┗┯┛  │            │   │   │
-        
-    where ``M`` is the `mask` up to transpose and/or dagger, which are automatically applied as
-    needed, such that the large leg of the mask is contracted with the tensor, and the
-    small leg is the resulting open leg
+        |                                │   │   │   │   │
+        |      │   │  ┏┷┓               ┏┷━━━┷━━━┷━━━┷━━━┷┓          │   │   │
+        |      │   │  ┃M┃               ┃ tensor          ┃         ┏┷━━━┷━━━┷┓
+        |      │   │  ┗┯┛               ┗┯━━━┯━━━━━━━━━━━┯┛         ┃ tensor  ┃
+        |     ┏┷━━━┷━━━┷┓       OR       │   │   ╭───╮   │    ==    ┗┯━━━┯━━━┯┛
+        |     ┃ tensor  ┃                │   │  ┏┷┓  │   │           │ ┏━┷━┓ │
+        |     ┗┯━━━┯━━━┯┛                │   │  ┃M┃  │   │           │ ┃M.T┃ │
+        |      │   │   │                 │   │  ┗┯┛  │   │           │ ┗━┯━┛ │
+        |                                │   ╰───╯   │   │
+
+    where ``M.T == transpose(M)``.
+
+    
+    The leg order and labels of `tensor` are not changed.
+    The resulting leg is always *smaller* than before.
+    
 
     Parameters
     ----------
     tensor: Tensor
         The tensor to project
     mask: Mask
-        The mask used for the projection. Its large leg must be equal or dual to
-        the specified `leg` of the tensor.
-        The mask is automatically :func:`transpose`-d and/or :func:`dagger`-ed such that
-        it can be applied via map composition as shown above.
+        A *projection* mask. Its large leg must be equal to the respective :attr:`Tensor.legs`.
+        Note that if the leg is in the domain this means ``mask.large_leg == domain[n].dual == legs[-n]``!
     leg: int | str
         Which leg of the tensor to project
-
-    The leg order and labels of `tensor` are not changed.
-
-    The mask is transposed or daggered as needed, such that the result has a smaller leg
-    than the input `tensor`.
-    The large leg of the mask must be equal or dual to the specified leg of the tensor.
 
     See Also
     --------
     compose, tdot, scale_axis
     """
     in_domain, co_domain_idx, leg_idx = tensor._parse_leg_idx(leg)
+    assert mask.large_leg == tensor.get_leg(leg_idx)
     raise NotImplementedError  # TODO
 
 
@@ -3447,7 +3446,7 @@ def split_legs(tensor: Tensor, legs: list[int | str] = None):
     |       │   │   │   │   │   │
 
     This is the inverse of :func:`combine_legs`, *only up to possible :func:`permute_legs`*!
-    
+
     Parameters
     ----------
     tensor
@@ -3506,8 +3505,8 @@ def squeeze_legs(tensor: Tensor, legs: int | str | list[int | str] = None) -> Te
 
 
 def tdot(tensor1: Tensor, tensor2: Tensor,
-             legs1: int | str | list[int | str], legs2: int | str | list[int | str],
-             relabel1: dict[str, str] = None, relabel2: dict[str, str] = None):
+         legs1: int | str | list[int | str], legs2: int | str | list[int | str],
+         relabel1: dict[str, str] = None, relabel2: dict[str, str] = None):
     """General tensor contraction, connecting arbitrary pairs of (matching!) legs.
 
     For example::
