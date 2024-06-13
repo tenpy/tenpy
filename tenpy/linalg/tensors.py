@@ -81,10 +81,10 @@ from ..tools.misc import to_iterable, rank_data
 
 __all__ = ['Tensor', 'SymmetricTensor', 'DiagonalTensor', 'ChargedTensor', 'Mask',
            'add_trivial_leg', 'almost_equal', 'angle', 'apply_mask', 'bend_legs', 'combine_legs',
-           'conj', 'dagger', 'compose', 'entropy', 'imag', 'inner', 'is_scalar', 'item', 'move_leg',
-           'norm', 'outer', 'permute_legs', 'real', 'real_if_close', 'scale_axis',
-           'split_legs', 'sqrt', 'squeeze_legs', 'tdot', 'trace', 'transpose', 'zero_like',
-           'get_same_backend', 'check_same_legs']
+           'conj', 'dagger', 'compose', 'entropy', 'imag', 'inner', 'is_scalar', 'item',
+           'linear_combination', 'move_leg', 'norm', 'outer', 'permute_legs', 'real',
+           'real_if_close', 'scalar_multiply', 'scale_axis', 'split_legs', 'sqrt', 'squeeze_legs',
+           'tdot', 'trace', 'transpose', 'zero_like', 'get_same_backend', 'check_same_legs']
 
 
 # TENSOR CLASSES
