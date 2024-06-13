@@ -925,8 +925,37 @@ def test_squeeze_legs():
     pytest.skip('Test not written yet')  # TODO
 
 
-def test_tdot():
-    pytest.skip('Test not written yet')  # TODO
+def test_tdot(make_compatible_tensor):
+    pytest.skip('Need to implement permute_legs first.')
+    
+    # TODO writing one specific case first, then generalize to tensor types, leg nums, labels or no
+    A: SymmetricTensor = make_compatible_tensor(
+        codomain=2, domain=2, labels=['a', 'b', 'c*', 'd*'],
+        max_block_size=3, max_blocks=3, cls=SymmetricTensor
+    )
+    a, b = A.codomain
+    d, c = A.domain
+    B: SymmetricTensor = make_compatible_tensor(
+        codomain=[c, None], domain=[a, None], labels=['c', 'e', 'f*', 'a*'],
+        max_block_size=3, max_blocks=3, cls=SymmetricTensor
+    )
+    _c, e = B.codomain
+    _a, f = B.domain
+    assert _c == c
+    assert _a == a
+
+    by_label = tensors.tdot(A, B, ['a', 'c*'], ['a*', 'c'])
+    by_idx = tensors.tdot(A, B, [0, 2], [2, 0])
+    A_np = A.to_numpy()
+    B_np = B.to_numpy()
+    expect = np.tensordot(A_np, B_np, [[0, 2], [2, 0]])
+    for res in [by_label, by_idx]:
+        res.test_sanity()
+        assert res._labels == ['b', 'd*', 'e', 'f']
+        assert res.legs == [b, d.dual, e, f.dual]
+        assert res.codomain.spaces == [b, d.dual]
+        assert res.domain.spaces == [f, e.dual]
+        npt.assert_allclose(res.to_numpy(), expect)
 
 
 def test_trace():
