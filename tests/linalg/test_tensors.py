@@ -55,13 +55,13 @@ def make_compatible_tensor_any_class(request, make_compatible_tensor, compatible
 
 def test_base_Tensor(make_compatible_space, compatible_backend):
 
-    class DummyTensor(Tensor):
+    class DummyTensor(tensors.Tensor):
         """Want to test the Tensor class directly.
 
         This overrides the abstractmethods, so we can actually make instances.
         """
 
-        def copy(self, deep=True) -> Tensor:
+        def copy(self, deep=True) -> tensors.Tensor:
             raise NotImplementedError
 
         def to_dense_block(self, leg_order: list[int | str] = None, dtype: Dtype = None):
