@@ -430,7 +430,8 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def permute_legs(self, a: SymmetricTensor, **kw) -> Data:  # TODO decide signature
+    def permute_legs(self, a: SymmetricTensor, codomain_idcs: list[int], domain_idcs: list[int],
+                     new_codomain: ProductSpace, new_domain: ProductSpace) -> Data:  # TODO decide signature
         ...
 
     @abstractmethod

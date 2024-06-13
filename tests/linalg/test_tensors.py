@@ -6,30 +6,25 @@ import numpy.testing as npt
 import pytest
 import operator
 
-from tenpy.linalg import tensors, backends
+from tenpy.linalg import backends, tensors
+from tenpy.linalg.tensors import DiagonalTensor, SymmetricTensor, Mask, ChargedTensor
 from tenpy.linalg.backends.backend_factory import get_backend
 from tenpy.linalg.dtypes import Dtype
 from tenpy.linalg.spaces import Space, ElementarySpace, ProductSpace, _fuse_spaces
 from tenpy.linalg.symmetries import ProductSymmetry, z4_symmetry, SU2Symmetry
 
 
-TENSOR_CLASSES = [tensors.DiagonalTensor,
-                  tensors.SymmetricTensor,
-                  tensors.Mask,
-                  tensors.ChargedTensor]
-
-
-@pytest.fixture(params=TENSOR_CLASSES)
+@pytest.fixture(params=[DiagonalTensor, SymmetricTensor, Mask, ChargedTensor])
 def make_compatible_tensor_any_class(request, make_compatible_tensor, compatible_symmetry_backend):
     def make(num=None):
         cls = request.param
 
-        if cls is tensors.Mask and compatible_symmetry_backend == 'fusion_tree':
+        if cls is Mask and compatible_symmetry_backend == 'fusion_tree':
             with pytest.raises(NotImplementedError, match='diagonal_to_mask not implemented'):
                 _ = make_compatible_tensor(cls=cls)
             pytest.skip()
         
-        if cls in [tensors.DiagonalTensor, tensors.Mask]:
+        if cls in [DiagonalTensor, Mask]:
             first = make_compatible_tensor(cls=cls)
             if num is None:
                 return first
@@ -41,15 +36,15 @@ def make_compatible_tensor_any_class(request, make_compatible_tensor, compatible
                                        cls=request.param)
         if num is None:
             return first
-        if cls is tensors.ChargedTensor:
+        if cls is ChargedTensor:
             more = []
             for _ in range(num - 1):
                 inv_part = make_compatible_tensor(
                     codomain=first.codomain, domain=first.invariant_part.domain,
-                    max_block_size=3, max_blocks=3, cls=tensors.SymmetricTensor,
+                    max_block_size=3, max_blocks=3, cls=SymmetricTensor,
                     labels=first.invariant_part._labels
                 )
-                more.append(tensors.ChargedTensor(inv_part, first.charged_state))
+                more.append(ChargedTensor(inv_part, first.charged_state))
         else:
             more = [make_compatible_tensor(codomain=first.codomain, domain=first.domain,
                                            max_block_size=3, max_blocks=3, cls=cls)
@@ -60,19 +55,19 @@ def make_compatible_tensor_any_class(request, make_compatible_tensor, compatible
 
 def test_base_Tensor(make_compatible_space, compatible_backend):
 
-    class DummyTensor(tensors.Tensor):
+    class DummyTensor(Tensor):
         """Want to test the Tensor class directly.
 
         This overrides the abstractmethods, so we can actually make instances.
         """
 
-        def copy(self, deep=True) -> tensors.Tensor:
+        def copy(self, deep=True) -> Tensor:
             raise NotImplementedError
 
         def to_dense_block(self, leg_order: list[int | str] = None, dtype: Dtype = None):
             raise NotImplementedError
 
-        def as_SymmetricTensor(self) -> tensors.SymmetricTensor:
+        def as_SymmetricTensor(self) -> SymmetricTensor:
             raise NotImplementedError
 
 
@@ -157,7 +152,7 @@ def test_base_Tensor(make_compatible_space, compatible_backend):
 @pytest.mark.parametrize('leg_nums', [(1, 1), (2, 1), (3, 0), (0, 3)],
                          ids=['1->1', '1->2', '0->3', '3->0'])
 def test_SymmetricTensor(make_compatible_tensor, leg_nums):
-    T: tensors.SymmetricTensor = make_compatible_tensor(*leg_nums)
+    T: SymmetricTensor = make_compatible_tensor(*leg_nums)
     backend = T.backend
     
     T.test_sanity()
@@ -176,7 +171,7 @@ def test_SymmetricTensor(make_compatible_tensor, leg_nums):
     dense_block = backend.block_from_numpy(numpy_block)
 
     print('checking from_dense_block')
-    tens = tensors.SymmetricTensor.from_dense_block(
+    tens = SymmetricTensor.from_dense_block(
         dense_block, codomain=T.codomain, domain=T.domain, backend=backend
     )
     tens.test_sanity()
@@ -184,7 +179,7 @@ def test_SymmetricTensor(make_compatible_tensor, leg_nums):
     if T.num_parameters < T.size:  # otherwise all blocks are symmetric
         non_symmetric_block = dense_block + tens.backend.block_random_uniform(T.shape, dtype=T.dtype)
         with pytest.raises(ValueError, match='Block is not symmetric'):
-            _ = tensors.SymmetricTensor.from_dense_block(
+            _ = SymmetricTensor.from_dense_block(
                 non_symmetric_block, codomain=T.codomain, domain=T.domain, backend=backend
             )
 
@@ -194,7 +189,7 @@ def test_SymmetricTensor(make_compatible_tensor, leg_nums):
     # - diagonal
 
     print('checking from_zero')
-    zero_tens = tensors.SymmetricTensor.from_zero(codomain=T.codomain, domain=T.domain, backend=backend)
+    zero_tens = SymmetricTensor.from_zero(codomain=T.codomain, domain=T.domain, backend=backend)
     zero_tens.test_sanity()
     npt.assert_array_almost_equal_nulp(zero_tens.to_numpy(), np.zeros(T.shape), 10)
     
@@ -204,7 +199,7 @@ def test_SymmetricTensor(make_compatible_tensor, leg_nums):
         # otherwise it gets a bit expensive to compute
         which = ProductSpace(which.spaces[:2], backend=backend)
     labels=list('abcdefg')[:len(which)]
-    tens = tensors.SymmetricTensor.from_eye(which, backend=T.backend, labels=labels)
+    tens = SymmetricTensor.from_eye(which, backend=T.backend, labels=labels)
     expect_from_backend = backend.block_to_numpy(
         backend.eye_block([leg.dim for leg in which.spaces], dtype=T.dtype)
     )
@@ -231,14 +226,14 @@ def test_SymmetricTensor(make_compatible_tensor, leg_nums):
 
 
 def test_DiagonalTensor(make_compatible_tensor):
-    T: tensors.DiagonalTensor = make_compatible_tensor(cls=tensors.DiagonalTensor)
+    T: DiagonalTensor = make_compatible_tensor(cls=DiagonalTensor)
     T.test_sanity()
 
     print('checking diagonal_as_numpy')
     np_diag = T.diagonal_as_numpy()
 
     print('checking from_diag_block')
-    tens = tensors.DiagonalTensor.from_diag_block(np_diag, leg=T.leg, backend=T.backend)
+    tens = DiagonalTensor.from_diag_block(np_diag, leg=T.leg, backend=T.backend)
     tens.test_sanity()
     res = tens.diagonal_as_numpy()
     npt.assert_array_almost_equal_nulp(res, np_diag, 100)
@@ -248,12 +243,12 @@ def test_DiagonalTensor(make_compatible_tensor):
     npt.assert_array_almost_equal_nulp(np_full, np.diag(np_diag), 100)
 
     print('checking from zero')
-    zero_tens = tensors.DiagonalTensor.from_zero(T.leg, backend=T.backend)
+    zero_tens = DiagonalTensor.from_zero(T.leg, backend=T.backend)
     zero_tens.test_sanity()
     npt.assert_array_almost_equal_nulp(zero_tens.diagonal_as_numpy(), np.zeros_like(np_diag), 100)
 
     print('checking from eye')
-    tens = tensors.DiagonalTensor.from_eye(T.leg, backend=T.backend)
+    tens = DiagonalTensor.from_eye(T.leg, backend=T.backend)
     tens.test_sanity()
     npt.assert_array_almost_equal_nulp(tens.diagonal_as_numpy(), np.ones_like(np_diag), 100)
 
@@ -275,10 +270,10 @@ def test_Mask(make_compatible_tensor, compatible_symmetry_backend, np_random):
     if compatible_symmetry_backend == 'fusion_tree':
         # necessary functions to create Masks from fixture are not implemented yet
         with pytest.raises(NotImplementedError, match='diagonal_to_mask not implemented'):
-            make_compatible_tensor(cls=tensors.Mask)
+            make_compatible_tensor(cls=Mask)
         return
 
-    M_projection: tensors.Mask = make_compatible_tensor(cls=tensors.Mask)
+    M_projection: Mask = make_compatible_tensor(cls=Mask)
     backend = M_projection.backend
     symmetry = M_projection.symmetry
     large_leg = M_projection.domain[0]
@@ -290,7 +285,7 @@ def test_Mask(make_compatible_tensor, compatible_symmetry_backend, np_random):
         M_projection_np = M_projection.as_numpy_mask()
 
     print('checking inclusion Mask')
-    M_inclusion: tensors.Mask = tensors.dagger(M_projection)
+    M_inclusion: Mask = tensors.dagger(M_projection)
     assert M_inclusion.is_projection is False
     M_inclusion.test_sanity()
 
@@ -302,7 +297,7 @@ def test_Mask(make_compatible_tensor, compatible_symmetry_backend, np_random):
 
     print('checking from_eye')
     for is_projection in [True, False]:
-        M_eye = tensors.Mask.from_eye(large_leg, is_projection=is_projection, backend=backend)
+        M_eye = Mask.from_eye(large_leg, is_projection=is_projection, backend=backend)
         assert M_eye.is_projection is is_projection
         M_eye.test_sanity()
 
@@ -310,7 +305,7 @@ def test_Mask(make_compatible_tensor, compatible_symmetry_backend, np_random):
         # checks that rely on dense block representations
         print('checking from_block_mask / as_block_mask')
         block_mask = np_random.choice([True, False], large_leg.dim, replace=True)
-        M = tensors.Mask.from_block_mask(block_mask, large_leg=large_leg, backend=backend)
+        M = Mask.from_block_mask(block_mask, large_leg=large_leg, backend=backend)
         M.test_sanity()
         assert M.large_leg == large_leg
         assert M.small_leg.dim == np.sum(block_mask)
@@ -318,7 +313,7 @@ def test_Mask(make_compatible_tensor, compatible_symmetry_backend, np_random):
         
         print('checking from_indices')
         indices = np.where(block_mask)[0]
-        M = tensors.Mask.from_indices(indices, large_leg=large_leg, backend=backend)
+        M = Mask.from_indices(indices, large_leg=large_leg, backend=backend)
         M.test_sanity()
         assert M.large_leg == large_leg
         assert M.small_leg.dim == np.sum(block_mask)
@@ -334,7 +329,7 @@ def test_Mask(make_compatible_tensor, compatible_symmetry_backend, np_random):
     assert diag.leg == large_leg
     assert diag.dtype == Dtype.bool
     diag.test_sanity()
-    M = tensors.Mask.from_DiagonalTensor(diag)
+    M = Mask.from_DiagonalTensor(diag)
     if symmetry.can_be_dropped:
         npt.assert_array_equal(M_projection_np, M.as_numpy_mask())
     assert (M == M_projection).all()
@@ -343,20 +338,20 @@ def test_Mask(make_compatible_tensor, compatible_symmetry_backend, np_random):
     assert diag.leg == large_leg
     assert diag.dtype == Dtype.bool
     diag.test_sanity()
-    M = tensors.Mask.from_DiagonalTensor(diag)  # should reproduce the *projection* Mask.
+    M = Mask.from_DiagonalTensor(diag)  # should reproduce the *projection* Mask.
     if symmetry.can_be_dropped:
         npt.assert_array_equal(M_projection_np, M.as_numpy_mask())
     assert (M == M_projection).all()
     
     print('checking from_random')
-    M = tensors.Mask.from_random(large_leg, small_leg=None, backend=backend)
+    M = Mask.from_random(large_leg, small_leg=None, backend=backend)
     M.test_sanity()
-    M2 = tensors.Mask.from_random(large_leg, small_leg=M.small_leg, backend=backend)
+    M2 = Mask.from_random(large_leg, small_leg=M.small_leg, backend=backend)
     M2.test_sanity()
     assert M2.small_leg == M.small_leg
 
     print('checking from_zero')
-    M_zero = tensors.Mask.from_zero(large_leg, backend=backend)
+    M_zero = Mask.from_zero(large_leg, backend=backend)
     M_zero.test_sanity()
     assert M_zero.small_leg.dim == 0
 
@@ -408,7 +403,7 @@ def test_Mask(make_compatible_tensor, compatible_symmetry_backend, np_random):
 @pytest.mark.parametrize('leg_nums', [(1, 1), (2, 1), (3, 0), (0, 3)],
                          ids=['1->1', '1->2', '0->3', '3->0'])
 def test_ChargedTensor(make_compatible_tensor, make_compatible_sectors, compatible_symmetry, leg_nums):
-    T: tensors.ChargedTensor = make_compatible_tensor(*leg_nums, cls=tensors.ChargedTensor)
+    T: ChargedTensor = make_compatible_tensor(*leg_nums, cls=ChargedTensor)
     backend = T.backend
 
     T.test_sanity()
@@ -426,7 +421,7 @@ def test_ChargedTensor(make_compatible_tensor, make_compatible_sectors, compatib
     assert T.shape == numpy_block.shape
     
     print('checking from_zero')
-    zero_tens = tensors.ChargedTensor.from_zero(
+    zero_tens = ChargedTensor.from_zero(
         codomain=T.codomain, domain=T.domain, charge=T.charge_leg, charged_state=T.charged_state,
         backend=backend
     )
@@ -443,7 +438,7 @@ def test_ChargedTensor(make_compatible_tensor, make_compatible_sectors, compatib
     sector = make_compatible_sectors(1)[0]
     charge_leg = ElementarySpace(compatible_symmetry, sector[None, :])
     inv_part = make_compatible_tensor(codomain=1, domain=[charge_leg], labels=[None, '!'])
-    tens = tensors.ChargedTensor(inv_part, charged_state=[1])
+    tens = ChargedTensor(inv_part, charged_state=[1])
     leg = tens.codomain[0]
     block_size = leg.sector_multiplicity(sector)
 
@@ -454,7 +449,7 @@ def test_ChargedTensor(make_compatible_tensor, make_compatible_sectors, compatib
     
     block = tens.to_dense_block_single_sector()
     assert backend.block_shape(block) == (block_size,)
-    tens2 = tensors.ChargedTensor.from_dense_block_single_sector(
+    tens2 = ChargedTensor.from_dense_block_single_sector(
         vector=block, space=leg, sector=sector, backend=backend
     )
     tens2.test_sanity()
@@ -514,11 +509,11 @@ def test_explicit_blocks(symmetry_backend, block_backend):
     non_symmetric_data = data.copy()
     non_symmetric_data[0, 0] = 42
     with pytest.raises(ValueError, match='not symmetric'):
-        t = tensors.SymmetricTensor.from_dense_block(non_symmetric_data, codomain=[s1, s2],
+        t = SymmetricTensor.from_dense_block(non_symmetric_data, codomain=[s1, s2],
                                                     backend=backend)
     # now continue with the symmetric block
 
-    t = tensors.SymmetricTensor.from_dense_block(data, codomain=[s1, s2], backend=backend)
+    t = SymmetricTensor.from_dense_block(data, codomain=[s1, s2], backend=backend)
     t.test_sanity()
     
     # explicitly check the ``t.data`` vs what we expect
@@ -586,12 +581,12 @@ def test_explicit_blocks(symmetry_backend, block_backend):
     non_symmetric_data = data.copy()
     non_symmetric_data[0, 0] = 42
     with pytest.raises(ValueError, match='not symmetric'):
-        t = tensors.SymmetricTensor.from_dense_block(
+        t = SymmetricTensor.from_dense_block(
             non_symmetric_data, codomain=[s1], domain=[s2], backend=backend
         )
     # now continue with the symmetric block
 
-    t = tensors.SymmetricTensor.from_dense_block(
+    t = SymmetricTensor.from_dense_block(
         data, codomain=[s1], domain=[s2], backend=backend
     )
     t.test_sanity()
@@ -659,12 +654,12 @@ def test_explicit_blocks(symmetry_backend, block_backend):
     non_symmetric_data = data.copy()
     non_symmetric_data[0, 0, 1, 1] = 42
     with pytest.raises(ValueError, match='not symmetric'):
-        t = tensors.SymmetricTensor.from_dense_block(
+        t = SymmetricTensor.from_dense_block(
             non_symmetric_data, codomain=[s, s], domain=[s, s], backend=backend
         )
     # now continue with the symmetric block
 
-    t = tensors.SymmetricTensor.from_dense_block(
+    t = SymmetricTensor.from_dense_block(
         data, codomain=[s, s], domain=[s, s], backend=backend
     )
     t.test_sanity()
@@ -744,7 +739,7 @@ def test_from_block_su2_symm(symmetry_backend, block_backend):
     print(heisenberg_4.transpose([0, 2, 1, 3]).reshape((4, 4)))
     heisenberg_4 = np.transpose(heisenberg_4, [0, 2, 3, 1])  # [p1, p2, p2*, p1*]
 
-    tens_4 = tensors.SymmetricTensor.from_dense_block(
+    tens_4 = SymmetricTensor.from_dense_block(
         heisenberg_4, codomain=[spin_half, spin_half], domain=[spin_half, spin_half],
         backend=backend, labels=[['p1', 'p2'], ['p1*', 'p2*']]
     )
@@ -861,7 +856,7 @@ def test_linear_combination(make_compatible_tensor_any_class):
     assert v.domain == w.domain
     assert v.codomain == w.codomain
     
-    needs_fusion_tensor = type(v) in [tensors.SymmetricTensor, tensors.ChargedTensor] \
+    needs_fusion_tensor = type(v) in [SymmetricTensor, ChargedTensor] \
         and isinstance(v.backend, backends.FusionTreeBackend)
     if needs_fusion_tensor and isinstance(v.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError):
@@ -898,7 +893,7 @@ def test_permute_legs():
 def test_scalar_multiply(make_compatible_tensor_any_class):
     T = make_compatible_tensor_any_class()
     
-    needs_fusion_tensor = type(T) in [tensors.SymmetricTensor, tensors.ChargedTensor] \
+    needs_fusion_tensor = type(T) in [SymmetricTensor, ChargedTensor] \
         and isinstance(T.backend, backends.FusionTreeBackend)
     if needs_fusion_tensor and isinstance(T.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError):
@@ -1540,7 +1535,7 @@ def OLD_test_elementwise_functions(make_compatible_space, compatible_backend, np
 
 @pytest.mark.parametrize('which_legs', [[0], [-1], ['b'], ['a', 'b', 'c', 'd'], ['b', -2]])
 def OLD_test_flip_leg_duality(make_compatible_tensor, which_legs):
-    T: tensors.SymmetricTensor = make_compatible_tensor(labels=['a', 'b', 'c', 'd'])
+    T: SymmetricTensor = make_compatible_tensor(labels=['a', 'b', 'c', 'd'])
 
     if isinstance(T.backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError, match='flip_leg_duality not implemented'):
@@ -1571,10 +1566,10 @@ def OLD_test_Mask(np_random, make_compatible_space, compatible_backend):
 
     if isinstance(compatible_backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError, match='mask_from_block not implemented'):
-            mask = tensors.Mask.from_blockmask(blockmask, large_leg=large_leg, backend=compatible_backend)
+            mask = Mask.from_blockmask(blockmask, large_leg=large_leg, backend=compatible_backend)
         return  # TODO
     
-    mask = tensors.Mask.from_blockmask(blockmask, large_leg=large_leg, backend=compatible_backend)
+    mask = Mask.from_blockmask(blockmask, large_leg=large_leg, backend=compatible_backend)
     mask.test_sanity()
 
     npt.assert_array_equal(mask.numpymask, blockmask)
@@ -1583,7 +1578,7 @@ def OLD_test_Mask(np_random, make_compatible_space, compatible_backend):
 
     # mask2 : same mask, but build from indices
     indices = np.where(blockmask)[0]
-    mask2 = tensors.Mask.from_indices(indices, large_leg=large_leg, backend=compatible_backend)
+    mask2 = Mask.from_indices(indices, large_leg=large_leg, backend=compatible_backend)
     mask2.test_sanity()
     npt.assert_array_equal(mask2.numpymask, blockmask)
     assert mask.same_mask(mask2)
@@ -1593,18 +1588,18 @@ def OLD_test_Mask(np_random, make_compatible_space, compatible_backend):
     print(f'{indices=}')
     indices3 = indices.copy()
     indices3[len(indices3) // 2] = not indices3[len(indices3) // 2]
-    mask3 = tensors.Mask.from_indices(indices3, large_leg=large_leg, backend=compatible_backend)
+    mask3 = Mask.from_indices(indices3, large_leg=large_leg, backend=compatible_backend)
     mask3.test_sanity()
     assert not mask.same_mask(mask3)
     assert not tensors.almost_equal(mask, mask3)
 
     # mask4: independent random mask
     blockmask4 = np_random.choice([True, False], size=large_leg.dim)
-    mask4 = tensors.Mask.from_blockmask(blockmask4, large_leg=large_leg, backend=compatible_backend)
+    mask4 = Mask.from_blockmask(blockmask4, large_leg=large_leg, backend=compatible_backend)
     mask4.test_sanity()
 
-    mask_all = tensors.Mask.eye(large_leg=large_leg, backend=compatible_backend)
-    mask_none = tensors.Mask.zero(large_leg=large_leg, backend=compatible_backend)
+    mask_all = Mask.eye(large_leg=large_leg, backend=compatible_backend)
+    mask_none = Mask.zero(large_leg=large_leg, backend=compatible_backend)
     assert mask_all.all()
     assert mask_all.any()
     assert not mask_none.all()
@@ -1629,24 +1624,24 @@ def OLD_test_Mask(np_random, make_compatible_space, compatible_backend):
         if mask == mask4:  # this is invalid
             pass
     # legal version:
-    if tensors.Mask.all(mask == mask4):
+    if Mask.all(mask == mask4):
         pass
 
-    eye = tensors.Mask.eye(large_leg=large_leg, backend=compatible_backend)
+    eye = Mask.eye(large_leg=large_leg, backend=compatible_backend)
     eye.test_sanity()
     assert eye.all()
     npt.assert_array_equal(eye.numpymask, np.ones(large_leg.dim, bool))
 
     diag = tensors.DiagonalTensor.from_diag(blockmask, first_leg=large_leg, backend=compatible_backend)
     diag.test_sanity()
-    mask5 = tensors.Mask.from_DiagonalTensor(diag)
+    mask5 = Mask.from_DiagonalTensor(diag)
     npt.assert_array_equal(mask5.numpymask, mask.numpymask)
     assert tensors.almost_equal(mask5, mask)
 
 
 @pytest.mark.parametrize('num_legs', [1, 3])
 def OLD_test_apply_Mask_Tensor(make_compatible_tensor, compatible_backend, num_legs):
-    T: tensors.SymmetricTensor = make_compatible_tensor(num_legs=num_legs)
+    T: SymmetricTensor = make_compatible_tensor(num_legs=num_legs)
 
     if not T.symmetry.is_abelian:
         # TODO
@@ -1654,10 +1649,10 @@ def OLD_test_apply_Mask_Tensor(make_compatible_tensor, compatible_backend, num_l
 
     if isinstance(T.backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError, match='mask_from_block not implemented'):
-            mask = make_compatible_tensor(legs=[T.legs[0], None], cls=tensors.Mask)
+            mask = make_compatible_tensor(legs=[T.legs[0], None], cls=Mask)
         return  # TODO
     
-    mask = make_compatible_tensor(legs=[T.legs[0], None], cls=tensors.Mask)
+    mask = make_compatible_tensor(legs=[T.legs[0], None], cls=Mask)
     masked = T.apply_mask(mask, 0)
     masked.test_sanity()
     npt.assert_array_almost_equal_nulp(T.to_numpy()[mask.numpymask],
@@ -1673,10 +1668,10 @@ def OLD_test_apply_Mask_DiagonalTensor(make_compatible_tensor, compatible_backen
 
     
     T: tensors.DiagonalTensor = make_compatible_tensor(cls=tensors.DiagonalTensor)
-    mask = make_compatible_tensor(legs=[T.legs[0], None], cls=tensors.Mask)
+    mask = make_compatible_tensor(legs=[T.legs[0], None], cls=Mask)
     # mask only one leg
     masked = T.apply_mask(mask, 0)
-    assert isinstance(masked, tensors.SymmetricTensor)
+    assert isinstance(masked, SymmetricTensor)
     masked.test_sanity()
     npt.assert_array_almost_equal_nulp(T.to_numpy()[mask.numpymask],
                                        masked.to_numpy(),
@@ -1694,7 +1689,7 @@ def OLD_test_apply_Mask_DiagonalTensor(make_compatible_tensor, compatible_backen
 def OLD_test_apply_Mask_ChargedTensor(make_compatible_tensor, num_legs):
     pytest.xfail('Fixture generates ChargedTensor with unspecified charged_state')
     
-    # T: tensors.ChargedTensor = make_compatible_tensor(num_legs=num_legs, cls=tensors.ChargedTensor)
+    # T: ChargedTensor = make_compatible_tensor(num_legs=num_legs, cls=ChargedTensor)
     # # first leg
     
     # if not T.symmetry.is_abelian:
@@ -1703,17 +1698,17 @@ def OLD_test_apply_Mask_ChargedTensor(make_compatible_tensor, num_legs):
 
     # if isinstance(T.backend, FusionTreeBackend):
     #     with pytest.raises(NotImplementedError, match='mask_from_block not implemented'):
-    #         mask = make_compatible_tensor(legs=[T.legs[0], None], cls=tensors.Mask)
+    #         mask = make_compatible_tensor(legs=[T.legs[0], None], cls=Mask)
     #     return  # TODO
     
-    # mask = make_compatible_tensor(legs=[T.legs[0], None], cls=tensors.Mask)
+    # mask = make_compatible_tensor(legs=[T.legs[0], None], cls=Mask)
     # masked = T.apply_mask(mask, 0)
     # masked.test_sanity()
     # npt.assert_array_almost_equal_nulp(T.to_numpy()[mask.numpymask],
     #                                    masked.to_numpy(),
     #                                    10)
     # # last leg
-    # mask = make_compatible_tensor(legs=[T.legs[-1], None], cls=tensors.Mask)
+    # mask = make_compatible_tensor(legs=[T.legs[-1], None], cls=Mask)
     # masked = T.apply_mask(mask, -1)
     # masked.test_sanity()
     # npt.assert_array_almost_equal_nulp(T.to_numpy()[..., mask.numpymask],
@@ -1766,7 +1761,7 @@ def OLD_test_Tensor_tofrom_dense_block_trivial_sector(make_compatible_tensor):
     
     block = tens.to_dense_block_trivial_sector()
     assert tens.backend.block_shape(block) == (block_size,)
-    tens2 = tensors.SymmetricTensor.from_dense_block_trivial_sector(leg=leg, block=block, backend=tens.backend, label='a')
+    tens2 = SymmetricTensor.from_dense_block_trivial_sector(leg=leg, block=block, backend=tens.backend, label='a')
     tens2.test_sanity()
     assert tensors.almost_equal(tens, tens2)
     block2 = tens2.to_dense_block_trivial_sector()
@@ -1783,13 +1778,13 @@ def OLD_test_ChargedTensor_tofrom_dense_block_single_sector(compatible_symmetry,
     sector = make_compatible_sectors(1)[0]
     dummy_leg = Space(compatible_symmetry, sector[None, :]).dual
     inv_part = make_compatible_tensor(legs=[None, dummy_leg])
-    tens = tensors.ChargedTensor(invariant_part=inv_part)
+    tens = ChargedTensor(invariant_part=inv_part)
     leg = tens.legs[0]
     block_size = leg.sector_multiplicity(sector)
 
     block = tens.to_flat_block_single_sector()
     assert tens.backend.block_shape(block) == (block_size,)
-    tens2 = tensors.ChargedTensor.from_flat_block_single_sector(
+    tens2 = ChargedTensor.from_flat_block_single_sector(
         leg=leg, block=block, sector=sector, backend=tens.backend
     )
     tens2.test_sanity()

@@ -533,7 +533,17 @@ class Tensor(metaclass=ABCMeta):
 
     def get_leg_idcs(self, idcs: int | str | Sequence[int | str]) -> list[int]:
         """Parse leg-idcs of leg-labels to leg-idcs (i.e. indices of :attr:`legs`)."""
-        return [self._parse_leg_idx(i) for i in to_iterable(idcs)]
+        res = []
+        for idx in to_iterable(idcs):
+            if isinstance(idx, str):
+                idx = self._labelmap.get(idx, None)
+                if idx is None:
+                    msg = f'No leg with label {idx}. Labels are {self._labels}'
+                    raise ValueError(msg)
+            else:
+                idx = _normalize_idx(idx, self.num_legs)
+            res.append(idx)
+        return res
 
     def has_label(self, label: str, *more: str) -> bool:
         return (label in self._labels) and all(l in self._labels for l in more)
@@ -3208,7 +3218,8 @@ def norm(tensor: Tensor) -> float:
     raise TypeError
 
 
-def outer(A: Tensor, B: Tensor):
+def outer(tensor1: Tensor, tensor2: Tensor,
+          relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> Tensor:
     r"""The outer product, or tensor product.
 
     The outer product of two maps :math:`A : W_A \to V_A` and :math:`B : W_B \to V_B` is
@@ -3225,12 +3236,23 @@ def outer(A: Tensor, B: Tensor):
     The outer product :math:`A \otimes B`, with domain ``[*A.domain, *B.domain]`` and codomain
     ``[*A.codomain, *B.codomain]``. Thus, the :attr:`Tensor.legs` are, *up to a permutation*,
     the :attr:`Tensor.legs` of `A` plus the :attr:`Tensor.legs` of `B`.
+
+    See Also
+    --------
+    tdot
+        tdot with no actual contractions gives a similar product, with different leg order.
+    relabel1, relabel2: dict[str, str], optional
+        A mapping of labels for each of the tensors. The result has labels, as if the
+        input tensors were relabelled accordingly before contraction.
     """
     raise NotImplementedError  # TODO
 
 
-def _permute_legs(tensor: Tensor, codomain: list[int | str] | None, domain: list[int | str] | None,
-                  levels: list[int] | dict[str | int, int] | None, err_msg: str = None
+def _permute_legs(tensor: Tensor,
+                  codomain: list[int | str] | None = None,
+                  domain: list[int | str] | None = None,
+                  levels: list[int] | dict[str | int, int] | None = None,
+                  err_msg: str = None
                   ) -> Tensor:
     """Internal implementation of :func:`permute_legs` that allows to specify the error msg.
 
@@ -3240,6 +3262,7 @@ def _permute_legs(tensor: Tensor, codomain: list[int | str] | None, domain: list
 
     The default error message is appropriate to *other* contexts, other than :func:`permute_legs`.
     """
+    # Parse domain and codomain to list[int]. Get rid of duplicates.
     if codomain is None and domain is None:
         raise ValueError('Need to specify either domain or codomain.')
     elif codomain is None:
@@ -3259,14 +3282,21 @@ def _permute_legs(tensor: Tensor, codomain: list[int | str] | None, domain: list
             raise ValueError(f'Duplicate entries. By leg index: {", ".join(duplicates)}')
         if missing:
             raise ValueError(f'Missing legs. By leg index: {", ".join(missing)}')
+    # Default error message
     if err_msg is None:
         err_msg = ('Legs can not be permuted automatically. '
                    'Explicitly use permute_legs() with specified levels first.')
-
-    if isinstance(tensor, Mask):
-        raise NotImplementedError  # TODO
-    if isinstance(tensor, DiagonalTensor):
-        raise NotImplementedError  # TODO
+    # Deal with other tensor types
+    if isinstance(tensor, (DiagonalTensor, Mask)):
+        if codomain == [0] and domain == [1]:
+            return tensor
+        if codomain == [1] and domain == [0]:
+            return transpose(tensor)
+        # other cases involve two legs either in the domain or codomain.
+        # Cant be done with Mask / DiagonalTensor
+        warnings.warn(f'Converting {type(tensor).__name__} to SymmetricTensor for permute_legs.',
+                      stacklevel=2)
+        tensor = tensor.as_SymmetricTensor()
     if isinstance(tensor, ChargedTensor):
         if levels is not None:
             # assign the highest level to the charge leg. since it does not move, it should not matter.
