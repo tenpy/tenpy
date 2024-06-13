@@ -10,6 +10,7 @@ on:
   push:
     branches:
       - main
+      - v2_alpha
   # PRs
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
