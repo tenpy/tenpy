@@ -926,7 +926,7 @@ def test_squeeze_legs():
 
 
 def test_tdot(make_compatible_tensor):
-    pytest.skip('Need to implement permute_legs first.')
+    pytest.skip('Need to implement permute_legs first.')  # TODO
     
     # TODO writing one specific case first, then generalize to tensor types, leg nums, labels or no
     A: SymmetricTensor = make_compatible_tensor(
