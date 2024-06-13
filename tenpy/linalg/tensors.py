@@ -2815,7 +2815,55 @@ def combine_legs(tensor: Tensor,
     data = tensor.backend.combine_legs(tensor, ...)
     return SymmetricTensor(data, codomain=codomain, domain=domain, backend=tensor.backend,
                            labels=[codomain_labels, domain_labels])
-    
+
+
+def combine_to_matrix(tensor: Tensor,
+                      codomain: int | str | list[int | str] | None = None,
+                      domain: int | str | list[int | str] | None = None,
+                      levels: list[int] | dict[str | int, int] = None,
+                      ) -> Tensor:
+    """Combine legs of a tensor into two combined ProductSpaces.
+
+    The resulting tensor can be interpreted as a matrix, i.e. has two legs::
+
+    |              ║
+    |           ╭──╨────┬───────╮
+    |       ╭───│───────│─────╮ │
+    |       │   │   ╭───│───╮ │ │
+    |       0   1   2   3   │ │ │
+    |      ┏┷━━━┷━━━┷━━━┷┓  │ │ │
+    |      ┃      T      ┃  │ │ │   =    combine_to_matrix(T, [1, 3, -1], [5, 2, 4, 0])
+    |      ┗━━┯━━━┯━━━┯━━┛  │ │ │
+    |         6   5   4     │ │ │
+    |         ╰───│───│─────│─│─╯
+    |             │ ╭─│─────╯ │
+    |             ╰─┴─┴──╥────╯
+    |                    ║
+
+    Parameters
+    ----------
+    tensor: Tensor
+        The tensor to act on
+    codomain, domain: (list of) {int | str}, or None
+        Two groups of legs. Each can be specified via leg index or leg label.
+        Together, they must comprise all legs of `tensor` without duplicates.
+        Only one of the two is required; the other one is determined by using "the rest" of
+        the legs of `tensor`.
+    levels: optional
+        Is ignored if the symmetry has symmetric braids. Otherwise, these levels specify the
+        chirality of any possible braids induced by permuting the legs. See :func:`permute_legs`.
+
+    See Also
+    --------
+    permute_legs
+        Move leg to domain / codomain without combining them there
+    combine_legs
+        Combine an arbitrary number of legs. Since the number of groups is arbitrary, this
+        does not have the interpretation of the matrix, with one group each in domain and codomain.
+    """
+    res = _permute_legs(tensor, codomain=codomain, domain=domain, levels=levels)
+    return combine_legs(res, range(res.num_codomain_legs), range(res.num_codomain_legs, res.num_legs))
+
 
 def conj(tensor: Tensor):
     """TODO doc this.

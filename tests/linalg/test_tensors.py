@@ -823,6 +823,10 @@ def test_combine_legs():
     pytest.skip('Test not written yet')  # TODO
 
 
+def test_combine_to_matrix():
+    pytest.skip('Test not written yet')  # TODO
+
+
 def test_conj():
     pytest.skip('Test not written yet')  # TODO
 
