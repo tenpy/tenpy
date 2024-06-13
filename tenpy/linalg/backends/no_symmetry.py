@@ -148,6 +148,9 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         )
         return data, small_leg
 
+    def diagonal_transpose(self, tens: DiagonalTensor) -> tuple[Space, DiagonalData]:
+        return tens.leg.dual, tens.data
+
     def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
         return self.block_eigh(a.data, sort=sort)
 
@@ -249,6 +252,11 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def mask_to_diagonal(self, a: Mask, dtype: Dtype) -> DiagonalData:
         return self.block_to_dtype(a.data, dtype)
 
+    def mask_transpose(self, tens: Mask) -> tuple[Space, Space, MaskData]:
+        space_in = tens.codomain[0].dual
+        space_out = tens.domain[0].dual
+        return space_in, space_out, tens.data
+
     def mask_unary_operand(self, mask: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
         large_leg = mask.large_leg
         basis_perm = large_leg._basis_perm
@@ -271,12 +279,14 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         raise NotImplementedError  # TODO not yet reviewed. careful with leg order!
         return self.block_outer(a.data, b.data)
 
-    def permute_legs(self, a: SymmetricTensor, **kw) -> Data:
-        # TODO decide signature
-        raise NotImplementedError  # TODO not yet reviewed
-        # if permutation is None:
-        #     return a.data
-        # return self.block_permute_axes(a.data, permutation)
+    def permute_legs(self, a: SymmetricTensor, codomain_idcs: list[int], domain_idcs: list[int],
+                     levels: list[int] | None) -> tuple[Data | None, ProductSpace, ProductSpace]:
+        codomain = ProductSpace([a._as_codomain_leg(i) for i in codomain_idcs],
+                                symmetry=a.symmetry, backend=self)
+        domain = ProductSpace([a._as_domain_leg(i) for i in domain_idcs],
+                              symmetry=a.symmetry, backend=self)
+        data = self.block_permute_axes(a.data, [*codomain_idcs, *reversed(domain_idcs)])
+        return data, codomain, domain
 
     def qr(self, a: SymmetricTensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, ElementarySpace]:
         raise NotImplementedError  # TODO not yet reviewed

@@ -240,6 +240,11 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def diagonal_transpose(self, tens: DiagonalTensor) -> tuple[Space, DiagonalData]:
+        """Transpose a diagonal tensor. Also return the new leg ``tens.leg.dual``"""
+        ...
+
+    @abstractmethod
     def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
         """Eigenvalue decomposition of a 2-leg hermitian tensor
 
@@ -404,7 +409,15 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def mask_to_diagonal(self, a: Mask, dtype: Dtype) -> DiagonalData:
+    def mask_to_diagonal(self, a: Mask, dtype: Dtype) -> MaskData:
+        ...
+
+    @abstractmethod
+    def mask_transpose(self, tens: Mask) -> tuple[Space, Space, MaskData]:
+        """Transpose a mask. Also return the new ``space_in`` and ``space_out``.
+
+        Those spaces are the duals of the respective other in the old mask.
+        """
         ...
 
     @abstractmethod
@@ -431,7 +444,23 @@ class Backend(metaclass=ABCMeta):
 
     @abstractmethod
     def permute_legs(self, a: SymmetricTensor, codomain_idcs: list[int], domain_idcs: list[int],
-                     new_codomain: ProductSpace, new_domain: ProductSpace) -> Data:  # TODO decide signature
+                     levels: list[int] | None) -> tuple[Data | None, ProductSpace, ProductSpace]:
+        """Permute legs on the tensors.
+
+        codomain_idcs, domain_idcs:
+            Which of the legs should end up in the (co-)domain.
+            All are leg indices (``0 <= i < a.num_legs``)
+        levels:
+            The levels. Can assume they are unique, support comparison and are non-negative.
+            ``None`` means unspecified.
+
+        Returns
+        -------
+        data:
+            The data for the permuted tensor, of ``None`` if `levels` are required were not specified.
+        codomain, domain
+            The (co-)domain of the new tensor.
+        """
         ...
 
     @abstractmethod

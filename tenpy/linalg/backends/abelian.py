@@ -665,7 +665,15 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
             is_dual=large_leg.is_dual, basis_perm=basis_perm
         )
         return data, small_leg
-
+    
+    def diagonal_transpose(self, tens: DiagonalTensor) -> tuple[Space, DiagonalData]:
+        dual_leg, perm = tens.leg._dual_space(return_perm=True)
+        data = AbelianBackendData(
+            tens.dtype, blocks=tens.data.blocks,
+            block_inds=inverse_permutation(perm)[tens.data.block_inds]
+        )
+        return dual_leg, data
+    
     def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
         raise NotImplementedError  # TODO not yet reviewed. interface may change.
         # for missing blocks, i.e. a zero block, the eigenvalues are zero, so we can just skip adding
@@ -1015,6 +1023,19 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         block_inds = np.repeat(large_leg_bi[:, None], 2, axis=1)
         return AbelianBackendData(dtype=dtype, blocks=blocks, block_inds=block_inds)
     
+    def mask_transpose(self, tens: Mask) -> tuple[Space, Space, MaskData]:
+        leg_in, perm1 = tens.codomain[0]._dual_space(return_perm=True)
+        leg_out, perm2 = tens.domain[0]._dual_space(return_perm=True)
+        # block_inds[:, 0] refers to tens.codomain[0]. Thus it should be permuted with perm1.
+        # It ends up being result.domain[0] -> second column of block_inds
+        block_inds = np.column_stack([
+            inverse_permutation(perm2)[tens.data.block_inds[:, 1]],
+            inverse_permutation(perm1)[tens.data.block_inds[:, 0]]
+        ])
+        data = AbelianBackendData(dtype=tens.dtype, blocks=tens.data.blocks, block_inds=block_inds,
+                                  is_sorted=False)
+        return leg_in, leg_out, data
+        
     def mask_unary_operand(self, mask: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
         large_leg = mask.large_leg
         basis_perm = large_leg._basis_perm
@@ -1111,16 +1132,52 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         #  if yes: add comment explaining why, adjust argument below
         return AbelianBackendData(res_dtype, res_blocks, res_block_inds, is_sorted=False)
 
-    def permute_legs(self, a: SymmetricTensor, **kw) -> Data:
-        # TODO decide signature of backend function
-        raise NotImplementedError  # TODO not yet reviewed
-        # if permutation is None:
-        #     return a.data  # TODO copy?
-        # blocks = a.data.blocks
-        # blocks = [self.block_permute_axes(block, permutation) for block in a.data.blocks]
-        # block_inds = a.data.block_inds[:, permutation]
-        # data = AbelianBackendData(a.data.dtype, blocks, block_inds, is_sorted=False)
-        # return data
+    def permute_legs(self, a: SymmetricTensor, codomain_idcs: list[int], domain_idcs: list[int],
+                     levels: list[int] | None) -> tuple[Data | None, ProductSpace, ProductSpace]:
+        codomain_legs = []
+        codomain_sector_perms = []
+        for i in codomain_idcs:
+            in_domain, co_domain_idx, _ = a._parse_leg_idx(i)
+            if in_domain:
+                # leg.sectors == duals(old_leg.sectors)[perm]
+                # block with given sectors which had bi_old belonged to
+                # old_leg.sectors[bi_old]
+                # it now belongs to 
+                # dual(old_leg.sectors[bi_old]) == dual(old_leg.sectors[perm[bi_new]]) == leg.sectors[bi_new]
+                #  -> bi_old == perm[bi_new]
+                leg, perm = a.domain[co_domain_idx]._dual_space(return_perm=True)
+                perm = inverse_permutation(perm)
+            else:
+                leg = a.codomain[co_domain_idx]
+                perm = None
+            codomain_legs.append(leg)
+            codomain_sector_perms.append(perm)
+        codomain = ProductSpace(codomain_legs, symmetry=a.symmetry, backend=self)
+        #
+        domain_legs = []
+        domain_sector_perms = []
+        for i in domain_idcs:
+            in_domain, co_domain_idx, _ = a._parse_leg_idx(i)
+            if in_domain:
+                leg = a.domain[co_domain_idx]
+                perm = None
+            else:
+                leg, perm = a.codomain[co_domain_idx]._dual_space(return_perm=True)
+                perm = inverse_permutation(perm)
+            domain_legs.append(leg)
+            domain_sector_perms.append(perm)
+        domain = ProductSpace(domain_legs, symmetry=a.symmetry, backend=self)
+        #
+        axes_perm = [*codomain_idcs, *reversed(domain_idcs)]
+        sector_perms = [*codomain_sector_perms, *reversed(domain_sector_perms)]
+        blocks = [self.block_permute_axes(block, axes_perm) for block in a.data.blocks]
+        block_inds = a.data.block_inds[:, axes_perm]
+        for ax, sector_perm in enumerate(sector_perms):
+            if sector_perm is None:
+                continue
+            block_inds[:, ax] = sector_perm[block_inds[:, ax]]
+        data = AbelianBackendData(a.dtype, blocks=blocks, block_inds=block_inds, is_sorted=False)
+        return data, codomain, domain
 
     def qr(self, a: SymmetricTensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, ElementarySpace]:
         raise NotImplementedError  # TODO not yet reviewed

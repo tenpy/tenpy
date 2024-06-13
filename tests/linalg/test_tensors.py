@@ -890,8 +890,60 @@ def test_outer():
     pytest.skip('Test not written yet')  # TODO
 
 
-def test_permute_legs():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.parametrize(
+    'cls, num_cod, num_dom, codomain, domain, levels',
+    [
+        pytest.param(SymmetricTensor, 2, 2, [0, 1], [3, 2], None, id='Symmetric-2<2-trivial'),
+        pytest.param(SymmetricTensor, 2, 2, [1, 0], [2, 3], [0, 1, 2, 3], id='Symmetric-2<2-braid'),
+        pytest.param(SymmetricTensor, 2, 2, [0, 1, 2], [3], None, id='Symmetric-2<2-bend'),
+        pytest.param(SymmetricTensor, 2, 2, [0, 3], [1, 2], [0, 1, 2, 3], id='Symmetric-2<2-general'),
+        pytest.param(DiagonalTensor, 1, 1, [0], [1], [0, 1], id='Diagonal-trivial'),
+        pytest.param(DiagonalTensor, 1, 1, [1], [0], [0, 1], id='Diagonal-swap'),
+        pytest.param(DiagonalTensor, 1, 1, [1, 0], [], [0, 1], id='Diagonal-general'),
+        pytest.param(Mask, 1, 1, [0], [1], [0, 1], id='Mask-trivial'),
+        pytest.param(Mask, 1, 1, [1], [0], [0, 1], id='Mask-swap'),
+        pytest.param(Mask, 1, 1, [1, 0], [], [0, 1], id='Mask-general'),
+        pytest.param(ChargedTensor, 2, 2, [0, 1], [3, 2], None, id='Symmetric-2<2-trivial'),
+        pytest.param(ChargedTensor, 2, 2, [1, 0], [2, 3], [0, 1, 2, 3], id='Symmetric-2<2-braid'),
+        pytest.param(ChargedTensor, 2, 2, [0, 1, 2], [3], None, id='Symmetric-2<2-bend'),
+        pytest.param(ChargedTensor, 2, 2, [0, 3], [1, 2], [0, 1, 2, 3], id='Symmetric-2<2-general'),
+    ]
+)
+def test_permute_legs(cls, num_cod, num_dom, codomain, domain, levels, make_compatible_tensor):
+    T = make_compatible_tensor(num_cod, num_dom, max_block_size=3, cls=cls)
+
+    if isinstance(T.backend, backends.FusionTreeBackend) and cls in [SymmetricTensor, ChargedTensor]:
+        with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
+            _ = tensors.permute_legs(T, codomain, domain, levels)
+        return
+    if isinstance(T.backend, backends.FusionTreeBackend) and cls is DiagonalTensor and codomain == [1]:
+        with pytest.raises(NotImplementedError, match='diagonal_transpose not implemented'):
+            _ = tensors.permute_legs(T, codomain, domain, levels)
+        return
+    if isinstance(T.backend, backends.FusionTreeBackend) and cls is DiagonalTensor and len(codomain) != 1:
+        with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
+            _ = tensors.permute_legs(T, codomain, domain, levels)
+        return
+
+    res = tensors.permute_legs(T, codomain, domain, levels)
+    res.test_sanity()
+
+    for n, i in enumerate(codomain):
+        assert res.codomain[n] == T._as_codomain_leg(i)
+    for n, i in enumerate(domain):
+        assert res.domain[n] == T._as_domain_leg(i)
+    assert res.codomain_labels == [T.labels[n] for n in codomain]
+    assert res.domain_labels == [T.labels[n] for n in domain]
+
+    if T.symmetry.can_be_dropped:
+        # makes sense to compare with dense blocks
+        expect = np.transpose(T.to_numpy(), [*codomain, *reversed(domain)])
+        actual = res.to_numpy()
+        npt.assert_allclose(actual, expect)
+    else:
+        # should we do a test like braiding two legs around each other with a single 
+        # anyonic sector and checking if the result is equal up to the expected phase?
+        raise NotImplementedError  # how to verify instead? permute back?
 
 
 def test_scalar_multiply(make_compatible_tensor_any_class):

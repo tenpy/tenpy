@@ -110,9 +110,8 @@ class Space(metaclass=ABCMeta):
     # ABSTRACT
 
     @property
-    @abstractmethod
     def dual(self):
-        ...
+        return self._dual_space(return_perm=False)
 
     @property
     @abstractmethod
@@ -166,6 +165,19 @@ class Space(metaclass=ABCMeta):
             If ``None`` (default) the entire symmetry is dropped and the result has ``no_symmetry``.
             An integer or list of integers assume that ``self.symmetry`` is a ``ProductSymmetry``
             and indicates which of its factors to drop.
+        """
+        ...
+
+    @abstractmethod
+    def _dual_space(self, return_perm: bool = False) -> Space | tuple[Space, np.ndarray]:
+        """Compute the dual space. Optionally return the induced permutation of sectors.
+
+        Returns
+        -------
+        dual: Space
+            The dual space
+        perm: 1D ndarray, optional
+            The permutation such that ``dual.sectors[n]`` is the dual of ``self.sectors[perm[n]]``
         """
         ...
 
@@ -468,14 +480,6 @@ class ElementarySpace(Space):
         if self._basis_perm is None:
             return np.arange(self.dim)
         return self._basis_perm
-    
-    @property
-    def dual(self) -> ElementarySpace:
-        return ElementarySpace.from_sectors(
-            symmetry=self.symmetry, sectors=self.symmetry.dual_sectors(self.sectors),
-            multiplicities=self.multiplicities, is_dual=not self.is_dual,
-            basis_perm=self._basis_perm, unique_sectors=True
-        )
 
     @property
     def inverse_basis_perm(self) -> ndarray:
@@ -662,6 +666,14 @@ class ElementarySpace(Space):
             mask[start:stop] = False
         return self.change_symmetry(symmetry=remaining_symmetry,
                                     sector_map=lambda sectors: sectors[:, mask])
+
+    def _dual_space(self, return_perm: bool = False
+                    ) -> ElementarySpace | tuple[ElementarySpace, np.ndarray]:
+        return ElementarySpace.from_sectors(
+            symmetry=self.symmetry, sectors=self.symmetry.dual_sectors(self.sectors),
+            multiplicities=self.multiplicities, is_dual=not self.is_dual,
+            basis_perm=self._basis_perm, unique_sectors=True, return_sorting_perm=return_perm
+        )
 
     def is_subspace_of(self, other: ElementarySpace) -> bool:
         """Whether self is a subspace of other.
@@ -869,11 +881,14 @@ class ProductSpace(Space):
             _sectors=isomorphic.sectors, _multiplicities=isomorphic.multiplicities
         )
 
-    @property
-    def dual(self) -> ProductSpace:
-        sectors, mults, _ = _sort_sectors(self.symmetry.dual_sectors(self.sectors), self.multiplicities)
-        return ProductSpace([sp.dual for sp in reversed(self.spaces)], symmetry=self.symmetry,
+    def _dual_space(self, return_perm: bool = False
+                    ) -> ProductSpace | tuple[ProductSpace, np.ndarray]:
+        sectors, mults, perm = _sort_sectors(self.symmetry.dual_sectors(self.sectors), self.multiplicities)
+        dual = ProductSpace([sp.dual for sp in reversed(self.spaces)], symmetry=self.symmetry,
                             _sectors=sectors, _multiplicities=mults)
+        if return_perm:
+            return dual, perm
+        return dual
             
     @property
     def fusion_outcomes_sort(self):

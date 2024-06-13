@@ -421,7 +421,10 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def diagonal_to_mask(self, tens: DiagonalTensor) -> tuple[DiagonalData, ElementarySpace]:
         raise NotImplementedError('diagonal_to_mask not implemented')
-
+    
+    def diagonal_transpose(self, tens: DiagonalTensor) -> tuple[Space, DiagonalData]:
+        raise NotImplementedError('diagonal_transpose not implemented')
+        
     def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
         # TODO do SVD first, comments there apply.
         raise NotImplementedError('eigh not implemented')  # TODO
@@ -599,6 +602,9 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def mask_to_diagonal(self, a: Mask, dtype: Dtype) -> DiagonalData:
         raise NotImplementedError
+
+    def mask_transpose(self, tens: Mask) -> tuple[Space, Space, MaskData]:
+        raise NotImplementedError('mask_transpose not implemented')
     
     def mask_unary_operand(self, mask: Mask, func) -> tuple[MaskData, ElementarySpace]:
         raise NotImplementedError
@@ -627,8 +633,8 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         # TODO what target leg order is easiest? does it match the one specified in Backend.outer?
         raise NotImplementedError('outer not implemented')  # TODO
 
-    def permute_legs(self, a: SymmetricTensor, **kw) -> Data:
-        # TODO decide signature
+    def permute_legs(self, a: SymmetricTensor, codomain_idcs: list[int], domain_idcs: list[int],
+                     levels: list[int] | None) -> tuple[Data | None, ProductSpace, ProductSpace]:
         raise NotImplementedError('permute_legs not implemented')  # TODO
 
     def qr(self, a: SymmetricTensor, new_r_leg_dual: bool, full: bool

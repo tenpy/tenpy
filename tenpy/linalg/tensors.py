@@ -3334,6 +3334,10 @@ def _permute_legs(tensor: Tensor,
     if err_msg is None:
         err_msg = ('Legs can not be permuted automatically. '
                    'Explicitly use permute_legs() with specified levels first.')
+    # Special case: if no legs move
+    if codomain == list(range(tensor.num_codomain_legs)) and domain == list(range(tensor.num_codomain_legs, tensor.num_legs)):
+        return tensor
+        
     # Deal with other tensor types
     if isinstance(tensor, (DiagonalTensor, Mask)):
         if codomain == [0] and domain == [1]:
@@ -3342,8 +3346,7 @@ def _permute_legs(tensor: Tensor,
             return transpose(tensor)
         # other cases involve two legs either in the domain or codomain.
         # Cant be done with Mask / DiagonalTensor
-        warnings.warn(f'Converting {type(tensor).__name__} to SymmetricTensor for permute_legs.',
-                      stacklevel=2)
+        # TODO should we warn? is this expected?
         tensor = tensor.as_SymmetricTensor()
     if isinstance(tensor, ChargedTensor):
         if levels is not None:
@@ -3353,14 +3356,17 @@ def _permute_legs(tensor: Tensor,
         inv_part = _permute_legs(tensor.invariant_part, codomain=codomain, domain=[-1, *domain],
                                  levels=levels, err_msg=err_msg)
         return ChargedTensor(inv_part, charged_state=tensor.charged_state)
-
-    new_domain = ProductSpace([tensor._as_domain_leg(idx) for idx in domain],
-                              symmetry=tensor.symmetry, backend=tensor.backend)
-    new_codomain = ProductSpace([tensor._as_codomain_leg(idx) for idx in codomain],
-                                symmetry=tensor.symmetry, backend=tensor.backend)
-    data = tensor.backend.permute_legs(tensor, codomain_idcs=codomain, domain_idcs=domain,
-                                       new_codomain=new_codomain, new_domain=new_domain,
-                                       levels=levels)
+    # Remaining case: SymmetricTensor
+    if levels is not None:
+        if duplicate_entries(levels):
+            raise ValueError('Levels must be unique.')
+        if any(l < 0 for l in levels):
+            raise ValueError('Levels must be non-negative.')
+    data, new_codomain, new_domain = tensor.backend.permute_legs(
+        tensor, codomain_idcs=codomain, domain_idcs=domain, levels=levels
+    )
+    if data is None:
+        raise SymmetryError(err_msg)
     labels = [[tensor._labels[n] for n in codomain], [tensor._labels[n] for n in domain]]
     return SymmetricTensor(data, new_codomain, new_domain, backend=tensor.backend, labels=labels)
 
@@ -3792,13 +3798,16 @@ def transpose(tensor: Tensor) -> Tensor:
     We use the "same" labels, up to the permutation.
     """
     if isinstance(tensor, Mask):
-        raise NotImplementedError  # TODO
+        space_in, space_out, data = tensor.backend.mask_transpose(tensor)
+        return Mask(data, space_in=space_in, space_out=space_out,
+                    is_projection=not tensor.is_projection, backend=tensor.backend,
+                    labels=_dual_label_list(tensor._labels))
     if isinstance(tensor, DiagonalTensor):
         # TODO implement this backend method.
         #      the result has dual leg, which means a permutation of sectors.
         dual_leg, data = tensor.backend.diagonal_transpose(tensor)
-        labels = _dual_label_list(tensor._labels)
-        return DiagonalTensor(data=data, leg=dual_leg, backend=tensor.backend, labels=labels)
+        return DiagonalTensor(data=data, leg=dual_leg, backend=tensor.backend,
+                              labels=_dual_label_list(tensor._labels))
     if isinstance(tensor, SymmetricTensor):
         return SymmetricTensor(
             data=tensor.backend.transpose(tensor),

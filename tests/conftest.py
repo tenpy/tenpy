@@ -240,8 +240,8 @@ def make_compatible_block(compatible_backend, np_random):
 
 
 @pytest.fixture
-def make_compatible_tensor(compatible_backend, compatible_symmetry, make_compatible_block,
-                           make_compatible_space, np_random):
+def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_symmetry_backend,
+                           make_compatible_block, make_compatible_space, np_random):
     """Tensor RNG."""
     def make(codomain: list[spaces.Space | str | None] | spaces.ProductSpace | int = None,
              domain: list[spaces.Space | str | None] | spaces.ProductSpace | int = None,
@@ -386,6 +386,15 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, make_compati
                 else:
                     extra = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
                     large_leg = small_leg.direct_sum(extra)
+
+            
+            if compatible_symmetry_backend == 'fusion_tree':
+                with pytest.raises(NotImplementedError, match='diagonal_to_mask'):
+                    _ = tensors.Mask.from_random(large_leg=large_leg, small_leg=small_leg,
+                                                 backend=compatible_backend, p_keep=.6,
+                                                 np_random=np_random)
+                pytest.skip()
+                    
             return tensors.Mask.from_random(large_leg=large_leg, small_leg=small_leg,
                                             backend=compatible_backend, p_keep=.6,
                                             np_random=np_random)
