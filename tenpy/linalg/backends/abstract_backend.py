@@ -136,6 +136,16 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def compose(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
+        """Assumes ``a.domain == b.codomain`` and performs map composition,
+        i.e. tensor contraction over those shared legs.
+
+        Assumes there is at least one open leg, i.e. the codomain of `a` and the domain of `b` are
+        not both empty.
+        """
+        ...
+
+    @abstractmethod
     def conj(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
         ...
 
@@ -350,14 +360,8 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_conj: bool, axs2: list[int] | None) -> float | complex:
-        """
-        inner product of <a|b>, both of which are given as ket-like vectors
-        (i.e. in C^N, the entries of a would need to be conjugated before multiplying with entries of b)
-        axs2, if not None, gives the order of the axes of b.
-        If do_conj, a is assumed as a "ket vector", in the same space as b, which will need to be conjugated.
-        Otherwise, a is assumed as a "bra vector", in the dual space, s.t. no conj is needed.
-        """
+    def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_dagger: bool) -> float | complex:
+        """tensors.inner on SymmetricTensors"""
         ...
 
     @abstractmethod
@@ -719,9 +723,15 @@ class BlockBackend(metaclass=ABCMeta):
         """
         ...
 
-    @abstractmethod
-    def block_inner(self, a: Block, b: Block, do_conj: bool, axs2: list[int] | None) -> float | complex:
-        ...
+    def block_inner(self, a: Block, b: Block, do_dagger: bool) -> float | complex:
+        """Dense block version of tensors.inner.
+
+        If do dagger, ``sum(conj(a[i1, i2, ..., iN]) * b[iN, ..., i2, i1])``
+        otherwise, ``sum(a[i1, ..., iN] * b[i1, ..., iN])``.
+        """
+        if do_dagger:
+            a = self.block_conj(self.block_permute_axes(a, list(reversed(range(a.ndim)))))
+        return self.block_sum_all(a * b)  # TODO or do tensordot?
 
     @abstractmethod
     def block_permute_axes(self, a: Block, permutation: list[int]) -> Block:
@@ -841,6 +851,7 @@ class BlockBackend(metaclass=ABCMeta):
     @abstractmethod
     def matrix_dot(self, a: Block, b: Block) -> Block:
         """As in numpy.dot, both a and b might be matrix or vector."""
+        # TODO can probably remove this? was only used in an old version of tdot.
         ...
 
     def matrix_svd(self, a: Block, algorithm: str | None, compute_u: bool, compute_vh: bool
@@ -1168,17 +1179,15 @@ def iter_common_sorted(a, b):
     l_a = len(a)
     l_b = len(b)
     i, j = 0, 0
-    res = []
     while i < l_a and j < l_b:
         if a[i] < b[j]:
             i += 1
         elif b[j] < a[i]:
             j += 1
         else:
-            res.append((i, j))
+            yield i, j
             i += 1
             j += 1
-    return res
 
 
 def iter_common_sorted_arrays(a, b):

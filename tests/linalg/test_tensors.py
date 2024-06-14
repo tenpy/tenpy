@@ -3,6 +3,7 @@
 from __future__ import annotations
 import numpy as np
 import numpy.testing as npt
+from typing import Type
 import pytest
 import operator
 
@@ -981,8 +982,64 @@ def test_squeeze_legs():
     pytest.skip('Test not written yet')  # TODO
 
 
-def test_tdot():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.parametrize(
+    'cls_A, cls_B, labels_A, labels_B, contr_A, contr_B',
+    [pytest.param(SymmetricTensor, SymmetricTensor, [['a', 'b'], ['c', 'd']], [['c', 'e'], ['a', 'f']], [0, 3], [3, 0], id='Sym-Sym-4-2-4'),
+     pytest.param(SymmetricTensor, SymmetricTensor, [['a', 'b'], ['c', 'd']], [['e', 'f'], ['g', 'h']], [], [], id='Sym-Sym-4-0-4'),
+     pytest.param(SymmetricTensor, SymmetricTensor, [['a', 'b'], ['c', 'd']], [['c', 'a'], ['d', 'b']], [0, 1, 3, 2], [1, 2, 0, 3], id='Sym-Sym-4-4-4'),
+     pytest.param(SymmetricTensor, SymmetricTensor, [[], ['a', 'b']], [['b', 'c'], ['d']], [0], [0], id='Sym-Sym-2-1-3'),
+    ]
+)
+def test_tdot(cls_A: Type[tensors.Tensor], cls_B: Type[tensors.Tensor],
+              labels_A: list[list[str]], labels_B: list[list[str]],
+              contr_A: list[int], contr_B: list[int],
+              make_compatible_tensor):
+    A: cls_A = make_compatible_tensor(
+        codomain=len(labels_A[0]), domain=len(labels_A[1]),
+        labels=[*labels_A[0], *reversed(labels_A[1])], max_block_size=5, max_blocks=3, cls=cls_A
+    )
+    # create B such that legs with the same label can be contracted
+    B: cls_B = make_compatible_tensor(
+        codomain=[A._as_domain_leg(l) if A.has_label(l) else None for l in labels_B[0]],
+        domain=[A._as_codomain_leg(l) if A.has_label(l) else None for l in labels_B[1]],
+        labels=[*labels_B[0], *reversed(labels_B[1])], max_block_size=5, max_blocks=3, cls=cls_B
+    )
+    num_contr = len(contr_A)
+    num_open_A = A.num_legs - num_contr
+    num_open_B = B.num_legs - num_contr
+    num_open = num_open_A + num_open_B
+    # make sure we defined compatible legs
+    for ia, ib in zip(contr_A, contr_B):
+        assert A._as_domain_leg(ia) == B._as_codomain_leg(ib), f'{ia} / {A.labels[ia]} incompatible with {ib} / {B.labels[ib]}'
+
+    if isinstance(A.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
+            _ = tensors.tdot(A, B, contr_A, contr_B)
+        return
+    if isinstance(A.backend, backends.AbelianBackend) and num_open == 0:
+        with pytest.raises(NotImplementedError, match='inner not implemented'):
+            _ = tensors.tdot(A, B, contr_A, contr_B)
+        return
+
+    res = tensors.tdot(A, B, contr_A, contr_B)
+    if num_open == 0:
+        # scalar result
+        assert isinstance(res, (float, complex))
+        res_np = res
+    else:
+        # tensor result
+        res.test_sanity()
+        res_np = res.to_numpy()
+        assert res.codomain.spaces == [A._as_codomain_leg(n) for n in range(A.num_legs) if n not in contr_A]
+        assert res.domain.spaces == [B._as_domain_leg(n) for n in range(B.num_legs) if not n in contr_B][::-1]
+        assert res.legs == [A.get_leg(n) for n in range(A.num_legs) if n not in contr_A] + [B.get_leg(n) for n in range(B.num_legs) if not n in contr_B]
+        assert res.labels == [A._labels[n] for n in range(A.num_legs) if n not in contr_A] + [B._labels[n] for n in range(B.num_legs) if not n in contr_B]
+    
+    # compare with dense tensordot
+    A_np = A.to_numpy()
+    B_np = B.to_numpy()
+    expect = np.tensordot(A_np, B_np, [contr_A, contr_B])
+    npt.assert_allclose(res_np, expect)
 
 
 def test_trace():
@@ -999,75 +1056,6 @@ def test_zero_like():
 
 # TODO old test below
 
-
-def OLD_test_tdot(make_compatible_space, make_compatible_sectors, make_compatible_tensor):
-    # define legs such that a tensor with the following combinations all allow non-zero num_parameters
-    # [a, b] , [a, b, c*] , [a, b, d*]
-    return  # TODO adapt to domain -> codomain
-    # from conftest import find_last_leg
-    # a = make_compatible_space()
-    # b = find_compatible_leg([a], max_sectors=3, max_mult=3, extra_sectors=make_compatible_sectors(3))
-    # c = find_compatible_leg([a, b], max_sectors=3, max_mult=3, extra_sectors=make_compatible_sectors(3)).dual
-    # d = find_compatible_leg([a, b], max_sectors=3, max_mult=3, extra_sectors=make_compatible_sectors(3)).dual
-    # print([l.dim for l in [a, b, c, d]])
-    
-    # legs_ = [[a, b, c.dual],
-    #          [d, b.dual, a.dual],
-    #          [b.dual, a.dual],
-    #          [a, b]]
-    # labels_ = [['a', 'b', 'c*'],
-    #            ['d', 'b*', 'a*'],
-    #            ['b*', 'a*'],
-    #            ['a', 'b']
-    #            ]
-    # tensors_ = [
-    #     make_compatible_tensor(legs=legs, labels=labels) for legs, labels in zip(legs_, labels_)
-    # ]
-    # for n, t in enumerate(tensors_):
-    #     # make sure we are defining tensors which actually contain blocks and are not just zero by
-    #     # charge conservation
-    #     assert t.num_parameters > 0, f'tensor {n} has 0 free parameters'
-
-    # if isinstance(tensors_[0].backend, backends.FusionTreeBackend) and isinstance(a.symmetry, ProductSymmetry):
-    #     with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
-    #         dense_ = [t.to_numpy() for t in tensors_]
-    #     return  # TODO
-    
-    # dense_ = [t.to_numpy() for t in tensors_]
-
-    # checks = [("single leg", 0, 1, 1, 1, 'b', 'b*'),
-    #           ("two legs", 0, 1, [0, 1], [2, 1], ['a', 'b'], ['a*', 'b*']),
-    #           ("all legs of first tensor", 2, 0, [0, 1], [1, 0], ['a*', 'b*'], ['a', 'b']),
-    #           ("all legs of second tensor", 1, 3, [1, 2], [1, 0], ['a*', 'b*'], ['a', 'b']),
-    #           ("scalar result / inner()", 2, 3, [0, 1], [1, 0], ['a*', 'b*'], ['a', 'b']),
-    #           ("no leg / outer()", 2, 3, [], [], [], []),
-    #           ]
-    # for comment, i, j, ax_i, ax_j, lbl_i, lbl_j in checks:
-    #     print('tdot: contract ', comment)
-    #     expect = np.tensordot(dense_[i], dense_[j], (ax_i, ax_j))
-
-    #     if isinstance(tensors_[0].backend, backends.FusionTreeBackend):
-    #         with pytest.raises(NotImplementedError, match='tdot not implemented'):        
-    #             res1 = tensors.tdot(tensors_[i], tensors_[j], ax_i, ax_j)
-    #         return  # TODO
-        
-    #     res1 = tensors.tdot(tensors_[i], tensors_[j], ax_i, ax_j)
-    #     res2 = tensors.tdot(tensors_[i], tensors_[j], lbl_i, lbl_j)
-    #     if len(expect.shape) > 0:
-    #         res1.test_sanity()
-    #         res2.test_sanity()
-    #         res1_d = res1.to_numpy()
-    #         res2_d = res2.to_numpy()
-    #         npt.assert_array_almost_equal(res1_d, expect)
-    #         npt.assert_array_almost_equal(res2_d, expect)
-    #     else: # got scalar, but we can compare it to 0-dim ndarray
-    #         npt.assert_almost_equal(res1, expect)
-    #         npt.assert_almost_equal(res2, expect)
-
-    # # TODO check that trying to contract incompatible legs raises
-    # #  - opposite is_dual but different dim
-    # #  - opposite is_dual and dim but different sectors
-    # #  - same dim and sectors but same is_dual
 
 
 def OLD_test_outer(make_compatible_tensor):

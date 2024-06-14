@@ -397,6 +397,215 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         # which is sorted and thus preserves lexsort( .T)-ing of res_block_inds
         return AbelianBackendData(res_dtype, res_blocks, res_block_inds, is_sorted=True)
 
+    def compose(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
+        """
+
+        Notes
+        -----
+        Looking at the source of numpy's tensordot (which is just 62 lines of python code),
+        you will find that it has the following strategy:
+
+            1. Transpose `a` and `b` such that the axes to sum over are in the end of `a` and front of `b`.
+            2. Combine the legs `axes`-legs and other legs with a `np.reshape`,
+               such that `a` and `b` are matrices.
+            3. Perform a matrix product with `np.dot`.
+            4. Split the remaining axes with another `np.reshape` to obtain the correct shape.
+
+        The main work is done by `np.dot`, which calls LAPACK to perform the simple matrix product.
+        (This matrix multiplication of a ``NxK`` times ``KxM`` matrix is actually faster
+        than the O(N*K*M) needed by a naive implementation looping over the indices.)
+
+        We follow the same overall strategy;
+
+        Step 1) is implemented in ``tenpy.tdot`` and is already done when we call ``tenpy.compose``;
+        this function gets input with legs sorted accordingly. Note the different leg order the.
+        We need to contract the last leg of `a` with the first legs of `b` and so on.
+
+        The steps 2) and 4) could be implemented with `combine_legs` and `split_legs`.
+        However, that would actually be an overkill: we're not interested
+        in the full charge data of the combined legs (which would be generated in the LegPipes).
+        Instead, we just need to track the block_inds of a and b carefully.
+
+        For step 2) is implemented in :meth:`_tdot_pre_worker`:
+        We split `a.data.block_inds` into `a_block_inds_keep` and `a_block_inds_contr`, and similar for `b`.
+        Then, view `a` is a matrix :math:`A_{i,k1}` and `b` as :math:`B_{k2,j}`, where
+        `i` can be any row of `a_block_inds_keep`, `j` can be any row of `b_block_inds_keep`.
+        The `k1` and `k2` are rows/columns of `a/b_block_inds_contr`, which come from compatible legs.
+        In our storage scheme, `a.data.blocks[s]` then contains the block :math:`A_{i,k1}` for
+        ``j = a_block_inds_keep[s]`` and ``k1 = a_block_inds_contr[s]``.
+        To identify the different indices `i` and `j`, it is easiest to lexsort in the `s`.
+        Note that we give priority to the `{a,b}_block_inds_keep` over the `_contr`, such that
+        equal rows of `i` are contiguous in `a_block_inds_keep`.
+        Then, they are identified with :func:`find_row_differences`.
+
+        Now, the goal is to calculate the sums :math:`C_{i,j} = sum_k A_{i,k} B_{k,j}`,
+        analogous to step 3) above. This is implemented directly in this function.
+        It is done 'naively' by explicit loops over ``i``, ``j`` and ``k``.
+        However, this is not as bad as it sounds:
+        First, we loop only over existent ``i`` and ``j``
+        (in the sense that there is at least some non-zero block with these ``i`` and ``j``).
+        Second, if the ``i`` and ``j`` are not compatible with the new total charge,
+        we know that ``C_{i,j}`` will be zero.
+        Third, given ``i`` and ``j``, the sum over ``k`` runs only over
+        ``k1`` with nonzero :math:`A_{i,k1}`, and ``k2` with nonzero :math:`B_{k2,j}`.
+
+         How many multiplications :math:`A_{i,k} B_{k,j}` we actually have to perform
+         depends on the sparseness. If ``k`` comes from a single leg, it is completely sorted
+         by charges, so the 'sum' over ``k`` will contain at most one term!
+        """
+        if a.num_codomain_legs == 0 and b.num_domain_legs == 0:
+            return self.inner(a, b, do_dagger=False)
+            
+        assert a.num_codomain_legs > 0 or b.num_domain_legs > 0, 'special case: inner'
+        if a.num_domain_legs == 0:
+            return self._compose_no_contraction(a, b)
+        res_dtype = Dtype.common(a.dtype, b.dtype)
+
+        if len(a.data.blocks) == 0 or len(b.data.blocks) == 0:
+            # if there are no actual blocks to contract, we can directly return 0
+            return self.zero_data(a.codomain, b.domain, res_dtype)
+
+        # convert blocks to common dtype
+        a_blocks = a.data.blocks
+        if a.dtype != res_dtype:
+            a_blocks = [self.block_to_dtype(B, res_dtype) for B in a_blocks]
+        b_blocks = b.data.blocks
+        if b.dtype != res_dtype:
+            b_blocks = [self.block_to_dtype(B, res_dtype) for B in b_blocks]
+
+        
+        # need to contract the domain legs of a with the codomain legs of b.
+        # due to the leg ordering
+
+        # Deal with the columns of the block inds that are kept/contracted separately
+        a_block_inds_keep, a_block_inds_contr = np.hsplit(a.data.block_inds, [a.num_codomain_legs])
+        b_block_inds_contr, b_block_inds_keep = np.hsplit(b.data.block_inds, [b.num_codomain_legs])
+        # Merge the block_inds on the contracted legs to a single column, using strides.
+        # Note: The order in a.data.block_inds is opposite from the order in b.data.block_inds!
+        #       I.e. a.data.block_inds[-1-n] and b.data.block_inds[n] describe one leg to contract
+        # We choose F-style strides, by appearance in b.data.block_inds.
+        # This guarantees that the b.data.block_inds sorting is preserved.
+        # We do not care about the sorting of the a.data.block_inds, since we need to re-sort anyway,
+        # to group by a_block_inds_keep.
+        strides = make_stride([l.num_sectors for l in b.codomain], cstyle=False)
+        a_block_inds_contr = np.sum(a_block_inds_contr * strides[::-1], axis=1)  # 1D array
+        b_block_inds_contr = np.sum(b_block_inds_contr * strides, axis=1)  # 1D array
+        
+        # sort the a.data.block_inds *first* by the _keep, *then* by the _contr columns
+        a_sort = np.lexsort(np.hstack([a_block_inds_contr[:, None], a_block_inds_keep]).T)
+        a_block_inds_keep = a_block_inds_keep[a_sort, :]
+        a_block_inds_contr = a_block_inds_contr[a_sort]
+        a_blocks = [a_blocks[i] for i in a_sort]
+        # The b_block_inds_* and b_blocks are already sorted like that.
+
+        # now group everything that has matching *_block_inds_keep
+        a_slices = find_row_differences(a_block_inds_keep, include_len=True)
+        b_slices = find_row_differences(b_block_inds_keep, include_len=True)
+        a_blocks = [a_blocks[i:i2] for i, i2 in zip(a_slices, a_slices[1:])]
+        b_blocks = [b_blocks[j:j2] for j, j2 in zip(b_slices, b_slices[1:])]
+        a_block_inds_contr = [a_block_inds_contr[i:i2] for i, i2 in zip(a_slices, a_slices[1:])]
+        b_block_inds_contr = [b_block_inds_contr[j:j2] for j, j2 in zip(b_slices, b_slices[1:])]
+        a_block_inds_keep = a_block_inds_keep[a_slices[:-1]]
+        b_block_inds_keep = b_block_inds_keep[b_slices[:-1]]
+
+        # Reshape blocks to matrices.
+        # Reason: We could use block_tdot to do the pairwise block contractions.
+        #         This would then internally reshape to matrices, to use e.g. GEMM.
+        #         One of the a_blocks may be contracted with many different b_blocks, and require
+        #         the same reshape every time. Instead, we do it once at this point.
+        # All blocks in a_blocks[n] have the same kept legs -> same kept shape
+        a_shape_keep = [self.block_shape(blocks[0])[:a.num_codomain_legs] for blocks in a_blocks]
+        b_shape_keep = [self.block_shape(blocks[0])[b.num_codomain_legs:] for blocks in b_blocks]
+        if a.num_codomain_legs == 0:
+            # special case: reshape to vector.
+            a_blocks = [[self.block_reshape(B, (-1,)) for B in blocks] for blocks in a_blocks]
+        else:
+            a_blocks = [[self.block_reshape(B, (np.prod(shape_keep), -1))
+                         for B in blocks] for blocks, shape_keep in zip(a_blocks, a_shape_keep)]
+        # need to permute the leg order of one group of permuted legs.
+        # OPTIMIZE does it matter, which?
+        # choose to permute the legs of the b-blocks
+        if b.num_domain_legs == 0:
+            # special case: reshape to vector
+            perm = list(reversed(range(b.num_legs)))
+            b_blocks = [[self.block_reshape(self.block_permute_axes(B, perm), (-1,))
+                         for B in blocks] for blocks in b_blocks]
+        else:
+            perm = [*reversed(range(b.num_codomain_legs)), *range(b.num_codomain_legs, b.num_legs)]
+            b_blocks = [[self.block_reshape(self.block_permute_axes(B, perm),
+                                            (-1, np.prod(shape_keep))) 
+                         for B in blocks]for blocks, shape_keep in zip(b_blocks, b_shape_keep)]
+
+        # compute coupled sectors for all rows of the block inds // for all blocks
+        if a.num_codomain_legs > 0:
+            a_charges = a.symmetry.multiple_fusion_broadcast(
+                *(leg.sectors[bi] for leg, bi in zip(a.codomain, a_block_inds_keep.T))
+            )
+        else:
+            a_charges = np.repeat(a.symmetry.trivial_sector[:, None], len(a_block_inds_keep))
+        if b.num_domain_legs > 0:
+            b_charges = a.symmetry.multiple_fusion_broadcast(
+                *(leg.sectors[bi] for leg, bi in zip(b.domain, b_block_inds_keep[:, ::-1].T))
+            )
+        else:
+            b_charges = np.repeat(a.symmetry.trivial_sector[:, None], len(b_block_inds_keep))
+        a_charge_lookup = list_to_dict_list(a_charges)  # lookup table ``tuple(sector) -> idcs_in_a_charges``
+
+        # rows_a changes faster than cols_b, such that the resulting block_inds are lex-sorted
+        res_blocks = []
+        res_block_inds_a = []
+        res_block_inds_b = []
+        for col_b, coupled in enumerate(b_charges):
+            b_blocks_in_col = b_blocks[col_b]
+            rows_a = a_charge_lookup.get(tuple(coupled), [])  # empty list if no match
+            for row_a in rows_a:
+                common_inds_iter = iter_common_sorted(a_block_inds_contr[row_a], b_block_inds_contr[col_b])
+                # Use first pair of common indices to initialize a block.
+                try:
+                    k1, k2 = next(common_inds_iter)
+                except StopIteration:
+                    continue
+                a_blocks_in_row = a_blocks[row_a]
+                block = self.matrix_dot(a_blocks_in_row[k1], b_blocks_in_col[k2])
+                # for further pairs of common indices, add the result onto the existing block
+                for k1, k2 in common_inds_iter:
+                    block += self.matrix_dot(a_blocks_in_row[k1], b_blocks_in_col[k2])
+                block = self.block_reshape(block, a_shape_keep[row_a] + b_shape_keep[col_b])
+                res_blocks.append(block)
+                res_block_inds_a.append(a_block_inds_keep[row_a])
+                res_block_inds_b.append(b_block_inds_keep[col_b])
+
+        # finish up:
+        if len(res_blocks) == 0:
+            block_inds = np.zeros((0, a.num_codomain_legs + b.num_domain_legs), dtype=int)
+        else:
+            block_inds = np.hstack((res_block_inds_a, res_block_inds_b))
+        return AbelianBackendData(res_dtype, blocks=res_blocks, block_inds=block_inds,
+                                  is_sorted=True)
+
+    def _compose_no_contraction(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
+        """special case of :meth:`compose` where no legs are actually contracted"""
+        res_dtype = a.data.dtype.common(b.data.dtype)
+        a_blocks = a.data.blocks
+        b_blocks = b.data.blocks
+        if a.data.dtype != res_dtype:
+            a_blocks = [self.block_to_dtype(T, res_dtype) for T in a_blocks]
+        if b.data.dtype != res_dtype:
+            b_blocks = [self.block_to_dtype(T, res_dtype) for T in b_blocks]
+        a_block_inds = a.data.block_inds
+        b_block_inds = b.data.block_inds
+        l_a, num_legs_a = a_block_inds.shape
+        l_b, num_legs_b = b_block_inds.shape
+        grid = np.indices([len(a_block_inds), len(b_block_inds)]).T.reshape(-1, 2)
+        # grid is lexsorted, with rows as all combinations of a/b block indices.
+        res_block_inds = np.empty((l_a * l_b, num_legs_a + num_legs_b), dtype=int)
+        res_block_inds[:, :num_legs_a] = a_block_inds[grid[:, 0]]
+        res_block_inds[:, num_legs_a:] = b_block_inds[grid[:, 1]]
+        res_blocks = [self.block_outer(a_blocks[i], b_blocks[j]) for i, j in grid]
+        # TODO (JU) are the block_inds actually sorted?
+        #  if yes: add comment explaining why, adjust argument below
+        return AbelianBackendData(res_dtype, res_blocks, res_block_inds, is_sorted=False)
+
     def conj(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
         raise NotImplementedError  # TODO not yet reviewed. duality of legs changes!!
         blocks = [self.block_conj(b) for b in a.data.blocks]
@@ -821,8 +1030,8 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         #      q = np.sum([l.get_charge(qi) for l, qi in zip(self.legs, qindices)], axis=0)
         #      return make_valid(q)  # TODO: leg.get_qindex, leg.get_charge
     
-    def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_conj: bool, axs2: list[int] | None) -> complex:
-        raise NotImplementedError  # TODO not yet reviewed
+    def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_dagger: bool) -> float | complex:
+        raise NotImplementedError('inner not implemented')  # TODO not yet reviewed
         # a.legs[i] to be contracted with b.legs[axs2[i]]
         a_blocks = a.data.blocks
         # TODO dont use legs! use conventional_leg_order / domain / codomain
@@ -839,7 +1048,7 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
             sort = np.argsort(b_block_inds)
             b_block_inds = b_block_inds[sort]
             b_blocks = [b_blocks[i] for i in sort]
-        res = [self.block_inner(a_blocks[i], b_blocks[j], do_conj=do_conj, axs2=axs2)
+        res = [self.block_inner(a_blocks[i], b_blocks[j], do_conj=do_conj, axs2=axs2)  # TODO signature changed!
                for i, j in iter_common_sorted(a_block_inds, b_block_inds)]
         return np.sum(res)
 

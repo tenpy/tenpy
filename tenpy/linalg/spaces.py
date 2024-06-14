@@ -933,7 +933,7 @@ class ProductSpace(Space):
         if show_symmetry:
             lines.append(f'{indent}symmetry={self.symmetry!r},')
         num_lines = len(lines) + 1  # already consider final line ')'
-        summarize = False
+        summarize = len(self.spaces) == 0  # if there are no spaces, auto-summarize
         for sp in self.spaces:
             sp_repr = sp._repr(show_symmetry=False)
             if sp_repr is None:

@@ -234,6 +234,9 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                      product_spaces: list[ProductSpace], new_axes: list[int],
                      final_legs: list[Space]) -> Data:
         raise NotImplementedError('combine_legs not implemented')  # TODO
+
+    def compose(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
+        raise NotImplementedError('compose not implemented')
         
     def conj(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
         # TODO what does this even mean? transpose of dagger?
@@ -555,8 +558,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                   ) -> ElementarySpace:
         raise NotImplementedError('infer_leg not implemented')  # TODO
 
-    def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_conj: bool,
-              axs2: list[int] | None) -> complex:
+    def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_dagger: bool) -> float | complex:
         raise NotImplementedError('inner not implemented')  # TODO
     
     def inv_part_from_dense_block_single_sector(self, vector: Block, space: Space,

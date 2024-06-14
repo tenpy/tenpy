@@ -87,6 +87,11 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         raise NotImplementedError  # TODO not yet reviewed
         return self.block_combine_legs(a.data, combine_slices)
 
+    def compose(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
+        a_domain = list(reversed(range(a.num_codomain_legs, a.num_legs)))
+        b_codomain = list(range(b.num_codomain_legs))
+        return self.block_tdot(a.data, b.data, a_domain, b_codomain)
+
     def conj(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
         return self.block_conj(a.data)
 
@@ -206,9 +211,8 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         dim = self.block_shape(block)[idx]
         return ElementarySpace.from_trivial_sector(dim, is_dual=is_dual)
 
-    def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_conj: bool, axs2: list[int] | None) -> complex:
-        raise NotImplementedError  # TODO not yet reviewed
-        return self.block_inner(a.data, b.data, do_conj=do_conj, axs2=axs2)
+    def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_dagger: bool) -> float | complex:
+        return self.block_inner(a.data, b.data, do_dagger=do_dagger)
 
     def inv_part_from_dense_block_single_sector(self, vector: Block, space: Space,
                                                 charge_leg: ElementarySpace) -> Data:

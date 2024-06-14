@@ -89,14 +89,12 @@ class TorchBlockBackend(BlockBackend):
     def block_outer(self, a: Block, b: Block) -> Block:
         return torch_module.tensordot(a, b, ([], []))
 
-    def block_inner(self, a: Block, b: Block, do_conj: bool, axs2: list[int] | None) -> complex:
-        # TODO is this faster than torch.sum(a * b.transpose[axs2]) ?
-        axs1 = list(range(len(a.shape)))
-        if axs2 is None:
-            axs2 = axs1
-        if do_conj:
-            a = torch_module.conj(a)
-        return torch_module.tensordot(a, b, (axs1, axs2))
+    def block_inner(self, a: Block, b: Block, do_dagger: bool) -> float | complex:
+        if do_dagger:
+            res = torch_module.tensordot(torch_module.conj(a), b, a.ndim)
+        else:
+            res = torch_module.tensordot(a, b, [range(a.ndim), reversed(range(a.ndim))])
+        return res.item()
 
     def block_permute_axes(self, a: Block, permutation: list[int]) -> Block:
         return torch_module.permute(a, permutation)  # TODO: this is documented as a view. is that a problem?

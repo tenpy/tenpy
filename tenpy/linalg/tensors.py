@@ -3014,12 +3014,23 @@ def _compose_SymmetricTensors(tensor1: SymmetricTensor, tensor2: SymmetricTensor
 
     Is used by both compose and tdot.
     """
+    if tensor1.num_codomain_legs == 0 == tensor2.num_domain_legs:  # no remaining open legs
+        return inner(tensor1, tensor2, do_dagger=False)
+
+    if relabel1 is None:
+        labels_codomain = tensor1.codomain_labels
+    else:
+        labels_codomain = [relabel1.get(l, l) for l in tensor1.codomain_labels]
+    if relabel2 is None:
+        labels_domain = tensor2.domain_labels
+    else:
+        labels_domain = [relabel2.get(l, l) for l in tensor2.domain_labels]
+        
     backend = get_same_backend(tensor1, tensor2)
     return SymmetricTensor(
         data=backend.compose(tensor1, tensor2),  # TODO impl, rename
         codomain=tensor1.codomain, domain=tensor2.domain, backend=backend,
-        labels=[[relabel1.get(l, l) for l in tensor1.codomain_labels],
-                [relabel2.get(l, l) for l in tensor2.domain_labels]]
+        labels=[labels_codomain, labels_domain]
     )
 
 
@@ -3093,6 +3104,8 @@ def inner(A: Tensor, B: Tensor, do_dagger: bool = True) -> float | complex:
     The inner product is defined as :math:`\mathrm{Tr}[ A^\dagger \circ B]`.
     It is thus equivalent to, but more efficient than ``trace(dot(A, B))``.
 
+    TODO should we allow an arg here to permute the legs before inner?
+
     Parameters
     ----------
     A, B
@@ -3108,6 +3121,13 @@ def inner(A: Tensor, B: Tensor, do_dagger: bool = True) -> float | complex:
     norm
         The Frobenius norm, induced by this inner product.
     """
+    if do_dagger:
+        assert A.codomain == B.codomain
+        assert A.domain == B.domain
+    else:
+        assert A.domain == B.codomain
+        assert A.codomain == B.domain
+    
     if isinstance(A, (DiagonalTensor, Mask)):
         # in this case, there is no benefit to having a dedicated backend function,
         # as the dot is cheap
@@ -3126,6 +3146,7 @@ def inner(A: Tensor, B: Tensor, do_dagger: bool = True) -> float | complex:
         raise NotImplementedError  # TODO
     
     if isinstance(B, ChargedTensor):
+        # reduce to the case where A is charged and B is not
         if do_dagger:
             return conj(inner(B, A))
         return inner(B, A, do_dagger=False)
@@ -3134,7 +3155,7 @@ def inner(A: Tensor, B: Tensor, do_dagger: bool = True) -> float | complex:
         raise NotImplementedError   # TODO
 
     # remaining case: both are SymmetricTensor
-    raise NotImplementedError  # TODO
+    return get_same_backend(A, B).inner(A, B, do_dagger=do_dagger)
 
 
 def is_scalar(obj):
@@ -3735,16 +3756,9 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
         return ChargedTensor(inv_part, tensor2.charged_state)
 
     # Remaining case: both are SymmetricTenor
-    
-    if num_open_1 == 0 == num_open_2:
-        # if all legs are contracted, there is no need to move them all to t1.domain / t2.codomain.
-        # we just need to permute them such that t1.domain == t2.codomain and vice versa
-        J1, K1 = tensor1.num_codomain_legs, tensor1.num_domain_legs
-        t2_domain = [legs2[legs1.index(n)] for n in range(J1)]
-        t2_codomain = [legs2[legs1.index(n)] for n in reversed(range(J1, J1 + K1))]
-        t2 = _permute_legs(tensor2, t2_codomain, t2_domain)
-        return inner(tensor1, t2, do_dagger=False)
 
+    # OPTIMIZE actually, we only need to permute legs to *any* matching order.
+    #          could use ``legs1[perm]`` and ``legs2[perm]`` instead, if that means fewer braids.
     tensor1 = _permute_legs(tensor1, domain=legs1)
     tensor2 = _permute_legs(tensor2, codomain=legs2)
     return _compose_SymmetricTensors(tensor1, tensor2, relabel1=relabel1, relabel2=relabel2)

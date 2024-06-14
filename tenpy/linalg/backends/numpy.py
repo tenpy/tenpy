@@ -66,13 +66,12 @@ class NumpyBlockBackend(BlockBackend):
     def block_outer(self, a: Block, b: Block) -> Block:
         return np.tensordot(a, b, ((), ()))
 
-    def block_inner(self, a: Block, b: Block, do_conj: bool, axs2: list[int] | None) -> complex:
-        dim = max(a.ndim, b.ndim)
-        axs2 = list(range(dim)) if axs2 is None else axs2
-        if do_conj:
-            a = np.conj(a)
-        return np.tensordot(a, b, (list(range(dim)), axs2)).item()
-
+    def block_inner(self, a: Block, b: Block, do_dagger: bool) -> float | complex:
+        # TODO use np.sum(a * b) instead?
+        if do_dagger:
+            return np.tensordot(np.conj(a), b, a.ndim).item()
+        return np.tensordot(a, b, [list(range(a.ndim)), list(reversed(range(a.ndim)))]).item()
+        
     def block_permute_axes(self, a: Block, permutation: list[int]) -> Block:
         return np.transpose(a, permutation)
 
