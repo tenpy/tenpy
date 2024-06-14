@@ -81,10 +81,11 @@ from ..tools.misc import to_iterable, rank_data
 
 __all__ = ['Tensor', 'SymmetricTensor', 'DiagonalTensor', 'ChargedTensor', 'Mask',
            'add_trivial_leg', 'almost_equal', 'angle', 'apply_mask', 'bend_legs', 'combine_legs',
-           'conj', 'dagger', 'compose', 'entropy', 'imag', 'inner', 'is_scalar', 'item',
-           'linear_combination', 'move_leg', 'norm', 'outer', 'permute_legs', 'real',
-           'real_if_close', 'scalar_multiply', 'scale_axis', 'split_legs', 'sqrt', 'squeeze_legs',
-           'tdot', 'trace', 'transpose', 'zero_like', 'get_same_backend', 'check_same_legs']
+           'combine_to_matrix', 'conj', 'dagger', 'compose', 'entropy', 'imag', 'inner',
+           'is_scalar', 'item', 'linear_combination', 'move_leg', 'norm', 'outer', 'permute_legs',
+           'real', 'real_if_close', 'scalar_multiply', 'scale_axis', 'split_legs', 'sqrt',
+           'squeeze_legs', 'tdot', 'trace', 'transpose', 'zero_like', 'get_same_backend',
+           'check_same_legs']
 
 
 # TENSOR CLASSES
@@ -102,7 +103,13 @@ class Tensor(metaclass=ABCMeta):
     in the :attr:`Tensor.legs`. E.g. if ``codomain == [V, W, Z]`` and ``domain == [X, Y]``,
     we have ``legs == [V, W, Z, Y.dual, X.dual]`` and indices ``1`` and ``-4`` both refer to the
     ``W`` leg in the codomain, while indices ``3`` and ``-2`` both refer to the ``X`` leg in the
-    domain.
+    domain. Graphically, the leg indices are arranged as follows::
+
+    |       0   1   2   3   4   5
+    |      ┏┷━━━┷━━━┷━━━┷━━━┷━━━┷┓
+    |      ┃          T          ┃
+    |      ┗┯━━━┯━━━┯━━━┯━━━┯━━━┯┛
+    |      11  10   9   8   7   6
 
     Attributes
     ----------
@@ -1029,7 +1036,14 @@ class SymmetricTensor(Tensor):
 class DiagonalTensor(SymmetricTensor):
     r"""Special case of a :class:`SymmetricTensor` that is diagonal in the computational basis.
 
-    The domain and codomain of a diagonal tensor are the same and consist of a single leg.
+    The domain and codomain of a diagonal tensor are the same and consist of a single leg::
+
+    |        │
+    |      ┏━┷━┓
+    |      ┃ D ┃
+    |      ┗━┯━┛
+    |        │
+
     A diagonal tensor then is a map that is a multiple of the identity on each sector of the leg,
     i.e. it is given by :math:`\bigoplus_a \lambda_a \eye_a`, where the sum goes over sectors
     :math:`a` of the `leg` :math:`V = \bigoplus_a a`.
@@ -1516,7 +1530,14 @@ class Mask(Tensor):
     sector. It has a single leg, the :attr:`large_leg` in its domain and maps it to a single leg,
     the :attr:`small_leg` in the codomain.
     An inclusion Mask is the dagger of this projection Mask and maps from the small leg in the
-    domain to the large leg in the codomain.
+    domain to the large leg in the codomain::
+
+    
+    |         │                 ║
+    |      ┏━━┷━━┓           ┏━━┷━━┓
+    |      ┃ M_p ┃    OR     ┃ M_i ┃
+    |      ┗━━┯━━┛           ┗━━┯━━┛
+    |         ║                 │
 
     TODO think in detail about the basis_perm and how it interacts with masking...
 
@@ -1925,7 +1946,15 @@ class ChargedTensor(Tensor):
     includes the :attr:`charge_leg` :math:`C` as its ``invariant_part.domain.spaces[0]``,
     and therefore has ``invariant_part.legs[-1] == C.dual``.
     Such that in the above examples we have ``invariant_part1.legs == [V1, V2, V3, C.dual]``
-    and ``invariant_part2.legs == [V1, V2, V4.dual, V3.dual, C.dual]``.
+    and ``invariant_part2.legs == [V1, V2, V4.dual, V3.dual, C.dual]``::
+
+    |       0   1   2   3
+    |      ┏┷━━━┷━━━┷━━━┷┓
+    |      ┃  invariant  ┃
+    |      ┗┯━━━┯━━━┯━━━┯┛
+    |      C┆   6   5   4
+    |      ┏┷┓
+    |      ┗━┛
     
     If the symmetry :attr:`Symmetry.can_be_dropped`, a specific state on the charge leg can be
     specified as a dense block. For example, consider an SU(2) symmetry and a charge leg :math:`C`,
