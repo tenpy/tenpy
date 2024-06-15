@@ -501,7 +501,7 @@ def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[N
 def decompose_theta_qr_based(old_B_L: npc.Array, old_B_R: npc.Array, theta: npc.Array, move_right: bool,
                              expand: float, min_block_increase: int, use_eig_based_svd: bool, trunc_params: dict, compute_err: bool, 
                              return_both_T: bool):
-    """Performs a QR based decomposition of a matrix `theta` (= the wavefunction) and truncates it. 
+    r"""Performs a QR based decomposition of a matrix `theta` (= the wavefunction) and truncates it.
     The result is an approximation.
 
     The decomposition for ``use_eig_based_svd=False`` is::
