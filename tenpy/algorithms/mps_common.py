@@ -2464,13 +2464,17 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
                                                 trunc_params=self.trunc_params, 
                                                 compute_err=self.options.get('compute_err', True),
                                                 return_both_T=True)
+        if self.move_right:
+            assert form[0] == 'A'
+            U = T_Lc
+        else:
+            assert form[1] == 'B'
+            VH = T_Rc
+        
         T_L = T_Lc.split_legs(['(vL.p)'])
         T_R = T_Rc.split_legs(['(p.vR)'])
         U, VH = None, None
-        if self.move_right:
-            U = T_Lc
-        else:
-            VH = T_Rc
+        
         self.renormalize.append(renormalize)
 
         # compare to old best guess to check convergence of the sweeps
