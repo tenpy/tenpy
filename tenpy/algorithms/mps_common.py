@@ -2454,10 +2454,18 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
         i0 = self.i0
         new_psi = self.psi
 
+        if self.move_right:
+            old_T_L = new_psi.get_B(i0, 'Th')
+            old_T_R = new_psi.get_B(i0+1, 'B')
+            # for old_T_L `'B'` form would be fine as well, but i0 is in `'Th'` form if ``use_eig_based_svd=True``
+        else:
+            old_T_L = new_psi.get_B(i0, 'A')
+            old_T_R = new_psi.get_B(i0+1, 'Th')
+            # for old_T_R `'A'` form would be fine as well, but i0+1 is in `'Th'` form if ``use_eig_based_svd=True``
         expand = self._expansion_rate(i0)
         use_eig_based_svd = self.options.get('use_eig_based_svd', False)
         T_Lc, S, T_Rc, form, err, renormalize = decompose_theta_qr_based(
-                                                old_T_L=new_psi.get_B(i0, 'B'), old_T_R=new_psi.get_B(i0+1, 'B'), 
+                                                old_T_L=old_T_L, old_T_R=old_T_R, 
                                                 theta=theta, move_right=self.move_right,
                                                 expand=expand, min_block_increase = self.options.get('cbe_min_block_increase', 1),
                                                 use_eig_based_svd=use_eig_based_svd,
