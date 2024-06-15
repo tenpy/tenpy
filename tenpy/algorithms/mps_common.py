@@ -2455,22 +2455,22 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
         new_psi = self.psi
 
         expand = self._expansion_rate(i0)
-        use_eig_based_svd = self.options.get('use_eig_based_svd', False)        
-        t_L, S, t_R, form, err, renormalize = decompose_theta_qr_based(
+        use_eig_based_svd = self.options.get('use_eig_based_svd', False)
+        T_Lc, S, T_Rc, form, err, renormalize = decompose_theta_qr_based(
                                                 old_B_L=new_psi.get_B(i0, 'B'), old_B_R=new_psi.get_B(i0+1, 'B'), 
-                                                theta=theta, get_left_side=self.move_right,
+                                                theta=theta, move_right=self.move_right,
                                                 expand=expand, min_block_increase = self.options.get('cbe_min_block_increase', 1),
                                                 use_eig_based_svd=use_eig_based_svd,
                                                 trunc_params=self.trunc_params, 
                                                 compute_err=self.options.get('compute_err', True),
-                                                need_other_side=True)
-        T_L = t_L.split_legs(['(vL.p)'])
-        T_R = t_R.split_legs(['(p.vR)'])
+                                                return_both_T=True)
+        T_L = T_Lc.split_legs(['(vL.p)'])
+        T_R = T_Rc.split_legs(['(p.vR)'])
         U, VH = None, None
         if self.move_right:
-            U = t_L
+            U = T_Lc
         else:
-            VH = t_R
+            VH = T_Rc
         self.renormalize.append(renormalize)
 
         # compare to old best guess to check convergence of the sweeps
@@ -2489,5 +2489,4 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
         new_psi.set_B(i0, T_L, form=form[0])
         new_psi.set_B(i0+1, T_R, form=form[1])
         new_psi.set_SR(i0, S)
-        
         return {'U': U, 'VH': VH, 'err': err}

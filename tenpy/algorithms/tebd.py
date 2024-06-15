@@ -647,12 +647,12 @@ class QRBasedTEBDEngine(TEBDEngine):
 
         A_L, S, B_R, forms, trunc_err, renormalize = decompose_theta_qr_based(
             old_B_L=self.psi.get_B(i0, 'B'), old_B_R=self.psi.get_B(i1, 'B'),
-            theta=theta, get_left_side=False,
+            theta=theta, move_right=False,
             expand=expand, min_block_increase=self.options.get('cbe_min_block_increase', 1),
             use_eig_based_svd=self.options.get('use_eig_based_svd', False),
             trunc_params=self.trunc_params,
             compute_err=self.options.get('compute_err', True),
-            need_other_side=False,
+            return_both_T=False,
         )
 
         B_L = npc.tensordot(C.combine_legs(('p1', 'vR'), pipes=theta.legs[1]),
@@ -685,12 +685,12 @@ class QRBasedTEBDEngine(TEBDEngine):
 
         A_L, S, B_R, form, trunc_err, renormalize = decompose_theta_qr_based(
             old_B_L=self.psi.get_B(i0, 'B'), old_B_R=self.psi.get_B(i1, 'B'),
-            theta=theta, get_left_side=False,
+            theta=theta, move_right=False,
             expand = expand, min_block_increase=self.options.get('cbe_min_block_increase', 1),
             use_eig_based_svd=self.options.get('use_eig_based_svd', False),
             trunc_params=self.trunc_params,
             compute_err=self.options.get('compute_err', True), 
-            need_other_side=True,
+            return_both_T=True,
         )
         A_L = A_L.split_legs(0)
         B_R = B_R.split_legs(1)
