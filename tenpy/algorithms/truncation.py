@@ -534,6 +534,8 @@ def decompose_theta_qr_based(old_T_L: npc.Array, old_T_R: npc.Array, theta: npc.
 
     if compute_err:
         return_both_T = True
+    
+    theta /= npc.norm(theta) # <- TODO: discuss this, since for TEBD already normalized. Alternatively, normalize in VariationalCompression.update_local()
 
     if move_right:
         # Get inital guess for the left isometry
@@ -600,7 +602,7 @@ def decompose_theta_qr_based(old_T_L: npc.Array, old_T_R: npc.Array, theta: npc.
             theta_approx = npc.tensordot(T_Lc, T_Rc, ['vR', 'vL'])
         else:
             theta_approx = npc.tensordot(T_Lc.scale_axis(S, axis='vR'), T_Rc, ['vR', 'vL'])
-        eps = npc.norm(theta - theta_approx) ** 2
+        eps = npc.norm(theta - theta_approx) ** 2 # TODO: if not normalized, error wrong
         trunc_err = TruncationError(eps, 1. - 2. * eps)
     else:
         trunc_err = TruncationError(np.nan, np.nan)
