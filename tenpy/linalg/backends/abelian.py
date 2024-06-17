@@ -1031,24 +1031,24 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_dagger: bool) -> float | complex:
         raise NotImplementedError('inner not implemented')  # TODO not yet reviewed
         # a.legs[i] to be contracted with b.legs[axs2[i]]
-        a_blocks = a.data.blocks
-        # TODO dont use legs! use conventional_leg_order / domain / codomain
-        stride = make_stride([l.num_sectors for l in a.legs], cstyle=False)
-        a_block_inds = np.sum(a.data.block_inds * stride, axis=1)
-        if axs2 is not None:
-            # permute strides to match the label order on b:
-            # strides_for_a[i] == strides_for_b[axs2[i]]
-            stride[axs2] = stride.copy()
-        b_blocks = b.data.blocks
-        b_block_inds = np.sum(b.data.block_inds * stride, axis=1)
-        if axs2 is not None:
-            # we permuted the strides, so b_block_inds is no longer sorted
-            sort = np.argsort(b_block_inds)
-            b_block_inds = b_block_inds[sort]
-            b_blocks = [b_blocks[i] for i in sort]
-        res = [self.block_inner(a_blocks[i], b_blocks[j], do_conj=do_conj, axs2=axs2)  # TODO signature changed!
-               for i, j in iter_common_sorted(a_block_inds, b_block_inds)]
-        return np.sum(res)
+        # a_blocks = a.data.blocks
+        # # TODO dont use legs! use conventional_leg_order / domain / codomain
+        # stride = make_stride([l.num_sectors for l in a.legs], cstyle=False)
+        # a_block_inds = np.sum(a.data.block_inds * stride, axis=1)
+        # if axs2 is not None:
+        #     # permute strides to match the label order on b:
+        #     # strides_for_a[i] == strides_for_b[axs2[i]]
+        #     stride[axs2] = stride.copy()
+        # b_blocks = b.data.blocks
+        # b_block_inds = np.sum(b.data.block_inds * stride, axis=1)
+        # if axs2 is not None:
+        #     # we permuted the strides, so b_block_inds is no longer sorted
+        #     sort = np.argsort(b_block_inds)
+        #     b_block_inds = b_block_inds[sort]
+        #     b_blocks = [b_blocks[i] for i in sort]
+        # res = [self.block_inner(a_blocks[i], b_blocks[j], do_conj=do_conj, axs2=axs2)  # TODO signature changed!
+        #        for i, j in iter_common_sorted(a_block_inds, b_block_inds)]
+        # return np.sum(res)
 
     def inv_part_from_dense_block_single_sector(self, vector: Block, space: Space,
                                                 charge_leg: ElementarySpace) -> Data:
