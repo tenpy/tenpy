@@ -566,10 +566,10 @@ class Tensor(metaclass=ABCMeta):
 
     def relabel(self, mapping: dict[str, str]) -> None:
         """Apply mapping to labels. In-place."""
-        self.labels = [mapping.get(l, l) for l in self._labels]
+        self.set_labels([mapping.get(l, l) for l in self._labels])
 
     def set_label(self, pos: int, label: str | None):
-        """Set a single label at given position, in-place.  Return the modified instance."""
+        """Set a single label at given position, in-place. Return the modified instance."""
         if label in self._labels[:pos] or label in self._labels[pos + 1:]:
             raise ValueError('Duplicate label')
         self._labels[pos] = label
@@ -1444,9 +1444,13 @@ class DiagonalTensor(SymmetricTensor):
             if self.leg != other.leg:
                 raise ValueError('Incompatible legs!')
             if right:
-                data = backend.diagonal_elementwise_binary(other, self, func=func)
+                data = backend.diagonal_elementwise_binary(
+                    other, self, func=func, func_kwargs={}, partial_zero_is_zero=False
+                )
             else:
-                data = backend.diagonal_elementwise_binary(self, other, func=func)
+                data = backend.diagonal_elementwise_binary(
+                    self, other, func=func, func_kwargs={}, partial_zero_is_zero=False
+                )
             labels = _get_matching_labels(self.labels, other.labels)
         elif return_NotImplemented and not isinstance(other, Tensor):
             return NotImplemented
@@ -1732,6 +1736,8 @@ class Mask(Tensor):
                                                       dtype=Dtype.float32)
             cutoff = 2 * p_keep - 1  # diagonal entries are uniform in [-1, 1].
             return cls.from_DiagonalTensor(diag < cutoff)
+
+        assert small_leg.is_subspace_of(large_leg)
 
         def func(shape, coupled):
             num_keep = small_leg.sector_multiplicity(coupled)
@@ -2166,8 +2172,23 @@ class ChargedTensor(Tensor):
         return cls(inv_part, [1])
 
     @classmethod
+    def from_invariant_part(cls, invariant_part: SymmetricTensor, charged_state: Block | None
+                            ) -> ChargedTensor | complex:
+        """Like constructor, but deals with the case where invariant_part has only one leg.
+
+        In that case, we return a scalar if the charged_state is specified and raise otherwise.
+        """
+        if invariant_part.num_legs == 1:
+            if charged_state is None:
+                raise ValueError('Can not instantiate ChargedTensor with no legs and unspecified charged_states.')
+            # OPTIMIZE ?
+            inv_block = invariant_part.to_dense_block()
+            return invariant_part.backend.block_inner(inv_block, charged_state, do_dagger=False)
+        return cls(invariant_part, charged_state)
+
+    @classmethod
     def from_two_charge_legs(cls, invariant_part: SymmetricTensor, state1: Block | None,
-                             state2: Block | None) -> ChargedTensor:
+                             state2: Block | None) -> ChargedTensor | complex:
         """Create a charged tensor from an invariant part with two charged legs.
 
         Parameters
@@ -2181,7 +2202,7 @@ class ChargedTensor(Tensor):
             raise ValueError('Must specify either both or none of the states')
         else:
             state = invariant_part.backend.state_tensor_product(state1, state2, inv_part.domain[0])
-        return cls(inv_part, state)
+        return cls.from_invariant_part(inv_part, state)
 
     @classmethod
     def from_zero(cls, codomain: ProductSpace | list[Space],
@@ -2238,6 +2259,16 @@ class ChargedTensor(Tensor):
             )
             lines.append(start + state_lines[0])
         return lines
+
+    def set_label(self, pos: int, label: str | None):
+        pos = _normalize_idx(pos, self.num_legs)
+        self.invariant_part.set_label(pos, label)
+        return super().set_label(pos, label)
+
+    def set_labels(self, labels: Sequence[list[str | None] | None] | list[str | None] | None):
+        super().set_labels(labels)
+        self.invariant_part.set_labels([*self._labels, *self._CHARGE_LEG_LABEL])
+        return self
     
     def to_dense_block(self, leg_order: list[int | str] = None, dtype: Dtype = None) -> Block:
         if self.charged_state is None:
@@ -2548,7 +2579,7 @@ def apply_mask(tensor: Tensor, mask: Mask, leg: int | str) -> Tensor:
     """
     in_domain, co_domain_idx, leg_idx = tensor._parse_leg_idx(leg)
     assert mask.large_leg == tensor.get_leg(leg_idx)
-    raise NotImplementedError  # TODO
+    raise NotImplementedError('tensors.apply_mask not implemented')  # TODO
 
 
 def bend_legs(tensor: Tensor, num_codomain_legs: int = None, num_domain_legs: int = None) -> Tensor:
@@ -3242,7 +3273,7 @@ def linear_combination(a: Number, v: Tensor, b: Number, w: Tensor):
     )
 
 
-def move_leg(tensor: Tensor, which_leg: int | str, *, codomain_pos: int = None,
+def move_leg(tensor: Tensor, which_leg: int | str, codomain_pos: int = None, *,
              domain_pos: int = None, levels: list[int] | dict[str | int, int] | None = None
              ) -> Tensor:
     """Move one leg of a tensor to a specified position.
@@ -3277,16 +3308,30 @@ def move_leg(tensor: Tensor, which_leg: int | str, *, codomain_pos: int = None,
         Is ignored if the symmetry has symmetric braids. Otherwise, these levels specify the
         chirality of any possible braids induced by permuting the legs. See :func:`permute_legs`.
     """
-    from_domain, co_domain_pos, leg_idx = tensor._parse_leg_idx(which_leg)
+    # TODO make this a separate backend function? Easier to determine move order for fusion tree.
+
+    from_domain, co_domain_pos_from, leg_idx = tensor._parse_leg_idx(which_leg)
+    if from_domain:
+        new_codomain = list(range(tensor.num_codomain_legs))
+        new_domain = [n for n in reversed(range(tensor.num_codomain_legs, tensor.num_legs))
+                      if n != leg_idx]
+    else:
+        new_codomain = [n for n in range(tensor.num_codomain_legs) if n != leg_idx]
+        new_domain = list(reversed(range(tensor.num_codomain_legs, tensor.num_legs)))
+    #
     if codomain_pos is not None:
-        assert domain_pos is None
-        new_codomain_size = tensor.num_codomain_legs + int(from_domain)
-        codomain_pos = _normalize_idx(codomain_pos, new_codomain_size)
-    if domain_pos is not None:
-        assert codomain_pos is None
-        new_domain_size = tensor.num_domain_legs + int(not from_domain)
-        domain_pos = _normalize_idx(domain_pos, new_domain_size)
-    raise NotImplementedError  # TODO
+        if domain_pos is not None:
+            raise ValueError('Can not specify both codomain_pos and domain_pos.')
+        pos = _normalize_idx(codomain_pos, len(new_codomain) + 1)
+        new_codomain[pos:pos] = [leg_idx]
+    elif domain_pos is not None:
+        pos = _normalize_idx(domain_pos, len(new_domain) + 1)
+        new_domain[pos:pos] = [leg_idx]
+        to_domain = True
+    else:
+        raise ValueError('Need to specify either codomain_pos or domain_pos.')
+    #
+    return permute_legs(tensor, new_codomain, new_domain, levels=levels)
 
 
 def norm(tensor: Tensor) -> float:
@@ -3556,7 +3601,7 @@ def scale_axis(tensor: Tensor, diag: DiagonalTensor, leg: int | str) -> Tensor:
         raise ValueError('Incompatible legs')
     
     if isinstance(tensor, DiagonalTensor):
-        return tensor * diag
+        return (tensor * diag).set_labels(tensor.labels)
     if isinstance(tensor, Mask):
         # leg == 0 -> mask is on leg 1 of diagonal and vice versa
         return apply_mask(diag.as_SymmetricTensor(), tensor, 1 - leg_idx)
@@ -3688,11 +3733,10 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
     # parse legs to list[int] and check they are valid
     legs1 = tensor1.get_leg_idcs(to_iterable(legs1))
     legs2 = tensor2.get_leg_idcs(to_iterable(legs2))
+    if duplicate_entries(legs1) or duplicate_entries(legs2):
+        raise ValueError(f'Duplicate leg entries.')
     num_contr = len(legs1)
     assert len(legs2) == num_contr
-    num_open_1 = tensor1.num_legs - num_contr
-    num_open_2 = tensor2.num_legs - num_contr
-    # TODO should we check uniqueness at this point?
 
     # Deal with Masks: either return or reduce to SymmetricTensor
     if isinstance(tensor1, Mask):
@@ -3700,18 +3744,27 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
             warnings.warn('Converting Mask to SymmetricTensor for non-contracting contract()')
             tensor1 = tensor1.as_SymmetricTensor()
         if num_contr == 1:
-            in_domain, co_domain_idx, leg_idx = tensor2._parse_leg_idx(legs2[0])
-            raise NotImplementedError  # TODO use apply_mask
+            res = apply_mask(tensor2, tensor1, legs2[0])
+            res.set_label(legs2[0], tensor1.labels[1 - legs1[0]])
+            return permute_legs(res, codomain=legs1)
         if num_contr == 2:
-            raise NotImplementedError  # TODO use apply_mask, then partial trace
+            large_leg_contr = legs1.index(1) if tensor1.is_projection else legs1.index(0)
+            res = apply_mask(tensor2, tensor1, legs2[large_leg_contr])
+            res = trace(res, legs2)
+            return bend_legs(res, num_codomain_legs=0)
     if isinstance(tensor2, Mask):
         if num_contr == 0:
             warnings.warn('Converting Mask to SymmetricTensor for non-contracting contract()')
             tensor2 = tensor2.as_SymmetricTensor()
         if num_contr == 1:
-            raise NotImplementedError  # TODO use apply_mask
+            large_leg_contr = legs2.index(1) if tensor2.is_projection else legs2.index(0)
+            res = apply_mask(tensor1, tensor2, legs1[large_leg_contr])
+            res.set_label(legs1[0], tensor2.labels[1 - legs2[0]])  # set to the uncontracted labels
+            return permute_legs(res, domain=legs2)
         if num_contr == 2:
-            raise NotImplementedError  # TODO use apply_mask, then partial trace
+            res = apply_mask(tensor1, tensor2, legs1[0])
+            res = trace(res, legs1)
+            return bend_legs(res, num_domain_legs=0)
 
     # Deal with DiagonalTensor: either return or reduce to SymmetricTensor
     if isinstance(tensor1, DiagonalTensor):
@@ -3719,17 +3772,25 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
             warnings.warn('Converting DiagonalTensor to SymmetricTensor for non-contracting contract()')
             tensor1 = tensor1.as_SymmetricTensor()
         if num_contr == 1:
-            raise NotImplementedError  # TODO use scale_axis
+            res = scale_axis(tensor2, tensor1, legs2[0])
+            res.set_label(legs2[0], tensor1.labels[1 - legs1[0]])
+            return permute_legs(res, codomain=legs1)
         if num_contr == 2:
-            raise NotImplementedError  # TODO use scale_axis, then partial trace
+            res = scale_axis(tensor2, tensor1, legs2[0])
+            res = trace(res, legs2)
+            return bend_legs(res, num_codomain_legs=0)
     if isinstance(tensor2, DiagonalTensor):
         if num_contr == 0:
             warnings.warn('Converting DiagonalTensor to SymmetricTensor for non-contracting contract()')
             tensor2 = tensor2.as_SymmetricTensor()
         if num_contr == 1:
-            raise NotImplementedError  # TODO use scale_axis
+            res = scale_axis(tensor1, tensor2, legs1[0])
+            res.set_label(legs1[0], tensor2.labels[1 - legs2[0]])
+            return permute_legs(res, domain=legs2)
         if num_contr == 2:
-            raise NotImplementedError  # TODO use scale_axis, then partial trace
+            res = scale_axis(tensor1, tensor2, legs1[0])
+            res = trace(res, legs1)
+            return bend_legs(res, num_domain_legs=0)
 
     # Deal with ChargedTensor
     if isinstance(tensor1, ChargedTensor) and isinstance(tensor2, ChargedTensor):
@@ -3740,7 +3801,7 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
         c1 = c + '1'
         c2 = c + '2'
         inv_part = tdot(tensor1.invariant_part, tensor2.invariant_part, legs1=legs1, legs2=legs2,
-                            relabel1={**relabel1, c: c1}, relabel2={**relabel2, c: c2})
+                        relabel1={**relabel1, c: c1}, relabel2={**relabel2, c: c2})
         inv_part = move_leg(inv_part, c1, domain_pos=0)
         return ChargedTensor.from_two_charge_legs(
             inv_part, state1=tensor1.charged_state, state2=tensor2.charged_state,
@@ -3749,11 +3810,11 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
         inv_part = tdot(tensor1.invariant_part, tensor2, legs1=legs1, legs2=legs2,
                             relabel1=relabel1, relabel2=relabel2)
         inv_part = move_leg(inv_part, ChargedTensor._CHARGE_LEG_LABEL, domain_pos=0)
-        return ChargedTensor(inv_part, tensor1.charged_state)
+        return ChargedTensor.from_invariant_part(inv_part, tensor1.charged_state)
     if isinstance(tensor2, ChargedTensor):
         inv_part = tdot(tensor1, tensor2.invariant_part, legs1=legs1, legs2=legs2,
                             relabel1=relabel1, relabel2=relabel2)
-        return ChargedTensor(inv_part, tensor2.charged_state)
+        return ChargedTensor.from_invariant_part(inv_part, tensor2.charged_state)
 
     # Remaining case: both are SymmetricTenor
 
@@ -3809,7 +3870,7 @@ def trace(tensor: Tensor,
     If all legs are traced, a python scalar.
     If legs are left open, a tensor, whose legs are the untraced legs.
     """
-    raise NotImplementedError  # TODO
+    raise NotImplementedError('tensors.trace not implemented')  # TODO
 
 
 def transpose(tensor: Tensor) -> Tensor:
@@ -3840,27 +3901,26 @@ def transpose(tensor: Tensor) -> Tensor:
 
     We use the "same" labels, up to the permutation.
     """
+    labels = [*tensor.domain_labels, *tensor.codomain_labels]
     if isinstance(tensor, Mask):
         space_in, space_out, data = tensor.backend.mask_transpose(tensor)
         return Mask(data, space_in=space_in, space_out=space_out,
                     is_projection=not tensor.is_projection, backend=tensor.backend,
-                    labels=_dual_label_list(tensor._labels))
+                    labels=labels)
     if isinstance(tensor, DiagonalTensor):
         # TODO implement this backend method.
         #      the result has dual leg, which means a permutation of sectors.
         dual_leg, data = tensor.backend.diagonal_transpose(tensor)
-        return DiagonalTensor(data=data, leg=dual_leg, backend=tensor.backend,
-                              labels=_dual_label_list(tensor._labels))
+        return DiagonalTensor(data=data, leg=dual_leg, backend=tensor.backend, labels=labels)
     if isinstance(tensor, SymmetricTensor):
         return SymmetricTensor(
             data=tensor.backend.transpose(tensor),
             codomain=tensor.domain.dual, domain=tensor.codomain.dual,
             backend=tensor.backend,
-            labels=_dual_label_list(tensor._labels)
+            labels=labels
         )
     if isinstance(tensor, ChargedTensor):
         inv_part = transpose(tensor.invariant_part)
-        inv_part.relabel({_dual_leg_label(ChargedTensor._CHARGE_LEG_LABEL): ChargedTensor._CHARGE_LEG_LABEL})
         inv_part = move_leg(tensor, ChargedTensor._CHARGE_LEG_LABEL, domain_pos=0)
         return ChargedTensor(inv_part, tensor.charged_state)
     raise TypeError

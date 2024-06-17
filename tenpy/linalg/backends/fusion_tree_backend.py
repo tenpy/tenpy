@@ -337,12 +337,12 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
             blocks = []
             for coupled  in coupled_sectors:
                 if np.all(coupled == a_coupled[i_a]):
-                    a_block = a.data.block[i_a]
+                    a_block = a.data.blocks[i_a]
                     i_a += 1
                 else:
                     a_block = self.zero_block([block_size(a.domain, coupled)], dtype=a.dtype)
                 if np.all(coupled == b_coupled[i_b]):
-                    b_block = b.data.block[i_b]
+                    b_block = b.data.blocks[i_b]
                     i_b += 1
                 else:
                     b_block = self.zero_block([block_size(a.domain, coupled)], dtype=b.dtype)

@@ -392,12 +392,12 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
                 with pytest.raises(NotImplementedError, match='diagonal_to_mask'):
                     _ = tensors.Mask.from_random(large_leg=large_leg, small_leg=small_leg,
                                                  backend=compatible_backend, p_keep=.6,
-                                                 np_random=np_random)
+                                                 labels=labels, np_random=np_random)
                 pytest.skip()
                     
             return tensors.Mask.from_random(large_leg=large_leg, small_leg=small_leg,
                                             backend=compatible_backend, p_keep=.6,
-                                            np_random=np_random)
+                                            labels=labels, np_random=np_random)
         #
         # 3) Fill in missing legs
         # ======================================================================================

@@ -6,6 +6,7 @@ import numpy.testing as npt
 from typing import Type
 import pytest
 import operator
+from contextlib import nullcontext
 
 from tenpy.linalg import backends, tensors
 from tenpy.linalg.tensors import DiagonalTensor, SymmetricTensor, Mask, ChargedTensor
@@ -984,10 +985,38 @@ def test_squeeze_legs():
 
 @pytest.mark.parametrize(
     'cls_A, cls_B, labels_A, labels_B, contr_A, contr_B',
-    [pytest.param(SymmetricTensor, SymmetricTensor, [['a', 'b'], ['c', 'd']], [['c', 'e'], ['a', 'f']], [0, 3], [3, 0], id='Sym-Sym-4-2-4'),
-     pytest.param(SymmetricTensor, SymmetricTensor, [['a', 'b'], ['c', 'd']], [['e', 'f'], ['g', 'h']], [], [], id='Sym-Sym-4-0-4'),
-     pytest.param(SymmetricTensor, SymmetricTensor, [['a', 'b'], ['c', 'd']], [['c', 'a'], ['d', 'b']], [0, 1, 3, 2], [1, 2, 0, 3], id='Sym-Sym-4-4-4'),
-     pytest.param(SymmetricTensor, SymmetricTensor, [[], ['a', 'b']], [['b', 'c'], ['d']], [0], [0], id='Sym-Sym-2-1-3'),
+    [pytest.param(SymmetricTensor, SymmetricTensor, [['a', 'b'], ['c', 'd']], [['c', 'e'], ['a', 'f']], [0, 3], [3, 0], id='Sym@Sym-4-2-4'),
+     pytest.param(SymmetricTensor, SymmetricTensor, [['a', 'b'], ['c', 'd']], [['e', 'f'], ['g', 'h']], [], [], id='Sym@Sym-4-0-4'),
+     pytest.param(SymmetricTensor, SymmetricTensor, [['a', 'b'], ['c', 'd']], [['c', 'a'], ['d', 'b']], [0, 1, 3, 2], [1, 2, 0, 3], id='Sym@Sym-4-4-4'),
+     pytest.param(SymmetricTensor, SymmetricTensor, [[], ['a', 'b']], [['b', 'c'], ['d']], [0], [0], id='Sym@Sym-2-1-3'),
+     #
+     pytest.param(SymmetricTensor, ChargedTensor, [['a', 'b'], ['c', 'd']], [['c', 'e'], ['a', 'f']], [0, 3], [3, 0], id='Sym-Charged@4-2-4'),
+     pytest.param(ChargedTensor, SymmetricTensor, [['a', 'b'], ['c', 'd']], [['e', 'f'], ['g', 'h']], [], [], id='Charged@Sym-4-0-4'),
+     pytest.param(SymmetricTensor, ChargedTensor, [['a', 'b'], ['c', 'd']], [['c', 'a'], ['d', 'b']], [0, 1, 3, 2], [1, 2, 0, 3], id='Sym@Charged-4-4-4'),
+     pytest.param(SymmetricTensor, ChargedTensor, [[], ['a', 'b']], [['b', 'c'], ['d']], [0], [0], id='Sym@Charged-2-1-3'),
+     #
+     # Note: need to put DiagonalTensor first to get correct legs. If SymmetricTensor is first,
+     # it generates independent legs, which can not both be on a diagonalTensor.
+     pytest.param(DiagonalTensor, SymmetricTensor, [['c'], ['b']], [['a', 'b'], ['c', 'd']], [1, 0], [1, 3], id='Diag@Sym-4-2-2'),
+     pytest.param(SymmetricTensor, DiagonalTensor, [['a', 'b'], ['c', 'd']], [['e'], ['b']], [1], [1], id='Sym@Diag-4-1-2'),
+     pytest.param(SymmetricTensor, DiagonalTensor, [['a', 'b'], ['c', 'd']], [['e'], ['f']], [], [], id='Sym-Diag-4-0-2'),
+     #
+     # Note: If both legs of a mask are contracted, we should generate the mask first. otherwise its legs may be invalid.
+     pytest.param(Mask, SymmetricTensor, [['c'], ['b']], [['a', 'b'], ['c', 'd']], [1, 0], [1, 3], id='Sym@Mask-4-2-2'),
+     pytest.param(SymmetricTensor, Mask, [['a', 'b'], ['c', 'd']], [['e'], ['b']], [1], [1], id='Sym@Mask-4-1-2'),
+     pytest.param(SymmetricTensor, Mask, [['a', 'b'], ['c', 'd']], [['e'], ['f']], [], [], id='Sym@Mask-4-0-2'),
+     #
+     pytest.param(ChargedTensor, DiagonalTensor, [['a', 'b'], ['c', 'd']], [['e'], ['b']], [1], [1], id='Charged@Diag-4-1-2'),
+     pytest.param(ChargedTensor, Mask, [['a', 'b'], ['c', 'd']], [['e'], ['b']], [1], [1], id='Charged@Mask-4-1-2'),
+     #
+     pytest.param(DiagonalTensor, DiagonalTensor, [['a'], ['b']], [['c'], ['b']], [1], [1], id='Diag@Diag-2-1-2'),
+     pytest.param(DiagonalTensor, DiagonalTensor, [['a'], ['b']], [['b'], ['a']], [1, 0], [0, 1], id='Diag@Diag-2-2-2'),
+     pytest.param(DiagonalTensor, DiagonalTensor, [['a'], ['b']], [['c'], ['d']], [], [], id='Diag@Diag-2-0-2'),
+     #
+     pytest.param(Mask, Mask, [['a'], ['b']], [['c'], ['b']], [1], [1], id='Mask@Mask-2-1-2'),
+     pytest.param(Mask, Mask, [['a'], ['b']], [['a'], ['b']], [0, 1], [0, 1], id='Mask@Mask-2-2-2'),
+     pytest.param(Mask, Mask, [['a'], ['b']], [['c'], ['d']], [], [], id='Mask@Mask-2-0-2'),
+     
     ]
 )
 def test_tdot(cls_A: Type[tensors.Tensor], cls_B: Type[tensors.Tensor],
@@ -1012,16 +1041,33 @@ def test_tdot(cls_A: Type[tensors.Tensor], cls_B: Type[tensors.Tensor],
     for ia, ib in zip(contr_A, contr_B):
         assert A._as_domain_leg(ia) == B._as_codomain_leg(ib), f'{ia} / {A.labels[ia]} incompatible with {ib} / {B.labels[ib]}'
 
-    if isinstance(A.backend, backends.FusionTreeBackend):
-        with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
-            _ = tensors.tdot(A, B, contr_A, contr_B)
-        return
-    if isinstance(A.backend, backends.AbelianBackend) and num_open == 0:
-        with pytest.raises(NotImplementedError, match='inner not implemented'):
-            _ = tensors.tdot(A, B, contr_A, contr_B)
-        return
+    # Context manager to catch expected errors
+    catch_errors = nullcontext()
+    
+    if (cls_A is Mask or cls_B is Mask) and num_contr > 0:
+        catch_errors = pytest.raises(NotImplementedError)
+    if DiagonalTensor in [cls_A, cls_B] and isinstance(A.backend, backends.AbelianBackend):
+        if num_contr == 2:
+            catch_errors = pytest.raises(NotImplementedError)
+        if num_contr == 1 and not (cls_A is DiagonalTensor and cls_B is DiagonalTensor):
+            catch_errors = pytest.raises(NotImplementedError)
+    elif (cls_A in [DiagonalTensor, Mask] or cls_B in [DiagonalTensor, Mask]) and num_contr == 2:
+        catch_errors = pytest.raises(NotImplementedError)
+    elif isinstance(A.backend, backends.FusionTreeBackend):
+        catch_errors = pytest.raises(NotImplementedError)
+    elif isinstance(A.backend, backends.AbelianBackend) and ChargedTensor not in [cls_A, cls_B] and num_open == 0:
+        catch_errors = pytest.raises(NotImplementedError)
 
-    res = tensors.tdot(A, B, contr_A, contr_B)
+    catch_warnings = nullcontext()
+    if (cls_A in [DiagonalTensor, Mask] or cls_B in [DiagonalTensor, Mask]) and num_contr == 0:
+        catch_warnings = pytest.warns(UserWarning, match='Converting .* to SymmetricTensor')        
+    
+    with catch_errors:
+        with catch_warnings:
+            res = tensors.tdot(A, B, contr_A, contr_B)
+    if not isinstance(catch_errors, nullcontext):
+        pytest.xfail()
+
     if num_open == 0:
         # scalar result
         assert isinstance(res, (float, complex))

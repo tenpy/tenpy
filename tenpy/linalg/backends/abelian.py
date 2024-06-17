@@ -542,13 +542,13 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
                 *(leg.sectors[bi] for leg, bi in zip(a.codomain, a_block_inds_keep.T))
             )
         else:
-            a_charges = np.repeat(a.symmetry.trivial_sector[:, None], len(a_block_inds_keep))
+            a_charges = np.repeat(a.symmetry.trivial_sector[:, None], len(a_block_inds_keep), axis=1)
         if b.num_domain_legs > 0:
             b_charges = a.symmetry.multiple_fusion_broadcast(
                 *(leg.sectors[bi] for leg, bi in zip(b.domain, b_block_inds_keep[:, ::-1].T))
             )
         else:
-            b_charges = np.repeat(a.symmetry.trivial_sector[:, None], len(b_block_inds_keep))
+            b_charges = np.repeat(a.symmetry.trivial_sector[:, None], len(b_block_inds_keep), axis=1)
         a_charge_lookup = list_to_dict_list(a_charges)  # lookup table ``tuple(sector) -> idcs_in_a_charges``
 
         # rows_a changes faster than cols_b, such that the resulting block_inds are lex-sorted
@@ -727,8 +727,6 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         b_blocks = b.data.blocks
         a_block_inds = a.data.block_inds
         b_block_inds = b.data.block_inds
-        a_mults = a.leg.multiplicities
-        b_mults = b.leg.multiplicities
         
         blocks = []
         block_inds = []
@@ -738,7 +736,7 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         ib = 0  # next block of b to process
         bi_b = -1 if len(b_block_inds) == 0 else b_block_inds[ib, 0]  # block_ind of that block => it belongs to leg.sectors[bi_b]
         #
-        for i in range(leg.multiplicities):
+        for i, mult in enumerate(leg.multiplicities):
             if i == bi_a:
                 block_a = a_blocks[ia]
                 ia += 1
@@ -749,7 +747,7 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
             elif partial_zero_is_zero:
                 continue
             else:
-                block_a = self.zero_block([leg.multiplicities[i]], a.dtype)
+                block_a = self.zero_block([mult], a.dtype)
 
             if i == bi_b:
                 block_b = b_blocks[ib]
@@ -761,7 +759,7 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
             elif partial_zero_is_zero:
                 continue
             else:
-                block_b = self.zero_block([leg.multiplicities[i]], a.dtype)
+                block_b = self.zero_block([mult], a.dtype)
             blocks.append(func(block_a, block_b, **func_kwargs))
             block_inds.append(i)
 
@@ -1453,7 +1451,7 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return q_data, r_data, new_leg
 
     def scale_axis(self, a: SymmetricTensor, b: DiagonalTensor, leg: int) -> Data:
-        raise NotImplementedError  # TODO not yet reviewed
+        raise NotImplementedError('abelian.scale_axis not implemented')  # TODO not yet reviewed
         a_blocks = a.data.blocks
         b_blocks = b.data.blocks
 

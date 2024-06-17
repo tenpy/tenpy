@@ -420,10 +420,13 @@ class ElementarySpace(Space):
         # sort sectors
         sectors, multiplicities, sort = _sort_sectors(sectors, multiplicities)
         if symmetry.can_be_dropped:
-            if basis_perm is None:
-                basis_perm = np.arange(np.sum(num_states))
-            basis_perm = np.concatenate([basis_perm[basis_slices[i]: basis_slices[i + 1]]
-                                         for i in sort])
+            if len(sectors) == 0:
+                basis_perm = np.zeros(0, int)
+            else:
+                if basis_perm is None:
+                    basis_perm = np.arange(np.sum(num_states))
+                basis_perm = np.concatenate([basis_perm[basis_slices[i]: basis_slices[i + 1]]
+                                            for i in sort])
         else:
             assert basis_perm is None
         # combine duplicate sectors (does not affect basis_perm)
