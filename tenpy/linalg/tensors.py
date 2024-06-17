@@ -2407,7 +2407,7 @@ def add_trivial_leg(tens: Tensor,
         legs_pos = codomain_pos
     elif domain_pos is not None:
         assert legs_pos is None and codomain_pos is None
-        res_domain_legs = tens.num_domain_legs
+        res_domain_legs = tens.num_domain_legs + 1
         domain_pos = _normalize_idx(domain_pos, res_domain_legs)
         add_to_domain = True
         co_domain_pos = domain_pos
@@ -2420,17 +2420,17 @@ def add_trivial_leg(tens: Tensor,
     if isinstance(tens, ChargedTensor):
         if add_to_domain:
             # domain[0] is the charge leg, so we need to add 1
-            inv_part = add_trivial_leg(tens.invariant_part, domain_pos=domain_pos + 1, label=label,
+            inv_part = add_trivial_leg(tens.invariant_part, domain_pos=co_domain_pos + 1, label=label,
                                        is_dual=is_dual)
         else:
-            inv_part = add_trivial_leg(tens.invariant_part, codomain_pos=codomain_pos, label=label,
+            inv_part = add_trivial_leg(tens.invariant_part, codomain_pos=co_domain_pos, label=label,
                                        is_dual=is_dual)
         return ChargedTensor(inv_part, charged_state=tens.charged_state)
 
     if not isinstance(tens, SymmetricTensor):
         raise TypeError
 
-    new_leg = Space.from_trivial_sector(1, symmetry=tens.symmetry, is_dual=is_dual)
+    new_leg = ElementarySpace.from_trivial_sector(1, symmetry=tens.symmetry, is_dual=is_dual)
     if add_to_domain:
         domain = tens.domain.insert_multiply(new_leg, pos=co_domain_pos)
         codomain = tens.codomain
@@ -2440,7 +2440,7 @@ def add_trivial_leg(tens: Tensor,
     data = tens.backend.add_trivial_leg(
         tens, legs_pos=legs_pos, add_to_domain=add_to_domain, co_domain_pos=co_domain_pos,
         new_codomain=codomain, new_domain=domain
-    ),
+    )
     return SymmetricTensor(
         data, codomain=codomain, domain=domain, backend=tens.backend,
         labels=[*tens.labels[:legs_pos], label, *tens.labels[legs_pos:]],

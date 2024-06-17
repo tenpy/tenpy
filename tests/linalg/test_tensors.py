@@ -801,8 +801,56 @@ def test_str_repr(make_compatible_tensor, str_max_lines=30, repr_max_lines=30):
 # TENSOR FUNCTIONS
 
 
-def test_add_trivial_leg():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.parametrize(
+    'cls, domain, codomain, is_dual',
+    [
+        pytest.param(SymmetricTensor, 2, 2, True),
+        pytest.param(SymmetricTensor, 2, 0, False),
+        pytest.param(SymmetricTensor, 0, 2, True),
+        pytest.param(SymmetricTensor, 1, 3, False),
+        pytest.param(DiagonalTensor, 1, 1, False),
+        pytest.param(DiagonalTensor, 1, 1, True),
+        pytest.param(Mask, 1, 1, False),
+        pytest.param(Mask, 1, 1, True),
+        pytest.param(ChargedTensor, 2, 2, False),
+        pytest.param(ChargedTensor, 3, 0, True),
+    ],
+)
+def test_add_trivial_leg(cls, domain, codomain, is_dual, make_compatible_tensor, np_random):
+    tens: cls = make_compatible_tensor(domain, codomain, cls=cls)
+
+    need_fusion_tensor = isinstance(tens.backend, backends.FusionTreeBackend) and (tens.num_codomain_legs > 1 or tens.num_domain_legs > 1)
+    if need_fusion_tensor and isinstance(tens.symmetry, ProductSymmetry):
+        with pytest.raises(NotImplementedError):
+            tens_np = tens.to_numpy()
+        pytest.xfail()
+    tens_np = tens.to_numpy()
+
+    if isinstance(tens.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError):
+            _ = tensors.add_trivial_leg(tens, 0, is_dual=is_dual)
+        pytest.xfail()
+
+    print('via positional arg')
+    pos = np_random.choice(tens.num_legs + 1)
+    res = tensors.add_trivial_leg(tens, pos, is_dual=is_dual)
+    res_np = res.to_numpy()
+    expect = np.expand_dims(tens_np, pos)
+    npt.assert_array_almost_equal_nulp(res_np, expect, 100)
+
+    print('to_domain')
+    pos = np_random.choice(tens.num_domain_legs + 1)
+    res = tensors.add_trivial_leg(tens, domain_pos=pos, is_dual=is_dual)
+    res_np = res.to_numpy()
+    expect = np.expand_dims(tens_np, -1-pos)
+    npt.assert_array_almost_equal_nulp(res_np, expect, 100)
+
+    print('to_codomain')
+    pos = np_random.choice(tens.num_codomain_legs + 1)
+    res = tensors.add_trivial_leg(tens, codomain_pos=pos, is_dual=is_dual)
+    res_np = res.to_numpy()
+    expect = np.expand_dims(tens_np, pos)
+    npt.assert_array_almost_equal_nulp(res_np, expect, 100)
 
 
 def test_elementwise_functions():
