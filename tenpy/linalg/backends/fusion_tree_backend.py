@@ -226,7 +226,6 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
         raise NotImplementedError('apply_mask_to_DiagonalTensor not implemented')  # TODO
-
     
     def apply_mask_to_SymmetricTensor(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int
                                       ) -> tuple[Data, ProductSpace, ProductSpace]:

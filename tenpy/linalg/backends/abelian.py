@@ -28,8 +28,7 @@ from numpy import ndarray
 
 from .abstract_backend import (
     Backend, BlockBackend, Data, DiagonalData, MaskData, Block, iter_common_noncommon_sorted_arrays,
-    iter_common_nonstrict_sorted_arrays, iter_common_sorted, iter_common_sorted_arrays,
-    conventional_leg_order
+    iter_common_nonstrict_sorted_arrays, iter_common_sorted, conventional_leg_order
 )
 from ..misc import make_stride, find_row_differences
 from ..dtypes import Dtype
@@ -269,22 +268,17 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return True
 
     def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
-        raise NotImplementedError  # TODO not yet reviewed
         tensor_blocks = tensor.data.blocks
+        tensor_block_inds_contr = tensor.data.block_inds[:, :1]  # is sorted
         mask_blocks = mask.data.blocks
-        tensor_block_inds_cont = tensor.data.block_inds[:, :1]  # since tensor is Diagonal, this is sorted
         mask_block_inds = mask.data.block_inds
-        mask_block_inds_cont = mask_block_inds[:, :1]
-        sort = np.lexsort(mask_block_inds_cont.T)
-        mask_blocks = [mask_blocks[i] for i in sort]
-        mask_block_inds = mask_block_inds[sort]
-        mask_block_inds_cont = mask_block_inds_cont[sort]
-        
+        mask_block_inds_contr = mask_block_inds[:, 1]  # is sorted
         res_blocks = []
-        res_block_inds = []  # gather only the entries of the first column in this list, repeat later
-        for i, j in iter_common_sorted_arrays(tensor_block_inds_cont, mask_block_inds_cont):
-            res_blocks.append(self.apply_mask_to_block(block=tensor_blocks[i], mask=mask_blocks[j], ax=0))
-            res_block_inds.append(mask_block_inds[j, 1])
+        res_block_inds = []  # append only for one leg, repeat later
+        for i, j in iter_common_sorted(tensor_block_inds_contr, mask_block_inds_contr):
+            block = self.apply_mask_to_block(tensor_blocks[i], mask_blocks[j], ax=0)
+            res_blocks.append(block)
+            res_block_inds.append(mask_block_inds[j, 0])
         if len(res_block_inds) > 0:
             res_block_inds = np.repeat(np.array(res_block_inds)[:, None], 2, axis=1)
         else:

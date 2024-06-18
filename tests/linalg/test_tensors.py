@@ -916,7 +916,23 @@ def test_apply_mask(cls, codomain, domain, which_leg, make_compatible_tensor):
     mask_np = M.as_numpy_mask()
     expect = T_np.compress(mask_np, leg_idx)
     npt.assert_almost_equal(res.to_numpy(), expect)
-    
+
+
+def test_apply_mask_DiagonalTensor(make_compatible_tensor):
+    tensor: DiagonalTensor = make_compatible_tensor(cls=DiagonalTensor, labels=['a', 'b'])
+    mask: Mask = make_compatible_tensor(domain=[tensor.leg], cls=Mask)
+
+    res = tensors.apply_mask_DiagonalTensor(tensor, mask)
+    res.test_sanity()
+    assert isinstance(res, DiagonalTensor)
+    assert res.leg == mask.small_leg
+    assert res.labels == tensor.labels
+
+    diag = tensor.diagonal_as_numpy()
+    mask_np = mask.as_numpy_mask()
+    expect = diag[mask_np]
+    npt.assert_almost_equal(res.diagonal_as_numpy(), expect)
+
 
 def test_bend_legs():
     pytest.skip('Test not written yet')  # TODO
@@ -1223,7 +1239,7 @@ def test_tdot(cls_A: Type[tensors.Tensor], cls_B: Type[tensors.Tensor],
     # Context manager to catch expected errors
     catch_errors = nullcontext()
     
-    if (cls_A is Mask or cls_B is Mask) and num_contr > 0:
+    if (cls_A is Mask and cls_B is Mask) and num_contr > 0:
         catch_errors = pytest.raises(NotImplementedError)
     if DiagonalTensor in [cls_A, cls_B] and isinstance(A.backend, backends.AbelianBackend):
         if num_contr == 2:

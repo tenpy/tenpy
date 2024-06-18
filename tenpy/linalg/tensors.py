@@ -80,11 +80,11 @@ from ..tools.misc import to_iterable, rank_data
 
 
 __all__ = ['Tensor', 'SymmetricTensor', 'DiagonalTensor', 'ChargedTensor', 'Mask',
-           'add_trivial_leg', 'almost_equal', 'angle', 'apply_mask', 'bend_legs', 'combine_legs',
-           'combine_to_matrix', 'conj', 'dagger', 'compose', 'entropy', 'imag', 'inner',
-           'is_scalar', 'item', 'linear_combination', 'move_leg', 'norm', 'outer', 'permute_legs',
-           'real', 'real_if_close', 'scalar_multiply', 'scale_axis', 'split_legs', 'sqrt',
-           'squeeze_legs', 'tdot', 'trace', 'transpose', 'zero_like', 'get_same_backend',
+           'add_trivial_leg', 'almost_equal', 'angle', 'apply_mask', 'apply_mask_DiagonalTensor',
+           'bend_legs', 'combine_legs', 'combine_to_matrix', 'conj', 'dagger', 'compose', 'entropy',
+           'imag', 'inner', 'is_scalar', 'item', 'linear_combination', 'move_leg', 'norm', 'outer',
+           'permute_legs', 'real', 'real_if_close', 'scalar_multiply', 'scale_axis', 'split_legs',
+           'sqrt', 'squeeze_legs', 'tdot', 'trace', 'transpose', 'zero_like', 'get_same_backend',
            'check_same_legs']
 
 
@@ -2582,11 +2582,6 @@ def apply_mask(tensor: Tensor, mask: Mask, leg: int | str) -> Tensor:
 
     where ``M.T == transpose(M)``.
 
-    
-    The leg order and labels of `tensor` are not changed.
-    The resulting leg is always *smaller* than before.
-    
-
     Parameters
     ----------
     tensor: Tensor
@@ -2598,9 +2593,15 @@ def apply_mask(tensor: Tensor, mask: Mask, leg: int | str) -> Tensor:
         Which leg of the tensor to project
     TODO add arg to specify the label? Now we just use the same as from `tensor`.
 
+    Returns
+    -------
+    A masked tensor of the same type as `tensor` (exception: `DiagonalTensor`s are converted to
+    `SymmetricTensor`s before masking). The leg order and labels are the same as on `tensor`.
+    The masked leg is *smaller* (or equal) than before.
+
     See Also
     --------
-    compose, tdot, scale_axis
+    compose, tdot, scale_axis, apply_mask_DiagonalTensor
     """
     in_domain, _, leg_idx = tensor._parse_leg_idx(leg)
 
@@ -2624,6 +2625,50 @@ def apply_mask(tensor: Tensor, mask: Mask, leg: int | str) -> Tensor:
     data, codomain, domain = backend.apply_mask_to_SymmetricTensor(tensor, mask, leg_idx)
     return SymmetricTensor(data=data, codomain=codomain, domain=domain, backend=backend,
                            labels=tensor.labels)
+
+
+def apply_mask_DiagonalTensor(tensor: DiagonalTensor, mask: Mask) -> DiagonalTensor:
+    """Apply a mask to *both* legs of a diagonal tensor.
+
+    The mask must be a projection, i.e. its large leg is in the domain, at the bottom.
+    we apply the mask via map composition::
+
+        |     ┏━━┷━━┓
+        |     ┃  M  ┃
+        |     ┗━━┯━━┛
+        |     ┏━━┷━━┓
+        |     ┃  D  ┃
+        |     ┗━━┯━━┛
+        |     ┏━━┷━━┓
+        |     ┃ M.hc┃
+        |     ┗━━┯━━┛
+
+    where ``M.hc == dagger(M)``
+
+    Parameters
+    ----------
+    tensor: DiagonalTensor
+        The diagonal tensor to project
+    mask: Mask
+        A *projection* mask. Its large leg must be equal to the :attr:`DiagonalTensor.leg`
+        of `tensor`.
+
+    Returns
+    -------
+    A masked :class:`DiagonalTensor`. Its :attr:`DiagonalTensor.leg` is the :attr:`Mask.small_leg`
+    of the `mask`. Its labels are the same as those of `tensor`.
+
+    See Also
+    --------
+    apply_mask
+    """
+    assert mask.is_projection
+    assert mask.large_leg == tensor.leg
+    backend = get_same_backend(tensor, mask)
+    return DiagonalTensor(
+        data=backend.apply_mask_to_DiagonalTensor(tensor, mask),
+        leg=mask.small_leg, backend=backend, labels=tensor.labels
+    )
 
 
 def bend_legs(tensor: Tensor, num_codomain_legs: int = None, num_domain_legs: int = None) -> Tensor:
