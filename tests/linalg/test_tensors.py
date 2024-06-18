@@ -167,7 +167,7 @@ def test_SymmetricTensor(make_compatible_tensor, leg_nums):
             # if both have at most one leg, we actually dont need fusion tensors to convert.
             with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
                 numpy_block = T.to_numpy()
-            return
+            pytest.xfail()
 
     numpy_block = T.to_numpy()
     dense_block = backend.block_from_numpy(numpy_block)
@@ -273,7 +273,7 @@ def test_Mask(make_compatible_tensor, compatible_symmetry_backend, np_random):
         # necessary functions to create Masks from fixture are not implemented yet
         with pytest.raises(NotImplementedError, match='diagonal_to_mask not implemented'):
             make_compatible_tensor(cls=Mask)
-        return
+        pytest.xfail()
 
     M_projection: Mask = make_compatible_tensor(cls=Mask)
     backend = M_projection.backend
@@ -418,7 +418,7 @@ def test_ChargedTensor(make_compatible_tensor, make_compatible_sectors, compatib
             # if both have at most one leg, we actually dont need fusion tensors to convert.
             with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
                 numpy_block = T.to_numpy()
-            return
+            pytest.xfail()
     numpy_block = T.to_numpy()
     assert T.shape == numpy_block.shape
     
@@ -447,7 +447,7 @@ def test_ChargedTensor(make_compatible_tensor, make_compatible_sectors, compatib
     if isinstance(backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError):
             _ = tens.to_dense_block_single_sector()
-        return
+        pytest.xfail()
     
     block = tens.to_dense_block_single_sector()
     assert backend.block_shape(block) == (block_size,)
@@ -934,8 +934,23 @@ def test_apply_mask_DiagonalTensor(make_compatible_tensor):
     npt.assert_almost_equal(res.diagonal_as_numpy(), expect)
 
 
-def test_bend_legs():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.parametrize('cls, codomain, domain, num_codomain_legs',
+                         [pytest.param(SymmetricTensor, 2, 2, 2),
+                          pytest.param(SymmetricTensor, 2, 2, 1),
+                          pytest.param(SymmetricTensor, 2, 2, 4),])
+def test_bend_legs(cls, codomain, domain, num_codomain_legs, make_compatible_tensor):
+    tensor: cls = make_compatible_tensor(codomain, domain, cls=cls)
+
+    if isinstance(tensor.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError):
+            _ = tensors.bend_legs(tensor, num_codomain_legs)
+        pytest.xfail()
+    
+    res = tensors.bend_legs(tensor, num_codomain_legs)
+    res.test_sanity()
+    assert res.legs == tensor.legs
+    tensor_np = tensor.to_numpy()
+    npt.assert_array_almost_equal_nulp(res.to_numpy(), tensor_np, 100)
 
 
 def test_combine_legs():
@@ -1061,8 +1076,8 @@ def test_linear_combination(make_compatible_tensor_any_class):
         and isinstance(v.backend, backends.FusionTreeBackend)
     if needs_fusion_tensor and isinstance(v.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError):
-            T_np = v.to_numpy()
-        return
+            _ = v.to_numpy()
+        pytest.xfail()
 
     v_np = v.to_numpy()
     w_np = w.to_numpy()
@@ -1112,15 +1127,15 @@ def test_permute_legs(cls, num_cod, num_dom, codomain, domain, levels, make_comp
     if isinstance(T.backend, backends.FusionTreeBackend) and cls in [SymmetricTensor, ChargedTensor]:
         with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
             _ = tensors.permute_legs(T, codomain, domain, levels)
-        return
+        pytest.xfail()
     if isinstance(T.backend, backends.FusionTreeBackend) and cls is DiagonalTensor and codomain == [1]:
         with pytest.raises(NotImplementedError, match='diagonal_transpose not implemented'):
             _ = tensors.permute_legs(T, codomain, domain, levels)
-        return
+        pytest.xfail()
     if isinstance(T.backend, backends.FusionTreeBackend) and cls is DiagonalTensor and len(codomain) != 1:
         with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
             _ = tensors.permute_legs(T, codomain, domain, levels)
-        return
+        pytest.xfail()
 
     res = tensors.permute_legs(T, codomain, domain, levels)
     res.test_sanity()
@@ -1151,7 +1166,7 @@ def test_scalar_multiply(make_compatible_tensor_any_class):
     if needs_fusion_tensor and isinstance(T.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError):
             T_np = T.to_numpy()
-        return
+        pytest.xfail()
     
     T_np = T.to_numpy()
     for valid_scalar in [0, 1., 2. + 3.j, -42]:
@@ -1305,7 +1320,7 @@ def OLD_test_outer(make_compatible_tensor):
     if isinstance(tensors_[0].backend, backends.FusionTreeBackend) and isinstance(tensors_[0].symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             dense_ = [t.to_numpy() for t in tensors_]
-        return  # TODO
+        pytest.xfail()
     
     dense_ = [t.to_numpy() for t in tensors_]
 
@@ -1316,7 +1331,7 @@ def OLD_test_outer(make_compatible_tensor):
         if isinstance(tensors_[0].backend, backends.FusionTreeBackend):
             with pytest.raises(NotImplementedError, match='outer not implemented'):
                 res = tensors.outer(tensors_[i], tensors_[j])
-            return  # TODO
+            pytest.xfail()
         
         res = tensors.outer(tensors_[i], tensors_[j])
         res.test_sanity()
@@ -1334,7 +1349,7 @@ def OLD_test_permute_legs(make_compatible_tensor):
     if isinstance(t.backend, backends.FusionTreeBackend) and isinstance(t.symmetry, ProductSymmetry):
         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
             d = t.to_numpy()
-        return  # TODO
+        pytest.xfail()
     
     d = t.to_numpy()
     for perm in [[0, 2, 1, 3], [3, 2, 1, 0], [1, 0, 3, 2], [0, 1, 2, 3], [0, 3, 2, 1]]:

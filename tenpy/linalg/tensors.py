@@ -2713,7 +2713,7 @@ def bend_legs(tensor: Tensor, num_codomain_legs: int = None, num_domain_legs: in
         assert num_codomain_legs + num_domain_legs == tensor.num_legs
     return _permute_legs(tensor,
                          codomain=range(num_codomain_legs),
-                         domain=range(num_codomain_legs, tensor.num_legs),
+                         domain=reversed(range(num_codomain_legs, tensor.num_legs)),
                          err_msg='This should never raise.')
 
 
