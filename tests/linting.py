@@ -13,17 +13,25 @@ import os
 
 def main(max_print_lines=30):
     """Called when this script is called, e.g. via `python linting.py`"""
-    print('Checking __all__ attributes')
-    lines = check_dunder_all_recursive(tenpy)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-q', action='store_true', help='quiet')
+    args = parser.parse_args()
+    quiet = args.q
+
+    if not quiet:
+        print('Checking __all__ attributes')
+    lines = check_dunder_all_recursive(tenpy, quiet=quiet)
     if lines:
         print()
         print('\n'.join(lines[:max_print_lines]))
         if len(lines) > max_print_lines:
             print(f'... and {len(lines) - max_print_lines} more lines')
         raise AssertionError
-    print('Checking copyright notices')
+    if not quiet:
+        print('Checking copyright notices')
     check_copyright_notice()
-    print('Done')
+    print('Custom linting checks passed.')
 
 
 # dunder_all_exceptions[check_module] is a list of exceptions for check_dunder_all_recursive(check_module)
@@ -40,7 +48,7 @@ copyright_exceptions = [
 ]
 
 
-def check_dunder_all_recursive(check_module, error_lines: list[str] = None):
+def check_dunder_all_recursive(check_module, error_lines: list[str] = None, quiet: bool = False):
     """Recursively check that `__all__` of a module contains only valid entries and no duplicates.
 
     Returns
@@ -51,8 +59,9 @@ def check_dunder_all_recursive(check_module, error_lines: list[str] = None):
     """
     if error_lines is None:
         error_lines = []
-    
-    print(f'Checking module {check_module.__name__}')
+
+    if not quiet:
+        print(f'Checking module {check_module.__name__}')
     is_init_py = '__init__.py' in check_module.__file__
     _all_ = getattr(check_module, '__all__', None)
     _name_ = check_module.__name__
@@ -94,7 +103,7 @@ def check_dunder_all_recursive(check_module, error_lines: list[str] = None):
     for n in _all_:
         m = getattr(check_module, n, None)
         if isinstance(m, types.ModuleType) and m.__name__.startswith('tenpy'):
-            check_dunder_all_recursive(m, error_lines=error_lines)
+            check_dunder_all_recursive(m, error_lines=error_lines, quiet=quiet)
     return error_lines
 
 
