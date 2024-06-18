@@ -251,6 +251,11 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
              *,
              max_blocks=5, max_block_size=5, empty_ok=False, all_blocks=False,
              cls=tensors.SymmetricTensor):
+        if isinstance(codomain, list):
+            codomain = codomain[:]  # we do inplace operations below.
+        if isinstance(domain, list):
+            domain = domain[:]  # we do inplace operations below.
+        
         # 0) default for codomain
         if codomain is None:
             if cls in [tensors.SymmetricTensor, tensors. ChargedTensor]:
@@ -265,6 +270,7 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
         # 1) deal with strings in codomain / domain.
         # ======================================================================================
         if isinstance(codomain, spaces.ProductSpace):
+            assert codomain.symmetry == compatible_symmetry
             num_codomain = codomain.num_spaces
             codomain_complete = True
             codomain_labels = [None] * len(codomain)
@@ -285,6 +291,7 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
             if cls in [tensors.DiagonalTensor, tensors.Mask]:
                 domain = [None]
         if isinstance(domain, spaces.ProductSpace):
+            assert domain.symmetry == compatible_symmetry
             num_domain = domain.num_spaces
             domain_labels = [None] * len(domain)
             domain_complete = True
