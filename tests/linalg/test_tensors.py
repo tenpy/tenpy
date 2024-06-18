@@ -851,8 +851,17 @@ def test_add_trivial_leg(cls, domain, codomain, is_dual, make_compatible_tensor,
     npt.assert_array_almost_equal_nulp(res_np, expect, 100)
 
 
-def test_almost_equal():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.parametrize('cls', [DiagonalTensor, SymmetricTensor, ChargedTensor])
+def test_almost_equal(cls, make_compatible_tensor):
+    if cls is ChargedTensor:
+        # TODO
+        pytest.skip('Need to generate T_diff to have the same dummy leg!')
+    
+    T: cls = make_compatible_tensor(cls=cls)
+    T_diff: cls = make_compatible_tensor(domain=T.domain, codomain=T.codomain, cls=cls)
+    T2 = T + 1e-7 * T_diff
+    assert tensors.almost_equal(T, T2, rtol=1e-5, atol=1e-5)
+    assert not tensors.almost_equal(T, T2, rtol=1e-10, atol=1e-10)
 
 
 def test_apply_mask():

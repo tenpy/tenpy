@@ -2495,7 +2495,7 @@ def almost_equal(tensor_1: Tensor, tensor_2: Tensor, rtol: float = 1e-5, atol=1e
         if isinstance(tensor_2, Mask) and allow_different_types:
             return almost_equal(tensor_1, tensor_2.as_DiagonalTensor(), rtol=rtol, atol=atol)
         if isinstance(tensor_2, DiagonalTensor):
-            return tensor_1.elementwise_almost_equal(tensor_2).all()
+            return tensor_1.elementwise_almost_equal(tensor_2, rtol=rtol, atol=atol).all()
         if isinstance(tensor_2, (SymmetricTensor, ChargedTensor)) and allow_different_types:
             return almost_equal(tensor_1.as_SymmetricTensor(), tensor_2, rtol=rtol, atol=atol)
 
@@ -2513,12 +2513,12 @@ def almost_equal(tensor_1: Tensor, tensor_2: Tensor, rtol: float = 1e-5, atol=1e
             raise NotImplementedError
 
     if isinstance(tensor_1, ChargedTensor):
-        # we implement the mixed type comparison SymmetricTensor and ChargedTensor only once.
-        # to swap the arguments we need to adjust the definition, to use abs(a2)
         if isinstance(tensor_2, (Mask, DiagonalTensor)) and allow_different_types:
             return almost_equal(tensor_1, tensor_2.as_SymmetricTensor(), rtol=rtol, atol=atol)
         if isinstance(tensor_2, SymmetricTensor):
             # TODO this is not strictly correct, since definition is not symmetric...
+            # we implement the mixed type comparison SymmetricTensor and ChargedTensor only once.
+            # to swap the arguments we need to adjust the definition, to use abs(a2)
             return almost_equal(tensor_2, tensor_1, rtol=rtol, atol=atol)
         if isinstance(tensor_2, ChargedTensor):
             if tensor_1.charge_leg != tensor_2.charge_leg:

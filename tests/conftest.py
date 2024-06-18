@@ -254,7 +254,9 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
         # 0) default for codomain
         if codomain is None:
             if cls in [tensors.SymmetricTensor, tensors. ChargedTensor]:
-                raise ValueError('codomain is required.')
+                codomain = 2
+                if domain is None:
+                    domain = 2
             elif cls in [tensors.DiagonalTensor, tensors.Mask]:
                 codomain = [None]
             else:
