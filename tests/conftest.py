@@ -399,11 +399,13 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
                     _ = tensors.Mask.from_random(large_leg=large_leg, small_leg=small_leg,
                                                  backend=compatible_backend, p_keep=.6,
                                                  labels=labels, np_random=np_random)
-                pytest.skip()
+                pytest.xfail()
                     
-            return tensors.Mask.from_random(large_leg=large_leg, small_leg=small_leg,
-                                            backend=compatible_backend, p_keep=.6,
-                                            labels=labels, np_random=np_random)
+            res = tensors.Mask.from_random(large_leg=large_leg, small_leg=small_leg,
+                                           backend=compatible_backend, p_keep=.6, min_keep=1,
+                                           labels=labels, np_random=np_random)
+            assert res.small_leg.num_sectors > 0
+            return res
         #
         # 3) Fill in missing legs
         # ======================================================================================
@@ -587,6 +589,8 @@ def find_last_leg(same: spaces.ProductSpace, opposite: spaces.ProductSpace,
     extra_sectors
         If given, extra sectors to mix in
     """
+    assert same.num_sectors > 0
+    assert opposite.num_sectors > 0
     prod = spaces.ProductSpace.from_partial_products(same.dual, opposite)
     sectors = prod.sectors
     mults = prod.multiplicities

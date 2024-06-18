@@ -1708,7 +1708,7 @@ class Mask(Tensor):
 
     @classmethod
     def from_random(cls, large_leg: Space, small_leg: Space | None = None,
-                    backend: Backend | None = None, p_keep: float = .5,
+                    backend: Backend | None = None, p_keep: float = .5, min_keep: int = 0,
                     labels: Sequence[list[str | None] | None] | list[str | None] | None = None,
                     np_random: np.random.Generator = np.random.default_rng()):
         """Create a random projection Mask.
@@ -1724,20 +1724,44 @@ class Mask(Tensor):
         backend, labels
             Arguments, like for the constructor
         p_keep: float, optional
-            If `small_leg` is not given, the probability that any single basis vector is kept.
-            Is ignored if `small_leg` is given, since it determines the number of kept basis vectors.
+            If `small_leg` is not given, the probability that any single sector is kept.
+            Is ignored if `small_leg` is given, since it determines the number of kept sectors.
+        min_keep: int, optional
+            If `small_leg` is not given, the minimum number of sectors kept.
+            Is ignored of `small_leg` is given.
         """
         
         if backend is None:
             backend = get_backend(symmetry=large_leg.symmetry)
             
         if small_leg is None:
+            assert 0 <= p_keep <= 1
             diag = DiagonalTensor.from_random_uniform(large_leg, backend=backend, labels=labels,
                                                       dtype=Dtype.float32)
             cutoff = 2 * p_keep - 1  # diagonal entries are uniform in [-1, 1].
-            return cls.from_DiagonalTensor(diag < cutoff)
+            res = cls.from_DiagonalTensor(diag < cutoff)
+
+            if np.sum(res.small_leg.multiplicities) >= min_keep:
+                return res
+
+            large_leg_sector_num = np.sum(large_leg.multiplicities)
+            assert min_keep <= large_leg_sector_num, 'min_keep can not be fulfilled'
+            if min_keep == large_leg_sector_num:
+                return Mask.from_eye(large_leg, is_projection=True, backend=backend, labels=labels)
+            # explicitly constructing the small_leg with exactly min_keep sectors kept is
+            # quite annoying bc of basis_perm. Instead we increase p_keep until we get there.
+            # first, try just a bit higher
+            p_keep = p_keep + 0.05 * (1 - p_keep)
+            res = cls.from_DiagonalTensor(diag < (2 * p_keep - 1))
+            for _ in range(20):
+                if np.sum(res.small_leg.multiplicities) >= min_keep:
+                    return res
+                p_keep = .5 * (p_keep + 1)  # step halfway towards 100%
+                res = cls.from_DiagonalTensor(diag < (2 * p_keep - 1))
+            raise RuntimeError('Could not fulfill min_keep')
 
         assert small_leg.is_subspace_of(large_leg)
+        
 
         def func(shape, coupled):
             num_keep = small_leg.sector_multiplicity(coupled)
