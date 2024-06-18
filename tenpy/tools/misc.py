@@ -18,7 +18,7 @@ __all__ = [
     'zero_if_close', 'pad', 'add_with_None_0', 'group_by_degeneracy', 'get_close',
     'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive', 'merge_recursive',
     'flatten', 'setup_logging', 'convert_memory_units', 'consistency_check',
-    'TenpyInconsistencyError', 'TenpyInconsistencyWarning', 'BetaWarning', 'rank_data'
+    'TenpyInconsistencyError', 'TenpyInconsistencyWarning', 'BetaWarning', 'rank_data', 'np_argsort'
 ]
 
 _not_set = object()  # sentinel

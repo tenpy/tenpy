@@ -332,18 +332,22 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                 blocks.append(func(a.data.blocks[i], b.data.blocks[j], **func_kwargs))
         else:
             i_a = 0  # during the loop: a_coupled[:i_a] was already visited
+            ac_ia = None if len(a_coupled) == 0 else a_coupled[0]
             i_b = 0  # same for b_coupled
+            bc_ib = None if len(b_coupled) == 0 else b_coupled[0]
             coupled_sectors = a.domain.sectors
             blocks = []
-            for coupled  in coupled_sectors:
-                if np.all(coupled == a_coupled[i_a]):
+            for coupled in coupled_sectors:
+                if ac_ia is not None and np.all(coupled == ac_ia):
                     a_block = a.data.blocks[i_a]
                     i_a += 1
+                    ac_ia = None if i_a >= len(a_coupled) else a_coupled[i_a]
                 else:
                     a_block = self.zero_block([block_size(a.domain, coupled)], dtype=a.dtype)
-                if np.all(coupled == b_coupled[i_b]):
+                if bc_ib is not None and np.all(coupled == b_coupled[i_b]):
                     b_block = b.data.blocks[i_b]
                     i_b += 1
+                    bc_ib = None if i_b >= len(b_coupled) else b_coupled[i_b]
                 else:
                     b_block = self.zero_block([block_size(a.domain, coupled)], dtype=b.dtype)
                 blocks.append(func(a_block, b_block, **func_kwargs))

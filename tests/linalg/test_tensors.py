@@ -851,6 +851,38 @@ def test_add_trivial_leg(cls, domain, codomain, is_dual, make_compatible_tensor,
     npt.assert_array_almost_equal_nulp(res_np, expect, 100)
 
 
+def test_almost_equal():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_apply_mask():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_bend_legs():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_combine_legs():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_combine_to_matrix():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_compose():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_conj():
+    pytest.skip('Test not written yet')  # TODO
+
+
+def test_dagger():
+    pytest.skip('Test not written yet')  # TODO
+
+
 @pytest.mark.parametrize(
     'tenpy_func, numpy_func, dtype, kwargs',
     # dtype=None indicates that we need to special case the tensor creations to fulfill constraints.
@@ -868,7 +900,7 @@ def test_add_trivial_leg(cls, domain, codomain, is_dual, make_compatible_tensor,
     ]
      # TODO more functions? exp, log
 )
-def test_elementwise_functions(tenpy_func, numpy_func, dtype, kwargs, make_compatible_tensor):
+def test_DiagonalTensor_elementwise_unary(tenpy_func, numpy_func, dtype, kwargs, make_compatible_tensor):
     if dtype is not None:
         D: DiagonalTensor = make_compatible_tensor(cls=DiagonalTensor, dtype=dtype)
     elif tenpy_func is tensors.sqrt:
@@ -890,40 +922,43 @@ def test_elementwise_functions(tenpy_func, numpy_func, dtype, kwargs, make_compa
     npt.assert_almost_equal(res_np, expect)
 
 
-def test_elementwise_binary_functions():
-    pytest.skip('Test not written yet')  # TODO
-    
+@pytest.mark.parametrize(
+    'cls, op, dtype',
+    [pytest.param(DiagonalTensor, operator.add, Dtype.complex128, id='+'),
+     pytest.param(DiagonalTensor, operator.ge, Dtype.bool, id='>='),
+     pytest.param(DiagonalTensor, operator.gt, Dtype.bool, id='>'),
+     pytest.param(DiagonalTensor, operator.le, Dtype.bool, id='<='),
+     pytest.param(DiagonalTensor, operator.lt, Dtype.bool, id='<'),
+     pytest.param(DiagonalTensor, operator.mul, Dtype.complex128, id='*'),
+     pytest.param(DiagonalTensor, operator.pow, Dtype.complex128, id='**'),
+     pytest.param(DiagonalTensor, operator.sub, Dtype.complex128, id='-'),
+    ]
+)
+def test_DiagonalTensor_elementwise_binary(cls, op, dtype, make_compatible_tensor, np_random):
+    t1: DiagonalTensor = make_compatible_tensor(cls=cls, dtype=dtype)
+    t2: DiagonalTensor = make_compatible_tensor(domain=t1.domain, cls=cls, dtype=dtype)
+    if dtype == Dtype.bool:
+        scalar = bool(np_random.choice([True, False]))
+    elif dtype.is_real:
+        scalar = np_random.uniform()
+    else:
+        scalar = np_random.uniform() + 1.j * np_random.uniform()
 
-def test_almost_equal():
-    pytest.skip('Test not written yet')  # TODO
+    t1_np = t1.diagonal_as_numpy()
+    t2_np = t2.diagonal_as_numpy()
+    print('With other tensor')
+    res = op(t1, t2)
+    res.test_sanity()
+    res_np = res.diagonal_as_numpy()
+    expect = op(t1_np, t2_np)
+    npt.assert_almost_equal(res_np, expect)
 
-
-def test_apply_mask():
-    pytest.skip('Test not written yet')  # TODO
-
-
-def test_bend_legs():
-    pytest.skip('Test not written yet')  # TODO
-
-
-def test_combine_legs():
-    pytest.skip('Test not written yet')  # TODO
-
-
-def test_combine_to_matrix():
-    pytest.skip('Test not written yet')  # TODO
-
-
-def test_conj():
-    pytest.skip('Test not written yet')  # TODO
-
-
-def test_dagger():
-    pytest.skip('Test not written yet')  # TODO
-
-
-def test_compose():
-    pytest.skip('Test not written yet')  # TODO
+    print('With scalar')
+    res = op(t1, scalar)
+    res.test_sanity()
+    res_np = res.diagonal_as_numpy()
+    expect = op(t1_np, scalar)
+    npt.assert_almost_equal(res_np, expect)
 
 
 def test_entropy():
@@ -1648,43 +1683,6 @@ def OLD_test_detect_sectors_from_block(compatible_backend, compatible_symmetry, 
                 compatible_backend.block_from_numpy(data), legs=[space], backend=compatible_backend
             )
             npt.assert_array_equal(sector, sectors[which])
-
-
-def OLD_test_elementwise_function_decorator():
-    assert tensors.sqrt.__doc__ == 'The square root of a number, elementwise.'
-
-
-@pytest.mark.parametrize('function, data_imag', [('real', 0), ('real', 1),
-                                                 ('imag', 0), ('imag', 1),
-                                                 ('angle', 0), ('angle', 1.),
-                                                 ('real_if_close', 0), ('real_if_close', 1e-16),
-                                                 ('real_if_close', 1e-12), ('real_if_close', 1),
-                                                 ('sqrt', 0),
-                                                 ])
-def OLD_test_elementwise_functions(make_compatible_space, compatible_backend, np_random, function, data_imag):
-    leg = make_compatible_space()
-    np_func = getattr(np, function)  # e.g. np.real
-    tp_func = getattr(tensors, function)  # e.g. tenpy.linalg.tensors.real
-    data = np_random.random((leg.dim,))
-    if data_imag > 0:
-        data = data + data_imag * np_random.random((leg.dim,))
-
-    if isinstance(compatible_backend, backends.FusionTreeBackend):
-        with pytest.raises(NotImplementedError, match='diagonal_from_block not implemented'):
-            tens = tensors.DiagonalTensor.from_diag(diag=data, first_leg=leg, backend=compatible_backend)
-        return  # TODO
-    
-    tens = tensors.DiagonalTensor.from_diag(diag=data, first_leg=leg, backend=compatible_backend)
-
-    print('scalar input')
-    res = tp_func(data[0])
-    expect = np_func(data[0])
-    npt.assert_array_almost_equal_nulp(res, expect)
-
-    print('DiagonalTensor input')
-    res = tp_func(tens).diag_numpy
-    expect = np_func(data)
-    npt.assert_array_almost_equal_nulp(res, expect)
 
 
 @pytest.mark.parametrize('which_legs', [[0], [-1], ['b'], ['a', 'b', 'c', 'd'], ['b', -2]])
