@@ -851,9 +851,48 @@ def test_add_trivial_leg(cls, domain, codomain, is_dual, make_compatible_tensor,
     npt.assert_array_almost_equal_nulp(res_np, expect, 100)
 
 
-def test_elementwise_functions():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.parametrize(
+    'tenpy_func, numpy_func, dtype, kwargs',
+    # dtype=None indicates that we need to special case the tensor creations to fulfill constraints.
+    [pytest.param(tensors.angle, np.angle, Dtype.complex128, {}, id='angle()-complex'),
+     pytest.param(tensors.angle, np.angle, Dtype.float64, {}, id='angle()-real'),
+     pytest.param(tensors.imag, np.imag, Dtype.complex128, {}, id='imag()-complex'),
+     pytest.param(tensors.imag, np.imag, Dtype.float64, {}, id='imag()-real'),
+     pytest.param(tensors.real, np.real, Dtype.complex128, {}, id='real()-complex'),
+     pytest.param(tensors.real, np.real, Dtype.float64, {}, id='real()-real'),
+     pytest.param(tensors.real_if_close, np.real_if_close, None, dict(tol=100), id='real_if_close()'),
+     pytest.param(tensors.sqrt, np.sqrt, None, {}, id='sqrt()'),
+     pytest.param(DiagonalTensor.__abs__, np.abs, Dtype.float64, {}, id='abs()-real'),
+     pytest.param(DiagonalTensor.__abs__, np.abs, Dtype.complex128, {}, id='abs()-complex'),
+     pytest.param(tensors.real, np.real, Dtype.float64, {}, id='real()-real'),
+    ]
+     # TODO more functions? exp, log
+)
+def test_elementwise_functions(tenpy_func, numpy_func, dtype, kwargs, make_compatible_tensor):
+    if dtype is not None:
+        D: DiagonalTensor = make_compatible_tensor(cls=DiagonalTensor, dtype=dtype)
+    elif tenpy_func is tensors.sqrt:
+        # need positive
+        D: DiagonalTensor = abs(make_compatible_tensor(cls=DiagonalTensor, dtype=Dtype.float64))
+    elif tenpy_func is tensors.real_if_close:
+        # want almost real
+        rp = make_compatible_tensor(cls=DiagonalTensor, dtype=Dtype.float64)
+        ip = make_compatible_tensor(domain=rp.domain, cls=DiagonalTensor, dtype=Dtype.float64)
+        D = rp + 1-12j * ip
+    else:
+        raise ValueError
 
+    res = tenpy_func(D, **kwargs)
+    res.test_sanity()
+
+    res_np = res.diagonal_as_numpy()
+    expect = numpy_func(D.diagonal_as_numpy())
+    npt.assert_almost_equal(res_np, expect)
+
+
+def test_elementwise_binary_functions():
+    pytest.skip('Test not written yet')  # TODO
+    
 
 def test_almost_equal():
     pytest.skip('Test not written yet')  # TODO

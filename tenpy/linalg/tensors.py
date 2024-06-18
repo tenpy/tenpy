@@ -3509,7 +3509,7 @@ def real(x: _ElementwiseType) -> _ElementwiseType:
     return np.real(x)
 
 
-@_elementwise_function(block_func='block_real_if_close', func_kwargs=dict(tol=100), maps_zero_to_zero=True)
+@_elementwise_function(block_func='block_real_if_close', maps_zero_to_zero=True)
 def real_if_close(x: _ElementwiseType, tol: float = 100) -> _ElementwiseType:
     """If close to real, return the :func:`real` part, :ref:`elementwise <diagonal_elementwise>`.
 

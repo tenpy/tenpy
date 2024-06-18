@@ -89,6 +89,8 @@ The function returned by the fixture ``make_compatible_tensor`` has the followin
         as to guarantee that the resulting tensor allows some blocks.
     labels: list[str | None] (default: all None)
         The labels for the resulting tensor. Note that labels can also be specified via (co)domain.
+    dtype: Dtype
+        The dtype for the tensor.
     *
     max_blocks: int (default 5)
         The maximum number of blocks for the resulting tensor
@@ -107,7 +109,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tenpy.linalg import backends, spaces, symmetries, tensors
+from tenpy.linalg import backends, spaces, symmetries, tensors, Dtype
 
 
 # QUICK CONFIGURATION
@@ -245,7 +247,7 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
     """Tensor RNG."""
     def make(codomain: list[spaces.Space | str | None] | spaces.ProductSpace | int = None,
              domain: list[spaces.Space | str | None] | spaces.ProductSpace | int = None,
-             labels: list[str | None] = None,
+             labels: list[str | None] = None, dtype: Dtype = None,
              *,
              max_blocks=5, max_block_size=5, empty_ok=False, all_blocks=False,
              cls=tensors.SymmetricTensor):
@@ -320,7 +322,7 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
             inv_labels = [*labels, tensors.ChargedTensor._CHARGE_LEG_LABEL]
             inv_part = make(codomain=codomain, domain=inv_domain, labels=inv_labels,
                             max_blocks=max_blocks, max_block_size=max_block_size, empty_ok=empty_ok,
-                            all_blocks=all_blocks, cls=tensors.SymmetricTensor)
+                            all_blocks=all_blocks, cls=tensors.SymmetricTensor, dtype=dtype)
             res = tensors.ChargedTensor(inv_part, charged_state=[1])
             res.test_sanity()
             return res
@@ -354,7 +356,8 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
                         assert domain[0] == leg
             #
             res = tensors.DiagonalTensor.from_block_func(
-                make_compatible_block, leg=leg, backend=compatible_backend, labels=labels
+                lambda size: make_compatible_block(size, real=dtype.is_real),
+                leg=leg, backend=compatible_backend, labels=labels, dtype=dtype
             )
             if not all_blocks:
                 res = randomly_drop_blocks(res, max_blocks=max_blocks, empty_ok=empty_ok,
@@ -363,6 +366,7 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
             return res
         #
         if cls is tensors.Mask:
+            assert dtype in [None, Dtype.bool]
             if isinstance(codomain, spaces.ProductSpace):
                 assert codomain.num_spaces == 1
                 small_leg = codomain.spaces[0]
@@ -447,8 +451,8 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
             raise ValueError(f'Unknown tensor cls: {cls}')
     
         res = tensors.SymmetricTensor.from_block_func(
-            make_compatible_block, codomain=codomain, domain=domain, backend=compatible_backend,
-            labels=labels
+            lambda size: make_compatible_block(size, real=dtype.is_real),
+            codomain=codomain, domain=domain, backend=compatible_backend, labels=labels, dtype=dtype
         )
         if not all_blocks:
             res = randomly_drop_blocks(res, max_blocks=max_blocks, empty_ok=empty_ok,
