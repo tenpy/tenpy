@@ -953,8 +953,29 @@ def test_bend_legs(cls, codomain, domain, num_codomain_legs, make_compatible_ten
     npt.assert_array_almost_equal_nulp(res.to_numpy(), tensor_np, 100)
 
 
-def test_combine_legs():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.xfail(reason='combine_legs not done')  # TODO
+def test_combine_split(make_compatible_tensor):
+    T: SymmetricTensor = make_compatible_tensor(['a', 'b'], ['c', 'd'])
+
+    combined = tensors.combine_legs(T, [1, 2])  # TODO more combinations. also combine multiple groups
+    combined.test_sanity()
+    assert combined.labels == ['a', '(b.c)', 'd']
+    # note: we can not easily compare to numpy.reshape,
+    # since combine_legs includes a basis transformation
+    # TODO test separately?
+
+    print('check that split reverses combine')
+    split = tensors.split_legs(combined, 1)
+    split.test_sanity()
+    assert split.labels == ['a', 'b', 'c', 'd']
+    T_np = T.to_numpy()
+    npt.assert_almost_equal(split.to_numpy, T_np)
+
+    print('check splitting a non-combined leg raises')
+    with pytest.raises(ValueError, match='foo'):
+        _ = tensors.split(combined, 0)
+
+    # TODO incorporate OLD_test_combine_legs_basis_trafo
 
 
 def test_combine_to_matrix():
@@ -1483,98 +1504,6 @@ def OLD_test_conj_hconj(make_compatible_tensor):
     _ = op2 + op2_hc  # just check if it runs
     expect = np.transpose(np.conj(op2.to_numpy()), [2, 3, 0, 1])
     npt.assert_array_equal(op2_hc.to_numpy(), expect)
-    
-
-def OLD_test_combine_split(make_compatible_tensor, compatible_symmetry_backend):
-    tens = make_compatible_tensor(labels=['a', 'b', 'c', 'd'], max_blocks=5, max_block_size=5)
-
-    if isinstance(tens.backend, backends.FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
-        with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
-            dense = tens.to_numpy()
-        return  # TODO
-    
-    dense = tens.to_numpy()
-    d0, d1, d2, d3 = dims = tuple(tens.shape)
-
-    print('check by idx')
-
-    if isinstance(tens.backend, backends.FusionTreeBackend):
-        with pytest.raises(NotImplementedError, match='combine_legs not implemented'):
-            res = tensors.combine_legs(tens, [1, 2])
-        return  # TODO
-    
-    res = tensors.combine_legs(tens, [1, 2])
-    res.test_sanity()
-    assert res.labels == ['a', '(b.c)', 'd']
-    # note: dense reshape is not enough to check expect, since we have permutation in indices.
-    # hence, we only check that we get back the same after split
-    split = tensors.split_legs(res, 1)
-    split.test_sanity()
-    assert split.labels == ['a', 'b', 'c', 'd']
-    npt.assert_equal(split.to_numpy(), dense)
-
-    print('check by label')
-    res = tensors.combine_legs(tens, ['b', 'd'])
-    res.test_sanity()
-    assert res.labels == ['a', '(b.d)', 'c']
-    split = tensors.split_legs(res, '(b.d)')
-    split.test_sanity()
-    assert split.labels == ['a', 'b', 'd', 'c']
-    assert np.allclose(split.to_numpy(), dense.transpose([0, 1, 3, 2]))
-
-    print('check splitting a non-combined leg raises')
-    with pytest.raises(ValueError):
-        tensors.split_legs(res, 0)
-    with pytest.raises(ValueError):
-        tensors.split_legs(res, 'd')
-
-    print('check combining multiple legs')
-    res = tensors.combine_legs(tens, ['c', 'a'], ['b', 'd'], product_spaces_dual=[False, True])
-    res.test_sanity()
-    # leg order after combine:
-    #
-    #     replace by (b.d)
-    #     |     omit
-    #     |     |
-    # [a, b, c, d]               ->   [(b.d), (c.a)]
-    #  |     |
-    #  omit  replace by (c.a)
-    #
-    assert res.labels == ['(b.d)', '(c.a)']
-    assert res.legs[0].is_dual == True
-    assert res.legs[1].is_dual == False
-    split = tensors.split_legs(res)
-    split.test_sanity()
-    assert split.labels == ['b', 'd', 'c', 'a']
-    npt.assert_equal(split.to_numpy(), dense.transpose([1, 3, 2, 0]))
-
-    print('check _fuse_spaces')
-    sectors1, mults1, metadata1 = _fuse_spaces(
-        symmetry=tens.symmetry, spaces=tens.get_legs(['b', 'd'])
-    )
-    assert len(metadata1) == 1
-    if compatible_symmetry_backend in ['abelian']:  # those backends that implement _fuse_spaces
-        sectors2, mults2, metadata2 = tens.backend._fuse_spaces(
-            symmetry=tens.symmetry, spaces=tens.get_legs(['b', 'd'])
-        )
-        npt.assert_array_equal(metadata1['fusion_outcomes_sort'], metadata2['fusion_outcomes_sort'])
-        npt.assert_array_equal(sectors1, sectors2)
-        npt.assert_array_equal(mults1, mults2)
-        assert len(metadata2) == 4
-
-    for prod_space, comment in [
-        (ProductSpace(tens.get_legs(['b', 'd']), backend=tens.backend), 'metadata via ProductSpace.__init__'),
-        (tens.backend.add_leg_metadata(ProductSpace(tens.get_legs(['b', 'd']))), 'metadata via add_leg_metadata'),
-        (ProductSpace(tens.get_legs(['b', 'd'])), 'no metadata'),
-    ]:
-        print(f'check combine_legs with ProductSpace. {comment}')
-        res = tensors.combine_legs(tens, ['b', 'd'], product_spaces=[prod_space])
-        res.test_sanity()
-        assert res.labels == ['a', '(b.d)', 'c']
-        split = tensors.split_legs(res, '(b.d)')
-        split.test_sanity()
-        assert split.labels == ['a', 'b', 'd', 'c']
-        assert np.allclose(split.to_numpy(), dense.transpose([0, 1, 3, 2]))
 
 
 @pytest.mark.xfail  # TODO

@@ -2853,7 +2853,7 @@ def combine_legs(tensor: Tensor,
     
     for n, group in enumerate(which_legs):
         combine_to_domain, combined_pos, first_leg = tensor._parse_leg_idx(group[0])
-        group = [first_leg]
+        group_idcs = [first_leg]
         to_combine = []  # the legs we need to combine. duality adjusted if they need to be bent.
         if combine_to_domain:
             to_combine.append(tensor.domain.spaces[combined_pos])
@@ -2861,7 +2861,7 @@ def combine_legs(tensor: Tensor,
             to_combine.append(tensor.codomain.spaces[combined_pos])
         for l in group[1:]:
             in_domain, pos, leg_idx = tensor._parse_leg_idx(l)
-            group.append(leg_idx)
+            group_idcs.append(leg_idx)
             if in_domain:
                 domain_skip.append(pos)
                 leg = tensor.domain.spaces[pos]
@@ -2878,9 +2878,9 @@ def combine_legs(tensor: Tensor,
             combined = combined_spaces[n]
             assert combined.spaces == to_combine
         if combine_to_domain:
-            domain_groups[combined_pos] = (group, combined)
+            domain_groups[combined_pos] = (group_idcs, combined)
         else:
-            codomain_groups[combined_pos] = (group, combined)
+            codomain_groups[combined_pos] = (group_idcs, combined)
 
     # 2b) populate the following data structures:
     new_domain_combine = []  # list[tuple[list[domain_pos], ProductSpace]], instructions for after permuting
@@ -2935,16 +2935,16 @@ def combine_legs(tensor: Tensor,
     for positions, combined in new_domain_combine:
         first, *_, last = positions
         label = _combine_leg_labels(domain_labels[first:last + 1])
-        domain_spaces[first:last] = None
+        domain_spaces[first:last] = [None] * (last - first)
         domain_spaces[last] = combined
-        domain_labels[first:last] = None
+        domain_labels[first:last] = [None] * (last - first)
         domain_labels[last] = label
     for positions, combined in new_codomain_combine:
         first, *_, last = positions
         label = _combine_leg_labels(codomain_labels[first:last + 1])
-        codomain_spaces[first:last] = None
+        codomain_spaces[first:last] = [None] * (last - first)
         codomain_spaces[last] = combined
-        codomain_labels[first:last] = None
+        codomain_labels[first:last] = [None] * (last - first)
         codomain_labels[last] = label
     domain_spaces = [s for s in domain_spaces if s is not None]
     codomain_spaces = [s for s in codomain_spaces if s is not None]
