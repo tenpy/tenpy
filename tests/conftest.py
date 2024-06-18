@@ -355,8 +355,9 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
                         leg = codomain[0]
                         assert domain[0] == leg
             #
+            real = False if dtype is None else dtype.is_real
             res = tensors.DiagonalTensor.from_block_func(
-                lambda size: make_compatible_block(size, real=dtype.is_real),
+                lambda size: make_compatible_block(size, real=real),
                 leg=leg, backend=compatible_backend, labels=labels, dtype=dtype
             )
             if not all_blocks:
@@ -449,9 +450,10 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
         # ======================================================================================
         if not cls is tensors.SymmetricTensor:
             raise ValueError(f'Unknown tensor cls: {cls}')
-    
+
+        real = False if dtype is None else dtype.is_real
         res = tensors.SymmetricTensor.from_block_func(
-            lambda size: make_compatible_block(size, real=dtype.is_real),
+            lambda size: make_compatible_block(size, real=real),
             codomain=codomain, domain=domain, backend=compatible_backend, labels=labels, dtype=dtype
         )
         if not all_blocks:

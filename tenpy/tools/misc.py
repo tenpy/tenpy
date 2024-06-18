@@ -210,7 +210,7 @@ def inverse_permutation(perm):
      # equivalently: return np.argsort(perm) # would be O(N log(N))
 
 
-def rank_data(a):
+def rank_data(a, stable=True):
     """Assign ranks to data.
 
     For equal values, the first one has lower rank.
@@ -220,20 +220,37 @@ def rank_data(a):
     ----------
     a : 1D array-like
         The data to rank. TODO support multi-dimensional data?
+    stable: bool
+        If ``True`` (default), the ranks of equal values are guaranteed increasing by order of
+        appearance in `a`. If ``False``, the relative rank of equal elements is arbitrary, which
+        may allow faster sorting algorithms.
 
     Returns
     -------
     ranks : 1D array of int
         The ranks of the data, such that ``a[i] > a[j]`` implies ``ranks[i] > ranks[j]``.
-        For ``a[i] == a[j]`` we have ``ranks[i] > ranks[j]`` iff ``i > j``.
+        For equal elements ``a[i] == a[j]``, and only if `stable`, we have ``ranks[i] > ranks[j]``
+        iff ``i > j``. Otherwise the relative ranks are arbitrary.
         The result is a permutation of ``range(len(a))``.
     """
     # basically np.argsort(np.argsort(a)),
     # but use same trick as inverse_permutation for the outer argsort call
-    order = np.argsort(a)
+    order = np_argsort(a, stable=stable)
     ranks = np.empty_like(order)
     ranks[order] = np.arange(len(a))
     return ranks
+
+
+if int(np.version.version.split('.')[0]) >= 2:
+    def np_argsort(a, stable=True):
+        """Wrapper around np.argsort, using the ``stable`` kwarg if available"""
+        return np.argsort(a, stable=stable)
+
+else:
+    def np_argsort(a, stable=True):
+        if stable:
+            return np.argsort(a, kind='stable')
+        return np.argsort(a)
 
 
 def list_to_dict_list(l):

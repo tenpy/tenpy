@@ -27,17 +27,19 @@ def test_inverse_permutation(N=10):
     npt.assert_equal(pinv, pinv2)
 
 
-def test_rank_data(N=10):
+@pytest.mark.parametrize('stable', [True, False])
+def test_rank_data(stable, N=10):
     float_data = np.random.random(N)
     int_data = np.random.randint(2 * N, size=N)
     int_data[-2] = int_data[2]  # make sure there is a duplicate to check stability
     for data in [int_data, float_data]:
         print(f'data={data}')
-        ranks = tools.misc.rank_data(data)
+        ranks = tools.misc.rank_data(data, stable=stable)
         print(f'ranks={ranks}')
-        # check vs known implementation
-        ranks2 = np.argsort(np.argsort(data))
-        npt.assert_array_equal(ranks, ranks2)
+        if stable:
+            # check vs known implementation
+            ranks2 = np.argsort(np.argsort(data, kind='stable'), kind='stable')
+            npt.assert_array_equal(ranks, ranks2)
         # check defining property
         for i, ai in enumerate(data):
             for j, aj in enumerate(data):
@@ -45,7 +47,7 @@ def test_rank_data(N=10):
                     assert ranks[i] < ranks[j]
                 elif ai > aj:
                     assert ranks[i] > ranks[j]
-                else:
+                elif stable:
                     assert (i < j) == (ranks[i] < ranks[j])
                     assert (i > j) == (ranks[i] > ranks[j])
 
