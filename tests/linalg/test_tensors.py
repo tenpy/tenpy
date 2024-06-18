@@ -766,36 +766,53 @@ def test_from_block_su2_symm(symmetry_backend, block_backend):
     assert backend.block_allclose(recovered_block, heisenberg_4)
 
 
-def test_str_repr(make_compatible_tensor, str_max_lines=30, repr_max_lines=30):
-    """Check if str and repr work. Automatically, we can only check if they run at all.
+@pytest.mark.parametrize(
+    'cls, codomain, domain',
+    [
+        pytest.param(SymmetricTensor, ['vL'], ['vR', 'p'], id='Sym-vL-p-vR'),
+        pytest.param(SymmetricTensor, ['p'], ['p*'], id='Sym-p-p*'),
+        pytest.param(DiagonalTensor, ['p'], ['p*'], id='Diag-p-p*'),
+        pytest.param(Mask, ['vL'], ['vL*'], id='Mask-vL-vL*'),
+        pytest.param(ChargedTensor, ['vL'], ['vR', 'p'], id='Charged-vL-p-vR')
+    ]
+)
+def test_Tensor_str_repr(cls, codomain, domain, make_compatible_tensor, str_max_lines=30, repr_max_lines=30):
+    """Check if str and repr work.
+
+    Automatically, we can only check if they run at all.
     To check if the output is sensible and useful, a human should look at it.
-    Run ``pytest -rP -k test_str_repr > output.txt`` to see the output.
+    Run e.g.::
+
+        pytest -rP -k test_Tensor_str_repr
+
+    to select only this test (``-k`` flag) and see the output (``-rP``), even if it passes.
+    Since the output is rather long, it is convenient to write the output to file.
+    To do that, and directly open that file in your favorite editor, run e.g. for VS Code::
+
+        pytest -rP -k test_Tensor_str_repr > playground/test_Tensor_str_repr.txt && code playground/test_Tensor_str_repr.txt
+
+    or for vim::
+
+        pytest -rP -k test_Tensor_str_repr > playground/test_Tensor_str_repr.txt && vim playground/test_Tensor_str_repr.txt
+
+    Assumes your cwd is the repository root, such that the file is generated in playground and therefore gitignored.
     """
     terminal_width = 80
-    str_max_len = terminal_width * str_max_lines
-    repr_max_len = terminal_width * str_max_lines
-    mps_tens = make_compatible_tensor(labels=['vL', 'p', 'vR'], codomain=1, domain=2)
-    local_op = make_compatible_tensor(labels=['p', 'p*'], codomain=1, domain=1)
-    for t in [mps_tens, local_op]:
-        print()
-        print()
-        print('----------------------')
-        print('__repr__()')
-        print('----------------------')
-        res = repr(t)
-        assert len(res) <= repr_max_len
-        assert res.count('\n') <= repr_max_lines
-        print(res)
-        
-        print()
-        print()
-        print('----------------------')
-        print('__str__()')
-        print('----------------------')
-        res = str(t)
-        assert len(res) <= str_max_len
-        assert res.count('\n') <= str_max_lines
-        print(res)
+    T = make_compatible_tensor(codomain=codomain, domain=domain, cls=cls)
+    print('repr(T):')
+    res = repr(T)
+    lines = res.split('\n')
+    assert all(len(line) <= terminal_width for line in lines)
+    assert len(lines) <= repr_max_lines
+    print(res)
+    #
+    print()
+    print('str(T):')
+    res = str(T)
+    lines = res.split('\n')
+    assert all(len(line) <= terminal_width for line in lines)
+    assert len(lines) <= str_max_lines
+    print(res)
 
 
 # TENSOR FUNCTIONS
