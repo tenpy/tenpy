@@ -291,43 +291,66 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
             res_block_inds = np.zeros((0, 2), int)
         return AbelianBackendData(tensor.dtype, res_blocks, res_block_inds, is_sorted=True)
 
-    def apply_mask_to_Tensor(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int) -> Data:
-        raise NotImplementedError  # TODO not yet reviewed
-        # implementation similar to scale_axis, see notes there
+    def apply_mask_to_SymmetricTensor(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int
+                                      ) -> tuple[Data, ProductSpace, ProductSpace]:
+        in_domain, co_domain_idx, _ = tensor._parse_leg_idx(leg_idx)
+        if in_domain:
+            assert not mask.is_projection
+            mask_contr = 0
+        else:
+            assert mask.is_projection
+            mask_contr = 1
+        
         tensor_blocks = tensor.data.blocks
-        mask_blocks = mask.data.blocksMaskData
         tensor_block_inds = tensor.data.block_inds
         tensor_block_inds_cont = tensor_block_inds[:, leg_idx:leg_idx + 1]
-        if leg_idx != tensor.num_legs - 1:
-            # due to np.lexsort(tensor_block_inds.T), only tensor_block_inds[:, -1] is sorted
+        #
+        mask_blocks = mask.data.blocks
+        mask_block_inds = mask.data.block_inds
+        mask_block_inds_cont = mask_block_inds[:, mask_contr:mask_contr + 1]
+        #
+        # sort by the contracted rows
+        # OPTIMIZE is that actually worth it? We only do this so the iterator over common indices
+        #          is cheaper. but if we need to sort and permute both sides, then re-sort the result
+        #          it seems like those benefits are outweighed by the cost??
+        if leg_idx != tensor.num_legs - 1:  # otherwise it is already sorted
             sort = np.lexsort(tensor_block_inds_cont.T)
             tensor_blocks = [tensor_blocks[i] for i in sort]
             tensor_block_inds = tensor_block_inds[sort]
             tensor_block_inds_cont = tensor_block_inds_cont[sort]
-        mask_block_inds = mask.data.block_inds
-        mask_block_inds_cont = mask_block_inds[:, 0:1]
-        sort = np.lexsort(mask_block_inds_cont.T)
-        mask_blocks = [mask_blocks[i] for i in sort]
-        mask_block_inds = mask_block_inds[sort]
-        mask_block_inds_cont = mask_block_inds_cont[sort]
+        if mask_contr == 0:  # otherwise it is already sorted
+            sort = np.lexsort(mask_block_inds_cont.T)
+            mask_blocks = [mask_blocks[i] for i in sort]
+            mask_block_inds = mask_block_inds[sort]
+            mask_block_inds_cont = mask_block_inds_cont[sort]
 
         res_blocks = []
         res_block_inds = []
-        # need only common blocks : zeros masks to zero, and a missing mask block means all False
+        # need to iterate only over the "common" blocks. If either block is zero, so is the result
         for i, j in iter_common_nonstrict_sorted_arrays(tensor_block_inds_cont, mask_block_inds_cont):
-            res_blocks.append(self.apply_mask_to_block(block=tensor_blocks[i], mask=mask_blocks[j], ax=leg_idx))
+            block = self.apply_mask_to_block(tensor_blocks[i], mask_blocks[j], ax=leg_idx)
             block_inds = tensor_block_inds[i].copy()
-            # TODO dont use legs! use conventional_leg_order / domain / codomain
-            # tensor_block_inds[i] refer to mask.legs[0]._sectors
-            # need to adjust to refer to mask.legs[1]._sectors
-            block_inds[leg_idx] = mask_block_inds[j, 1]
+            block_inds[leg_idx] = mask_block_inds[j, 1 - mask_contr]
+            res_blocks.append(block)
             res_block_inds.append(block_inds)
         if len(res_block_inds) > 0:
             res_block_inds = np.array(res_block_inds)
         else:
             res_block_inds = np.zeros((0, tensor.num_legs), int)
         # OPTIMIZE (JU) block_inds might actually be sorted but i am not sure right now
-        return AbelianBackendData(tensor.dtype, res_blocks, res_block_inds, is_sorted=False)
+        data = AbelianBackendData(tensor.dtype, res_blocks, res_block_inds, is_sorted=False)
+        #
+        if in_domain:
+            codomain = tensor.codomain
+            spaces = tensor.domain.spaces[:]
+            spaces[co_domain_idx] = mask.small_leg
+            domain = ProductSpace(spaces, symmetry=tensor.symmetry, backend=self)
+        else:
+            domain = tensor.domain
+            spaces = tensor.codomain.spaces[:]
+            spaces[co_domain_idx] = mask.small_leg
+            codomain = ProductSpace(spaces, symmetry=tensor.symmetry, backend=self)
+        return data, codomain, domain
 
     def combine_legs(self, a: SymmetricTensor, combine_slices: list[int, int], product_spaces: list[ProductSpace],
                      new_axes: list[int], final_legs: list[Space]) -> Data:

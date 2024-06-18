@@ -78,9 +78,22 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
         return self.apply_mask_to_block(tensor.data, mask.data, ax=0)
 
-    def apply_mask_to_Tensor(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int) -> Data:
-        return self.apply_mask_to_block(tensor.data, mask.data, ax=leg_idx)
-
+    def apply_mask_to_SymmetricTensor(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int
+                                      ) -> tuple[Data, ProductSpace, ProductSpace]:
+        data = self.apply_mask_to_block(tensor.data, mask.data, leg_idx)
+        in_domain, co_domain_idx, _ = tensor._parse_leg_idx(leg_idx)
+        if in_domain:
+            codomain = tensor.codomain
+            spaces = tensor.domain.spaces[:]
+            spaces[co_domain_idx] = mask.small_leg
+            domain = ProductSpace(spaces, symmetry=tensor.symmetry, backend=self)
+        else:
+            domain = tensor.domain
+            spaces = tensor.codomain.spaces[:]
+            spaces[co_domain_idx] = mask.small_leg
+            codomain = ProductSpace(spaces, symmetry=tensor.symmetry, backend=self)
+        return data, codomain, domain
+    
     def combine_legs(self, a: SymmetricTensor, combine_slices: list[int, int],
                      product_spaces: list[ProductSpace], new_axes: list[int],
                      final_legs: list[Space]) -> Data:

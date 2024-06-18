@@ -2596,14 +2596,34 @@ def apply_mask(tensor: Tensor, mask: Mask, leg: int | str) -> Tensor:
         Note that if the leg is in the domain this means ``mask.large_leg == domain[n].dual == legs[-n]``!
     leg: int | str
         Which leg of the tensor to project
+    TODO add arg to specify the label? Now we just use the same as from `tensor`.
 
     See Also
     --------
     compose, tdot, scale_axis
     """
-    in_domain, co_domain_idx, leg_idx = tensor._parse_leg_idx(leg)
+    in_domain, _, leg_idx = tensor._parse_leg_idx(leg)
+
+    if isinstance(tensor, ChargedTensor):
+        inv_part = apply_mask(tensor.invariant_part, mask, leg_idx)
+        return ChargedTensor(inv_part, tensor.charged_state)
+    
     assert mask.large_leg == tensor.get_leg(leg_idx)
-    raise NotImplementedError('tensors.apply_mask not implemented')  # TODO
+    assert mask.is_projection
+
+    if isinstance(tensor, DiagonalTensor):
+        tensor = tensor.as_SymmetricTensor()
+    if isinstance(tensor, Mask):
+        raise NotImplementedError  # TODO
+    if not isinstance(tensor, SymmetricTensor):
+        raise TypeError(f'Invalid tensor type: {type(tensor).__name__}')
+    
+    if in_domain:
+        mask = transpose(mask)
+    backend = get_same_backend(tensor, mask)
+    data, codomain, domain = backend.apply_mask_to_SymmetricTensor(tensor, mask, leg_idx)
+    return SymmetricTensor(data=data, codomain=codomain, domain=domain, backend=backend,
+                           labels=tensor.labels)
 
 
 def bend_legs(tensor: Tensor, num_codomain_legs: int = None, num_domain_legs: int = None) -> Tensor:

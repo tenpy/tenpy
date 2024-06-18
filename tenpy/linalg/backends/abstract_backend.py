@@ -120,7 +120,16 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def apply_mask_to_Tensor(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int) -> Data:
+    def apply_mask_to_SymmetricTensor(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int
+                                      ) -> tuple[Data, ProductSpace, ProductSpace]:
+        """
+        If the `leg_idx` is in the codomain, `mask` is a projection mask.
+        Otherwise it is an inclusion mask.
+        Either way, the ``mask.large_leg == tensor.get_co_domain_leg(leg_idx)`` is the same as
+        the leg in `tensor` in the (co-)domain.
+
+        Returns ``data, new_codomain, new_domain``.
+        """
         ...
 
     @abstractmethod

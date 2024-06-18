@@ -881,9 +881,42 @@ def test_almost_equal(cls, make_compatible_tensor):
     assert not tensors.almost_equal(T, T2, rtol=1e-10, atol=1e-10)
 
 
-def test_apply_mask():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.parametrize(
+    'cls, codomain, domain, which_leg',
+    [pytest.param(SymmetricTensor, 2, 2, 1, id='Symm-2-2-codom'),
+     pytest.param(SymmetricTensor, 2, 2, -1, id='Symm-2-2-dom'),
+     pytest.param(ChargedTensor, 2, 2, 1, id='Charged-2-2-dom'),
+     pytest.param(ChargedTensor, 2, 2, -1, id='Charged-2-2-dom'),
+     pytest.param(DiagonalTensor, 1, 1, -1, id='Diag-dom'),
+     pytest.param(Mask, 1, 1, 0, id='Mask-codom'),
+     pytest.param(Mask, 1, 1, -1, id='Mask-dom'),
+    ]
+)
+def test_apply_mask(cls, codomain, domain, which_leg, make_compatible_tensor):
+    num_legs = codomain + domain
+    labels = list('abcdefghijkl')[:num_legs]
+    T: cls = make_compatible_tensor(codomain=codomain, domain=domain, labels=labels, cls=cls)
+    M: Mask = make_compatible_tensor(domain=[T.get_leg(which_leg)], cls=Mask)
 
+    if cls is Mask:
+        with pytest.raises(NotImplementedError):
+            _ = tensors.apply_mask(T, M, which_leg)
+        pytest.xfail()
+
+    res = tensors.apply_mask(T, M, which_leg)
+    res.test_sanity()
+
+    in_domain, co_domain_idx, leg_idx = T._parse_leg_idx(which_leg)
+    expect_legs = T.legs
+    expect_legs[leg_idx] = M.small_leg
+    assert res.legs == expect_legs
+    assert res.labels == T.labels
+
+    T_np = T.to_numpy()
+    mask_np = M.as_numpy_mask()
+    expect = T_np.compress(mask_np, leg_idx)
+    npt.assert_almost_equal(res.to_numpy(), expect)
+    
 
 def test_bend_legs():
     pytest.skip('Test not written yet')  # TODO
