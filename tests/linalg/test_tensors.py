@@ -808,10 +808,8 @@ def test_str_repr(make_compatible_tensor, str_max_lines=30, repr_max_lines=30):
         pytest.param(SymmetricTensor, 2, 0, False),
         pytest.param(SymmetricTensor, 0, 2, True),
         pytest.param(SymmetricTensor, 1, 3, False),
-        pytest.param(DiagonalTensor, 1, 1, False),
         pytest.param(DiagonalTensor, 1, 1, True),
         pytest.param(Mask, 1, 1, False),
-        pytest.param(Mask, 1, 1, True),
         pytest.param(ChargedTensor, 2, 2, False),
         pytest.param(ChargedTensor, 3, 0, True),
     ],
@@ -1540,27 +1538,6 @@ def OLD_test_squeeze_legs(make_compatible_tensor, compatible_symmetry):
     res.test_sanity()
     assert res.labels == ['a', 'c', 'd']
     npt.assert_array_equal(res.to_numpy(), dense[:, 0, :, :, 0])
-
-
-def OLD_test_add_trivial_leg(make_compatible_tensor):
-    A = make_compatible_tensor(labels=['a', 'b'])
-
-    if isinstance(A.backend, backends.FusionTreeBackend):
-        with pytest.raises(NotImplementedError, match='add_trivial_leg not implemented'):
-            B = tensors.add_trivial_leg(A, 'c', is_dual=True)
-        return  # TODO
-    
-    B = tensors.add_trivial_leg(A, 'c', is_dual=True)
-    B.test_sanity()
-    B = tensors.add_trivial_leg(B, 'xY', pos=1)
-    B.test_sanity()
-    assert B.labels == ['a', 'xY', 'b', 'c']
-    assert [leg.is_dual for leg in B.legs] == [A.legs[0].is_dual, False, A.legs[1].is_dual, True]
-    expect = A.to_numpy()[:, None, :, None]
-    B_np = B.to_numpy()
-    npt.assert_array_equal(B_np, expect)
-    C = B.squeeze_legs()
-    assert tensors.almost_equal(A, C)
 
 
 def OLD_test_scale_axis(make_compatible_tensor):

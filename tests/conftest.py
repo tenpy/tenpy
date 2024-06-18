@@ -386,7 +386,6 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
                 else:
                     extra = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
                     large_leg = small_leg.direct_sum(extra)
-
             
             if compatible_symmetry_backend == 'fusion_tree':
                 with pytest.raises(NotImplementedError, match='diagonal_to_mask'):

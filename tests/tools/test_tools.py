@@ -32,7 +32,9 @@ def test_rank_data(N=10):
     int_data = np.random.randint(2 * N, size=N)
     int_data[-2] = int_data[2]  # make sure there is a duplicate to check stability
     for data in [int_data, float_data]:
+        print(f'data={data}')
         ranks = tools.misc.rank_data(data)
+        print(f'ranks={ranks}')
         # check vs known implementation
         ranks2 = np.argsort(np.argsort(data))
         npt.assert_array_equal(ranks, ranks2)
