@@ -3992,19 +3992,20 @@ def transpose(tensor: Tensor) -> Tensor:
     |            │   │               │ │   │   ╰─────────╯ │
     |            │   │               │ │   ╰───────────────╯
 
-    Thus the result has::
+    Returns
+    -------
+    The transposed tensor. Its legs and labels fulfill e.g.::
 
         transpose(A).codomain == A.domain.dual == [V2.dual, V1.dual]  # if A.codomain == [V1, V2]
         transpose(A).domain == A.codomain.dual == [W2.dual, W1.dual]  # if A.domain == [W1, W2]
         transpose(A).legs == [V2.dual, V1.dual, W1, W2]  # compared to A.legs == [V1, V2, W2.dual, W1.dual]
-        transpose(A).labels == [*A.domain_labels, *A.codomain_labels]
+        transpose(A).labels == [*reversed(A.domain_labels), *A.codomain_labels]
 
     Note that the resulting :attr:`Tensor.legs` depend not only on the input :attr:`Tensor.legs`,
     but also on how they are partitioned into domain and codomain.
-
     We use the "same" labels, up to the permutation.
     """
-    labels = [*tensor.domain_labels, *tensor.codomain_labels]
+    labels = [*reversed(tensor.domain_labels), *tensor.codomain_labels]
     if isinstance(tensor, Mask):
         space_in, space_out, data = tensor.backend.mask_transpose(tensor)
         return Mask(data, space_in=space_in, space_out=space_out,
@@ -4016,15 +4017,12 @@ def transpose(tensor: Tensor) -> Tensor:
         dual_leg, data = tensor.backend.diagonal_transpose(tensor)
         return DiagonalTensor(data=data, leg=dual_leg, backend=tensor.backend, labels=labels)
     if isinstance(tensor, SymmetricTensor):
-        return SymmetricTensor(
-            data=tensor.backend.transpose(tensor),
-            codomain=tensor.domain.dual, domain=tensor.codomain.dual,
-            backend=tensor.backend,
-            labels=labels
-        )
+        data, codomain, domain = tensor.backend.transpose(tensor)
+        return SymmetricTensor(data=data, codomain=codomain, domain=domain, backend=tensor.backend,
+                               labels=labels)
     if isinstance(tensor, ChargedTensor):
         inv_part = transpose(tensor.invariant_part)
-        inv_part = move_leg(tensor, ChargedTensor._CHARGE_LEG_LABEL, domain_pos=0)
+        inv_part = move_leg(inv_part, ChargedTensor._CHARGE_LEG_LABEL, domain_pos=0)
         return ChargedTensor(inv_part, tensor.charged_state)
     raise TypeError
 

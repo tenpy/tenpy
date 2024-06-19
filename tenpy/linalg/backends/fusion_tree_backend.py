@@ -756,6 +756,12 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                       remaining_idcs: list[int]) -> Data:
         raise NotImplementedError('trace_partial not implemented')  # TODO
 
+    def transpose(self, a: SymmetricTensor) -> tuple[Data, ProductSpace, ProductSpace]:
+        # Juthos implementation:
+        # tensors: https://github.com/Jutho/TensorKit.jl/blob/b026cf2c1d470c6df1788a8f742c20acca67db83/src/tensors/indexmanipulations.jl#L143
+        # trees: https://github.com/Jutho/TensorKit.jl/blob/b026cf2c1d470c6df1788a8f742c20acca67db83/src/fusiontrees/manipulations.jl#L524
+        raise NotImplementedError('transpose not implemented')  # TODO
+
     def zero_data(self, codomain: ProductSpace, domain: ProductSpace, dtype: Dtype
                   ) -> FusionTreeData:
         return FusionTreeData(coupled_sectors=codomain.symmetry.empty_sector_array, blocks=[],

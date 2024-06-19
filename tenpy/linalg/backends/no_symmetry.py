@@ -369,6 +369,13 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         raise NotImplementedError  # TODO not yet reviewed
         return self.block_trace_partial(a.data, idcs1, idcs2, remaining_idcs)
 
+    def transpose(self, a: SymmetricTensor) -> tuple[Data, ProductSpace, ProductSpace]:
+        perm = [*range(a.num_codomain_legs, a.num_legs), *range(a.num_codomain_legs)]
+        data = self.block_permute_axes(a.data, perm)
+        codomain = a.domain.dual
+        domain = a.codomain.dual
+        return data, codomain, domain
+
     def zero_data(self, codomain: ProductSpace, domain: ProductSpace, dtype: Dtype):
         return self.zero_block(shape=[l.dim for l in conventional_leg_order(codomain, domain)],
                                dtype=dtype)

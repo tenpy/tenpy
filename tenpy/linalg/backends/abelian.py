@@ -1894,6 +1894,12 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         res_block_inds = np.array(list(res_data.keys()), dtype=int)
         return AbelianBackendData(a.data.dtype, res_blocks, res_block_inds, is_sorted=False)
 
+    def transpose(self, a: SymmetricTensor) -> tuple[Data, ProductSpace, ProductSpace]:
+        return self.permute_legs(a,
+                                 codomain_idcs=list(range(a.num_codomain_legs, a.num_legs)),
+                                 domain_idcs=list(reversed(range(a.num_codomain_legs))),
+                                 levels=None)
+
     def zero_data(self, codomain: ProductSpace, domain: ProductSpace, dtype: Dtype
                   ) -> AbelianBackendData:
         block_inds = np.zeros((0, codomain.num_spaces + domain.num_spaces), dtype=int)

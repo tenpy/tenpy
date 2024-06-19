@@ -610,6 +610,13 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def transpose(self, a: SymmetricTensor) -> tuple[Data, ProductSpace, ProductSpace]:
+        """Returns ``data, new_codomain, new_domain``.
+        Note that ``new_codomain == a.domain.dual`` and ``new_domain == a.codomain.dual``.
+        """
+        ...
+
+    @abstractmethod
     def zero_data(self, codomain: ProductSpace, domain: ProductSpace, dtype: Dtype) -> Data:
         """Data for a zero tensor"""
         ...

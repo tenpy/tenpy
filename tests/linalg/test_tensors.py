@@ -1423,9 +1423,42 @@ def test_trace():
     pytest.skip('Test not written yet')  # TODO
 
 
-# TODO
-def test_transpose():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.parametrize(
+    'cls, cod, dom',
+    [pytest.param(SymmetricTensor, 2, 2, id='Sym-2-2'),
+     pytest.param(SymmetricTensor, 3, 0, id='Sym-3-0'),
+     pytest.param(SymmetricTensor, 1, 1, id='Sym-1-1'),
+     pytest.param(SymmetricTensor, 0, 3, id='Sym-3-0'),
+     pytest.param(ChargedTensor, 2, 2, id='Charged-2-2'),
+     pytest.param(ChargedTensor, 3, 0, id='Charged-3-0'),
+     pytest.param(ChargedTensor, 1, 1, id='Charged-1-1'),
+     pytest.param(ChargedTensor, 0, 3, id='Charged-3-0'),
+     pytest.param(DiagonalTensor, 1, 1, id='Diag'),
+     pytest.param(Mask, 1, 1, id='Mask')]
+)
+def test_transpose(cls, cod, dom, make_compatible_tensor, np_random):
+    labels = list('abcdefghi')[:cod + dom]
+    tensor: cls = make_compatible_tensor(cod, dom, cls=cls, labels=labels)
+
+    if isinstance(tensor.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError, match='transpose not implemented'):
+            _ = tensors.transpose(tensor)
+        pytest.xfail()
+
+    how_to_call = np_random.choice(['dagger()', '.T'])
+    print(how_to_call)
+    if how_to_call == 'dagger()':
+        res = tensors.transpose(tensor)
+    if how_to_call == '.T':
+        res = tensor.T
+    res.test_sanity()
+
+    assert res.codomain == tensor.domain.dual
+    assert res.domain == tensor.codomain.dual
+    assert res.labels == [*labels[cod:], *labels[:cod]]
+
+    expect = np.transpose(tensor.to_numpy(), [*range(cod, cod + dom), *range(cod)])
+    npt.assert_almost_equal(res.to_numpy(), expect)
 
 
 # TODO
