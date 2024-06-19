@@ -12,7 +12,7 @@ from tenpy.linalg import backends, tensors
 from tenpy.linalg.tensors import DiagonalTensor, SymmetricTensor, Mask, ChargedTensor
 from tenpy.linalg.backends.backend_factory import get_backend
 from tenpy.linalg.dtypes import Dtype
-from tenpy.linalg.spaces import Space, ElementarySpace, ProductSpace, _fuse_spaces
+from tenpy.linalg.spaces import Space, ElementarySpace, ProductSpace
 from tenpy.linalg.symmetries import ProductSymmetry, z4_symmetry, SU2Symmetry
 
 
@@ -983,8 +983,47 @@ def test_combine_to_matrix():
     pytest.skip('Test not written yet')  # TODO
 
 
-def test_compose():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.parametrize(
+    'cls_A, cls_B, cod_A, shared, dom_B',
+    [pytest.param(SymmetricTensor, SymmetricTensor, 2, 2, 2, id='Sym@Sym-2-2-2'),]
+)
+def test_compose(cls_A, cls_B, cod_A, shared, dom_B, make_compatible_tensor):
+    labels_A = [list('abcd')[:cod_A], list('efgh')[:shared]]
+    labels_B = [list('ijkl')[:shared], list('mnop')[:dom_B]]
+    A: cls_A = make_compatible_tensor(
+        codomain=cod_A, domain=shared, labels=labels_A, cls=cls_A
+    )
+    B: cls_B = make_compatible_tensor(
+        codomain=A.domain, domain=dom_B, labels=labels_B, cls=cls_B
+    )
+
+    if isinstance(A.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError):
+            _ = tensors.compose(A, B, relabel1={'a': 'x'}, relabel2={'j': 'y'})
+        pytest.xfail()
+    
+    res = tensors.compose(A, B, relabel1={'a': 'x'}, relabel2={'m': 'y'})
+
+    if cod_A == 0 == dom_B:  # scalar result
+        assert isinstance(res, (float, complex))
+        res_np = res
+    else:
+        res.test_sanity()
+        assert res.codomain == A.codomain
+        assert res.domain == B.domain
+        expect_labels = []
+        if A.num_codomain_legs > 0:
+            expect_labels.append('x')
+            expect_labels.extend(A.codomain_labels[1:])
+        if B.num_domain_legs > 0:
+            expect_labels.extend(reversed(B.domain_labels[1:]))
+            expect_labels.append('y')
+        assert res.labels == expect_labels
+        res_np = res.to_numpy()
+
+    axes = [list(range(cod_A, cod_A + shared)), list(reversed(range(shared)))]
+    expect = np.tensordot(A.to_numpy(), B.to_numpy(), axes)
+    npt.assert_almost_equal(res_np, expect)
 
 
 def test_conj():
