@@ -698,10 +698,10 @@ class BlockBackend(metaclass=ABCMeta):
         """Assumes that data is a scalar (i.e. has only one entry). Returns that scalar as python float or complex"""
         ...
 
-    def block_dagger(self, a: Block, num_codomain: int) -> Block:
-        """Permute axes ``[*axs[num_codomain:], *axs[:num_codomain]]`` and elementwise conj."""
+    def block_dagger(self, a: Block) -> Block:
+        """Permute axes to reverse order and elementwise conj."""
         num_legs = len(self.block_shape(a))
-        res = self.block_permute_axes(a, [*range(num_codomain, num_legs), *range(num_codomain)])
+        res = self.block_permute_axes(a, list(reversed(range(num_legs))))
         return self.block_conj(res)
 
     @abstractmethod

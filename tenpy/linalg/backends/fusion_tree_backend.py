@@ -252,7 +252,11 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         )
 
     def dagger(self, a: SymmetricTensor) -> Data:
-        raise NotImplementedError  # TODO
+        return FusionTreeData(
+            coupled_sectors=a.data.coupled_sectors,
+            blocks=[self.block_dagger(b) for b in a.data.blocks],
+            dtype=a.dtype
+        )
 
     def data_item(self, a: FusionTreeData) -> float | complex:
         if len(a.blocks) > 1:

@@ -953,6 +953,7 @@ def test_bend_legs(cls, codomain, domain, num_codomain_legs, make_compatible_ten
     npt.assert_array_almost_equal_nulp(res.to_numpy(), tensor_np, 100)
 
 
+# TODO
 def test_combine_split(make_compatible_tensor):
     pytest.xfail(reason='combine_legs not done')  # TODO
     
@@ -979,6 +980,7 @@ def test_combine_split(make_compatible_tensor):
     # TODO incorporate OLD_test_combine_legs_basis_trafo
 
 
+# TODO
 def test_combine_to_matrix():
     pytest.skip('Test not written yet')  # TODO
 
@@ -1026,12 +1028,56 @@ def test_compose(cls_A, cls_B, cod_A, shared, dom_B, make_compatible_tensor):
     npt.assert_almost_equal(res_np, expect)
 
 
+# TODO
 def test_conj():
     pytest.skip('Test not written yet')  # TODO
 
 
-def test_dagger():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.parametrize(
+    'cls, cod, dom',
+    [pytest.param(SymmetricTensor, 2, 2, id='Sym-2-2'),
+     pytest.param(SymmetricTensor, 3, 0, id='Sym-3-0'),
+     pytest.param(SymmetricTensor, 1, 1, id='Sym-1-1'),
+     pytest.param(SymmetricTensor, 0, 3, id='Sym-3-0'),
+     pytest.param(ChargedTensor, 2, 2, id='Charged-2-2'),
+     pytest.param(ChargedTensor, 3, 0, id='Charged-3-0'),
+     pytest.param(ChargedTensor, 1, 1, id='Charged-1-1'),
+     pytest.param(ChargedTensor, 0, 3, id='Charged-3-0'),
+     pytest.param(DiagonalTensor, 1, 1, id='Diag'),
+     pytest.param(Mask, 1, 1, id='Mask')]
+)
+def test_dagger(cls, cod, dom, make_compatible_tensor, np_random):
+    T_labels = list('abcdefghi')[:cod + dom]
+    T: cls = make_compatible_tensor(cod, dom, cls=cls, labels=T_labels)
+
+    if isinstance(T.backend, backends.FusionTreeBackend) and cls is ChargedTensor:
+        with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
+            _ = T.dagger
+        pytest.xfail()
+
+    how_to_call = np_random.choice(['dagger()', '.hc', '.dagger'])
+    print(how_to_call)
+    if how_to_call == 'dagger()':
+        res = tensors.dagger(T)
+    if how_to_call == '.hc':
+        res = T.hc
+    if how_to_call == '.dagger':
+        res = T.dagger
+    res.test_sanity()
+
+    if isinstance(T.backend, backends.FusionTreeBackend) \
+            and isinstance(T.symmetry, ProductSymmetry)\
+            and (cod > 1 or dom > 1):
+        with pytest.raises(NotImplementedError):
+            _ = T.to_numpy()
+        pytest.xfail()
+
+    assert res.codomain == T.domain
+    assert res.domain == T.codomain
+    assert res.labels == [f'{l}*' for l in reversed(T_labels)]
+
+    expect = np.conj(np.transpose(T.to_numpy(), list(reversed(range(cod + dom)))))
+    npt.assert_almost_equal(res.to_numpy(), expect)
 
 
 @pytest.mark.parametrize(
@@ -1114,18 +1160,22 @@ def test_DiagonalTensor_elementwise_binary(cls, op, dtype, make_compatible_tenso
     npt.assert_almost_equal(res_np, expect)
 
 
+# TODO
 def test_entropy():
     pytest.skip('Test not written yet')  # TODO
 
 
+# TODO
 def test_inner():
     pytest.skip('Test not written yet')  # TODO
 
 
+# TODO
 def test_is_scalar():
     pytest.skip('Test not written yet')  # TODO
 
 
+# TODO
 def test_item():
     pytest.skip('Test not written yet')  # TODO
 
@@ -1153,14 +1203,17 @@ def test_linear_combination(make_compatible_tensor_any_class):
             _ = tensors.linear_combination(invalid_scalar, v, invalid_scalar, w)
 
 
+# TODO
 def test_move_leg():
     pytest.skip('Test not written yet')  # TODO
 
 
+# TODO
 def test_norm():
     pytest.skip('Test not written yet')  # TODO
 
 
+# TODO
 def test_outer():
     pytest.skip('Test not written yet')  # TODO
 
@@ -1240,18 +1293,22 @@ def test_scalar_multiply(make_compatible_tensor_any_class):
             _ = tensors.scalar_multiply(invalid_scalar, T)
 
 
+# TODO
 def test_scale_axis():
     pytest.skip('Test not written yet')  # TODO
 
 
+# TODO
 def test_set_as_slice():
     pytest.skip('Test not written yet')  # TODO
 
 
+# TODO
 def test_split_legs():
     pytest.skip('Test not written yet')  # TODO
 
 
+# TODO
 def test_squeeze_legs():
     pytest.skip('Test not written yet')  # TODO
 
@@ -1361,14 +1418,17 @@ def test_tdot(cls_A: Type[tensors.Tensor], cls_B: Type[tensors.Tensor],
     npt.assert_allclose(res_np, expect)
 
 
+# TODO
 def test_trace():
     pytest.skip('Test not written yet')  # TODO
 
 
+# TODO
 def test_transpose():
     pytest.skip('Test not written yet')  # TODO
 
 
+# TODO
 def test_zero_like():
     pytest.skip('Test not written yet')  # TODO
 

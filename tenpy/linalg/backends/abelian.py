@@ -633,8 +633,7 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return AbelianBackendData(a.data.dtype, blocks, a.data.block_inds.copy(), is_sorted=True)
 
     def dagger(self, a: SymmetricTensor) -> Data:
-        num_codomain = a.num_codomain_legs
-        blocks = [self.block_dagger(b, num_codomain=num_codomain) for b in a.data.blocks]
+        blocks = [self.block_dagger(b) for b in a.data.blocks]
         block_inds = a.data.block_inds[:, ::-1]
         return AbelianBackendData(a.dtype, blocks=blocks, block_inds=block_inds)
 

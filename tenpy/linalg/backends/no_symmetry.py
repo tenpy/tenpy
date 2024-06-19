@@ -112,7 +112,7 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return self.block_copy(a.data)
 
     def dagger(self, a: SymmetricTensor) -> Data:
-        return self.block_dagger(a.data, num_codomain=a.num_codomain_legs)
+        return self.block_dagger(a.data)
 
     def data_item(self, a: Data | DiagonalData) -> float | complex:
         return self.block_item(a)

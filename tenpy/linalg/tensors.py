@@ -453,7 +453,7 @@ class Tensor(metaclass=ABCMeta):
             return self.domain[co_domain_idx]
         return self.codomain[co_domain_idx].dual
 
-    def _parse_leg_idx(self, idx: int | str) -> tuple[bool, int, int]:
+    def _parse_leg_idx(self, which_leg: int | str) -> tuple[bool, int, int]:
         """Parse a leg index or a leg label.
 
         Parameters
@@ -471,12 +471,13 @@ class Tensor(metaclass=ABCMeta):
             The index of the leg in :attr:`legs`. Same as input ``idx``, except
             it is guaranteed to be in ``range(num_legs)``.
         """
-        if isinstance(idx, str):
-            idx = self._labelmap.get(idx, None)
+        if isinstance(which_leg, str):
+            idx = self._labelmap.get(which_leg, None)
             if idx is None:
-                msg = f'No leg with label {idx}. Labels are {self._labels}'
+                msg = f'No leg with label {which_leg}. Labels are {self._labels}'
                 raise ValueError(msg)
-        idx = _normalize_idx(idx, self.num_legs)
+        else:
+            idx = _normalize_idx(which_leg, self.num_legs)
         in_domain = (idx >= len(self.codomain))
         if in_domain:
             co_domain_idx = self.num_legs - 1 - idx
@@ -3035,16 +3036,6 @@ def dagger(tensor: Tensor) -> Tensor:
     For a tensor with one leg each in (co-)domain (i.e. a matrix), this coincides with
     the hermitian conjugate matrix :math:`(M^\dagger)_{i,j} = \bar{M}_{j, i}` .
     For a tensor ``A: X -> Y`` the dagger is a map ``dagger(A): Y -> X``.
-    Thus the result has::
-
-        dagger(A).codomain == A.domain
-        dagger(A).domain == A.codomain
-        dagger(A).legs == [leg.dual for leg in reversed(A.legs)]
-        dagger(A).labels == [_dual_leg_label(l) for l in reversed(A.labels)]
-
-    Note that the resulting :attr:`Tensor.legs` only depend on the input :attr:`Tensor.legs`, not
-    on their bipartition into domain and codomain.
-
     Graphically::
 
         |        a   b   c             e   d
@@ -3056,7 +3047,18 @@ def dagger(tensor: Tensor) -> Tensor:
         |          e   d             a   b   c
 
     Where ``a, b, c, d, e`` denote the legs in to (co-)domain.
-    
+
+    Returns
+    -------
+    The hermitian conjugate tensor. Its legs and labels are::
+
+        dagger(A).codomain == A.domain
+        dagger(A).domain == A.codomain
+        dagger(A).legs == [leg.dual for leg in reversed(A.legs)]
+        dagger(A).labels == [_dual_leg_label(l) for l in reversed(A.labels)]
+
+    Note that the resulting :attr:`Tensor.legs` only depend on the input :attr:`Tensor.legs`, not
+    on their bipartition into domain and codomain.
     For labels, we toggle a duality marker, i.e. if ``A.labels == ['a', 'b', 'c', 'd*', 'e*']``,
     then ``dagger(A).labels == ['e', 'd', 'c*', 'b*','a*'].
     """
@@ -3068,7 +3070,9 @@ def dagger(tensor: Tensor) -> Tensor:
             labels=[_dual_leg_label(l) for l in reversed(tensor._labels)]
         )
     if isinstance(tensor, DiagonalTensor):
-        return tensor._elementwise_unary(tensor.backend.block_conj, maps_zero_to_zero=True)
+        res = tensor._elementwise_unary(tensor.backend.block_conj, maps_zero_to_zero=True)
+        res.set_labels([_dual_leg_label(l) for l in reversed(tensor._labels)])
+        return res
     if isinstance(tensor, SymmetricTensor):
         return SymmetricTensor(
             data=tensor.backend.dagger(tensor),
@@ -3077,8 +3081,9 @@ def dagger(tensor: Tensor) -> Tensor:
             labels=[_dual_leg_label(l) for l in reversed(tensor._labels)]
         )
     if isinstance(tensor, ChargedTensor):
-        inv_part = dagger(tensor.invariant_part)
-        inv_part = move_leg(tensor, ChargedTensor._CHARGE_LEG_LABEL, domain_pos=0)
+        inv_part = dagger(tensor.invariant_part)  # charge_leg ends up as codomain[0] and is dual.
+        inv_part.set_label(0, ChargedTensor._CHARGE_LEG_LABEL)
+        inv_part = move_leg(inv_part, 0, domain_pos=0)
         charged_state = tensor.charged_state
         if charged_state is not None:
             charged_state = tensor.backend.block_conj(charged_state)
