@@ -953,8 +953,9 @@ def test_bend_legs(cls, codomain, domain, num_codomain_legs, make_compatible_ten
     npt.assert_array_almost_equal_nulp(res.to_numpy(), tensor_np, 100)
 
 
-@pytest.mark.xfail(reason='combine_legs not done')  # TODO
 def test_combine_split(make_compatible_tensor):
+    pytest.xfail(reason='combine_legs not done')  # TODO
+    
     T: SymmetricTensor = make_compatible_tensor(['a', 'b'], ['c', 'd'])
 
     combined = tensors.combine_legs(T, [1, 2])  # TODO more combinations. also combine multiple groups
@@ -1003,7 +1004,9 @@ def test_dagger():
      pytest.param(tensors.imag, np.imag, Dtype.float64, {}, id='imag()-real'),
      pytest.param(tensors.real, np.real, Dtype.complex128, {}, id='real()-complex'),
      pytest.param(tensors.real, np.real, Dtype.float64, {}, id='real()-real'),
-     pytest.param(tensors.real_if_close, np.real_if_close, None, dict(tol=100), id='real_if_close()'),
+     pytest.param(tensors.real_if_close, np.real_if_close, Dtype.complex128, {}, id='real_if_close()'),
+     pytest.param(tensors.real_if_close, np.real_if_close, Dtype.float64, dict(tol=100), id='real_if_close()'),
+     pytest.param(tensors.real_if_close, np.real_if_close, None, {}, id='real_if_close()'),
      pytest.param(tensors.sqrt, np.sqrt, None, {}, id='sqrt()'),
      pytest.param(DiagonalTensor.__abs__, np.abs, Dtype.float64, {}, id='abs()-real'),
      pytest.param(DiagonalTensor.__abs__, np.abs, Dtype.complex128, {}, id='abs()-complex'),

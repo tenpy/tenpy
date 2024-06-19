@@ -2356,13 +2356,21 @@ def _elementwise_function(block_func: str, func_kwargs={}, maps_zero_to_zero=Fal
     -------
     decorator
         A function, to be used as a decorator, see summary above.
+
+    Notes
+    -----
+    Take care if the function you are defining/decorating has optional kwargs with default value,
+    which are mandatory for the `block_func`. In that case, you should pass the default value
+    in ``func_kwargs``, since the default value is not accessible to the wrapped function!
+    See e.g. the implementation of :func:`real_if_close`.
     """
     def decorator(function):
         @functools.wraps(function)
         def wrapped(x, *args, **kwargs):
             if isinstance(x, DiagonalTensor):
+                kwargs = {**func_kwargs, **kwargs}  # kwargs take precedence over func_kwargs
                 return x._elementwise_unary(
-                    lambda block: getattr(x.backend, block_func)(block, *args, **kwargs, **func_kwargs),
+                    lambda block: getattr(x.backend, block_func)(block, *args, **kwargs),
                     maps_zero_to_zero=maps_zero_to_zero
                 )
             elif is_scalar(x):
@@ -3598,7 +3606,8 @@ def real(x: _ElementwiseType) -> _ElementwiseType:
     return np.real(x)
 
 
-@_elementwise_function(block_func='block_real_if_close', maps_zero_to_zero=True)
+@_elementwise_function(block_func='block_real_if_close', func_kwargs=dict(tol=100),
+                       maps_zero_to_zero=True)
 def real_if_close(x: _ElementwiseType, tol: float = 100) -> _ElementwiseType:
     """If close to real, return the :func:`real` part, :ref:`elementwise <diagonal_elementwise>`.
 
