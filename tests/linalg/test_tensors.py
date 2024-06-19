@@ -55,23 +55,25 @@ def make_compatible_tensor_any_class(request, make_compatible_tensor, compatible
     return make
 
 
+# TENSOR CLASSES
+
+class DummyTensor(tensors.Tensor):
+    """Want to test the Tensor class directly.
+
+    This overrides the abstractmethods, so we can actually make instances.
+    """
+
+    def copy(self, deep=True) -> tensors.Tensor:
+        raise NotImplementedError
+
+    def to_dense_block(self, leg_order: list[int | str] = None, dtype: Dtype = None):
+        raise NotImplementedError
+
+    def as_SymmetricTensor(self) -> SymmetricTensor:
+        raise NotImplementedError
+
+
 def test_base_Tensor(make_compatible_space, compatible_backend):
-
-    class DummyTensor(tensors.Tensor):
-        """Want to test the Tensor class directly.
-
-        This overrides the abstractmethods, so we can actually make instances.
-        """
-
-        def copy(self, deep=True) -> tensors.Tensor:
-            raise NotImplementedError
-
-        def to_dense_block(self, leg_order: list[int | str] = None, dtype: Dtype = None):
-            raise NotImplementedError
-
-        def as_SymmetricTensor(self) -> SymmetricTensor:
-            raise NotImplementedError
-
 
     a, b, c, d, e = [make_compatible_space() for _ in range(5)]
 
@@ -764,6 +766,33 @@ def test_from_block_su2_symm(symmetry_backend, block_backend):
     print(heisenberg_4.reshape((4, 4)))
 
     assert backend.block_allclose(recovered_block, heisenberg_4)
+
+
+@pytest.mark.parametrize(
+    'codomain_dims, domain_dims, labels',
+    [
+        ([42, 42], [42, 42], ['a', 'b', 'c', 'd']),
+        ([42], [42, 42], ['a', 'b', 'c']),
+        ([42, 42, 12345, 42], [1], ['a', 'b', 'c', 'lorem', 'ipsum']),
+        ([], [42, 42], ['a', 'b']),
+        ([42, 42, 42], [], ['a', 'b', 'c']),
+    ]
+)
+def test_Tensor_ascii_diagram(codomain_dims, domain_dims, labels):
+    """
+    You may find useful (see comments in :func:`test_Tensor_str_repr`)::
+
+        pytest -rP -k test_Tensor_ascii_diagram > playground/test_Tensor_ascii_diagram.txt && code playground/test_Tensor_ascii_diagram.txt
+
+    or for vim::
+
+        pytest -rP -k test_Tensor_ascii_diagram > playground/test_Tensor_ascii_diagram.txt && vim playground/test_Tensor_ascii_diagram.txt
+
+    """
+    codomain = [ElementarySpace.from_trivial_sector(dim=d) for d in codomain_dims]
+    domain = [ElementarySpace.from_trivial_sector(dim=d) for d in domain_dims]
+    T = DummyTensor(codomain, domain, backend=get_backend(), labels=labels, dtype=Dtype.complex128)
+    print(T.ascii_diagram)
 
 
 @pytest.mark.parametrize(

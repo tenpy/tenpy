@@ -269,6 +269,77 @@ class Tensor(metaclass=ABCMeta):
         self.backend.test_leg_sanity(self.codomain)
         assert self.dtype not in self._forbidden_dtypes
 
+    @property
+    def ascii_diagram(self) -> str:
+        # example:
+        # |     123   123   132   123
+        # |       a     b     c     d
+        # |   ┏━━━┷━━━━━┷━━━━━┷━━━━━┷━━━┓
+        # |   ┃                         ┃
+        # |   ┗┯━━━━━┯━━━━━┯━━━━━┯━━━━━┯┛
+        # |    i     h     g     f     e
+        # |   42   777    11     2     3
+
+        DISTANCE = 5  # distance between legs in chars, i.e. number of '━' between the '┯'
+        codomain_dims = [
+            str(l.dim).rjust(DISTANCE) if len(str(l.dim)) <= DISTANCE else 'huge'.rjust(DISTANCE)
+            for l in self.codomain
+        ]
+        domain_dims = [
+            str(l.dim).rjust(DISTANCE) if len(str(l.dim)) <= DISTANCE else 'huge'.rjust(DISTANCE)
+            for l in self.domain
+        ]
+        codomain_labels = [
+            str(l).rjust(DISTANCE) if len(str(l)) <= DISTANCE else '...'.rjust(DISTANCE)
+            for l in self.codomain_labels
+        ]
+        domain_labels = [
+            str(l).rjust(DISTANCE) if len(str(l)) <= DISTANCE else '...'.rjust(DISTANCE)
+            for l in self.domain_labels
+        ]
+        start = ' ' * (DISTANCE - 2)  # such that f'{start}┗┯' has length DISTANCE
+        #
+        assert DISTANCE % 2 == 1
+        if self.num_codomain_legs > self.num_domain_legs:
+            codomain_extra = 0
+            domain_extra = ((DISTANCE + 1) // 2) * (self.num_codomain_legs - self.num_domain_legs)
+        else:
+            codomain_extra = ((DISTANCE + 1) // 2) * (self.num_domain_legs - self.num_codomain_legs)
+            domain_extra = 0
+        #
+        if self.num_codomain_legs > 0:
+            top_border = ''.join([
+                start,
+                '┏',
+                '━' * codomain_extra,
+                (DISTANCE * '━').join(['┷'] * self.num_codomain_legs),
+                '━' * codomain_extra,
+                '┓'
+            ])
+        else:
+            top_border = ''.join([
+                start, '┏', '━' * ((DISTANCE + 1) * (self.num_domain_legs - 1) + 1), '┓'
+            ])
+        body = ''.join([start, '┃', ' ' * (len(top_border) - len(start) - 2), '┃'])
+        if self.num_domain_legs > 0:
+            bottom_border = ''.join([
+                start,
+                '┗',
+                '━' * domain_extra,
+                (DISTANCE * '━').join(['┯'] * self.num_domain_legs),
+                '━' * domain_extra,
+                '┛'
+            ])
+        else:
+            bottom_border = ''.join([
+                start, '┗', '━' * ((DISTANCE + 1) * (self.num_codomain_legs - 1) + 1), '┛'
+            ])
+        return '\n'.join([' ' * codomain_extra + ' '.join(codomain_dims),
+                          ' ' * codomain_extra + ' '.join(codomain_labels),
+                          top_border, body, bottom_border,
+                          ' ' * domain_extra + ' '.join(domain_labels),
+                          ' ' * domain_extra + ' '.join(domain_dims)])
+
     @abstractmethod
     def as_SymmetricTensor(self) -> SymmetricTensor:
         ...
@@ -486,29 +557,18 @@ class Tensor(metaclass=ABCMeta):
         return in_domain, co_domain_idx, idx
 
     def _repr_header_lines(self, indent: str) -> list[str]:
-        codomain_labels = []
-        for n in range(self.num_codomain_legs):
-            l = self._labels[n]
-            if l is None:
-                codomain_labels.append(f'?{n}')
-            else:
-                codomain_labels.append(f'"{l}"')
-        codomain_labels = '[' + ', '.join(codomain_labels) + ']'
-        #
-        domain_labels = []
-        for n in reversed(range(self.num_codomain_legs, self.num_legs)):
-            l = self._labels[n]
-            if l is None:
-                domain_labels.append(f'?{n}')
-            else:
-                domain_labels.append(f'"{l}"')
-        domain_labels = '[' + ', '.join(domain_labels) + ']'
+        if all(l is None for l in self._labels):
+            labels_str = 'None'
+        else:
+            labels_str = f'{self._labels}   ;   {self.codomain_labels} <- {self.domain_labels}'
+        codomain_dims = self.shape[:self.num_codomain_legs]
+        domain_dims = tuple(reversed(self.shape[self.num_codomain_legs:]))
+        shape_str = f'{self.shape}   ;   {codomain_dims} <- {domain_dims}'
         lines = [
             f'{indent}* Backend: {self.backend!s}',
             f'{indent}* Symmetry: {self.symmetry!s}',
-            f'{indent}* Labels: {self._labels}',
-            f'{indent}* Shape: {self.shape}',
-            f'{indent}* Domain -> Codomain: {domain_labels} -> {codomain_labels}'
+            f'{indent}* Labels: {labels_str}',
+            f'{indent}* Shape: {shape_str}',
         ]
         return lines
 
