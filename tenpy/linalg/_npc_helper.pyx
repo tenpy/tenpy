@@ -57,9 +57,7 @@ IF HAVE_MKL:
         # in that way, we don't rely on a `export MKL_INTERFACE_LAYER="ILP64"` by the user.
 
     ctypedef MKL_INT BLAS_INT
-    ctypedef np.complex_t complex_t
-    cdef extern from "mkl.h" nogil:
-        ctypedef complex_t MKL_Complex16
+    ctypedef np.complex128_t MKL_Complex16
 ELSE:
     from scipy.linalg.cython_blas cimport (dgemm, zgemm,
             ddot, zdotc, zdotu, daxpy, zaxpy, dscal, zscal, zdscal)
@@ -71,14 +69,14 @@ ELSE:
         CblasNoTrans=111
         CblasTrans=112
         CblasConjTrans=113
-    ctypedef np.complex_t MKL_Complex16
+    ctypedef np.complex128_t MKL_Complex16
 
 
 compiled_with_MKL = HAVE_MKL
 
-QTYPE = np.int_             # numpy dtype for the charges
-ctypedef np.int_t QTYPE_t   # compile time type for QTYPE
-cdef int QTYPE_num = np.NPY_LONG # == np.dtype(QTYPE).num
+QTYPE = np.int64             # numpy dtype for the charges
+ctypedef np.int64_t QTYPE_t   # compile time type for QTYPE
+cdef int QTYPE_num = np.NPY_INT64 # == np.dtype(QTYPE).num
 
 ctypedef np.intp_t intp_t   # compile time type for np.intp
 cdef int intp_num = np.NPY_INTP
