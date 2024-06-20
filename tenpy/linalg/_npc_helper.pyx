@@ -278,7 +278,7 @@ cdef class CblasGemmBatch:
 IF HAVE_MKL and USE_MKL_GEMM_BATCH:
     pass # don't define dgemm_batch and zgemm_batch to avoid compiler warnings about unused functions
 ELSE:
-    cdef void dgemm_batch(BLAS_INT * m, BLAS_INT * n, BLAS_INT * k, double * alpha, double ** A, double ** B, double * beta, double ** C, int batch_size) nogil:
+    cdef void dgemm_batch(BLAS_INT * m, BLAS_INT * n, BLAS_INT * k, double * alpha, double ** A, double ** B, double * beta, double ** C, int batch_size) noexcept nogil:
         """Perform a batch of dgemm matrix multiplications.
 
         Assumes that all matrices are stored C-contiguous.
@@ -295,7 +295,7 @@ ELSE:
                     A[b], <int*>&k[b], &beta[b], C[b], <int*>&n[b])
 
 
-    cdef void zgemm_batch(BLAS_INT * m, BLAS_INT * n, BLAS_INT * k, complex128_t* alpha, complex128_t ** A, complex128_t ** B, complex128_t * beta, complex128_t ** C, int batch_size) nogil:
+    cdef void zgemm_batch(BLAS_INT * m, BLAS_INT * n, BLAS_INT * k, complex128_t* alpha, complex128_t ** A, complex128_t ** B, complex128_t * beta, complex128_t ** C, int batch_size) noexcept nogil:
         """Perform a batch of zgemm matrix multiplications.
 
         Assumes that all matrices are stored C-contiguous.
@@ -313,7 +313,7 @@ ELSE:
 
 
 
-cdef void _blas_inpl_add(int N, void* A, void* B, complex128_t prefactor, int dtype_num) nogil:
+cdef int _blas_inpl_add(int N, void* A, void* B, complex128_t prefactor, int dtype_num) nogil:
     """Use blas for ``A += prefactor * B``.
 
     Assumes (!) that A, B are contiguous C-style matrices of dimensions MxK, KxN , MxN.
@@ -333,9 +333,10 @@ cdef void _blas_inpl_add(int N, void* A, void* B, complex128_t prefactor, int dt
             cblas_zaxpy(N, <MKL_Complex16*> prefactor_ptr, <MKL_Complex16*> B, 1, <MKL_Complex16*> A, 1)
         ELSE:
             zaxpy(&N, &prefactor, <double complex*> B, &one, <double complex*> A, &one)
+    return 0; # int return type only to allow cython to do error handling
 
 
-cdef void _blas_inpl_scale(int N, void* A, complex128_t prefactor, int dtype_num) nogil:
+cdef int _blas_inpl_scale(int N, void* A, complex128_t prefactor, int dtype_num) nogil:
     """Use blas for ``A *= prefactor``.
 
     Assumes (!) that A is contiguous C-style matrices of dimensions N.
@@ -360,12 +361,13 @@ cdef void _blas_inpl_scale(int N, void* A, complex128_t prefactor, int dtype_num
                 cblas_zscal(N, &prefactor, A, 1)
             ELSE:
                 zscal(&N, &prefactor, <double complex*> A, &one)
+    return 0; # int return type only to allow cython to do error handling
 
 
 
 cdef void _sliced_strided_copy(char* dest_data, intp_t* dest_strides,
                           char* src_data, intp_t* src_strides,
-                          intp_t* slice_shape, intp_t ndim, intp_t width) nogil:
+                          intp_t* slice_shape, intp_t ndim, intp_t width) noexcept nogil:
     """Implementation of :func:`_sliced_copy`.
 
     `src_beg` and `dest_beg` are [0, 0, ...] and the arrays are given by pointers & strides.
@@ -438,7 +440,7 @@ def _float_complex_are_64_bit(dtype_float, dtype_complex):
 @cython.wraparound(False)
 @cython.boundscheck(False)
 @cython.cdivision(True)
-cdef void _make_valid_charges_1D(QTYPE_t[::1] chinfo_mod, QTYPE_t[::1] charges) nogil:
+cdef void _make_valid_charges_1D(QTYPE_t[::1] chinfo_mod, QTYPE_t[::1] charges) noexcept nogil:
     """same as ChargeInfo.make_valid for 1D charges, but works in place"""
     cdef intp_t qnumber = chinfo_mod.shape[0]
     cdef int j
@@ -455,7 +457,7 @@ cdef void _make_valid_charges_1D(QTYPE_t[::1] chinfo_mod, QTYPE_t[::1] charges) 
 @cython.wraparound(False)
 @cython.boundscheck(False)
 @cython.cdivision(True)
-cdef void _make_valid_charges_2D(QTYPE_t[::1] chinfo_mod, QTYPE_t[:, ::1] charges) nogil:
+cdef void _make_valid_charges_2D(QTYPE_t[::1] chinfo_mod, QTYPE_t[:, ::1] charges) noexcept nogil:
     """same as ChargeInfo.make_valid for 2D charges, but works in place"""
     cdef intp_t qnumber = chinfo_mod.shape[0]
     cdef intp_t L = charges.shape[0]
