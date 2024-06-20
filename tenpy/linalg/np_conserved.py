@@ -1421,6 +1421,7 @@ class Array:
         .. versionchanged :: 1.0
             Make `qconj` default to the `qconj` of the first leg to be combine rather than just +1.
 
+        foo
 
         Parameters
         ----------
