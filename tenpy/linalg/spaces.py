@@ -76,12 +76,12 @@ class Space(metaclass=ABCMeta):
             slices[:, 1] = slice_ends = np.cumsum(multiplicities * sector_dims)
             slices[1:, 0] = slice_ends[:-1]  # slices[0, 0] remains 0, which is correct
             self.slices = slices
-            self.dim = np.sum(sector_dims * multiplicities)
+            self.dim = np.sum(sector_dims * multiplicities).item()
         else:
             self.sector_dims = None
             self.sector_qdims = sector_qdims = symmetry.batch_qdim(sectors)
             self.slices = None
-            self.dim = np.sum(sector_qdims * multiplicities)
+            self.dim = np.sum(sector_qdims * multiplicities).item()
         self.is_bra_space = is_bra_space
 
     def test_sanity(self):
