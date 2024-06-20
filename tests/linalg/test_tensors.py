@@ -830,18 +830,18 @@ def test_Tensor_str_repr(cls, codomain, domain, make_compatible_tensor, str_max_
     T = make_compatible_tensor(codomain=codomain, domain=domain, cls=cls)
     print('repr(T):')
     res = repr(T)
+    print(res)
     lines = res.split('\n')
     assert all(len(line) <= terminal_width for line in lines)
     assert len(lines) <= repr_max_lines
-    print(res)
     #
     print()
     print('str(T):')
     res = str(T)
+    print(res)
     lines = res.split('\n')
     assert all(len(line) <= terminal_width for line in lines)
     assert len(lines) <= str_max_lines
-    print(res)
 
 
 # TENSOR FUNCTIONS
