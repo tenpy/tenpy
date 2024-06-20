@@ -114,11 +114,6 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def data_item(self, a: Data | DiagonalData) -> float | complex:
         return self.block_item(a)
     
-    def _data_repr_lines(self, a: SymmetricTensor, indent: str, max_width: int, max_lines: int):
-        block_lines = self._block_repr_lines(a.data, indent=indent + '  ', max_width=max_width,
-                                             max_lines=max_lines - 1)
-        return [f'{indent}* Data:', *block_lines]
-
     def diagonal_all(self, a: DiagonalTensor) -> bool:
         return self.block_all(a.data)
 
@@ -294,8 +289,7 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return self.block_norm(a.data)
 
     def outer(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
-        raise NotImplementedError  # TODO not yet reviewed. careful with leg order!
-        return self.block_outer(a.data, b.data)
+        return self.block_tensor_outer(a.data, b.data, K=a.num_codomain_legs)
 
     def permute_legs(self, a: SymmetricTensor, codomain_idcs: list[int], domain_idcs: list[int],
                      levels: list[int] | None) -> tuple[Data | None, ProductSpace, ProductSpace]:

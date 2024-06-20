@@ -1285,9 +1285,42 @@ def test_norm():
     pytest.skip('Test not written yet')  # TODO
 
 
-# TODO
-def test_outer():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.parametrize(
+    'cls_A, cls_B, cA, dA, cB, dB',
+    [pytest.param(SymmetricTensor, SymmetricTensor, 1, 2, 2, 1, id='Sym@Sym-1-2-2-1'),
+     pytest.param(SymmetricTensor, SymmetricTensor, 2, 1, 1, 2, id='Sym@Sym-2-1-1-2'),
+     pytest.param(SymmetricTensor, SymmetricTensor, 0, 3, 2, 0, id='Sym@Sym-0-3-2-0'),
+     pytest.param(ChargedTensor, ChargedTensor, 1, 2, 2, 1, id='Charged@Charged-1-2-2-1'),
+     pytest.param(ChargedTensor, ChargedTensor, 0, 3, 2, 0, id='Charged@Charged-0-3-2-0'),
+     pytest.param(ChargedTensor, SymmetricTensor, 1, 2, 2, 1, id='Charged@Sym-1-2-2-1'),
+     pytest.param(SymmetricTensor, ChargedTensor, 0, 3, 2, 0, id='Sym@Charged-0-3-2-0'),
+     ]
+)
+def test_outer(cls_A, cls_B, cA, dA, cB, dB, make_compatible_tensor):
+    A_labels = list('abcdefg')[:cA + dA]
+    B_labels = list('hijklmn')[:cB + dB]
+    A: cls_A = make_compatible_tensor(cA, dA, cls=cls_A, labels=A_labels)
+    B: cls_B = make_compatible_tensor(cB, dB, cls=cls_B, labels=B_labels)
+
+    if isinstance(A.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError, match='outer not implemented'):
+            _ = tensors.outer(A, B, relabel1={'a': 'x'}, relabel2={'h': 'y'})
+        pytest.xfail()
+    if cls_A is ChargedTensor and cls_B is ChargedTensor:
+        with pytest.raises(NotImplementedError, match='tensors.combine_legs not implemented'):
+            _ = tensors.outer(A, B, relabel1={'a': 'x'}, relabel2={'h': 'y'})
+        pytest.xfail()
+
+    res = tensors.outer(A, B, relabel1={'a': 'x'}, relabel2={'h': 'y'})
+
+    res.test_sanity()
+    A_relabelled = ['x', *A_labels[1:]]
+    B_relabelled = ['y', *B_labels[1:]]
+    assert res.labels == [*A_relabelled[:cA], *B_relabelled, *A_relabelled[cA:]]
+
+    perm = [*range(cA), *range(cA + dA, cA + cB + dB + dA), *range(cA, cA + dA)]
+    expect = np.transpose(np.tensordot(A.to_numpy(), B.to_numpy(), [(), ()]), perm)
+    npt.assert_almost_equal(res.to_numpy(), expect)
 
 
 @pytest.mark.parametrize(

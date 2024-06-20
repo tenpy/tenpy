@@ -639,83 +639,6 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
             return a.dtype.zero_scalar
         return self.block_item(a.blocks[0])
 
-    def _data_repr_lines(self, a: SymmetricTensor, indent: str, max_width: int, max_lines: int):
-        raise NotImplementedError  # TODO not yet reviewed
-        from ..dummy_config import printoptions
-        from ..misc import join_as_many_as_possible
-        
-        data = a.data
-        if len(data.blocks) == 0:
-            return [f'{indent}* Data : no non-zero blocks']
-        if max_lines <= 1:
-            return [f'{indent}* Data : Showing none of {len(data.blocks):d} blocks']
-
-        line_start = f'{indent}* Data for sectors '
-
-        if not printoptions.summarize_blocks:
-            # try showing all blocks
-            lines = []
-            for block, block_inds in zip(data.blocks, data.block_inds):
-                sectors = join_as_many_as_possible(
-                    # TODO dont use legs! use conventional_leg_order
-                    [a.symmetry.sector_str(leg.sectors[i]) for leg, i in zip(a.legs, block_inds)],
-                    separator=', ', max_len=printoptions.linewidth - len(line_start) - 1
-                )
-                lines.append(f'{line_start}[{sectors}]:')
-                lines.extend(self._block_repr_lines(block,
-                                                    indent=indent + printoptions.indent * ' ',
-                                                    max_width=max_width,
-                                                    max_lines=max_lines))
-                if len(lines) > max_lines:
-                    break
-            else:  # (no break ocurred)
-                return lines
-            
-
-        # try showing shapes of all blocks
-        lines = []
-        for block, block_inds in zip(data.blocks, data.block_inds):
-            sectors = join_as_many_as_possible(
-                # TODO dont use legs! use conventional_leg_order
-                [a.symmetry.sector_str(leg.sectors[i]) for leg, i in zip(a.legs, block_inds)],
-                separator=', ', max_len=printoptions.linewidth - len(line_start) - 1
-            )
-            shape = str(self.block_shape(block))
-            if len(line_start) + len(sectors) + 10 + len(shape) <= printoptions.linewidth:
-                lines.append(f'{line_start}[{sectors}]: shape {shape}')
-            else:
-                lines.append(f'{line_start}[{sectors}]: shape {shape}')
-                lines.append(f'{indent}    shape {shape}')
-            if len(lines) > max_lines:
-                break
-        else:  # (no break ocurred)
-            return lines
-
-        # only show shapes of largest blocks
-        lines = []
-        sizes = np.prod([self.block_shape(block) for block in data.blocks], axis=1)
-        missing_blocks = len(a.data.blocks)
-        for j in np.argsort(sizes):
-            sectors = join_as_many_as_possible(
-                [a.symmetry.sector_str(leg.sectors[i])
-                 # TODO dont use legs! use conventional_leg_order
-                 for leg, i in zip(a.legs, a.data.block_inds[j])],
-                separator=', ', max_len=printoptions.linewidth - len(line_start) - 1
-            )
-            shape = str(self.block_shape(a.data.blocks[j]))
-            if len(line_start) + len(sectors) + 10 + len(shape) <= printoptions.linewidth:
-                new_lines = [f'{line_start}[{sectors}]: shape {shape}']
-            else:
-                new_lines = [f'{line_start}[{sectors}]: shape {shape}',
-                             f'{indent}    shape {shape}']
-            if len(lines) + len(new_lines) >= max_lines:
-                lines.append(f'{indent}* Data for {missing_blocks} smaller blocks not shown')
-                return lines
-            lines.extend(new_lines)
-            missing_blocks -= 1
-
-        raise ValueError  # the above return should have triggered
-
     def diagonal_all(self, a: DiagonalTensor) -> bool:
         if len(a.data.block_inds) < a.leg.num_sectors:
             # missing blocks are filled with False
@@ -1327,28 +1250,30 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return np.linalg.norm(block_norms, ord=2)
 
     def outer(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
-        raise NotImplementedError  # TODO not yet reviewed
-        res_dtype = a.data.dtype.common(b.data.dtype)
         a_blocks = a.data.blocks
         b_blocks = b.data.blocks
-        if a.data.dtype != res_dtype:
-            a_blocks = [self.block_to_dtype(T, res_dtype) for T in a_blocks]
-        if b.data.dtype != res_dtype:
-            b_blocks = [self.block_to_dtype(T, res_dtype) for T in b_blocks]
         a_block_inds = a.data.block_inds
         b_block_inds = b.data.block_inds
-        l_a, num_legs_a = a_block_inds.shape
-        l_b, num_legs_b = b_block_inds.shape
-        grid = np.indices([len(a_block_inds), len(b_block_inds)]).T.reshape(-1, 2)
+        l_a, N_a = a_block_inds.shape
+        l_b, N_b = b_block_inds.shape
+        K_a = a.num_codomain_legs
+        # convert to common dtype
+        res_dtype = Dtype.common(a.dtype, b.dtype)
+        if a.dtype != res_dtype:
+            a_blocks = [self.block_to_dtype(T, res_dtype) for T in a_blocks]
+        if b.dtype != res_dtype:
+            b_blocks = [self.block_to_dtype(T, res_dtype) for T in b_blocks]
+        #
+        grid = np.indices([l_a, l_b]).T.reshape(-1, 2)
         # grid is lexsorted, with rows as all combinations of a/b block indices.
-        res_block_inds = np.empty((l_a * l_b, num_legs_a + num_legs_b), dtype=int)
-        res_block_inds[:, :num_legs_a] = a_block_inds[grid[:, 0]]
-        res_block_inds[:, num_legs_a:] = b_block_inds[grid[:, 1]]
-
-        res_blocks = [self.block_outer(a_blocks[i], b_blocks[j]) for i, j in grid]
-
-        # TODO (JU) are the block_inds actually sorted?
-        #  if yes: add comment explaining why, adjust argument below
+        #
+        res_block_inds = np.empty((l_a * l_b, N_a + N_b), dtype=int)
+        res_block_inds[:, :K_a] =  a_block_inds[grid[:, 0], :K_a]
+        res_block_inds[:, K_a:K_a+N_b] = b_block_inds[grid[:, 1]]
+        res_block_inds[:, K_a+N_b:] = a_block_inds[grid[:, 0], K_a:]
+        res_blocks = [self.block_tensor_outer(a_blocks[i], b_blocks[j], K_a) for i, j in grid]
+        # res_block_inds are in general not sorted.
+        #
         return AbelianBackendData(res_dtype, res_blocks, res_block_inds, is_sorted=False)
 
     def permute_legs(self, a: SymmetricTensor, codomain_idcs: list[int], domain_idcs: list[int],

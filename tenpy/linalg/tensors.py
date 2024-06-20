@@ -2283,7 +2283,7 @@ class ChargedTensor(Tensor):
         Parameters
         -
         """
-        inv_part = combine_legs(invariant_part, -1, -2)
+        inv_part = combine_legs(invariant_part, [-1, -2])
         inv_part.set_label(-1, cls._CHARGE_LEG_LABEL)
         if state1 is None and state2 is None:
             state = None
@@ -3033,7 +3033,7 @@ def combine_legs(tensor: Tensor,
 
     # 4) Build the data / finish up
     # ==============================================================================================
-    raise NotImplementedError  # TODO probably need to rework the backend method.
+    raise NotImplementedError('tensors.combine_legs not implemented')  # TODO probably need to rework the backend method.
     data = tensor.backend.combine_legs(tensor, ...)
     return SymmetricTensor(data, codomain=codomain, domain=domain, backend=tensor.backend,
                            labels=[codomain_labels, domain_labels])
@@ -3664,7 +3664,47 @@ def outer(tensor1: Tensor, tensor2: Tensor,
         A mapping of labels for each of the tensors. The result has labels, as if the
         input tensors were relabelled accordingly before contraction.
     """
-    raise NotImplementedError  # TODO
+    if isinstance(tensor1, (Mask, DiagonalTensor)):
+        tensor1 = tensor1.as_SymmetricTensor()
+    if isinstance(tensor2, (Mask, DiagonalTensor)):
+        tensor2 = tensor2.as_SymmetricTensor()
+    if isinstance(tensor1, ChargedTensor):
+        if isinstance(tensor2, ChargedTensor):
+            inv_part = outer(tensor1.invariant_part, tensor2.invariant_part,
+                             relabel1=relabel1, relabel2=relabel2)
+            inv_part = move_leg(inv_part, tensor1.num_codomain_legs + tensor2.num_legs, domain_pos=1)
+            return ChargedTensor.from_two_charge_legs(inv_part,
+                                                      tensor1.charged_state,
+                                                      tensor2.charged_state)
+        else:
+            inv_part = outer(tensor1.invariant_part, tensor2, relabel1=relabel1, relabel2=relabel2)
+            return ChargedTensor(inv_part, tensor1.charged_state)
+    if isinstance(tensor2, ChargedTensor):
+        inv_part = outer(tensor1, tensor2.invariant_part, relabel1=relabel1, relabel2=relabel2)
+        inv_part = move_leg(inv_part, tensor1.num_codomain_legs + tensor2.num_legs, domain_pos=0)
+        return ChargedTensor(inv_part, tensor2.charged_state)
+    backend = get_same_backend(tensor1, tensor2)
+    data = backend.outer(tensor1, tensor2)
+    # TODO is it easier to compute the (co)domain in the backend?
+    codomain = ProductSpace.from_partial_products(tensor1.codomain, tensor2.codomain, backend=backend)
+    domain = ProductSpace.from_partial_products(tensor1.domain, tensor2.domain, backend=backend)
+    # construct new labels
+    codomain_labels = []
+    domain_labels = []
+    if relabel1 is None:
+        codomain_labels.extend(tensor1.codomain_labels)
+        domain_labels.extend(tensor1.domain_labels)
+    else:
+        codomain_labels.extend(relabel1.get(l, l) for l in tensor1.codomain_labels)
+        domain_labels.extend(relabel1.get(l, l) for l in tensor1.domain_labels)
+    if relabel2 is None:
+        codomain_labels.extend(tensor2.codomain_labels)
+        domain_labels.extend(tensor2.domain_labels)
+    else:
+        codomain_labels.extend(relabel2.get(l, l) for l in tensor2.codomain_labels)
+        domain_labels.extend(relabel2.get(l, l) for l in tensor2.domain_labels)
+    #
+    return SymmetricTensor(data, codomain, domain, backend, [codomain_labels, domain_labels])
 
 
 def _permute_legs(tensor: Tensor,

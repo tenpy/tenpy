@@ -173,13 +173,6 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def _data_repr_lines(self, a: SymmetricTensor, indent: str, max_width: int, max_lines: int) -> list[str]:
-        """helper function for Tensor.__repr__ ; return a list of strs which are the lines
-        comprising the ``"* Data:"``section.
-        indent is to be placed in front of every line"""
-        ...
-
-    @abstractmethod
     def diagonal_all(self, a: DiagonalTensor) -> bool:
         """Assumes a boolean DiagonalTensor. If all entries are True."""
         ...
@@ -696,6 +689,20 @@ class BlockBackend(metaclass=ABCMeta):
     def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]
                    ) -> Block:
         ...
+
+    def block_tensor_outer(self, a: Block, b: Block, K: int) -> Block:
+        """Version of ``tensors.outer`` on blocks.
+
+        Note the different leg order to usual outer products::
+
+            res[i1,...,iK,j1,...,jM,i{K+1},...,iN] == a[i1,...,iN] * b[j1,...,jM]
+
+        intended to be used with ``K == a_num_codomain_legs``.
+        """
+        res = self.block_outer(a, b)  # [i1,...,iN,j1,...,jM]
+        N = len(self.block_shape(a))
+        M = len(self.block_shape(b))
+        return self.block_permute_axes(res, [*range(K), *range(N, N + M), *range(K, N)])
 
     @abstractmethod
     def block_shape(self, a: Block) -> tuple[int]:

@@ -10,7 +10,7 @@ from .abstract_backend import (
     iter_common_noncommon_sorted_arrays
 )
 from ..dtypes import Dtype
-from ..symmetries import Sector, SectorArray, Symmetry, FusionStyle
+from ..symmetries import Sector, SectorArray, Symmetry
 from ..spaces import Space, ElementarySpace, ProductSpace
 from ..trees import FusionTree, fusion_trees
 
@@ -259,55 +259,6 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         if len(a.blocks) == 0:
             return a.dtype.zero_scalar
         return self.block_item(a.blocks[0])
-
-    def _data_repr_lines(self, a: SymmetricTensor, indent: str, max_width: int,
-                         max_lines: int) -> list[str]:
-        raise NotImplementedError  # TODO not yet reviewed
-        from ..dummy_config import printoptions
-        if len(a.data.blocks) == 0:
-            return [f'{indent}* Data : no non-zero blocks']
-
-        lines = []
-        for alpha_tree, beta_tree, entries in _tree_block_iter(a, backend=self):
-            # build (a_before_Z) <- (a_after_Z) <- coupled <- (b_after_Z) <- (b_before_Z)
-            a_before_Z, a_after_Z, coupled = alpha_tree._str_uncoupled_coupled(
-                a.symmetry, alpha_tree.uncoupled, alpha_tree.coupled, alpha_tree.are_dual
-            ).split(' -> ')
-            b_before_Z, b_after_Z, coupled = beta_tree._str_uncoupled_coupled(
-                a.symmetry, beta_tree.uncoupled, beta_tree.coupled, beta_tree.are_dual
-            ).split(' -> ')
-            sectors = f'{a_after_Z} <- {coupled} <- {b_after_Z}'
-            if a_before_Z != a_after_Z:
-                sectors = a_before_Z + ' <- ' + sectors
-            if b_before_Z != b_after_Z:
-                sectors = sectors + ' <- ' + b_before_Z
-
-            if a.symmetry.fusion_style is FusionStyle.single:
-                lines.append(f'{indent}* Data for sectors {sectors}')
-            elif a.symmetry.fusion_style is FusionStyle.multiple_unique:
-                # dont need multiplicity labels
-                a_inner = ', '.join(a.symmetry.sector_str(i) for i in alpha_tree.inner_sectors)
-                b_inner = ', '.join(a.symmetry.sector_str(i) for i in beta_tree.inner_sectors)
-                lines.append(f'{indent}* Data for trees {sectors}')
-                lines.append(f'{indent}  with inner sectors ({a_inner}) and ({b_inner})')
-            else:
-                a_inner = ', '.join(a.symmetry.sector_str(i) for i in alpha_tree.inner_sectors)
-                b_inner = ', '.join(a.symmetry.sector_str(i) for i in beta_tree.inner_sectors)
-                a_mults = ', '.join(map(str, alpha_tree.multiplicities))
-                b_mults = ', '.join(map(str, beta_tree.multiplicities))
-                lines.append(f'{indent}* Data for trees {sectors}')
-                lines.append(f'{indent}  with inner sectors ({a_inner}) and ({b_inner})')
-                lines.append(f'{indent}  with multiplicities ({a_mults}) <- ({b_mults})')
-            lines.extend(self._block_repr_lines(entries, indent=indent + printoptions.indent * ' ',
-                                                max_width=max_width, max_lines=max_lines))
-
-            if (len(lines) > max_lines) or any(len(line) > max_width for line in lines):
-                # fallback to just stating number of blocks.
-                num_entries = sum(prod(self.block_shape(b)) for b in a.data.blocks)
-                return [
-                    f'{indent}* Data: {num_entries} entries in {len(a.data.blocks)} blocks.'
-                ]
-        return lines
 
     def diagonal_all(self, a: DiagonalTensor) -> bool:
         if len(a.data.blocks) < a.domain.num_sectors:
@@ -640,7 +591,6 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return self.block_sqrt(norm_sq)
 
     def outer(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
-        # TODO what target leg order is easiest? does it match the one specified in Backend.outer?
         raise NotImplementedError('outer not implemented')  # TODO
 
     def permute_legs(self, a: SymmetricTensor, codomain_idcs: list[int], domain_idcs: list[int],
