@@ -1,3 +1,7 @@
+Files `*.txt` in this folder are included verbatim into the docs of the `docs/changelog/_latest.rst` version.
+We use this folder to collect the changes to be merged into the release notes of the next version 
+without having git merge conflicts. See also the `docs/contr/release.rst` documentation.
+
 NOTE: This file is required for the docbuild on git to function properly on github!
 The docbuild checks the contents of the ``doc/changelog/latest`` folder and fails if that folder
 does not exist. However, git ignores empty folders.
