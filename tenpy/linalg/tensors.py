@@ -81,11 +81,11 @@ from ..tools.misc import to_iterable, rank_data
 
 __all__ = ['Tensor', 'SymmetricTensor', 'DiagonalTensor', 'ChargedTensor', 'Mask',
            'add_trivial_leg', 'almost_equal', 'angle', 'apply_mask', 'apply_mask_DiagonalTensor',
-           'bend_legs', 'combine_legs', 'combine_to_matrix', 'conj', 'dagger', 'compose', 'entropy',
-           'imag', 'inner', 'is_scalar', 'item', 'linear_combination', 'move_leg', 'norm', 'outer',
-           'permute_legs', 'real', 'real_if_close', 'scalar_multiply', 'scale_axis', 'split_legs',
-           'sqrt', 'squeeze_legs', 'tdot', 'trace', 'transpose', 'zero_like', 'get_same_backend',
-           'check_same_legs']
+           'bend_legs', 'combine_legs', 'combine_to_matrix', 'conj', 'dagger', 'compose',
+           'enlarge_leg', 'entropy', 'imag', 'inner', 'is_scalar', 'item', 'linear_combination',
+           'move_leg', 'norm', 'outer', 'permute_legs', 'real', 'real_if_close', 'scalar_multiply',
+           'scale_axis', 'split_legs', 'sqrt', 'squeeze_legs', 'tdot', 'trace', 'transpose',
+           'zero_like', 'get_same_backend', 'check_same_legs']
 
 
 # TENSOR CLASSES
@@ -523,6 +523,9 @@ class Tensor(metaclass=ABCMeta):
         if in_domain:
             return self.domain[co_domain_idx]
         return self.codomain[co_domain_idx].dual
+
+    def dbg(self):
+        print(self.ascii_diagram)
 
     def _parse_leg_idx(self, which_leg: int | str) -> tuple[bool, int, int]:
         """Parse a leg index or a leg label.
@@ -2110,6 +2113,7 @@ class ChargedTensor(Tensor):
 
     def test_sanity(self):
         super().test_sanity()
+        assert self.labels == self.invariant_part.labels[:-1]
         self.invariant_part.test_sanity()
         if self.charged_state is not None:
             assert self.backend.block_shape(self.charged_state) == (self.charge_leg.dim,)
@@ -2636,7 +2640,7 @@ def almost_equal(tensor_1: Tensor, tensor_2: Tensor, rtol: float = 1e-5, atol=1e
 def apply_mask(tensor: Tensor, mask: Mask, leg: int | str) -> Tensor:
     """Apply a projection Mask to one leg of a tensor, *projecting* it to a smaller leg.
 
-    The mask must be a projection, i.e. its large leg is at the bottom.
+    The mask must be a projection, i.e. its large leg is in its domain, at the bottom.
     We apply the mask via map composition::
 
         |                                │   │   │   │   │
@@ -2670,7 +2674,7 @@ def apply_mask(tensor: Tensor, mask: Mask, leg: int | str) -> Tensor:
 
     See Also
     --------
-    compose, tdot, scale_axis, apply_mask_DiagonalTensor
+    enlarge_leg, compose, tdot, scale_axis, apply_mask_DiagonalTensor
     """
     in_domain, _, leg_idx = tensor._parse_leg_idx(leg)
 
@@ -2678,13 +2682,13 @@ def apply_mask(tensor: Tensor, mask: Mask, leg: int | str) -> Tensor:
         inv_part = apply_mask(tensor.invariant_part, mask, leg_idx)
         return ChargedTensor(inv_part, tensor.charged_state)
     
-    assert mask.large_leg == tensor.get_leg(leg_idx)
     assert mask.is_projection
+    assert mask.large_leg == tensor.get_leg(leg_idx)
 
     if isinstance(tensor, DiagonalTensor):
         tensor = tensor.as_SymmetricTensor()
     if isinstance(tensor, Mask):
-        raise NotImplementedError  # TODO
+        raise NotImplementedError('tensors.apply_mask not implemented for Mask')
     if not isinstance(tensor, SymmetricTensor):
         raise TypeError(f'Invalid tensor type: {type(tensor).__name__}')
     
@@ -3177,13 +3181,27 @@ def compose(tensor1: Tensor, tensor2: Tensor, relabel1: dict[str, str] = None,
     """
     if tensor1.domain != tensor2.codomain:
         raise ValueError('Incompatible legs')
+
+    if relabel1 is None:
+        codomain_labels = tensor1.codomain_labels
+    else:
+        codomain_labels = [relabel1.get(l, l) for l in tensor1.codomain_labels]
+    if relabel2 is None:
+        domain_labels = tensor2.domain_labels
+    else:
+        domain_labels = [relabel2.get(l, l) for l in tensor2.domain_labels]
+    res_labels = [codomain_labels, domain_labels]
     
-    res_labels = [[relabel1.get(l, l) for l in tensor1.codomain_labels],
-                  [relabel2.get(l, l) for l in tensor2.domain_labels]]
     if isinstance(tensor1, Mask):
-        return apply_mask(tensor2, tensor1, 0).set_labels(res_labels)
+        if tensor1.is_projection:
+            return apply_mask(tensor2, tensor1, 0).set_labels(res_labels)
+        else:
+            return enlarge_leg(tensor2, tensor1, 0).set_labels(res_labels)
     if isinstance(tensor2, Mask):
-        return apply_mask(tensor1, tensor2, -1).set_labels(res_labels)
+        if tensor2.is_projection:
+            return apply_mask(tensor1, tensor2, -1).set_labels(res_labels)
+        else:
+            return enlarge_leg(tensor1, tensor2, -1).set_label(res_labels)
 
     if isinstance(tensor1, DiagonalTensor):
         return scale_axis(tensor2, tensor1, 0).set_labels(res_labels)
@@ -3193,9 +3211,9 @@ def compose(tensor1: Tensor, tensor2: Tensor, relabel1: dict[str, str] = None,
     if isinstance(tensor1, ChargedTensor) or isinstance(tensor2, ChargedTensor):
         # OPTIMIZE dedicated implementation?
         return tdot(tensor1, tensor2,
-                        list(reversed(range(tensor1.num_codomain_legs, tensor1.num_legs))),
-                        list(range(tensor2.num_codomain_legs)),
-                        relabel1=relabel1, relabel2=relabel2)
+                    list(reversed(range(tensor1.num_codomain_legs, tensor1.num_legs))),
+                    list(range(tensor2.num_codomain_legs)),
+                    relabel1=relabel1, relabel2=relabel2)
 
     return _compose_SymmetricTensors(tensor1, tensor2, relabel1=relabel1, relabel2=relabel2)
 
@@ -3221,10 +3239,72 @@ def _compose_SymmetricTensors(tensor1: SymmetricTensor, tensor2: SymmetricTensor
         
     backend = get_same_backend(tensor1, tensor2)
     return SymmetricTensor(
-        data=backend.compose(tensor1, tensor2),  # TODO impl, rename
+        data=backend.compose(tensor1, tensor2),
         codomain=tensor1.codomain, domain=tensor2.domain, backend=backend,
         labels=[labels_codomain, labels_domain]
     )
+
+
+def enlarge_leg(tensor: Tensor, mask: Mask, leg: int | str) -> Tensor:
+    """Apply an inclusion Mask to one leg of a tensor *embedding* it into a larger leg.
+
+    The mask must be an inclusion, i.e. its large leg is in its codomain, at the top.
+    We apply the mask via map composition::
+
+        |                                │   │   │   │   │
+        |      │   │  ┏┷┓               ┏┷━━━┷━━━┷━━━┷━━━┷┓          │   │   │
+        |      │   │  ┃M┃               ┃ tensor          ┃         ┏┷━━━┷━━━┷┓
+        |      │   │  ┗┯┛               ┗┯━━━┯━━━━━━━━━━━┯┛         ┃ tensor  ┃
+        |     ┏┷━━━┷━━━┷┓       OR       │   │   ╭───╮   │    ==    ┗┯━━━┯━━━┯┛
+        |     ┃ tensor  ┃                │   │  ┏┷┓  │   │           │ ┏━┷━┓ │
+        |     ┗┯━━━┯━━━┯┛                │   │  ┃M┃  │   │           │ ┃M.T┃ │
+        |      │   │   │                 │   │  ┗┯┛  │   │           │ ┗━┯━┛ │
+        |                                │   ╰───╯   │   │
+
+    where ``M.T == transpose(M)``.
+
+    Parameters
+    ----------
+    tensor: Tensor
+        The tensor to enlarge
+    mask: Mask
+        An *inclusion* mask. Its small leg must be equal to the respective :attr:`Tensor.legs`.
+        Note that if the leg is in the domain this means ``mask.small_leg == domain[n].dual == legs[-n]``!
+    leg: int | str
+        Which leg of the tensor to enlarge
+
+    Returns
+    -------
+    An embedded tensor of the same type as `tensor` (exception: `DiagonalTensor`s are converted to
+    `SymmetricTensor`s before enlarging). The leg order and labels are the same as on `tensor`.
+    The new leg is *larger* (or equal) than before.
+
+    See Also
+    --------
+    apply_mask, compose, tdot, scale_axis
+    """
+    in_domain, _, leg_idx = tensor._parse_leg_idx(leg)
+
+    if isinstance(tensor, ChargedTensor):
+        inv_part = enlarge_leg(tensor.invariant_part, mask, leg_idx)
+        return ChargedTensor(inv_part, tensor.charged_state)
+
+    assert not mask.is_projection
+    assert mask.small_leg == tensor.get_leg(leg_idx)
+
+    if isinstance(tensor, DiagonalTensor):
+        tensor = tensor.as_SymmetricTensor()
+    if isinstance(tensor, Mask):
+        raise NotImplementedError('tensors.enlarge_leg not implemented for Mask')
+    if not isinstance(tensor, SymmetricTensor):
+        raise TypeError(f'Invalid tensor type: {type(tensor).__name__}')
+
+    if in_domain:
+        mask = transpose(mask)
+    backend = get_same_backend(tensor, mask)
+    data, codomain, domain = backend.enlarge_leg_SymmetricTensor(tensor, mask, leg_idx)
+    return SymmetricTensor(data=data, codomain=codomain, domain=domain, backend=backend,
+                           labels=tensor.labels)
 
 
 def entropy(p: DiagonalTensor | Sequence[float], n=1):
@@ -3308,6 +3388,7 @@ def inner(A: Tensor, B: Tensor, do_dagger: bool = True) -> float | complex:
         If ``False``, we assume that the dagger has already been performed on one of the tensors.
         Thus we require ``tensor_1.domain == tensor_2.codomain`` and vice versa and just perform
         the contraction and trace.
+    TODO allow an argument that specifies a permutation first? probably cant do levels well?
     
     See Also
     --------
@@ -3330,25 +3411,61 @@ def inner(A: Tensor, B: Tensor, do_dagger: bool = True) -> float | complex:
     if isinstance(B, (DiagonalTensor, Mask)):
         # same argument as above.
         if do_dagger:
-            return conj(trace(compose(dagger(B), A)))
+            return np.conj(trace(compose(dagger(B), A)))
         return trace(compose(A, B))
 
     # remaining cases: both are either SymmetricTensor or ChargedTensor
+    backend = get_same_backend(A, B)
     
     if isinstance(A, ChargedTensor) and isinstance(B, ChargedTensor):
-        raise NotImplementedError  # TODO
-    
-    if isinstance(B, ChargedTensor):
-        # reduce to the case where A is charged and B is not
+        if A.charged_state is None or B.charged_state is None:
+            raise ValueError('charged_state must be specified for inner()')
         if do_dagger:
-            return conj(inner(B, A))
-        return inner(B, A, do_dagger=False)
+            inv_part = _compose_SymmetricTensors(
+                bend_legs(dagger(A.invariant_part), num_codomain_legs=1),  # ['!*'] <- [*a_legs]
+                bend_legs(B.invariant_part, num_domain_legs=1)  # [*b_legs] <- ['!']
+            )  # ['!*', '!']
+            # OPTIMIZE: like GEMM, should we offer an interface where dagger is implicitly done during tdot?
+            res = backend.block_tdot(
+                backend.block_conj(A.charged_state),
+                backend.block_tdot(inv_part.to_dense_block(), B.charged_state, [1], [0]),
+                [0], [0]
+            )
+        else:
+            inv_part = tdot(A.invariant_part,
+                            B.invariant_part,
+                            [*range(A.num_legs)], [*reversed(range(A.num_legs))])  # ['?1', '?2']
+            res = backend.block_tdot(
+                A.charged_state,
+                backend.block_tdot(inv_part.to_dense_block(), B.charged_state, [1], [0]),
+                [0], [0]
+            )
+        return backend.block_item(res)
 
     if isinstance(A, ChargedTensor):  # and B is a SymmetricTensor
-        raise NotImplementedError   # TODO
+        # reduce to the case where B is charged and A is not
+        if do_dagger:
+            return np.conj(inner(B, A, do_dagger=True))
+        return inner(B, A, do_dagger=False)
 
+    if isinstance(B, ChargedTensor):
+        if B.charged_state is None:
+            raise ValueError('charged_state must be specified for inner()')
+        if B.charge_leg.sector_multiplicity(B.symmetry.trivial_sector) == 0:
+            return Dtype.common(A.dtype, B.dtype).zero_scalar
+        # OPTIMIZE: by charge rule, only components in the trivial sector of the charge_leg contribute
+        #           could exploit by projecting to those components first.
+        if do_dagger:
+            inv_part = tdot(dagger(A), B.invariant_part, [*range(A.num_legs)], [*reversed(range(A.num_legs))])
+            B_state = backend.block_conj(B.charged_state)
+            res = backend.block_tdot(inv_part.to_dense_block(), B_state, [0], [0])
+        else:
+            inv_part = tdot(A, B.invariant_part, [*range(A.num_legs)], [*reversed(range(A.num_legs))])
+            res = backend.block_tdot(inv_part.to_dense_block(), B.charged_state, [0], [0])
+        return backend.block_item(res)
+            
     # remaining case: both are SymmetricTensor
-    return get_same_backend(A, B).inner(A, B, do_dagger=do_dagger)
+    return backend.inner(A, B, do_dagger=do_dagger)
 
 
 def is_scalar(obj):
@@ -3963,8 +4080,10 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
         c = ChargedTensor._CHARGE_LEG_LABEL
         c1 = c + '1'
         c2 = c + '2'
+        relabel1 = {c: c1} if relabel1 is None else {**relabel1, c: c1}
+        relabel2 = {c: c2} if relabel2 is None else {**relabel2, c: c2}
         inv_part = tdot(tensor1.invariant_part, tensor2.invariant_part, legs1=legs1, legs2=legs2,
-                        relabel1={**relabel1, c: c1}, relabel2={**relabel2, c: c2})
+                        relabel1=relabel1, relabel2=relabel2)
         inv_part = move_leg(inv_part, c1, domain_pos=0)
         return ChargedTensor.from_two_charge_legs(
             inv_part, state1=tensor1.charged_state, state2=tensor2.charged_state,

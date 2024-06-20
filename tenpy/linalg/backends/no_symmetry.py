@@ -172,6 +172,10 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
         return self.block_eigh(a.data, sort=sort)
 
+    def enlarge_leg_SymmetricTensor(self, a: SymmetricTensor, mask: Mask, leg_idx: int
+                                    ) -> tuple[Data, ProductSpace, ProductSpace]:
+        raise NotImplementedError('enlarge_leg_SymmetricTensor not implemented')
+
     def eye_data(self, co_domain: ProductSpace, dtype: Dtype) -> Data:
         # Note: the identity has the same matrix elements in all ONB, so ne need to consider
         #       the basis perms.

@@ -441,6 +441,10 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         # TODO do SVD first, comments there apply.
         raise NotImplementedError('eigh not implemented')  # TODO
 
+    def enlarge_leg_SymmetricTensor(self, a: SymmetricTensor, mask: Mask, leg_idx: int
+                                    ) -> tuple[Data, ProductSpace, ProductSpace]:
+        raise NotImplementedError('enlarge_leg_SymmetricTensor not implemented')
+
     def eye_data(self, co_domain: ProductSpace, dtype: Dtype) -> FusionTreeData:
         # Note: the identity has the same matrix elements in all ONB, so ne need to consider
         #       the basis perms.

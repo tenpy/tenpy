@@ -277,6 +277,11 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def enlarge_leg_SymmetricTensor(self, a: SymmetricTensor, mask: Mask, leg_idx: int
+                                    ) -> tuple[Data, ProductSpace, ProductSpace]:
+        ...
+
+    @abstractmethod
     def eye_data(self, co_domain: ProductSpace, dtype: Dtype) -> Data:
         """Data for :meth:``SymmetricTensor.eye``.
 
@@ -742,11 +747,13 @@ class BlockBackend(metaclass=ABCMeta):
     def block_inner(self, a: Block, b: Block, do_dagger: bool) -> float | complex:
         """Dense block version of tensors.inner.
 
-        If do dagger, ``sum(conj(a[i1, i2, ..., iN]) * b[iN, ..., i2, i1])``
-        otherwise, ``sum(a[i1, ..., iN] * b[i1, ..., iN])``.
+        If do dagger, ``sum(conj(a[i1, i2, ..., iN]) * b[i1, ..., iN])``
+        otherwise, ``sum(a[i1, ..., iN] * b[iN, ..., i2, i1])``.
         """
         if do_dagger:
-            a = self.block_conj(self.block_permute_axes(a, list(reversed(range(a.ndim)))))
+            a = self.block_conj(a)
+        else:
+            a = self.block_permute_axes(a, list(reversed(range(a.ndim))))
         return self.block_sum_all(a * b)  # TODO or do tensordot?
 
     @abstractmethod

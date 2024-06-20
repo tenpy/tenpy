@@ -1190,13 +1190,59 @@ def test_DiagonalTensor_elementwise_binary(cls, op, dtype, make_compatible_tenso
 
 
 # TODO
+def test_enlarge_leg():
+    pytest.skip('Test not written yet')
+
+
+# TODO
 def test_entropy():
     pytest.skip('Test not written yet')  # TODO
 
 
-# TODO
-def test_inner():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.parametrize(
+    'cls, cod, dom, do_dagger',
+    [pytest.param(SymmetricTensor, 2, 2, True, id='Sym-2-2-True'),
+     pytest.param(SymmetricTensor, 2, 2, False, id='Sym-2-2-False'),
+     pytest.param(SymmetricTensor, 3, 0, True, id='Sym-3-0-True'),
+     pytest.param(SymmetricTensor, 0, 2, False, id='Sym-0-2-False'),
+     pytest.param(ChargedTensor, 2, 2, True, id='Charged-2-2-True'),
+     pytest.param(ChargedTensor, 2, 2, False, id='Charged-2-2-False'),
+     pytest.param(ChargedTensor, 3, 0, True, id='Charged-3-0-True'),
+     pytest.param(ChargedTensor, 0, 2, False, id='Charged-0-2-False'),
+     pytest.param(DiagonalTensor, 1, 1, True, id='Diag-1-1-True'),
+     pytest.param(DiagonalTensor, 1, 1, False, id='Diag-1-1-False'),
+     pytest.param(Mask, 1, 1, True, id='Mask-1-1-True'),
+     pytest.param(Mask, 1, 1, False, id='Mask-1-1-False'),]
+    # TODO also test mixed types
+)
+def test_inner(cls, cod, dom, do_dagger, make_compatible_tensor):
+    A: cls = make_compatible_tensor(cod, dom, cls=cls)
+    if do_dagger:
+        B: cls = make_compatible_tensor(codomain=A.codomain, domain=A.domain, cls=cls)
+    else:
+        B: cls = make_compatible_tensor(codomain=A.domain, domain=A.codomain, cls=cls)
+
+    if cls is DiagonalTensor:
+        with pytest.raises(NotImplementedError, match='tensors.trace not implemented'):
+            _ = tensors.inner(A, B, do_dagger=do_dagger)
+        pytest.xfail()
+    if cls is Mask:
+        with pytest.raises(NotImplementedError, match='tensors.(enlarge_leg|apply_mask) not implemented for Mask'):
+            _ = tensors.inner(A, B, do_dagger=do_dagger)
+        pytest.xfail()
+    if isinstance(A.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError, match='(inner|permute_legs) not implemented'):
+            _ = tensors.inner(A, B, do_dagger=do_dagger)
+        pytest.xfail()
+
+    res = tensors.inner(A, B, do_dagger=do_dagger)
+    assert isinstance(res, (float, complex))
+
+    if do_dagger:
+        expect = np.sum(np.conj(A.to_numpy()) * B.to_numpy())
+    else:
+        expect = np.sum(np.transpose(A.to_numpy(), [*reversed(range(A.num_legs))]) * B.to_numpy())
+    npt.assert_almost_equal(res, expect)
 
 
 # TODO
@@ -1413,8 +1459,6 @@ def test_tdot(cls_A: Type[tensors.Tensor], cls_B: Type[tensors.Tensor],
     elif (cls_A in [DiagonalTensor, Mask] or cls_B in [DiagonalTensor, Mask]) and num_contr == 2:
         catch_errors = pytest.raises(NotImplementedError)
     elif isinstance(A.backend, backends.FusionTreeBackend):
-        catch_errors = pytest.raises(NotImplementedError)
-    elif isinstance(A.backend, backends.AbelianBackend) and ChargedTensor not in [cls_A, cls_B] and num_open == 0:
         catch_errors = pytest.raises(NotImplementedError)
 
     catch_warnings = nullcontext()

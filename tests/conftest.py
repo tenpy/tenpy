@@ -407,10 +407,16 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
                                                  backend=compatible_backend, p_keep=.6,
                                                  labels=labels, np_random=np_random)
                 pytest.xfail()
-                    
-            res = tensors.Mask.from_random(large_leg=large_leg, small_leg=small_leg,
-                                           backend=compatible_backend, p_keep=.6, min_keep=1,
-                                           labels=labels, np_random=np_random)
+
+            if small_leg is not None and small_leg.dim > large_leg.dim:
+                res = tensors.Mask.from_random(large_leg=small_leg, small_leg=large_leg,
+                                               backend=compatible_backend, p_keep=.6, min_keep=1,
+                                               labels=labels, np_random=np_random)
+                res = tensors.dagger(res)
+            else:
+                res = tensors.Mask.from_random(large_leg=large_leg, small_leg=small_leg,
+                                               backend=compatible_backend, p_keep=.6, min_keep=1,
+                                               labels=labels, np_random=np_random)
             assert res.small_leg.num_sectors > 0
             return res
         #
