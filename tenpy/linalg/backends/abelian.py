@@ -1779,18 +1779,18 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         blocks = [self.block_to_dtype(block, dtype) for block in a.data.blocks]
         return AbelianBackendData(dtype, blocks, a.data.block_inds, is_sorted=True)
 
-    def trace_full(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
-        raise NotImplementedError  # TODO not yet reviewed
+    def trace_full(self, a: SymmetricTensor) -> float | complex:
         a_blocks = a.data.blocks
-        a_block_inds_1 = a.data.block_inds[:, idcs1]
-        a_block_inds_2 = a.data.block_inds[:, idcs2]
-        total_sum = a.data.dtype.zero_scalar
-        for block, i1, i2 in zip(a_blocks, a_block_inds_1, a_block_inds_2):
-            # if len(idcs1) == 1, i1==i2 due to charge conservation,
-            # but for multi-dimensional indices not clear
-            if np.all(i1 == i2):
-                total_sum += self.block_trace_full(block, idcs1, idcs2)
-        return total_sum
+        a_block_inds = a.data.block_inds
+        K = a.num_codomain_legs
+        res = a.data.dtype.zero_scalar
+        for block, bi in zip(a_blocks, a_block_inds):
+            bi_cod = bi[:K]
+            bi_dom = bi[K:]
+            if np.all(bi_cod == bi_dom[::-1]):
+                res += self.block_trace_full(block)
+            # else: block is entirely off-diagonal and does not contribute to the trace
+        return res
 
     def trace_partial(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
         raise NotImplementedError  # TODO not yet reviewed

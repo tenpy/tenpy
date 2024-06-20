@@ -764,7 +764,7 @@ class BlockBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def block_trace_full(self, a: Block, idcs1: list[int], idcs2: list[int]) -> float | complex:
+    def block_trace_full(self, a: Block) -> float | complex:
         ...
 
     @abstractmethod

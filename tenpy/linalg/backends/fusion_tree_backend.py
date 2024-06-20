@@ -363,7 +363,11 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         raise NotImplementedError('diagonal_tensor_from_full_tensor not implemented')  # TODO
 
     def diagonal_tensor_trace_full(self, a: DiagonalTensor) -> float | complex:
-        raise NotImplementedError('diagonal_tensor_trace_full not implemented')  # TODO
+        res = a.dtype.zero_scalar
+        for coupled, block in zip(a.data.coupled_sectors, a.data.blocks):
+            d_c = a.symmetry.qdim(coupled)
+            res += d_c * self.block_sum_all(block)
+        return res
 
     def diagonal_tensor_to_block(self, a: DiagonalTensor) -> Block:
         assert a.symmetry.can_be_dropped
@@ -697,9 +701,12 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         blocks = [self.block_to_dtype(block, dtype) for block in a.data.blocks]
         return FusionTreeData(a.data.coupled_sectors, blocks, dtype)
 
-    def trace_full(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int]
-                   ) -> float | complex:
-        raise NotImplementedError('trace_full not implemented')  # TODO
+    def trace_full(self, a: SymmetricTensor) -> float | complex:
+        res = a.dtype.zero_scalar
+        for coupled, block in zip(a.data.coupled_sectors, a.data.blocks):
+            d_c = a.symmetry.qdim(coupled)
+            res += d_c * self.block_trace_full(block)
+        return res
 
     def trace_partial(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int],
                       remaining_idcs: list[int]) -> Data:

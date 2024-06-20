@@ -99,10 +99,11 @@ class TorchBlockBackend(BlockBackend):
     def block_permute_axes(self, a: Block, permutation: list[int]) -> Block:
         return torch_module.permute(a, permutation)  # TODO: this is documented as a view. is that a problem?
 
-    def block_trace_full(self, a: Block, idcs1: list[int], idcs2: list[int]) -> float | complex:
-        a = torch_module.permute(a, idcs1 + idcs2)
-        trace_dim = prod(a.shape[:len(idcs1)])
-        a = torch_module.reshape(a, (trace_dim, trace_dim))
+    def block_trace_full(self, a: Block) -> float | complex:
+        num_trace = a.ndim // 2
+        trace_dim = prod(a.shape[:num_trace])
+        perm = [*range(num_trace), *reversed(range(num_trace, 2 * num_trace))]
+        a = torch_module.reshape(torch_module.permute(a, perm), (trace_dim, trace_dim))
         return a.diagonal(offset=0, dim1=0, dim2=1).sum(0)
 
     def block_trace_partial(self, a: Block, idcs1: list[int], idcs2: list[int], remaining: list[int]) -> Block:

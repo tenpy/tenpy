@@ -1219,15 +1219,11 @@ def test_inner(cls, cod, dom, do_dagger, make_compatible_tensor):
     else:
         B: cls = make_compatible_tensor(codomain=A.domain, domain=A.codomain, cls=cls)
 
-    if cls is DiagonalTensor:
-        with pytest.raises(NotImplementedError, match='tensors.trace not implemented'):
-            _ = tensors.inner(A, B, do_dagger=do_dagger)
-        pytest.xfail()
     if cls is Mask:
         with pytest.raises(NotImplementedError, match='tensors.(enlarge_leg|apply_mask) not implemented for Mask'):
             _ = tensors.inner(A, B, do_dagger=do_dagger)
         pytest.xfail()
-    if isinstance(A.backend, backends.FusionTreeBackend):
+    if isinstance(A.backend, backends.FusionTreeBackend) and cls is not DiagonalTensor:
         with pytest.raises(NotImplementedError, match='(inner|permute_legs) not implemented'):
             _ = tensors.inner(A, B, do_dagger=do_dagger)
         pytest.xfail()
@@ -1521,9 +1517,50 @@ def test_tdot(cls_A: Type[tensors.Tensor], cls_B: Type[tensors.Tensor],
     npt.assert_allclose(res_np, expect)
 
 
+@pytest.mark.parametrize('cls, legs', [pytest.param(SymmetricTensor, 2, id='Sym-2'),
+                                       pytest.param(SymmetricTensor, 1, id='Sym-1'),
+                                       pytest.param(ChargedTensor, 2, id='Charged-2'),
+                                       pytest.param(ChargedTensor, 1, id='Charged-1'),
+                                       pytest.param(DiagonalTensor, 1, id='Diag'),])
+def test_trace_full(cls, legs, make_compatible_tensor, compatible_symmetry, make_compatible_sectors,
+                    make_compatible_space):
+    co_domain_spaces = [make_compatible_space() for _ in range(legs)]
+    if cls is ChargedTensor:
+        # make a ChargedTensor that has the trivial sector, otherwise the trace is always 0
+        other_sector = make_compatible_sectors(1)[0]
+        charge_leg = ElementarySpace.from_sectors(
+            compatible_symmetry, [compatible_symmetry.trivial_sector, other_sector],
+        )
+        inv_part = make_compatible_tensor(co_domain_spaces, [charge_leg, *co_domain_spaces],
+                                          cls=SymmetricTensor)
+        charged_state = inv_part.backend.as_block(list(range(charge_leg.dim)))
+        tensor = ChargedTensor(inv_part.set_label(-1, '!'), charged_state)
+    else:
+        tensor: cls = make_compatible_tensor(co_domain_spaces, co_domain_spaces, cls=cls)
+
+    if cls is ChargedTensor:
+        with pytest.raises(NotImplementedError, match='tensors.partial_trace not implemented'):
+            _ = tensors.trace(tensor)
+        pytest.xfail()
+
+    res = tensors.trace(tensor)
+    assert isinstance(res, (float, complex))
+
+    if isinstance(tensor.backend, backends.FusionTreeBackend) and isinstance(tensor.symmetry, ProductSymmetry) and legs > 1:
+        with pytest.raises(NotImplementedError):
+            _ = tensor.to_numpy()
+        pytest.xfail()
+
+    expect = tensor.to_numpy()
+    while expect.ndim > 0:
+        expect = np.trace(expect, axis1=0, axis2=-1)
+    npt.assert_almost_equal(res, expect)
+
+
 # TODO
-def test_trace():
+def test_trace_partial():
     pytest.skip('Test not written yet')  # TODO
+
 
 
 @pytest.mark.parametrize(

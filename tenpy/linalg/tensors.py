@@ -83,9 +83,9 @@ __all__ = ['Tensor', 'SymmetricTensor', 'DiagonalTensor', 'ChargedTensor', 'Mask
            'add_trivial_leg', 'almost_equal', 'angle', 'apply_mask', 'apply_mask_DiagonalTensor',
            'bend_legs', 'combine_legs', 'combine_to_matrix', 'conj', 'dagger', 'compose',
            'enlarge_leg', 'entropy', 'imag', 'inner', 'is_scalar', 'item', 'linear_combination',
-           'move_leg', 'norm', 'outer', 'permute_legs', 'real', 'real_if_close', 'scalar_multiply',
-           'scale_axis', 'split_legs', 'sqrt', 'squeeze_legs', 'tdot', 'trace', 'transpose',
-           'zero_like', 'get_same_backend', 'check_same_legs']
+           'move_leg', 'norm', 'outer', 'partial_trace', 'permute_legs', 'real', 'real_if_close',
+           'scalar_multiply', 'scale_axis', 'split_legs', 'sqrt', 'squeeze_legs', 'tdot', 'trace',
+           'transpose', 'zero_like', 'get_same_backend', 'check_same_legs']
 
 
 # TENSOR CLASSES
@@ -3707,6 +3707,49 @@ def outer(tensor1: Tensor, tensor2: Tensor,
     return SymmetricTensor(data, codomain, domain, backend, [codomain_labels, domain_labels])
 
 
+def partial_trace(tensor,
+                  *pairs: Sequence[int | str],
+                  levels: list[int] | dict[str | int, int] | None = None):
+    """Perform a partial trace.
+    
+    An arbitrary number of pairs can be traced over::
+
+        |    ╭───│───╮   ╭───╮
+        |    0   1   2   3   │
+        |   ┏┷━━━┷━━━┷━━━┷┓  │
+        |   ┃      A      ┃  │    ==   trace(A, (0, 2), (3, 5), (-2, 4))
+        |   ┗┯━━━┯━━━┯━━━┯┛  │
+        |    7   6   5   4   │
+        |    │   ╰───│───╯   │
+        |    │       ╰───────╯
+
+    Note that despite its name, a "full" trace with a scalar result *can* be realized.
+
+    Parameters
+    ----------
+    tensor: Tensor
+        The tensor to act on
+    *pairs:
+        A number of pairs, each describing two legs via index or via label.
+        Each pair is connected, realizing a partial trace.
+        Must be compatible ``tensor.get_leg(pair[0]) == tensor.get_leg(pair[1]).dual``.
+    levels:
+        The connectivity of the partial trace may induce braids.
+        For symmetries with non-symmetric braiding, these levels are used to determine the
+        chirality of those braids, like in :func:`permute_legs`.
+
+    Returns
+    -------
+    If all legs are traced, a python scalar.
+    If legs are left open, a tensor with the same type as `tensor`.
+    
+    See Also
+    --------
+    trace
+    """
+    raise NotImplementedError('tensors.partial_trace not implemented')  # TODO
+
+
 def _permute_legs(tensor: Tensor,
                   codomain: list[int | str] | None = None,
                   domain: list[int | str] | None = None,
@@ -4067,7 +4110,7 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
         if num_contr == 2:
             large_leg_contr = legs1.index(1) if tensor1.is_projection else legs1.index(0)
             res = apply_mask(tensor2, tensor1, legs2[large_leg_contr])
-            res = trace(res, legs2)
+            res = partial_trace(res, legs2)
             return bend_legs(res, num_codomain_legs=0)
     if isinstance(tensor2, Mask):
         if num_contr == 0:
@@ -4080,7 +4123,7 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
             return permute_legs(res, domain=legs2)
         if num_contr == 2:
             res = apply_mask(tensor1, tensor2, legs1[0])
-            res = trace(res, legs1)
+            res = partial_trace(res, legs1)
             return bend_legs(res, num_domain_legs=0)
 
     # Deal with DiagonalTensor: either return or reduce to SymmetricTensor
@@ -4094,7 +4137,7 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
             return permute_legs(res, codomain=legs1)
         if num_contr == 2:
             res = scale_axis(tensor2, tensor1, legs2[0])
-            res = trace(res, legs2)
+            res = partial_trace(res, legs2)
             return bend_legs(res, num_codomain_legs=0)
     if isinstance(tensor2, DiagonalTensor):
         if num_contr == 0:
@@ -4106,7 +4149,7 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
             return permute_legs(res, domain=legs2)
         if num_contr == 2:
             res = scale_axis(tensor1, tensor2, legs1[0])
-            res = trace(res, legs1)
+            res = partial_trace(res, legs1)
             return bend_legs(res, num_domain_legs=0)
 
     # Deal with ChargedTensor
@@ -4144,12 +4187,10 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
     return _compose_SymmetricTensors(tensor1, tensor2, relabel1=relabel1, relabel2=relabel2)
 
 
-def trace(tensor: Tensor,
-          *pairs: Sequence[int | str],
-          levels: list[int] | dict[str | int, int] | None = None):
-    """Perform a (partial) trace.
-
-    By default, require that ``tensor.domain == tensor.codomain`` and perform the full trace::
+def trace(tensor: Tensor):
+    """Perform the trace.
+    
+    Requires that ``tensor.domain == tensor.codomain`` and perform the full trace::
 
         |    ╭───────────────╮
         |    │   ╭─────────╮ │
@@ -4161,35 +4202,31 @@ def trace(tensor: Tensor,
         |    │   ╰─────────╯ │
         |    ╰───────────────╯
 
-    If `pairs` are specified, a number of partial traces are performed::
-
-        |    ╭───│───╮   ╭───╮
-        |    0   1   2   3   │
-        |   ┏┷━━━┷━━━┷━━━┷┓  │
-        |   ┃      A      ┃  │    ==   trace(A, (0, 2), (3, 5), (-2, 4))
-        |   ┗┯━━━┯━━━┯━━━┯┛  │
-        |    7   6   5   4   │
-        |    │   ╰───│───╯   │
-        |    │       ╰───────╯
-
     Parameters
     ----------
     tensor: Tensor
-        The tensor to act on
-    *pairs:
-        A number of pairs, each describing two legs via index or via label.
-        Each pair is connected, realizing a partial trace
-    levels:
-        If `pairs` is given, the connectivity of the partial trace may induce braids.
-        For symmetries with non-symmetric braiding, these levels are used to determine the
-        chirality of those braids, like in :func:`permute_legs`.
+        The tensor to trace on
 
     Returns
     -------
-    If all legs are traced, a python scalar.
-    If legs are left open, a tensor, whose legs are the untraced legs.
+    A python scalar, the trace.
+
+    See Also
+    --------
+    partial_trace
+        Trace only some legs, or trace all legs with a different connectivity.
     """
-    raise NotImplementedError('tensors.trace not implemented')  # TODO
+    assert tensor.domain == tensor.codomain, 'Incompatible legs'
+    if isinstance(tensor, DiagonalTensor):
+        return tensor.backend.diagonal_tensor_trace_full(tensor)
+    if isinstance(tensor, ChargedTensor):
+        if tensor.charged_state is None:
+            raise ValueError('charged_state needs to be specified')
+        # OPTIMIZE can project to trivial sector on charge leg first
+        pairs = [[n, -1-n] for n in range(tensor.num_codomain_legs)]
+        inv_block = partial_trace(tensor.invariant_part, *pairs).to_dense_block()
+        return tensor.backend.block_tdot(inv_block, tensor.charged_state, [0], [0])
+    return tensor.backend.trace_full(tensor)
 
 
 def transpose(tensor: Tensor) -> Tensor:

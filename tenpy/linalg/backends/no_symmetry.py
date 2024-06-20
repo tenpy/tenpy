@@ -356,9 +356,8 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def to_dtype(self, a: SymmetricTensor, dtype: Dtype) -> Data:
         return self.block_to_dtype(a.data, dtype)
 
-    def trace_full(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
-        raise NotImplementedError  # TODO not yet reviewed
-        return self.block_trace_full(a.data, idcs1, idcs2)
+    def trace_full(self, a: SymmetricTensor) -> float | complex:
+        return self.block_trace_full(a.data)
 
     def trace_partial(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
         raise NotImplementedError  # TODO not yet reviewed

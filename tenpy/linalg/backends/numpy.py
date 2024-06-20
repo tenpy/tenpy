@@ -75,11 +75,12 @@ class NumpyBlockBackend(BlockBackend):
     def block_permute_axes(self, a: Block, permutation: list[int]) -> Block:
         return np.transpose(a, permutation)
 
-    def block_trace_full(self, a: Block, idcs1: list[int], idcs2: list[int]) -> float | complex:
-        a = np.transpose(a, idcs1 + idcs2)
-        trace_dim = np.prod(a.shape[:len(idcs1)])
-        a = np.reshape(a, (trace_dim, trace_dim))
-        return np.trace(a, axis1=0, axis2=1)
+    def block_trace_full(self, a: Block) -> float | complex:
+        num_trace = a.ndim // 2
+        trace_dim = np.prod(a.shape[:num_trace])
+        perm = [*range(num_trace), *reversed(range(num_trace, 2 * num_trace))]
+        a = np.reshape(np.transpose(a, perm), (trace_dim, trace_dim))
+        return np.trace(a, axis1=0, axis2=1).item()
 
     def block_trace_partial(self, a: Block, idcs1: list[int], idcs2: list[int], remaining: list[int]) -> Block:
         a = np.transpose(a, remaining + idcs1 + idcs2)

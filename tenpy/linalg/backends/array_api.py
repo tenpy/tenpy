@@ -99,10 +99,12 @@ class ArrayApiBlockBackend(BlockBackend):
     def block_permute_axes(self, a: Block, permutation: list[int]) -> Block:
         return self._api.permute_dims(a, permutation)
 
-    def block_trace_full(self, a: Block, idcs1: list[int], idcs2: list[int]) -> float | complex:
-        a = self._api.permute_dims(a, idcs1 + idcs2)
-        trace_dim = np.prod(a.shape[:len(idcs1)])
-        a = self._api.reshape(a, (trace_dim, trace_dim))
+    def block_trace_full(self, a: Block) -> float | complex:
+        shape = a.shape
+        num_trace = len(shape) // 2
+        trace_dim = np.prod(shape[:num_trace])
+        perm = [*range(num_trace), *reversed(range(num_trace, 2 * num_trace))]
+        a = self._api.reshape(self._api.permute_dims(a, perm), (trace_dim, trace_dim))
         res = self._api.linalg.trace(a)  # performs trace along last two axes
         return self.block_item(res)
 
