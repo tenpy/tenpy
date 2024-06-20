@@ -623,11 +623,6 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         #  if yes: add comment explaining why, adjust argument below
         return AbelianBackendData(res_dtype, res_blocks, res_block_inds, is_sorted=False)
 
-    def conj(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
-        raise NotImplementedError  # TODO not yet reviewed. duality of legs changes!!
-        blocks = [self.block_conj(b) for b in a.data.blocks]
-        return AbelianBackendData(a.data.dtype, blocks, a.data.block_inds, is_sorted=True)
-
     def copy_data(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
         blocks = [self.block_copy(b) for b in a.data.blocks]
         return AbelianBackendData(a.data.dtype, blocks, a.data.block_inds.copy(), is_sorted=True)

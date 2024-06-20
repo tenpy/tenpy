@@ -155,10 +155,6 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def conj(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
-        ...
-
-    @abstractmethod
     def copy_data(self, a: SymmetricTensor | DiagonalTensor | MaskData
                   ) -> Data | DiagonalData | MaskData:
         """Return a copy, such that future in-place operations on the output data do not affect the input data"""

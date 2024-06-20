@@ -1057,11 +1057,6 @@ def test_compose(cls_A, cls_B, cod_A, shared, dom_B, make_compatible_tensor):
     npt.assert_almost_equal(res_np, expect)
 
 
-# TODO
-def test_conj():
-    pytest.skip('Test not written yet')  # TODO
-
-
 @pytest.mark.parametrize(
     'cls, cod, dom',
     [pytest.param(SymmetricTensor, 2, 2, id='Sym-2-2'),
@@ -1125,6 +1120,8 @@ def test_dagger(cls, cod, dom, make_compatible_tensor, np_random):
      pytest.param(DiagonalTensor.__abs__, np.abs, Dtype.float64, {}, id='abs()-real'),
      pytest.param(DiagonalTensor.__abs__, np.abs, Dtype.complex128, {}, id='abs()-complex'),
      pytest.param(tensors.real, np.real, Dtype.float64, {}, id='real()-real'),
+     pytest.param(tensors.conj, np.conj, Dtype.float64, {}, id='conj()-real'),
+     pytest.param(tensors.conj, np.conj, Dtype.complex128, {}, id='conj()-complex'),
     ]
      # TODO more functions? exp, log
 )

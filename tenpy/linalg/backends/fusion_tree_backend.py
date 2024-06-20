@@ -238,11 +238,6 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def compose(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
         raise NotImplementedError('compose not implemented')
-        
-    def conj(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
-        # TODO what does this even mean? transpose of dagger?
-        # TODO should we offer transpose and dagger too?
-        raise NotImplementedError('conj not implemented')  # TODO
 
     def copy_data(self, a: SymmetricTensor) -> FusionTreeData:
         return FusionTreeData(

@@ -3087,11 +3087,10 @@ def combine_to_matrix(tensor: Tensor,
     return combine_legs(res, range(res.num_codomain_legs), range(res.num_codomain_legs, res.num_legs))
 
 
-def conj(tensor: Tensor):
-    """TODO doc this.
-    TODO do we even need this?
-    """
-    return dagger(transpose(tensor))  # OPTIMIZE
+@_elementwise_function(block_func='block_conj', maps_zero_to_zero=True)
+def conj(x: _ElementwiseType) -> _ElementwiseType:
+    """Complex conjugation, :ref:`elementwise <diagonal_elementwise>`"""
+    return np.conj(x)
 
 
 def dagger(tensor: Tensor) -> Tensor:
@@ -3134,9 +3133,7 @@ def dagger(tensor: Tensor) -> Tensor:
             labels=[_dual_leg_label(l) for l in reversed(tensor._labels)]
         )
     if isinstance(tensor, DiagonalTensor):
-        res = tensor._elementwise_unary(tensor.backend.block_conj, maps_zero_to_zero=True)
-        res.set_labels([_dual_leg_label(l) for l in reversed(tensor._labels)])
-        return res
+        return conj(tensor).set_labels([_dual_leg_label(l) for l in reversed(tensor._labels)])
     if isinstance(tensor, SymmetricTensor):
         return SymmetricTensor(
             data=tensor.backend.dagger(tensor),

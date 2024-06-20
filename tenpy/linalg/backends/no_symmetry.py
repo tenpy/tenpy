@@ -105,9 +105,6 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         b_codomain = list(range(b.num_codomain_legs))
         return self.block_tdot(a.data, b.data, a_domain, b_codomain)
 
-    def conj(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
-        return self.block_conj(a.data)
-
     def copy_data(self, a: SymmetricTensor | DiagonalTensor) -> Data | DiagonalData:
         return self.block_copy(a.data)
 
