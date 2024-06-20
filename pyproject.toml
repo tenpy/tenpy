@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68.0.0", "numpy", "scipy", "Cython>0.29"]
+requires = ["setuptools>=68.0.0", "numpy<2.0", "scipy", "Cython>0.29"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -38,7 +38,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
-    "numpy",
+    "numpy<2.0",
     "scipy",
 ]
 
