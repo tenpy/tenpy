@@ -67,9 +67,10 @@ def _get_git_description():
         descr = subprocess.check_output(['git', 'describe', '--tags', '--long'],
                                         cwd=os.path.dirname(os.path.abspath(__file__)),
                                         stderr=subprocess.STDOUT).decode().strip()
+        n_commits = int(descr.split('-')[1])
     except:
-        return 0
-    return int(descr.split('-')[1])
+        n_commits = 0
+    return n_commits
 
 
 #: the hash of the last git commit (if available)
