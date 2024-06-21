@@ -291,6 +291,28 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def outer(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
         return self.block_tensor_outer(a.data, b.data, K=a.num_codomain_legs)
 
+    def partial_trace(self, tensor: SymmetricTensor, pairs: list[tuple[int, int]],
+                      levels: list[int] | None) -> tuple[Data, ProductSpace, ProductSpace]:
+        N = tensor.num_legs
+        idcs1 = []
+        idcs2 = []
+        for i1, i2 in pairs:
+            idcs1.append(i1)
+            idcs2.append(i2)
+        remaining = [n for n in range(N) if n not in idcs1 and n not in idcs2]
+        data = self.block_trace_partial(tensor.data, idcs1, idcs2, remaining)
+        if len(remaining) == 0:
+            return self.block_item(data), None, None
+        codomain = ProductSpace(
+            [leg for n, leg in enumerate(tensor.codomain) if n in remaining],
+            symmetry=tensor.symmetry, backend=self
+        )
+        domain = ProductSpace(
+            [leg for n, leg in enumerate(tensor.domain) if N - 1 - n in remaining],
+            symmetry=tensor.symmetry, backend=self
+        )
+        return data, codomain, domain
+
     def permute_legs(self, a: SymmetricTensor, codomain_idcs: list[int], domain_idcs: list[int],
                      levels: list[int] | None) -> tuple[Data | None, ProductSpace, ProductSpace]:
         codomain = ProductSpace([a._as_codomain_leg(i) for i in codomain_idcs],
@@ -358,10 +380,6 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def trace_full(self, a: SymmetricTensor) -> float | complex:
         return self.block_trace_full(a.data)
-
-    def trace_partial(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
-        raise NotImplementedError  # TODO not yet reviewed
-        return self.block_trace_partial(a.data, idcs1, idcs2, remaining_idcs)
 
     def transpose(self, a: SymmetricTensor) -> tuple[Data, ProductSpace, ProductSpace]:
         perm = [*range(a.num_codomain_legs, a.num_legs), *range(a.num_codomain_legs)]

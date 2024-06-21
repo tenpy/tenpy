@@ -597,6 +597,10 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def outer(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
         raise NotImplementedError('outer not implemented')  # TODO
 
+    def partial_trace(self, tensor: SymmetricTensor, pairs: list[tuple[int, int]],
+                      levels: list[int] | None) -> tuple[Data, ProductSpace, ProductSpace]:
+        raise NotImplementedError('partial_trace not implemented')  # TODO
+
     def permute_legs(self, a: SymmetricTensor, codomain_idcs: list[int], domain_idcs: list[int],
                      levels: list[int] | None) -> tuple[Data | None, ProductSpace, ProductSpace]:
         raise NotImplementedError('permute_legs not implemented')  # TODO
@@ -707,10 +711,6 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
             d_c = a.symmetry.qdim(coupled)
             res += d_c * self.block_trace_full(block)
         return res
-
-    def trace_partial(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int],
-                      remaining_idcs: list[int]) -> Data:
-        raise NotImplementedError('trace_partial not implemented')  # TODO
 
     def transpose(self, a: SymmetricTensor) -> tuple[Data, ProductSpace, ProductSpace]:
         # Juthos implementation:

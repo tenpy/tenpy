@@ -1276,6 +1276,83 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         #
         return AbelianBackendData(res_dtype, res_blocks, res_block_inds, is_sorted=False)
 
+    def partial_trace(self, tensor: SymmetricTensor, pairs: list[tuple[int, int]],
+                      levels: list[int] | None) -> tuple[Data, ProductSpace, ProductSpace]:
+        N = tensor.num_legs
+        K = tensor.num_codomain_legs
+        idcs1 = []
+        idcs2 = []
+        opposite_sides = []  # if pairs[n] has one leg each in codomain and domain or if they are both on the same side
+        for i1, i2 in pairs:
+            idcs1.append(i1)
+            idcs2.append(i2)
+            opposite_sides.append((i1 < K) != (i2 < K))
+        remaining = [n for n in range(N) if n not in idcs1 and n not in idcs2]
+        #
+        blocks = tensor.data.blocks
+        block_inds_1 = tensor.data.block_inds[:, idcs1]
+        block_inds_2 = tensor.data.block_inds[:, idcs2]
+        block_inds_rem = tensor.data.block_inds[:, remaining]
+        #
+        # OPTIMIZE
+        #   - avoid python loops / function calls
+        #   - spaces could store (or cache!) the sector permutation between itself and its dual.
+        #     this permutation could be applied to the block_inds and then we can compare on block_inds
+        #     level again, without resorting to the sectors.
+        #
+        def on_diagonal(bi1, bi2):
+            # given bi1==block_inds_1[n] and bi2==block_inds_2[n], return if blocks[n] is on the
+            # diagonal and thus contributes to the trace, or not.
+            for n, (i1, i2) in enumerate(zip(bi1, bi2)):
+                if opposite_sides[n]:
+                    # legs are the same -> can compare block_inds
+                    if i1 != i2:
+                        return False
+                else:
+                    # legs have opposite duality. need to compare sectors explicitly
+                    sector1 = tensor.get_leg_co_domain(idcs1[n]).sectors[i1]
+                    sector2 = tensor.get_leg_co_domain(idcs2[n]).sectors[i2]
+                    if not np.all(sector1 == tensor.symmetry.dual_sector(sector2)):
+                        return False
+            return True
+            
+        #
+        res_data = {}  # dictionary res_block_inds_row -> Block
+        for block, i1, i2, bi_rem in zip(blocks, block_inds_1, block_inds_2, block_inds_rem):
+            if not on_diagonal(i1, i2):
+                continue
+            bi_rem = tuple(bi_rem)
+            block = self.block_trace_partial(block, idcs1, idcs2, remaining)
+            add_block = res_data.get(bi_rem, None)
+            if add_block is not None:
+                block = block + add_block
+            res_data[bi_rem] = block
+        res_blocks = list(res_data.values())
+
+        if len(remaining) == 0:
+            # scalar result
+            if len(res_blocks) == 0:
+                return tensor.dtype.zero_scalar, None, None
+            elif len(res_blocks) == 1:
+                return self.block_item(res_blocks[0]), None, None
+            raise RuntimeError  # by charge rule, should be impossible to get multiple blocks.
+        
+        if len(res_blocks) == 0:
+            res_block_inds = np.zeros((0, len(remaining)), int)
+        else:
+            res_block_inds = np.array(list(res_data.keys()), int)
+        data = AbelianBackendData(tensor.dtype, res_blocks, res_block_inds, is_sorted=False)
+        codomain = ProductSpace(
+            [leg for n, leg in enumerate(tensor.codomain) if n in remaining],
+            symmetry=tensor.symmetry, backend=self
+        )
+        domain = ProductSpace(
+            [leg for n, leg in enumerate(tensor.domain) if N - 1 - n in remaining],
+            symmetry=tensor.symmetry, backend=self
+        )
+        return data, codomain, domain
+        
+
     def permute_legs(self, a: SymmetricTensor, codomain_idcs: list[int], domain_idcs: list[int],
                      levels: list[int] | None) -> tuple[Data | None, ProductSpace, ProductSpace]:
         codomain_legs = []
@@ -1791,29 +1868,6 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
                 res += self.block_trace_full(block)
             # else: block is entirely off-diagonal and does not contribute to the trace
         return res
-
-    def trace_partial(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
-        raise NotImplementedError  # TODO not yet reviewed
-        a_blocks = a.data.blocks
-        a_block_inds_1 = a.data.block_inds[:, idcs1]
-        a_block_inds_2 = a.data.block_inds[:, idcs2]
-        a_block_inds_rem = a.data.block_inds[:, remaining_idcs]
-        res_data = {}  # dictionary res_block_inds_row -> Block
-        for block, i1, i2, ir in zip(a_blocks, a_block_inds_1, a_block_inds_2, a_block_inds_rem):
-            if not np.all(i1 == i2):
-                continue
-            ir = tuple(ir)
-            block = self.block_trace_partial(block, idcs1, idcs2, remaining_idcs)
-            add_block = res_data.get(ir, None)
-            if add_block is not None:
-                block = block + add_block
-            res_data[ir] = block
-        res_blocks = list(res_data.values())
-        if len(res_blocks) == 0:
-            # TODO dont use legs! use conventional_leg_order / domain / codomain
-            return self.zero_data([a.legs[i] for i in remaining_idcs], dtype=a.data.dtype, num_domain_legs=-666)
-        res_block_inds = np.array(list(res_data.keys()), dtype=int)
-        return AbelianBackendData(a.data.dtype, res_blocks, res_block_inds, is_sorted=False)
 
     def transpose(self, a: SymmetricTensor) -> tuple[Data, ProductSpace, ProductSpace]:
         return self.permute_legs(a,

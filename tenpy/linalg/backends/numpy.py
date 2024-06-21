@@ -84,7 +84,7 @@ class NumpyBlockBackend(BlockBackend):
 
     def block_trace_partial(self, a: Block, idcs1: list[int], idcs2: list[int], remaining: list[int]) -> Block:
         a = np.transpose(a, remaining + idcs1 + idcs2)
-        trace_dim = np.prod(a.shape[len(remaining):len(remaining)+len(idcs1)])
+        trace_dim = np.prod(a.shape[len(remaining):len(remaining)+len(idcs1)], dtype=int)
         a = np.reshape(a, a.shape[:len(remaining)] + (trace_dim, trace_dim))
         return np.trace(a, axis1=-2, axis2=-1)
 

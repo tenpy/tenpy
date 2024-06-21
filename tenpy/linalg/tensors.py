@@ -3707,9 +3707,9 @@ def outer(tensor1: Tensor, tensor2: Tensor,
     return SymmetricTensor(data, codomain, domain, backend, [codomain_labels, domain_labels])
 
 
-def partial_trace(tensor,
+def partial_trace(tensor: Tensor,
                   *pairs: Sequence[int | str],
-                  levels: list[int] | dict[str | int, int] | None = None):
+                  levels: list[int] | dict[str | int, int] | None = None) -> Tensor:
     """Perform a partial trace.
     
     An arbitrary number of pairs can be traced over::
@@ -3747,7 +3747,50 @@ def partial_trace(tensor,
     --------
     trace
     """
-    raise NotImplementedError('tensors.partial_trace not implemented')  # TODO
+    # check legs are compatible
+    pairs = [tensor.get_leg_idcs(pair) for pair in pairs]
+    traced_idcs = [l for pair in pairs for l in pair]
+    duplicates = duplicate_entries(traced_idcs)
+    if duplicates:
+        raise ValueError('Pairs may not contain duplicates.')
+    for i1, i2 in pairs:
+        in_domain, co_domain_idx, _ = tensor._parse_leg_idx(i1)
+        if in_domain:
+            assert tensor.domain[co_domain_idx] == tensor._as_codomain_leg(i2), 'incompatible legs'
+        else:
+            assert tensor.codomain[co_domain_idx] == tensor._as_domain_leg(i2), 'incompatible legs'
+    
+    if len(pairs) == 0:
+        return tensor
+    # deal with other tensor types
+    if isinstance(tensor, (DiagonalTensor, Mask)):
+        # only remaining option after input checks if the full trace.
+        return trace(tensor)
+    if isinstance(tensor, ChargedTensor):
+        if levels is not None:
+            # assign highest level to charge leg.
+            # probably want to unify implementation with other functions that use levels.
+            raise NotImplementedError  # TODO
+        invariant_part = partial_trace(tensor.invariant_part, *pairs, levels=levels)
+        if invariant_part.num_legs == 1:
+            # scalar result
+            if tensor.charged_state is None:
+                raise ValueError('Need to specify charged_state for full trace of ChargedTensor')
+            res = tensor.backend.block_tdot(
+                invariant_part.to_dense_block(), tensor.charged_state, [0], [0]
+            )
+            return tensor.backend.block_item(res)
+        return ChargedTensor(invariant_part, tensor.charged_state)
+    if not isinstance(tensor, SymmetricTensor):
+        raise TypeError(f'Unexpected tensor type: {type(tensor).__name__}')
+    data, codomain, domain = tensor.backend.partial_trace(tensor, pairs, levels)
+    if tensor.num_legs == len(traced_idcs):
+        # should be a scalar
+        return data
+    labels = [l for n, l in enumerate(tensor._labels) if n not in traced_idcs]
+    return SymmetricTensor(
+        data=data, codomain=codomain, domain=domain, backend=tensor.backend, labels=labels
+    )
 
 
 def _permute_legs(tensor: Tensor,
@@ -4111,6 +4154,8 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
             large_leg_contr = legs1.index(1) if tensor1.is_projection else legs1.index(0)
             res = apply_mask(tensor2, tensor1, legs2[large_leg_contr])
             res = partial_trace(res, legs2)
+            if tensor2.num_legs == 2:  # scalar result
+                return res
             return bend_legs(res, num_codomain_legs=0)
     if isinstance(tensor2, Mask):
         if num_contr == 0:
@@ -4124,6 +4169,8 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
         if num_contr == 2:
             res = apply_mask(tensor1, tensor2, legs1[0])
             res = partial_trace(res, legs1)
+            if tensor1.num_legs == 2:  # scalar result
+                return res
             return bend_legs(res, num_domain_legs=0)
 
     # Deal with DiagonalTensor: either return or reduce to SymmetricTensor
@@ -4138,6 +4185,8 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
         if num_contr == 2:
             res = scale_axis(tensor2, tensor1, legs2[0])
             res = partial_trace(res, legs2)
+            if tensor2.num_legs == 2:  # scalar result
+                return res
             return bend_legs(res, num_codomain_legs=0)
     if isinstance(tensor2, DiagonalTensor):
         if num_contr == 0:
@@ -4150,6 +4199,8 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
         if num_contr == 2:
             res = scale_axis(tensor1, tensor2, legs1[0])
             res = partial_trace(res, legs1)
+            if tensor1.num_legs == 2:  # scalar result
+                return res
             return bend_legs(res, num_domain_legs=0)
 
     # Deal with ChargedTensor
@@ -4221,11 +4272,13 @@ def trace(tensor: Tensor):
         return tensor.backend.diagonal_tensor_trace_full(tensor)
     if isinstance(tensor, ChargedTensor):
         if tensor.charged_state is None:
-            raise ValueError('charged_state needs to be specified')
+            raise ValueError('Need to specify charged_state for full trace of ChargedTensor')
         # OPTIMIZE can project to trivial sector on charge leg first
-        pairs = [[n, -1-n] for n in range(tensor.num_codomain_legs)]
+        N = tensor.num_legs
+        pairs = [[n, N-1-n] for n in range(tensor.num_codomain_legs)]
         inv_block = partial_trace(tensor.invariant_part, *pairs).to_dense_block()
-        return tensor.backend.block_tdot(inv_block, tensor.charged_state, [0], [0])
+        res = tensor.backend.block_tdot(inv_block, tensor.charged_state, [0], [0])
+        return tensor.backend.block_item(res)
     return tensor.backend.trace_full(tensor)
 
 

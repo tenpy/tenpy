@@ -14,6 +14,7 @@ from tenpy.linalg.backends.backend_factory import get_backend
 from tenpy.linalg.dtypes import Dtype
 from tenpy.linalg.spaces import Space, ElementarySpace, ProductSpace
 from tenpy.linalg.symmetries import ProductSymmetry, z4_symmetry, SU2Symmetry
+from tenpy.linalg.misc import duplicate_entries
 
 
 @pytest.fixture(params=[DiagonalTensor, SymmetricTensor, Mask, ChargedTensor])
@@ -1320,6 +1321,101 @@ def test_outer(cls_A, cls_B, cA, dA, cB, dB, make_compatible_tensor):
 
 
 @pytest.mark.parametrize(
+    'cls, codom, dom',
+    [pytest.param(SymmetricTensor, ['a', 'b', 'a'], ['c', 'd'], id='Sym-aba-cd'),
+     pytest.param(SymmetricTensor, ['a', 'b'], ['b', 'a'], id='Sym-ab-ba'),
+     pytest.param(SymmetricTensor, ['a', 'c'], ['b', 'a'], id='Sym-ac-ba'),
+     pytest.param(SymmetricTensor, ['a', 'b'], ['c', 'd'], id='Sym-ab-cd'),
+     pytest.param(ChargedTensor, ['a', 'b'], ['b', 'a'], id='Charged-ab-ba'),
+     pytest.param(ChargedTensor, ['a', 'b', 'a'], ['c', 'd'], id='Charged-aba-cd'),
+     pytest.param(DiagonalTensor, ['a'], ['a'], id='Diag-a-a'),]
+)
+def test_partial_trace(cls, codom, dom, make_compatible_space, make_compatible_tensor, np_random):
+    #
+    # 1) Prepare inputs
+    #
+    trace_legs = {l: make_compatible_space() for l in duplicate_entries([*codom, *dom])}
+    # build compatible legs.
+    # If we see a label for the second time, use opposite duality than the first time, and different label.
+    # In the domain, use opposite duality than in the codomain.
+    seen_labels = []
+    codomain_spaces = []
+    codomain_labels = []
+    for l in codom:
+        if l in seen_labels:
+            codomain_spaces.append(trace_legs[l].dual)
+            codomain_labels.append(f'{l}*')
+        elif l in trace_legs:
+            codomain_spaces.append(trace_legs[l])
+            seen_labels.append(l)
+            codomain_labels.append(l)
+        else:
+            codomain_spaces.append(make_compatible_space())
+            codomain_labels.append(l)
+    domain_spaces = []
+    domain_labels = []
+    for l in dom:
+        if l in seen_labels:
+            domain_spaces.append(trace_legs[l])
+            domain_labels.append(f'{l}*')
+        elif l in trace_legs:
+            domain_spaces.append(trace_legs[l].dual)
+            domain_labels.append(l)
+            seen_labels.append(l)
+        else:
+            domain_spaces.append(make_compatible_space())
+            domain_labels.append(l)
+    #
+    T: cls = make_compatible_tensor(codomain_spaces, domain_spaces, cls=cls,
+                                    labels=[*codomain_labels, *reversed(domain_labels)])
+    #
+    how_to_call = np_random.choice(['positions', 'labels'])
+    labels = T.labels
+    pairs_positions = [(labels.index(l), labels.index(f'{l}*')) for l in trace_legs]
+    if how_to_call == 'positions':
+        pairs = pairs_positions
+    if how_to_call == 'labels':
+        pairs = [(l, f'{l}*') for l in trace_legs]
+    # 
+    # 2) Call the actual function
+    #
+    if isinstance(T.backend, backends.FusionTreeBackend) and len(trace_legs) > 0 and cls is not DiagonalTensor:
+        with pytest.raises(NotImplementedError, match='partial_trace not implemented'):
+            _ = tensors.partial_trace(T, *pairs)
+        pytest.xfail()
+    #
+    res = tensors.partial_trace(T, *pairs)
+    #
+    # 3) Test the result
+    #
+    if isinstance(T.backend, backends.FusionTreeBackend) and isinstance(T.symmetry, ProductSymmetry) and (T.num_codomain_legs > 1 or T.num_domain_legs > 1):
+        with pytest.raises(NotImplementedError):
+            _ = T.to_numpy()
+        pytest.xfail()
+    #
+    num_open = T.num_legs - 2 * len(pairs)
+    if num_open == 0:
+        assert isinstance(res, (float, complex))
+        res_np = res
+    else:
+        assert isinstance(res, cls)
+        res.test_sanity()
+        assert res.labels == [l for l in T.labels if l[0] not in trace_legs]
+        assert res.codomain.spaces == [sp for sp, l in zip(T.codomain, T.codomain_labels)
+                                       if l[0] not in trace_legs]
+        assert res.domain.spaces == [sp for sp, l in zip(T.domain, T.domain_labels)
+                                     if l[0] not in trace_legs]
+        res_np = res.to_numpy()
+    #
+    idcs1 = [p[0] for p in pairs_positions]
+    idcs2 = [p[1] for p in pairs_positions]
+    remaining = [n for n in range(T.num_legs) if n not in idcs1 and n not in idcs2]
+    expect = T.backend.block_trace_partial(T.to_dense_block(), idcs1, idcs2, remaining)
+    expect = T.backend.block_to_numpy(expect)
+    npt.assert_almost_equal(res_np, expect)
+
+
+@pytest.mark.parametrize(
     'cls, num_cod, num_dom, codomain, domain, levels',
     [
         pytest.param(SymmetricTensor, 2, 2, [0, 1], [3, 2], None, id='Symmetric-2<2-trivial'),
@@ -1477,15 +1573,17 @@ def test_tdot(cls_A: Type[tensors.Tensor], cls_B: Type[tensors.Tensor],
     
     if (cls_A is Mask and cls_B is Mask) and num_contr > 0:
         catch_errors = pytest.raises(NotImplementedError)
+    
     if DiagonalTensor in [cls_A, cls_B] and isinstance(A.backend, backends.AbelianBackend):
-        if num_contr == 2:
-            catch_errors = pytest.raises(NotImplementedError)
-        if num_contr == 1 and not (cls_A is DiagonalTensor and cls_B is DiagonalTensor):
-            catch_errors = pytest.raises(NotImplementedError)
-    elif (cls_A in [DiagonalTensor, Mask] or cls_B in [DiagonalTensor, Mask]) and num_contr == 2:
-        catch_errors = pytest.raises(NotImplementedError)
+        catch_errors = pytest.raises(NotImplementedError, match='abelian.scale_axis not implemented')
+        if (cls_A is DiagonalTensor and cls_B is DiagonalTensor):
+            catch_errors = nullcontext()
+        if num_contr == 0:
+            catch_errors = nullcontext()
     elif isinstance(A.backend, backends.FusionTreeBackend):
         catch_errors = pytest.raises(NotImplementedError)
+        if (cls_A is DiagonalTensor and cls_B is DiagonalTensor) and num_contr == 2:
+            catch_errors = nullcontext()
 
     catch_warnings = nullcontext()
     if (cls_A in [DiagonalTensor, Mask] or cls_B in [DiagonalTensor, Mask]) and num_contr == 0:
@@ -1522,7 +1620,7 @@ def test_tdot(cls_A: Type[tensors.Tensor], cls_B: Type[tensors.Tensor],
                                        pytest.param(ChargedTensor, 2, id='Charged-2'),
                                        pytest.param(ChargedTensor, 1, id='Charged-1'),
                                        pytest.param(DiagonalTensor, 1, id='Diag'),])
-def test_trace_full(cls, legs, make_compatible_tensor, compatible_symmetry, make_compatible_sectors,
+def test_trace(cls, legs, make_compatible_tensor, compatible_symmetry, make_compatible_sectors,
                     make_compatible_space):
     co_domain_spaces = [make_compatible_space() for _ in range(legs)]
     if cls is ChargedTensor:
@@ -1538,8 +1636,8 @@ def test_trace_full(cls, legs, make_compatible_tensor, compatible_symmetry, make
     else:
         tensor: cls = make_compatible_tensor(co_domain_spaces, co_domain_spaces, cls=cls)
 
-    if cls is ChargedTensor:
-        with pytest.raises(NotImplementedError, match='tensors.partial_trace not implemented'):
+    if cls is ChargedTensor and isinstance(tensor.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError, match='partial_trace not implemented'):
             _ = tensors.trace(tensor)
         pytest.xfail()
 
@@ -1555,12 +1653,6 @@ def test_trace_full(cls, legs, make_compatible_tensor, compatible_symmetry, make
     while expect.ndim > 0:
         expect = np.trace(expect, axis1=0, axis2=-1)
     npt.assert_almost_equal(res, expect)
-
-
-# TODO
-def test_trace_partial():
-    pytest.skip('Test not written yet')  # TODO
-
 
 
 @pytest.mark.parametrize(

@@ -450,6 +450,14 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def partial_trace(self, tensor: SymmetricTensor, pairs: list[tuple[int, int]],
+                      levels: list[int] | None) -> tuple[Data, ProductSpace, ProductSpace]:
+        """Perform an arbitrary number of traces. Pairs are converted to leg idcs.
+        Returns ``data, codomain, domain``.
+        """
+        ...
+
+    @abstractmethod
     def permute_legs(self, a: SymmetricTensor, codomain_idcs: list[int], domain_idcs: list[int],
                      levels: list[int] | None) -> tuple[Data | None, ProductSpace, ProductSpace]:
         """Permute legs on the tensors.
@@ -597,10 +605,6 @@ class Backend(metaclass=ABCMeta):
 
     @abstractmethod
     def trace_full(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
-        ...
-
-    @abstractmethod
-    def trace_partial(self, a: SymmetricTensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
         ...
 
     @abstractmethod
