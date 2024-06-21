@@ -515,9 +515,9 @@ def decompose_theta_qr_based(old_T_L: npc.Array, old_T_R: npc.Array, theta: npc.
         Otherwise, the truncation error is set to NaN.
     return_both_T : bool
         Whether the other tensor (associated with ``not move_right``) should be returned as well.
-        If `Ture` and ``move_right=True``, the right tensor `T_Rc` is returned in `'Th'` (`'B'`) form, 
+        If `True` and ``move_right=True``, the right tensor `T_Rc` is returned in `'Th'` (`'B'`) form, 
         if ``use_eig_based_svd=True`` (``use_eig_based_svd=False``).
-        If `Ture` and ``move_right=False``, the left tensor `T_Lc` is returned in `'Th'` (`'A'`) form, 
+        If `True` and ``move_right=False``, the left tensor `T_Lc` is returned in `'Th'` (`'A'`) form, 
         if ``use_eig_based_svd=True`` (``use_eig_based_svd=False``).
 
     Returns
@@ -531,14 +531,12 @@ def decompose_theta_qr_based(old_T_L: npc.Array, old_T_R: npc.Array, theta: npc.
     trunc_err : TruncationError
     renormalize : float
     """
-
     if compute_err:
         return_both_T = True
-    
     theta /= npc.norm(theta) # <- TODO: discuss this, since for TEBD already normalized. Alternatively, normalize in VariationalCompression.update_local()
 
     if move_right:
-        # Get inital guess for the left isometry
+        # Get initial guess for the left isometry
         Y0 = _qr_theta_Y0(old_T_L, old_T_R, theta, move_right, expand, min_block_increase) # Y0: [(vL.p0), vR]
 
         # QR based updates
@@ -551,7 +549,7 @@ def decompose_theta_qr_based(old_T_L: npc.Array, old_T_R: npc.Array, theta: npc.
         A_L, Xi = npc.qr(theta_i0, inner_labels=['vR', 'vL']) # A_L: [(vL.p0), vR]
         
     else:
-        # Get inital guess for the right isometry
+        # Get initial guess for the right isometry
         Y0 = _qr_theta_Y0(old_T_L, old_T_R, theta, move_right, expand, min_block_increase) # Y0: [vL, (p1.vR)]
 
         # QR based updates
@@ -572,7 +570,7 @@ def decompose_theta_qr_based(old_T_L: npc.Array, old_T_R: npc.Array, theta: npc.
     else:
         U, S, Vd, _, renormalize = svd_theta(Xi, trunc_params) # <- TODO: Is it fine to not specify the charges here?
 
-    # Asign return matrices
+    # Assign return matrices
     T_Lc, T_Rc = None, None
     form = ['A','B']
     if move_right:
@@ -618,6 +616,7 @@ def decompose_theta_qr_based(old_T_L: npc.Array, old_T_R: npc.Array, theta: npc.
             T_Lc.ireplace_label('(vL.p0)', '(vL.p)')
         
     return T_Lc, S, T_Rc, form, trunc_err, renormalize
+
 
 def _combine_constraints(good1, good2, warn):
     """return logical_and(good1, good2) if there remains at least one `True` entry.
