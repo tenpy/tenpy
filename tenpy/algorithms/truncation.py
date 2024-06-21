@@ -474,15 +474,15 @@ def decompose_theta_qr_based(old_T_L: npc.Array, old_T_R: npc.Array, theta: npc.
 
     The decomposition for ``use_eig_based_svd=False`` is::
 
-        |   -- theta --   ==>   -- T_Lc --- S --- T_Rc --
-        |      |   |                |              |
+        |   -- theta --   ~=   renormalization * -- T_Lc --- S --- T_Rc --
+        |      |   |                                 |              |
 
     Where `T_Lc` is in `'A'` form and `T_Rc` in `'B'` form.
 
     The decomposition for ``use_eig_based_svd=True`` is::
 
-        |   -- theta --   ==>   -- T_Lc --- T_Rc --
-        |      |   |                |        |
+        |   -- theta --   ~=   renormalization * -- T_Lc --- T_Rc --
+        |      |   |                                 |        |
 
     Where `T_Lc` is in `'A'` (`'Th'`) form and `T_Rc` in `'Th'` (`'B'`) form, if ``move_right=True`` 
     (``move_right=False``).
@@ -524,19 +524,20 @@ def decompose_theta_qr_based(old_T_L: npc.Array, old_T_R: npc.Array, theta: npc.
     -------
     T_Lc : array with legs [(vL.p), vR] or None
     S : 1D numpy array
+        The singular values of the array.
+        Normalized to ``np.linalg.norm(S)==1``.
     T_Rc : array with legs [vL, (p.vR)] or None
     form : list
         List containing two entries providing the form of the two arrays `T_Lc` and `T_Rc` in string form.
         e.g. ``['A','Th']``
     trunc_err : TruncationError
-    renormalize : float
+    renormalization : float
+        Factor, by which S was renormalized.
     """
 
     if compute_err:
         return_both_T = True
     
-    theta /= npc.norm(theta) # <- TODO: discuss this, since for TEBD already normalized. Alternatively, normalize in VariationalCompression.update_local()
-
     if move_right:
         # Get inital guess for the left isometry
         Y0 = _qr_theta_Y0(old_T_L, old_T_R, theta, move_right, expand, min_block_increase) # Y0: [(vL.p0), vR]
@@ -566,11 +567,11 @@ def decompose_theta_qr_based(old_T_L: npc.Array, old_T_R: npc.Array, theta: npc.
 
     # SVD of bond matrix Xi
     if use_eig_based_svd:
-        U, S, Vd, _, renormalize = _eig_based_svd(
+        U, S, Vd, _, renormalization = _eig_based_svd(
             Xi, need_U=move_right, need_Vd=(not move_right), inner_labels=['vR', 'vL'], trunc_params=trunc_params
         )
     else:
-        U, S, Vd, _, renormalize = svd_theta(Xi, trunc_params) # <- TODO: Is it fine to not specify the charges here?
+        U, S, Vd, _, renormalization = svd_theta(Xi, trunc_params) # <- TODO: Is it fine to not specify the charges here?
 
     # Asign return matrices
     T_Lc, T_Rc = None, None
@@ -602,7 +603,7 @@ def decompose_theta_qr_based(old_T_L: npc.Array, old_T_R: npc.Array, theta: npc.
             theta_approx = npc.tensordot(T_Lc, T_Rc, ['vR', 'vL'])
         else:
             theta_approx = npc.tensordot(T_Lc.scale_axis(S, axis='vR'), T_Rc, ['vR', 'vL'])
-        eps = npc.norm(theta - theta_approx) ** 2 # TODO: if not normalized, error wrong
+        eps = npc.norm(theta/npc.norm(theta) - theta_approx) ** 2
         trunc_err = TruncationError(eps, 1. - 2. * eps)
     else:
         trunc_err = TruncationError(np.nan, np.nan)
@@ -617,7 +618,7 @@ def decompose_theta_qr_based(old_T_L: npc.Array, old_T_R: npc.Array, theta: npc.
         if return_both_T:
             T_Lc.ireplace_label('(vL.p0)', '(vL.p)')
         
-    return T_Lc, S, T_Rc, form, trunc_err, renormalize
+    return T_Lc, S, T_Rc, form, trunc_err, renormalization
 
 def _combine_constraints(good1, good2, warn):
     """return logical_and(good1, good2) if there remains at least one `True` entry.
