@@ -1036,7 +1036,7 @@ class Array:
         axes = np.array(axes, dtype=np.intp)
         keep_axes = np.array(keep_axes, dtype=np.intp)
         keep_blocks = np.all(self._qdata[:, axes] == pos[:, 0], axis=1)
-        res._qdata = np.array(self._qdata[np.ix_(keep_blocks, keep_axes)], copy=False, order='C')
+        res._qdata = np.asarray(self._qdata[np.ix_(keep_blocks, keep_axes)], order='C')
         # res._qdata_sorted is not changed
         # determine the slices to take on _data
         sl = [slice(None)] * self.rank
@@ -1076,10 +1076,9 @@ class Array:
         res._data = res._data[:]  # make a copy
         for j, T in enumerate(res._data):
             res._data[j] = T.reshape(T.shape[:axis] + (1, ) + T.shape[axis:])
-        res._qdata = np.array(np.hstack(
+        res._qdata = np.asarray(np.hstack(
             [res._qdata[:, :axis],
              np.zeros([len(res._data), 1], np.intp), res._qdata[:, axis:]]),
-                              copy=False,
                               order='C')
         return res
 
@@ -1711,7 +1710,7 @@ class Array:
         res.iset_leg_labels([labels[a] for a in keep])
 
         res._data = [np.squeeze(t, axis=axes).copy() for t in self._data]
-        res._qdata = np.array(self._qdata[:, np.array(keep)], copy=False, order='C')
+        res._qdata = np.asarray(self._qdata[:, np.array(keep)], order='C')
         # res._qdata_sorted doesn't change
         return res
 

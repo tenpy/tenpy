@@ -789,7 +789,7 @@ class HubbardMixedXKSquare(MixedXKModel):
         N_orb = xk_lat.N_orb
 
         # hopping
-        intra_hopping = np.zeros((Ly, N_orb, Ly, N_orb), dtype=np.complex_)
+        intra_hopping = np.zeros((Ly, N_orb, Ly, N_orb), dtype=complex)
         inter_hopping = np.zeros((Ly, N_orb, Ly, N_orb))
         cos_k = np.real(xk_lat.get_exp_ik(np.arange(Ly)))
         for k in range(Ly):
