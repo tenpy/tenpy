@@ -1,0 +1,49 @@
+#!/usr/bin/env -S python -m tenpy
+
+simulation_class : GroundStateSearch
+
+directory: results
+output_filename_params:
+    prefix: dmrg_tfi_cylinder
+    parts:
+        model_params.hx: 'g_{0:.1f}'
+    suffix: .h5
+
+model_class : SpinModel
+model_params :
+    bc_MPS: infinite
+    bc_y: cylinder
+    lattice: Square
+    Lx: 2
+    Ly: 4
+    S: .5
+    Jx: -1
+    hx: [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0]
+    
+log_params:
+    to_file: INFO
+    to_stdout: INFO
+    
+initial_state_params:
+    method : lat_product_state
+    product_state : [[[up]]]
+
+algorithm_class: TwoSiteDMRGEngine
+algorithm_params:
+    mixer: True
+    trunc_params:
+        svd_min: 1.e-10
+        chi_max: 200
+    max_E_err: 1.e-10
+    
+connect_measurements:
+  - - tenpy.simulations.measurement
+    - m_onsite_expectation_value
+    - opname: Sz
+  - - tenpy.simulations.measurement
+    - m_correlation_length
+    - unit: lattice_rings
+    
+sequential:
+    recursive_keys:
+        - model_params.hx
