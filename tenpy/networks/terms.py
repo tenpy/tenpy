@@ -648,7 +648,7 @@ class CouplingTerms(Hdf5Exportable):
                 style['color'] = hsv(norm_angle(np.angle(strength)))
                 return style
 
-        text_pos = np.array([1. - text_pos, text_pos], np.float_)
+        text_pos = np.array([1. - text_pos, text_pos], np.float64)
         for i in sorted(self.coupling_terms.keys()):
             d1 = self.coupling_terms[i]
             x_y[0, :] = pos[i]
