@@ -29,7 +29,7 @@ chinfoTr = npc.ChargeInfo()  # trivial charge
 
 lcTr = npc.LegCharge.from_qind(chinfoTr, [0, 2, 3, 5, 8], [[]] * 4)
 
-EPS = np.finfo(np.float_).eps
+EPS = np.finfo(np.float64).eps
 
 
 def project_multiple_axes(flat_array, perms, axes):
