@@ -12,6 +12,7 @@ released.
     :maxdepth: 1
     
     changelog/_latest.rst
+    changelog/v1.0.3.rst
     changelog/v1.0.2.rst
     changelog/v1.0.1.rst
     changelog/v1.0.0.rst

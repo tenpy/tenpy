@@ -1,1 +1,0 @@
-- fix the `tenpy/linag/_npc_helper.pyx` cython files to compile with the latest numpy=1.26 cython=3.0.10 combination.
