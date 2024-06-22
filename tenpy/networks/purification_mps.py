@@ -460,6 +460,7 @@ class PurificationMPS(MPS):
         raise NotImplementedError()
 
     def sample_measurements(self,
+                            sample_q,
                             first_site=0,
                             last_site=None,
                             ops=None,
@@ -467,9 +468,19 @@ class PurificationMPS(MPS):
                             norm_tol=1.e-12):
         """Sample measurement results in the computational basis. See
         MPS.sample_measurements for documentation of the function. The only functional difference
-        between these two functions is that we sample over the physical leg and leave
-        the ancilla leg behind on each site. Also, we return the weight**2 of the measurements
-        rather than the weight as in MPS case.
+        between these two functions is that we must now deal with the ancilla leg on each site. There are
+        two options, specified by `sample_q`:
+            (1) Sample both the p and q leg on each site; at the end, forget about the outcomes for the q leg
+            to sample from the distribution just on the physical legs. The probabilty we return is the joint
+            probability of both p and q outcomes. We don't care about in which basis we sample the q legs.
+            (2) Leave the ancilla leg behind on each site. Then we sample directly from the distribution on p legs,
+            but this is more expensive. The total cost of sampling is now O(chi^3) rather than O(chi^2). The returned
+            probability is just that of the p outcomes.
+
+        Parameters (differences from MPS)
+        ----------
+        sample_q : Boolean
+            Do we sample the q leg (True) or leave it behind (False)?
 
         Returns (differences from MPS)
         -------
@@ -485,7 +496,7 @@ class PurificationMPS(MPS):
         total_probability = 1.
         theta = self.get_theta(first_site, n=1).replace_labels(['p0', 'q0'], ['p', 'q'])
         for i in range(first_site, last_site + 1):
-            # theta = wave function in basis vL [sigmas...] p vR
+            # theta = wave function in basis vL [sigmas...] p q vR
             # where the `sigmas` are already fixed to the measurement results
             i0 = self._to_valid_index(i)
             site = self.sites[i0]
@@ -500,30 +511,65 @@ class PurificationMPS(MPS):
                 W = np.arange(site.dim)
             # perform a projective measurement:
             # trace out rest except site `i`
-            rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']])
-            # probabilities p(sigma) = <sigma|rho|sigma>
-            rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
-            if abs(np.sum(rho_diag) - 1.) > norm_tol:
-                raise ValueError("not normalized to `norm_tol`")
-            rho_diag /= np.sum(rho_diag)
-            sigma = rng.choice(site.dim, p=rho_diag)  # randomly select index from probabilities
-            sigmas.append(W[sigma])
-            theta = theta.take_slice(sigma, 'p')  # project to sigma in theta for remaining rho
-            #weight = npc.norm(theta)
-            probability = rho_diag[sigma] # this squared is probability of seeing sigma conditioned on previous results.
-            # weight**2 should be equal to rho_diag[sigma] which should be the same as
-            # npc.tensordot(theta.conj(), theta, axes=(['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']))
-            total_probability *= probability
+            if sample_q == False:
+                rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']]) # physical RDM on site i
+                # probabilities p(sigma) = <sigma|rho|sigma>
+                rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
+                if abs(np.sum(rho_diag) - 1.) > norm_tol:
+                    raise ValueError("not normalized to `norm_tol`")
+                rho_diag /= np.sum(rho_diag)
+                sigma = rng.choice(site.dim, p=rho_diag)  # randomly select index from probabilities
+                sigmas.append(W[sigma]) # return eigenvalue if an op was specified
+                theta = theta.take_slice(sigma, 'p')  # project to sigma in theta; now has legs vL (trivial), q, vR
+                probability = rho_diag[sigma] # this is probability of seeing sigma conditioned on previous results.
+                # rho_diag[sigma] which should be the same as the norm of theta squared
+                # assert np.isclose(probability, npc.tensordot(theta.conj(), theta, axes=(['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q'])))
+                total_probability *= probability    # probability of p outcome
+            else:
+                W2 = np.arange(site.dim)    # outcomes for q leg
+                # Sample p
+                rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']]) # physical RDM on site i
+                # probabilities p(sigma) = <sigma|rho|sigma>
+                rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
+                if abs(np.sum(rho_diag) - 1.) > norm_tol:
+                    raise ValueError("not normalized to `norm_tol`")
+                rho_diag /= np.sum(rho_diag)
+                sigma_1 = rng.choice(site.dim, p=rho_diag)  # randomly select index from probabilities
+                probability = rho_diag[sigma_1] # rho_diag[sigma_1] is probability of p outcome, conditioned on all previous outcomes
+                # So by Bayes' rule, we now have the joint probability of all sampled outcomes.
+                theta = theta.take_slice([sigma_1], ['p'])  # project to sigma in theta; now has legs vL (trivial), vR
+
+                # Sample q
+                rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*'], ['vL', 'vR']]) # physical RDM on site i
+                # probabilities p(sigma) = <sigma|rho|sigma>
+                rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
+                # rho_diag will nothave trace = 1 since we didn't normalize theta after slicing.
+                rho_diag /= np.sum(rho_diag)
+                sigma_2 = rng.choice(site.dim, p=rho_diag)  # randomly select index from probabilities
+                probability *= rho_diag[sigma_2] # probabilty of all outcomes seen so far.
+                theta = theta.take_slice([sigma_2], ['q'])  # project to sigma in theta; now has legs vL (trivial), vR
+
+                sigmas.append((W[sigma_1], W2[sigma_2])) # For ancilla, just return the index of the leg we chose.
+                # rho_diag[sigma] which should be the same as the norm of theta squared
+                # assert np.isclose(probability, npc.tensordot(theta.conj(), theta, axes=(['vL*', 'vR*'], ['vL', 'vR'])))
+                total_probability *= probability    # probability of q outcome
+
             if i != last_site:
-                # attach next site to sigma
-                theta = theta / npc.norm(theta)
-                Q, R = npc.qr(theta.combine_legs(['vL', 'q']),
-                              inner_labels=['vR', 'vL'],
-                              pos_diag_R=True,
-                              )
+                # Move orthogonality center to the next site
+                theta = theta / npc.norm(theta) # renormalize
                 B = self.get_B(i + 1)
-                theta = npc.tensordot(R, B, axes=['vR', 'vL'])
+                if sample_q:
+                    theta = npc.tensordot(theta, B, axes=['vR', 'vL'])
+                else:
+                    Q, R = npc.qr(theta.combine_legs(['vL', 'q']),
+                                  inner_labels=['vR', 'vL'],
+                                  pos_diag_R=True,
+                                  )
+                    theta = npc.tensordot(R, B, axes=['vR', 'vL'])
                 # B is right-canonical -> theta still normalized
+            elif self.bc == 'finite' and first_site == 0 and last_site == self.L - 1 and sample_q:
+                assert theta.shape == (1,1) # This contains the phase; but we don't want this since
+                # we are returning the probability, not the weight.
         return sigmas, total_probability
 
     def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
