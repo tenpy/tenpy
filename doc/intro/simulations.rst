@@ -14,7 +14,9 @@ In fact, any simulation can be run from the command line, given only a parameter
    # or alternatively, if tenpy is installed correctly:
    tenpy-run parameters.yml
 
-Of course, you need to specify somewhere what type of simulation you want to run. Often, one of the predefined ones like
+   # equivalent to calling `tenpy.console_main("parameters.yml")` from within python
+
+You need to specify somewhere what type of simulation you want to run. Often, one of the predefined ones like
 the :class:`~tenpy.simulations.ground_state_search.GroundStateSearch` for running DMRG or
 :class:`~tenpy.simulations.time_evolution.RealTimeEvolution` for running e.g. TEBD or TDVP will suffice.
 The :class:`~tenpy.simulations.simulation.Simulation` class can be specified with the `simulation_class` option in the yaml file, or directly as a command line
@@ -25,10 +27,21 @@ For more details, see :func:`tenpy.console_main` for the command-line interface.
 Of course, you can also directly run the simulation from inside python, the command line call is essentially just a wrapper around the :func:`tenpy.run_simulation` python interface::
 
     import tenpy
-    import yaml
 
-    simulation_params = yaml.load("parameters.yml")
+    simulation_params = tenpy.load_yaml_with_py_eval("parameters.yml")
     # instead of using yaml, you can also define a usual python dictionary
+    tenpy.run_simulation(**simulation_params)
+
+Or as a single line::
+
+    tenpy.console_main("parameters.yml")
+
+To have self-contained jupyter notebook examples, the following pattern might be useful::
+
+    simulation_params = tenpy.load_yaml_with_py_eval(yaml_content="""
+    SimulationClass: GroundStateSearch
+    ...
+    """)
     tenpy.run_simulation(**simulation_params)
 
 
@@ -39,7 +52,7 @@ An minimal example to run finite DMRG for a Spin-1/2 Heisenberg :class:`~tenpy.m
 
 Parallelization: controlling the number of threads
 --------------------------------------------------
-Almost all of the TeNPy code is "only" using thread-based paralellization provided by the underlying LAPACK/BLAS package linked to by Numpy/Scipy, and/or TeNPy's Cython code when you compile it.
+Almost all of the TeNPy code is "only" using thread-based parallelization provided by the underlying LAPACK/BLAS package linked to by Numpy/Scipy, and/or TeNPy's Cython code when you compile it.
 (A notable exception is the :class:`~tenpy.tools.cache.ThreadedStorage` for caching.)
 In practice, you can control the number of threads in the same way as if you use just plain numpy - by default, this uses all the CPU cores on a given machine. 
 
@@ -50,8 +63,8 @@ If you run things on a cluster, it is often required to only use a fixed number 
     export OMP_NUM_THREADS=4
     python -m tenpy parameters.yml
 
-If you linked against MKL, you can use ``export MKL_NUM_THREADS=4`` instead. In some cases, it might also be necessary to additionaly ``export MKL_DYNAMIC=FALSE``.
-Universities usually have some kind of local cluster documentation with examples - try to follow those, and doulbe check
+If you linked against MKL, you can use ``export MKL_NUM_THREADS=4`` instead. In some cases, it might also be necessary to additionally ``export MKL_DYNAMIC=FALSE``.
+Universities usually have some kind of local cluster documentation with examples - try to follow those, and double check
 that you only use the cores you request.
 
 
@@ -80,14 +93,15 @@ To get the full set of used options, it can be convenient to simply run the algo
 (for debugging parameters to allow a very quick run) and look at the ``results['simulation_parameters']``
 returned by the simulation (or saved to file):
 
-.. code-block :: yaml
+.. code-block :: python
 
     import tenpy
     from pprint import pprint
     import yaml
 
-    with open('parameters.yml', 'r') as f:
-        simulation_parameters = yaml.safe_load(f)
+    with open('parameters.yml', 'r') as stream:
+        simulation_parameters = tenpy.load_yaml_with_py_eval(stream)
+    # alternative: simulation_parameters = tenpy.load_yaml_with_py_eval('parameters.yml')
     results = tenpy.run_simulation(simulation_parameters)
     pprint(results['simulation_parameters'])
 
@@ -106,7 +120,7 @@ Adjusting the output
 If specified, output files are saved in a given :cfg:option:`Simulation.directory`.
 As shown in the parameter example above, you can simply give an :cfg:option:`Simulation.output_filename` parameter.
 Alternatively, one can specify the :cfg:option:`Simulation.output_filename_params` to make the filename depend on other
-simulation paramters (specified as keys of the `parts`), e.g:
+simulation parameters (specified as keys of the `parts`), e.g:
 
 .. code-block :: yaml
 
@@ -157,7 +171,7 @@ The general structure is listed in :attr:`~tenpy.simulations.simulation.Simulati
 Possible entries depend on the simulation class run, and some options like `save_psi` or specified measurements.
 
 Let us consider our initial DMRG example.
-The :class:`~tenpy.simulations.ground_state_search.GroundStateSearch` performs two measurements: one on the inital
+The :class:`~tenpy.simulations.ground_state_search.GroundStateSearch` performs two measurements: one on the initial
 state (unless disabled with :cfg:option:`measure_initial` and one on the final state.
 Further, MPS-based simulations by default measure the entanglement entropies for cutting at the various MPS bonds, 
 such that we can read out the final half-chain entanglement entropy like this::
@@ -225,7 +239,7 @@ A full example with custom python code
 --------------------------------------
 
 While there are plenty of predefined models and algorithms, there is a good chance that you need to tweak and adjust
-them further by writing your own python code. Examples could be custom models and/or lattices, measurment functions, or
+them further by writing your own python code. Examples could be custom models and/or lattices, measurement functions, or
 even adjustments to any other class (tensor networks, algorithms, simulations...).
 
 As a concrete example, let's try to reproduce some results of :cite:`pollmann2012`, namely the :math:`\mathcal{O}_I` defined in eq. (15) of that paper.
@@ -249,7 +263,7 @@ You can then run this simulation, say for three different `D` values specified d
 
 .. note ::
 
-    If you use the setup from the [TeNPyProjectTemplate]_ repository, the ``cluster_jobs.py`` helps to manage submiting
+    If you use the setup from the [TeNPyProjectTemplate]_ repository, the ``cluster_jobs.py`` helps to manage submitting
     jobs with similar parameters to a computing cluster; 
     it includes this very example as a starting point for customization.
 
@@ -289,7 +303,7 @@ particular for flux pump experiments, or to get a stable scaling with bond dimen
 To achieve this, you need to call :func:`~tenpy.run_seq_simulations` instead of just :func:`~tenpy.run_simulation`, and
 specify the :cfg:config:`sequential` parameters for the simulation (at the top level of the yaml files), in particular
 the `recursive_keys` for the parameters to be changed. The values for those parameters can be specified as 
-:cfg:option:`sequential.value_lists`, or as lists in the original localtion of the yaml file.
+:cfg:option:`sequential.value_lists`, or as lists in the original location of the yaml file.
 
 .. code-block :: yaml
 

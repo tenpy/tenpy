@@ -2,12 +2,10 @@
 
 .. todo ::     add further terms (e.g. c^dagger c^dagger + h.c.) to the Hamiltonian.
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
-import numpy as np
 
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import asConfig
 from ..networks.site import FermionSite
 from .lattice import Chain
 
@@ -55,7 +53,7 @@ class FermionModel(CouplingMPOModel):
             particles hopping around the circumference of the cylinder acquire a phase `phi_ext`.
     """
     def init_sites(self, model_params):
-        conserve = model_params.get('conserve', 'N')
+        conserve = model_params.get('conserve', 'N', str)
         if conserve == 'best':
             conserve = 'N'
             self.logger.info("%s: set conserve to %s", self.name, conserve)
@@ -63,10 +61,10 @@ class FermionModel(CouplingMPOModel):
         return site
 
     def init_terms(self, model_params):
-        J = model_params.get('J', 1.)
-        V = model_params.get('V', 1.)
-        mu = model_params.get('mu', 0.)
-        phi_ext = model_params.get('phi_ext', None)
+        J = model_params.get('J', 1., 'real_or_array')
+        V = model_params.get('V', 1., 'real_or_array')
+        mu = model_params.get('mu', 0., 'real_or_array')
+        phi_ext = model_params.get('phi_ext', None, 'real')
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu, u, 'N')
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:

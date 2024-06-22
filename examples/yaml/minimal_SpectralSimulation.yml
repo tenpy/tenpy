@@ -1,0 +1,34 @@
+#!/usr/bin/env -S python -m tenpy
+# This can only run if there is an output `results/a_minimal_DMRG.h5`
+
+simulation_class: SpectralSimulation
+
+ground_state_filename: a_minimal_DMRG.h5
+
+directory: results
+output_filename: a_minimal_SpectralSimulation.h5
+
+operator_t0:
+    opname: Sz  # can also be a list
+    # lat_idx: [x, y, u]  (or a 2d list for multi operators)
+    # mps_idx:
+    # key_name:
+operator_t: Sz
+
+final_time: 1
+
+algorithm_class: TEBDEngine
+algorithm_params:
+    trunc_params:
+        chi_max: 120
+    dt : 0.1
+    N_steps : 2  # measurements every dt*N_steps
+
+spectral_function_params:
+    linear_predict: True
+    # rel_prediction_time: 1
+    # rel_num_points: 0.3
+    # truncation_mode: renormalize
+    # rel_split: 0.1
+    gaussian_window: True
+    # sigma: 0.4

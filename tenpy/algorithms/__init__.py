@@ -14,14 +14,16 @@
     tdvp
     purification
     mpo_evolution
+    vumps
+    plane_wave_excitation
     network_contractor
     exact_diag
     disentangler
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from . import algorithm, truncation, dmrg, dmrg_parallel, disentangler, mps_common, tebd, tdvp, \
-    exact_diag, purification, network_contractor, mpo_evolution
+    exact_diag, purification, network_contractor, mpo_evolution, vumps, plane_wave_excitation
 from .algorithm import *
 from .disentangler import *
 from .dmrg_parallel import *
@@ -34,6 +36,9 @@ from .purification import *
 from .tdvp import *
 from .tebd import *
 from .truncation import *
+from .vumps import *
+from .plane_wave_excitation import *
+
 
 __all__ = [
     "algorithm",
@@ -48,6 +53,8 @@ __all__ = [
     "network_contractor",
     "mpo_evolution",
     "disentangler",
+    "vumps",
+    "plane_wave_excitation",
     *algorithm.__all__,
     *truncation.__all__,
     *[n for n in dmrg.__all__ if n not in ['Mixer', 'SubspaceExpansion', 'DensityMatrixMixer']],
@@ -60,4 +67,6 @@ __all__ = [
     *purification.__all__,
     *network_contractor.__all__,
     *mpo_evolution.__all__,
+    *vumps.__all__,
+    *plane_wave_excitation.__all__,
 ]

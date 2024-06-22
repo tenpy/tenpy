@@ -41,7 +41,7 @@ is the discarded part (orthogonal to the kept part) and the
     There might be other sources of error as well, for example TEBD has also an discretization
     error depending on the chosen time step.
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from ..linalg import np_conserved as npc
@@ -143,10 +143,6 @@ def truncate(S, options):
 
     Options
     -------
-    .. deprecated :: 0.5.1
-        Renamed `symmetry_tol` to `degeneracy_tol`,
-        and don't use log in the condition any more.
-
     .. cfg:config:: truncation
 
         chi_max : int
@@ -191,15 +187,11 @@ def truncate(S, options):
     options = asConfig(options, "truncation")
     # by default, only truncate values which are much closer to zero than machine precision.
     # This is only to avoid problems with taking the inverse of `S`.
-    chi_max = options.get('chi_max', 100)
-    chi_min = options.get('chi_min', None)
-    deg_tol = options.get('degeneracy_tol', None)
-    options.deprecated_alias('symmetry_tol', 'degeneracy_tol',
-                             "We don't use `log` in the condition anymore!")
-    if 'symmetry_tol' in options:  # deprecated!
-        deg_tol = np.log(options['symmetry_tol'])
-    svd_min = options.get('svd_min', 1.e-14)
-    trunc_cut = options.get('trunc_cut', 1.e-14)
+    chi_max = options.get('chi_max', 100, int)
+    chi_min = options.get('chi_min', None, int)
+    deg_tol = options.get('degeneracy_tol', None, 'real')
+    svd_min = options.get('svd_min', 1.e-14, 'real')
+    trunc_cut = options.get('trunc_cut', 1.e-14, 'real')
 
     if trunc_cut is not None and trunc_cut >= 1.:
         raise ValueError("trunc_cut >=1.")

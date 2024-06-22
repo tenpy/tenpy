@@ -5,23 +5,16 @@ A tool to contract a network of multiple tensors.
 This is an implementation of 'NCON: A tensor network contractor for MATLAB'
 by Robert N. C. Pfeifer, Glen Evenbly, Sukhwinder Singh, Guifre Vidal, see :arxiv:`1402.0939`
 
-.. autodata :: outer_product
-
 .. todo ::
     - implement or wrap netcon.m, a function to find optimal contraction sequences
         (:arxiv:`1304.6112`)
-    - implement or deprecate the outer_product in sequence behavior
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
-import warnings
-import collections
 from ..linalg import np_conserved as npc
 
-__all__ = ['outer_product', 'contract', 'ncon']
-
-outer_product = -66666666  #: a constant that represents an outer product in the sequence of ncon
+__all__ = ['contract', 'ncon']
 
 
 def ncon(tensor_list, leg_links, sequence=None):
@@ -44,10 +37,8 @@ def ncon(tensor_list, leg_links, sequence=None):
         Negative values ``-1,-2,-3,...`` are labels of uncontracted legs and indicate the final ordering
         (``-1`` is the first axis).
     sequence : list of int, optional
-        The order in which the contractions (indicated by positive values in `leg_links` are to be performed.
-        Ascending order is used by default
-        An entry of network_contractor.outer_product indicates performing an outer product.
-        This corresponds to the zero-in-sequence convention of :arxiv:`1304.6112`
+        The order in which the contractions (indicated by positive values in `leg_links`) are to be performed.
+        Ascending order is used by default.
 
     Returns
     -------
@@ -55,8 +46,6 @@ def ncon(tensor_list, leg_links, sequence=None):
         The number or tensor resulting from the contraction.
     """
     tensor_list, leg_links, sequence = _ncon_input_checks(tensor_list, leg_links, sequence)
-    if outer_product in sequence:
-        raise NotImplementedError('Current implementation does not support outer product in sequence')
     tensor_list, leg_links, sequence = _ncon_do_traces(tensor_list, leg_links, sequence)
     tensor_list, leg_links, sequence = _ncon_do_binary_contractions(tensor_list, leg_links, sequence)
     tensor_list, leg_links = _ncon_do_outer_products(tensor_list, leg_links)
@@ -92,8 +81,6 @@ def contract(tensor_list, tensor_names=None, leg_contractions=None, open_legs=No
         ``0, 1, 2, ...``.
     sequence : list of int
         The order in which the leg_contractions are to be performed.
-        An entry of network_contractor.outer_product indicates performing an outer product.
-        This corresponds to the zero-in-sequence convention of :arxiv:`1304.6112`
 
     Returns
     -------
@@ -127,9 +114,6 @@ def contract(tensor_list, tensor_names=None, leg_contractions=None, open_legs=No
     contraction_counter = 1
     new_sequence = []
     for n in sequence:
-        if n == outer_product:
-            new_sequence.append(outer_product)
-            continue
 
         con = leg_contractions[n - 1]
         leg_idx1 = tensor_list[con[0]].get_leg_index(con[1])
@@ -190,8 +174,6 @@ def _ncon_input_checks(tensor_list, leg_links, sequence):
         if len(sequence) != num_contractions or set(sequence) != set(range(1, num_contractions + 1)):
             msg = f'Invalid sequence. Expected a permutation of [1, ..., {num_contractions}]. Got {sequence}.'
             raise ValueError(msg)
-        if outer_product in sequence:
-            raise ValueError('Outer product in sequence is deprecated.')
         
     return tensor_list, leg_links, sequence
 

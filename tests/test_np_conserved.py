@@ -1,13 +1,11 @@
 """A collection of tests for tenpy.linalg.np_conserved."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np
 import numpy.testing as npt
 import itertools as it
 from tenpy.tools.misc import inverse_permutation
-import warnings
-import pytest
 
 from random_test import gen_random_legcharge, random_Array
 
@@ -31,7 +29,7 @@ chinfoTr = npc.ChargeInfo()  # trivial charge
 
 lcTr = npc.LegCharge.from_qind(chinfoTr, [0, 2, 3, 5, 8], [[]] * 4)
 
-EPS = np.finfo(np.float_).eps
+EPS = np.finfo(np.float64).eps
 
 
 def project_multiple_axes(flat_array, perms, axes):
@@ -273,9 +271,7 @@ def test_npc_Array_reshape():
                                  ([[0], [1], [2]], [0, 1, 2]), ([[2, 0]], [1, 2, 0]),
                                  ([[2, 0, 1]], [2, 0, 1])]:
         print('combine legs', comb_legs)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", FutureWarning)
-            acomb = a.combine_legs(comb_legs)  # just sorts second leg
+        acomb = a.combine_legs(comb_legs)  # just sorts second leg
         print("=> labels: ", acomb.get_leg_labels())
         acomb.test_sanity()
         asplit = acomb.split_legs()
@@ -326,9 +322,7 @@ def test_npc_Array_reshape_2():
     shape = (2, 5, 2)
     a = random_Array(shape, chinfo3, sort=True)
     aflat = a.to_ndarray()
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", FutureWarning)
-        acomb = a.combine_legs([[0, 1]])
+    acomb = a.combine_legs([[0, 1]])
     acombflat = acomb.to_ndarray()
     pipe = acomb.legs[0]
     print(a)
@@ -507,12 +501,8 @@ def test_npc_addition_transpose():
     a2 = np.swapaxes(a1, 0, 1)
     t1 = npc.Array.from_ndarray_trivial(a1, labels=['a', 'b', 'c'])
     t2 = npc.Array.from_ndarray_trivial(a2, labels=['b', 'a', 'c'])
-    # TODO: for now warning
-    with pytest.warns(FutureWarning):
-        diff = npc.norm(t1 - t2)
-    # TODO: when the behaviour is changed do
-    #  diff = npc.norm(t1 - t2)
-    #  assert diff < 1.e-10
+    diff = npc.norm(t1 - t2)
+    assert diff < 1.e-10
 
 
 def test_npc_tensordot():

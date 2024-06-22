@@ -5,7 +5,7 @@ acting on them. Each term is given by a collection of (onsite) operator names an
 sites it acts on. Moreover, we associate a `strength` to each term, which corresponds to the
 prefactor when specifying e.g. a Hamiltonian.
 """
-# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -193,7 +193,12 @@ class TermList(Hdf5Exportable):
     def __str__(self):
         res = []
         for term, strength in self:
-            term_str = ' '.join(['{op!s}_{i:d}'.format(op=op, i=i) for op, i in term])
+            ops = []
+            for op, i in term:
+                if ' ' in op:
+                    op = '[' + op + ']'
+                ops.append(f"{op!s}_{i:d}")
+            term_str = ' '.join(ops)
             res.append('{s:.5f} * {t}'.format(s=strength, t=term_str))
         return ' +\n'.join(res)
 
@@ -349,6 +354,8 @@ class OnsiteTerms(Hdf5Exportable):
         for i, terms in enumerate(self.onsite_terms):
             for opname, strength in terms.items():
                 graph.add(i, 'IdL', 'IdR', opname, strength)
+        if graph.max_range is not None:
+            graph.max_range = max(graph.max_range, 1)
 
     def to_Arrays(self, sites):
         """Convert the :attr:`onsite_terms` into a list of np_conserved Arrays.
@@ -641,7 +648,7 @@ class CouplingTerms(Hdf5Exportable):
                 style['color'] = hsv(norm_angle(np.angle(strength)))
                 return style
 
-        text_pos = np.array([1. - text_pos, text_pos], np.float_)
+        text_pos = np.array([1. - text_pos, text_pos], np.float64)
         for i in sorted(self.coupling_terms.keys()):
             d1 = self.coupling_terms[i]
             x_y[0, :] = pos[i]
@@ -702,7 +709,8 @@ class CouplingTerms(Hdf5Exportable):
                     label_j = graph.add_string_left_to_right(i, j, label, op_string)
                     for opname_j, strength in d3.items():
                         graph.add(j, label_j, 'IdR', opname_j, strength)
-        # done
+        if graph.max_range is not None:
+            graph.max_range = max(graph.max_range, self.max_range())
 
     def to_nn_bond_Arrays(self, sites):
         """Convert the :attr:`coupling_terms` into Arrays on nearest neighbor bonds.
@@ -1125,7 +1133,8 @@ class MultiCouplingTerms(CouplingTerms):
                 continue
             switchLR, op_switch, shift, strength = connection
             graph.add(switchLR, keyL, keyR, op_switch, strength)
-        # done
+        if graph.max_range is not None:
+            graph.max_range = max(graph.max_range, self._max_range)
 
     def _insert_to_graph(self, graph, from_left):
         all_keys = [None] * len(self.connections)
@@ -1444,8 +1453,8 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                     else:
                         graph.add(i, label, label, op_string, 1.)
                 graph.add(last_subsite, label, 'IdR', op_j, strength)
-
-        # done
+        if graph.max_range is not None:
+            graph.max_range = np.inf
 
     def to_TermList(self, cutoff=0.01, bc="finite"):
         """Convert self into a :class:`TermList`.

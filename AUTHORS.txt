@@ -12,6 +12,17 @@ Markus Drescher
 Wilhelm Kadow
 Gunnar Moeller
 Jakob Unfried
+Bartholomew Andrews
+Jan Geiger
+Stefan Divic
+Sajant Anand
+Daniel Parker
+Philipp Thoma
+Jack Kemp 
+Michael Rader
+Umberto Borla
+Nico Kirchner
+Yantao Wu
 
 Further, the code is based on an earlier version of the library, mainly developed by
 Frank Pollmann, Michael P. Zaletel and Roger S. K. Mong.

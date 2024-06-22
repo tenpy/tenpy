@@ -65,7 +65,7 @@ Names for the ``ATTR_TYPE`` attribute:
 
 .. autodata:: TYPES_FOR_HDF5_DATASETS
 """
-# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import pickle
 import gzip
@@ -737,7 +737,12 @@ class Hdf5Saver:
     else:
         # numpy version 1.20 introduced separate subclasses of dtype for the standard types
         for t in np.dtype.__subclasses__():
-            dispatch_save[t] = (save_dtype, REPR_DTYPE)
+            if t.__name__.startswith('_'):
+                 # HACK: numpy version 2.0 introduced subclasses of subclasses
+                for t2 in t.__subclasses__():
+                    dispatch_save[t2] = (save_dtype, REPR_DTYPE)
+            else:
+                dispatch_save[t] = (save_dtype, REPR_DTYPE)
 
     def save_ignored(self, obj, path, type_repr):
         """Don't save the Hdf5Ignored object; just return None."""
@@ -891,6 +896,21 @@ class Hdf5Loader:
         data from subgroups with new calls of :meth:`load`.
         """
         self.memo_load.setdefault(h5gr.id, obj)  # don't overwrite existing entries!
+
+    def get_all_hdf5_keys(self, h5_group=None):
+        """Recursively display all keys in the given h5_group."""
+        if h5_group is None:
+            h5_group = self.h5group
+        results = dict()
+        for key in h5_group.keys():
+            if isinstance(h5_group[key], h5py.Group):
+                results[key] = self.get_all_hdf5_keys(h5_group[key])
+            else:
+                results[key] = h5_group[key]
+        # if we are on the lowest recursion level, we only return the keys as sets
+        if not any([isinstance(h5_group[key], h5py.Group) for key in h5_group.keys()]):
+            results = set(results)
+        return results
 
     @staticmethod
     def get_attr(h5gr, attr_name):

@@ -81,7 +81,7 @@ Overview
     speigs
 
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import scipy.linalg
@@ -97,7 +97,7 @@ from .svd_robust import svd as svd_flat
 
 from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation, list_to_dict_list
 from ..tools.math import speigs as _sp_speigs
-from ..tools.math import qr_li, rq_li
+from ..tools.math import qr_li
 from ..tools.string import vert_join, is_non_string_iterable
 from ..tools.optimization import optimize, OptimizationFlag, use_cython
 
@@ -106,7 +106,7 @@ __all__ = [
     'concatenate', 'grid_concat', 'grid_outer', 'detect_grid_outer_legcharge', 'detect_qtotal',
     'detect_legcharge', 'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh',
     'eig', 'eigvalsh', 'eigvals', 'speigs', 'expm', 'qr', 'orthogonal_columns',
-    'to_iterable_arrays'
+    'to_iterable_arrays', 'polar'
 ]
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
@@ -446,7 +446,8 @@ class Array:
         data_flat = np.asarray(data_flat)  # unspecified dtype
         if dtype is None:
             dtype = data_flat.dtype
-        data_flat = data_flat.astype(dtype, copy=False)
+        # make copy so we can safely modify
+        data_flat = data_flat.astype(dtype, copy=True)
         res = cls(legcharges, dtype, qtotal, labels)  # without any data
         if res.shape != data_flat.shape:
             raise ValueError("Incompatible shapes: legcharges {0!s} vs flat {1!s} ".format(
@@ -459,13 +460,15 @@ class Array:
             sl = res._get_block_slices(qindices)
             if np.all(res._get_block_charge(qindices) == qtotal):
                 data.append(np.array(data_flat[sl], dtype=res.dtype))  # copy data
+                data_flat[sl] = 0
                 qdata.append(qindices)
-            elif np.any(np.abs(data_flat[sl]) > cutoff):
-                if raise_wrong_sector:
-                    raise ValueError("wrong sector with non-zero entries")
-                if warn_wrong_sector:
-                    warnings.warn("flat array has non-zero entries in blocks "
-                                  "incompatible with charge",  stacklevel=2)
+        # have set all those entries that were read out to zero. Only zeros should remain
+        if np.any(np.abs(data_flat) > cutoff):
+            if raise_wrong_sector:
+                raise ValueError("wrong sector with non-zero entries")
+            if warn_wrong_sector:
+                msg = "flat array has non-zero entries in blocks incompatible with charge"
+                warnings.warn(msg,  stacklevel=2)
         res._data = data
         res._qdata = np.array(qdata, dtype=np.intp, order='C').reshape((len(qdata), res.rank))
         res._qdata_sorted = True
@@ -636,29 +639,6 @@ class Array:
     def ndim(self):
         """Alias for :attr:`rank` or ``len(self.shape)``."""
         return self.rank
-
-    @property
-    def labels(self):
-        warnings.warn("Deprecated access of Array.labels as dictionary.",
-                      category=FutureWarning,
-                      stacklevel=2)
-        dict_lab = {}
-        for i, l in enumerate(self._labels):
-            if l is not None:
-                dict_lab[l] = i
-        return dict_lab
-
-    @labels.setter
-    def labels(self, dict_lab):
-        warnings.warn("Deprecated setting of Array.labels with dictionary.",
-                      category=FutureWarning,
-                      stacklevel=2)
-        list_lab = [None] * self.rank
-        for k, v in dict_lab.items():
-            if list_lab[v] is not None:
-                raise ValueError("Two labels point to the same index " + repr(dict_lab))
-            list_lab[v] = str(k)
-        self._labels = list_lab
 
     # labels ==================================================================
 
@@ -1056,7 +1036,7 @@ class Array:
         axes = np.array(axes, dtype=np.intp)
         keep_axes = np.array(keep_axes, dtype=np.intp)
         keep_blocks = np.all(self._qdata[:, axes] == pos[:, 0], axis=1)
-        res._qdata = np.array(self._qdata[np.ix_(keep_blocks, keep_axes)], copy=False, order='C')
+        res._qdata = np.asarray(self._qdata[np.ix_(keep_blocks, keep_axes)], order='C')
         # res._qdata_sorted is not changed
         # determine the slices to take on _data
         sl = [slice(None)] * self.rank
@@ -1096,10 +1076,9 @@ class Array:
         res._data = res._data[:]  # make a copy
         for j, T in enumerate(res._data):
             res._data[j] = T.reshape(T.shape[:axis] + (1, ) + T.shape[axis:])
-        res._qdata = np.array(np.hstack(
+        res._qdata = np.asarray(np.hstack(
             [res._qdata[:, :axis],
              np.zeros([len(res._data), 1], np.intp), res._qdata[:, axis:]]),
-                              copy=False,
                               order='C')
         return res
 
@@ -1438,6 +1417,10 @@ class Array:
     def combine_legs(self, combine_legs, new_axes=None, pipes=None, qconj=None):
         """Reshape: combine multiple legs into multiple pipes. If necessary, transpose before.
 
+        .. versionchanged :: 1.0
+            Make `qconj` default to the `qconj` of the first leg to be combine rather than just +1.
+
+
         Parameters
         ----------
         combine_legs : (iterable of) iterable of {str|int}
@@ -1453,7 +1436,9 @@ class Array:
             computing new leg pipes for the same legs multiple times.
             The LegPipes are conjugated, if that is necessary for compatibility with the legs.
         qconj : (iterable of) {+1, -1}
-            Specify whether new created pipes point inward or outward. Defaults to +1.
+            Specify whether new created pipes point inward or outward.
+            Defaults to the same value as the first of the legs to be combined.
+            E.g. for a single combine, the default `qconj` is `self.get_leg(combine_legs[0]).qconj`.
             Ignored for given `pipes`, which are not newly calculated.
 
         Returns
@@ -1725,7 +1710,7 @@ class Array:
         res.iset_leg_labels([labels[a] for a in keep])
 
         res._data = [np.squeeze(t, axis=axes).copy() for t in self._data]
-        res._qdata = np.array(self._qdata[:, np.array(keep)], copy=False, order='C')
+        res._qdata = np.asarray(self._qdata[:, np.array(keep)], order='C')
         # res._qdata_sorted doesn't change
         return res
 
@@ -2339,6 +2324,7 @@ class Array:
         """
         if self is other:
             return True
+        if not isinstance(other, Array): return NotImplemented
         if other.chinfo != self.chinfo:
             raise ValueError("other array has different charges!")
         other = other._transpose_same_labels(self._labels)
@@ -2669,12 +2655,7 @@ class Array:
             if pipe is None:
                 qconj_i = qconj[i]
                 if qconj_i is None:
-                    qconj_i = +1  # will change in future to
-                    qconj_i_new = self.get_leg(combine_legs[i][0]).qconj
-                    if qconj_i != qconj_i_new:
-                        warnings.warn(
-                            "combine_legs default value for `qconj` will change "
-                            "from +1 to `qconj` of the first leg, here `-1`", FutureWarning, 3)
+                    qconj_i = self.get_leg(combine_legs[i][0]).qconj
                 pipes[i] = self.make_pipe(axes=combine_legs[i], qconj=qconj_i)
             else:
                 # test for compatibility
@@ -2804,18 +2785,11 @@ class Array:
                 warnings.warn("Not all legs labeled, so no transpose for Array addition. "
                               "Did you intend to transpose?")
             return self  # not all legs labeled
-        if set(self_labels) != set(other_labels):
-            return self  # different labels
-        # now: same labels, different order.
-        # TODO to keep backwards compatibility, just warn for now
-        warnings.warn(
-            "Arrays with same labels in different order. Transpose intended?"
-            " We will transpose in the future!",
-            category=FutureWarning,
-            stacklevel=2)
+        if set(self_labels) == set(other_labels):
+            # same labels, different order.
+            return self.transpose(other_labels)
+        # else: different labels
         return self
-        # TODO: do this for the next release
-        return self.transpose(other_labels)
 
 
 # ##################################
@@ -3398,8 +3372,11 @@ def outer(a, b):
     return res
 
 
-def inner(a, b, axes=None, do_conj=False):
+def inner(a, b, axes='labels', do_conj=False):
     """Contract all legs in `a` and `b`, return scalar.
+
+    .. versionchanged :: 1.0
+        Change default behaviour of `axes` from ``'range'`` to ``'labels'``.
 
     Parameters
     ----------
@@ -3410,8 +3387,8 @@ def inner(a, b, axes=None, do_conj=False):
         `axes_a` and `axes_b` specify the legs of `a` and `b`, respectively,
         which should be contracted. Legs can be specified with leg labels or indices.
         We contract leg ``axes_a[i]`` of `a` with leg ``axes_b[i]`` of `b`.
-        The default ``axes='range'`` is equivalent to ``(range(rank), range(rank))``.
-        ``axes='labels'`` is equivalent to either ``(a.get_leg_labels(), a.get_leg_labels())``
+        ``axes='range'`` is equivalent to ``(range(rank), range(rank))``.
+        The default ``axes='labels'`` is equivalent to either ``(a.get_leg_labels(), a.get_leg_labels())``
         for ``do_conj=True``,
         or to ``(a.get_leg_labels(), conj_labels(a.get_leg_labels()))`` for ``do_conj=False``.
         In other words, ``axes='labels'`` requires `a` and `b` to have the same/conjugated labels
@@ -3425,12 +3402,11 @@ def inner(a, b, axes=None, do_conj=False):
     inner_product : dtype
         A scalar (of common dtype of `a` and `b`) giving the full contraction of `a` and `b`.
     """
+    if isinstance(a, list) and isinstance(b, list):
+        return np.sum([inner(w, v, axes=axes, do_conj=do_conj) for w, v in zip(a, b)])
     if a.rank != b.rank:
         raise ValueError("different rank!")
-    if axes is None or axes == 'range':
-        if axes is None:
-            msg = "inner(): `axes` currently defaults to 'range', will change to 'labels'"
-            warnings.warn(msg, FutureWarning, stacklevel=2)
+    if axes == 'range':
         transp = False
     else:
         if axes == 'labels':
@@ -3456,11 +3432,14 @@ def inner(a, b, axes=None, do_conj=False):
     if not optimize(OptimizationFlag.skip_arg_checks):
         if a.chinfo != b.chinfo:
             raise ValueError("different ChargeInfo")
-        for lega, legb in zip(a.legs, b.legs):
-            if do_conj:
-                lega.test_equal(legb)
-            else:
-                lega.test_contractible(legb)
+        for i, (lega, legb) in enumerate(zip(a.legs, b.legs)):
+            try:
+                if do_conj:
+                    lega.test_equal(legb)
+                else:
+                    lega.test_contractible(legb)
+            except ValueError as e:
+                raise ValueError(f"incompatible legs {a._labels[i]!r} and {b._labels[i]!r}") from e
     return _inner_worker(a, b, do_conj)
 
 
@@ -3619,6 +3598,52 @@ def svd(a,
     VH.iset_leg_labels([labR, a_labels[1]])
     return U, S, VH
 
+def polar(a, cutoff=1.e-16, left=False, inner_labels=[None, None]):
+    """Polar decomposition of an Array `a`.
+
+    Factorizes ``u * p = a`` (left=False) or ``p * u = a`` (left=True), such that ``a = U*diag(S)*VH`` (where ``*`` stands for
+    a :func:`tensordot` and `diag` creates an correctly shaped Array with `S` on the diagonal).
+    For a non-zero `cutoff` this holds only approximately.
+
+    There is a gauge freedom regarding the charges, see also :meth:`Array.gauge_total_charge`.
+    We ensure contractibility by setting ``U.legs[1] = VH.legs[0].conj()``.
+    Further, we gauge the LegCharge such that `U` and `V` have the desired `qtotal_LR`.
+
+    Parameters
+    ----------
+    a : (M, N) :class:`Array`
+        Matrix to be pseudo-inverted.
+    cutoff : float
+        Cutoff for small singular values, as given to :func:`svd`.
+        (Note: different convention than numpy.)
+
+    Returns
+    -------
+    B : (N, M) :class:`Array`
+        The pseudo-inverse of `a`.
+    """
+    # check arguments
+    if a.rank != 2:
+        raise ValueError("Polar is only defined for a 2D matrix. Use LegPipes!")
+    if cutoff < 0.:
+        raise ValueError("invalid cutoff")
+    # follow exactly the procedure lined out.
+    # however, use inplace methods and don't construct the diagonal matrix explicitly.
+    W, s, VH = svd(a, cutoff=cutoff, inner_labels=inner_labels) # w s vh
+
+    u = tensordot(W, VH, axes=([1, 0]))
+    if not left:
+        labels = VH.conj().get_leg_labels()[1], VH.get_leg_labels()[1]
+        # a = up
+        p = tensordot(VH.conj().itranspose().iscale_axis(s), VH, axes=([1, 0])).iset_leg_labels(labels)
+        #p = (vh.T.conj() * s).dot(vh)
+    else:
+        # a = pu
+        labels = u.get_leg_labels()[0], u.conj().get_leg_labels()[0]
+        p = tensordot(W.iscale_axis(s), W.conj().itranspose(), axes=([1, 0])).iset_leg_labels(labels)
+        #p = (w * s).dot(w.T.conj())
+    return u, p, s
+
 
 def pinv(a, cutoff=1.e-15):
     """Compute the (Moore-Penrose) pseudo-inverse of a matrix.
@@ -3690,6 +3715,8 @@ def norm(a, ord=None, convert_to_float=True):
             new_type = np.result_type('f4', a.dtype)  # int -> float
             a = np.asarray(a, new_type)  # doesn't copy, if the dtype did not change.
         return np.linalg.norm(a.reshape((-1, )), ord)
+    elif isinstance(a, list):
+        return np.linalg.norm([norm(p) for p in a] + [0])
     else:
         raise ValueError("unknown type of a")
 

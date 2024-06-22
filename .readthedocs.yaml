@@ -4,21 +4,29 @@
 # Required
 version: 2
 
+# Set the OS, Python version and other tools you might need
+build:
+  os: ubuntu-22.04
+  apt_packages:
+    - graphviz
+  tools:
+    python: "3.11"
+    
+
 # Build documentation in the doc/ directory with Sphinx
 sphinx:
   configuration: doc/conf.py
 
 # Optionally build your docs in additional formats such as PDF and ePub
-formats:
-    - htmlzip
-    #- pdf
+# formats:
+#     - htmlzip
+#     #- pdf
 
 submodules:
     include: all
 
 # Optionally set the version of Python and requirements required to build your docs
 python:
-  version: 3.7
   install:
     - requirements: requirements.txt
     - requirements: doc/requirements.txt

@@ -1,5 +1,5 @@
 """A collection of tests for tenpy.models.lattice."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from tenpy.models import lattice
 import tenpy.linalg.np_conserved as npc
@@ -322,3 +322,49 @@ def test_index_conversion():
         expect_sz2 = np.sum(state2**2 * np.array([1., -1]), axis=-1)
         npt.assert_array_almost_equal_nulp(sz2_lat, expect_sz2, 100)
     # doen
+
+
+def test_reciprocal_basis_and_BZ():
+    lattices = [
+        lattice.Chain(2, None),
+        lattice.Ladder(2, None),
+        lattice.Square(2, 2, None),
+        lattice.Triangular(2, 2, None),
+        lattice.Honeycomb(2, 2, None),
+        lattice.Kagome(2, 2, None)
+    ]
+
+    # hardcoded arrays for BZ coordinates depending on default basis in tenpy lattice
+    corners_chain = np.array([-np.pi, np.pi])
+    corners_square = np.array([[np.pi, np.pi],
+                               [-np.pi, np.pi],
+                               [-np.pi, -np.pi],
+                               [np.pi, -np.pi]])
+    corners_triangular = np.array([[1, 1/np.sqrt(3)],
+                                  [0, 2/np.sqrt(3)],
+                                  [-1, 1/np.sqrt(3)],
+                                  [-1, -1/np.sqrt(3)],
+                                  [0, -2/np.sqrt(3)],
+                                  [1, -1/np.sqrt(3)]])*2*np.pi/np.sqrt(3)
+    corners_ladder = corners_chain
+    corners_honeycomb = corners_triangular
+    corners_kagome = np.rot90(corners_honeycomb).T/2  # (since the length of the basis vectors = 2)
+
+    bz_vertices_lat = [corners_chain, corners_ladder, corners_square, corners_triangular,
+                       corners_honeycomb, corners_kagome]
+
+    for lat, vertices in zip(lattices, bz_vertices_lat):
+        basis = lat.basis
+        recip_basis = lat.reciprocal_basis
+        # test a_i * b_j = 2*pi if i = j
+        for a, b in zip(basis, recip_basis):
+            assert np.allclose(a @ b, 2 * np.pi)
+        # test a_i * b_j = 0 if i != j
+        if lat.dim > 1:
+            for a, b in zip(np.roll(basis, 1, axis=0), recip_basis):
+                assert np.allclose(a @ b, 0)
+
+        # check that the BZ can be created
+        assert lat.BZ
+        # check that correct coordinates are returned
+        assert np.allclose(lat.BZ.vertices, lat.BZ.order_vertices(vertices))

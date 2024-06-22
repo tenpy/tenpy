@@ -1,11 +1,10 @@
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import numpy.testing as npt
 import tempfile
 import os
 import pytest
-import warnings
 
 from tenpy.tools.cache import CacheFile
 
@@ -54,12 +53,15 @@ def test_DictCache(**kwargs):
 
 @pytest.mark.skipif(h5py is None, reason="h5py not available")
 def test_Hdf5Cache():
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore', UserWarning)  # disable warngings temporarily
-        with tempfile.TemporaryDirectory() as tdir:
-            filename = os.path.join(tdir, 'tmp_Hdf5Cache.h5')
+    warning_msg = 'Benchmarks suggest that PickleStorage is faster than Hdf5Storage'
+    with tempfile.TemporaryDirectory() as tdir:
+        filename = os.path.join(tdir, 'tmp_Hdf5Cache.h5')
+        with pytest.warns(UserWarning, match=warning_msg):
             test_DictCache(storage_class="Hdf5Storage", filename=filename)
+    
+    with pytest.warns(UserWarning, match=warning_msg):
         test_DictCache(storage_class="Hdf5Storage")  # path = None -> tempfile in tenpy.tools.cache
+    with pytest.warns(UserWarning, match=warning_msg):
         test_DictCache(storage_class="Hdf5Storage", use_threading=True)
 
 

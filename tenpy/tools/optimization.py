@@ -76,7 +76,7 @@ knobs you can turn to tweak the most out of this library, explained in the follo
 .. autodata:: have_cython_functions
 .. autodata:: compiled_with_MKL
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from enum import IntEnum
 import warnings
@@ -140,6 +140,16 @@ class OptimizationFlag(IntEnum):
     default = 1
     safe = 2
     skip_arg_checks = 3
+
+    @classmethod
+    def from_bytes(cls, bytes, byteorder, *, signed = False):
+        """Like ``int.from_bytes``, which has a docstring which sphinx cant parse"""
+        return super(OptimizationFlag, cls).from_bytes(bytes, byteorder, signed=signed)
+
+
+    def to_bytes(self, length = 1, byteorder="big", *, signed=False):
+        """Like ``int.to_bytes``, which has a docstring which sphinx cant parse"""
+        return super().to_bytes(length, byteorder, signed=signed)
 
 
 class temporary_level:

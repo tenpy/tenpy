@@ -37,10 +37,11 @@ If one chooses imaginary :math:`dt`, the exponential projects
     Yet, imaginary TEBD might be useful for cross-checks and testing.
 
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import time
+import typing
 import warnings
 import logging
 logger = logging.getLogger(__name__)
@@ -49,17 +50,15 @@ from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError, truncate
 from ..linalg import random_matrix
+from ..tools.misc import consistency_check
 
-__all__ = ['TEBDEngine', 'Engine', 'QRBasedTEBDEngine', 'RandomUnitaryEvolution', 'TimeDependentTEBD']
+__all__ = ['TEBDEngine', 'QRBasedTEBDEngine', 'RandomUnitaryEvolution', 'TimeDependentTEBD']
 
 
 class TEBDEngine(TimeEvolutionAlgorithm):
     """Time Evolving Block Decimation (TEBD) algorithm.
 
     Parameters are the same as for :class:`~tenpy.algorithms.algorithm.Algorithm`.
-
-    .. deprecated :: 0.6.0
-        Renamed parameter/attribute `TEBD_params` to :attr:`options`.
 
     Options
     -------
@@ -74,6 +73,11 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         E_offset : None | list of float
             Energy offset to be applied in :meth:`calc_U`, see doc there.
             Only used for real-time evolution!
+        max_delta_t : float | None
+            Threshold for raising errors on too large time steps. Default ``1.0``.
+            The trotterization in the time evolution operator assumes that the time step is small.
+            We raise an error if it is not.
+            Can be downgraded to a warning by setting this option to ``None``.
 
     Attributes
     ----------
@@ -103,11 +107,6 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         self._U = None
         self._U_param = {}
         self._update_index = None
-
-    @property
-    def TEBD_params(self):
-        warnings.warn("renamed self.TEBD_params -> self.options", FutureWarning, stacklevel=2)
-        return self.options
 
     @property
     def trunc_err_bonds(self):
@@ -141,9 +140,9 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         delta_tau_list = self.options.get(
             'delta_tau_list',
             [0.1, 0.01, 0.001, 1.e-4, 1.e-5, 1.e-6, 1.e-7, 1.e-8, 1.e-9, 1.e-10, 1.e-11, 0.])
-        max_error_E = self.options.get('max_error_E', 1.e-13)
-        N_steps = self.options.get('N_steps', 10)
-        TrotterOrder = self.options.get('order', 2)
+        max_error_E = self.options.get('max_error_E', 1.e-13, 'real')
+        N_steps = self.options.get('N_steps', 10, int)
+        TrotterOrder = self.options.get('order', 2, int)
 
         Eold = np.mean(self.model.bond_energies(self.psi))
         Sold = np.mean(self.psi.entanglement_entropy())
@@ -156,7 +155,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             step = 0
             while (DeltaE > max_error_E):
                 if self.psi.finite and TrotterOrder == 2:
-                    self.update_imag(N_steps)
+                    self.update_imag(N_steps, call_canonical_form=False)
                 else:
                     self.evolve(N_steps, delta_tau)
                 step += N_steps
@@ -282,8 +281,8 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         raise ValueError("Unknown order {0!r} for Suzuki Trotter decomposition".format(order))
 
     def prepare_evolve(self, dt):
-        order = self.options.get('order', 2)
-        E_offset = self.options.get('E_offset', None)
+        order = self.options.get('order', 2, int)
+        E_offset = self.options.get('E_offset', None, 'real')
         self.calc_U(order, dt, type_evo='real', E_offset=E_offset)
 
     def calc_U(self, order, delta_t, type_evo='real', E_offset=None):
@@ -320,7 +319,8 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             return  # nothing to do: U is cached
         self._U_param = U_param
         logger.info("Calculate U for %s", U_param)
-
+        consistency_check(delta_t, self.options, 'max_delta_t', 1.,
+                          'delta_t > ``max_delta_t`` is unreasonably large for trotterization.')
         L = self.psi.L
         self._U = []
         for dt in self.suzuki_trotter_time_steps(order):
@@ -469,17 +469,26 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         self._trunc_err_bonds[i] = self._trunc_err_bonds[i] + trunc_err
         return trunc_err
 
-    def update_imag(self, N_steps):
+    def update_imag(self, N_steps, call_canonical_form=True):
         """Perform an update suitable for imaginary time evolution.
 
         Instead of the even/odd brick structure used for ordinary TEBD,
         we 'sweep' from left to right and right to left, similar as DMRG.
-        Thanks to that, we are actually able to preserve the canonical form.
+        Thanks to that, we are able to preserve at least the orthonormality
+        of the canoncial form.
+
 
         Parameters
         ----------
         N_steps : int
             The number of steps for which the whole lattice should be updated.
+        call_canonical_from : bool
+            The singular values saved in the MPS are not exactly correct after the update,
+            since the non-unitary update on other bonds can change them.
+            To fix this, we call `psi.canonical_form` at the end.
+            Since this is about as a expensive as a single sweep, we allow to disable it,
+            e.g. during the imaginary evolution looking for ground states where the intermediate
+            results is not so critical.
 
         Returns
         -------
@@ -514,6 +523,9 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         self.evolved_time = self.evolved_time + N_steps * self._U_param['tau']
         self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
         # (this is done to avoid problems of users storing self.trunc_err after each `update`)
+        if call_canonical_form:
+            # get correct singular values on all bonds to fix expectation values
+            self.psi.canonical_form()
         return trunc_err
 
     def update_bond_imag(self, i, U_bond):
@@ -580,18 +592,6 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         return U.split_legs()
 
 
-class Engine(TEBDEngine):
-    """Deprecated old name of :class:`TEBDEngine`.
-
-    .. deprecated : v0.8.0
-        Renamed the `Engine` to `TEBDEngine` to have unique algorithm class names.
-    """
-    def __init__(self, psi, model, options):
-        msg = "Renamed `Engine` class to `TEBDEngine`."
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        TEBDEngine.__init__(self, psi, model, options)
-
-
 class QRBasedTEBDEngine(TEBDEngine):
     r"""Version of TEBD that relies on QR decompositions rather than SVD.
 
@@ -634,13 +634,13 @@ class QRBasedTEBDEngine(TEBDEngine):
 
     def _expansion_rate(self, i):
         """get expansion rate for updating bond i"""
-        expand = self.options.get('cbe_expand', 0.1)
-        expand_0 = self.options.get('cbe_expand_0', None)
+        expand = self.options.get('cbe_expand', 0.1, 'real')
+        expand_0 = self.options.get('cbe_expand_0', None, 'real')
 
         if expand_0 is None or expand_0 == expand:
             return expand
 
-        chi_max = self.trunc_params.get('chi_max', None)
+        chi_max = self.trunc_params.get('chi_max', None, int)
         if chi_max is None:
             raise ValueError('Need to specify trunc_params["chi_max"] in order to use cbe_expand_0.')
 
@@ -658,12 +658,12 @@ class QRBasedTEBDEngine(TEBDEngine):
         theta = C.scale_axis(self.psi.get_SL(i0), 'vL')
         theta = theta.combine_legs([('vL', 'p0'), ('p1', 'vR')], qconj=[+1, -1])
 
-        min_block_increase = self.options.get('cbe_min_block_increase', 1)
+        min_block_increase = self.options.get('cbe_min_block_increase', 1, int)
         Y0 = _qr_tebd_cbe_Y0(B_L=self.psi.get_B(i0, 'B'), B_R=self.psi.get_B(i1, 'B'), theta=theta,
                              expand=expand, min_block_increase=min_block_increase)
         A_L, S, B_R, trunc_err, renormalize = _qr_based_decomposition(
-            theta=theta, Y0=Y0, use_eig_based_svd=self.options.get('use_eig_based_svd', False),
-            need_A_L=False, compute_err=self.options.get('compute_err', True),
+            theta=theta, Y0=Y0, use_eig_based_svd=self.options.get('use_eig_based_svd', False, bool),
+            need_A_L=False, compute_err=self.options.get('compute_err', True, bool),
             trunc_params=self.trunc_params
         )
         B_L = npc.tensordot(C.combine_legs(('p1', 'vR'), pipes=theta.legs[1]),
@@ -688,18 +688,18 @@ class QRBasedTEBDEngine(TEBDEngine):
         theta.itranspose(['vL', 'p0', 'p1', 'vR'])
         theta = theta.combine_legs([('vL', 'p0'), ('p1', 'vR')], qconj=[+1, -1])
 
-        use_eig_based_svd = self.options.get('use_eig_based_svd', False)
+        use_eig_based_svd = self.options.get('use_eig_based_svd', False, bool)
 
         if use_eig_based_svd:
             # see todo comment in _eig_based_svd
             raise NotImplementedError('update_bond_imag does not (yet) support eig based SVD')
 
-        min_block_increase = self.options.get('cbe_min_block_increase', 1)
+        min_block_increase = self.options.get('cbe_min_block_increase', 1, int)
         Y0 = _qr_tebd_cbe_Y0(B_L=self.psi.get_B(i0, 'B'), B_R=self.psi.get_B(i1, 'B'), theta=theta,
                              expand=expand, min_block_increase=min_block_increase)
         A_L, S, B_R, trunc_err, renormalize = _qr_based_decomposition(
             theta=theta, Y0=Y0, use_eig_based_svd=use_eig_based_svd,
-            need_A_L=True, compute_err=self.options.get('compute_err', True),
+            need_A_L=True, compute_err=self.options.get('compute_err', True, bool),
             trunc_params=self.trunc_params
         )
         A_L = A_L.split_legs(0)
@@ -968,7 +968,7 @@ class RandomUnitaryEvolution(TEBDEngine):
 
     def run(self):
         """Time evolution with TEBD and random two-site unitaries (possibly conserving charges)."""
-        dt = self.options.get('dt', 1)
+        dt = self.options.get('dt', 1, 'real')
         if dt != 1:
             warnings.warn(f"dt={dt!s} != 1 for RandomUnitaryEvolution "
                           "is only used as unit for evolved_time")
@@ -981,8 +981,6 @@ class RandomUnitaryEvolution(TEBDEngine):
     def calc_U(self):
         """Draw new random two-site unitaries replacing the usual `U` of TEBD.
 
-        The parameter `dt` is only there for compatibility with parent classes and is ignored.
-
         .. cfg:configoptions :: RandomUnitaryEvolution
 
             distribution_func : str | function
@@ -994,13 +992,13 @@ class RandomUnitaryEvolution(TEBDEngine):
             distribution_func_kwargs : dict
                 Extra keyword arguments for `distribution_func`.
         """
-        func = self.options.get('distribution_func', "CUE")
+        func = self.options.get('distribution_func', "CUE", [str, typing.Callable])
         if isinstance(func, str):
             if func not in ["CUE", "CRE", "COE", "O_close_1", "U_close_1"]:
                 raise ValueError("distribution_func should generate unitaries")
             func = getattr(random_matrix, func, None)
             assert func is not None
-        func_kwargs = self.options.get('distribution_func_kwargs', {})
+        func_kwargs = self.options.get('distribution_func_kwargs', {}, dict)
         sites = self.psi.sites
         L = len(sites)
         U_bonds = []

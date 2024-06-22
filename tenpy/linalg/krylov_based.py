@@ -1,22 +1,18 @@
 """Lanczos algorithm for np_conserved arrays."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
-import warnings
 import numpy as np
-from scipy.linalg import expm
-import scipy.sparse
 from .sparse import FlatHermitianOperator, OrthogonalNpcLinearOperator, ShiftNpcLinearOperator
 import logging
 logger = logging.getLogger(__name__)
 
 from . import np_conserved as npc
 from ..tools.params import asConfig
-from ..tools.math import speigsh
 from ..tools.misc import argsort
 
 __all__ = [
-    'KrylovBased', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution', 'lanczos_arpack',
-    'gram_schmidt', 'plot_stats'
+    'KrylovBased', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution', 'GMRES', 'lanczos_arpack',
+    'gram_schmidt', 'iadd_prefactor_other', 'iscale_prefactor', 'plot_stats'
 ]
 
 
@@ -112,21 +108,25 @@ class KrylovBased:
     _dtype_h_krylov = np.complex128
     _dtype_E = np.complex128
 
-    def __init__(self, H, psi0, options, orthogonal_to=[]):
+    def __init__(self, H, psi0, options):
         self.H = H
         self.psi0 = psi0.copy()
         self._psi0_norm = None
         self.options = options = asConfig(options, self.__class__.__name__)
-        self.N_min = options.get('N_min', 2)
-        self.N_max = options.get('N_max', 20)
+        self.N_min = options.get('N_min', 2, int)
+        self.N_max = options.get('N_max', 20, int)
         self.N_cache = self.N_max
-        self.P_tol = options.get('P_tol', 1.e-14)
-        self.min_gap = options.get('min_gap', 1.e-12)
-        self.reortho = options.get('reortho', False)
-        self.E_shift = options.get('E_shift', None)
+        self.P_tol = options.get('P_tol', 1.e-14, 'real')
+        self.min_gap = options.get('min_gap', 1.e-12, 'real')
+        self.reortho = options.get('reortho', False, bool)
+        self.E_shift = options.get('E_shift', None, 'real')
         if self.N_min < 2:
             raise ValueError("Should perform at least 2 steps.")
-        self._cutoff = options.get('cutoff', np.finfo(psi0.dtype).eps * 100)
+        self._cutoff = options.get(
+            'cutoff',
+            np.finfo(psi0.dtype if not isinstance(psi0, list) else psi0[0].dtype).eps * 100,
+            'real'
+        )
         if self.E_shift is not None:
             if isinstance(self.H, OrthogonalNpcLinearOperator):
                 self.H.orig_operator = ShiftNpcLinearOperator(self.H.orig_operator, self.E_shift)
@@ -150,11 +150,15 @@ class KrylovBased:
         """
         vf = self._result_krylov
         assert N == len(vf) > 1
-        psif = self.psi0 * vf[0]  # the start vector is still known and got normalized
+        if isinstance(self.psi0, npc.Array):
+            psif = self.psi0 * vf[0]  # the start vector is still known and got normalized
+        else:
+            assert isinstance(self.psi0, list)
+            psif = [p * vf[0] for p in self.psi0]
         len_cache = len(self._cache)
         # and the last len_cache vectors have been cached
         for k in range(1, min(len_cache + 1, N)):
-            psif.iadd_prefactor_other(vf[N - k], self._cache[-k])
+            self.iadd_prefactor_other(psif, vf[N - k], self._cache[-k])
         # other vectors are not cached, so we need to restart the Lanczos iteration.
         self._cache = []  # free memory: we need at least two more vectors
 
@@ -167,7 +171,7 @@ class KrylovBased:
             # If you get this warning, you can try to set the parameters
             # `reortho`=True and `N_cache` >= `N_max`
             logger.warning("poorly conditioned H matrix in KrylovBased! |psi_0| = %f", psif_norm)
-        psif.iscale_prefactor(1. / psif_norm)
+        self.iscale_prefactor(psif, 1. / psif_norm)
         return psif
 
     def _to_cache(self, psi):
@@ -180,6 +184,120 @@ class KrylovBased:
     def _calc_result_krylov(self, k):
         raise NotImplementedError("subclasses should implement this")
 
+    def iscale_prefactor(self, w, scale):
+        iscale_prefactor(w, scale)
+
+    def iadd_prefactor_other(self, w, alpha, v):
+        iadd_prefactor_other(w, alpha, v)
+
+class GMRES():
+    def __init__(self, A, x, b, options):
+        self.options = options = asConfig(options, self.__class__.__name__)
+        self.N_min = options.get('N_min', 5, int)
+        self.N_max = options.get('N_max', 20, int)
+        self.restart = options.get('restart', 10, int)
+        self.res = self.options.get('res', 1.e-8, 'real')
+        self.A = A
+        self.b = b.copy()
+        self.x = x.copy() # Initial guess
+        self.rs = [self.b.copy()]
+        self.rs[0] = self.rs[0].iadd_prefactor_other(-1, self.A.matvec(self.x)) # residuals
+        self.b_norm = npc.norm(self.b)
+        self.total_error = [[npc.norm(self.rs[0]) / self.b_norm]]
+        self.total_iters = []
+        self.r_norm = npc.norm(self.rs[0])
+        self.qs = [self.rs[0].copy()]
+        self.qs[0].iscale_prefactor(1./self.r_norm)
+
+        self.sine = np.zeros(self.N_max)*1.j
+        self.cosine = np.zeros(self.N_max)*1.j
+        self.e1 = npc.Array.from_ndarray_trivial(np.zeros(self.N_max+1)*1.j)
+        self.e1[0] = 1
+        self.e1.iscale_prefactor(self.r_norm)
+
+        self.H = npc.Array.from_ndarray_trivial(np.zeros((self.N_max+1, self.N_max))*1.j)
+
+    def run(self):
+        for _ in range(self.restart):
+            converged=False
+            for k in range(0,self.N_max):
+                self.arnoldi(k)
+                self.apply_givens_rotation(k)
+                self.e1[k+1] = -self.sine[k] * self.e1[k]
+                self.e1[k] = self.cosine[k] * self.e1[k]
+                error = np.abs(self.e1[k+1]) / self.b_norm # The residual is just the last element of $\beta$ vector (see Wikipedia) since $y$ is found exactly.
+                self.total_error[-1].append(error)
+                if error < self.res and k >= self.N_min:
+                    converged=True
+                    break
+            self.total_iters.append(k+1)
+            self.backsolve(k+1)
+            Q_mat = npc.concatenate(self.qs[:k+1], axis=1)
+            for i in range(k+1):
+                self.x.iadd_prefactor_other(self.y[i], self.qs[i])
+            if not converged:
+                self.reset()
+            else:
+                break
+
+        return self.x, npc.norm(self.A.matvec(self.x) - self.b) / self.b_norm, self.total_error, self.total_iters
+
+    def arnoldi(self, k):
+        # Iterative build orthogonal Krylov subspace and $H$ matrix.
+        q = self.A.matvec(self.qs[-1])
+        for i in range(k+1):
+            self.H[i,k] = npc.inner(q, self.qs[i], axes='range', do_conj=True)
+            q.iadd_prefactor_other(-self.H[i,k], self.qs[i])
+        self.H[k+1,k] = npc.norm(q)
+        q.iscale_prefactor(1./self.H[k+1,k])
+        self.qs.append(q)
+
+    def apply_givens_rotation(self, k):
+        # Apply rotation to $H$ so that it becomes upper triangular.
+        for i in range(k):
+            temp = self.cosine[i] * self.H[i,k] + self.sine[i] * self.H[i+1,k]
+            self.H[i+1,k] = -self.sine[i] * self.H[i,k] + self.cosine[i] * self.H[i+1,k]
+            self.H[i,k] = temp
+
+        self.givens_rotation(k)
+        self.H[k,k] = self.cosine[k] * self.H[k,k] + self.sine[k] * self.H[k+1,k]
+        self.H[k+1,k] = 0
+
+    def givens_rotation(self, k):
+        # Find cosine and sine such that the element below the diagonal of kth column of $H$ is removed.
+        v1, v2 = self.H[k,k], self.H[k+1,k]
+        t = np.sqrt(v1**2 + v2**2)
+        self.cosine[k] = v1 / t
+        self.sine[k] = v2 / t
+
+    def backsolve(self, k):
+        # $H$ is now a diagonal matrix; backsolve to find $y$ exactly.
+        H = self.H[:k,:k]
+        e2 = self.e1[:k]
+        #e2[np.abs(e2.to_ndarray()) < 1.e-14] = 0 # N_max should be less than the size of A.
+        self.y = npc.Array.from_ndarray_trivial(np.ones(k))*1.j
+        for i in range(k-1,-1,-1):
+            self.y[i] = e2[i]
+            for j in range(i+1,k):
+                self.y[i] -= H[i,j]*self.y[j]
+            self.y[i] /= H[i,i]
+
+    def reset(self):
+        # Restart GMRES algorithm using current $x$ as initial guess.
+        self.rs.append(self.b.copy())
+        self.rs[-1] = self.rs[-1].iadd_prefactor_other(-1, self.A.matvec(self.x)) # residuals
+        self.total_error.append([npc.norm(self.rs[-1]) / self.b_norm])
+        self.r_norm = npc.norm(self.rs[-1])
+        self.qs = [self.rs[-1].copy()]
+        self.qs[-1].iscale_prefactor(1./self.r_norm)
+
+        self.sine = np.zeros(self.N_max)*1.j
+        self.cosine = np.zeros(self.N_max)*1.j
+        self.e1 = npc.Array.from_ndarray_trivial(np.zeros(self.N_max+1)*1.j)
+        self.e1[0] = 1
+        self.e1.iscale_prefactor(self.r_norm)
+
+        self.H = npc.Array.from_ndarray_trivial(np.zeros((self.N_max+1, self.N_max))*1.j)
 
 class Arnoldi(KrylovBased):
     """Arnoldi method for diagonalizing square, non-hermitian/symmetric matrices.
@@ -201,9 +319,9 @@ class Arnoldi(KrylovBased):
     """
     def __init__(self, H, psi0, options):
         super().__init__(H, psi0, options)
-        self.E_tol = self.options.get('E_tol', np.inf)
-        self.which = self.options.get('which', 'LM')
-        self.num_ev = self.options.get('num_ev', 1)  # number of desired eigenvectors
+        self.E_tol = self.options.get('E_tol', np.inf, 'real')
+        self.which = self.options.get('which', 'LM', str)
+        self.num_ev = self.options.get('num_ev', 1, int)  # number of desired eigenvectors
 
     def run(self):
         """Find the ground state of H.
@@ -236,12 +354,12 @@ class Arnoldi(KrylovBased):
         w = self.psi0  # initialize
         norm = npc.norm(w)
         for k in range(self.N_max):
-            w.iscale_prefactor(1. / norm)
+            self.iscale_prefactor(w, 1. / norm)
             self._to_cache(w)
             w = self.H.matvec(w)
             for i, v_i in enumerate(self._cache):
                 h[i, k] = ov = npc.inner(v_i, w, axes='range', do_conj=True)
-                w.iadd_prefactor_other(-ov, v_i)
+                self.iadd_prefactor_other(w, -ov, v_i)
             h[k + 1, k] = norm = npc.norm(w)
             self._calc_result_krylov(k)
             if norm < self._cutoff or (k + 1 >= self.N_min and self._converged(k)):
@@ -277,10 +395,16 @@ class Arnoldi(KrylovBased):
             assert N == len(vf) > 1
             krylov_basis = self._cache
             assert len(krylov_basis) >= N
-            psi = vf[0] * krylov_basis[0]  # copy!
+
+            if isinstance(self.psi0, npc.Array):
+                psi = vf[0] * krylov_basis[0]  # copy!
+            else:
+                assert isinstance(self.psi0, list)
+                psi = [p * vf[0] for p in krylov_basis[0]]
+
             # and the last len_cache vectors have been cached
             for k in range(1, N):
-                psi.iadd_prefactor_other(vf[k], krylov_basis[k])
+                self.iadd_prefactor_other(psi, vf[k], krylov_basis[k])
 
             psi_norm = npc.norm(psi)
             if abs(1. - psi_norm) > 1.e-5:
@@ -289,7 +413,7 @@ class Arnoldi(KrylovBased):
                 # If you get this warning, you can try to set the parameters
                 # `reortho`=True and `N_cache` >= `N_max`
                 logger.warning("poorly conditioned H matrix in Arnoldi! |psi| = %f", psi_norm)
-            psi.iscale_prefactor(1. / psi_norm)
+            self.iscale_prefactor(psi, 1. / psi_norm)
             psis.append(psi)
         return psis
 
@@ -313,16 +437,7 @@ class LanczosGroundState(KrylovBased):
     """Lanczos algorithm to find the ground state.
 
     **Assumes** that `H` is hermitian.
-
-    .. deprecated :: 0.6.0
-        Renamed attribute `params` to :attr:`options`.
-
-    .. deprecated :: 0.6.0
-        Going to remove the `orthogonal_to` argument.
-        Instead, replace H with ``OrthogonalNpcLinearOperator(H, orthogonal_to)``
-        using the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
-
-
+    
     Options
     -------
     .. cfg:config :: LanczosGroundState
@@ -348,17 +463,12 @@ class LanczosGroundState(KrylovBased):
     _dtype_h_krylov = np.float64
     _dtype_E = np.float64
 
-    def __init__(self, H, psi0, options, orthogonal_to=[]):
+    def __init__(self, H, psi0, options):
         super().__init__(H, psi0, options)
-        self.E_tol = self.options.get('E_tol', np.inf)
-        self.N_cache = self.options.get('N_cache', self.N_max)
+        self.E_tol = self.options.get('E_tol', np.inf, 'real')
+        self.N_cache = self.options.get('N_cache', self.N_max, int)
         if self.N_cache < 2:
             raise ValueError("Need to cache at least two vectors.")
-        if len(orthogonal_to) > 0:
-            msg = ("Lanczos argument `orthogonal_to` is deprecated and will be removed.\n"
-                   "Instead, replace `H` with  `OrthogonalNpcLinearOperator(H, orthogonal_to)`.")
-            warnings.warn(msg, category=FutureWarning, stacklevel=2)
-            self.H = OrthogonalNpcLinearOperator(self.H, orthogonal_to)
 
     def run(self):
         """Find the ground state of H.
@@ -395,22 +505,24 @@ class LanczosGroundState(KrylovBased):
         h = self._h_krylov
         w = self.psi0  # initialize
         beta = npc.norm(w)
+        if beta < self._cutoff:
+            raise ValueError(f'Norm of self.psi0 too small: {beta}')
         if self._psi0_norm is None:
             # this is only needed for normalization in LanczosEvolution
             self._psi0_norm = beta
         for k in range(self.N_max):
-            w.iscale_prefactor(1. / beta)
+            self.iscale_prefactor(w, 1. / beta)
             self._to_cache(w)
             w = self.H.matvec(w)
             alpha = np.real(npc.inner(w, self._cache[-1], axes='range', do_conj=True)).item()
             h[k, k] = alpha
             self._calc_result_krylov(k)
-            w.iadd_prefactor_other(-alpha, self._cache[-1])
+            self.iadd_prefactor_other(w, -alpha, self._cache[-1])
             if self.reortho:
                 for c in self._cache[:-1]:
-                    w.iadd_prefactor_other(-npc.inner(c, w, axes='range', do_conj=True), c)
+                    self.iadd_prefactor_other(w, -npc.inner(c, w, axes='range', do_conj=True), c)
             elif k > 0:
-                w.iadd_prefactor_other(-beta, self._cache[-2])
+                self.iadd_prefactor_other(w, -beta, self._cache[-2])
             beta = npc.norm(w)
             h[k, k + 1] = h[k + 1, k] = beta  # needed for the next step and convergence criteria
             if abs(beta) < self._cutoff or (k + 1 >= self.N_min and self._converged(k)):
@@ -434,15 +546,15 @@ class LanczosGroundState(KrylovBased):
             self._to_cache(w)
             w = self.H.matvec(w)
             alpha = h[k, k]
-            w.iadd_prefactor_other(-alpha, self._cache[-1])
+            self.iadd_prefactor_other(w, -alpha, self._cache[-1])
             if self.reortho:
                 for c in self._cache[:-1]:
-                    w.iadd_prefactor_other(-npc.inner(c, w, 'range', do_conj=True), c)
+                    self.iadd_prefactor_other(w, -npc.inner(c, w, axes='range', do_conj=True), c)
             elif k > 0:
-                w.iadd_prefactor_other(-beta, self._cache[-2])  # noqa: F821
+                self.iadd_prefactor_other(w, -beta, self._cache[-2])  # noqa: F821
             beta = h[k, k + 1]  # = norm(w)
-            w.iscale_prefactor(1. / beta)
-            psif.iadd_prefactor_other(vf[k + 1], w)
+            self.iscale_prefactor(w, 1. / beta)
+            self.iadd_prefactor_other(psif, vf[k + 1], w)
         # continue in _calc_result_full
 
     def _calc_result_krylov(self, k):
@@ -564,7 +676,7 @@ class LanczosEvolution(LanczosGroundState):
         return np.abs(self._result_krylov[k]) < self.P_tol
 
 
-def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
+def lanczos_arpack(H, psi, options={}):
     """Use :func:`scipy.sparse.linalg.eigsh` to find the ground state of `H`.
 
     This function has the same call/return structure as :func:`lanczos`, but uses
@@ -574,14 +686,9 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
     from np_conserved :class:`~tenpy.linalg.np_conserved.Array` into a flat numpy array
     and back during *each* `matvec`-operation!
 
-    .. deprecated :: 0.6.0
-        Going to remove the `orthogonal_to` argument.
-        Instead, replace H with `OrthogonalNpcLinearOperator(H, orthogonal_to)`
-        using the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
-
     Parameters
     ----------
-    H, psi, options, orthogonal_to :
+    H, psi, options :
         See :class:`LanczosGroundState`.
         `H` and `psi` should have/use labels.
 
@@ -592,27 +699,17 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
     psi0 : :class:`~tenpy.linalg.np_conserved.Array`
         Ground state vector.
     """
-    if len(orthogonal_to) > 0:
-        msg = ("Lanczos argument `orthogonal_to` is deprecated and will be removed.\n"
-               "Instead, replace `H` with  `OrthogonalNpcLinearOperator(H, orthogonal_to)`.")
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        H = OrthogonalNpcLinearOperator(H, orthogonal_to)
     options = asConfig(options, "Lanczos")
     H_flat, psi_flat = FlatHermitianOperator.from_guess_with_pipe(H.matvec, psi, dtype=H.dtype)
-    tol = options.get('P_tol', 1.e-14)
-    N_min = options.get('N_min', None)
+    tol = options.get('P_tol', 1.e-14, 'real')
+    N_min = options.get('N_min', None, int)
     Es, Vs = H_flat.eigenvectors(num_ev=1, which='SA', v0=psi_flat, tol=tol, ncv=N_min)
     psi0 = Vs[0].split_legs(0).itranspose(psi.get_leg_labels())
     return Es[0], psi0
 
 
-def gram_schmidt(vecs, rcond=1.e-14, verbose=None):
+def gram_schmidt(vecs, rcond=1.e-14):
     """In place Gram-Schmidt Orthogonalization and normalization for npc Arrays.
-
-    .. deprecated :: 0.9.1
-        Previously, this function return `vecs, ov` with `ov` being the overlaps
-        ``<vecs[i]|vecs[j]>``. The return value `ov` has been dropped now,
-        since it wasn't used anyways.
 
     Parameters
     ----------
@@ -628,19 +725,31 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=None):
     vecs : list of Array
         The ortho-normalized vectors (without any ``None``).
     """
-    if verbose is not None:
-        warnings.warn("Dropped verbose argument", category=FutureWarning, stacklevel=2)
     res = []
     for vec in vecs:
         for other in res:
             ov = npc.inner(other, vec, 'range', do_conj=True)
-            vec.iadd_prefactor_other(-ov, other)
+            iadd_prefactor_other(vec, -ov, other)
         n = npc.norm(vec)
         if n > rcond:
-            vec.iscale_prefactor(1. / n)
+            iscale_prefactor(vec, 1. / n)
             res.append(vec)
     return res
 
+
+def iscale_prefactor(w, scale):
+    if not isinstance(w, list):
+        w.iscale_prefactor(scale)
+    else:
+        for a in w:
+            a.iscale_prefactor(scale)
+
+def iadd_prefactor_other(w, alpha, v):
+    if not isinstance(w, list):
+        w.iadd_prefactor_other(alpha, v)
+    else:
+        for a, b in zip(w, v):
+            a.iadd_prefactor_other(alpha, b)
 
 def plot_stats(ax, Es):
     """Plot the convergence of the energies.

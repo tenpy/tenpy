@@ -1,7 +1,7 @@
 Fermions and the Jordan-Wigner transformation
 =============================================
 
-The `Jordan-Wigner tranformation <https://en.wikipedia.org/wiki/Jordan-Wigner_transformation>`_
+The `Jordan-Wigner transformation <https://en.wikipedia.org/wiki/Jordan-Wigner_transformation>`_
 maps fermionic creation- and annihilation operators to (bosonic) spin-operators.
 
 
@@ -27,7 +27,7 @@ a site, they actually act on all sites ``l <= j``!
 Thus, clearly the operators ``C`` and ``Cd`` defined in the :class:`~tenpy.networks.site.FermionSite` do *not* directly correspond to :math:`c_j` and
 :math:`c^\dagger_j`.
 The part :math:`(-1)^{\sum_{l < j} n_l}` is called Jordan-Wigner string and in the :class:`~tenpy.networks.site.FermionSite` is given by the local operator 
-:math:`JW := (-1)^{n_l}` acting all sites ``l < j``.
+:math:`JW := (-1)^{n_l}` acting on all sites ``l < j``.
 Since this important, let me stress it again:
 
 .. warning ::
@@ -38,7 +38,7 @@ On the sites itself, the onsite operators ``C`` and ``Cd`` in the :class:`~tenpy
 The ``JW`` string is necessary to ensure the anti-commutation for operators acting on different sites.
 
 Written in terms of `onsite` operators defined in the :class:`~tenpy.networks.site.FermionSite`, 
-with the `i`-th entry entry in the list acting on site `i`, the relations are thus::
+with the `i`-th entry in the list acting on site `i`, the relations are thus::
 
     ["JW", ..., "JW", "C",  "Id", ..., "Id"]   # for the annihilation operator
     ["JW", ..., "JW", "Cd", "Id", ..., "Id"]   # for the creation operator
@@ -81,8 +81,8 @@ but this time acting *after* ``C``::
 
 Higher dimensions
 -----------------
-For an MPO or MPS, you always have to define an ordering of all your sites. This ordering effectifely maps the
-higher-dimensional lattice to a 1D chain, usually at the expence of long-range hopping/interactions.
+For an MPO or MPS, you always have to define an ordering of all your sites. This ordering effectively maps the
+higher-dimensional lattice to a 1D chain, usually at the expense of long-range hopping/interactions.
 With this mapping, the Jordan-Wigner transformation generalizes to higher dimensions in a straight-forward way.
 
 
@@ -138,7 +138,7 @@ with the `j`-th entry entry in the list acting on site `j`, the relations are::
     ["JW", ..., "JW", "Cdu",  "Id", ..., "Id"]   # for the creation operator spin-up
     ["JW", ..., "JW", "Cdd",  "Id", ..., "Id"]   # for the creation operator spin-down
 
-As you can see, the asymmetry regaring the spins in the definition of the local onsite operators ``"Cu", "Cd", "Cdu", "Cdd"`` lead to a symmetric definition in the global sense.
+As you can see, the asymmetry regarding the spins in the definition of the local onsite operators ``"Cu", "Cd", "Cdu", "Cdd"`` lead to a symmetric definition in the global sense.
 If you look at the definitions very closely, you can see that in terms like ``["Id", "Cd JW", "JW", "Cd"]`` the
 Jordan-Wigner sign :math:`(-1)^{n_\uparrow,2}` appears twice (namely once in the definition of ``"Cd"`` and once in the ``"JW"`` on site
 2) and could in principle be canceled, however in favor of a simplified handling in the code we do not recommend you to cancel it.
@@ -182,7 +182,7 @@ However, if you use the :meth:`~tenpy.models.model.CouplingModel.add_coupling` m
 (or the generalization :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling` for more than 2 operators),
 TeNPy can use the information from the `Site` class to *automatically add Jordan-Wigner* strings as needed.
 Indeed, with the default argument ``op_string=None``, `add_coupling` will automatically check whether the operators
-need Jordan-Wigner strings and correspondlingly set ``op_string='JW', str_on_first=True``, if necessary.
+need Jordan-Wigner strings and correspondingly set ``op_string='JW', str_on_first=True``, if necessary.
 For `add_multi_coupling`, you can't even explicitly specify the correct Jordan-Wigner strings, but you **must use**
 ``op_string=None``, from which it will automatically determine where Jordan-Wigner strings are needed.
 

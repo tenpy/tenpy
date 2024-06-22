@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=30.3.0", "numpy>1.13", "scipy>=0.18", "Cython>0.29"]
+requires = ["setuptools>=68.0.0", "numpy", "scipy", "Cython>0.29"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,7 @@ name = "physics-tenpy"
 dynamic = ["version"]
 description = "Simulation of quantum many-body systems with tensor networks in Python"
 readme = {file = "README.rst", content-type = "text/x-rst"}
-requires-python = ">=3.6"
+requires-python = ">=3.8"
 license = {text = "GPLv3"}
 authors = [
     {name = "TeNPy Developer Team"},
@@ -18,7 +18,7 @@ maintainers = [
 ]
 keywords = ["tensor networks", "matrix product states"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
@@ -26,12 +26,11 @@ classifiers = [
     "Programming Language :: C",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.6",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Operating System :: Unix",
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",
@@ -39,12 +38,12 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
-    "numpy>=1.13",
-    "scipy>=0.18",
+    "numpy",
+    "scipy",
 ]
 
 [project.optional-dependencies]
-plot = ["matplotlib>=2.0"]
+plot = ["matplotlib"]
 io = ["h5py", "pyyaml"]
 test = ["pytest>=6.0"]
 extra = ["bottleneck", "yapf==0.28.0", "docformatter==1.3.1"]
@@ -73,8 +72,8 @@ all = ["tenpy[plot, io, test, extra, docbuild]"]
 tenpy-run = "tenpy:console_main"
 
 
-[tool.setuptools]
-packages = ["tenpy"]
+[tool.setuptools.packages.find]
+include = ['tenpy*']
 
 
 [tool.setuptools.dynamic]
@@ -82,10 +81,16 @@ version = {attr = "tenpy.__version__"}
 
 
 [tool.pytest.ini_options]
-filterwarnings = "always"
+filterwarnings = [
+    "error",  # consider all unfiltered warnings error. they should be handled or filtered.
+    "ignore:Couldn't load compiled cython code. Code will run a bit slower.:UserWarning",
+    "ignore::tenpy.BetaWarning"
+]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "example: marks tests as example (deselect with '-m \"not example\"')",
 ]
 #{slow = "marks tests as slow (deselect with `-m 'not slow'`)"}
 log_level = "INFO"
 log_format = "%(asctime)s %(levelname)-8s %(filename)-16s%(lineno)4d: %(message)s"
+testpaths = ["tests"]

@@ -1,16 +1,13 @@
 """A collection of tests for tenpy.tools submodules."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
-import logging
 import numpy as np
 import numpy.testing as npt
 import itertools as it
 import tenpy
 from tenpy import tools
-import warnings
 import pytest
 import os.path
-import sys
 
 
 def test_inverse_permutation(N=10):
@@ -39,8 +36,8 @@ def test_speigs():
     x_LM = x[tools.misc.argsort(x, 'm>')]
     x_SM = x[tools.misc.argsort(x, 'SM')]
     A = np.diag(x)
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')  # disable warngings temporarily
+
+    with pytest.warns(UserWarning, match='trimming speigs k to smaller matrix dimension d'):
         for k in range(4, 9):
             print(k)
             W, V = tools.math.speigs(A, k, which='LM')
@@ -97,26 +94,24 @@ def test_memory_usage():
     tools.process.memory_usage()
 
 
+@pytest.mark.filterwarnings('ignore')
 def test_omp(n=2):
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')  # disable warngings temporarily
-        if tools.process.omp_set_nthreads(n):
-            nthreads = tools.process.omp_get_nthreads()
-            print(nthreads)
-            assert (nthreads == n)
-        else:
-            print("test_omp failed to import the OpenMP libaray.")
+    if tools.process.omp_set_nthreads(n):
+        nthreads = tools.process.omp_get_nthreads()
+        print(nthreads)
+        assert (nthreads == n)
+    else:
+        print("test_omp failed to import the OpenMP libaray.")
 
 
+@pytest.mark.filterwarnings('ignore')
 def test_mkl(n=2):
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')  # disable warngings temporarily
-        if tools.process.mkl_set_nthreads(n):
-            nthreads = tools.process.mkl_get_nthreads()
-            print(nthreads)
-            assert (nthreads == n)
-        else:
-            print("test_mkl failed to import the shared MKL libaray.")
+    if tools.process.mkl_set_nthreads(n):
+        nthreads = tools.process.mkl_get_nthreads()
+        print(nthreads)
+        assert (nthreads == n)
+    else:
+        print("test_mkl failed to import the shared MKL libaray.")
 
 
 def test_group_by_degeneracy():
@@ -263,21 +258,27 @@ def test_merge_recursive():
 
 
 @pytest.mark.skip(reason="interferes with pytest logging setup")
-def test_logging_setup(tmp_path, capsys):
+def test_logging_setup(tmp_path):
+    from contextlib import redirect_stdout
     import logging.config
     logger = logging.getLogger('tenpy.test_logging')
     root = logging.getLogger()
-    output_filename = tmp_path / 'output.pkl'
     logging_params = {
+        'output_filename': tmp_path / 'output.pkl',
         'to_stdout': 'INFO',
         'to_file': 'WARNING',
         'skip_setup': False,
     }
-    tools.misc.setup_logging(logging_params, output_filename)
 
-    test_message = "test %s message 12345"
-    logger.info(test_message, 'info')
-    logger.warning(test_message, 'warning')
+
+    with open(tmp_path / 'stdout.txt', 'w') as stdout:
+        with redirect_stdout(stdout):
+            # example logging code
+            tools.misc.setup_logging(**logging_params)
+
+            test_message = "test %s message 12345"
+            logger.info(test_message, 'info')
+            logger.warning(test_message, 'warning')
 
     # clean up loggers -> close file handlers (?)
     logging.config.dictConfig({'version': 1, 'disable_existing_loggers': False})
@@ -288,7 +289,26 @@ def test_logging_setup(tmp_path, capsys):
     assert test_message % 'warning' in file_text
     assert test_message % 'info' not in file_text  # should have filtered that out
 
-    capture = capsys.readouterr()
-    stdout_text = capture.out
+    with open(tmp_path / 'stdout.txt', 'r') as stdout:
+        stdout_text = stdout.read()
     assert test_message % 'warning' in stdout_text
     assert test_message % 'info' in stdout_text
+    print("test_logging_setup() finished without errors")
+
+
+def test_convert_memory_units():
+    assert tools.misc.convert_memory_units(12.5*1024, 'bytes', 'bytes') == (12.5 * 1024, 'bytes')
+    assert tools.misc.convert_memory_units(12.5*1024, 'KB', 'MB') == (12.5, 'MB')
+    assert tools.misc.convert_memory_units(12.5*1024, 'MB', 'KB') == (12.5 * 1024**2, 'KB')
+    assert tools.misc.convert_memory_units(12.5*1024, 'MB', None) == (12.5, 'GB')
+
+
+def test_setup_logging():
+    tenpy.tools.misc.setup_logging(to_stdout="INFO", skip_setup=False)
+    
+
+if __name__ == "__main__":
+    import tempfile
+    from pathlib import Path
+    with tempfile.TemporaryDirectory() as tmp_path:
+        test_logging_setup(Path(tmp_path))

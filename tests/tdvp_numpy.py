@@ -2,12 +2,10 @@
 
 .. todo ::     Make this a nice toycode! For the test, use some pre-defined values.
 """
-# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from scipy.linalg import expm
-from scipy.sparse.linalg import expm_multiply
 import numpy as np
-from scipy.sparse.linalg import onenormest
 
 
 def tdvp(Psi, W, dt, Rp_list=None, k=5, O=None):

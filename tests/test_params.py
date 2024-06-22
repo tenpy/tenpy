@@ -1,9 +1,9 @@
 """A test for tenpy.tools.params."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
-import warnings
 from tenpy.tools.params import Config, asConfig
 import copy
+import pytest
 
 
 def example_function(example_pars, keys=['a', 'b', 'c']):
@@ -34,15 +34,31 @@ def test_parameters():
     pars_copy['sub']['z'] = 30
     assert config.as_dict() == pars_copy
     example_function(sub)
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter('always')
-        assert len(config.unused) == 1
-        del config  # catch the warning for 'e'
-        del pars
-        # assert len(w) == 1
+
+    # test .get(..., expect_types) argument
+    _ = config.get('a', 4, NotADirectoryError)  # value of None always passes
+    _ = config.get('a', 12, [NotADirectoryError, dict])  # value of None always passes
+    _ = config.get('b', 5 ,'real')
+    with pytest.warns(UserWarning, match='Invalid type for key'):
+        _ = config.get('b', 5, int)
+    _ = config.get('uses_default_value', 5.3 ,'real')
+    with pytest.warns(UserWarning, match='Invalid type for key'):
+        _ = config.get('uses_default_value', 5.3, int)
+    _ = config.get('b', 5, [float, dict])
+    with pytest.warns(UserWarning, match='Invalid type for key'):
+        _ = config.get('b', 5, [int, dict])
+
+    # test warnings on deletion
+    assert len(config.unused) == 1
+    # the match is a bit ugly, since brackets have special meaning in regex.
+    # the expected message is
+    #  "unused option ['e'] for config Test parameters"
+    with pytest.warns(UserWarning, match=r"unused option \['e'\] for config Test parameters"):
+        del config
+    del pars
+    with pytest.warns(FutureWarning, match="Deprecated option in 'sub': 'y' renamed to 'y_new'"):
         sub.deprecated_alias('y', 'y_new')
-        # assert len(w) == 2
-        assert len(sub.unused) == 2
+    assert len(sub.unused) == 2
+    with pytest.warns(UserWarning, match=r"unused options for config sub:\n\['x', 'y_new'\]"):
         sub.__del__()
-        assert len(w) == 3
-        sub.touch('x', 'y_new')  # avoid warnings when deconstructed outside of the catch_warning
+

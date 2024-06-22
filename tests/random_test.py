@@ -1,5 +1,5 @@
 """Provide helper functions for test of random Arrays."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import itertools as it
@@ -89,6 +89,10 @@ def random_Array(shape, chinfo, func=np.random.random, shape_kw='size', qtotal=N
 
 def random_MPS(L, d, chimax, func=randmat.standard_normal_complex, bc='finite', form='B'):
     site = Site(charges.LegCharge.from_trivial(d))
+    site.add_op('D', np.diag(np.arange(1, d+1)), hc='D')
+    h = func(size=(d,d))
+    h = 0.5*(h + h.T.conj())
+    site.add_op('h', h, hc='D')
     chi = [chimax] * (L + 1)
     if bc == 'finite':
         for i in range(L // 2 + 1):

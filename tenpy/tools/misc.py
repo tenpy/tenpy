@@ -1,26 +1,24 @@
 """Miscellaneous tools, somewhat random mix yet often helpful."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
-import logging
+import operator
 import numpy as np
 from .optimization import bottleneck
-from .process import omp_set_nthreads
 from .params import Config
 from collections.abc import Mapping
-import random
 import os.path
-import itertools
-import argparse
 import warnings
 
 __all__ = [
     'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
     'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
-    'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
-    'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive',
-    'merge_recursive', 'flatten', 'setup_logging', 'build_initial_state', 'setup_executable'
+    'zero_if_close', 'pad', 'add_with_None_0', 'group_by_degeneracy', 'get_close',
+    'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive', 'merge_recursive',
+    'flatten', 'setup_logging', 'convert_memory_units', 'consistency_check',
+    'TenpyInconsistencyError', 'TenpyInconsistencyWarning', 'BetaWarning'
 ]
 
+_not_set = object()  # sentinel
 
 def to_iterable(a):
     """If `a` is a not iterable or a string, return ``[a]``, else return ``a``."""
@@ -106,7 +104,10 @@ def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
 
 
 if bottleneck is not None:
-    anynan = bottleneck.anynan
+
+    def anynan(a):
+        """check whether any entry of a ndarray `a` is 'NaN'."""
+        return bottleneck.anynan(a)
 else:
 
     def anynan(a):
@@ -361,57 +362,6 @@ def pad(a, w_l=0, v_l=0, w_r=0, v_r=0, axis=0):
     return b
 
 
-def any_nonzero(params, keys, verbose_msg=None):
-    """Check for any non-zero or non-equal entries in some parameters.
-
-    .. deprecated :: 0.8.0
-        This method will be removed in version 1.0.0.
-        Use :meth:`tenpy.tools.params.Config.any_nonzero` instead.
-
-    Parameters
-    ----------
-    params : dict | Config
-        A dictionary of parameters, or a :class:`~tenpy.tools.params.Config`
-        instance.
-    keys : list of {key | tuple of keys}
-        For a single key, check ``params[key]`` for non-zero entries.
-        For a tuple of keys, all the ``params[key]`` have to be equal (as numpy arrays).
-    verbose_msg : None | str
-        If params['verbose'] >= 1, we print `verbose_msg` before checking,
-        and a short notice with the `key`, if a non-zero entry is found.
-
-    Returns
-    -------
-    match : bool
-        False, if all params[key] are zero or `None` and
-        True, if any of the params[key] for single `key` in `keys`,
-        or if any of the entries for a tuple of `keys`
-    """
-    msg = ("tools.misc.any_nonzero() is deprecated in favor of "
-           "tools.params.Config.any_nonzero().")
-    warnings.warn(msg, category=FutureWarning, stacklevel=2)
-    if isinstance(params, Config):
-        return params.any_nonzero(keys, verbose_msg)
-    verbose = (params.get('verbose', 0) > 1.)
-    for k in keys:
-        if isinstance(k, tuple):
-            # check equality
-            val = params.get(k[0], None)
-            for k1 in k[1:]:
-                if not np.array_equal(val, params.get(k1, None)):
-                    if verbose:
-                        print("{k0!r} and {k1!r} have different entries.".format(k0=k[0], k1=k1))
-                    return True
-        else:
-            val = params.get(k, None)
-            if val is not None and np.any(np.array(val) != 0.):  # count `None` as zero
-                if verbose:
-                    print(verbose_msg)
-                    print(str(k) + " has nonzero entries")
-                return True
-    return False
-
-
 def add_with_None_0(a, b):
     """Return ``a + b``, treating `None` as zero.
 
@@ -430,19 +380,6 @@ def add_with_None_0(a, b):
     if b is None:
         return a
     return a + b
-
-
-def chi_list(chi_max, dchi=20, nsweeps=20, verbose=0):
-    warnings.warn("Deprecated: moved `chi_list` to `tenpy.algorithms.dmrg.chi_list`.",
-                  category=FutureWarning,
-                  stacklevel=2)
-    from tenpy.algorithms import dmrg
-    chi_list = dmrg.chi_list(chi_max, dchi, nsweeps)
-    if verbose:
-        import pprint
-        print("chi_list = ")
-        pprint.pprint(chi_list)
-    return chi_list
 
 
 def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
@@ -753,10 +690,9 @@ def flatten(mapping, separator='.'):
 skip_logging_setup = False
 
 
-def setup_logging(options=None,
-                  output_filename=None,
+def setup_logging(output_filename=None,
                   *,
-                  filename=None,
+                  filename=_not_set,
                   to_stdout="INFO",
                   to_file="INFO",
                   format="%(levelname)-8s: %(message)s",
@@ -803,17 +739,13 @@ def setup_logging(options=None,
         e.g., because you run multiple :class:`~tenpy.simulations.simulation.Simulation`
         classes sequentially (e.g., :func:`~tenpy.simulations.simulation.run_seq_simulations`).
 
-    .. deprecated :: 0.9.0
-        The arguments were previously collected in a dictionary `options`.
-        Now they should be given directly as keyword arguments.
-
     Parameters
     ----------
-    **kwargs :
-        Keyword arguments as described in the options below.
     output_filename : None | str
         The filename for where results are saved. The :cfg:option:`log.filename` for the
         log-file defaults to this, but replacing the extension with ``.log``.
+    **kwargs :
+        Keyword arguments as described in the options below.
 
     Options
     -------
@@ -830,7 +762,7 @@ def setup_logging(options=None,
             The filename is given by `filename`.
         filename : str
             Filename for the logfile.
-            It defaults  to `output_filename` with the extension replaced to ".log".
+            If not set, it defaults  to `output_filename` with the extension replaced to ".log".
             If ``None``, no log-file will be created, even with `to_file` set.
         logger_levels : dict(str, str)
             Set levels for certain loggers, e.g. ``{'tenpy.tools.params': 'WARNING'}`` to suppress
@@ -859,14 +791,13 @@ def setup_logging(options=None,
             Whether to call :func:`logging.captureWarnings` to include the warnings into the log.
     """
     import logging.config
-    if options is not None:
-        warnings.warn("Give logging parameters directly as keyword arguments!", FutureWarning, 2)
-        locals().update(**options)
-    if filename is None:
+    if filename is _not_set:
         if output_filename is not None:
             root, ext = os.path.splitext(output_filename)
             assert ext != '.log'
             filename = root + '.log'
+        else:
+            filename = None
     if capture_warnings is None:
         capture_warnings = dict_config is not None or to_stdout or to_file
     if skip_setup is None:
@@ -930,185 +861,122 @@ def setup_logging(options=None,
         logging.captureWarnings(True)
 
 
-def build_initial_state(size, states, filling, mode='random', seed=None):
-    warnings.warn(
-        "Deprecated `build_initial_state`: Use `tenpy.networks.mps.InitialStateBuilder` instead.",
-        category=FutureWarning,
-        stacklevel=2)
-    from tenpy.networks import mps
-    return mps.build_initial_state(size, states, filling, mode, seed)
-
-
-def setup_executable(mod, run_defaults, identifier_list=None):
-    """Read command line arguments and turn into useable dicts.
-
-    .. warning ::
-
-        this is a deprecated interface. Use the :class:`~tenpy.simulations.simulation.Simulation`
-        interface in combination with :func:`~tenpy.console_main` instead.
-        You can invoke that from the command line as ``python -m tenpy ...``.
-
-    Uses default values defined at:
-    - model class for model_par
-    - here for sim_par
-    - executable file for run_par
-    Alternatively, a model_defaults dictionary and identifier_list can be supplied without the model
-
-    NB: for setup_executable to work with a model class, the model class needs to define two things:
-            - defaults, a static (class level) dictionary with (key, value) pairs that have the name
-              of the parameter (as string) as key, and the default value as value.
-            - identifier, a static (class level) list or other iterable with the names of the parameters
-              to be used in filename identifiers.
+def convert_memory_units(value, unit_from='bytes', unit_to=None):
+    """Convert between different memory units.
 
     Parameters
     ----------
-    mod : model | dict
-        Model class (or instance) OR a dictionary containing model defaults
-    run_defaults : dict
-        default values for executable file parameters
-    identifier_list : iterable
-        Used only if mod is a dict. Contains the identifier variables
+    value : float
+        The value to convert.
+    unit_from : ``'bytes'| 'KB'| 'MB'| 'GB'| 'TB'``
+        The unit to convert from.
+    unit_to : ``None | 'bytes'| 'KB'| 'MB'| 'GB'| 'TB'``
+        The unit to convert to.
+        The default ``None`` chooses a human-readable largest unit smaller than `value`.
 
     Returns
     -------
-    model_par, sim_par, run_par : dict
-        containing all parameters.
-    args :
-        namespace with raw arguments for some backwards compatibility with executables.
+    value : float
+        The value in the unit `unit_to`.
+    unit_to : str
+        The unit to which `value` was converted.
     """
-    warnings.warn("Deprecated: use `tenpy.run_simulation` and `tenpy.console_main` instead.",
-                  category=FutureWarning,
-                  stacklevel=2)
-    parser = argparse.ArgumentParser()
+    units = ['bytes', 'KB', 'MB', 'GB', 'TB']
+    factors = [1024**i for i in range(len(units))]
+    value = value * factors[units.index(unit_from)]  # first convert to bytes
+    if unit_to is None:
+        for f, unit_to in reversed(list(zip(factors, units))):
+            if value > f:
+                break
+        return value / f, unit_to
+    value = value / factors[units.index(unit_to)]  # now convert back to unit_to
+    return value, unit_to
 
-    # These deal with backwards compatibility (supplying a model)
-    if type(mod) != dict and identifier_list == None:  # Assume we've been given a model class
-        try:
-            model_defaults = mod.defaults
-            identifier_list = mod.identifier
-        except AttributeError as err:
-            print("Cannot get model defaults and identifier list from mod. Is mod a class/instance?")
-            print(err)
-            raise AttributeError
-    elif type(mod) == dict and hasattr(identifier_list, '__iter__'):
-        model_defaults = mod
-    else:
-        raise ValueError("If model_par are supplied as dict, identifier_list should be provided.")
 
-    # The model_par bit (for all model parameters)
-    for label, value in model_defaults.items():
-        if type(value) == bool:  # For boolean defaults, we want a true/false flag
-            if value:
-                parser.add_argument('-' + label, action='store_false')
-            else:
-                parser.add_argument('-' + label, action='store_true')
-        else:  # For non-boolean defaults, take the type of the default as type for the cmdline var
-            parser.add_argument('-' + label, type=type(value), default=value)
+class TenpyInconsistencyError(Exception):
+    """Error class that is raised when a consistency check fails.
 
-    # The run_par bit (for executable-level parameters). These are defined in the executable file
-    # but need to be included for argparse to work correctly.
-    for label, value in run_defaults.items():
-        if type(value) == bool:  # For boolean defaults, we want a true/false flag
-            if value:
-                parser.add_argument('-' + label, action='store_false')
-            else:
-                parser.add_argument('-' + label, action='store_true')
-        else:  # For non-boolean defaults, take the type of the default as type for the cmdline var
-            print('Adding argument', label)
-            parser.add_argument('-' + label, type=type(value), default=value)
-    # The following parameters are run-time but so general they're defined here
-    parser.add_argument('-ncores', type=int, default=1)
-    parser.add_argument('-dir', type=str, default=None)
-    parser.add_argument('-plots', action='store_true')  # Generic flag to activate plotting
-    parser.add_argument('-seed', default=None)  # For anything random
+    See :meth:`consistency_check`."""
+    pass
 
-    # The sim_par bit (for DMRG-related parameters). These don't vary, so we'll just define here.
-    parser.add_argument('-chi', type=int, default=100)
-    parser.add_argument('-dchi', type=int, default=20)  # Step size for chi ramp
-    parser.add_argument('-dsweeps', type=int, default=20)  # Number of sweeps for chi step
-    parser.add_argument('-min_sweeps', type=int, default=30)
-    parser.add_argument('-max_sweeps', type=int, default=1000)
-    #parser.add_argument('-n_steps', type=int, default=10)
-    #parser.add_argument('-max_steps', type=int, default=2400)
-    parser.add_argument('-mixer', action='store_true')  # To activate mixer
-    parser.add_argument('-mix_str', type=float, default=1.e-3)
-    parser.add_argument('-mix_dec', type=float, default=1.5)
-    parser.add_argument('-mix_len', type=int, default=80)
-    parser.add_argument('-start_env', type=int, default=0)
-    parser.add_argument('-update_env', type=int)
 
-    # Now parse and turn into manageable dicts.
-    args = parser.parse_args()
-    par_dict = vars(args)  # Turns args (='Namespace' object) into dict.
+class TenpyInconsistencyWarning(UserWarning):
+    """Warning category that is emitted when a consistency check fails.
 
-    model_par = {}
-    for label in model_defaults.keys():  # Select the model-relevant parts of par_dict
-        model_par[label] = par_dict[label]
+    See :meth:`consistency_check`."""
+    pass
 
-    run_par = {}
-    for label in run_defaults.keys():  # Select the executable-relevant parts of par_dict
-        run_par[label] = par_dict[label]
 
-    try:
-        sim_par = {
-            'chi_list': chi_list(args.chi, args.dchi, args.dsweeps),
-            'N_sweeps_check': 10,
-            'min_sweeps': args.min_sweeps,
-            'max_sweeps': args.max_sweeps,
-            'verbose': args.verbose,  # Take this from the model
-            'lanczos_params': {
-                'N_min': 2,
-                'N_max': 40,
-                'E_tol': 10**(-12)
-            }
-        }
-    except AttributeError as err:
-        print(
-            'sim_par parsing has failed, most likely because model does not define verbose parameter.'
-        )
-        print(err)
-        raise AttributeError
-    if args.mixer:
-        sim_par['mixer'] = True
-        sim_par['mixer_params'] = {
-            'amplitude': args.mix_str,
-            'decay': args.mix_dec,
-            'disable_after': args.mix_len
-        }
+class BetaWarning(UserWarning):
+    """Warning category that we emit in new code that still needs to be tested better.
 
-    # Having set up all dictionaries, we can now do some other setting up
-    omp_set_nthreads(args.ncores)
-    if not args.dir == None:
-        os.chdir(args.dir)
-    import matplotlib
-    matplotlib.rcParams["savefig.directory"] = os.chdir(os.getcwd())
+    When adding new features like algorithms, we might raise a Warning of this category
+    to indicate that the features are not yet super well tested. Thus, this warning gives a hint
+    that the user needs to be cautious and should not jump to conclusion
+    if the results are unexpected.
+    Rather, it's appropriate to test robustness, ideally by cross-checking with another
+    well-tested algorithm.
+    """
+    pass
 
-    # Build the identifier based on model-defined and general parameters
-    identifier = "chi_{}_seed_{}_".format(args.chi, args.seed)  # Only use seed if supplied?
-    for varname in identifier_list:
-        if 'conserve' in varname:
-            shortened = varname.replace('conserve',
-                                        'cons').replace('number',
-                                                        'num').replace('charge',
-                                                                       'ch').replace('spin', 'S')
-            identifier += shortened + "_"
-        elif model_par[varname] != 0:  # Parameters that are 0 are ignored. Only want supplied?
-            identifier += varname + "_" + str(model_par[varname]) + "_"
-    if args.mixer:
-        identifier += 'mix_({},{},{})'.format(args.mix_str, args.mix_dec, args.mix_len)
-    if identifier[-1] == "_":
-        identifier = identifier[:-1]
-    # Attempt to shorten the identifier
-    identifier = identifier.replace('periodic', 'inf').replace('finite', 'fin').replace('.0_', '_')
-    if len(identifier) >= 144:
-        print("Warning: identifier has a length longer than max filename on encrypted Ubuntu!")
 
-    run_par.update({
-        'ncores': args.ncores,
-        'dir': args.dir,
-        'plots': args.plots,
-        'identifier': identifier,
-        'seed': args.seed,
-    })
+def consistency_check(value, options, threshold_key, threshold_default, msg, compare='<='):
+    """Perform a consistency check, raising an error if it is violated.
 
-    return model_par, sim_par, run_par, args
+    At several points in the library we perform checks that detect if::
+
+        a) Parameters do not permit the simulation to complete on typical cluster hardware,
+           e.g. because it would need to much memory or runtime.
+
+        b) Parameters do not permit useable results, e.g. if the time step is too large to trust
+           a Suzuki-Trotter approximation.
+
+        c) Results are unreliable, e.g. if the truncation errors are too large
+
+    This necessarily requires heuristic threshold values for each of those conditions.
+    We hard code default values, informed by our experience, typically as magic numbers for the
+    `threshold_default` argument of this function.
+    If the threshold is exceeded, a :class:`TenpyInconsistencyError` is raised.
+    To manually adjust the threshold, we provide a config option for each check, such as
+    e.g. :cfg:option:`Algorithm.max_N_sites_per_ring`.
+    It can be set to ``None``, which causes a :class:`TenpyInconsistencyWarning` to be emitted
+    instead of the error.
+
+    .. warning ::
+        Obviously, the fact that we do consistency checks like ``dt < 1.`` does not mean that
+        that your results are converged for any ``dt < 1.``!
+        You will likely have to choose a value much smaller than the threshold, and it is *your*
+        responsibility as a user to ensure that you are in fact converged in each of the parameters.
+
+    Parameters
+    ----------
+    value
+        The value to check. Must support the `compare` operation.
+    options : :class:`~tenpy.tools.params.Config` | dict-like
+        The options that may contain the manually overriding threshold value.
+    threshold_key : str
+        The key of the threshold value in `options`.
+        If present, the value is used as the threshold and takes precedence over `threshold_default`.
+        If the value is ``None``, the `threshold_default` is used for comparison, and if violated,
+        we only issue a warning (``warnings.warn``) instead of raising an error.
+    threshold_default : float
+        The default value for the threshold
+    msg : str
+        The error message, in case the check fails.
+    compare : '<=' | '<' | '>' | '>=' | '!=' | '==' | callable
+        By default, we check if ``value <= threshold`` and raise otherwise.
+        This allows other comparison operations.
+        A callable means we check ``compare(value, threshold)``.
+    """
+    threshold = options.get(threshold_key, threshold_default)
+    warn_instead = False
+    if threshold is None:
+        warn_instead = True
+        threshold = threshold_default
+    compare_func = {'<=': operator.le, '<': operator.lt, '>': operator.gt, '>=': operator.ge,
+                    '!=': operator.ne, '==': operator.eq}.get(compare, compare)
+    if not compare_func(value, threshold):
+        if warn_instead:
+            warnings.warn(msg, category=TenpyInconsistencyWarning, stacklevel=2)
+        else:
+            raise TenpyInconsistencyError(msg)

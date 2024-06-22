@@ -7,7 +7,6 @@ or somewhere in the ``PYTHON_PATH``. Then you can use it with the parameters fil
     tenpy-run -i model_custom simulation_custom.yml
 """
 
-import tenpy
 from tenpy.networks.site import SpinSite
 from tenpy.networks.mps import TransferMatrix
 from tenpy.models.model import CouplingMPOModel, NearestNeighborModel

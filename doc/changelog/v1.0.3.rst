@@ -1,0 +1,14 @@
+[v1.0.3] - 2024-06-31
+=====================
+
+Release Notes
+-------------
+This is a very minor release to support Numpy version 2.0, which requires us to re-build the packages.
+
+Changelog
+---------
+
+Fixed
+^^^^^
+- :issue:`426` fixes necssary to compile with the latest numpy version 2.0 and cython 3.0.10 combination.
+- :issue:`431` let simulations run even if `git describe` has unexpected output.

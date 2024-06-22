@@ -7,7 +7,7 @@ For now, this is written for disentangling purifications; could be generalized t
 
 .. autodata:: disentanglers_atom_parse_dict
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import logging
@@ -129,8 +129,8 @@ class RenyiDisentangler(Disentangler):
     Arguments and return values are the same as for :meth:`disentangle`.
     """
     def __init__(self, parent):
-        self.max_iter = parent.options.get('disent_max_iter', 20)
-        self.eps = parent.options.get('disent_eps', 1.e-10)
+        self.max_iter = parent.options.get('disent_max_iter', 20, int)
+        self.eps = parent.options.get('disent_eps', 1.e-10, float)
         self.parent = parent
 
     def __call__(self, theta):
@@ -242,11 +242,11 @@ class NormDisentangler(Disentangler):
     Arguments and return values are the same as for :meth:`disentangle`.
     """
     def __init__(self, parent):
-        self.max_iter = parent.options.get('disent_max_iter', 20)
-        self.eps = parent.options.get('disent_eps', 1.e-10)
+        self.max_iter = parent.options.get('disent_max_iter', 20, int)
+        self.eps = parent.options.get('disent_eps', 1.e-10, 'real')
         self.trunc_par = parent.options.subconfig('disent_trunc_par', parent.trunc_params)
-        self.chi_max = self.trunc_par.get('chi_max', 100)
-        self.trunc_cut = self.trunc_par.get('trunc_cut', None)
+        self.chi_max = self.trunc_par.get('chi_max', 100, int)
+        self.trunc_cut = self.trunc_par.get('trunc_cut', None, float)
         self.chi_range = self.trunc_par.get('disent_norm_chi', range(1, self.chi_max + 1))
         self.parent = parent
 
@@ -329,9 +329,9 @@ class GradientDescentDisentangler(Disentangler):
     Arguments and return values are the same as for :class:`Disentangler`.
     """
     def __init__(self, parent):
-        self.max_iter = parent.options.get('disent_max_iter', 20)
-        self.eps = parent.options.get('disent_eps', 1.e-10)
-        self.n = parent.options.get('disent_n', 1.)
+        self.max_iter = parent.options.get('disent_max_iter', 20, int)
+        self.eps = parent.options.get('disent_eps', 1.e-10, 'real')
+        self.n = parent.options.get('disent_n', 1., 'real')
         self.stepsizes = parent.options.get('disent_stepsizes', [0.2, 1., 2.])
         self.parent = parent
 
@@ -436,7 +436,7 @@ class NoiseDisentangler(Disentangler):
     Arguments and return values are the same as for :class:`Disentangler`.
     """
     def __init__(self, parent):
-        self.a = parent.options.get('disent_noiselevel', 0.01)
+        self.a = parent.options.get('disent_noiselevel', 0.01, 'real')
 
     def __call__(self, theta):
         a = self.a
@@ -549,7 +549,7 @@ class MinDisentangler(Disentangler):
     """
     def __init__(self, disentanglers, parent):
         self.disentanglers = disentanglers
-        self.n = parent.options.get('disent_min_n', 1.)
+        self.n = parent.options.get('disent_min_n', 1., 'real')
 
     def __call__(self, theta):
         theta_min, U_min = self.disentanglers[0](theta)

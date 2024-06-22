@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 #
 import sys
 import os
@@ -8,6 +8,7 @@ import inspect
 import sphinx_rtd_theme
 import io
 import warnings
+from datetime import datetime
 
 # ensure parent folder is in sys.path to allow import of tenpy
 REPO_PREFIX = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -71,7 +72,7 @@ pygments_style = 'sphinx'  # syntax highlighting style
 
 # General information about the project.
 project = 'TeNPy'
-copyright = '2016-2020, TeNPy Developers'
+copyright = f'2016-{datetime.today().strftime("%Y")}, TeNPy Developers'
 author = 'TeNPy Developers'
 version = tenpy.__version__  # The short X.Y version.
 release = tenpy.__full_version__  # The full version, including alpha/beta/rc tags.
@@ -163,6 +164,49 @@ def include_command_line_help():
 
 
 include_command_line_help()
+
+# -- modify changelog/_latest.rst  ----------------------------------------
+
+
+def stitch_changelog_latest():
+    # Append the contents of all files in ``doc/changelog/latest/`` with ``.txt`` suffix
+    # to ``doc/changelog/_latest.rst`` verbatim.
+    # Intended use: contains only rst bullet points?
+    folder = os.path.join(os.path.dirname(__file__), 'changelog', 'latest')
+    outfile = os.path.join(os.path.dirname(__file__), 'changelog', '_latest.rst')
+    if not os.path.exists(outfile):
+        # repo should be set up such that this exists.
+        print(outfile)
+        raise ValueError('`doc/changelog/_latest.rst` not found.')
+    contents = [
+        '[latest]\n',
+        '========\n',
+        'The following changes are in the github repository, but not yet released.\n',
+        'The contents are auto-generated from multiple files.\n',
+        '\n',
+        '.. only :: comment\n',
+        '\n',
+        '    Contents are modified by ``stitch_changelog_latest`` in ``doc/conf.py``\n',
+        '    Any ``.txt`` file in ``doc/changelog/latest/`` is included verbatim.\n'
+        '\n',
+        '\n',
+    ]
+    
+    for fn in os.listdir(folder):
+        fn = os.path.join(folder, fn)
+        if not fn.endswith('.txt'):
+            continue
+        with open(fn, 'r') as f:
+            lines = f.readlines()
+        contents.extend(lines)
+        contents.append('\n')  # empty line between files
+    
+    with open(outfile, 'w') as f:
+        f.writelines(contents)
+    # done
+
+
+stitch_changelog_latest()
 
 # -- Options for HTML output ----------------------------------------------
 
@@ -279,6 +323,7 @@ extlinks = {
     'arxiv': ('https://arxiv.org/abs/%s', 'arXiv:%s'),
     'doi': ('https://dx.doi.org/%s', 'doi:%s'),
     'issue': (GITHUBBASE + '/issues/%s', 'issue #%s'),
+    'pull': (GITHUBBASE + '/pulls/%s', 'PR #%s'),
     'forum': ('https://tenpy.johannes-hauschild.de/viewtopic.php?t=%s',
               'community forum (topic %s)')
 }

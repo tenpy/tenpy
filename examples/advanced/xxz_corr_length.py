@@ -1,11 +1,11 @@
-"""Calculate the correleation legnth of the transferse field Ising model for various h_z.
+"""Calculate the correlation length of the transverse field Ising model for various h_z.
 
 This example uses DMRG to find the ground state of the transverse field Ising model when tuning
 through the phase transition by changing the field `hz`. It uses
 :meth:`~tenpy.networks.mps.MPS.correlation_length` to extract the correlation length of the ground
 state, and plots it vs. hz in the end.
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 

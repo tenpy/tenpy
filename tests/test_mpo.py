@@ -1,8 +1,7 @@
 """A collection of tests for (classes in) :module:`tenpy.networks.mpo`."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
-import numpy.testing as npt
 import pytest
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.models.spins import SpinChain
@@ -21,8 +20,10 @@ def test_MPO():
     for bc in mpo.MPO._valid_bc:
         for L in [4, 2, 1]:
             print(bc, ", L =", L)
-            grid = [[s.Id, s.Sp, s.Sm, s.Sz], [None, None, None, s.Sm], [None, None, None, s.Sp],
-                    [None, None, None, s.Id]]
+            grid = [[s.Id, s.Sp, s.Sm, s.Sz],
+                    [None, None, None, s.Sm],
+                    [None, None, None, s.Sp],
+                    [None, None, None, s.Id]]  # yapf: disable
             legW = npc.LegCharge.from_qflat(s.leg.chinfo, [[0], s.Sp.qtotal, s.Sm.qtotal, [0]])
             W = npc.grid_outer(grid, [legW, legW.conj()], grid_labels=['wL', 'wR'])
             Ws = [W] * L
@@ -39,6 +40,10 @@ def test_MPO():
             H.sort_legcharges()
             H.test_sanity()
             assert H.is_equal(H_copy)
+            assert H.prefactor(0, ['Sz']) == 1.
+            for i in range(L - 1):
+                assert H.prefactor(i, ['Sp', 'Sm']) == 1.
+                assert H.prefactor(i, ['Sz', 'Sz']) == 0.
         if L == 4:
             H2 = H.group_sites(n=2)
             H2.test_sanity()
@@ -104,9 +109,10 @@ def test_MPO_conversion():
     L = 8
     sites = []
     for i in range(L):
-        s = site.Site(spin_half.leg)
-        s.add_op("X_{i:d}".format(i=i), np.diag([2., 1.]))
-        s.add_op("Y_{i:d}".format(i=i), np.diag([1., 2.]))
+        s = site.Site(npc.LegCharge.from_trivial(2))
+        s.add_op("X_{i:d}".format(i=i), np.array([[0., 1.], [1., 0.]]))
+        s.add_op("Y_{i:d}".format(i=i), np.array([[0., 1.], [-1., 0.]]))
+        s.add_op("Z_{i:d}".format(i=i), np.array([[1., 0.], [0., -1.]]))
         sites.append(s)
     terms = [
         [("X_0", 0)],
@@ -122,6 +128,9 @@ def test_MPO_conversion():
     ct_add = MultiCouplingTerms(L)
     ct_add.add_coupling_term(12., 4, 5, "X_4", "X_5")
     ct_add.add_multi_coupling_term(0.5, [4, 5, 7], ["X_4", "Y_5", "X_7"], "Id")
+    prefactors[-2] += 0.5
+    terms.append([("X_4", 4), ("X_5", 5)])
+    prefactors.append(12.)
     ct_add.add_to_graph(g1)
     H1 = g1.build_MPO()
     grids = [
@@ -165,7 +174,13 @@ def test_MPO_conversion():
     H2 = mpo.MPO.from_grids(sites, grids, 'finite', [0] * 4 + [None] * 5, [None] * 5 + [-1] * 4)
     for w1, w2 in zip(H1._W, H2._W):
         assert npc.norm(w1 - w2, np.inf) == 0.
-    pass
+    assert H2.is_equal(H1)
+    back_to_terms = H1.to_TermList([["Id", f"X_{i:d}", f"Y_{i:d}", f"Z_{i:d}"] for i in range(L)], max_range=8)
+    assert len(back_to_terms.terms) == len(terms)
+    for term, pref in zip(back_to_terms.terms, back_to_terms.strength):
+        assert term in terms
+        i = terms.index(term)
+        assert abs(prefactors[i] - pref) < 1.e-13
 
 
 def test_MPOEnvironment():

@@ -6,7 +6,7 @@ Based on Eq.1 of [Grushin2015]_ with:
 - 1/2 filling of the lowest band (i.e. 1/4 total filling)
 """
 
-# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -60,7 +60,6 @@ def run(model_params, phi_ext=np.linspace(0, 2.0, 7)):
         'max_E_err': 1.e-10,
         'max_S_err': 1.e-6,
         'max_sweeps': 150,
-        'verbose': 1.,
     }
 
     prod_state = [1]
@@ -152,8 +151,7 @@ if __name__ == "__main__":
                         order='default',
                         Lx=1,
                         Ly=4,
-                        bc_y='cylinder',
-                        verbose=0)
+                        bc_y='cylinder')
 
     # plot_model(model_params)
     data = run(model_params)

@@ -1,15 +1,13 @@
 """a collection of tests to check the functionality of network_contractor.py."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from tenpy.algorithms.network_contractor import contract, ncon
 import numpy as np
 from tenpy.linalg import np_conserved as npc
-import pytest
-import warnings
 from random_test import random_Array
 
-# Contruct toy tensors
-# ====================
+# Construct toy tensors
+# =====================
 
 Sx = npc.Array.from_ndarray_trivial([[0., 1.], [1., 0.]])
 Sy = npc.Array.from_ndarray_trivial([[0., -1.j], [1.j, 0.]], dtype=complex)
@@ -19,7 +17,7 @@ S0 = npc.Array.from_ndarray_trivial([[1., 0.], [0., 1.]])
 
 def two_site_hamiltonian(coupling=1, ferro=True):
     """ returns the two site gate h = -ZZ - gX for ferro=True and h = ZZ - gX otherwise
-        the gX term is symmetrised as 1/2 (1*Sx + Sx*1)
+        the gX term is symmetrized as 1/2 (1*Sx + Sx*1)
 
         Index convention
 

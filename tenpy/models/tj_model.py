@@ -1,9 +1,8 @@
 """tJ model"""
-# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from .model import CouplingMPOModel, NearestNeighborModel
 from .lattice import Chain
-from ..tools.params import asConfig
 from ..networks.site import SpinHalfHoleSite
 
 __all__ = ['tJModel', 'tJChain']
@@ -50,15 +49,15 @@ class tJModel(CouplingMPOModel):
     """
 
     def init_sites(self, model_params):
-        cons_N = model_params.get('cons_N', 'N')
-        cons_Sz = model_params.get('cons_Sz', 'Sz')
+        cons_N = model_params.get('cons_N', 'N', str)
+        cons_Sz = model_params.get('cons_Sz', 'Sz', str)
         site = SpinHalfHoleSite(cons_N=cons_N, cons_Sz=cons_Sz)
         return site
 
     def init_terms(self, model_params):
         # 0) Read out/set default parameters.
-        t = model_params.get('t', 1.)
-        J = model_params.get('J', 1.)
+        t = model_params.get('t', 1., 'real_or_array')
+        J = model_params.get('J', 1., 'real_or_array')
 
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             self.add_coupling(-t, u1, 'Cdu', u2, 'Cu', dx, plus_hc=True)

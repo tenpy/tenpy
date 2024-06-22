@@ -10,7 +10,7 @@ As briefly explained in :doc:`/intro/simulations`, you can easily add custom mea
 
 Full description and details in :doc:`/intro/measurements`.
 """
-# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -23,8 +23,6 @@ __all__ = [
     'measurement_wrapper', 'm_measurement_index', 'm_bond_dimension', 'm_bond_energies',
     'm_simulation_parameter', 'm_energy_MPO', 'm_entropy', 'm_onsite_expectation_value',
     'm_correlation_length', 'm_evolved_time',
-    'measurement_index', 'bond_dimension', 'bond_energies', 'simulation_parameter', 'energy_MPO',
-    'entropy', 'onsite_expectation_value', 'correlation_length',  'evolved_time', 'psi_method',
 ]
 
 
@@ -60,6 +58,7 @@ def m_measurement_index(results, psi, model, simulation, results_key='measuremen
 
     See :doc:`/intro/measurements` for the general setup using measurements.
 
+
     .. versionchanged:: 0.10.0
 
         The `model` parameter is new! Any measurement function for simulations now has to accept
@@ -77,6 +76,9 @@ def m_measurement_index(results, psi, model, simulation, results_key='measuremen
         Usually shorthand for ``simulation.psi`` and ``simulation.model``, respectively,
         but can be different, e.g., when grouping sites.
         See :meth:`~tenpy.simulations.simulation.Simulation.get_measurement_psi_model`.
+        Note that ``psi`` is compatible with ``model``,
+        and ``simulation.psi`` should be compatible with ``simulation.model``,
+        but you should not mix them.
     simulation : :class:`~tenpy.simulations.simulation.Simulation`
         The simulation class. This gives also access to the `model`, algorithm `engine`, etc.
     results_key : str
@@ -110,7 +112,9 @@ def m_bond_energies(results, psi, model, simulation, results_key='bond_energies'
     results, psi, model, simulation, results_key :
         See :func:`~tenpy.simulation.measurement.measurement_index`.
     """
-    results[results_key] = model.bond_energies(psi)
+    # use simulation.psi and simulation.model since default 'energy' measurement is
+    # obtained from model.get_extra_default_measurements() in _connect_measurements() after regrouping
+    results[results_key] = simulation.model.bond_energies(simulation.psi)
 
 
 def m_simulation_parameter(results, psi, model, simulation, recursive_key, results_key=None, **kwargs):
@@ -265,65 +269,6 @@ def m_evolved_time(results, psi, model, simulation, results_key='evolved_time'):
     results[results_key] = simulation.engine.evolved_time
 
 
-def psi_method(results, psi, model, simulation, method, key=None, **kwargs):
-    """Generic function to measure arbitrary method of psi with given additional kwargs.
-
-    .. deprecated :: 0.10.0
-
-        Instead of using this function :func:`tenpy.simulations.measurement.psi_method`
-        as a global measurement wrapper function, you can now directly use "psi_method"
-        as `module_name` and replace the `connect_measurements` simulation parameter
-        entries as follows::
-
-            An old python entry for connect_measurements
-                ['tenpy.simulations.measurement',
-                 'psi_method',
-                 {'method': 'correlation_function',
-                  'key': '<Sp_i Sm_j>',
-                  'ops1': 'Sp',
-                  'ops2': 'Sm'}]
-            can get replaced with new entry:
-                ['psi_method',
-                 'wrap correlation_function',
-                 {'results_key': '<Sp_i Sm_j>',
-                  'ops1': 'Sp',
-                  'ops2': 'Sm'}]
-            Similarly, an old yaml entry for connect_measurements
-                - - tenpy.simulations.measurement
-                  - psi_method
-                  - method: correlation_function
-                    key: '<Sp_i Sm_j>'
-                    ops1: Sp
-                    ops2: Sm
-            can get replaced with new yaml:
-                - - psi_method
-                  - wrap correlation_function
-                  - results_key: '<Sp_i Sm_j>'
-                    ops1: Sp
-                    ops2: Sm
-
-        The new way is now the preferred way of measuring psi methods, the old way is deprecated.
-        Note the additional "wrap " in the function name, which indicates that the specified
-        function just returns the results and does not take ``results, model, simulation`` as
-        arguments, hence we need a wrapper function for the measurement.
-        Also note the renaming of `key` to `results_key`.
-
-    Parameters
-    ----------
-    results, psi, model, simulation, key:
-        See :func:`~tenpy.simulation.measurement.measurement_index`.
-    method : str
-        Name of the method of `psi` to call. `key` defaults to this if not specified.
-    **kwargs :
-        further keyword arguments given to the method
-    """
-    # extract the deprecation comment from the doc string
-    _psi_method_deprecated_msg = '\n'.join([line[8:] for line in
-                                            psi_method.__doc__.splitlines()[4:42]])
-    warnings.warn(_psi_method_deprecated_msg, FutureWarning)
-    _m_psi_method_wrapped(results, psi, model, simulation, method, results_key=key, **kwargs)
-
-
 # the following wrapper functions _m_{psi,model}_method_[wrapped] are used
 # in simulation._connect_measurement_fct  for entries with 'psi_method' and 'model_method' in
 # :cfg:option:`Simulation.connect_measurement`
@@ -356,64 +301,3 @@ def _m_model_method_wrapped(results, psi, model, simulation, func_name, results_
     model_method = getattr(model, func_name)
     res = model_method(**kwargs)
     results[results_key] = res
-
-
-# Deprecated functions
-_deprecated_msg = ("renamed function and argument {0:s}(..., key) to m_{0:s}(..., results_key), "
-                   "update corresponding entry in simulation parameter `connect_measurements`!")
-
-
-def measurement_index(results, psi, model, simulation, key='measurement_index'):
-    """Deprecated version of :func:`m_measurement_index`."""
-    warnings.warn(_deprecated_msg.format("measurement_index"), FutureWarning)
-    m_measurement_index(results, psi, model, simulation, key)
-
-
-def bond_dimension(results, psi, model, simulation, key='bond_dimension'):
-    """Deprecated version of :func:`m_bond_dimension`."""
-    warnings.warn(_deprecated_msg.format("bond_dimension"), FutureWarning)
-    m_bond_dimension(results, psi, model, simulation, key)
-
-
-def bond_energies(results, psi, model, simulation, key='bond_energies'):
-    """Deprecated version of :func:`m_bond_energies`."""
-    warnings.warn(_deprecated_msg.format("bond_energies"), FutureWarning)
-    m_bond_dimension(results, psi, model, simulation, key)
-
-
-def simulation_parameter(results, psi, model, simulation, recursive_key, key=None, **kwargs):
-    """Deprecated version of :func:`m_simulation_parameter`."""
-    warnings.warn(_deprecated_msg.format("simulation_parameter"), FutureWarning)
-    m_simulation_parameter(results, psi, model, simulation, recursive_key, key, **kwargs)
-
-
-def energy_MPO(results, psi, model, simulation, key='energy_MPO'):
-    """Deprecated version of :func:`m_energy_MPO`."""
-    warnings.warn(_deprecated_msg.format("energy_MPO"), FutureWarning)
-    m_energy_MPO(results, psi, model, simulation, key)
-
-
-def entropy(results, psi, model, simulation, key='entropy'):
-    """Deprecated version of :func:`m_entropy`."""
-    warnings.warn(_deprecated_msg.format("entropy"), FutureWarning)
-    m_entropy(results, psi, model, simulation, key)
-
-
-def onsite_expectation_value(results, psi, model, simulation, opname, key=None, fix_u=None,
-                             **kwargs):
-    """Deprecated version of :func:`m_onsite_expectation_value`."""
-    warnings.warn(_deprecated_msg.format("onsite_expectation_value"), FutureWarning)
-    m_onsite_expectation_value(results, psi, model, simulation, opname, key, fix_u, **kwargs)
-
-
-def correlation_length(results, psi, model, simulation, key='correlation_length', unit=None,
-                       **kwargs):
-    """Deprecated version of :func:`m_correlation_length`."""
-    warnings.warn(_deprecated_msg.format("correlation_length"), FutureWarning)
-    m_correlation_length(results, psi, model, simulation, key, unit, **kwargs)
-
-
-def evolved_time(results, psi, model, simulation, key='evolved_time'):
-    """Deprecated version of :func:`m_evolved_time`."""
-    warnings.warn(_deprecated_msg.format("evolved_time"), FutureWarning)
-    m_evolved_time(results, psi, model, simulation, key)

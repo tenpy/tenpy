@@ -1,26 +1,36 @@
-"""Check for consistencies."""
-# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
+"""Perform linting checks.
+
+These are checks for coding guidelines, best practices etc.
+The code may still run fine even if these checks fail.
+We therefore consider them part of a linting routine and do *not* call them from pytest.
+"""
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import tenpy
 import types
 import os
-import re
-from datetime import date
 
 
-def test_all(check_module=tenpy):
+def main():
+    """Called when this script is called, e.g. via `python linting.py`"""
+    print('Checking __all__ attributes')
+    check_all_attribute()
+    print('Checking copyright notices')
+    check_copyright_notice()
+    print('Done')
+
+
+def check_all_attribute(check_module=tenpy):
     """Recursively check that `__all__` of a module contains only valid entries.
 
     In each *.py file under tenpy/, there should be an __all__,
     """
-    _file_ = check_module.__file__
     _name_ = check_module.__name__
-    _package_ = check_module.__package__
     if not hasattr(check_module, '__all__'):
         raise AssertionError("module {0} has no line __all__ = [...]".format(_name_))
     _all_ = check_module.__all__
 
-    print("test __all__ of", _name_)
+    # print("test __all__ of", _name_)
     # find entries in __all__ but not in the module
     nonexistent = [n for n in _all_ if not hasattr(check_module, n)]
     if len(nonexistent) > 0:
@@ -49,7 +59,7 @@ def test_all(check_module=tenpy):
     submodules = [getattr(check_module, n, None) for n in _all_]
     for m in submodules:
         if isinstance(m, types.ModuleType) and m.__name__.startswith('tenpy'):
-            test_all(m)
+            check_all_attribute(m)
 
 
 def get_python_files(top):
@@ -60,25 +70,25 @@ def get_python_files(top):
             del dirnames[dirnames.index('__pycache__')]
         for fn in filenames:
             if fn.endswith('.py') and fn != '_npc_helper.py':
-                # exlude _npc_helper.py generated in the egg by ``python setup.py install``
+                # exclude _npc_helper.py generated in the egg by ``python setup.py install``
                 python_files.append(os.path.join(dirpath, fn))
     return python_files
 
 
-def test_copyright():
+def check_copyright_notice():
     tenpy_files = get_python_files(os.path.dirname(tenpy.__file__))
     #  to check also files in examples/ and toycodes/ etc, if you have the full repository,
     #  you can use the following:
     # tenpy_files = get_python_files(os.path.dirname(os.path.dirname(tenpy.__file__)))
     #  (but this doesn't work for the pip-installed tenpy, so you can only do it temporary!)
-    current_year = date.today().year
-    regex = re.compile(r'#\s[Cc]opyright (20[0-9]{2}-)?20[0-9]{2} (TeNPy|tenpy) [dD]evelopers, GNU GPLv3')
     for fn in tenpy_files:
         with open(fn, 'r') as f:
             for line in f:
-                if line.startswith('#'):
-                    match = regex.match(line)
-                    if match is not None:
-                        break
+                if line.startswith('# Copyright (C) TeNPy Developers, GNU GPLv3'):
+                    break
             else:  # no break
                 raise AssertionError(f'No/wrong copyright notice in {fn}.')
+
+
+if __name__ == '__main__':
+    main()

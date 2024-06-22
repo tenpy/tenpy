@@ -3,13 +3,13 @@
 .. warning ::
     This module is still under active development. Use with care!
 """
-# Copyright 2021-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from ..tools.thread import Worker
 
 from ..linalg import np_conserved as npc
-from .dmrg import TwoSiteDMRGEngine, SingleSiteDMRGEngine
-from .mps_common import OneSiteH, TwoSiteH
+from .dmrg import TwoSiteDMRGEngine
+from .mps_common import TwoSiteH
 
 __all__ = ["DMRGThreadPlusHC", "TwoSiteHThreadPlusHC"]
 
@@ -37,7 +37,6 @@ class TwoSiteHThreadPlusHC(TwoSiteH):
         return theta + theta_hc
 
     def matvec_hc(self, theta):
-        labels = theta.get_leg_labels()
         theta = theta.conj()  # copy!
         theta = npc.tensordot(theta, self.LHeff, axes=['(vL*.p0*)', '(vR*.p0)'])
         theta = npc.tensordot(self.RHeff_for_hc,

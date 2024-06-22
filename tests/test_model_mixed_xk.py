@@ -1,6 +1,5 @@
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
-from tenpy.models.mixed_xk import (MixedXKLattice, MixedXKModel, SpinlessMixedXKSquare,
-                                   HubbardMixedXKSquare)
+# Copyright (C) TeNPy Developers, GNU GPLv3
+from tenpy.models.mixed_xk import SpinlessMixedXKSquare, HubbardMixedXKSquare
 from test_model import check_general_model
 from tenpy.models.fermions_spinless import FermionModel
 from tenpy.models.hubbard import FermiHubbardModel

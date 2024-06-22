@@ -1,12 +1,9 @@
 """To be used in the `-m` argument of benchmark.py."""
-# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
-
-import numpy as np
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from tenpy.networks.mps import MPS
 from tenpy.models.spins import SpinChain
 from tenpy.algorithms import dmrg
-from tenpy.tools import optimization
 
 
 def setup_benchmark(mod_q=[1], legs=10, size=20, diag_method='lanczos', **kwargs):

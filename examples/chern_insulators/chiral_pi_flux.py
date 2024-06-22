@@ -3,7 +3,7 @@
 Based on the model in [Neupert2011]_
 """
 
-# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -66,19 +66,19 @@ class FermionicPiFluxModel(CouplingMPOModel):
 
         for u1, u2, dx in self.lat.NN:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
-            self.add_coupling(t1_phi, u1, 'Cd', u2, 'C', dx, 'JW', True,
-                              category='t1 Cd_i C_j', add_hc=True)  # yapf: disable
+            self.add_coupling(t1_phi, u1, 'Cd', u2, 'C', dx, 'JW',
+                              category='t1 Cd_i C_j', plus_hc=True)  # yapf: disable
             self.add_coupling(V, u1, 'N', u2, 'N', dx, category='V N_i N_j')
 
         for u1, u2, dx in self.lat.nNNdashed:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
-            self.add_coupling(t2_phi, u1, 'Cd', u2, 'C', dx, 'JW', True,
-                              category='t2 Cd_i C_j', add_hc=True)  # yapf: disable
+            self.add_coupling(t2_phi, u1, 'Cd', u2, 'C', dx, 'JW',
+                              category='t2 Cd_i C_j', plus_hc=True)  # yapf: disable
 
         for u1, u2, dx in self.lat.nNNdotted:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
-            self.add_coupling(-t2_phi, u1, 'Cd', u2, 'C', dx, 'JW', True,
-                              category='-t2 Cd_i C_j', add_hc=True)  # yapf: disable
+            self.add_coupling(-t2_phi, u1, 'Cd', u2, 'C', dx, 'JW',
+                              category='-t2 Cd_i C_j', plus_hc=True)  # yapf: disable
 
 
 def plot_lattice():
@@ -99,7 +99,7 @@ def run(phi_ext=np.linspace(0, 1.0, 7)):
 
     data = dict(phi_ext=phi_ext, QL=[], ent_spectrum=[])
 
-    model_params = dict(conserve='N', t=-1, V=0, mu=0, Lx=1, Ly=3, verbose=1)
+    model_params = dict(conserve='N', t=-1, V=0, mu=0, Lx=1, Ly=3)
 
     dmrg_params = {
         'mixer': True,  # setting this to True helps to escape local minima
@@ -123,7 +123,6 @@ def run(phi_ext=np.linspace(0, 1.0, 7)):
         'max_E_err': 1.e-10,
         'max_S_err': 1.e-6,
         'max_sweeps': 150,
-        'verbose': 1.,
     }
 
     prod_state = ['empty', 'full'] * (model_params['Lx'] * model_params['Ly'] * 2)

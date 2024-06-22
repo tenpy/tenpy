@@ -4,14 +4,13 @@
     Long term: implement different lattices.
     Long term: implement variable hopping strengths Jx, Jy.
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
-import warnings
 
 from .lattice import Square
 from ..networks.site import BosonSite, FermionSite
-from .model import CouplingModel, MPOModel, CouplingMPOModel
+from .model import CouplingMPOModel
 
 __all__ = ['HofstadterBosons', 'HofstadterFermions', 'gauge_hopping']
 
@@ -70,11 +69,11 @@ def gauge_hopping(model_params):
     # If the array is smaller than the actual number of couplings,
     # it is 'tiled', i.e. repeated periodically, see also tenpy.tools.to_array().
     # If no magnetic unit cell size is defined, minimal size will be used.
-    gauge = model_params.get('gauge', 'landau_x')
-    mx = model_params.get('mx', None)
-    my = model_params.get('my', None)
-    Jx = model_params.get('Jx', 1.)
-    Jy = model_params.get('Jy', 1.)
+    gauge = model_params.get('gauge', 'landau_x', str)
+    mx = model_params.get('mx', None, int)
+    my = model_params.get('my', None, int)
+    Jx = model_params.get('Jx', 1., 'real')
+    Jy = model_params.get('Jy', 1., 'real')
     phi_p, phi_q = model_params.get('phi', (1, 3))
     phi = 2 * np.pi * phi_p / phi_q
 
@@ -157,7 +156,7 @@ class HofstadterFermions(CouplingMPOModel):
     force_default_lattice = True
 
     def init_sites(self, model_params):
-        conserve = model_params.get('conserve', 'N')
+        conserve = model_params.get('conserve', 'N', str)
         filling = model_params.get('filling', (1, 8))
         filling = filling[0] / filling[1]
         site = FermionSite(conserve=conserve, filling=filling)
@@ -166,9 +165,9 @@ class HofstadterFermions(CouplingMPOModel):
     def init_terms(self, model_params):
         Lx = self.lat.shape[0]
         Ly = self.lat.shape[1]
-        phi_ext = model_params.get('phi_ext', 0.)
-        mu = np.asarray(model_params.get('mu', 0.))
-        v = np.asarray(model_params.get('v', 0))
+        phi_ext = model_params.get('phi_ext', 0., 'real')
+        mu = np.asarray(model_params.get('mu', 0., 'real_or_array'))
+        v = np.asarray(model_params.get('v', 0, 'real_or_array'))
         hop_x, hop_y = gauge_hopping(model_params)
 
         # 6) add terms of the Hamiltonian
@@ -236,8 +235,8 @@ class HofstadterBosons(CouplingMPOModel):
     force_default_lattice = True
 
     def init_sites(self, model_params):
-        Nmax = model_params.get('Nmax', 3)
-        conserve = model_params.get('conserve', 'N')
+        Nmax = model_params.get('Nmax', 3, int)
+        conserve = model_params.get('conserve', 'N', str)
         filling = model_params.get('filling', (1, 8))
         filling = filling[0] / filling[1]
         site = BosonSite(Nmax=Nmax, conserve=conserve, filling=filling)
@@ -246,9 +245,9 @@ class HofstadterBosons(CouplingMPOModel):
     def init_terms(self, model_params):
         Lx = self.lat.shape[0]
         Ly = self.lat.shape[1]
-        phi_ext = model_params.get('phi_ext', 0.)
-        mu = np.asarray(model_params.get('mu', 0.))
-        U = np.asarray(model_params.get('U', 0))
+        phi_ext = model_params.get('phi_ext', 0., 'real')
+        mu = np.asarray(model_params.get('mu', 0., 'real_or_array'))
+        U = np.asarray(model_params.get('U', 0, 'real_or_array'))
         hop_x, hop_y = gauge_hopping(model_params)
 
         # 6) add terms of the Hamiltonian

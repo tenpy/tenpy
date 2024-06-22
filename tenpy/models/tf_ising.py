@@ -6,13 +6,12 @@ the idea is more to serve as a pedagogical example for a 'model'.
 
 We choose the field along z to allow to conserve the parity, if desired.
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
 from .model import CouplingMPOModel, NearestNeighborModel
 from .lattice import Chain
-from ..tools.params import asConfig
 from ..networks.site import SpinHalfSite
 
 __all__ = ['TFIModel', 'TFIChain']
@@ -44,26 +43,25 @@ class TFIModel(CouplingMPOModel):
 
         conserve : None | 'parity'
             What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
-        sort_charge : bool | None
-            Whether to sort by charges of physical legs.
-            See change comment in :class:`~tenpy.networks.site.Site`.
+        sort_charge : bool
+            Whether to sort by charges of physical legs. `True` by default.
         J, g : float | array
             Coupling as defined for the Hamiltonian above.
 
     """
     def init_sites(self, model_params):
-        conserve = model_params.get('conserve', 'parity')
+        conserve = model_params.get('conserve', 'parity', str)
         assert conserve != 'Sz'
         if conserve == 'best':
             conserve = 'parity'
             self.logger.info("%s: set conserve to %s", self.name, conserve)
-        sort_charge = model_params.get('sort_charge', None)
+        sort_charge = model_params.get('sort_charge', True, bool)
         site = SpinHalfSite(conserve=conserve, sort_charge=sort_charge)
         return site
 
     def init_terms(self, model_params):
-        J = np.asarray(model_params.get('J', 1.))
-        g = np.asarray(model_params.get('g', 1.))
+        J = np.asarray(model_params.get('J', 1., 'real_or_array'))
+        g = np.asarray(model_params.get('g', 1., 'real_or_array'))
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-g, u, 'Sigmaz')
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:

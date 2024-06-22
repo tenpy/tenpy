@@ -5,7 +5,7 @@ as described in :cite:`motruk2016`.
 
 We consider infinite cylinders in real-space along the cylinder axis,
 but transform to momentum space around the cylinder.
-The DMRG unit cell consists of `N_rings` "rings" on they cylinder with a given x-coordinate `i`.
+The DMRG unit cell consists of `N_rings` "rings" on the cylinder with a given x-coordinate `i`.
 Inside each ring, we consider `Ly` repetitions of `N_orb` independent fermionic orbitals around
 the cylinder. Each orbital is one fermionic state that can be occupied or empty and corresponds to
 a unique creation/annihilation operator in second quantization.
@@ -19,19 +19,19 @@ and orbital :math:`l = 0, ... N_{orb}`.
 We transform them into momentum space with the convention (for all :math:`x,l` independently):
 
 .. math ::
-    c^\dagger_{x,k,l} = 1/\sqrt{L_y} \sum_k \exp(- \frac{2\pi i}{L_y} * k * y) c^\dagger_{x,y,l}
+    c^\dagger_{x,k,l} = 1/\sqrt{L_y} \sum_y \exp(- \frac{2\pi i}{L_y} * k * y) c^\dagger_{x,y,l}
     \\
-    c_{x,k,l}         = 1/\sqrt{L_y} \sum_k \exp(+ \frac{2\pi i}{L_y} * k * y) c_{x,y,l}
+    c_{x,k,l}         = 1/\sqrt{L_y} \sum_y \exp(+ \frac{2\pi i}{L_y} * k * y) c_{x,y,l}
     \\
-    c^\dagger_{x,y,l} = 1/\sqrt{L_y} \sum_y \exp(+ \frac{2\pi i}{L_y} * k * y) c^\dagger_{x,k,l}
+    c^\dagger_{x,y,l} = 1/\sqrt{L_y} \sum_k \exp(+ \frac{2\pi i}{L_y} * k * y) c^\dagger_{x,k,l}
     \\
-    c_{x,y,l}         = 1/\sqrt{L_y} \sum_y \exp(- \frac{2\pi i}{L_y} * k * y) c_{x,k,l}
+    c_{x,y,l}         = 1/\sqrt{L_y} \sum_k \exp(- \frac{2\pi i}{L_y} * k * y) c_{x,k,l}
 
 
 We use the indices ``k = 0, ... Ly-1`` and define the actual momentum as
 :math:`k_y = 2 \pi i / L_y * k` for :math:`k \leq Ly/2` and
 and shift to :math:`k_y = 2 \pi i * (k-L_y) / L_y ` for :math:`k > Ly/2` such that
-:math:`k_y \in (-\pi, pi]`.
+:math:`k_y \in (-\pi, \pi]`.
 The momenta fulfill the usual relations
 
 .. math ::
@@ -62,11 +62,10 @@ The Jordan-Wigner strings follow the *final* DMRG snake.
     exclusion principle implies a possibly large occupation on single k modes, i.e., hard-core
     bosons in x-y-space don't map to hard-core bosons in x-k-space!
 """
-# Copyright 2021-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import itertools as it
-import warnings
 
 from .lattice import Lattice
 from .model import CouplingMPOModel
@@ -386,11 +385,11 @@ class MixedXKModel(CouplingMPOModel):
         if xy_lattice != "Square":
             raise NotImplementedError("Can't choose other than Square for now")
         self.real_space_lattice = xy_lattice
-        N_rings = model_params.get('Lx', 1)
-        Ly = model_params.get('Ly', 2)
+        N_rings = model_params.get('Lx', 1, int)
+        Ly = model_params.get('Ly', 2, int)
         ring_order = model_params.get('ring_order', None)
-        conserve_k = model_params.get('conserve_k', True)
-        bc_MPS = model_params.get('bc_MPS', 'infinite')
+        conserve_k = model_params.get('conserve_k', True, bool)
+        bc_MPS = model_params.get('bc_MPS', 'infinite', str)
         bc = 'periodic' if bc_MPS == 'infinite' else 'open'
         lat = MixedXKLattice.from_charges_of_orbitals(N_rings,
                                                       Ly,
@@ -736,8 +735,8 @@ class SpinlessMixedXKSquare(MixedXKModel):
 
     def init_terms(self, model_params):
         # Read out parameters
-        t = model_params.get('t', 1.)
-        V = model_params.get('V', 1.)
+        t = model_params.get('t', 1., 'real_or_array')
+        V = model_params.get('V', 1., 'real_or_array')
         xk_lat = self.lat
         Ly = xk_lat.Ly
         N_orb = xk_lat.N_orb
@@ -783,14 +782,14 @@ class HubbardMixedXKSquare(MixedXKModel):
 
     def init_terms(self, model_params):
         # Read out parameters
-        t = model_params.get('t', 1.)
-        U = model_params.get('U', 1.)
+        t = model_params.get('t', 1., 'real_or_array')
+        U = model_params.get('U', 1., 'real_or_array')
         xk_lat = self.lat
         Ly = xk_lat.Ly
         N_orb = xk_lat.N_orb
 
         # hopping
-        intra_hopping = np.zeros((Ly, N_orb, Ly, N_orb), dtype=np.complex_)
+        intra_hopping = np.zeros((Ly, N_orb, Ly, N_orb), dtype=complex)
         inter_hopping = np.zeros((Ly, N_orb, Ly, N_orb))
         cos_k = np.real(xk_lat.get_exp_ik(np.arange(Ly)))
         for k in range(Ly):

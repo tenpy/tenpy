@@ -1,7 +1,7 @@
 Logging and terminal output
 ===========================
 
-By default, calling (almost) any function in TeNPy will not print output, appart from error messages, tracebacks, and warnings.
+By default, calling (almost) any function in TeNPy will not print output, apart from error messages, tracebacks, and warnings.
 Instead, we use Python's :mod:`logging` module to allow fine-grained redirecting of status messages etc.
 
 Of course, when you get an error message, you should be concerned to find out what it is about and how to fix it. 
@@ -27,7 +27,7 @@ instead of stdout. Note that you should call `basicConfig` only once; subsequent
 
 
 More detailed configurations can be made through :mod:`logging.config`.
-For example, the following both prints log messages to stdout and saves them to`ouput_filename.log`::
+For example, the following both prints log messages to stdout and saves them to`output_filename.log`::
 
     import logging.config
     conf = {
@@ -66,9 +66,9 @@ Moreover, you can easily adjust the log levels with simple parameters, for examp
         to_stdout:     # nothing in yaml -> None in python => no logging to stdout
         to_file: INFO
         logger_levels:
-            tenpy.tools.params : WARNING  # suppres INFO/DEBUG output for any logging of parameters
+            tenpy.tools.params : WARNING  # suppress INFO/DEBUG output for any logging of parameters
 
-Of course, you can also explicilty call the :func:`~tenpy.tools.misc.setup_logging` yourself, if you don't use the `Simulation` classes::
+Of course, you can also explicitly call the :func:`~tenpy.tools.misc.setup_logging` yourself, if you don't use the `Simulation` classes::
 
     tenpy.tools.misc.setup_logging({'to_stdout': None, 'to_file': 'INFO', 'filename': 'my_log.txt',
                                     'log_levels': {'tenpy.tools.params': 'WARNING'}})
@@ -99,7 +99,7 @@ but it's actually straight-forward, and just requires at most two steps.
         In that case you can even **skip** this step and just use ``self.logger`` instead of ``logger`` in the snippets
         below.
 
-2.  Inside your funtions/methods/..., make calls like this::
+2.  Inside your functions/methods/..., make calls like this::
 
         if is_likely_bad(options['parameter']):
             # this can be fixed by the user!
@@ -111,7 +111,7 @@ but it's actually straight-forward, and just requires at most two steps.
         n_steps = do_calculation()
         if something_bad_happened():
             # the user can't do anything about it
-            logger.warning("Something bad happend")
+            logger.warning("Something bad happened")
         logger.info("calculation finished after %d steps", n_steps)
 
     You can use `printf-formatting <https://docs.python.org/3/library/stdtypes.html#printf-style-string-formatting>`_
@@ -121,4 +121,4 @@ In summary, instead of just ``print("do X")`` statements, use ``self.logger.info
 ``logger.info("do X")`` for the module-wide logger, which you can initialize right at the top of your file with the import
 statements. If you have non-string arguments, add a formatter string, e.g. replace ``print(max(psi.chi))`` with
 ``logger.info("%d", max(psi.chi))``, or even better, ``logger.info("max(chi)=%d", max(psi.chi))``.
-For genereic types, use ``"%s"`` or ``"%r"``, which converts the other arguments to strings with ``str(...)`` or ``repr(...)``, respectively.
+For generic types, use ``"%s"`` or ``"%r"``, which converts the other arguments to strings with ``str(...)`` or ``repr(...)``, respectively.

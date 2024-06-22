@@ -1,10 +1,9 @@
 """Bosonic and fermionic Haldane models."""
-# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
 from .model import CouplingMPOModel
-from ..tools.params import asConfig
 from ..networks.site import BosonSite, FermionSite
 from .lattice import Honeycomb
 
@@ -55,17 +54,17 @@ class BosonicHaldaneModel(CouplingMPOModel):
     force_default_lattice = True
 
     def init_sites(self, model_params):
-        conserve = model_params.get('conserve', 'N')
+        conserve = model_params.get('conserve', 'N', str)
         site = BosonSite(conserve=conserve)
         return site
 
     def init_terms(self, model_params):
-        t1 = np.asarray(model_params.get('t1', -1.))
+        t1 = np.asarray(model_params.get('t1', -1., 'real_or_array'))
         t2_default = (np.sqrt(129) / 36) * t1 * np.exp(1j * np.arccos(3 * np.sqrt(3 / 43)))
-        t2 = np.asarray(model_params.get('t2', t2_default))
-        V = np.asarray(model_params.get('V', 0))
-        mu = np.asarray(model_params.get('mu', 0.))
-        phi_ext = model_params.get('phi_ext', 0.)
+        t2 = np.asarray(model_params.get('t2', t2_default, 'complex_or_array'))
+        V = np.asarray(model_params.get('V', 0, 'real_or_array'))
+        mu = np.asarray(model_params.get('mu', 0., 'real_or_array'))
+        phi_ext = model_params.get('phi_ext', 0., 'real')
 
         self.add_onsite(mu, 0, 'N', category='mu N')
         self.add_onsite(-mu, 1, 'N', category='mu N')
@@ -130,17 +129,17 @@ class FermionicHaldaneModel(CouplingMPOModel):
     force_default_lattice = True
 
     def init_sites(self, model_params):
-        conserve = model_params.get('conserve', 'N')
+        conserve = model_params.get('conserve', 'N', str)
         site = FermionSite(conserve=conserve)
         return site
 
     def init_terms(self, model_params):
-        t1 = np.asarray(model_params.get('t1', -1.))
+        t1 = np.asarray(model_params.get('t1', -1., 'real_or_array'))
         t2_default = np.sqrt(129) / 36 * t1 * np.exp(1j * np.arccos(3 * np.sqrt(3 / 43)))
-        t2 = np.asarray(model_params.get('t2', t2_default))
-        V = np.asarray(model_params.get('V', 0))
-        mu = np.asarray(model_params.get('mu', 0.))
-        phi_ext = model_params.get('phi_ext', 0.)
+        t2 = np.asarray(model_params.get('t2', t2_default, 'complex_or_array'))
+        V = np.asarray(model_params.get('V', 0, 'real_or_array'))
+        mu = np.asarray(model_params.get('mu', 0., 'real_or_array'))
+        phi_ext = model_params.get('phi_ext', 0., 'real')
 
         self.add_onsite(mu, 0, 'N', category='mu N')
         self.add_onsite(-mu, 1, 'N', category='mu N')

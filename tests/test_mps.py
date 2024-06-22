@@ -1,12 +1,11 @@
 """A collection of tests for :module:`tenpy.networks.mps`."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import numpy.testing as npt
-import warnings
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.models.aklt import AKLTChain
-from tenpy.models.lattice import Square, Chain, Honeycomb, MultiSpeciesLattice
+from tenpy.models.lattice import Square, Chain, MultiSpeciesLattice
 
 from tenpy.tools import misc
 from tenpy.algorithms import tebd
@@ -141,8 +140,8 @@ def test_singlet_mps():
     npt.assert_array_almost_equal_nulp(ent_segm, [2, 3, 1, 3, 2], 5)
     ent_segm = psi.entanglement_entropy_segment([0, 1, 3, 4]) / np.log(2)
     npt.assert_array_almost_equal_nulp(ent_segm, [1, 1, 2, 2], 5)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", UserWarning)
+
+    with pytest.warns(UserWarning, match='inefficient: use `entanglement_entropy_segment` instead!'):
         ent_segm2 = psi.entanglement_entropy_segment2([1, 2, 3, 4]) / np.log(2)
         assert abs(ent_segm2 - 3) < 1.e-12
         ent_segm2 = psi.entanglement_entropy_segment2([1, 2, 4, 5]) / np.log(2)
@@ -295,7 +294,7 @@ def test_TransferMatrix(chi=4, d=2):
         # compare largest eigenvector
         w0 = w[0].to_ndarray()
         w0 /= np.sum(w0)
-        npt.assert_allclose(w0, w0_full)
+        npt.assert_allclose(w0, w0_full, atol=1e-15)
 
 
 def test_compute_K():
@@ -386,16 +385,10 @@ def test_apply_op(bc, eps=1.e-13):
 def test_enlarge_mps_unit_cell():
     s = site.SpinHalfSite(conserve='Sz', sort_charge=True)
     psi = mps.MPS.from_product_state([s] * 3, ['up', 'down', 'up'], bc='infinite')
-    psi0 = psi.copy()
-    psi1 = psi.copy()
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", FutureWarning)
-        psi0.increase_L(9)
-    psi1.enlarge_mps_unit_cell(3)
-    for psi in [psi0, psi1]:
-        psi.test_sanity()
-        expval = psi.expectation_value('Sigmaz')
-        npt.assert_equal(expval, [1., -1., 1.] * 3)
+    psi.enlarge_mps_unit_cell(3)
+    psi.test_sanity()
+    expval = psi.expectation_value('Sigmaz')
+    npt.assert_equal(expval, [1., -1., 1.] * 3)
     # done
 
 
@@ -657,14 +650,16 @@ def test_correlation_length():
     assert np.all(np.abs(xi - xi_AKLT) < 1.e-13 )
     charges = np.asarray(charges)
     npt.assert_array_equal(charges[np.argsort(charges[:, 0])], [[-2], [0], [2]])
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", UserWarning)
+
+    with pytest.warns(UserWarning, match='trimming speigs k to smaller matrix dimension d'):
         xi_m2, charges = psi_AKLT.correlation_length(target=1, charge_sector=[-2], return_charges=True)
-        npt.assert_array_equal(charges, [-2])
-        assert abs(xi_m2 - xi_AKLT) < 1.e-13
-        # note: sectors have only one entry, so target only changes resulting
+    npt.assert_array_equal(charges, [-2])
+    assert abs(xi_m2 - xi_AKLT) < 1.e-13
+    # note: sectors have only one entry, so target only changes resulting
+    with pytest.warns(UserWarning, match='trimming speigs k to smaller matrix dimension d'):
         xi_p2 = psi_AKLT.correlation_length(target=2, charge_sector=np.array([+2]), tol_ev0=None)
-        assert abs(xi_p2[0] - xi_AKLT) < 1.e-13
+    assert abs(xi_p2[0] - xi_AKLT) < 1.e-13
+    
     assert abs(xi - xi_AKLT) < 1.e-13
 
 
@@ -769,6 +764,20 @@ def test_mps_compress(method, eps=1.e-13):
     assert (np.abs(psiSum2.overlap(psi) - .5) < 1e-13)
     assert (np.abs(psiSum2.overlap(psiOrth) - .5) < 1e-13)
 
+
+def test_extract_segment():
+    psi = random_MPS(12, 2, 8, bc='finite', form='B')
+    psi.canonical_form()
+    orig_vals = psi.expectation_value('h')
+    first, last = 6, 8
+    psi_seg = psi.extract_segment(first, last)
+    seg_vals = psi_seg.expectation_value('h')
+    assert np.allclose(seg_vals, orig_vals[first:last+1])
+    first2, last2 = 3, 10
+    psi_seg2, _, _ = psi_seg.extract_enlarged_segment(psi, psi, first, last,
+                                                      new_first_last=(first2, last2))
+    seg2_vals = psi_seg2.expectation_value('h')
+    assert np.allclose(seg2_vals, orig_vals[first2:last2+1])
 
 def test_InitialStateBuilder():
     s0 = site.SpinHalfSite('Sz', sort_charge=True)

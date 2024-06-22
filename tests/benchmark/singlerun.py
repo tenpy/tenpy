@@ -4,11 +4,9 @@ Call this file with arguments, e.g:     python singlerun.py -m tensordot_npc ten
 -s 20 -S 50 -q 1 1
 """
 
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
-import cProfile
-import pstats
 import time
 
 
@@ -24,10 +22,10 @@ def single_run(mod_name, repeat=1, seed=0, **kwargs):
     repeat : int
         Repeat the `benchmark` function to be profiled that many times.
     seed : int
-        Seed of the random number generator with this number to enhance reproducability
+        Seed of the random number generator with this number to enhance reproducibility
     **kwargs :
         Further arguments given to the `setup_benchmark` function.
-        Note: is formated to a string with ``repr(kwargs)``. Don't use too complicated arguements!
+        Note: is formatted to a string with ``repr(kwargs)``. Don't use too complicated arguments!
     """
     kwargs['mod_name'] = mod_name
     np.random.seed(seed)

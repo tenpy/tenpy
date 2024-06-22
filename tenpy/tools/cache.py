@@ -7,7 +7,7 @@ Any cache should be handled like a file object that needs to be closed after use
 this is easiest done through a ``with`` statement, see the example in :class:`DictCache`.
 """
 
-# Copyright 2021-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import pickle
 import numpy as np
@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 from .misc import find_subclass
 from .thread import Worker
 from .hdf5_io import load_from_hdf5, save_to_hdf5
-from .params import asConfig
 
 __all__ = ["DictCache", "CacheFile", "Storage", "PickleStorage", "Hdf5Storage", "ThreadedStorage"]
 

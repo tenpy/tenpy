@@ -1,0 +1,101 @@
+[v1.0.0] - 2024-03-19
+=====================
+
+Release Notes
+-------------
+This is the first officially stable release of TeNPy.
+Compared to the :mod:`v0.99 release</changelog/v0.99.0>`, it only introduces necessary
+backwards-incompatible changes and removes deprecated features.
+
+Especially when upgrading from an older version, or in case you get an error with code that used to work,
+we suggest that you install v0.99 before upgrading to v1.0 or greater.
+You can for example do that in a separate conda environment::
+
+    conda create -n tenpy_099 -c conda-forge physics-tenpy=0.99
+
+This allows you to fix any `FutureWarning` that your code raises.
+If it doesn't raise any `FutureWarning`, your code shouldn't be affected by the incompatible changes below.
+
+
+
+Changelog
+---------
+
+Backwards incompatible changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Change the default to ``sort_charge=True`` in the config of models and in the ``__init__`` of sites.
+  This may cause issues when loading data that was saved using an older version of tenpy.
+  See also :issue:`175`.
+- Drop support for ``scipy<0.18``, in particular in svd_robust
+- Drop support for legacy ``simulation_class_name`` option in ``console_main``,
+  i.e. when calling ``tenpy-run`` in a command line and in ``simulation.py``
+- Drop support for outer products in the sequence of :func:`~tenpy.algorithm.network_contractor.ncon`.
+
+- Call signature changes (mostly removing legacy keyword arguments):
+
+  - ``Model.add_multi_coupling()`` : remove legacy positional arguments
+  - ``MPS.expectation_value_terms_sum()`` : remove legacy `prefactors` argument
+  - ``mps.TransferMatrix()`` : Change default of `shift_ket` to ``0``
+  - ``Array.combine_legs()`` : Change default of `qconj`
+  - ``KrylovBased()``, ``LanczosGroundState()``, ``lanczos()``, ``lanczos_arpack()`` : remove legacy `orthogonal_to` arg
+  - ``lanczos.gram_schmidt()`` : remove legacy ``verbose`` arg
+  - ``np_conserved.inner()`` : change default of `axes` to `labels`
+  - ``MPS.permute_sites()`` : remove legacy `verbose` arg
+  - ``tools.misc.setup_logging()`` : remove legacy `options` positional argument
+
+- Remove deprecated / legacy submodules:
+
+  - ``models.bose_hubbard`` and ``models.bose_hubbard_chain``
+  - ``models.fermions_hubbard`` and ``models.fermion_chain``
+  - ``algorithms.purification_tebd``
+  - ``mps_sweeps``
+
+- Remove deprecated / legacy config entries:
+
+  - ``CouplingModel`` : `bc_coupling`
+  - ``truncation`` : `symmetry_tol`
+  - ``Sweep`` : `LP`, `LP_age`, `RP`, `RP_age`, `init_env_data`, `orthogonal_to`, `sweep_0`
+  - ``Simulation`` : `logging_params`
+  - ``VariationalCompression`` : `N_sweeps`
+
+- Remove deprecated / legacy attributes:
+
+  - ``Lattice.nearest_neighbors``, etc.
+  - ``DMRGEngine.DMRG_params``, ``Sweep.engine_params``, ``TDVPEngine.TDVP_params``, ``TEBDEngine.TEBD_params``
+  - ``Array.labels``
+  - ``Algorithm.verbose``, ``CouplingModel.verbose``, ``Simulation.verbose``, ``Config.verbose``
+
+- Remove deprecated / legacy methods:
+
+  - ``MPO.get_grouped_mpo()``
+  - ``MPO.get_full_hamiltonian()``
+  - ``MPS.increase_L()``
+  - ``MPS.canonical_form_infinite()``
+  - ``CouplingModel.calc_H_onsite()``
+  - ``FlatLinearOperator.flat_to_npc_all_sectors`` and ``FlatLinearOperator.npc_to_flat_all_sectors``
+
+- Remove deprecated / legacy functions:
+
+  - ``tools.misc.chi_list()``
+  - ``tools.misc.setup_executable()``
+  - ``tools.misc.build_initial()``
+  - ``tools.misc.any_nonzero()``
+  - ``tools.params.get_parameter()``
+  - ``tools.params.unused_parameters()``
+  - ``sites.multi_sites_combine_charges()``
+  - ``legacy functions in simulations.measurements``
+
+- Remove deprecated / legacy classes:
+
+  - ``dmrg.SingleSiteMixer``, ``drmg.TwoSiteMixer``
+  - ``dmrg.EngineCombine``, dmrg.EngineFracture``
+  - ``tdvp.Engine``, tdvp.OldTDVPEngine``
+  - ``tebd.Engine``
+  - ``model.MultiCoupingModel``
+
+Changed
+^^^^^^^
+- Remove `FutureWarning`:
+
+  - When using legacy features, e.g. config parameters
+  - When adding Arrays causes a transpose to match labels

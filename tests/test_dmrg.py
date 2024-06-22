@@ -1,7 +1,6 @@
 """A collection of tests to check the functionality of `tenpy.dmrg`"""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
-import itertools as it
 import tenpy.linalg.np_conserved as npc
 from tenpy.models.tf_ising import TFIChain
 from tenpy.models.spins import SpinChain
@@ -13,7 +12,7 @@ import numpy as np
 from scipy import integrate
 
 
-def e0_tranverse_ising(g=0.5):
+def e0_transverse_ising(g=0.5):
     """Exact groundstate energy of transverse field Ising.
 
     H = - J sigma_z sigma_z + g sigma_x
@@ -96,7 +95,7 @@ def test_dmrg(bc_MPS, combine, mixer, n, g=1.2):
     else:
         # compare exact solution for transverse field Ising model
         Edmrg = res['E']
-        Eexact = e0_tranverse_ising(g)
+        Eexact = e0_transverse_ising(g)
         print("E_DMRG={Edmrg:.12f} vs E_exact={Eex:.12f}".format(Edmrg=Edmrg, Eex=Eexact))
         print("relative energy error: {err:.2e}".format(err=abs((Edmrg - Eexact) / Eexact)))
         print("norm err:", psi.norm_test())
@@ -183,9 +182,9 @@ def test_dmrg_excited(eps=1.e-12):
     ED = ExactDiag(M)
     ED.build_full_H_from_mpo()
     ED.full_diagonalization()
-    # Note: energies sorted by chargesector (first 0), then ascending -> perfect for comparison
+    # Note: energies sorted by charge sector (first 0), then ascending -> perfect for comparison
     print("Exact diag: E[:5] = ", ED.E[:5])
-    print("Exact diag: (smalles E)[:10] = ", np.sort(ED.E)[:10])
+    print("Exact diag: (smallest E)[:10] = ", np.sort(ED.E)[:10])
 
     psi_ED = [ED.V.take_slice(i, 'ps*') for i in range(5)]
     print("charges : ", [psi.qtotal for psi in psi_ED])
@@ -213,7 +212,7 @@ def test_dmrg_excited(eps=1.e-12):
     ov = npc.inner(psi_ED[1], ED.mps_to_full(psi1), 'range', do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
     # and a third one to check with 2 eigenstates
-    # note: different intitial state necessary, otherwise H is 0
+    # note: different initial state necessary, otherwise H is 0
     psi2 = mps.MPS.from_singlets(psi0.sites[0], L, [(0, 1), (2, 3), (4, 5), (6, 7)], bc=bc)
     eng2 = dmrg.TwoSiteDMRGEngine(psi2, M, dmrg_pars, orthogonal_to=[psi0, psi1])
     E2, psi2 = eng2.run()
@@ -286,3 +285,48 @@ def test_dmrg_explicit_plus_hc(N, bc_MPS, tol=1.e-13, bc='finite'):
     ov = abs(psi1.overlap(psi3, understood_infinite=True))
     print("ov =", ov)
     assert abs(ov - 1) < tol
+
+
+@pytest.mark.parametrize("L, bc_MPS", [(12, 'finite'), (4, 'infinite')])
+def test_dmrg_mixer_cleanup(L, bc_MPS):
+    model_params = dict(L=L, Jx=1., Jy=1., Jz=2.5, hz=5.125, bc_MPS=bc_MPS, conserve='parity')
+    dmrg_params = dict(N_sweeps_check=2, mixer=True, trunc_params={'chi_max': 50})
+    model = SpinChain(model_params)
+    psi = mps.MPS.from_lat_product_state(model.lat, [['up'], ['down']])
+    engine = dmrg.TwoSiteDMRGEngine(psi, model, dmrg_params)
+    # do a few steps of engine.run()
+    engine.shelve = False
+    engine.pre_run_initialize()
+    for _ in range(3):
+        engine.run_iteration()
+    assert engine.mixer is not None
+    old_psi = engine.psi.copy()
+    old_LP = [engine.env.get_LP(i) for i in range(psi.L)]
+    old_RP = [engine.env.get_RP(i) for i in range(psi.L)]
+    
+    print(f'Checking consistency of old environments...')
+    old_contractions = [engine.env.full_contraction(i) for i in range(L)]
+    
+    print('Calling mixer_cleanup()...')
+    engine.mixer_deactivate()
+    engine.mixer_cleanup()
+
+    print('Checking sanity...')
+    engine.psi.test_sanity()
+
+    print('Make sure envs were updated...')
+    new_LP = [engine.env.get_LP(i) for i in range(psi.L)]
+    new_RP = [engine.env.get_RP(i) for i in range(psi.L)]
+    for i in range(L):
+        if not (bc_MPS == 'finite' and i == 0):
+            assert new_LP[i] is not old_LP[i]
+        if not (bc_MPS == 'finite' and i == L - 1):
+            assert new_RP[i] is not old_RP[i]
+    
+    print(f'Checking consistency of new environments...')
+    for i in range(L):
+        assert np.allclose(engine.env.full_contraction(i), old_contractions[i])
+    
+    print(f'Check that expectation values have not changed...')
+    for op in ['Sx', 'Sz']:
+        assert np.allclose(engine.psi.expectation_value(op), old_psi.expectation_value(op))

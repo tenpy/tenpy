@@ -3,15 +3,13 @@
 As we put the model on a cylinder, the name "toric code" is a bit misleading, but it is the
 established name for this model...
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
 from .lattice import Lattice, get_order, _parse_sites
 from ..networks.site import SpinHalfSite
 from .model import CouplingMPOModel
-from ..tools.params import asConfig
-from ..tools.misc import any_nonzero
 
 __all__ = ['DualSquare', 'ToricCode']
 
@@ -119,9 +117,8 @@ class ToricCode(CouplingMPOModel):
             Dimension of the lattice, number of plaquettes around the cylinder.
         conserve : 'parity' | None
             What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
-        sort_charge : bool | None
-            Whether to sort by charges of physical legs.
-            See change comment in :class:`~tenpy.networks.site.Site`.
+        sort_charge : bool
+            Whether to sort by charges of physical legs. `True` by default.
         Jv, Jp : float | array
             Couplings as defined for the Hamiltonian above.
         order : str
@@ -142,14 +139,14 @@ class ToricCode(CouplingMPOModel):
     force_default_lattice = True
 
     def init_sites(self, model_params):
-        conserve = model_params.get('conserve', 'parity')
-        sort_charge = model_params.get('sort_charge', None)
+        conserve = model_params.get('conserve', 'parity', str)
+        sort_charge = model_params.get('sort_charge', True, bool)
         site = SpinHalfSite(conserve, sort_charge=sort_charge)
         return site
 
     def init_terms(self, model_params):
-        Jv = np.asarray(model_params.get('Jv', 1.))
-        Jp = np.asarray(model_params.get('Jp', 1.))
+        Jv = np.asarray(model_params.get('Jv', 1., 'real_or_array'))
+        Jp = np.asarray(model_params.get('Jp', 1., 'real_or_array'))
         # vertex/star term
         self.add_multi_coupling(-Jv, [('Sigmax', [0, 0], 1), ('Sigmax', [0, 0], 0),
                                       ('Sigmax', [-1, 0], 1), ('Sigmax', [0, -1], 0)])

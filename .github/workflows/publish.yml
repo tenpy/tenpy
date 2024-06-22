@@ -1,0 +1,118 @@
+name: Publish to (Test)PyPI
+# Build wheels and publish them to either TestPyPI (on pushing a tag)
+#  or live PyPI (on creating a release)
+
+on:
+  # when a release is created (-> publish to live PyPI)
+  release:
+    types: [created]
+  
+  # when a tagged commit is pushed to *any* branch (-> publish to testPyPI)
+  push:
+    tags:
+      - '**'  # on any tag
+
+jobs:
+  build-native-wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-14]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Build wheels
+      uses: pypa/cibuildwheel@v2.16.5
+      with:
+        output-dir: dist
+      env:
+          # Disable building PyPy wheels on all platforms
+          # Disable building 32bit windows wheels (h5py does not support it)
+          # Disable musllinux : would need to install BLAS/LAPACK
+          CIBW_SKIP: pp* *-win32 *-musllinux_*
+          # Build separate wheels for macOS's different architectures.
+          CIBW_ARCHS_MACOS: "x86_64 arm64"
+          # Build only on Linux architectures that don't need qemu emulation.
+          CIBW_ARCHS_LINUX: "x86_64"
+          # Include latest Python beta.
+          CIBW_PRERELEASE_PYTHONS: True
+          # Run the test suite after each build.
+          CIBW_TEST_REQUIRES: pytest>=6.0 numpy scipy bottleneck h5py pyyaml psutil
+          CIBW_TEST_COMMAND: pytest {project}/tests
+          # silence warning that arm wheels can not be tested.
+          # Jakob has a M2 MacBook that can test them, e.g. from testPyPI, if needed.
+          CIBW_TEST_SKIP: "*-macosx_arm64"
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheels-${{ matrix.os }}
+        path: dist/*.whl
+  
+  build-sdist-and-upload:
+    runs-on: ubuntu-latest
+    needs: 'build-native-wheels'
+    permissions:
+      # allow trusted publishing / OIDC authentication for PyPI
+      # corresponding authentication settings on {test.}pypi.org
+      id-token: write
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install --upgrade build twine
+    
+    - name: Download wheels from build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: wheels-*
+        merge-multiple: true
+        path: dist-wheels/
+    
+    - name: Build package
+      run: |
+        python -m build --sdist
+        python -m twine check --strict dist/*
+        python -m twine check --strict dist-wheels/*
+
+    # Publish to TestPyPI, only  if it is *not* a release
+    #  For a release, pushing the unreleased tag should have already caused this workflow to
+    #  publish to TestPyPI. Thus, we can not publish the same version number again.
+    - name: Publish wheels to TestPyPI
+      if: github.event_name != 'release'
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
+        packages-dir: dist-wheels/
+    - name: Publish sdist to TestPyPI
+      if: github.event_name != 'release'
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
+
+    # Publish to live PyPI *only on release*
+    - name: Publish wheels to PyPI
+      if: github.event_name == 'release'
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        packages-dir: dist-wheels/
+    - name: Publish sdist to PyPI
+      if: github.event_name == 'release'
+      uses: pypa/gh-action-pypi-publish@release/v1

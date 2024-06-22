@@ -1,18 +1,14 @@
 """Time evolution using the WI or WII approximation of the time evolution operator."""
 
-# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
-import numpy as np
-import time
-from scipy.linalg import expm
 import logging
 
 logger = logging.getLogger(__name__)
 
 from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
-from ..linalg import np_conserved as npc
 from .truncation import TruncationError
-from ..tools.params import asConfig
+from ..tools.misc import consistency_check
 
 __all__ = ['ExpMPOEvolution', 'TimeDependentExpMPOEvolution']
 
@@ -41,6 +37,12 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         order : int
             Order of the algorithm. The total error up to time `t` scales as ``O(t*dt^order)``.
             Implemented are order = 1 and order = 2.
+        max_dt : float | None
+            Threshold for raising errors on too large time steps. Default ``1.0``.
+            See :meth:`~tenpy.tools.misc.consistency_check`.
+            The trotterization in the time evolution operator assumes that the time step is small.
+            We raise an error if it is not.
+            Can be downgraded to a warning by setting this option to ``None``.
 
     Attributes
     ----------
@@ -64,15 +66,15 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
         options = self.options
-        self.trunc_err = options.get('start_trunc_err', TruncationError())
+        self.trunc_err = options.get('start_trunc_err', TruncationError(), TruncationError)
         self._U_MPO = None
         self._U_param = {}
 
     # run from TimeEvolutionAlgorithm
 
     def prepare_evolve(self, dt):
-        order = self.options.get('order', 2)
-        approximation = self.options.get('approximation', 'II')
+        order = self.options.get('order', 2, int)
+        approximation = self.options.get('approximation', 'II', str)
 
         self.calc_U(dt, order, approximation)
 
@@ -97,7 +99,8 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
             return  # nothing to do: _U is cached
         self._U_param = U_param
         logger.info("Calculate U for %s", U_param)
-
+        consistency_check(dt, self.options, 'max_dt', 1.,
+                          'delta_t > ``max_delta_t`` is unreasonably large for trotterization.')
         H_MPO = self.model.H_MPO
         if order == 1:
             U_MPO = H_MPO.make_U(dt * -1j, approximation=approximation)

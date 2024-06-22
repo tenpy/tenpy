@@ -1,7 +1,6 @@
 """A collection of tests for :module:`tenpy.networks.purification_mps`."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
-import warnings
 import numpy as np
 import numpy.testing as npt
 import scipy

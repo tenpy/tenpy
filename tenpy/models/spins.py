@@ -2,14 +2,11 @@
 
 Uniform lattice of spin-S sites, coupled by nearest-neighbor interactions.
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
-
-import numpy as np
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from ..networks.site import SpinSite
 from .model import CouplingMPOModel, NearestNeighborModel
 from .lattice import Chain
-from ..tools.params import asConfig
 
 __all__ = ['SpinModel', 'SpinChain']
 
@@ -45,16 +42,15 @@ class SpinModel(CouplingMPOModel):
         conserve : 'best' | 'Sz' | 'parity' | None
             What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
             For ``'best'``, we check the parameters what can be preserved.
-        sort_charge : bool | None
-            Whether to sort by charges of physical legs.
-            See change comment in :class:`~tenpy.networks.site.Site`.
+        sort_charge : bool
+            Whether to sort by charges of physical legs. `True` by default.
         Jx, Jy, Jz, hx, hy, hz, muJ, D, E  : float | array
             Coupling as defined for the Hamiltonian above.
 
     """
     def init_sites(self, model_params):
-        S = model_params.get('S', 0.5)
-        conserve = model_params.get('conserve', 'best')
+        S = model_params.get('S', 0.5, 'real')
+        conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
             # check how much we can conserve
             if not model_params.any_nonzero([('Jx', 'Jy'), 'hx', 'hy', 'E'],
@@ -65,20 +61,20 @@ class SpinModel(CouplingMPOModel):
             else:
                 conserve = None
             self.logger.info("%s: set conserve to %s", self.name, conserve)
-        sort_charge = model_params.get('sort_charge', None)
+        sort_charge = model_params.get('sort_charge', True, bool)
         site = SpinSite(S, conserve, sort_charge)
         return site
 
     def init_terms(self, model_params):
-        Jx = model_params.get('Jx', 1.)
-        Jy = model_params.get('Jy', 1.)
-        Jz = model_params.get('Jz', 1.)
-        hx = model_params.get('hx', 0.)
-        hy = model_params.get('hy', 0.)
-        hz = model_params.get('hz', 0.)
-        D = model_params.get('D', 0.)
-        E = model_params.get('E', 0.)
-        muJ = model_params.get('muJ', 0.)
+        Jx = model_params.get('Jx', 1., 'real_or_array')
+        Jy = model_params.get('Jy', 1., 'real_or_array')
+        Jz = model_params.get('Jz', 1., 'real_or_array')
+        hx = model_params.get('hx', 0., 'real_or_array')
+        hy = model_params.get('hy', 0., 'real_or_array')
+        hz = model_params.get('hz', 0., 'real_or_array')
+        D = model_params.get('D', 0., 'real_or_array')
+        E = model_params.get('E', 0., 'real_or_array')
+        muJ = model_params.get('muJ', 0., 'real_or_array')
 
         # (u is always 0 as we have only one site in the unit cell)
         for u in range(len(self.lat.unit_cell)):

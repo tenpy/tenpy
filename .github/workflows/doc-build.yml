@@ -1,44 +1,48 @@
-name: sphinx-doctest
+name: Sphinx Build and Doctest
+# Check if the documentation can be built and run the doctests
 
 on:
-  push: 
+  # pushes to main
+  push:
     branches:
       - main
+  # PRs
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 
 jobs:
   build:
-
+    if: github.event.pull_request.draft == false
+    
     runs-on: ubuntu-latest
     defaults:
       run:
         # https://github.com/marketplace/actions/setup-miniconda#use-a-default-shell
         shell: bash -el {0}
-
     steps:
-    - uses: actions/checkout@v3
+    
+    - name: Checkout
+      uses: actions/checkout@v4
       with:
-        submodules: false
-    - name: Update submodules
-      run: |
-        git submodule update --init --recursive
-        git submodule update --remote --merge --recursive
+        submodules: recursive
+      
     - name: Setup miniconda
-      uses: conda-incubator/setup-miniconda@v2
+      uses: conda-incubator/setup-miniconda@v3
       with:
         auto-update-conda: true
         miniforge-variant: Mambaforge
         use-mamba: true
         activate-environment: tenpydoc
         environment-file: doc/environment.yml
-        python-version: 3.8
+        python-version: 3.11
+    
     - name: Build documentation
       # -W treats warnings as errors, i.e. the action fails if there are warnings from sphinx
       # --keep-going causes sphinx to not quit on a warning/error, so we get to see all of them
       run: |
         conda activate tenpydoc
         python -m sphinx -W --keep-going -b html ./doc ./doc/sphinx_build
+    
     - name: Run doctests
       run: python -m sphinx -b doctest ./doc ./doc/sphinx_build
- 

@@ -1,6 +1,6 @@
 """Tools for handling strings."""
 
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 __all__ = ['is_non_string_iterable', 'vert_join', 'to_mathematica_lists']
 

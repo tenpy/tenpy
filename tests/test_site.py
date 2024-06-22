@@ -1,5 +1,5 @@
 """A collection of tests for :mod:`tenpy.models.site`."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import numpy.testing as npt
@@ -39,7 +39,7 @@ def test_site():
     op2 = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
     op3_dense = np.diag(np.arange(10, 18))
     labels = [f'x{i:d}' for i in range(10, 18)]
-    s = site.Site(leg, labels, silly_op=op1)
+    s = site.Site(leg, labels, silly_op=op1, sort_charge=False)
     assert s.state_index('x10') == 0
     assert s.state_index('x17') == leg.ind_len - 1
     assert s.opnames == set(['silly_op', 'Id', 'JW'])
@@ -315,7 +315,7 @@ def test_clock_site():
             for _ in range(q - 1):
                 Z_pow_q = np.dot(Z_pow_q, Z)
                 X_pow_q = np.dot(X_pow_q, X)
-                
+
             npt.assert_array_almost_equal_nulp(np.dot(X, Z), w * np.dot(Z, X), 3 * q)
             npt.assert_array_almost_equal_nulp(X_pow_q, np.eye(q), 3 * q)
             npt.assert_array_almost_equal_nulp(Z_pow_q, np.eye(q), 3 * q)
@@ -333,10 +333,13 @@ def test_set_common_charges():
     spin1_ops = {op_name: get_site_op_flat(spin1, op_name) for op_name in spin1.opnames}
     ferm_ops = {op_name: get_site_op_flat(ferm, op_name) for op_name in ferm.opnames}
     boson_ops = {op_name: get_site_op_flat(boson, op_name) for op_name in boson.opnames}
+    assert spin.charge_to_JW_parity is not None
+    assert ferm.charge_to_JW_parity is not None
     site.set_common_charges([spin, ferm])
     assert tuple(spin.leg.chinfo.names) == ('2*Sz', 'N')
     spin.test_sanity()
     ferm.test_sanity()
+    assert spin.charge_to_JW_parity is not None
     for op_name, op_flat in spin_ops.items():
         op_flat2 = get_site_op_flat(spin, op_name)
         npt.assert_equal(op_flat, op_flat2)
@@ -348,6 +351,7 @@ def test_set_common_charges():
     ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
     site.set_common_charges([ferm, spin], new_charges=[[(1, 0, '2*Sz'), (1, 1, '2*Sz')]])
     assert tuple(ferm.leg.chinfo.names) == ('2*Sz', )
+    assert getattr(spin, 'charge_to_JW_parity', None) is None
     spin.test_sanity()
     ferm.test_sanity()
     for op_name, op_flat in spin_ops.items():
@@ -368,6 +372,7 @@ def test_set_common_charges():
                                          [(2, 0, 'N'), (1, 3, 'N')], [(0.5, 1, '2*Sz')]],
                             new_names=['2*(Sz_f + Sz_spin-half)', '2*N_f+N_b', 'Sz_spin-1'])
     assert tuple(ferm.leg.chinfo.names) == ('2*(Sz_f + Sz_spin-half)', '2*N_f+N_b', 'Sz_spin-1')
+    assert getattr(ferm, 'charge_to_JW_parity', None) is None
     spin.test_sanity()
     ferm.test_sanity()
     spin1.test_sanity()
@@ -384,3 +389,10 @@ def test_set_common_charges():
     for op_name, op_flat in boson_ops.items():
         op_flat2 = get_site_op_flat(boson, op_name)
         npt.assert_equal(op_flat, op_flat2)
+
+    f1 = site.FermionSite('N')
+    f2 = site.FermionSite('N')
+    site.set_common_charges([f1, f2], 'independent')
+    assert f1.charge_to_JW_parity is not None
+    f1.test_sanity()
+    f2.test_sanity()

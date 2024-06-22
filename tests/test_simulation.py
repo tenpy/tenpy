@@ -1,17 +1,15 @@
 """A collection of tests to check the functionality of modules in `tenpy.simulations`"""
-# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import copy
 import numpy as np
-import warnings
 import sys
 
 import tenpy
 from tenpy.algorithms.algorithm import Algorithm
 from tenpy.simulations.simulation import *
 from tenpy.simulations.ground_state_search import GroundStateSearch
-from tenpy.simulations.time_evolution import RealTimeEvolution
-
+from tenpy.simulations.time_evolution import RealTimeEvolution, SpectralSimulation, SpectralSimulationEvolveBraKet
 import pytest
 
 tenpy.tools.misc.skip_logging_setup = True  # skip logging setup
@@ -126,15 +124,12 @@ def test_bad_measurements():
     sim_params['connect_measurements'].append((__name__, 'bad_dummy_measurement', {}, -1))
     sim = Simulation(sim_params)
 
-    with warnings.catch_warnings(record=True) as caught:
+    expect_warning1 = ("measurement gave new keys {'changing_key_[0-9]'} fill up with `None` for "
+                       "previous measurements.")
+    expect_warning2 = ("measurement didn't give keys {'changing_key_[0-9]'} we have from previous "
+                       "measurements, fill up with `None`")
+    with pytest.warns(UserWarning, match=f'({expect_warning1}|{expect_warning2})'):
         results = sim.run()
-    for w in caught:
-        msg = str(w.message)
-        expected = any((part in msg) for part in ["measurement gave new keys {'changing_key",
-                                                  "measurement didn't give keys {'changing_key"])
-        if not expected:
-            warnings.showwarning(w.message, w.category, w.filename, w.lineno, w.file, w.line)
-    assert len(caught) >= 2, "expected to get warnings about changing keys"
 
     meas = results['measurements']
     assert np.all(meas['measurement_index'] == np.arange(2))
@@ -244,6 +239,83 @@ def test_RealTimeEvolution():
     assert np.all(meas['dummy_value'] == [-1] + [expected_dummy_value] * (N - 1))
 
 
+regrouping_params = copy.deepcopy(simulation_params)
+regrouping_params['final_time'] = 4.
+regrouping_params['group_to_NearestNeighborModel'] = True
+regrouping_params['group_sites'] = 2
+
+
+def test_regrouping_and_group_to_NearestNeighborModel():
+    sim_params = copy.deepcopy(regrouping_params)
+    sim = RealTimeEvolution(sim_params)
+    results = sim.run()
+    assert sim.model.lat.bc_MPS == 'infinite'  # check whether model parameters were used
+    assert 'psi' in results  # should be by default
+    meas = results['measurements']
+    # expect two measurements: once in `init_measurements` and in `final_measurement`.
+    alg_params = sim_params['algorithm_params']
+    expected_times = np.arange(0., sim_params['final_time'] + 1.e-10,
+                               alg_params['N_steps'] * alg_params['dt'])
+    N = len(expected_times)
+    assert np.allclose(meas['evolved_time'], expected_times)
+    assert np.all(meas['measurement_index'] == np.arange(N))
+    assert np.all(meas['dummy_value'] == [-1] + [expected_dummy_value] * (N - 1))
+    # after group_to_NearestNeighborModel, we should measure the bond_energies instead of energy_MPO
+    assert 'bond_energies' in meas and 'energy_MPO' not in meas
+
+
+spectral_sim_params = copy.deepcopy(timeevol_params)
+spectral_sim_params['operator_t0'] = {'opname': 'Sz'}
+spectral_sim_params['operator_t'] = 'Sz'
+spectral_sim_params['model_params']['bc_MPS'] = 'finite'
+
+
+def test_SpectralSimulation():
+    for SpectralSimulationClass in [SpectralSimulation, SpectralSimulationEvolveBraKet]:
+        # building with initial state passed in sim params
+        sim_params = copy.deepcopy(spectral_sim_params)
+        sim = SpectralSimulationClass(sim_params)
+        with pytest.warns(UserWarning, match='No ground state data is supplied'):
+            results = sim.run()
+
+        assert sim.model.lat.bc_MPS == 'finite'  # check whether model parameters were used
+        assert 'psi' and 'psi_ground_state' in results  # should be by default
+        assert 'spectral_function_Sz_Sz' in results  # output of SpectralSimulation for sim_params
+        meas = results['measurements']
+        # expect two measurements: once in `init_measurements` and in `final_measurement`.
+        alg_params = sim_params['algorithm_params']
+        expected_times = np.arange(0., sim_params['final_time'] + 1.e-10,
+                                   alg_params['N_steps'] * alg_params['dt'])
+        N = len(expected_times)
+        assert np.allclose(meas['evolved_time'], expected_times)
+        assert np.all(meas['measurement_index'] == np.arange(N))
+        assert np.all(meas['dummy_value'] == [-1] + [expected_dummy_value] * (N - 1))
+
+        # remove init_state_builder and model and pull from gs_search
+        sim_params = copy.deepcopy(spectral_sim_params)
+        del sim_params['initial_state_params'], sim_params['model_class'], sim_params['model_params']
+        # first run a gs_search
+        sim_params_gs = copy.deepcopy(groundstate_params)
+        sim_params_gs['model_params']['bc_MPS'] = 'finite'
+        sim = GroundStateSearch(sim_params_gs)
+        gs_results = sim.run()
+        # run the simulation from the results of the gs_search
+        sim = SpectralSimulation(sim_params, ground_state_data=gs_results)
+        results = sim.run()
+        assert sim.model.lat.bc_MPS == 'finite'  # check whether model parameters were used
+        assert 'psi' and 'psi_ground_state' in results  # should be by default
+        assert 'spectral_function_Sz_Sz' in results  # output of SpectralSimulation for sim_params
+        meas = results['measurements']
+        # expect two measurements: once in `init_measurements` and in `final_measurement`.
+        alg_params = sim_params['algorithm_params']
+        expected_times = np.arange(0., sim_params['final_time'] + 1.e-10,
+                                   alg_params['N_steps'] * alg_params['dt'])
+        N = len(expected_times)
+        assert np.allclose(meas['evolved_time'], expected_times)
+        assert np.all(meas['measurement_index'] == np.arange(N))
+        assert np.all(meas['dummy_value'] == [-1] + [expected_dummy_value] * (N - 1))
+
+
 def test_output_filename_from_dict():
     options = copy.deepcopy(simulation_params)
     assert output_filename_from_dict(options) == 'result.h5', "hard-coded default values changed"
@@ -278,3 +350,74 @@ def test_output_filename_from_dict():
                                    },
                                    parts_order=['alg.dt', ('model.Lx', 'model.Ly')])
     assert fn == 'result_dt_0.50_3x4.h5'
+
+
+yaml_example = """
+simulation_class : GroundStateSearch
+directory: results
+
+model_class : SpinModel
+model_params :
+    bc_MPS: infinite
+    bc_y: cylinder
+    lattice: !py_eval tenpy.models.lattice.Square
+    Lx: 2
+    Ly: 4
+    S: .5
+    Jx: !py_eval "[J ** 2 for J in range(6)]"
+    hx: !py_eval |
+        np.linspace(0, 5, 21, endpoint=True)
+
+log_params:
+    to_file: INFO
+    to_stdout: INFO
+
+initial_state_params:
+    method : lat_product_state
+    product_state : [[[up]]]
+
+algorithm_class: TwoSiteDMRGEngine
+algorithm_params:
+    mixer: True
+    trunc_params:
+        svd_min: 1.e-10
+        chi_max: 200
+    max_E_err: 1.e-10
+
+sequential:
+    recursive_keys:
+        - model_params.hx
+        - model_params.Jx
+"""
+
+
+def test_yaml_load(tmp_path):
+    yaml = pytest.importorskip('yaml')
+
+    # load without writing to file first
+    simulation_params = tenpy.load_yaml_with_py_eval(yaml_content=yaml_example,
+                                                     context=dict(np=np, tenpy=tenpy))
+    assert simulation_params['simulation_class'] == 'GroundStateSearch'
+    assert simulation_params['model_params']['Jx'] == [0, 1, 4, 9, 16, 25]
+    np.testing.assert_array_almost_equal_nulp(
+        simulation_params['model_params']['hx'],
+        np.linspace(0, 5, 21, endpoint=True),
+        10
+    )
+    assert simulation_params['model_params']['lattice'] is tenpy.Square
+
+    # now try again loading from file
+    del simulation_params
+
+    file = tmp_path / 'simulation.yaml'
+    with open(file, 'w') as f:
+        print(yaml_example, file=f)
+    simulation_params = tenpy.load_yaml_with_py_eval(file, context=dict(np=np, tenpy=tenpy))
+    assert simulation_params['simulation_class'] == 'GroundStateSearch'
+    assert simulation_params['model_params']['Jx'] == [0, 1, 4, 9, 16, 25]
+    np.testing.assert_array_almost_equal_nulp(
+        simulation_params['model_params']['hx'],
+        np.linspace(0, 5, 21, endpoint=True),
+        10
+    )
+    assert simulation_params['model_params']['lattice'] is tenpy.Square

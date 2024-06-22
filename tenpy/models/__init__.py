@@ -33,7 +33,7 @@ All other modules in this folder contain model classes derived from these base c
     mixed_xk
     clock
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from . import lattice, model
 from . import tf_ising, xxz_chain, spins, spins_nnn

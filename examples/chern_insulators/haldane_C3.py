@@ -3,7 +3,7 @@
 Based on the model in [Yang2012]_
 """
 
-# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -78,24 +78,24 @@ class FermionicC3HaldaneModel(CouplingMPOModel):
 
         for u1, u2, dx in self.lat.NN:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
-            self.add_coupling(t1_phi, u1, 'CdA', u2, 'CB', dx, 'JW', True)
-            self.add_coupling(np.conj(t1_phi), u2, 'CdB', u1, 'CA', -dx, 'JW', True)
+            self.add_coupling(t1_phi, u1, 'CdA', u2, 'CB', dx, 'JW')
+            self.add_coupling(np.conj(t1_phi), u2, 'CdB', u1, 'CA', -dx, 'JW')
             self.add_coupling(V, u1, 'Ntot', u2, 'Ntot', dx)
 
         for u1, u2, dx in self.lat.nNNA:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
-            self.add_coupling(t2_phi, u1, 'CdA', u2, 'CA', dx, 'JW', True)
-            self.add_coupling(np.conj(t2_phi), u2, 'CdA', u1, 'CA', -dx, 'JW', True)
+            self.add_coupling(t2_phi, u1, 'CdA', u2, 'CA', dx, 'JW')
+            self.add_coupling(np.conj(t2_phi), u2, 'CdA', u1, 'CA', -dx, 'JW')
 
         for u1, u2, dx in self.lat.nNNB:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
-            self.add_coupling(t2_phi, u1, 'CdB', u2, 'CB', dx, 'JW', True)
-            self.add_coupling(np.conj(t2_phi), u2, 'CdB', u1, 'CB', -dx, 'JW', True)
+            self.add_coupling(t2_phi, u1, 'CdB', u2, 'CB', dx, 'JW')
+            self.add_coupling(np.conj(t2_phi), u2, 'CdB', u1, 'CB', -dx, 'JW')
 
         for u1, u2, dx in self.lat.nnNN:
             t3_phi = self.coupling_strength_add_ext_flux(t3, dx, [0, phi_ext])
-            self.add_coupling(t3_phi, u1, 'CdA', u2, 'CB', dx, 'JW', True)
-            self.add_coupling(np.conj(t3_phi), u2, 'CdB', u1, 'CA', -dx, 'JW', True)
+            self.add_coupling(t3_phi, u1, 'CdA', u2, 'CB', dx, 'JW')
+            self.add_coupling(np.conj(t3_phi), u2, 'CdB', u1, 'CA', -dx, 'JW')
 
 
 def plot_lattice():
@@ -117,7 +117,7 @@ def run(phi_ext=np.linspace(0, 1.0, 7)):
 
     data = dict(phi_ext=phi_ext, QL=[], ent_spectrum=[])
 
-    model_params = dict(conserve='N', t=-1, V=0, Lx=1, Ly=3, verbose=1)
+    model_params = dict(conserve='N', t=-1, V=0, Lx=1, Ly=3)
 
     dmrg_params = {
         'mixer': True,  # setting this to True helps to escape local minima
@@ -141,7 +141,6 @@ def run(phi_ext=np.linspace(0, 1.0, 7)):
         'max_E_err': 1.e-10,
         'max_S_err': 1.e-6,
         'max_sweeps': 150,
-        'verbose': 1.,
     }
 
     prod_state = ['full_A empty_B', 'empty_A full_B', 'full_A empty_B'

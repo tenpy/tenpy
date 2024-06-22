@@ -1,0 +1,12 @@
+{% extends "!layout.html" %}
+
+  {% block menu %}
+    {{ super() }}
+    <p class="caption" role="heading"><span class="caption-text">Indices</span></p>
+    <ul>
+        <li class="toctree-l1"><a href= "{{pathto('cfg-config.html', 1)}}">Config Index</a></li>
+        <li class="toctree-l1"><a href= "{{pathto('cfg-option.html', 1)}}">Config Option Index</a></li>
+        <li class="toctree-l1"><a href= "{{pathto('py-modindex.html', 1)}}">Python Module Index</a></li>
+        <li class="toctree-l1"><a href= "{{pathto('genindex.html', 1)}}">Full Index</a></li>
+    </ul>
+  {% endblock %}

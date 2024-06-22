@@ -2,7 +2,7 @@
 
 Generalization of transverse field Ising model to higher dimensional on-site Hilbert space.
 """
-# Copyright 2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from .model import CouplingMPOModel, NearestNeighborModel
@@ -41,9 +41,8 @@ class ClockModel(CouplingMPOModel):
 
         conserve : None | 'Z'
             What should be conserved. See :class:`~tenpy.networks.Site.ClockSite`.
-        sort_charge : bool | None
-            Whether to sort by charges of physical legs.
-            See change comment in :class:`~tenpy.networks.site.Site`.
+        sort_charge : bool
+            Whether to sort by charges of physical legs. `True` by default.
         q : int
             The number of states per site.
         J, g : float | array
@@ -52,19 +51,19 @@ class ClockModel(CouplingMPOModel):
     """
 
     def init_sites(self, model_params):
-        conserve = model_params.get('conserve', 'Z')
+        conserve = model_params.get('conserve', 'Z', str)
         if conserve == 'best':
             conserve = 'Z'
             self.logger.info("%s: set conserve to %s", self.name, conserve)
-        q = model_params.get('q', None)
+        q = model_params.get('q', None, int)
         if q is None:
             raise ValueError('Need to specify q.')
-        sort_charge = model_params.get('sort_charge', None)
+        sort_charge = model_params.get('sort_charge', True, bool)
         return ClockSite(q=q, conserve=conserve, sort_charge=sort_charge)
 
     def init_terms(self, model_params):
-        J = np.asarray(model_params.get('J', 1.))
-        g = np.asarray(model_params.get('g', 1.))
+        J = np.asarray(model_params.get('J', 1., 'real_or_array'))
+        g = np.asarray(model_params.get('g', 1., 'real_or_array'))
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-g, u, 'Z', plus_hc=True)
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:

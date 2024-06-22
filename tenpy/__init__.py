@@ -3,17 +3,19 @@
 TeNPy is a library for algorithms working with tensor networks,
 e.g., matrix product states and -operators,
 designed to study the physics of strongly correlated quantum systems.
-The code is intended to be accessible for newcommers
+The code is intended to be accessible for newcomers
 and yet powerful enough for day-to-day research.
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 # This file marks this directory as a python package.
 
-import warnings
+# Note: all external packages that are imported should be `del`-ed at the end of the file!
 import logging
-logger = logging.getLogger(__name__)  # main logger for tenpy
 
-# load and provide subpackages on first input
+# main logger for tenpy
+logger = logging.getLogger(__name__)
+
+# load and provide sub packages on first input
 # note that the order matters!
 from . import tools
 from . import linalg
@@ -33,6 +35,7 @@ from .algorithms.network_contractor import ncon, contract
 from .algorithms.purification import PurificationApplyMPO, PurificationTEBD, PurificationTEBD2
 from .algorithms.tdvp import (SingleSiteTDVPEngine, TwoSiteTDVPEngine, TimeDependentSingleSiteTDVP,
                               TimeDependentTwoSiteTDVP)
+from .algorithms.vumps import SingleSiteVUMPSEngine, TwoSiteVUMPSEngine
 from .algorithms.tebd import TEBDEngine, QRBasedTEBDEngine, RandomUnitaryEvolution, TimeDependentTEBD
 from .algorithms.truncation import TruncationError, truncate, svd_theta
 from .linalg.charges import ChargeInfo, LegCharge, LegPipe
@@ -66,9 +69,11 @@ from .networks.mps import (MPS, MPSEnvironment, TransferMatrix, InitialStateBuil
                            build_initial_state)
 from .networks.mpo import MPO, MPOEnvironment, MPOTransferMatrix
 from .networks.purification_mps import PurificationMPS
+from .networks.uniform_mps import UniformMPS
+from .networks.momentum_mps import MomentumMPS
 from .simulations.simulation import (Simulation, Skip, init_simulation, run_simulation,
                                      init_simulation_from_checkpoint, resume_from_checkpoint,
-                                     run_seq_simulations)
+                                     run_seq_simulations, estimate_simulation_RAM)
 from .simulations.ground_state_search import (GroundStateSearch, OrthogonalExcitations,
                                               ExcitationInitialState)
 from .simulations.time_evolution import RealTimeEvolution
@@ -76,6 +81,11 @@ from .simulations.measurement import (m_measurement_index, m_bond_dimension, m_b
                                       m_simulation_parameter, m_energy_MPO, m_entropy,
                                       m_onsite_expectation_value, m_correlation_length,
                                       m_evolved_time)
+from .tools.hdf5_io import save, load, save_to_hdf5, load_from_hdf5
+from .tools.misc import (setup_logging, consistency_check, TenpyInconsistencyError,
+                         TenpyInconsistencyWarning, BetaWarning)
+from .tools.params import Config, asConfig, load_yaml_with_py_eval
+
 
 
 #: hard-coded version string
@@ -93,7 +103,8 @@ __all__ = [
     'contract', 'PurificationApplyMPO', 'PurificationTEBD', 'PurificationTEBD2',
     'SingleSiteTDVPEngine', 'TwoSiteTDVPEngine', 'TimeDependentSingleSiteTDVP',
     'TimeDependentTwoSiteTDVP', 'TEBDEngine', 'QRBasedTEBDEngine', 'RandomUnitaryEvolution',
-    'TimeDependentTEBD', 'TruncationError', 'truncate', 'svd_theta',
+    'TimeDependentTEBD', 'TruncationError', 'truncate', 'svd_theta', 'SingleSiteVUMPSEngine',
+    'TwoSiteVUMPSEngine',
     # from tenpy.linalg
     'ChargeInfo', 'LegCharge', 'LegPipe', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution',
     'lanczos_arpack', 'Array', 'zeros', 'ones', 'eye_like', 'diag', 'concatenate', 'grid_concat',
@@ -113,13 +124,17 @@ __all__ = [
     'Site', 'GroupedSite', 'group_sites', 'SpinHalfSite', 'SpinSite', 'FermionSite',
     'SpinHalfFermionSite', 'SpinHalfHoleSite', 'BosonSite', 'ClockSite', 'spin_half_species',
     'kron', 'MPS', 'MPSEnvironment', 'TransferMatrix', 'InitialStateBuilder', 'build_initial_state',
-    'MPO', 'MPOEnvironment', 'MPOTransferMatrix', 'PurificationMPS',
+    'MPO', 'MPOEnvironment', 'MPOTransferMatrix', 'PurificationMPS', 'UniformMPS', 'MomentumMPS',
     # from tenpy.simulations
     'Simulation', 'Skip', 'init_simulation', 'run_simulation', 'init_simulation_from_checkpoint',
     'resume_from_checkpoint', 'run_seq_simulations', 'GroundStateSearch', 'OrthogonalExcitations',
     'ExcitationInitialState', 'RealTimeEvolution', 'm_measurement_index', 'm_bond_dimension',
     'm_bond_energies', 'm_simulation_parameter', 'm_energy_MPO', 'm_entropy',
     'm_onsite_expectation_value', 'm_correlation_length', 'm_evolved_time',
+    # from tenpy.tools
+    'save', 'load', 'save_to_hdf5', 'load_from_hdf5', 'setup_logging', 'consistency_check',
+    'TenpyInconsistencyError', 'TenpyInconsistencyWarning', 'BetaWarning', 'Config', 'asConfig',
+    'load_yaml_with_py_eval',
     # from tenpy.__init__, i.e. defined below
     'show_config', 'console_main',
 ]
@@ -159,7 +174,7 @@ def console_main(*command_line_args):
 
     args = parser.parse_args(args=command_line_args if command_line_args else None)
     # import extra modules
-    context = {'tenpy': globals(), 'np': np, 'scipy': scipy}
+    context = {'tenpy': sys.modules[__name__], 'np': np, 'scipy': scipy}
     if args.import_module:
         sys.path.insert(0, '.')
         for module_name in args.import_module:
@@ -168,11 +183,9 @@ def console_main(*command_line_args):
     # load parameters_file
     options = {}
     if args.parameters_file:
-        import yaml
         options_files = []
         for fn in args.parameters_file:
-            with open(fn, 'r') as stream:
-                options = yaml.safe_load(stream)
+            options = load_yaml_with_py_eval(fn, context)
             options_files.append(options)
         if len(options_files) > 1:
             options = tools.misc.merge_recursive(*options_files, conflict=args.merge)
@@ -186,15 +199,14 @@ def console_main(*command_line_args):
     if 'output_filename' not in options and 'output_filename_params' not in options:
         raise ValueError("No output filename specified - refuse to run without saving anything!")
     if args.sim_class is not None:  # non-default
-        if 'simulation_class_name' in options:
-            warnings.warn('command line overrides deprecated `simulation_class_name` parameter',
-                          FutureWarning)
-            del options['simulation_class_name']
         options['simulation_class'] = args.sim_class
+    if args.RAM:
+        # exit immediately
+        return estimate_simulation_RAM(suppress_non_RAM_output=True, unit='MB', **options)
     if 'sequential' not in options:
-        run_simulation(**options)
+        return run_simulation(**options)
     else:
-        run_seq_simulations(**options)
+        return run_seq_simulations(**options)
 
 
 def _setup_arg_parser(width=None):
@@ -246,9 +258,16 @@ def _setup_arg_parser(width=None):
                         default='error',
                         help="Selects how to merge conflicts in case of multiple yaml files. "
                         "Options are 'error', 'first' or 'last'.")
+    parser.add_argument('--RAM',
+                        action="store_true",
+                        help="Estimates the required RAM. "
+                        "This argument does not execute any simulation, but just initializes it "
+                        "to predict the necessary RAM in MB and then exits.")
     parser.add_argument('parameters_file',
                         nargs='*',
                         help="Yaml (*.yml) file with the simulation parameters/options. "
+                        "We support an additional yaml tag !py_eval: VALUE that gets initialized "
+                        "by python's ``eval(VALUE)`` with `np`, `scipy` and `tenpy` defined. "
                         "Multiple files get merged according to MERGE; "
                         "see tenpy.tools.misc.merge_recursive for details.")
     opt_help = textwrap.dedent("""\
@@ -266,3 +285,7 @@ def _setup_arg_parser(width=None):
                         help=opt_help)
     parser.add_argument('--version', '-v', action='version', version=__full_version__)
     return parser
+
+
+# remove the imported libraries again. we do not want to expose them e.g. as tenpy.logging
+del logging

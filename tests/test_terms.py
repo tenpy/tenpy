@@ -1,5 +1,5 @@
 """A collection of tests for :module:`tenpy.networks.terms`."""
-# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import copy
@@ -7,7 +7,6 @@ import copy
 from tenpy.networks.terms import *
 from tenpy.networks import site
 from tenpy.networks import mpo
-from tenpy.linalg.np_conserved import LegCharge
 
 spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=True)
 fermion = site.FermionSite(conserve='N')

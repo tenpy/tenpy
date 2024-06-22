@@ -21,7 +21,7 @@ so you probably won't need to import `charges` directly.
     krylov_based
 
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from . import charges, np_conserved, krylov_based, random_matrix, sparse, svd_robust
 from .charges import *

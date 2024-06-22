@@ -4,11 +4,11 @@ This code shows the general structure of DMRG with segment boundary conditions, 
 to find topologically non-trivial excitations on a "finite" segment between two different
 degenerate ground states.
 
-For production, you should probalby use the
+For production, you should probably use the
 :class:`~tenpy.simulations.GroundStateSearch.OrthogonalExcitations` class,
 but this example might be helpful to see the general idea.
 """
-# Copyright 2022 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
