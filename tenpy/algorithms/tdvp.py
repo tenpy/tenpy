@@ -211,7 +211,7 @@ class TwoSiteTDVPEngine(TDVPEngine):
         elif (self.move_right is False):
             self.one_site_update(i0, 0.5j * self.dt)
         # for the last update of the sweep, where move_right is None, there is no one_site_update
-        
+
         return update_data
 
     def update_env(self, **update_data):
@@ -366,3 +366,6 @@ class TimeDependentTwoSiteTDVP(TimeDependentHAlgorithm,TwoSiteTDVPEngine):
 
     def reinit_model(self):
         TimeDependentSingleSiteTDVP.reinit_model(self)
+
+def KrylovExpansion(psi, H, options):
+    pass
