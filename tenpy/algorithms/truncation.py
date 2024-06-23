@@ -307,17 +307,20 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
     return U, S, VH, err, renormalization
 
 
-def _qr_theta_Y0(T_L: npc.Array, T_R: npc.Array, theta: npc.Array, move_right: bool, expand: float, min_block_increase: int):
+def _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, move_right: bool, expand: float, min_block_increase: int):
     """Generate the initial guess `Y0` for the (left) right isometry for the QR based theta decomposition `decompose_theta_qr_based()`.
 
     Parameters
     ----------
-    T_L : Array with legs [vL, p, vR]
-        If ``move_right=True`` the tensor `T_L` must be in `'B'` or `'Th'` form.
-        If ``move_right=False`` the tensor `T_L` must be in `'A'` form.
-    T_R : Array with legs [vL, p, vR]
-        If ``move_right=True`` the tensor `T_R` must be in `'B'` form.
-        If ``move_right=False`` the tensor `T_R` must be in `'A'` or `'Th'` form.
+    old_qtotal_L : 1D array
+        The total charge of the old left tensor.
+        e.g. ``old_qtotal_L = T_L.qtotal``
+    old_qtotal_R : 1D array
+        The total charge of the old right tensor.
+        e.g. ``old_qtotal_R = T_R.qtotal``
+    old_bond_leg : :class:`~tenpy.linalg.charges.LegCharge`
+        The leg between the old left tensor and the old right tensor.
+        e.g. ``old_bond_leg = T_L.get_leg('vR')`` or ``old_bond_leg = T_R.get_leg('vL')``
     theta : Array with legs [(vL.p0), (p1.vR)]
     move_right : bool 
     expand : float
@@ -337,9 +340,9 @@ def _qr_theta_Y0(T_L: npc.Array, T_R: npc.Array, theta: npc.Array, move_right: b
         Y0 = theta.copy(deep=False)
         Y0.legs[1] = Y0.legs[1].to_LegCharge()
         Y0.ireplace_label('(p1.vR)', 'vR')
-        if any(T_R.qtotal != 0):
-            Y0.gauge_total_charge('vR', new_qtotal=T_L.qtotal)
-        vR_old = T_L.get_leg('vR')
+        if any(old_qtotal_R != 0):
+            Y0.gauge_total_charge('vR', new_qtotal=old_qtotal_L)
+        vR_old = old_bond_leg
         if not vR_old.is_blocked():
             vR_old = vR_old.sort()[1]
         vR_new = Y0.get_leg('vR')  # is blocked, since created from pipe
@@ -349,9 +352,9 @@ def _qr_theta_Y0(T_L: npc.Array, T_R: npc.Array, theta: npc.Array, move_right: b
         Y0 = theta.copy(deep=False)
         Y0.legs[0] = Y0.legs[0].to_LegCharge()
         Y0.ireplace_label('(vL.p0)', 'vL')
-        if any(T_L.qtotal != 0):
-            Y0.gauge_total_charge('vL', new_qtotal=T_R.qtotal)
-        vL_old = T_R.get_leg('vL')
+        if any(old_qtotal_L != 0):
+            Y0.gauge_total_charge('vL', new_qtotal=old_qtotal_R)
+        vL_old = old_bond_leg
         if not vL_old.is_blocked():
             vL_old = vL_old.sort()[1]
         vL_new = Y0.get_leg('vL')  # is blocked, since created from pipe
@@ -466,8 +469,9 @@ def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[N
     return U, S, Vd, trunc_err, renormalize
 
 
-def decompose_theta_qr_based(old_T_L: npc.Array, old_T_R: npc.Array, theta: npc.Array, move_right: bool,
-                             expand: float, min_block_increase: int, use_eig_based_svd: bool, trunc_params: dict, compute_err: bool, 
+def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, 
+                             move_right: bool, expand: float, min_block_increase: int, 
+                             use_eig_based_svd: bool, trunc_params: dict, compute_err: bool, 
                              return_both_T: bool):
     r"""Performs a QR based decomposition of a matrix `theta` (= the wavefunction) and truncates it.
     The result is an approximation.
@@ -489,10 +493,15 @@ def decompose_theta_qr_based(old_T_L: npc.Array, old_T_R: npc.Array, theta: npc.
     
     Parameters
     ----------
-    old_T_L : npc.Array
-        Array with legs [vL, p, vR]
-    old_T_R : npc.Array
-        Array with legs [vL, p, vR]
+    old_qtotal_L : 1D array
+        The total charge of the old left tensor.
+        e.g. ``old_qtotal_L = T_L.qtotal``
+    old_qtotal_R : 1D array
+        The total charge of the old right tensor.
+        e.g. ``old_qtotal_R = T_R.qtotal``
+    old_bond_leg : :class:`~tenpy.linalg.charges.LegCharge`
+        The leg between the old left tensor and the old right tensor.
+        e.g. ``old_bond_leg = T_L.get_leg('vR')`` or ``old_bond_leg = T_R.get_leg('vL')``
     theta : npc.Array
         Array with legs [(vL.p0), (p1.vR)]
     expand : float | None
@@ -540,7 +549,7 @@ def decompose_theta_qr_based(old_T_L: npc.Array, old_T_R: npc.Array, theta: npc.
     
     if move_right:
         # Get initial guess for the left isometry
-        Y0 = _qr_theta_Y0(old_T_L, old_T_R, theta, move_right, expand, min_block_increase) # Y0: [(vL.p0), vR]
+        Y0 = _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta, move_right, expand, min_block_increase) # Y0: [(vL.p0), vR]
 
         # QR based updates
         theta_i1 = npc.tensordot(Y0.conj(), theta, ['(vL*.p0*)', '(vL.p0)']).ireplace_label('vR*', 'vL') # theta_i1: [vL,(p1.vR)]
@@ -553,7 +562,7 @@ def decompose_theta_qr_based(old_T_L: npc.Array, old_T_R: npc.Array, theta: npc.
         
     else:
         # Get initial guess for the right isometry
-        Y0 = _qr_theta_Y0(old_T_L, old_T_R, theta, move_right, expand, min_block_increase) # Y0: [vL, (p1.vR)]
+        Y0 = _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta, move_right, expand, min_block_increase) # Y0: [vL, (p1.vR)]
 
         # QR based updates
         theta_i0 = npc.tensordot(theta, Y0.conj(), ['(p1.vR)', '(p1*.vR*)']).ireplace_label('vL*', 'vR') # theta_i0: [(vL.p0),vR]

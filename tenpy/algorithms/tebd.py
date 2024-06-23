@@ -657,9 +657,11 @@ class QRBasedTEBDEngine(TEBDEngine):
         C.itranspose(['vL', 'p0', 'p1', 'vR'])
         theta = C.scale_axis(self.psi.get_SL(i0), 'vL')
         theta = theta.combine_legs([('vL', 'p0'), ('p1', 'vR')], qconj=[+1, -1])
+        old_B_L = self.psi.get_B(i0, 'B')
+        old_B_R = self.psi.get_B(i1, 'B')
 
         _, S, B_R, form, trunc_err, renormalize = decompose_theta_qr_based(
-            old_B_L=self.psi.get_B(i0, 'B'), old_B_R=self.psi.get_B(i1, 'B'),
+            old_qtotal_L=old_B_L.qtotal, old_qtotal_R=old_B_R.qtotal, old_bond_leg=old_B_R.get_leg('vL'),
             theta=theta, move_right=False,
             expand=expand, min_block_increase=self.options.get('cbe_min_block_increase', 1, int),
             use_eig_based_svd=self.options.get('use_eig_based_svd', False, bool),
@@ -690,6 +692,8 @@ class QRBasedTEBDEngine(TEBDEngine):
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
         theta.itranspose(['vL', 'p0', 'p1', 'vR'])
         theta = theta.combine_legs([('vL', 'p0'), ('p1', 'vR')], qconj=[+1, -1])
+        old_B_L = self.psi.get_B(i0, 'B')
+        old_B_R = self.psi.get_B(i1, 'B')
 
         use_eig_based_svd = self.options.get('use_eig_based_svd', False, bool)
 
@@ -698,7 +702,7 @@ class QRBasedTEBDEngine(TEBDEngine):
             raise NotImplementedError('update_bond_imag does not (yet) support eig based SVD')
 
         A_L, S, B_R, form, trunc_err, renormalize = decompose_theta_qr_based(
-            old_B_L=self.psi.get_B(i0, 'B'), old_B_R=self.psi.get_B(i1, 'B'),
+            old_qtotal_L=old_B_L.qtotal, old_qtotal_R=old_B_R.qtotal, old_bond_leg=old_B_R.get_leg('vL'),
             theta=theta, move_right=False,
             expand = expand, min_block_increase=self.options.get('cbe_min_block_increase', 1, int),
             use_eig_based_svd=self.options.get('use_eig_based_svd', False, bool),

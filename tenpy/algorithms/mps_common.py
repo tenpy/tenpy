@@ -2457,21 +2457,26 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
         if self.move_right:
             old_T_L = new_psi.get_B(i0, 'Th')
             old_T_R = new_psi.get_B(i0+1, 'B')
-            # for old_T_L `'B'` form would be fine as well, but i0 is in `'Th'` form if ``use_eig_based_svd=True``
+            old_bond_leg = old_T_R.get_leg('vL')
+            # for old_T_L `'B'` form fine as well, but i0 in `'Th'` form if ``use_eig_based_svd=True``
         else:
             old_T_L = new_psi.get_B(i0, 'A')
             old_T_R = new_psi.get_B(i0+1, 'Th')
-            # for old_T_R `'A'` form would be fine as well, but i0+1 is in `'Th'` form if ``use_eig_based_svd=True``
+            old_bond_leg = old_T_L.get_leg('vR')
+            # for old_T_R `'A'` form fine as well, but i0+1 in `'Th'` form if ``use_eig_based_svd=True``
         expand = self._expansion_rate(i0)
         use_eig_based_svd = self.options.get('use_eig_based_svd', False, bool)
+        
         T_Lc, S, T_Rc, form, err, renormalize = decompose_theta_qr_based(
-                                                old_T_L=old_T_L, old_T_R=old_T_R, 
-                                                theta=theta, move_right=self.move_right,
-                                                expand=expand, min_block_increase = self.options.get('cbe_min_block_increase', 1, int),
-                                                use_eig_based_svd=use_eig_based_svd,
-                                                trunc_params=self.trunc_params, 
-                                                compute_err=self.options.get('compute_err', True, bool),
-                                                return_both_T=True)
+            old_qtotal_L=old_T_L.qtotal, old_qtotal_R=old_T_R.qtotal, old_bond_leg=old_bond_leg, 
+            theta=theta, move_right=self.move_right,
+            expand=expand, min_block_increase = self.options.get('cbe_min_block_increase', 1, int),
+            use_eig_based_svd=use_eig_based_svd,
+            trunc_params=self.trunc_params, 
+            compute_err=self.options.get('compute_err', True, bool),
+            return_both_T=True
+        )
+
         if self.move_right:
             assert form[0] == 'A'
             U = T_Lc
