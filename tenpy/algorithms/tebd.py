@@ -665,7 +665,7 @@ class QRBasedTEBDEngine(TEBDEngine):
             use_eig_based_svd=self.options.get('use_eig_based_svd', False, bool),
             trunc_params=self.trunc_params,
             compute_err=self.options.get('compute_err', True, bool),
-            need_other_side=False,
+            return_both_T=False,
         )
         assert form[1] == 'B'
 
@@ -704,7 +704,7 @@ class QRBasedTEBDEngine(TEBDEngine):
             use_eig_based_svd=self.options.get('use_eig_based_svd', False, bool),
             trunc_params=self.trunc_params,
             compute_err=self.options.get('compute_err', True, bool), 
-            need_other_side=True,
+            return_both_T=True,
         )
         assert form == ['A','B']
 
