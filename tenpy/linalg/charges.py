@@ -31,7 +31,7 @@ from ..tools.optimization import optimize, OptimizationFlag, use_cython
 
 __all__ = ['ChargeInfo', 'LegCharge', 'LegPipe', 'QTYPE']
 
-QTYPE = np.int_
+QTYPE = np.int64
 """Numpy data type for the charges."""
 
 
