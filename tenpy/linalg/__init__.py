@@ -46,7 +46,7 @@ def _patch_cython():
     from . import _npc_helper
     _npc_helper._charges = charges
     _npc_helper._np_conserved = np_conserved
-    assert _npc_helper.QTYPE == charges.QTYPE
+    assert _npc_helper.QTYPE == charges.QTYPE, f'{_npc_helper.QTYPE} != {charges.QTYPE}'
     # check types
     warn = False
     import numpy as np
