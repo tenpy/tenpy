@@ -2436,13 +2436,13 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
 
     def _expansion_rate(self, i):
         """get expansion rate for updating bond i"""
-        expand = self.options.get('cbe_expand', 0.1)
-        expand_0 = self.options.get('cbe_expand_0', None)
+        expand = self.options.get('cbe_expand', 0.1, 'real')
+        expand_0 = self.options.get('cbe_expand_0', None, 'real')
 
         if expand_0 is None or expand_0 == expand:
             return expand
 
-        chi_max = self.trunc_params.get('chi_max', None)
+        chi_max = self.trunc_params.get('chi_max', None, int)
         if chi_max is None:
             raise ValueError('Need to specify trunc_params["chi_max"] in order to use cbe_expand_0.')
 
@@ -2463,14 +2463,14 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
             old_T_R = new_psi.get_B(i0+1, 'Th')
             # for old_T_R `'A'` form would be fine as well, but i0+1 is in `'Th'` form if ``use_eig_based_svd=True``
         expand = self._expansion_rate(i0)
-        use_eig_based_svd = self.options.get('use_eig_based_svd', False)
+        use_eig_based_svd = self.options.get('use_eig_based_svd', False, bool)
         T_Lc, S, T_Rc, form, err, renormalize = decompose_theta_qr_based(
                                                 old_T_L=old_T_L, old_T_R=old_T_R, 
                                                 theta=theta, move_right=self.move_right,
-                                                expand=expand, min_block_increase = self.options.get('cbe_min_block_increase', 1),
+                                                expand=expand, min_block_increase = self.options.get('cbe_min_block_increase', 1, int),
                                                 use_eig_based_svd=use_eig_based_svd,
                                                 trunc_params=self.trunc_params, 
-                                                compute_err=self.options.get('compute_err', True),
+                                                compute_err=self.options.get('compute_err', True, bool),
                                                 return_both_T=True)
         if self.move_right:
             assert form[0] == 'A'
