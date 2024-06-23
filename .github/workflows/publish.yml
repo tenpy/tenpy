@@ -8,9 +8,17 @@ on:
     types: [created]
   
   # when a tagged commit is pushed to *any* branch (-> publish to testPyPI)
+  # push:
+  #   tags:
+  #     - '**'  # on any tag
+  
   push:
-    tags:
-      - '**'  # on any tag
+  # when a change to tenpy/version.py is pushed to the test_pypi_publish branch
+    branches:
+      - 'test_pypi_publish'
+    paths:
+      - 'tenpy/version.py'
+    
 
 jobs:
   build-native-wheels:
