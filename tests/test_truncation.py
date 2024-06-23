@@ -110,15 +110,16 @@ def test_decompose_theta_qr_based(use_eig_based_svd):
             U, S, VH, SVD_err, renormalization = truncation.svd_theta(theta, trunc_par=options.get('trunc_params'))
 
             # QR decomposition and truncation
-            T_Lc, S, T_Rc, form, QR_err, renormalize = truncation.decompose_theta_qr_based(
-                                                        old_T_L=old_T_L, old_T_R=old_T_R, 
-                                                        theta=theta, move_right=move_right,
-                                                        expand=options.get('cbe_expand'), 
-                                                        min_block_increase=options.get('cbe_min_block_increase'),
-                                                        use_eig_based_svd=use_eig_based_svd,
-                                                        trunc_params=options.get('trunc_params'), 
-                                                        compute_err=True,
-                                                        return_both_T=True)
+            T_Lc, S, T_Rc, form, QR_err, renormalization = truncation.decompose_theta_qr_based(
+                old_qtotal_L=old_T_L.qtotal, old_qtotal_R=old_T_R.qtotal, old_bond_leg=old_T_R.get_leg('vL'), 
+                theta=theta, move_right=move_right,
+                expand=options.get('cbe_expand'), 
+                min_block_increase=options.get('cbe_min_block_increase'),
+                use_eig_based_svd=use_eig_based_svd,
+                trunc_params=options.get('trunc_params'), 
+                compute_err=True,
+                return_both_T=True
+            )
             T_L = T_Lc.split_legs(['(vL.p)'])
             T_R = T_Rc.split_legs(['(p.vR)'])
 
