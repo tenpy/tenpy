@@ -164,8 +164,9 @@ from ..tools.math import lcm, entropy
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
 from ..tools import hdf5_io
-from ..algorithms.truncation import TruncationError, svd_theta, _machine_prec_trunc_par
+from ..algorithms.truncation import TruncationError, svd_theta, eig_theta, _machine_prec_trunc_par
 from ..algorithms.tebd import RandomUnitaryEvolution
+from ..linalg.random_matrix import GOE, GUE
 
 __all__ = ['BaseMPSExpectationValue', 'MPS', 'BaseEnvironment', 'MPSEnvironment', 'TransferMatrix',
            'InitialStateBuilder', 'build_initial_state']
@@ -4403,31 +4404,92 @@ class MPS(BaseMPSExpectationValue):
         psi.canonical_form_finite(renormalize=False, cutoff=cutoff)
         return psi
 
-    def extend(self, others, trunc_par={'svd_min': 1.e-8}):
-        """Return an MPS which represents ``alpha|self> + beta |others>``.
+    def extend(self, others=[], trunc_par={'svd_min': 1.e-8}, do_canonicalize=False):
+        """Return an MPS which represents the exact same physical state as ``|self>`` but has 
+        the basis extended by additional MPS. We follow the approach 
+        from https://arxiv.org/abs/2005.06104.
 
-        Works only for 'finite', 'segment' boundary conditions.
-        For 'segment' boundary conditions, the virtual legs on the very left/right are
-        assumed to correspond to each other (i.e. self and other have the same state outside of
-        the considered segment).
-        Takes into account :attr:`norm`.
+        Works (for now) only for 'finite' boundary conditions.
+        While in principle this could work for segments, ._gauge_compatible_vL_vR doesn't work
+        for 'segment' boundary conditions. In principle, this could be implemented.
+
+        If we pass in no new MPSs, we simply add random orthogonal states.
 
         Parameters
         ----------
-        other : :class:`MPS`
-            Another MPS of the same length to be added with self.
-        alpha, beta : complex float
-            Prefactors for self and other. We calculate
-            ``alpha * |self> + beta * |other>``
-        cutoff : float | None
-            Cutoff of singular values used in the SVDs.
-
+        others : list of :class:`MPS` or an empty list ([])
+            MPS of same length used to extend the basis of self
+            If None, we add random basis states.
+        trunc_par : dict
+            Parameters for truncation, see :cfg:config:`truncation`.
+        do_canonicalize : Boolean
+            Do we convert to canonical form at the end? This has the tendency to remove some trivial
+            singular values which negates the purpose of this function.
+        
         Returns
         -------
-        sum : :class:`MPS`
-            An MPS representing ``alpha|self> + beta |other>``.
-            Has same total charge as `self`.
+        extended_psi : :class:`MPS`
+            An MPS representing an extended MPS that is physically equivalent to self.
         """
+        L = self.L
+        assert self.finite
+        assert self.bc == 'finite'
+        assert L >= 2
+        psis = [self] + list(others)
+
+        # assume that all psi are already canonical so that we can just use A form tensors immediately.
+        for i in range(1, len(psis)):
+            assert (psis[i].L == L and L >= 2)  # (if you need this, generalize this function...)
+            assert self.bc == psis[i].bc
+            
+        expanded_psi = self.copy()
+        eig_error = TruncationError()
+
+        current_Cs = []
+        for i in range(len(psis)):
+            current_Cs.append(psis[i].get_theta(L-1, n=1).replace_label('p0', 'p'))
+    
+        for j in reversed(range(1, L)):
+            _, exact_B = npc.lq(current_Cs[0].combine_legs(['p', 'vR']), mode='reduced', inner_labels=['vR', 'vL'])
+            eBhc_eB = npc.tensordot(exact_B.conj(), exact_B, axes=(['vL*'], ['vL']))
+            proj = npc.eye_like(eBhc_eB, labels=eBhc_eB.get_leg_labels()) - eBhc_eB
+            rho = npc.eye_like(proj, labels=eBhc_eB.get_leg_labels()) * 0
+            if npc.norm(proj) < 1.e-12:
+                new_B = exact_B.split_legs()
+            else:
+                if len(current_Cs) > 1:
+                    for C in current_Cs[1:]:
+                        C_k = C.combine_legs(['p', 'vR'])
+                        rho += npc.tensordot(C_k.conj(), C_k, axes=(['vL*'], ['vL']))
+                else:
+                    # Generate a random (hermitian) density matrix that will provide random vectors
+                    # in the orthogonal subspace.
+                    leg = proj.legs[0]
+                    if proj.dtype == 'float64': # real, symmetric
+                        rho = npc.Array.from_func_square(GOE, leg, labels=proj.get_leg_labels())
+                    else:
+                        rho = npc.Array.from_func_square(GUE, leg, labels=proj.get_leg_labels())
+                    # Normalize the density matrix
+                rho /= npc.norm(rho)
+                proj_rho = npc.tensordot(npc.tensordot(proj, rho, axes=(['(p.vR)'], ['(p*.vR*)'])), proj, axes=(['(p.vR)'], ['(p*.vR*)']))
+                if npc.norm(proj_rho) < 1.e-12:
+                    new_B = exact_B.split_legs()
+                else:
+                    w_enl_trunc, B_enl_trunc, err_trunc = eig_theta(proj_rho, trunc_par=trunc_par, sort='m>')
+                    new_B = npc.concatenate([exact_B, B_enl_trunc.conj().transpose()], axis=0).split_legs()
+                    eig_error += err_trunc
+            expanded_psi.set_B(j, new_B, form='B')
+            
+            old_Cs = current_Cs
+            current_Cs = []
+            for i, oC in enumerate(old_Cs):
+                current_Cs.append(npc.tensordot(psis[i].get_B(j-1, form='A'),
+                                                npc.tensordot(oC, new_B.conj(), axes=(['p', 'vR'], ['p*', 'vR*'])).replace_label('vL*', 'vR'),
+                                                axes=(['vR'], ['vL'])))
+        expanded_psi.set_B(0, current_Cs[0], form='B')
+        if do_canonicalize:
+            expanded_psi.canonical_form()
+        return expanded_psi, eig_error
         
     def apply_local_op(self, i, op, unitary=None, renormalize=False, cutoff=1.e-13,
                        understood_infinite=False):
