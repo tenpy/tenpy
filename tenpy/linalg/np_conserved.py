@@ -69,6 +69,7 @@ Overview
     pinv
     norm
     qr
+    lq
     expm
 
 .. rubric:: Eigen systems
@@ -105,7 +106,7 @@ __all__ = [
     'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'ones', 'eye_like', 'diag',
     'concatenate', 'grid_concat', 'grid_outer', 'detect_grid_outer_legcharge', 'detect_qtotal',
     'detect_legcharge', 'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh',
-    'eig', 'eigvalsh', 'eigvals', 'speigs', 'expm', 'qr', 'orthogonal_columns',
+    'eig', 'eigvalsh', 'eigvals', 'speigs', 'expm', 'qr', 'lq', 'orthogonal_columns',
     'to_iterable_arrays', 'polar'
 ]
 
@@ -4085,6 +4086,27 @@ def qr(a,
     q.iset_leg_labels([a_labels[0], label_Q])
     r.iset_leg_labels([label_R, a_labels[1]])
     return q, r
+
+
+def lq(a,
+       mode='reduced',
+       inner_labels=[None, None],
+       cutoff=None,
+       pos_diag_L=False,
+       qtotal_Q=None,
+       inner_qconj=+1):
+    r"""Q-R decomposition of a matrix. See documentation for npc.qr for details.
+    """
+
+    q, r = qr(a.transpose(),
+              mode=mode,
+              inner_labels=inner_labels[::-1],
+              cutoff=cutoff,
+              pos_diag_R=pos_diag_L,
+              qtotal_Q=qtotal_Q,
+              inner_qconj=+1)
+
+    return r.transpose(), q.transpose()
 
 
 def orthogonal_columns(a, new_label=None):

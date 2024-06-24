@@ -4403,6 +4403,32 @@ class MPS(BaseMPSExpectationValue):
         psi.canonical_form_finite(renormalize=False, cutoff=cutoff)
         return psi
 
+    def extend(self, others, trunc_par={'svd_min': 1.e-8}):
+        """Return an MPS which represents ``alpha|self> + beta |others>``.
+
+        Works only for 'finite', 'segment' boundary conditions.
+        For 'segment' boundary conditions, the virtual legs on the very left/right are
+        assumed to correspond to each other (i.e. self and other have the same state outside of
+        the considered segment).
+        Takes into account :attr:`norm`.
+
+        Parameters
+        ----------
+        other : :class:`MPS`
+            Another MPS of the same length to be added with self.
+        alpha, beta : complex float
+            Prefactors for self and other. We calculate
+            ``alpha * |self> + beta * |other>``
+        cutoff : float | None
+            Cutoff of singular values used in the SVDs.
+
+        Returns
+        -------
+        sum : :class:`MPS`
+            An MPS representing ``alpha|self> + beta |other>``.
+            Has same total charge as `self`.
+        """
+        
     def apply_local_op(self, i, op, unitary=None, renormalize=False, cutoff=1.e-13,
                        understood_infinite=False):
         r"""Apply a local (one or multi-site) operator to `self`. In place.

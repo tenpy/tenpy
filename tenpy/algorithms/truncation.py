@@ -307,6 +307,66 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
     return U, S, VH, err, renormalization
 
 
+def eig_theta(theta, trunc_par, UPLO='L', sort=None, hermitian=True):
+    """Performs EIG of a matrix `theta` (= the wavefunction) and truncates it.
+
+    Perform a eigenvalue decomposition (SVD) with :func:`~tenpy.linalg.np_conserved.eig`
+    and truncates with :func:`truncate`. If the matrix is Hermitian, we use the hermitian
+    eigenvalue decomposition.
+    The result is an approximation
+    ``theta ~= tensordot(V.scale_axis(W*renormalization, 1), V.conj().T, axes=1)``
+
+    Parameters
+    ----------
+    theta : :class:`~tenpy.linalg.np_conserved.Array`, shape ``(M, M)``
+        The matrix, on which the eigenvalue decomposition (EIG) is performed.
+        Usually, `theta` represents the wavefunction.
+    trunc_par : dict
+        truncation parameters as described in :func:`truncate`.
+    UPLO : {'L', 'U'}
+        Whether to take the lower ('L', default) or upper ('U') triangular part of `a`.
+        Only used for hermitian eigenvalue decomposition.
+    sort : {'m>', 'm<', '>', '<', ``None``}
+        How the eigenvalues should are sorted *within* each charge block.
+        Defaults to ``None``, which is same as '<'. See :func:`argsort` for details.
+    hermitian : Boolean
+        Hermitian decomosition or not?
+
+    Returns
+    -------
+    W : 1D ndarray
+        The eigenvalues, sorted within the same charge blocks according to `sort`.
+    V : :class:`Array`
+        Unitary matrix; ``V[:, i]`` is normalized eigenvector with eigenvalue ``W[i]``.
+        The first label is inherited from `A`, the second label is ``'eig'``.
+    err : :class:`TruncationError`
+        The truncation error introduced.
+    """
+    if hermitian:
+        W, V = npc.eigh(theta, UPLO=UPLO, sort=sort)
+    else:
+        W, V = npc.eig(theta, sort=sort)
+
+    renormalization = np.linalg.norm(W)
+    W = W / renormalization
+    # We normalize the eigenvalues for more reasonable truncation
+    piv, new_norm, err = truncate(W, trunc_par)
+    # svd_min and chi_max are the most reasonable ways to truncate.
+    # trunc_cut requires squaring the eigenvalues.
+    # err reported is for the normalized eigenvalues.
+    new_len_W = np.sum(piv, dtype=np.int_)
+    if new_len_W * 100 < len(W) and (trunc_par['chi_max'] is None
+                                     or new_len_W != trunc_par['chi_max']):
+        msg = "Catastrophic reduction in chi: {0:d} -> {1:d}".format(len(W), new_len_W)
+        # NANs are excluded in npc.svd
+        VHU = npc.tensordot(V.conj(), V, axes=[[0], [0]])
+        msg += " |V^d V - 1| = {0:f}".format(npc.norm(VHV - npc.eye_like(VHV)))
+        warnings.warn(msg, stacklevel=2)
+    W = W[piv] / new_norm * renormalization
+    V.iproject(piv, axes=1)  # V = V[:, piv]
+    return W, V, err
+
+
 def _combine_constraints(good1, good2, warn):
     """return logical_and(good1, good2) if there remains at least one `True` entry.
 
