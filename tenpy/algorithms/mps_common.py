@@ -2394,17 +2394,14 @@ class VariationalApplyMPO(VariationalCompression):
             th = th.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
         return self.update_new_psi(th)
 
+
 class QRBasedVariationalApplyMPO(VariationalApplyMPO):
-    r"""Version of variational apply MPO that relies on QR decompositions rather than SVD.
+    r"""Variational MPO application, using QR-based decompositions instead of SVD.
 
-    Analog to the QR based TEBD introduced in :arxiv:`2212.09782`.
-
-    .. todo ::
-        To use `use_eig_based_svd == True`, which makes sense on GPU only, we need to implement
-        the `_eig_based_svd` for "non-square" matrices.
-        This means that :math:`M^{\dagger} M` and :math:`M M^{\dagger}` dont have the same size,
-        and we need to disregard those eigenvectors of the larger one, that have eigenvalue zero,
-        since we dont have corresponding eigenvalues of the smaller one.
+    The QR-based decomposition, introduced in :arxiv:`2212.09782` is used for TEBD, as implemented
+    in :class:`~tenpy.algorithms.tebd.QRBasedTEBDEngine`. This engine is a version of
+    :class:`VariationalApplyMPO` that uses the same QR-based decomposition instead of SVD in
+    the truncation step after the variational update.
 
     Options
     -------
