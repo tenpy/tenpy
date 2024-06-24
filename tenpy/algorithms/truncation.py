@@ -591,7 +591,7 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
             if use_eig_based_svd:
                 T_Rc = npc.tensordot(Xi, B_R, ['vR', 'vL'])
                 T_Rc = npc.tensordot(U.iconj(), T_Rc, ['vL*', 'vL']).ireplace_label('vR*', 'vL')
-                T_Rc *= 1/npc.norm(T_Rc)
+                T_Rc /= npc.norm(T_Rc)
                 form[1] = 'Th'
             else:
                 T_Rc = npc.tensordot(Vd, B_R, ['vR', 'vL'])
@@ -601,7 +601,7 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
             if use_eig_based_svd:
                 T_Lc = npc.tensordot(A_L, Xi, ['vR', 'vL'])
                 T_Lc = npc.tensordot(T_Lc, Vd.iconj(), ['vR', 'vR*']).ireplace_label('vL*', 'vR')
-                T_Lc *= 1/npc.norm(T_Lc)
+                T_Lc /= npc.norm(T_Lc)
                 form[0] = 'Th'
             else:
                 T_Lc = npc.tensordot(A_L, U, ['vR', 'vL'])
@@ -612,7 +612,7 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
             theta_approx = npc.tensordot(T_Lc, T_Rc, ['vR', 'vL'])
         else:
             theta_approx = npc.tensordot(T_Lc.scale_axis(S, axis='vR'), T_Rc, ['vR', 'vL'])
-        eps = npc.norm(theta/npc.norm(theta) - theta_approx) ** 2
+        eps = npc.norm(theta / npc.norm(theta) - theta_approx) ** 2
         trunc_err = TruncationError(eps, 1. - 2. * eps)
     else:
         trunc_err = TruncationError(np.nan, np.nan)
