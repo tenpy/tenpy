@@ -107,6 +107,18 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
 
     def prepare_evolve(self, dt):
         """Expand the basis using Krylov updates, i.e. the algorithm from https://arxiv.org/abs/2005.06104
+
+        This action of this function is specified by the 'Krylov_options' field of the options passed when constructing the
+        TDVP engine. Below, I list the possible keys of the 'Krylov_options' dictionary.
+
+        (1) Krylov_expansion_dim: how many additional vectors do we use to expand the basis; > 1 is sufficient for random extension.
+        (2) mpo: what MPO do we use for expanion? If none is specified, we use the Hamiltonian. If 'None' is specified, we do
+            random extension.
+        (3) trunc_params: standard dictionary for truncation settings.
+                chi_max: max number of states that are added on each site.
+                svd_min: cutoff for kept eigenvalues of the RDM
+        (4) do_canonicalize: do we canonicalize after adding basis states; probably best not to as some new states might be removed.
+        (5) apply_mpo_options: how do we apply the MPO to the MPS; e.g. SVD, zip_up, variational and associated parameters.
         """
         Krylov_expansion_dim = self.Krylov_options.get('expansion_dim', 0)
         if Krylov_expansion_dim > 0:    # Do some basis expansion
@@ -144,7 +156,7 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
         N_steps : int
             The number of steps to evolve.
         """
-        consistency_check(dt, self.options, 'max_dt', 1.,
+        consistency_check(dt, self.options, 'max_dt', 2.,
                           'dt > ``max_dt`` is unreasonably large for TDVP.')
         self.dt = dt
         trunc_err = TruncationError()
