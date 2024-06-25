@@ -466,27 +466,44 @@ class PurificationMPS(MPS):
                             ops=None,
                             rng=None,
                             norm_tol=1.e-12):
-        """Sample measurement results in the computational basis. See
-        MPS.sample_measurements for documentation of the function. The only functional difference
-        between these two functions is that we must now deal with the ancilla leg on each site. There are
-        two options, specified by `sample_q`:
-            (1) Sample both the p and q leg on each site; at the end, forget about the outcomes for the q leg
+        """Sample measurement results in the computational basis.
+
+        See :meth:`tenpy.networks.mps.MPS.sample_measurements` for documentation of the function.
+        The only functional difference between these two functions is that we must now deal with
+        the ancilla leg on each site. There are two options, specified by `sample_q`::
+
+            1. Sample both the p and q leg on each site; at the end, forget about the outcomes for the q leg
             to sample from the distribution just on the physical legs. The probabilty we return is the joint
-            probability of both p and q outcomes. We don't care about in which basis we sample the q legs.
-            (2) Leave the ancilla leg behind on each site. Then we sample directly from the distribution on p legs,
+            probability of both p and q outcomes. We don't care about in which basis we sample the q legs, and
+            additionally we do not return the q outcomes to the user.
+            2. Leave the ancilla leg behind on each site. Then we sample directly from the distribution on p legs,
             but this is more expensive. The total cost of sampling is now O(chi^3) rather than O(chi^2). The returned
-            probability is just that of the p outcomes.
+            probability is just that of the p outcomes, so this is physical.
 
-        Parameters (differences from MPS)
+        Below we list the differences in the parameters and return values from the MPS function.
+
+        Parameters
         ----------
-        sample_q : Boolean
-            Do we sample the q leg (True) or leave it behind (False)?
+        sample_q : bool
+             Do we sample the q leg (True) or leave it behind (False)?
+        first_site, last_site, ops, rng, norm_tol :
+            Same as in :meth:`tenpy.networks.mps.MPS.sample_measurements`.
 
-        Returns (differences from MPS)
+        Returns
         -------
+        sigmas : list of int | list of float
+            On each site the index of the local basis that was measured for the PHYSICAL site only,
+            as specified in the corresponding :class:`~tenpy.networks.site.Site` in :attr:`sites`.
+            Note that this can change depending on whether/what charges you conserve!
+            Explicitly specifying the measurement operator will avoid that issue.
+            We DO NOT return the index sampled for the ancilla leg (only done if `sample_q`==True) as
+            to get expectation values of the density matrix, one should trace over (i.e. forget the outcome of)
+            the ancilla legs.
         probability : float
-            The probability ``trace(|psi><psi|sigmas...><sigmas...|)``, i.e.,
+            If `sample_q` == False, the probability ``trace(|psi><psi|sigmas...><sigmas...|)``, i.e.,
             the probability of measuring ``|sigmas...>`` on the physical legs.
+            If `sample_q` == True, we return the probability of measuring a particular configuration on both
+            physical and ancilla legs, even though we don't return the ancilla configuration.
         """
         if last_site is None:
             last_site = self.L - 1
@@ -511,7 +528,7 @@ class PurificationMPS(MPS):
                 W = np.arange(site.dim)
             # perform a projective measurement:
             # trace out rest except site `i`
-            if sample_q == False:
+            if not sample_q:
                 rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']]) # physical RDM on site i
                 # probabilities p(sigma) = <sigma|rho|sigma>
                 rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
@@ -549,7 +566,8 @@ class PurificationMPS(MPS):
                 probability *= rho_diag[sigma_2] # probabilty of all outcomes seen so far.
                 theta = theta.take_slice([sigma_2], ['q'])  # project to sigma in theta; now has legs vL (trivial), vR
 
-                sigmas.append((W[sigma_1], W2[sigma_2])) # For ancilla, just return the index of the leg we chose.
+                sigmas.append(W[sigma_1]) # For ancilla, we do not return the sampled index W[sigma_2] since the outcome
+                # is in an arbitrary basis.
                 # rho_diag[sigma] which should be the same as the norm of theta squared
                 # assert np.isclose(probability, npc.tensordot(theta.conj(), theta, axes=(['vL*', 'vR*'], ['vL', 'vR'])))
                 total_probability *= probability    # probability of q outcome
