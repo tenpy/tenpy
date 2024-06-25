@@ -101,12 +101,40 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
         assert psi.bc == model.lat.bc_MPS
         super().__init__(psi, model, options, **kwargs)
         self.lanczos_options = self.options.subconfig('lanczos_options')
+        self.Krylov_options = self.options.subconfig('Krylov_options')
 
     # run() from TimeEvolutionAlgorithm
 
     def prepare_evolve(self, dt):
-        "Do nothing."
-        pass
+        """Expand the basis using Krylov updates, i.e. the algorithm from https://arxiv.org/abs/2005.06104
+        """
+        Krylov_expansion_dim = self.Krylov_options.get('expansion_dim', 0)
+        if Krylov_expansion_dim > 0:    # Do some basis expansion
+            original_chi = self.psi.chi
+            logger.info(f"Original bond dimension: {original_chi}.")
+            # Get the MPO A that will be used to generate Krylov vectors; {A^k |psi>}
+            # We might want to use the WII MPO or (1 - itH) rather than H
+            Krylov_mpo = self.Krylov_options.get('mpo', self.model.H_MPO)
+            Krylov_trunc_params = self.Krylov_options.get('trunc_params', self.trunc_params)    # How do we truncate the RDMs when extending?
+            Krylov_do_canonicalize = self.Krylov_options.get('do_canonicalize', False)          # Canonicalize the MPS after we extend?
+            if Krylov_mpo is None:  # Random expansion
+                extension_err = self.psi.extend(others=[], trunc_par=Krylov_trunc_params, do_canonicalize=Krylov_do_canonicalize)
+            else:                   # Expansion by MPO application
+                # First generate Krylov basis
+                Krylov_apply_mpo_options = self.Krylov_options['apply_mpo_options']
+                # Needs to contain 'compression_method' and options for doing the MPO application
+                Krylov_extended_basis = []
+                new_psi = self.psi.copy()
+                for i in range(Krylov_expansion_dim):
+                    Krylov_mpo.apply(new_psi, Krylov_apply_mpo_options)
+                    Krylov_extended_basis.append(new_psi.copy())
+                extension_err = self.psi.extend(others=Krylov_extended_basis, trunc_par=Krylov_trunc_params, do_canonicalize=Krylov_do_canonicalize)
+            extended_chi = [B.get_leg('vL').ind_len for B in self.psi._B] + [self.psi._B[-1].get_leg('vR').ind_len]
+            logger.info(f"Extended bond dimension: {extended_chi}.")
+            # Need to clear out left and right environments since the bond dimensions no longer match.
+            # So we will need to recalculate the H envs for the next TDVP step
+            self.env.clear()
+        return
 
     def evolve(self, N_steps, dt):
         """Evolve by ``N_steps * dt``.

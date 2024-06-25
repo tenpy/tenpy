@@ -4405,7 +4405,7 @@ class MPS(BaseMPSExpectationValue):
         return psi
 
     def extend(self, others=[], trunc_par={'svd_min': 1.e-8}, do_canonicalize=False):
-        """Return an MPS which represents the exact same physical state as ``|self>`` but has 
+        """Return an MPS (in place) which represents the exact same physical state as ``|self>`` but has 
         the basis extended by additional MPS. We follow the approach 
         from https://arxiv.org/abs/2005.06104.
 
@@ -4428,8 +4428,8 @@ class MPS(BaseMPSExpectationValue):
         
         Returns
         -------
-        extended_psi : :class:`MPS`
-            An MPS representing an extended MPS that is physically equivalent to self.
+        eig_error : :class:`TruncationError`
+            Error from truncating eigenvalues of reduced density matrices. Not the easiest to interpret.
         """
         L = self.L
         assert self.finite
@@ -4442,7 +4442,6 @@ class MPS(BaseMPSExpectationValue):
             assert (psis[i].L == L and L >= 2)  # (if you need this, generalize this function...)
             assert self.bc == psis[i].bc
             
-        expanded_psi = self.copy()
         eig_error = TruncationError()
 
         current_Cs = []
@@ -4469,8 +4468,8 @@ class MPS(BaseMPSExpectationValue):
                         rho = npc.Array.from_func_square(GOE, leg, labels=proj.get_leg_labels())
                     else:
                         rho = npc.Array.from_func_square(GUE, leg, labels=proj.get_leg_labels())
-                    # Normalize the density matrix
-                rho /= npc.norm(rho)
+                    rho = npc.tensordot(rho, rho.conj(), axes=([0], [0])) # Make this positive
+                rho /= npc.norm(rho) # Normalize the density matrix
                 proj_rho = npc.tensordot(npc.tensordot(proj, rho, axes=(['(p.vR)'], ['(p*.vR*)'])), proj, axes=(['(p.vR)'], ['(p*.vR*)']))
                 if npc.norm(proj_rho) < 1.e-12:
                     new_B = exact_B.split_legs()
@@ -4478,7 +4477,7 @@ class MPS(BaseMPSExpectationValue):
                     w_enl_trunc, B_enl_trunc, err_trunc = eig_theta(proj_rho, trunc_par=trunc_par, sort='m>')
                     new_B = npc.concatenate([exact_B, B_enl_trunc.conj().transpose()], axis=0).split_legs()
                     eig_error += err_trunc
-            expanded_psi.set_B(j, new_B, form='B')
+            self.set_B(j, new_B, form='B')
             
             old_Cs = current_Cs
             current_Cs = []
@@ -4486,11 +4485,11 @@ class MPS(BaseMPSExpectationValue):
                 current_Cs.append(npc.tensordot(psis[i].get_B(j-1, form='A'),
                                                 npc.tensordot(oC, new_B.conj(), axes=(['p', 'vR'], ['p*', 'vR*'])).replace_label('vL*', 'vR'),
                                                 axes=(['vR'], ['vL'])))
-        expanded_psi.set_B(0, current_Cs[0], form='B')
+        self.set_B(0, current_Cs[0], form='B')
         if do_canonicalize:
-            expanded_psi.canonical_form()
-        return expanded_psi, eig_error
-        
+            self.canonical_form()
+        return eig_error
+
     def apply_local_op(self, i, op, unitary=None, renormalize=False, cutoff=1.e-13,
                        understood_infinite=False):
         r"""Apply a local (one or multi-site) operator to `self`. In place.
