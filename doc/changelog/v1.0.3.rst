@@ -10,5 +10,5 @@ Changelog
 
 Fixed
 ^^^^^
-- :issue:`426` fixes necssary to compile with the latest numpy version 2.0 and cython 3.0.10 combination.
+- :issue:`426` fixes necessary to compile with the latest numpy version 2.0 and cython 3.0.10 combination.
 - :issue:`431` let simulations run even if `git describe` has unexpected output.
