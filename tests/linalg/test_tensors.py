@@ -1414,9 +1414,31 @@ def test_is_scalar():
     assert not tensors.is_scalar(non_scalar_tens)
 
 
-# TODO
-def test_item():
-    pytest.skip('Test not written yet')  # TODO
+def test_item(make_compatible_tensor, make_compatible_sectors, compatible_symmetry, np_random):
+    sector_candidates = make_compatible_sectors(10)
+    dims = compatible_symmetry.batch_sector_dim(sector_candidates)
+    one_dim_sectors = sector_candidates[dims == 1, :]
+    if len(one_dim_sectors) == 0:
+        sector = compatible_symmetry.trivial_sector
+    else:
+        sector = np_random.choice(sector_candidates)
+    leg = ElementarySpace(compatible_symmetry, [sector])
+    T: SymmetricTensor = make_compatible_tensor([leg, leg], [leg, leg], cls=SymmetricTensor)
+
+    res = tensors.item(T)
+
+    if isinstance(T.backend, backends.FusionTreeBackend) and isinstance(T.symmetry, ProductSymmetry):
+        with pytest.raises(NotImplementedError):
+            _ = T.to_numpy()
+        pytest.xfail()
+    
+    expect = T.to_numpy().item()
+    npt.assert_almost_equal(res, expect)
+
+    leg2 = ElementarySpace(compatible_symmetry, [sector], [3])
+    non_scalar_T = make_compatible_tensor([leg, leg2], [leg, leg], cls=SymmetricTensor)
+    with pytest.raises(ValueError, match='Not a scalar'):
+        _ = tensors.item(non_scalar_T)
 
 
 def test_linear_combination(make_compatible_tensor_any_class):
