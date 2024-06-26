@@ -470,15 +470,16 @@ class PurificationMPS(MPS):
 
         See :meth:`tenpy.networks.mps.MPS.sample_measurements` for documentation of the function.
         The only functional difference between these two functions is that we must now deal with
-        the ancilla leg on each site. There are two options, specified by `sample_q`::
+        the ancilla leg on each site. There are two options, specified by `sample_q`:
 
-            1. Sample both the p and q leg on each site; at the end, forget about the outcomes for the q leg
-            to sample from the distribution just on the physical legs. The probabilty we return is the joint
-            probability of both p and q outcomes. We don't care about in which basis we sample the q legs, and
-            additionally we do not return the q outcomes to the user.
-            2. Leave the ancilla leg behind on each site. Then we sample directly from the distribution on p legs,
-            but this is more expensive. The total cost of sampling is now O(chi^3) rather than O(chi^2). The returned
-            probability is just that of the p outcomes, so this is physical.
+        1. Sample both the p and q leg on each site; at the end, forget about the outcomes for the
+        q leg to sample from the distribution just on the physical legs. The probability we return
+        is the joint probability of both p and q outcomes. We don't care about in which basis we
+        sample the q legs, and additionally we do not return the q outcomes to the user.
+        
+        2. Leave the ancilla leg behind on each site. Then we sample directly from the distribution
+        on p legs, but this is more expensive. The total cost of sampling is now O(chi^3) rather
+        than O(chi^2). The returned probability is just that of the p outcomes, so this is physical.
 
         Below we list the differences in the parameters and return values from the MPS function.
 
@@ -496,14 +497,14 @@ class PurificationMPS(MPS):
             as specified in the corresponding :class:`~tenpy.networks.site.Site` in :attr:`sites`.
             Note that this can change depending on whether/what charges you conserve!
             Explicitly specifying the measurement operator will avoid that issue.
-            We DO NOT return the index sampled for the ancilla leg (only done if `sample_q`==True) as
-            to get expectation values of the density matrix, one should trace over (i.e. forget the outcome of)
-            the ancilla legs.
+            We DO NOT return any measurement outcomes/indices for the ancilla leg, even if they
+            are explicitly sampled. This is because to get expectation values of the density matrix,
+            one should trace over (i.e. forget the outcome of) the ancilla legs.
         probability : float
-            If `sample_q` == False, the probability ``trace(|psi><psi|sigmas...><sigmas...|)``, i.e.,
-            the probability of measuring ``|sigmas...>`` on the physical legs.
-            If `sample_q` == True, we return the probability of measuring a particular configuration on both
-            physical and ancilla legs, even though we don't return the ancilla configuration.
+            If `sample_q` == False, the probability ``trace(|psi><psi|sigmas...><sigmas...|)``,
+            i.e. the probability of measuring ``|sigmas...>`` on the physical legs.
+            If `sample_q` == True, we return the probability of measuring a particular configuration
+            on both physical and ancilla legs, even though we don't return the ancilla configuration.
         """
         if last_site is None:
             last_site = self.L - 1
