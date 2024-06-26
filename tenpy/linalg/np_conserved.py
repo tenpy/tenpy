@@ -263,7 +263,7 @@ class Array:
              [3. 4. 5.]]
             >>> b = a.copy(deep=False)  # shallow copy
             >>> b[1, 2] = 8.
-            >>> a[1, 2]  # changed!
+            >>> float(a[1, 2])  # changed!
             8.0
 
         Other `inplace` operations **might*** have no effect at all (although we don't guarantee that):
@@ -1607,7 +1607,7 @@ class Array:
             >>> split_array = comb_array.split_legs()
             >>> split_array.get_leg_labels()
             ['a', 'd', 'b', 'c', 'e']
-            >>> npc.norm(split_array.transpose(orig_array.get_leg_labels()) - orig_array)
+            >>> float(npc.norm(split_array.transpose(orig_array.get_leg_labels()) - orig_array))
             0.0
         """
         if axes is None:

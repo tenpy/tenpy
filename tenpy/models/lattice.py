@@ -771,7 +771,7 @@ class Lattice:
             >>> A_res = lat.mps2lat_values(A)
             >>> A_res.shape
             (10, 3, 2)
-            >>> A_res[tuple(lat.mps2lat_idx(5))] == A[5]
+            >>> bool(A_res[tuple(lat.mps2lat_idx(5))] == A[5])
             True
 
         If you have a correlation function ``C[i, j]``, it gets just slightly more complicated:
@@ -796,7 +796,7 @@ class Lattice:
             >>> A_u_res = lat.mps2lat_values(A_u, u=u)
             >>> A_u_res.shape
             (10, 3)
-            >>> np.all(A_res[:, :, u] == A_u_res[:, :])
+            >>> bool(np.all(A_res[:, :, u] == A_u_res[:, :]))
             True
         """
         axes = to_iterable(axes)

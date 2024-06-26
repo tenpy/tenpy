@@ -213,7 +213,7 @@ class Site(Hdf5Exportable):
             permute = np.asarray(permute, dtype=np.intp)
             inv_perm = inverse_permutation(permute)
             self.perm = self.perm[permute]
-            self.state_labels = dict((lbl, inv_perm[i]) for lbl, i in self.state_labels.items())
+            self.state_labels = dict((lbl, int(inv_perm[i])) for lbl, i in self.state_labels.items())
         for opname in self.opnames.copy():
             op = self.get_op(opname).to_ndarray()
             self.opnames.remove(opname)
