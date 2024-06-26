@@ -540,9 +540,9 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             >>> p_state = ['empty', 'full'] * 3
             >>> psi = tenpy.networks.mps.MPS.from_product_state([fermion]*6, p_state, "finite")
             >>> CdC = psi.correlation_function("Cd", "C")  # optionally: use `hermitian=True`
-            >>> psi.correlation_function("C", "Cd")[1, 2] == -CdC[2, 1]
+            >>> bool(psi.correlation_function("C", "Cd")[1, 2] == -CdC[2, 1])
             True
-            >>> np.all(np.diag(CdC) == psi.expectation_value("Cd C"))  # "Cd C" is equivalent to "N"
+            >>> bool(np.all(np.diag(CdC) == psi.expectation_value("Cd C")))  # "Cd C" is equivalent to "N"
             True
 
         See also

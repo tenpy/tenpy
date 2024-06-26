@@ -354,7 +354,7 @@ class MPO:
             TruncationError()
             >>> C = psi.correlation_function('Cd', 'C')
             >>> C_expected = np.conj(coeff)[:, np.newaxis] * coeff[np.newaxis, :]
-            >>> np.max(np.abs(C - C_expected) ) < 1.e-10
+            >>> bool(np.max(np.abs(C - C_expected) ) < 1.e-10)
             True
         """
         coeff = np.asarray(coeff)
