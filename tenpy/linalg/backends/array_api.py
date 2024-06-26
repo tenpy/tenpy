@@ -266,6 +266,15 @@ class ArrayApiBlockBackend(BlockBackend):
     def _block_argsort(self, block: Block, axis: int) -> Block:
         return self._api.argsort(block, axis=axis)
 
+    def block_enlarge_leg(self, block: Block, mask: Block, axis: int) -> Block:
+        shape = list(block.shape)
+        shape[axis] = len(mask)
+        res = self._api.zeros(shape, dtype=block.dtype)
+        idcs = [slice(None, None, None)] * len(shape)
+        idcs[axis] = mask
+        res[idcs] = block
+        return res
+
 
 class NoSymmetryArrayApiBackend(ArrayApiBlockBackend, NoSymmetryBackend):
     def __init__(self, api_namespace):

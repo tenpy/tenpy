@@ -260,7 +260,16 @@ class TorchBlockBackend(BlockBackend):
 
     def _block_argsort(self, block: Block, axis: int) -> Block:
         return torch_module.argsort(block, dim=axis)
-        
+
+    def block_enlarge_leg(self, block: Block, mask: Block, axis: int) -> Block:
+        shape = list(block.shape)
+        shape[axis] = len(mask)
+        res = torch_module.zeros(shape, dtype=block.dtype, device=block.device)
+        idcs = [slice(None, None, None)] * len(shape)
+        idcs[axis] = mask
+        res[idcs] = block
+        return res
+
 
 class NoSymmetryTorchBackend(TorchBlockBackend, NoSymmetryBackend):
     def __init__(self, device: str = 'cpu'):

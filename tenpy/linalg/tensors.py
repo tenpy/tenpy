@@ -273,13 +273,22 @@ class Tensor(metaclass=ABCMeta):
     def ascii_diagram(self) -> str:
         # example:
         # |     123   123   132   123
+        # |       ^     v     v     ^
         # |       a     b     c     d
         # |   ┏━━━┷━━━━━┷━━━━━┷━━━━━┷━━━┓
-        # |   ┃                         ┃
+        # |   ┃          TEXT           ┃
         # |   ┗┯━━━━━┯━━━━━┯━━━━━┯━━━━━┯┛
         # |    i     h     g     f     e
+        # |    ^     v     ^     ^     v
         # |   42   777    11     2     3
-
+        text = {
+            SymmetricTensor: 'Symm',
+            ChargedTensor: 'Charged',
+            DiagonalTensor: 'Diag',
+            Mask: 'Mask'
+        }.get(type(self), '???')
+        #
+        
         DISTANCE = 5  # distance between legs in chars, i.e. number of '━' between the '┯'
         codomain_dims = [
             str(l.dim).rjust(DISTANCE) if len(str(l.dim)) <= DISTANCE else 'huge'.rjust(DISTANCE)
@@ -287,6 +296,14 @@ class Tensor(metaclass=ABCMeta):
         ]
         domain_dims = [
             str(l.dim).rjust(DISTANCE) if len(str(l.dim)) <= DISTANCE else 'huge'.rjust(DISTANCE)
+            for l in self.domain
+        ]
+        codomain_arrows = [
+            ('║' if isinstance(l, ProductSpace) else ('v' if l.is_bra_space else '^')).rjust(DISTANCE)
+            for l in self.codomain
+        ]
+        domain_arrows = [
+            ('║' if isinstance(l, ProductSpace) else ('v' if l.is_bra_space else '^')).rjust(DISTANCE)
             for l in self.domain
         ]
         codomain_labels = [
@@ -307,6 +324,11 @@ class Tensor(metaclass=ABCMeta):
             codomain_extra = ((DISTANCE + 1) // 2) * (self.num_domain_legs - self.num_codomain_legs)
             domain_extra = 0
         #
+        if self.num_codomain_legs < 2 and self.num_domain_legs < 2:
+            # make room for the text
+            codomain_extra += 3
+            domain_extra += 3
+        #
         if self.num_codomain_legs > 0:
             top_border = ''.join([
                 start,
@@ -320,7 +342,10 @@ class Tensor(metaclass=ABCMeta):
             top_border = ''.join([
                 start, '┏', '━' * ((DISTANCE + 1) * (self.num_domain_legs - 1) + 1), '┓'
             ])
-        body = ''.join([start, '┃', ' ' * (len(top_border) - len(start) - 2), '┃'])
+        chars_in_box = len(top_border) - len(start) - 2
+        front_pad = ' ' * ((chars_in_box - len(text)) // 2)
+        back_pad = ' ' * (chars_in_box - len(text) - len(front_pad))
+        body = ''.join([start, '┃', front_pad, text, back_pad, '┃'])
         if self.num_domain_legs > 0:
             bottom_border = ''.join([
                 start,
@@ -335,9 +360,11 @@ class Tensor(metaclass=ABCMeta):
                 start, '┗', '━' * ((DISTANCE + 1) * (self.num_codomain_legs - 1) + 1), '┛'
             ])
         return '\n'.join([' ' * codomain_extra + ' '.join(codomain_dims),
+                          ' ' * codomain_extra + ' '.join(codomain_arrows),
                           ' ' * codomain_extra + ' '.join(codomain_labels),
                           top_border, body, bottom_border,
                           ' ' * domain_extra + ' '.join(domain_labels),
+                          ' ' * domain_extra + ' '.join(domain_arrows),
                           ' ' * domain_extra + ' '.join(domain_dims)])
 
     @abstractmethod
@@ -599,7 +626,7 @@ class Tensor(metaclass=ABCMeta):
             return list(map(self.get_leg, which_leg))
         in_domain, co_domain_idx, _ = self._parse_leg_idx(which_leg)
         if in_domain:
-            return self.domain.spaces[co_domain_idx].dual
+            return self.domain.spaces[co_domain_idx]
         return self.codomain.spaces[co_domain_idx]
 
     def get_leg_idcs(self, idcs: int | str | Sequence[int | str]) -> list[int]:
@@ -2676,28 +2703,11 @@ def apply_mask(tensor: Tensor, mask: Mask, leg: int | str) -> Tensor:
     --------
     enlarge_leg, compose, tdot, scale_axis, apply_mask_DiagonalTensor
     """
-    in_domain, _, leg_idx = tensor._parse_leg_idx(leg)
-
-    if isinstance(tensor, ChargedTensor):
-        inv_part = apply_mask(tensor.invariant_part, mask, leg_idx)
-        return ChargedTensor(inv_part, tensor.charged_state)
-    
+    in_domain, co_domain_idx, leg_idx = tensor._parse_leg_idx(leg)
     assert mask.is_projection
-    assert mask.large_leg == tensor.get_leg(leg_idx)
-
-    if isinstance(tensor, DiagonalTensor):
-        tensor = tensor.as_SymmetricTensor()
-    if isinstance(tensor, Mask):
-        raise NotImplementedError('tensors.apply_mask not implemented for Mask')
-    if not isinstance(tensor, SymmetricTensor):
-        raise TypeError(f'Invalid tensor type: {type(tensor).__name__}')
-    
     if in_domain:
         mask = transpose(mask)
-    backend = get_same_backend(tensor, mask)
-    data, codomain, domain = backend.apply_mask_to_SymmetricTensor(tensor, mask, leg_idx)
-    return SymmetricTensor(data=data, codomain=codomain, domain=domain, backend=backend,
-                           labels=tensor.labels)
+    return _compose_with_Mask(tensor, mask, leg_idx)
 
 
 def apply_mask_DiagonalTensor(tensor: DiagonalTensor, mask: Mask) -> DiagonalTensor:
@@ -3188,17 +3198,11 @@ def compose(tensor1: Tensor, tensor2: Tensor, relabel1: dict[str, str] = None,
     else:
         domain_labels = [relabel2.get(l, l) for l in tensor2.domain_labels]
     res_labels = [codomain_labels, domain_labels]
-    
+
     if isinstance(tensor1, Mask):
-        if tensor1.is_projection:
-            return apply_mask(tensor2, tensor1, 0).set_labels(res_labels)
-        else:
-            return enlarge_leg(tensor2, tensor1, 0).set_labels(res_labels)
+        return _compose_with_Mask(tensor2, tensor1, 0).set_label(0, tensor1.labels[0])
     if isinstance(tensor2, Mask):
-        if tensor2.is_projection:
-            return apply_mask(tensor1, tensor2, -1).set_labels(res_labels)
-        else:
-            return enlarge_leg(tensor1, tensor2, -1).set_label(res_labels)
+        return _compose_with_Mask(tensor1, tensor2, -1).set_label(-1, tensor2.labels[1])
 
     if isinstance(tensor1, DiagonalTensor):
         return scale_axis(tensor2, tensor1, 0).set_labels(res_labels)
@@ -3213,6 +3217,49 @@ def compose(tensor1: Tensor, tensor2: Tensor, relabel1: dict[str, str] = None,
                     relabel1=relabel1, relabel2=relabel2)
 
     return _compose_SymmetricTensors(tensor1, tensor2, relabel1=relabel1, relabel2=relabel2)
+
+
+def _compose_with_Mask(tensor: Tensor, mask: Mask, leg_idx: int) -> Tensor:
+    """Compose `tensor` with a mask, preserving the leg order of `tensor`
+
+    We expect ``tensor.codomain[leg_idx] == mask.domain[0]`` if `leg_idx` is in the codomain, or
+    ``tensor.domain[co_domain_idx] == mask.codomain[0]`` otherwise.
+
+    That is we have::
+
+        |      │   │  ┏┷┓          │   │   │
+        |      │   │  ┃M┃         ┏┷━━━┷━━━┷┓
+        |      │   │  ┗┯┛         ┃ tensor  ┃
+        |     ┏┷━━━┷━━━┷┓   OR    ┗┯━━━┯━━━┯┛
+        |     ┃ tensor  ┃          │  ┏┷┓  │
+        |     ┗┯━━━┯━━━┯┛          │  ┃M┃  │
+        |      │   │   │           │  ┗┯┛  │
+
+    Note that the resulting leg may be smaller than before (for a projection mask in the codomain
+    or an inclusion mask in the domain) or larger (otherwise).
+    
+    The result hast the same leg order and labels as `tensor`.
+    """
+    in_domain, co_domain_idx, leg_idx = tensor._parse_leg_idx(leg_idx)
+    if in_domain:
+        assert tensor.domain[co_domain_idx] == mask.codomain[0]
+    else:
+        assert tensor.codomain[co_domain_idx] == mask.domain[0]
+
+    # deal with other tensor types
+    if isinstance(tensor, ChargedTensor):
+        invariant_part = _compose_with_Mask(tensor.invariant_part, mask, leg_idx)
+        return ChargedTensor(invariant_part, tensor.charged_state)
+    if isinstance(tensor, Mask):
+        raise NotImplementedError('tensors._compose_with_Mask not implemented for Mask')
+    tensor = tensor.as_SymmetricTensor()
+    
+    backend = get_same_backend(tensor, mask)
+    if in_domain == mask.is_projection:
+        data, codomain, domain = backend.mask_contract_small_leg(tensor, mask, leg_idx)
+    else:
+        data, codomain, domain = backend.mask_contract_large_leg(tensor, mask, leg_idx)
+    return SymmetricTensor(data, codomain, domain, backend=backend, labels=tensor.labels)
 
 
 def _compose_SymmetricTensors(tensor1: SymmetricTensor, tensor2: SymmetricTensor,
@@ -3280,28 +3327,12 @@ def enlarge_leg(tensor: Tensor, mask: Mask, leg: int | str) -> Tensor:
     --------
     apply_mask, compose, tdot, scale_axis
     """
-    in_domain, _, leg_idx = tensor._parse_leg_idx(leg)
-
-    if isinstance(tensor, ChargedTensor):
-        inv_part = enlarge_leg(tensor.invariant_part, mask, leg_idx)
-        return ChargedTensor(inv_part, tensor.charged_state)
-
+    # parse inputs
+    in_domain, co_domain_idx, leg_idx = tensor._parse_leg_idx(leg)
     assert not mask.is_projection
-    assert mask.small_leg == tensor.get_leg(leg_idx)
-
-    if isinstance(tensor, DiagonalTensor):
-        tensor = tensor.as_SymmetricTensor()
-    if isinstance(tensor, Mask):
-        raise NotImplementedError('tensors.enlarge_leg not implemented for Mask')
-    if not isinstance(tensor, SymmetricTensor):
-        raise TypeError(f'Invalid tensor type: {type(tensor).__name__}')
-
     if in_domain:
         mask = transpose(mask)
-    backend = get_same_backend(tensor, mask)
-    data, codomain, domain = backend.enlarge_leg_SymmetricTensor(tensor, mask, leg_idx)
-    return SymmetricTensor(data=data, codomain=codomain, domain=domain, backend=backend,
-                           labels=tensor.labels)
+    return _compose_with_Mask(tensor, mask, leg_idx)
 
 
 def entropy(p: DiagonalTensor | Sequence[float], n=1):
@@ -3440,7 +3471,7 @@ def inner(A: Tensor, B: Tensor, do_dagger: bool = True) -> float | complex:
         return backend.block_item(res)
 
     if isinstance(A, ChargedTensor):  # and B is a SymmetricTensor
-        # reduce to the case where B is charged and A is not
+        # reduce to the case where B is charged and A is not  # OPTIMIZE write it out instead...
         if do_dagger:
             return np.conj(inner(B, A, do_dagger=True))
         return inner(B, A, do_dagger=False)
@@ -4002,12 +4033,14 @@ def scale_axis(tensor: Tensor, diag: DiagonalTensor, leg: int | str) -> Tensor:
         diag = transpose(diag)
     else:
         raise ValueError('Incompatible legs')
+    assert tensor.get_leg_co_domain(leg_idx) == diag.leg  # TODO rm check?
     
     if isinstance(tensor, DiagonalTensor):
         return (tensor * diag).set_labels(tensor.labels)
     if isinstance(tensor, Mask):
-        # leg == 0 -> mask is on leg 1 of diagonal and vice versa
-        return apply_mask(diag.as_SymmetricTensor(), tensor, 1 - leg_idx)
+        if leg_idx == 0:
+            return compose(diag, tensor).set_labels(tensor.labels)
+        return compose(tensor, diag).set_labels(tensor.labels)
     if isinstance(tensor, ChargedTensor):
         inv_part = scale_axis(tensor.invariant_part, diag, leg_idx)
         return ChargedTensor(inv_part, tensor.charged_state)
@@ -4140,35 +4173,63 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
         raise ValueError(f'Duplicate leg entries.')
     num_contr = len(legs1)
     assert len(legs2) == num_contr
+    for i1, i2 in zip(legs1, legs2):
+        assert tensor1._as_domain_leg(i1) == tensor2._as_codomain_leg(i2), 'incompatible legs'
 
     # Deal with Masks: either return or reduce to SymmetricTensor
     if isinstance(tensor1, Mask):
         if num_contr == 0:
-            warnings.warn('Converting Mask to SymmetricTensor for non-contracting contract()')
             tensor1 = tensor1.as_SymmetricTensor()
         if num_contr == 1:
-            res = apply_mask(tensor2, tensor1, legs2[0])
+            t1_in_domain = legs1[0] == 1
+            t2_in_domain = legs2[0] >= tensor2.num_codomain_legs
+            if t2_in_domain == t1_in_domain:
+                res = _compose_with_Mask(tensor2, transpose(tensor1), legs2[0])
+            else:
+                res = _compose_with_Mask(tensor2, tensor1, legs2[0])
             res.set_label(legs2[0], tensor1.labels[1 - legs1[0]])
+            # move legs to tdot convention
             return permute_legs(res, codomain=legs1)
         if num_contr == 2:
-            large_leg_contr = legs1.index(1) if tensor1.is_projection else legs1.index(0)
-            res = apply_mask(tensor2, tensor1, legs2[large_leg_contr])
+            # contract the large leg first
+            which_is_large = legs1.index(1 if tensor1.is_projection else 0)
+            t1_in_domain = tensor1.is_projection
+            t2_in_domain = legs2[which_is_large] >= tensor2.num_codomain_legs
+            if t1_in_domain == t2_in_domain:
+                res = _compose_with_Mask(tensor2, transpose(tensor1), legs2[which_is_large])
+            else:
+                res = _compose_with_Mask(tensor2, tensor1, legs2[which_is_large])
+            # then trace over the small leg
             res = partial_trace(res, legs2)
+            # move legs to tdot convention
             if tensor2.num_legs == 2:  # scalar result
                 return res
             return bend_legs(res, num_codomain_legs=0)
     if isinstance(tensor2, Mask):
         if num_contr == 0:
-            warnings.warn('Converting Mask to SymmetricTensor for non-contracting contract()')
             tensor2 = tensor2.as_SymmetricTensor()
         if num_contr == 1:
-            large_leg_contr = legs2.index(1) if tensor2.is_projection else legs2.index(0)
-            res = apply_mask(tensor1, tensor2, legs1[large_leg_contr])
-            res.set_label(legs1[0], tensor2.labels[1 - legs2[0]])  # set to the uncontracted labels
+            t1_in_domain = legs1[0] >= tensor1.num_codomain_legs
+            t2_in_domain = legs2[0] == 1
+            if t1_in_domain == t2_in_domain:
+                res = _compose_with_Mask(tensor1, transpose(tensor2), legs1[0])
+            else:
+                res = _compose_with_Mask(tensor1, tensor2, legs1[0])
+            res.set_label(legs1[0], tensor2.labels[1 - legs2[0]])
+            # move legs to tdot convention
             return permute_legs(res, domain=legs2)
         if num_contr == 2:
-            res = apply_mask(tensor1, tensor2, legs1[0])
+            # contract the large leg first
+            which_is_large = legs2.index(1 if tensor2.is_projection else 0)
+            t1_in_domain = legs1[which_is_large] >= tensor1.num_codomain_legs
+            t2_in_domain = tensor2.is_projection
+            if t1_in_domain == t2_in_domain:
+                res = _compose_with_Mask(tensor1, transpose(tensor2), legs1[which_is_large])
+            else:
+                res = _compose_with_Mask(tensor1, tensor2, legs1[which_is_large])
+            # then trace over the small leg
             res = partial_trace(res, legs1)
+            # move legs to tdot convention
             if tensor1.num_legs == 2:  # scalar result
                 return res
             return bend_legs(res, num_domain_legs=0)
@@ -4176,7 +4237,6 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
     # Deal with DiagonalTensor: either return or reduce to SymmetricTensor
     if isinstance(tensor1, DiagonalTensor):
         if num_contr == 0:
-            warnings.warn('Converting DiagonalTensor to SymmetricTensor for non-contracting contract()')
             tensor1 = tensor1.as_SymmetricTensor()
         if num_contr == 1:
             res = scale_axis(tensor2, tensor1, legs2[0])
@@ -4190,7 +4250,6 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
             return bend_legs(res, num_codomain_legs=0)
     if isinstance(tensor2, DiagonalTensor):
         if num_contr == 0:
-            warnings.warn('Converting DiagonalTensor to SymmetricTensor for non-contracting contract()')
             tensor2 = tensor2.as_SymmetricTensor()
         if num_contr == 1:
             res = scale_axis(tensor1, tensor2, legs1[0])

@@ -76,24 +76,8 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return self.block_allclose(a.data, b.data, rtol=rtol, atol=atol)
 
     def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
-        return self.apply_mask_to_block(tensor.data, mask.data, ax=0)
+        return self.block_apply_mask(tensor.data, mask.data, ax=0)
 
-    def apply_mask_to_SymmetricTensor(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int
-                                      ) -> tuple[Data, ProductSpace, ProductSpace]:
-        data = self.apply_mask_to_block(tensor.data, mask.data, leg_idx)
-        in_domain, co_domain_idx, _ = tensor._parse_leg_idx(leg_idx)
-        if in_domain:
-            codomain = tensor.codomain
-            spaces = tensor.domain.spaces[:]
-            spaces[co_domain_idx] = mask.small_leg
-            domain = ProductSpace(spaces, symmetry=tensor.symmetry, backend=self)
-        else:
-            domain = tensor.domain
-            spaces = tensor.codomain.spaces[:]
-            spaces[co_domain_idx] = mask.small_leg
-            codomain = ProductSpace(spaces, symmetry=tensor.symmetry, backend=self)
-        return data, codomain, domain
-    
     def combine_legs(self, a: SymmetricTensor, combine_slices: list[int, int],
                      product_spaces: list[ProductSpace], new_axes: list[int],
                      final_legs: list[Space]) -> Data:
@@ -163,10 +147,6 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
         return self.block_eigh(a.data, sort=sort)
-
-    def enlarge_leg_SymmetricTensor(self, a: SymmetricTensor, mask: Mask, leg_idx: int
-                                    ) -> tuple[Data, ProductSpace, ProductSpace]:
-        raise NotImplementedError('enlarge_leg_SymmetricTensor not implemented')
 
     def eye_data(self, co_domain: ProductSpace, dtype: Dtype) -> Data:
         # Note: the identity has the same matrix elements in all ONB, so ne need to consider
@@ -245,6 +225,38 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
             basis_perm=basis_perm
         )
         return data, small_leg
+
+    def mask_contract_large_leg(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int
+                                ) -> tuple[Data, ProductSpace, ProductSpace]:
+        in_domain, co_domain_idx, leg_idx = tensor._parse_leg_idx(leg_idx)
+        data = self.block_apply_mask(tensor.data, mask.data, leg_idx)
+        if in_domain:
+            codomain = tensor.codomain
+            spaces = tensor.domain.spaces[:]
+            spaces[co_domain_idx] = mask.small_leg
+            domain = ProductSpace(spaces, symmetry=tensor.symmetry, backend=self)
+        else:
+            domain = tensor.domain
+            spaces = tensor.codomain.spaces[:]
+            spaces[co_domain_idx] = mask.small_leg
+            codomain = ProductSpace(spaces, symmetry=tensor.symmetry, backend=self)
+        return data, codomain, domain
+    
+    def mask_contract_small_leg(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int
+                                ) -> tuple[Data, ProductSpace, ProductSpace]:
+        in_domain, co_domain_idx, leg_idx = tensor._parse_leg_idx(leg_idx)
+        data = self.block_enlarge_leg(tensor.data, mask.data, leg_idx)
+        if in_domain:
+            codomain = tensor.codomain
+            spaces = tensor.domain.spaces[:]
+            spaces[co_domain_idx] = mask.large_leg
+            domain = ProductSpace(spaces, symmetry=tensor.symmetry, backend=self)
+        else:
+            domain = tensor.domain
+            spaces = tensor.codomain.spaces[:]
+            spaces[co_domain_idx] = mask.large_leg
+            codomain = ProductSpace(spaces, symmetry=tensor.symmetry, backend=self)
+        return data, codomain, domain
 
     def mask_dagger(self, mask: Mask) -> MaskData:
         return mask.data

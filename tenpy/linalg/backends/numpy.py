@@ -227,7 +227,7 @@ class NumpyBlockBackend(BlockBackend):
     def block_sum_all(self, a: Block) -> float | complex:
         return np.sum(a)
 
-    def apply_mask_to_block(self, block: Block, mask: Block, ax: int) -> Block:
+    def block_apply_mask(self, block: Block, mask: Block, ax: int) -> Block:
         return np.compress(mask, block, ax)
 
     def block_eigh(self, block: Block, sort: str = None) -> tuple[Block, Block]:
@@ -250,6 +250,16 @@ class NumpyBlockBackend(BlockBackend):
 
     def _block_argsort(self, block: Block, axis: int) -> Block:
         return np.argsort(block, axis=axis)
+
+    def block_enlarge_leg(self, block: Block, mask: Block, axis: int) -> Block:
+        # OPTIMIZE is there a numpy builtin function that does this? or at least part of this?
+        shape = list(block.shape)
+        shape[axis] = len(mask)
+        res = np.zeros(shape, dtype=block.dtype)
+        idcs = [slice(None, None, None)] * len(shape)
+        idcs[axis] = mask
+        res[tuple(idcs)] = block  # TODO should we worry about mutability?
+        return res
     
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, NoSymmetryBackend):

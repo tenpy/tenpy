@@ -120,19 +120,6 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def apply_mask_to_SymmetricTensor(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int
-                                      ) -> tuple[Data, ProductSpace, ProductSpace]:
-        """
-        If the `leg_idx` is in the codomain, `mask` is a projection mask.
-        Otherwise it is an inclusion mask.
-        Either way, the ``mask.large_leg == tensor.get_co_domain_leg(leg_idx)`` is the same as
-        the leg in `tensor` in the (co-)domain.
-
-        Returns ``data, new_codomain, new_domain``.
-        """
-        ...
-
-    @abstractmethod
     def combine_legs(self, a: SymmetricTensor, combine_slices: list[int, int],
                      product_spaces: list[ProductSpace], new_axes: list[int],
                      final_legs: list[Space]) -> Data:
@@ -266,11 +253,6 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def enlarge_leg_SymmetricTensor(self, a: SymmetricTensor, mask: Mask, leg_idx: int
-                                    ) -> tuple[Data, ProductSpace, ProductSpace]:
-        ...
-
-    @abstractmethod
     def eye_data(self, co_domain: ProductSpace, dtype: Dtype) -> Data:
         """Data for :meth:``SymmetricTensor.eye``.
 
@@ -399,6 +381,26 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def mask_contract_large_leg(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int
+                                ) -> tuple[Data, ProductSpace, ProductSpace]:
+        """Implementation of :func:`tenpy.linalg.tensors._compose_with_Mask` in the case where
+        the large leg of the mask is contracted.
+        Note that the mask may be a projection to be applied to the codomain or an inclusion
+        to be contracted on the domain.
+        """
+        ...
+
+    @abstractmethod
+    def mask_contract_large_leg(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int
+                                ) -> tuple[Data, ProductSpace, ProductSpace]:
+        """Implementation of :func:`tenpy.linalg.tensors._compose_with_Mask` in the case where
+        the small leg of the mask is contracted.
+        Note that the mask may be an inclusion to be applied to the codomain or a projection
+        to be contracted on the domain.
+        """
+        ...
+
+    @abstractmethod
     def mask_dagger(self, mask: Mask) -> MaskData:
         ...
 
@@ -495,7 +497,10 @@ class Backend(metaclass=ABCMeta):
 
     @abstractmethod
     def scale_axis(self, a: SymmetricTensor, b: DiagonalTensor, leg: int) -> Data:
-        """Scale axis ``leg`` of ``a`` with ``b``."""
+        """Scale axis ``leg`` of ``a`` with ``b``.
+
+        Can assume ``a.get_leg_co_domain(leg) == b.leg``.
+        """
         ...
 
     @abstractmethod
@@ -1062,7 +1067,7 @@ class BlockBackend(metaclass=ABCMeta):
         """
         ...
 
-    def apply_mask_to_block(self, block: Block, mask: Block, ax: int) -> Block:
+    def block_apply_mask(self, block: Block, mask: Block, ax: int) -> Block:
         """Apply a mask (1D boolean block) to a block, slicing/projecting that axis"""
         idx = (slice(None, None, None),) * (ax - 1) + (mask,)
         return block[idx]
@@ -1183,6 +1188,14 @@ class BlockBackend(metaclass=ABCMeta):
             assert self.block_shape(block) == expect_shape, 'wrong block shape'
         if expect_dtype is not None:
             assert self.block_dtype(block) == expect_dtype, 'wrong block dtype'
+
+    def block_enlarge_leg(self, block: Block, mask: Block, axis: int) -> Block:
+        shape = list(self.block_shape(block))
+        shape[axis] = self.block_shape(mask)[0]
+        res = self.zero_block(shape, dtype=self.block_dtype(block))
+        idcs = (slice(None, None, None),) * axis + (mask,)
+        res[idcs] = block  # TODO mutability?
+        return res
 
 
 def conventional_leg_order(tensor_or_codomain: SymmetricTensor | ProductSpace,

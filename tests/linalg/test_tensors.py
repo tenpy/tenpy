@@ -1221,7 +1221,7 @@ def test_inner(cls, cod, dom, do_dagger, make_compatible_tensor):
         B: cls = make_compatible_tensor(codomain=A.domain, domain=A.codomain, cls=cls)
 
     if cls is Mask:
-        with pytest.raises(NotImplementedError, match='tensors.(enlarge_leg|apply_mask) not implemented for Mask'):
+        with pytest.raises(NotImplementedError, match='tensors._compose_with_Mask not implemented for Mask'):
             _ = tensors.inner(A, B, do_dagger=do_dagger)
         pytest.xfail()
     if isinstance(A.backend, backends.FusionTreeBackend) and cls is not DiagonalTensor:
@@ -1490,9 +1490,57 @@ def test_scalar_multiply(make_compatible_tensor_any_class):
             _ = tensors.scalar_multiply(invalid_scalar, T)
 
 
-# TODO
-def test_scale_axis():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.parametrize(
+    'cls, codom, dom, which_leg',
+    [pytest.param(SymmetricTensor, 2, 2, 1, id='Sym-2-2-1'),
+     pytest.param(SymmetricTensor, 2, 2, 3, id='Sym-2-2-3'),
+     pytest.param(SymmetricTensor, 0, 2, 1, id='Sym-0-2-1'),
+     pytest.param(SymmetricTensor, 3, 0, 1, id='Sym-3-0-1'),
+     pytest.param(ChargedTensor, 2, 2, 1, id='Charged-2-2-1'),
+     pytest.param(ChargedTensor, 2, 2, 3, id='Charged-2-2-3'),
+     pytest.param(DiagonalTensor, 1, 1, 0, id='Diag-0'),
+     pytest.param(DiagonalTensor, 1, 1, 1, id='Diag-1'),
+     pytest.param(Mask, 1, 1, 0, id='Mask-0'),
+     pytest.param(Mask, 1, 1, 1, id='Mask-1'),]
+)
+def test_scale_axis(cls, codom, dom, which_leg, make_compatible_tensor, np_random):
+    # 1) Prepare
+    T_labels = list('abcdefghi')[:codom + dom]
+    T: cls = make_compatible_tensor(codom, dom, cls=cls, labels=T_labels)
+    leg = T.get_leg_co_domain(which_leg=which_leg)
+    need_transpose = np_random.choice([True, False])
+    if need_transpose:
+        leg = leg.dual
+    D: DiagonalTensor = make_compatible_tensor([leg], cls=DiagonalTensor, labels=['x', 'y'])
+
+    # 2) Call functions
+    if isinstance(T.backend, backends.FusionTreeBackend) and need_transpose:
+        with pytest.raises(NotImplementedError, match='diagonal_transpose not implemented'):
+            _ = tensors.scale_axis(T, D, which_leg)
+        pytest.xfail()
+    if isinstance(T.backend, backends.FusionTreeBackend) and cls in [SymmetricTensor, ChargedTensor]:
+        with pytest.raises(NotImplementedError, match='scale_axis not implemented'):
+            _ = tensors.scale_axis(T, D, which_leg)
+        pytest.xfail()
+    
+    how_to_call = np_random.choice(['by_idx', 'by_label'])
+    if how_to_call == 'by_idx':
+        res = tensors.scale_axis(T, D, which_leg)
+    if how_to_call == 'by_label':
+        res = tensors.scale_axis(T, D, T_labels[which_leg])
+
+    # 3) check tensor properties
+    res.test_sanity()
+    assert isinstance(res, SymmetricTensor if cls is Mask else cls)
+    assert res.codomain == T.codomain
+    assert res.domain == T.domain
+    assert res.labels == T_labels
+
+    # 4) compare to numpy
+    expect = np.swapaxes(T.to_numpy(), which_leg, -1)  # swap axis to be scaled to the back
+    expect = expect * D.diagonal_as_numpy()  # broadcasts to last axis of expect
+    expect = np.swapaxes(expect, which_leg, -1)  # swap back
+    npt.assert_array_equal(res.to_numpy(), expect)
 
 
 # TODO
@@ -1573,25 +1621,13 @@ def test_tdot(cls_A: Type[tensors.Tensor], cls_B: Type[tensors.Tensor],
     
     if (cls_A is Mask and cls_B is Mask) and num_contr > 0:
         catch_errors = pytest.raises(NotImplementedError)
-    
-    if DiagonalTensor in [cls_A, cls_B] and isinstance(A.backend, backends.AbelianBackend):
-        catch_errors = pytest.raises(NotImplementedError, match='abelian.scale_axis not implemented')
-        if (cls_A is DiagonalTensor and cls_B is DiagonalTensor):
-            catch_errors = nullcontext()
-        if num_contr == 0:
-            catch_errors = nullcontext()
     elif isinstance(A.backend, backends.FusionTreeBackend):
         catch_errors = pytest.raises(NotImplementedError)
         if (cls_A is DiagonalTensor and cls_B is DiagonalTensor) and num_contr == 2:
             catch_errors = nullcontext()
-
-    catch_warnings = nullcontext()
-    if (cls_A in [DiagonalTensor, Mask] or cls_B in [DiagonalTensor, Mask]) and num_contr == 0:
-        catch_warnings = pytest.warns(UserWarning, match='Converting .* to SymmetricTensor')        
     
     with catch_errors:
-        with catch_warnings:
-            res = tensors.tdot(A, B, contr_A, contr_B)
+        res = tensors.tdot(A, B, contr_A, contr_B)
     if not isinstance(catch_errors, nullcontext):
         pytest.xfail()
 

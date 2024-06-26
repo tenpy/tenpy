@@ -227,10 +227,6 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
         raise NotImplementedError('apply_mask_to_DiagonalTensor not implemented')  # TODO
     
-    def apply_mask_to_SymmetricTensor(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int
-                                      ) -> tuple[Data, ProductSpace, ProductSpace]:
-        raise NotImplementedError('apply_mask_to_SymmetricTensor not implemented')  # TODO
-
     def combine_legs(self, a: SymmetricTensor, combine_slices: list[int, int],
                      product_spaces: list[ProductSpace], new_axes: list[int],
                      final_legs: list[Space]) -> Data:
@@ -390,10 +386,6 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
         # TODO do SVD first, comments there apply.
         raise NotImplementedError('eigh not implemented')  # TODO
-
-    def enlarge_leg_SymmetricTensor(self, a: SymmetricTensor, mask: Mask, leg_idx: int
-                                    ) -> tuple[Data, ProductSpace, ProductSpace]:
-        raise NotImplementedError('enlarge_leg_SymmetricTensor not implemented')
 
     def eye_data(self, co_domain: ProductSpace, dtype: Dtype) -> FusionTreeData:
         # Note: the identity has the same matrix elements in all ONB, so ne need to consider
@@ -555,6 +547,14 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         
     def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[MaskData, ElementarySpace]:
         raise NotImplementedError('mask_binary_operand not implemented')
+
+    def mask_contract_large_leg(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int
+                                ) -> tuple[Data, ProductSpace, ProductSpace]:
+        raise NotImplementedError('mask_contract_large_leg not implemented')
+    
+    def mask_contract_small_leg(self, tensor: SymmetricTensor, mask: Mask, leg_idx: int
+                                ) -> tuple[Data, ProductSpace, ProductSpace]:
+        raise NotImplementedError('mask_contract_small_leg not implemented')
     
     def mask_dagger(self, mask: Mask) -> MaskData:
         raise NotImplementedError('mask_dagger not implemented')
