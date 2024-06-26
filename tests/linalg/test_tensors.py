@@ -1031,7 +1031,7 @@ def test_apply_mask_DiagonalTensor(make_compatible_tensor):
 def test_bend_legs(cls, codomain, domain, num_codomain_legs, make_compatible_tensor):
     tensor: cls = make_compatible_tensor(codomain, domain, cls=cls)
 
-    if isinstance(tensor.backend, backends.FusionTreeBackend):
+    if isinstance(tensor.backend, backends.FusionTreeBackend) and num_codomain_legs != codomain:
         with pytest.raises(NotImplementedError):
             _ = tensors.bend_legs(tensor, num_codomain_legs)
         pytest.xfail()
@@ -1039,6 +1039,14 @@ def test_bend_legs(cls, codomain, domain, num_codomain_legs, make_compatible_ten
     res = tensors.bend_legs(tensor, num_codomain_legs)
     res.test_sanity()
     assert res.legs == tensor.legs
+
+    if isinstance(tensor.backend, backends.FusionTreeBackend) \
+            and isinstance(tensor.symmetry, ProductSymmetry)\
+            and (codomain > 1 or domain > 1):
+        with pytest.raises(NotImplementedError):
+            _ = tensor.to_numpy()
+        pytest.xfail()
+    
     tensor_np = tensor.to_numpy()
     npt.assert_array_almost_equal_nulp(res.to_numpy(), tensor_np, 100)
 
@@ -1371,7 +1379,7 @@ def test_inner(cls, cod, dom, do_dagger, make_compatible_tensor):
             _ = tensors.inner(A, B, do_dagger=do_dagger)
         pytest.xfail()
     if isinstance(A.backend, backends.FusionTreeBackend) and cls is not DiagonalTensor:
-        with pytest.raises(NotImplementedError, match='(inner|permute_legs) not implemented'):
+        with pytest.raises(NotImplementedError, match='(inner|permute_legs|compose) not implemented'):
             _ = tensors.inner(A, B, do_dagger=do_dagger)
         pytest.xfail()
 
@@ -1464,9 +1472,59 @@ def test_linear_combination(make_compatible_tensor_any_class):
             _ = tensors.linear_combination(invalid_scalar, v, invalid_scalar, w)
 
 
-# TODO
-def test_move_leg():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.parametrize(
+    'cls, cod, dom, leg, codomain_pos, domain_pos, levels',
+    [pytest.param(SymmetricTensor, 2, 2, 0, 1, None, None, id='Sym-a'),
+     pytest.param(SymmetricTensor, 2, 2, 0, 0, None, None, id='Sym-b'),
+     pytest.param(SymmetricTensor, 2, 2, 0, None, 0, None, id='Sym-c'),
+     pytest.param(SymmetricTensor, 2, 2, 3, 1, None, None, id='Sym-d'),
+     pytest.param(SymmetricTensor, 2, 2, 3, 0, None, None, id='Sym-e'),
+     pytest.param(SymmetricTensor, 2, 2, 3, None, 0, None, id='Sym-f'),
+     pytest.param(DiagonalTensor, 1, 1, 0, None, 1, None, id='Diag-a'),
+     pytest.param(DiagonalTensor, 1, 1, 0, 0, None, None, id='Diag-b'),
+     pytest.param(ChargedTensor, 2, 2, 0, 1, None, None, id='Charged-a'),
+     pytest.param(ChargedTensor, 2, 2, 0, None, 1, None, id='Charged-b'),
+     pytest.param(ChargedTensor, 2, 2, 3, 0, None, None, id='Charged-c'),]
+)
+def test_move_leg(cls, cod, dom, leg, codomain_pos, domain_pos, levels, make_compatible_tensor):
+    assert sum(x is None for x in [domain_pos, codomain_pos]) == 1
+    
+    T_labels = list('abcdefghi')[:cod + dom]
+    T: cls = make_compatible_tensor(cod, dom, labels=T_labels, cls=cls)
+    
+    codomain_perm = [n for n in range(cod) if n != leg]
+    domain_perm = [n for n in reversed(range(cod, cod + dom)) if n != leg]
+    if codomain_pos is not None:
+        codomain_perm[codomain_pos:codomain_pos] = [leg]
+    if domain_pos is not None:
+        domain_perm[domain_pos:domain_pos] = [leg]
+    perm = [*codomain_perm, *reversed(domain_perm)]
+    
+    is_trivial = (codomain_perm == list(range(cod))) and (domain_perm == list(reversed(range(cod, cod + dom))))
+    if isinstance(T.backend, backends.FusionTreeBackend) and not is_trivial:
+        with pytest.raises(NotImplementedError):
+            _ = tensors.move_leg(T, leg, codomain_pos=codomain_pos, domain_pos=domain_pos, levels=levels)
+        pytest.xfail()
+
+    res = tensors.move_leg(T, leg, codomain_pos=codomain_pos, domain_pos=domain_pos, levels=levels)
+    res.test_sanity()
+    
+    assert res.labels == [T_labels[n] for n in perm]
+    assert res.legs == [T.get_leg(n) for n in perm]
+    assert res.num_codomain_legs == cod + int(codomain_pos is not None) - int(leg < cod)
+
+    if isinstance(T.backend, backends.FusionTreeBackend) and isinstance(T.symmetry, ProductSymmetry):
+        if cod > 1 or dom > 1:
+            with pytest.raises(NotImplementedError):
+                _ = T.to_numpy()
+            pytest.xfail()
+        if res.num_codomain_legs > 1 or res.num_domain_legs > 1:
+            with pytest.raises(NotImplementedError):
+                _ = res.to_numpy()
+            pytest.xfail()
+    
+    expect = T.to_numpy().transpose(perm)
+    npt.assert_allclose(res.to_numpy(), expect)
 
 
 @pytest.mark.parametrize(
@@ -1650,8 +1708,9 @@ def test_partial_trace(cls, codom, dom, make_compatible_space, make_compatible_t
 )
 def test_permute_legs(cls, num_cod, num_dom, codomain, domain, levels, make_compatible_tensor):
     T = make_compatible_tensor(num_cod, num_dom, max_block_size=3, cls=cls)
-
-    if isinstance(T.backend, backends.FusionTreeBackend) and cls in [SymmetricTensor, ChargedTensor]:
+    is_trivial = (codomain == [*range(num_cod)]) and (domain == [*reversed(range(num_cod, T.num_legs))])
+    
+    if isinstance(T.backend, backends.FusionTreeBackend) and cls in [SymmetricTensor, ChargedTensor] and not is_trivial:
         with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
             _ = tensors.permute_legs(T, codomain, domain, levels)
         pytest.xfail()
@@ -1676,6 +1735,14 @@ def test_permute_legs(cls, num_cod, num_dom, codomain, domain, levels, make_comp
 
     if T.symmetry.can_be_dropped:
         # makes sense to compare with dense blocks
+
+        if isinstance(T.backend, backends.FusionTreeBackend) \
+                and isinstance(T.symmetry, ProductSymmetry)\
+                and (num_cod > 1 or num_dom > 1):
+            with pytest.raises(NotImplementedError):
+                _ = T.to_numpy()
+            pytest.xfail()
+        
         expect = np.transpose(T.to_numpy(), [*codomain, *reversed(domain)])
         actual = res.to_numpy()
         npt.assert_allclose(actual, expect)

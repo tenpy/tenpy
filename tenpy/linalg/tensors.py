@@ -3592,8 +3592,8 @@ def linear_combination(a: Number, v: Tensor, b: Number, w: Tensor):
     )
 
 
-def move_leg(tensor: Tensor, which_leg: int | str, codomain_pos: int = None, *,
-             domain_pos: int = None, levels: list[int] | dict[str | int, int] | None = None
+def move_leg(tensor: Tensor, which_leg: int | str, codomain_pos: int | None = None, *,
+             domain_pos: int | None = None, levels: list[int] | dict[str | int, int] | None = None
              ) -> Tensor:
     """Move one leg of a tensor to a specified position.
 
@@ -3629,7 +3629,7 @@ def move_leg(tensor: Tensor, which_leg: int | str, codomain_pos: int = None, *,
     """
     # TODO make this a separate backend function? Easier to determine move order for fusion tree.
 
-    from_domain, co_domain_pos_from, leg_idx = tensor._parse_leg_idx(which_leg)
+    from_domain, _, leg_idx = tensor._parse_leg_idx(which_leg)
     if from_domain:
         new_codomain = list(range(tensor.num_codomain_legs))
         new_domain = [n for n in reversed(range(tensor.num_codomain_legs, tensor.num_legs))
@@ -3646,7 +3646,6 @@ def move_leg(tensor: Tensor, which_leg: int | str, codomain_pos: int = None, *,
     elif domain_pos is not None:
         pos = _normalize_idx(domain_pos, len(new_domain) + 1)
         new_domain[pos:pos] = [leg_idx]
-        to_domain = True
     else:
         raise ValueError('Need to specify either codomain_pos or domain_pos.')
     #
@@ -3875,7 +3874,8 @@ def _permute_legs(tensor: Tensor,
         err_msg = ('Legs can not be permuted automatically. '
                    'Explicitly use permute_legs() with specified levels first.')
     # Special case: if no legs move
-    if codomain == list(range(tensor.num_codomain_legs)) and domain == list(range(tensor.num_codomain_legs, tensor.num_legs)):
+    if codomain == list(range(tensor.num_codomain_legs)) \
+            and domain == list(reversed(range(tensor.num_codomain_legs, tensor.num_legs))):
         return tensor
         
     # Deal with other tensor types
