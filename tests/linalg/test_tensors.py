@@ -1311,9 +1311,33 @@ def test_inner(cls, cod, dom, do_dagger, make_compatible_tensor):
     npt.assert_almost_equal(res, expect)
 
 
-# TODO
 def test_is_scalar():
-    pytest.skip('Test not written yet')  # TODO
+    # python scalars
+    assert tensors.is_scalar(42.)
+    assert tensors.is_scalar(1. + 3.j)
+    assert tensors.is_scalar(4e543j)
+    assert tensors.is_scalar(3)
+    assert tensors.is_scalar(True)
+    # objects which are not scalar, just bc of their type
+    assert not tensors.is_scalar('42')
+    assert not tensors.is_scalar([3, 3, 1])
+    assert not tensors.is_scalar([3])
+    assert not tensors.is_scalar({'a': 3})
+    assert not tensors.is_scalar(np.array(1))
+    assert not tensors.is_scalar(np.array([True]))
+    assert not tensors.is_scalar(np.array([1., 2]))
+    # Tensors
+    leg1 = ElementarySpace(z4_symmetry, [[2]])
+    leg2 = ElementarySpace.from_sectors(z4_symmetry, [[2], [3], [1]])
+    backend = get_backend()
+    scalar_tens1 = DummyTensor([leg1, leg1], [leg1, leg1], backend=backend, labels=None, dtype=Dtype.float64)
+    scalar_tens2 = DummyTensor([], [leg1, leg1], backend=backend, labels=None, dtype=Dtype.float64)
+    scalar_tens3 = DummyTensor([leg1], [leg1], backend=backend, labels=None, dtype=Dtype.float64)
+    non_scalar_tens = DummyTensor([leg1, leg1], [leg2], backend=backend, labels=None, dtype=Dtype.float64)
+    assert tensors.is_scalar(scalar_tens1)
+    assert tensors.is_scalar(scalar_tens2)
+    assert tensors.is_scalar(scalar_tens3)
+    assert not tensors.is_scalar(non_scalar_tens)
 
 
 # TODO
