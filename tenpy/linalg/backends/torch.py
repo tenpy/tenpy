@@ -150,8 +150,15 @@ class TorchBlockBackend(BlockBackend):
     def block_norm(self, a: Block, order: int | float = 2, axis: int | None = None) -> float:
         return torch_module.linalg.vector_norm(a, ord=order, dim=axis)
 
+    
+    def block_max(self, a: Block) -> float | complex:
+        return torch_module.max(a)
+    
     def block_max_abs(self, a: Block) -> float:
         return torch_module.max(torch_module.max(a))
+
+    def block_min(self, a: Block) -> float | complex:
+        return torch_module.min(a)
 
     def block_reshape(self, a: Block, shape: tuple[int]) -> Block:
         return torch_module.reshape(a, tuple(shape))
@@ -269,6 +276,9 @@ class TorchBlockBackend(BlockBackend):
         idcs[axis] = mask
         res[idcs] = block
         return res
+
+    def block_stable_log(self, block: Block, cutoff: float) -> Block:
+        return torch_module.where(block > cutoff, torch_module.log(block), 0.)
 
 
 class NoSymmetryTorchBackend(TorchBlockBackend, NoSymmetryBackend):

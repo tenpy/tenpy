@@ -126,9 +126,15 @@ class NumpyBlockBackend(BlockBackend):
             return np.linalg.norm(a.ravel(), ord=order)
         return np.linalg.norm(a, ord=order, axis=axis)
 
+    def block_max(self, a: Block) -> float | complex:
+        return np.max(a)
+
     def block_max_abs(self, a: Block) -> float:
         return np.max(np.abs(a))
 
+    def block_min(self, a: Block) -> float | complex:
+        return np.min(a)
+    
     def block_reshape(self, a: Block, shape: tuple[int]) -> Block:
         return np.reshape(a, shape)
 
@@ -260,6 +266,9 @@ class NumpyBlockBackend(BlockBackend):
         idcs[axis] = mask
         res[tuple(idcs)] = block  # TODO should we worry about mutability?
         return res
+
+    def block_stable_log(self, block: Block, cutoff: float) -> Block:
+        return np.where(block > cutoff, np.log(block), 0.)
     
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, NoSymmetryBackend):

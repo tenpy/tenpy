@@ -269,6 +269,12 @@ def test_DiagonalTensor(make_compatible_tensor):
     # TODO elementwise dunder methods. loop over operator.XXX functions?
     # TODO float(), complex(), bool()
 
+    print('checking min / max')
+    real_T = tensors.real(T)
+    real_np = real_T.diagonal_as_numpy()
+    npt.assert_almost_equal(real_T.max(), np.max(real_np))
+    npt.assert_almost_equal(real_T.min(), np.min(real_np))
+
 
 def test_Mask(make_compatible_tensor, compatible_symmetry_backend, np_random):
 
@@ -1186,6 +1192,7 @@ def test_DiagonalTensor_elementwise_binary(cls, op, dtype, make_compatible_tenso
     expect = op(t1_np, scalar)
     npt.assert_almost_equal(res_np, expect)
 
+
 @pytest.mark.parametrize(
     'cls, codomain, domain, which_leg',
     [pytest.param(SymmetricTensor, 2, 2, 1, id='Symm-2-2-codom'),
@@ -1244,9 +1251,22 @@ def test_enlarge_leg(cls, codomain, domain, which_leg, make_compatible_tensor, m
     npt.assert_almost_equal(res.to_numpy(), expect)
 
 
-# TODO
-def test_entropy():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.parametrize('n', [1, np.inf, 2, 3])
+def test_entropy(n, make_compatible_tensor):
+    D: DiagonalTensor = make_compatible_tensor(cls=DiagonalTensor)
+    D = abs(D)  # non-negative
+    D = D / tensors.norm(D)  # normalized
+    p = D ** 2
+
+    # make sure we have created a valid probability distribution
+    D_np = D.diagonal_as_numpy()
+    p_np = p.diagonal_as_numpy()
+    assert np.all(D_np >= 0)
+    npt.assert_almost_equal(np.sum(p_np), 1)
+
+    ent = tensors.entropy(p, n)
+    expect = tensors.entropy(p_np, n)
+    npt.assert_almost_equal(ent, expect)
 
 
 @pytest.mark.parametrize(

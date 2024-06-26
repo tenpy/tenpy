@@ -84,8 +84,8 @@ __all__ = ['Tensor', 'SymmetricTensor', 'DiagonalTensor', 'ChargedTensor', 'Mask
            'bend_legs', 'combine_legs', 'combine_to_matrix', 'conj', 'dagger', 'compose',
            'enlarge_leg', 'entropy', 'imag', 'inner', 'is_scalar', 'item', 'linear_combination',
            'move_leg', 'norm', 'outer', 'partial_trace', 'permute_legs', 'real', 'real_if_close',
-           'scalar_multiply', 'scale_axis', 'split_legs', 'sqrt', 'squeeze_legs', 'tdot', 'trace',
-           'transpose', 'zero_like', 'get_same_backend', 'check_same_legs']
+           'scalar_multiply', 'scale_axis', 'split_legs', 'sqrt', 'squeeze_legs', 'stable_log',
+           'tdot', 'trace', 'transpose', 'zero_like', 'get_same_backend', 'check_same_legs']
 
 
 # TENSOR CLASSES
@@ -1608,6 +1608,14 @@ class DiagonalTensor(SymmetricTensor):
             self, func, func_kwargs=func_kwargs or {}, maps_zero_to_zero=maps_zero_to_zero
         )
         return DiagonalTensor(data, self.leg, backend=self.backend, labels=self.labels)
+
+    def max(self):
+        assert self.dtype.is_real
+        return self.backend.reduce_DiagonalTensor(self, block_func=self.backend.block_max, func=max)
+
+    def min(self):
+        assert self.dtype.is_real
+        return self.backend.reduce_DiagonalTensor(self, block_func=self.backend.block_min, func=min)
     
     def to_dense_block(self, leg_order: list[int | str] = None, dtype: Dtype = None) -> Block:
         diag = self.diagonal_as_block(dtype=dtype)
@@ -3356,8 +3364,12 @@ def entropy(p: DiagonalTensor | Sequence[float], n=1):
     is the quantum dimension of sector :math:`a`. (See :meth:`Symmetry.qdim`.)
     """
     if isinstance(p, DiagonalTensor):
-        # TODO assumes symmetry can be dropped!
-        p = p.to_numpy()  # OPTIMIZE
+        assert p.dtype.is_real
+        if n == 1:
+            return -trace(p * stable_log(p, cutoff=1e-30))
+        if n == np.inf:
+            return -np.log(p.max())
+        return np.log(trace(p ** n)) / (1. - n)
     else:
         p = np.asarray(p)
         p = np.real_if_close(p)
@@ -4117,6 +4129,18 @@ def squeeze_legs(tensor: Tensor, legs: int | str | list[int | str] = None) -> Te
         )
     # Remaining case: SymmetricTensor
     raise NotImplementedError  # TODO
+
+
+@_elementwise_function(block_func='block_stable_log', func_kwargs=dict(cutoff=1e-30),
+                       maps_zero_to_zero=True)
+def stable_log(x: _ElementwiseType, cutoff=1e-30) -> _ElementwiseType:
+    """Stabilized logarithm, :ref:`elementwise <diagonal_elementwise>`.
+
+    For values ``> cutoff``, this is the standard natural logarithm. For values smaller than the
+    cutoff, return 0.
+    """
+    assert cutoff > 0
+    return np.where(x > cutoff, np.log(x), 0.)
 
 
 def tdot(tensor1: Tensor, tensor2: Tensor,

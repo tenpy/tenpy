@@ -496,6 +496,16 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def reduce_DiagonalTensor(self, tensor: DiagonalTensor, block_func, func) -> float | complex:
+        """Reduce a diagonal tensor to a single number.
+
+        Used e.g. to implement ``DiagonalTensor.max``.
+        ``block_func(block: Block) -> float | complex`` realizes that reduction on blocks,
+        ``func(numbers: Sequence[float | complex]) -> float | complex`` for python numbers.
+        """
+        ...
+
+    @abstractmethod
     def scale_axis(self, a: SymmetricTensor, b: DiagonalTensor, leg: int) -> Data:
         """Scale axis ``leg`` of ``a`` with ``b``.
 
@@ -876,9 +886,17 @@ class BlockBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def block_max(self, a: Block) -> float:
+        ...
+
+    @abstractmethod
     def block_max_abs(self, a: Block) -> float:
         ...
 
+    @abstractmethod
+    def block_min(self, a: Block) -> float:
+        ...
+        
     @abstractmethod
     def block_reshape(self, a: Block, shape: tuple[int]) -> Block:
         ...
@@ -1196,6 +1214,11 @@ class BlockBackend(metaclass=ABCMeta):
         idcs = (slice(None, None, None),) * axis + (mask,)
         res[idcs] = block  # TODO mutability?
         return res
+
+    @abstractmethod
+    def block_stable_log(self, block: Block, cutoff: float) -> Block:
+        """Elementwise stable log. For entries > cutoff, yield their natural log. Otherwise 0."""
+        ...
 
 
 def conventional_leg_order(tensor_or_codomain: SymmetricTensor | ProductSpace,

@@ -1468,6 +1468,20 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
         return q_data, r_data, new_leg
 
+    def reduce_DiagonalTensor(self, tensor: DiagonalTensor, block_func, func) -> float | complex:
+        numbers = []
+        block_inds = tensor.data.block_inds
+        blocks = tensor.data.blocks
+        i = 0
+        for j, m in enumerate(tensor.leg.multiplicities):
+            if j == block_inds[i, 0]:
+                block = blocks[i]
+                i += 1
+            else:
+                block = self.zero_block(m, dtype=tensor.dtype)
+            numbers.append(block_func(block))
+        return func(numbers)
+
     def scale_axis(self, a: SymmetricTensor, b: DiagonalTensor, leg: int) -> Data:
         a_blocks = a.data.blocks
         b_blocks = b.data.blocks

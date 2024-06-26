@@ -341,6 +341,9 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         new_leg = ElementarySpace.from_trivial_sector(new_leg_dim, is_dual=new_r_leg_dual)
         return q, r, new_leg
 
+    def reduce_DiagonalTensor(self, tensor: DiagonalTensor, block_func, func) -> float | complex:
+        return block_func(tensor.data)
+
     def scale_axis(self, a: SymmetricTensor, b: DiagonalTensor, leg: int) -> Data:
         return self.block_scale_axis(a.data, b.data, leg)
 

@@ -154,9 +154,15 @@ class ArrayApiBlockBackend(BlockBackend):
             res = self.block_item(res)
         return res
 
+    def block_max(self, a: Block) -> float | complex:
+        return self._api.max(a)
+    
     def block_max_abs(self, a: Block) -> float:
         return self._api.max(self._api.abs(a))
 
+    def block_min(self, a: Block) -> float | complex:
+        return self._api.min(a)
+    
     def block_reshape(self, a: Block, shape: tuple[int]) -> Block:
         return self._api.reshape(a, shape)
 
@@ -274,6 +280,9 @@ class ArrayApiBlockBackend(BlockBackend):
         idcs[axis] = mask
         res[idcs] = block
         return res
+
+    def block_stable_log(self, block: Block, cutoff: float) -> Block:
+        return self._api.where(block > cutoff, self._api.log(block), 0.)
 
 
 class NoSymmetryArrayApiBackend(ArrayApiBlockBackend, NoSymmetryBackend):
