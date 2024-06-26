@@ -398,7 +398,10 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
                 if small_leg is None:
                     large_leg = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
                 else:
-                    extra = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
+                    # TODO looks like this generates a basis_perm incompatible with the mask!
+                    raise NotImplementedError('Mask generation broken')
+                    extra = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size,
+                                                  is_dual=small_leg.is_bra_space)
                     large_leg = small_leg.direct_sum(extra)
             
             if compatible_symmetry_backend == 'fusion_tree':

@@ -1186,10 +1186,62 @@ def test_DiagonalTensor_elementwise_binary(cls, op, dtype, make_compatible_tenso
     expect = op(t1_np, scalar)
     npt.assert_almost_equal(res_np, expect)
 
+@pytest.mark.parametrize(
+    'cls, codomain, domain, which_leg',
+    [pytest.param(SymmetricTensor, 2, 2, 1, id='Symm-2-2-codom'),
+     pytest.param(SymmetricTensor, 2, 2, 3, id='Symm-2-2-dom'),
+     pytest.param(ChargedTensor, 2, 2, 1, id='Charged-2-2-dom'),
+     pytest.param(ChargedTensor, 2, 2, 3, id='Charged-2-2-dom'),
+     pytest.param(DiagonalTensor, 1, 1, 1, id='Diag-dom'),
+     pytest.param(Mask, 1, 1, 0, id='Mask-codom'),
+     pytest.param(Mask, 1, 1, 1, id='Mask-dom'),
+    ]
+)
+def test_enlarge_leg(cls, codomain, domain, which_leg, make_compatible_tensor, make_compatible_space):
+    num_legs = codomain + domain
+    labels = list('abcdefghijkl')[:num_legs]
+    
+    large_leg = make_compatible_space()
+    projection: Mask = make_compatible_tensor(domain=[large_leg], cls=Mask)
+    M: Mask = tensors.dagger(projection)
+    #
+    T_codomain = [None] * codomain
+    T_domain = [None] * domain
+    if which_leg >= codomain:
+        domain_idx = codomain + domain - 1 - which_leg
+        T_domain[domain_idx] = M.small_leg.dual
+    else:
+        T_codomain[which_leg] = M.small_leg
 
-# TODO
-def test_enlarge_leg():
-    pytest.skip('Test not written yet')
+    if cls is Mask and which_leg == 0:
+        with pytest.raises(NotImplementedError):
+            _ = make_compatible_tensor(codomain=T_codomain, domain=T_domain, labels=labels, cls=cls)
+        pytest.xfail()
+        
+    T: cls = make_compatible_tensor(codomain=T_codomain, domain=T_domain, labels=labels, cls=cls)
+
+    if cls is Mask:
+        with pytest.raises(NotImplementedError):
+            _ = tensors.enlarge_leg(T, M, which_leg)
+        pytest.xfail()
+
+    res = tensors.enlarge_leg(T, M, which_leg)
+    res.test_sanity()
+
+    _, _, leg_idx = T._parse_leg_idx(which_leg)
+    expect_legs = T.legs[:]
+    expect_legs[leg_idx] = M.large_leg
+    assert res.legs == expect_legs
+    assert res.labels == T.labels
+
+    T_np = T.to_numpy()
+    mask_np = M.as_numpy_mask()
+    idcs = (slice(None, None, None),) * leg_idx + (mask_np,)
+    expect_shape = list(T.shape)
+    expect_shape[leg_idx] = M.shape[0]
+    expect = np.zeros(expect_shape, dtype=T_np.dtype)
+    expect[idcs] = T_np
+    npt.assert_almost_equal(res.to_numpy(), expect)
 
 
 # TODO
