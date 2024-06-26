@@ -49,7 +49,7 @@ from ..tools.hdf5_io import Hdf5Exportable
 import warnings
 from ..tools.params import asConfig
 
-__all__ = ['TruncationError', 'truncate', 'svd_theta', 'eig_theta']
+__all__ = ['TruncationError', 'truncate', 'svd_theta', 'eigh_rho']
 
 
 
@@ -307,20 +307,20 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
     return U, S, VH, err, renormalization
 
 
-def eig_theta(theta, trunc_par, UPLO='L', sort=None, hermitian=True):
-    """Performs EIG of a matrix `theta` (= the wavefunction) and truncates it.
+def eigh_rho(rho, trunc_par, UPLO='L', sort=None):
+    """Performs EIG of a hermitian matrix `rho` (= density matrix) and truncates it.
 
-    Perform a eigenvalue decomposition (SVD) with :func:`~tenpy.linalg.np_conserved.eig`
-    and truncates with :func:`truncate`. If the matrix is Hermitian, we use the hermitian
-    eigenvalue decomposition.
+    Perform a hermitian eigenvalue decomposition with :func:`~tenpy.linalg.np_conserved.eigh`
+    and truncates with :func:`truncate`.
     The result is an approximation
     ``theta ~= tensordot(V.scale_axis(W*renormalization, 1), V.conj().T, axes=1)``
 
     Parameters
     ----------
-    theta : :class:`~tenpy.linalg.np_conserved.Array`, shape ``(M, M)``
+    rho : :class:`~tenpy.linalg.np_conserved.Array`, shape ``(M, M)``
         The matrix, on which the eigenvalue decomposition (EIG) is performed.
-        Usually, `theta` represents the wavefunction.
+        Usually, `rho` represents a density matrix and is assumed to be hermitian AND positive
+        so that the eigenvalues are non-negative.
     trunc_par : dict
         truncation parameters as described in :func:`truncate`.
     UPLO : {'L', 'U'}
@@ -329,8 +329,6 @@ def eig_theta(theta, trunc_par, UPLO='L', sort=None, hermitian=True):
     sort : {'m>', 'm<', '>', '<', ``None``}
         How the eigenvalues should are sorted *within* each charge block.
         Defaults to ``None``, which is same as '<'. See :func:`argsort` for details.
-    hermitian : Boolean
-        Hermitian decomosition or not?
 
     Returns
     -------
@@ -342,17 +340,13 @@ def eig_theta(theta, trunc_par, UPLO='L', sort=None, hermitian=True):
     err : :class:`TruncationError`
         The truncation error introduced.
     """
-    if hermitian:
-        W, V = npc.eigh(theta, UPLO=UPLO, sort=sort)
-    else:
-        W, V = npc.eig(theta, sort=sort)
-
-    renormalization = np.linalg.norm(W)
+    W, V = npc.eigh(rho, UPLO=UPLO, sort=sort)
+    W[W<1.e-14] = 0     # set small eigenvalues to zero
+    renormalization = np.sum(W)
     W = W / renormalization
-    # We normalize the eigenvalues for more reasonable truncation
-    piv, new_norm, err = truncate(W, trunc_par)
-    # svd_min and chi_max are the most reasonable ways to truncate.
-    # trunc_cut requires squaring the eigenvalues.
+    # We normalize the eigenvalues to have sum 1 to represent a valid density matrix.
+    # Truncation assumes SVs, so take square root.
+    piv, new_norm, err = truncate(np.sqrt(W), trunc_par)
     # err reported is for the normalized eigenvalues.
     new_len_W = np.sum(piv, dtype=np.int_)
     if new_len_W * 100 < len(W) and (trunc_par['chi_max'] is None
@@ -362,7 +356,7 @@ def eig_theta(theta, trunc_par, UPLO='L', sort=None, hermitian=True):
         VHU = npc.tensordot(V.conj(), V, axes=[[0], [0]])
         msg += " |V^d V - 1| = {0:f}".format(npc.norm(VHV - npc.eye_like(VHV)))
         warnings.warn(msg, stacklevel=2)
-    W = W[piv] / new_norm * renormalization
+    W = W[piv] / new_norm**2 * renormalization
     V.iproject(piv, axes=1)  # V = V[:, piv]
     return W, V, err
 

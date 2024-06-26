@@ -795,6 +795,31 @@ def test_qr():
                             assert npc.norm(QdaggerQ - npc.eye_like(QdaggerQ)) < 1.e-10
 
 
+def test_lq():
+    for shape in [(4, 4), (6, 8), (8, 6)]:
+        tol = shape[0] * shape[1] * 100
+        for qtotal_A in [None, [1]]:
+            A = random_Array(shape, chinfo3, qtotal=qtotal_A, sort=False)
+            A_flat = A.to_ndarray()
+            for qtotal_Q in [None, [1]]:
+                for mode in ['reduced', 'complete']:
+                    for qconj in [+1, -1]:
+                        for pos in [False, True]:
+                            print(f"shape={shape!s} qtot_A={qtotal_A!s} qtot_Q={qtotal_Q!s}"
+                                  f"mode={mode!s} pos_diag_R={pos!s} inner_qconj={qconj:+d}")
+                            L, Q = npc.lq(A, mode=mode, pos_diag_L=pos, qtotal_Q=qtotal_Q,
+                                          inner_qconj=qconj)
+                            #  print(q._qdata)
+                            Q.test_sanity()
+                            L.test_sanity()
+                            assert np.all(Q.qtotal) == A.chinfo.make_valid(qtotal_Q)
+                            assert L.legs[1].qconj == qconj
+                            LQ = npc.tensordot(L, Q, axes=1)
+                            npt.assert_array_almost_equal_nulp(A_flat, LQ.to_ndarray(), tol)
+                            QQdagger = npc.tensordot(Q, Q.conj(), axes=[1, 1])
+                            assert npc.norm(QQdagger - npc.eye_like(QQdagger)) < 1.e-10
+
+
 def test_orthogonal_columns():
     for shape in [(8, 6), (8, 2)]:
         tol = shape[0] * shape[1] * 100

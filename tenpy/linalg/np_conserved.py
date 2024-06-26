@@ -4095,7 +4095,9 @@ def lq(a,
        pos_diag_L=False,
        qtotal_Q=None,
        inner_qconj=+1):
-    r"""Q-R decomposition of a matrix. See documentation for npc.qr for details.
+    r"""Q-R decomposition of a matrix. See documentation for :meth:`qr` for details.
+
+    We simply transpose the original matrix, call :meth:`qr`, and then transpose the results.
     """
 
     q, r = qr(a.transpose(),
@@ -4104,7 +4106,7 @@ def lq(a,
               cutoff=cutoff,
               pos_diag_R=pos_diag_L,
               qtotal_Q=qtotal_Q,
-              inner_qconj=+1)
+              inner_qconj=inner_qconj)
 
     return r.transpose(), q.transpose()
 

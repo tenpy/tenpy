@@ -164,7 +164,7 @@ from ..tools.math import lcm, entropy
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
 from ..tools import hdf5_io
-from ..algorithms.truncation import TruncationError, svd_theta, eig_theta, _machine_prec_trunc_par
+from ..algorithms.truncation import TruncationError, svd_theta, eigh_rho, _machine_prec_trunc_par
 from ..algorithms.tebd import RandomUnitaryEvolution
 from ..linalg.random_matrix import GOE, GUE
 
@@ -4404,28 +4404,27 @@ class MPS(BaseMPSExpectationValue):
         psi.canonical_form_finite(renormalize=False, cutoff=cutoff)
         return psi
 
-    def extend(self, others=[], trunc_par={'svd_min': 1.e-8}, do_canonicalize=False):
-        """Return an MPS (in place) which represents the exact same physical state as ``|self>`` but has 
-        the basis extended by additional MPS. We follow the approach 
-        from https://arxiv.org/abs/2005.06104.
+    def subspace_expansion(self, expand_into=[], trunc_par={'svd_min': 1.e-8}):
+        """Subspace expansion increasing chi without changing the represented state.
 
-        Works (for now) only for 'finite' boundary conditions.
-        While in principle this could work for segments, ._gauge_compatible_vL_vR doesn't work
-        for 'segment' boundary conditions. In principle, this could be implemented.
+        We mostly follow the approach `:cite:yang2020`; starting on the rightmost tensor and sweeping
+        to the left, we expand the basis on each site using either additional states specified in the
+        `expand_into` parameter or random basis vectors orthogonal to those contained in `|self>`. As
+        described in `:cite:yang2020:`, we use the current `B` tensor on each site to define a projector
+        into the orthogonal subspace.
 
-        If we pass in no new MPSs, we simply add random orthogonal states.
+        This function works (for now) only for 'finite' boundary conditions; TDVP is only implemented for
+        `finite` BCs currently. While in principle this could work for segments, ._gauge_compatible_vL_vR
+        doesn't work is not currently implemented for 'segment' boundary conditions.
 
         Parameters
         ----------
-        others : list of :class:`MPS` or an empty list ([])
+        expand_into : list of :class:`MPS` or an empty list ([])
             MPS of same length used to extend the basis of self
-            If None, we add random basis states.
+            If empty, we add random, orthogonal basis states on each site.
         trunc_par : dict
             Parameters for truncation, see :cfg:config:`truncation`.
-        do_canonicalize : Boolean
-            Do we convert to canonical form at the end? This has the tendency to remove some trivial
-            singular values which negates the purpose of this function.
-        
+
         Returns
         -------
         eig_error : :class:`TruncationError`
@@ -4435,24 +4434,25 @@ class MPS(BaseMPSExpectationValue):
         assert self.finite
         assert self.bc == 'finite'
         assert L >= 2
-        psis = [self] + list(others)
+        psis = [self] + list(expand_into)
 
         # assume that all psi are already canonical so that we can just use A form tensors immediately.
         for i in range(1, len(psis)):
             assert (psis[i].L == L and L >= 2)  # (if you need this, generalize this function...)
             assert self.bc == psis[i].bc
-            
+
         eig_error = TruncationError()
 
         current_Cs = []
         for i in range(len(psis)):
             current_Cs.append(psis[i].get_theta(L-1, n=1).replace_label('p0', 'p'))
-    
+
         for j in reversed(range(1, L)):
+            current_vL_dim = current_Cs[0].get_leg('vL').ind_len
             _, exact_B = npc.lq(current_Cs[0].combine_legs(['p', 'vR']), mode='reduced', inner_labels=['vR', 'vL'])
-            eBhc_eB = npc.tensordot(exact_B.conj(), exact_B, axes=(['vL*'], ['vL']))
+            eBhc_eB = npc.tensordot(exact_B.conj(), exact_B, axes=(['vL*'], ['vL']))    # (p.vR)*, (p.vR)
             proj = npc.eye_like(eBhc_eB, labels=eBhc_eB.get_leg_labels()) - eBhc_eB
-            rho = npc.eye_like(proj, labels=eBhc_eB.get_leg_labels()) * 0
+            rho = proj.zeros_like()
             if npc.norm(proj) < 1.e-12:
                 new_B = exact_B.split_legs()
             else:
@@ -4464,30 +4464,30 @@ class MPS(BaseMPSExpectationValue):
                     # Generate a random (hermitian) density matrix that will provide random vectors
                     # in the orthogonal subspace.
                     leg = proj.legs[0]
-                    if proj.dtype == 'float64': # real, symmetric
-                        rho = npc.Array.from_func_square(GOE, leg, labels=proj.get_leg_labels())
-                    else:
-                        rho = npc.Array.from_func_square(GUE, leg, labels=proj.get_leg_labels())
-                    rho = npc.tensordot(rho, rho.conj(), axes=([0], [0])) # Make this positive
+                    rho = npc.Array.from_func_square(GUE if proj.dtype.kind == 'c' else GOE, leg, labels=proj.get_leg_labels())
+                    rho = npc.tensordot(rho.conj(), rho, axes=(['(p.vR)'], ['(p*.vR*)'])) # Make this positive
                 rho /= npc.norm(rho) # Normalize the density matrix
                 proj_rho = npc.tensordot(npc.tensordot(proj, rho, axes=(['(p.vR)'], ['(p*.vR*)'])), proj, axes=(['(p.vR)'], ['(p*.vR*)']))
                 if npc.norm(proj_rho) < 1.e-12:
                     new_B = exact_B.split_legs()
                 else:
-                    w_enl_trunc, B_enl_trunc, err_trunc = eig_theta(proj_rho, trunc_par=trunc_par, sort='m>')
+                    w_enl_trunc, B_enl_trunc, err_trunc = eigh_rho(proj_rho, trunc_par=trunc_par, sort='m>')
                     new_B = npc.concatenate([exact_B, B_enl_trunc.conj().transpose()], axis=0).split_legs()
                     eig_error += err_trunc
-            self.set_B(j, new_B, form='B')
-            
+
             old_Cs = current_Cs
             current_Cs = []
             for i, oC in enumerate(old_Cs):
                 current_Cs.append(npc.tensordot(psis[i].get_B(j-1, form='A'),
                                                 npc.tensordot(oC, new_B.conj(), axes=(['p', 'vR'], ['p*', 'vR*'])).replace_label('vL*', 'vR'),
                                                 axes=(['vR'], ['vL'])))
+             # Set new_B and padded SVs on site j AFTER we've gotten tensors on site j-1
+            self.set_B(j, new_B, form='B')
+            # Need to handle edge case if SVs are not 1D array but instead are npc matrices?
+            self.set_SL(j, np.pad(self.get_SL(j), (0, new_B.get_leg('vL').ind_len - current_vL_dim), mode='constant', constant_values=0.0))
+
         self.set_B(0, current_Cs[0], form='B')
-        if do_canonicalize:
-            self.canonical_form()
+        self.test_sanity()
         return eig_error
 
     def apply_local_op(self, i, op, unitary=None, renormalize=False, cutoff=1.e-13,
