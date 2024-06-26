@@ -666,6 +666,21 @@ class BlockBackend(metaclass=ABCMeta):
     svd_algorithms: list[str]  # first is default
     BlockCls = None  # to be set by subclass
 
+    def apply_basis_perm(self, block: Block, legs: list[Space], inv: bool = False) -> Block:
+        """Apply basis_perm of a ElementarySpace (or its inverse) on every axis of a dense block"""
+        perms = []
+        for leg in legs:
+            p = leg._inverse_basis_perm if inv else leg._basis_perm
+            if p is None:
+                # OPTIMIZE support None in apply_leg_permutations, to skip permuting that leg? 
+                p = np.arange(leg.dim)
+            perms.append(p)
+        return self.apply_leg_permutations(block, perms)
+
+    def apply_leg_permutations(self, block: Block, perms: list[np.ndarray]) -> Block:
+        """Apply permutations to every axis of a dense block"""
+        return block[np.ix_(*perms)]
+
     @abstractmethod
     def as_block(self, a, dtype: Dtype = None, return_dtype: bool = False
                  ) -> Block | tuple[Block, Dtype]:
@@ -686,113 +701,21 @@ class BlockBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def block_abs_argmax(self, block: Block) -> list[int]:
+        """Return the indices (one per axis) of the largest entry (by magnitude) of the block"""
+        ...
+
+    @abstractmethod
+    def block_add_axis(self, a: Block, pos: int) -> Block:
+        ...
+
+    @abstractmethod
     def block_all(self, a) -> bool:
         """Require a boolean block. If all of its entries are True"""
         ...
         
     @abstractmethod
-    def block_any(self, a) -> bool:
-        """Require a boolean block. If any of its entries are True"""
-        ...
-    
-    @abstractmethod
-    def block_from_numpy(self, a: np.ndarray, dtype: Dtype = None) -> Block:
-        ...
-
-    def block_is_real(self, a: Block) -> bool:
-        """If the block is comprised of real numbers.
-        Complex numbers with small or zero imaginary part still cause a `False` return."""
-        return self.tenpy_dtype_map[self.block_dtype(a)].is_real
-
-    @abstractmethod
-    def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]
-                   ) -> Block:
-        ...
-
-    def block_tensor_outer(self, a: Block, b: Block, K: int) -> Block:
-        """Version of ``tensors.outer`` on blocks.
-
-        Note the different leg order to usual outer products::
-
-            res[i1,...,iK,j1,...,jM,i{K+1},...,iN] == a[i1,...,iN] * b[j1,...,jM]
-
-        intended to be used with ``K == a_num_codomain_legs``.
-        """
-        res = self.block_outer(a, b)  # [i1,...,iN,j1,...,jM]
-        N = len(self.block_shape(a))
-        M = len(self.block_shape(b))
-        return self.block_permute_axes(res, [*range(K), *range(N, N + M), *range(K, N)])
-
-    @abstractmethod
-    def block_shape(self, a: Block) -> tuple[int]:
-        ...
-
-    @abstractmethod
-    def block_item(self, a: Block) -> float | complex:
-        """Assumes that data is a scalar (i.e. has only one entry). Returns that scalar as python float or complex"""
-        ...
-
-    def block_dagger(self, a: Block) -> Block:
-        """Permute axes to reverse order and elementwise conj."""
-        num_legs = len(self.block_shape(a))
-        res = self.block_permute_axes(a, list(reversed(range(num_legs))))
-        return self.block_conj(res)
-
-    @abstractmethod
-    def block_dtype(self, a: Block) -> Dtype:
-        ...
-
-    @abstractmethod
-    def block_to_dtype(self, a: Block, dtype: Dtype) -> Block:
-        ...
-
-    def block_to_numpy(self, a: Block, numpy_dtype=None) -> np.ndarray:
-        # BlockBackends may override, if this implementation is not valid
-        return np.asarray(a, dtype=numpy_dtype)
-
-    @abstractmethod
-    def block_copy(self, a: Block) -> Block:
-        ...
-
-    @abstractmethod
-    def _block_repr_lines(self, a: Block, indent: str, max_width: int, max_lines: int) -> list[str]:
-        ...
-
-    @abstractmethod
-    def block_outer(self, a: Block, b: Block) -> Block:
-        """Outer product of blocks.
-
-        ``res[i1,...,iN,j1,...,jM] = a[i1,...,iN] * b[j1,...,jM]``
-        """
-        ...
-
-    def block_inner(self, a: Block, b: Block, do_dagger: bool) -> float | complex:
-        """Dense block version of tensors.inner.
-
-        If do dagger, ``sum(conj(a[i1, i2, ..., iN]) * b[i1, ..., iN])``
-        otherwise, ``sum(a[i1, ..., iN] * b[iN, ..., i2, i1])``.
-        """
-        if do_dagger:
-            a = self.block_conj(a)
-        else:
-            a = self.block_permute_axes(a, list(reversed(range(a.ndim))))
-        return self.block_sum_all(a * b)  # TODO or do tensordot?
-
-    @abstractmethod
-    def block_permute_axes(self, a: Block, permutation: list[int]) -> Block:
-        ...
-
-    @abstractmethod
-    def block_trace_full(self, a: Block) -> float | complex:
-        ...
-
-    @abstractmethod
-    def block_trace_partial(self, a: Block, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Block:
-        ...
-
-    @abstractmethod
-    def block_conj(self, a: Block) -> Block:
-        """complex conjugate of a block"""
+    def block_allclose(self, a: Block, b: Block, rtol: float = 1e-5, atol: float = 1e-8) -> bool:
         ...
 
     @abstractmethod
@@ -801,348 +724,14 @@ class BlockBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def block_real(self, a: Block) -> Block:
-        """The real part of a complex number, elementwise."""
+    def block_any(self, a) -> bool:
+        """Require a boolean block. If any of its entries are True"""
         ...
-
-    @abstractmethod
-    def block_real_if_close(self, a: Block, tol: float) -> Block:
-        """If a block is close to its real part, return the real part. Otherwise the original block.
-        Elementwise."""
-        ...
-
-    @abstractmethod
-    def block_sqrt(self, a: Block) -> Block:
-        """The elementwise square root"""
-        ...
-
-    @abstractmethod
-    def block_imag(self, a: Block) -> Block:
-        """The imaginary part of a complex number, elementwise."""
-        ...
-
-    @abstractmethod
-    def block_exp(self, a: Block) -> Block:
-        """The *elementwise* exponential. Not to be confused with :meth:`matrix_exp`, the *matrix*
-        exponential."""
-        ...
-
-    @abstractmethod
-    def block_log(self, a: Block) -> Block:
-        """The *elementwise* natural logarithm. Not to be confused with :meth:`matrix_log`, the
-        *matrix* logarithm."""
-        ...
-
-    def block_combine_legs(self, a: Block, legs_slices: list[tuple[int]]) -> Block:
-        """no transpose, only reshape ``legs[b:e] for b,e in legs_slice`` to single legs"""
-        old_shape = self.block_shape(a)
-        new_shape = []
-        last_e = 0
-        for b, e in legs_slices:  # ascending!
-            new_shape.extend(old_shape[last_e:b])
-            new_shape.append(np.prod(old_shape[b:e]))
-            last_e = e
-        new_shape.extend(old_shape[last_e:])
-        return self.block_reshape(a, tuple(new_shape))
-
-    def block_split_legs(self, a: Block, idcs: list[int], dims: list[list[int]]) -> Block:
-        old_shape = self.block_shape(a)
-        new_shape = []
-        start = 0
-        for i, i_dims in zip(idcs, dims):
-            new_shape.extend(old_shape[start:i])
-            new_shape.extend(i_dims)
-            start = i + 1
-        new_shape.extend(old_shape[start:])
-        return self.block_reshape(a, tuple(new_shape))
-
-    @abstractmethod
-    def block_allclose(self, a: Block, b: Block, rtol: float = 1e-5, atol: float = 1e-8) -> bool:
-        ...
-
-    @abstractmethod
-    def block_squeeze_legs(self, a: Block, idcs: list[int]) -> Block:
-        # TODO rename to squeeze_axes ?
-        ...
-
-    @abstractmethod
-    def block_add_axis(self, a: Block, pos: int) -> Block:
-        ...
-
-    @abstractmethod
-    def block_norm(self, a: Block, order: int | float = 2, axis: int | None = None) -> float:
-        r"""The p-norm vector-norm of a block.
-
-        Parameters
-        ----------
-        order : float
-            The order :math:`p` of the norm.
-            Unlike numpy, we always compute vector norms, never matrix norms.
-            We only support p-norms :math:`\Vert x \Vert = \sqrt[p]{\sum_i \abs{x_i}^p}`.
-        axis : int | None
-            ``axis=None`` means "all axes", i.e. norm of the flattened block.
-            An integer means to broadcast the norm over all other axes.
-        """
-        ...
-
-    @abstractmethod
-    def block_max(self, a: Block) -> float:
-        ...
-
-    @abstractmethod
-    def block_max_abs(self, a: Block) -> float:
-        ...
-
-    @abstractmethod
-    def block_min(self, a: Block) -> float:
-        ...
-        
-    @abstractmethod
-    def block_reshape(self, a: Block, shape: tuple[int]) -> Block:
-        ...
-
-    @abstractmethod
-    def matrix_dot(self, a: Block, b: Block) -> Block:
-        """As in numpy.dot, both a and b might be matrix or vector."""
-        # TODO can probably remove this? was only used in an old version of tdot.
-        ...
-
-    def matrix_svd(self, a: Block, algorithm: str | None, compute_u: bool, compute_vh: bool
-                   ) -> tuple[Block, Block, Block]:
-        """SVD of a 2D block.
-
-        With full_matrices=False, i.e. shape ``(n,m) -> (n,k), (k,) (k,m)`` where
-        ``k = min(n,m)``.
-        
-        Assumes that U and Vh have the same dtype as a, while S has a matching real dtype.
-        """
-        if algorithm == 'eigh':
-            return self.matrix_eig_based_svd(a, compute_u=compute_u, compute_vh=compute_vh)
-        return self._matrix_svd(a, algorithm)
-
-    @abstractmethod
-    def _matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
-        """Internal version of :meth:`matrix_svd`, to be implemented by subclasses."""
-        ...
-
-    def matrix_eig_based_svd(self, a: Block, compute_u: bool, compute_vh: bool
-                             ) -> tuple[Block, Block, Block]:
-        """Eig-based SVD of a 2D block.
-
-        With full_matrices=False, i.e. shape ``(n,m) -> (n,k), (k,) (k,m)`` where
-        ``k = min(n,m)``.
-        
-        Assumes that U and Vh have the same dtype as a, while S has a matching real dtype.
-        """
-        # TODO should we actually contract the full square a.hc @ a or can we work with the
-        #      factored form?
-        #      consider discussion in https://www.math.wsu.edu/math/faculty/watkins/pdfiles/1-44311.pdf
-        m, n = self.block_shape(a)
-        k = min(m, n)
-        if compute_u and compute_vh:
-            raise ValueError('Can not compute both U and Vh.')
-        if (not compute_u) and (not compute_vh):
-            if m > n:  # a.hc @ a is n x n, thus its cheaper to compute its eigenvalues
-                square = self.block_tdot(self.block_conj(a), a, [0], [0])
-            else:
-                square = self.block_tdot(a, self.block_conj(a), [1], [1])
-            S_sq = self.block_eigvalsh(square)
-            U = Vh = None
-        if compute_u:  # decompose a @ a.hc = U @ S**2 @ U.hc
-            a_ahc = self.block_tdot(a, self.block_conj(a), [1], [1])
-            S_sq, U = self.block_eigh(a_ahc, sort='>')
-            U = U[:, :k]
-            Vh = None
-        else:  # decompose a.hc @ a = V @ S**2 @ V.hc  (note that we want V.hc !)
-            ahc_a = self.block_tdot(self.block_conj(a), a, [0], [0])
-            S_sq, V = self.block_eigh(ahc_a, sort='>')
-            Vh = self.block_permute_axes(self.block_conj(V), [1, 0])[:k, :]
-            U = None
-        # economic SVD: only k=min(m, n) singular values
-        S = self.block_sqrt(abs(S_sq[:k]))
-        return U, S, Vh
-
-    @abstractmethod
-    def matrix_qr(self, a: Block, full: bool) -> tuple[Block, Block]:
-        """QR decomposition of a 2D block"""
-        ...
-
-    @abstractmethod
-    def matrix_exp(self, matrix: Block) -> Block:
-        ...
-
-    @abstractmethod
-    def matrix_log(self, matrix: Block) -> Block:
-        ...
-
-    @abstractmethod
-    def block_random_uniform(self, dims: list[int], dtype: Dtype) -> Block:
-        ...
-
-    @abstractmethod
-    def block_random_normal(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
-        ...
-
-    def block_linear_combination(self, a, v: Block, b, w: Block) -> Block:
-        return a * v + b * w
-
-    def block_mul(self, a: float | complex, b: Block) -> Block:
-        return a * b
-
-    @abstractmethod
-    def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
-        ...
-
-    @abstractmethod
-    def ones_block(self, shape: list[int], dtype: Dtype) -> Block:
-        ...
-
-    @abstractmethod
-    def eye_matrix(self, dim: int, dtype: Dtype) -> Block:
-        """The ``dim x dim`` identity matrix"""
-        ...
-
-    def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
-        """The identity matrix, reshaped to a block.
-
-        Note the unusual leg order ``[m1,...,mJ,mJ*,...,m1*]``,
-        which is chosen to match :meth:`eye_data`.
-
-        Note also that the ``legs`` only specify the dimensions of the first half,
-        namely ``m1,...,mJ``.
-        """
-        J = len(legs)
-        eye = self.eye_matrix(prod(legs), dtype)
-        # [M, M*] -> [m1,...,mJ,m1*,...,mJ*]
-        eye = self.block_reshape(eye, legs * 2)
-        # [m1,...,mJ,mJ*,...,m1*]
-        return self.block_permute_axes(eye, [*range(J), *reversed(range(J, 2 * J))])
-
-    @abstractmethod
-    def block_kron(self, a: Block, b: Block) -> Block:
-        """The kronecker product.
-
-        Parameters
-        ----------
-        a, b
-            Twp blocks with the same number of dimensions.
-
-        Notes
-        -----
-        The elements are products of elements from `a` and `b`::
-            kron(a,b)[k0,k1,...,kN] = a[i0,i1,...,iN] * b[j0,j1,...,jN]
-
-        where::
-            kt = it * st + jt,  t = 0,...,N
-
-        (Taken from numpy docs)
-        """
-        ...
-
-    @abstractmethod
-    def get_block_element(self, a: Block, idcs: list[int]) -> complex | float | bool:
-        ...
-
-    @abstractmethod
-    def set_block_element(self, a: Block, idcs: list[int], value: complex | float | bool) -> Block:
-        """Return a modified copy, with the entry at `idcs` set to `value`"""
-        ...
-
-    @abstractmethod
-    def block_get_diagonal(self, a: Block, check_offdiagonal: bool) -> Block:
-        """Get the diagonal of a 2D block as a 1D block"""
-        ...
-
-    @abstractmethod
-    def block_from_diagonal(self, diag: Block) -> Block:
-        """Return a 2D square block that has the 1D ``diag`` on the diagonal"""
-        ...
-
-    @abstractmethod
-    def block_from_mask(self, mask: Block, dtype: Dtype) -> Block:
-        """Return a (N, M) of numbers (float or complex dtype) from a 1D bool-valued block shape (M,)
-        where N is the number of True entries. The result is the coefficient matrix of the projection map."""
-        ...
-
-    def block_scale_axis(self, block: Block, factors: Block, axis: int) -> Block:
-        """multiply block with the factors (a 1D block), along a given axis.
-        E.g. if block is 4D and ``axis==2`` with numpy-like broadcasting, this is would be
-        ``block * factors[None, None, :, None]``.
-        """
-        idx = [None] * len(self.block_shape(block))
-        idx[axis] = slice(None, None,  None)
-        return block * factors[tuple(idx)]
-
-    @abstractmethod
-    def block_sum(self, a: Block, ax: int) -> Block:
-        """The sum over a single axis."""
-        ...
-
-    @abstractmethod
-    def block_sum_all(self, a: Block) -> float | complex:
-        """The sum of all entries of the block.
-        If the block contains boolean values, this should return the number of ``True`` entries.
-        """
-        ...
-
+    
     def block_apply_mask(self, block: Block, mask: Block, ax: int) -> Block:
         """Apply a mask (1D boolean block) to a block, slicing/projecting that axis"""
         idx = (slice(None, None, None),) * (ax - 1) + (mask,)
         return block[idx]
-
-    @abstractmethod
-    def block_eigh(self, block: Block, sort: str = None) -> tuple[Block, Block]:
-        """Eigenvalue decomposition of a 2D hermitian block.
-
-        Return a 1D block of eigenvalues and a 2D block of eigenvectors
-        
-        Parameters
-        ----------
-        block : Block
-            The block to decompose
-        sort : {'m>', 'm<', '>', '<'}
-            How the eigenvalues are sorted
-        """
-        ...
-
-    @abstractmethod
-    def block_eigvalsh(self, block: Block, sort: str = None) -> Block:
-        """Eigenvalues of a 2D hermitian block.
-
-        Return a 1D block of eigenvalues
-        
-        Parameters
-        ----------
-        block : Block
-            The block to decompose
-        sort : {'m>', 'm<', '>', '<'}
-            How the eigenvalues are sorted
-        """
-        ...
-
-    @abstractmethod
-    def block_abs_argmax(self, block: Block) -> list[int]:
-        """Return the indices (one per axis) of the largest entry (by magnitude) of the block"""
-        ...
-
-    def synchronize(self):
-        """Wait for asynchronous processes (if any) to finish"""
-        pass
-
-    def apply_leg_permutations(self, block: Block, perms: list[np.ndarray]) -> Block:
-        """Apply permutations to every axis of a dense block"""
-        return block[np.ix_(*perms)]
-
-    def apply_basis_perm(self, block: Block, legs: list[Space], inv: bool = False) -> Block:
-        """Apply basis_perm of a ElementarySpace (or its inverse) on every axis of a dense block"""
-        perms = []
-        for leg in legs:
-            p = leg._inverse_basis_perm if inv else leg._basis_perm
-            if p is None:
-                # OPTIMIZE support None in apply_leg_permutations, to skip permuting that leg? 
-                p = np.arange(leg.dim)
-            perms.append(p)
-        return self.apply_leg_permutations(block, perms)
 
     def block_argsort(self, block: Block, sort: str = None, axis: int = 0) -> Block:
         """Return the permutation that would sort a block along one axis.
@@ -1199,13 +788,66 @@ class BlockBackend(metaclass=ABCMeta):
         """Like :meth:`block_argsort` but can assume real valued block, and sort ascending"""
         ...
 
-    def test_block_sanity(self, block, expect_shape: tuple[int, ...] | None = None,
-                          expect_dtype: Dtype | None = None):
-        assert isinstance(block, self.BlockCls), 'wrong block type'
-        if expect_shape is not None:
-            assert self.block_shape(block) == expect_shape, 'wrong block shape'
-        if expect_dtype is not None:
-            assert self.block_dtype(block) == expect_dtype, 'wrong block dtype'
+    def block_combine_legs(self, a: Block, legs_slices: list[tuple[int]]) -> Block:
+        """no transpose, only reshape ``legs[b:e] for b,e in legs_slice`` to single legs"""
+        old_shape = self.block_shape(a)
+        new_shape = []
+        last_e = 0
+        for b, e in legs_slices:  # ascending!
+            new_shape.extend(old_shape[last_e:b])
+            new_shape.append(np.prod(old_shape[b:e]))
+            last_e = e
+        new_shape.extend(old_shape[last_e:])
+        return self.block_reshape(a, tuple(new_shape))
+
+    @abstractmethod
+    def block_conj(self, a: Block) -> Block:
+        """complex conjugate of a block"""
+        ...
+
+    @abstractmethod
+    def block_copy(self, a: Block) -> Block:
+        ...
+
+    def block_dagger(self, a: Block) -> Block:
+        """Permute axes to reverse order and elementwise conj."""
+        num_legs = len(self.block_shape(a))
+        res = self.block_permute_axes(a, list(reversed(range(num_legs))))
+        return self.block_conj(res)
+
+    @abstractmethod
+    def block_dtype(self, a: Block) -> Dtype:
+        ...
+
+    @abstractmethod
+    def block_eigh(self, block: Block, sort: str = None) -> tuple[Block, Block]:
+        """Eigenvalue decomposition of a 2D hermitian block.
+
+        Return a 1D block of eigenvalues and a 2D block of eigenvectors
+        
+        Parameters
+        ----------
+        block : Block
+            The block to decompose
+        sort : {'m>', 'm<', '>', '<'}
+            How the eigenvalues are sorted
+        """
+        ...
+
+    @abstractmethod
+    def block_eigvalsh(self, block: Block, sort: str = None) -> Block:
+        """Eigenvalues of a 2D hermitian block.
+
+        Return a 1D block of eigenvalues
+        
+        Parameters
+        ----------
+        block : Block
+            The block to decompose
+        sort : {'m>', 'm<', '>', '<'}
+            How the eigenvalues are sorted
+        """
+        ...
 
     def block_enlarge_leg(self, block: Block, mask: Block, axis: int) -> Block:
         shape = list(self.block_shape(block))
@@ -1216,8 +858,366 @@ class BlockBackend(metaclass=ABCMeta):
         return res
 
     @abstractmethod
+    def block_exp(self, a: Block) -> Block:
+        """The *elementwise* exponential. Not to be confused with :meth:`matrix_exp`, the *matrix*
+        exponential."""
+        ...
+
+    @abstractmethod
+    def block_from_diagonal(self, diag: Block) -> Block:
+        """Return a 2D square block that has the 1D ``diag`` on the diagonal"""
+        ...
+
+    @abstractmethod
+    def block_from_mask(self, mask: Block, dtype: Dtype) -> Block:
+        """Return a (N, M) of numbers (float or complex dtype) from a 1D bool-valued block shape (M,)
+        where N is the number of True entries. The result is the coefficient matrix of the projection map."""
+        ...
+
+    @abstractmethod
+    def block_from_numpy(self, a: np.ndarray, dtype: Dtype = None) -> Block:
+        ...
+
+    @abstractmethod
+    def block_get_diagonal(self, a: Block, check_offdiagonal: bool) -> Block:
+        """Get the diagonal of a 2D block as a 1D block"""
+        ...
+
+    @abstractmethod
+    def block_imag(self, a: Block) -> Block:
+        """The imaginary part of a complex number, elementwise."""
+        ...
+
+    def block_inner(self, a: Block, b: Block, do_dagger: bool) -> float | complex:
+        """Dense block version of tensors.inner.
+
+        If do dagger, ``sum(conj(a[i1, i2, ..., iN]) * b[i1, ..., iN])``
+        otherwise, ``sum(a[i1, ..., iN] * b[iN, ..., i2, i1])``.
+        """
+        if do_dagger:
+            a = self.block_conj(a)
+        else:
+            a = self.block_permute_axes(a, list(reversed(range(a.ndim))))
+        return self.block_sum_all(a * b)  # TODO or do tensordot?
+
+    def block_is_real(self, a: Block) -> bool:
+        """If the block is comprised of real numbers.
+        Complex numbers with small or zero imaginary part still cause a `False` return."""
+        return self.tenpy_dtype_map[self.block_dtype(a)].is_real
+
+    @abstractmethod
+    def block_item(self, a: Block) -> float | complex:
+        """Assumes that data is a scalar (i.e. has only one entry). Returns that scalar as python float or complex"""
+        ...
+
+    @abstractmethod
+    def block_kron(self, a: Block, b: Block) -> Block:
+        """The kronecker product.
+
+        Parameters
+        ----------
+        a, b
+            Twp blocks with the same number of dimensions.
+
+        Notes
+        -----
+        The elements are products of elements from `a` and `b`::
+            kron(a,b)[k0,k1,...,kN] = a[i0,i1,...,iN] * b[j0,j1,...,jN]
+
+        where::
+            kt = it * st + jt,  t = 0,...,N
+
+        (Taken from numpy docs)
+        """
+        ...
+
+    def block_linear_combination(self, a, v: Block, b, w: Block) -> Block:
+        return a * v + b * w
+
+    @abstractmethod
+    def block_log(self, a: Block) -> Block:
+        """The *elementwise* natural logarithm. Not to be confused with :meth:`matrix_log`, the
+        *matrix* logarithm."""
+        ...
+
+    @abstractmethod
+    def block_max(self, a: Block) -> float:
+        ...
+
+    @abstractmethod
+    def block_max_abs(self, a: Block) -> float:
+        ...
+
+    @abstractmethod
+    def block_min(self, a: Block) -> float:
+        ...
+        
+    def block_mul(self, a: float | complex, b: Block) -> Block:
+        return a * b
+
+    @abstractmethod
+    def block_norm(self, a: Block, order: int | float = 2, axis: int | None = None) -> float:
+        r"""The p-norm vector-norm of a block.
+
+        Parameters
+        ----------
+        order : float
+            The order :math:`p` of the norm.
+            Unlike numpy, we always compute vector norms, never matrix norms.
+            We only support p-norms :math:`\Vert x \Vert = \sqrt[p]{\sum_i \abs{x_i}^p}`.
+        axis : int | None
+            ``axis=None`` means "all axes", i.e. norm of the flattened block.
+            An integer means to broadcast the norm over all other axes.
+        """
+        ...
+
+    @abstractmethod
+    def block_outer(self, a: Block, b: Block) -> Block:
+        """Outer product of blocks.
+
+        ``res[i1,...,iN,j1,...,jM] = a[i1,...,iN] * b[j1,...,jM]``
+        """
+        ...
+
+    @abstractmethod
+    def block_permute_axes(self, a: Block, permutation: list[int]) -> Block:
+        ...
+
+    @abstractmethod
+    def block_random_normal(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
+        ...
+
+    @abstractmethod
+    def block_random_uniform(self, dims: list[int], dtype: Dtype) -> Block:
+        ...
+
+    @abstractmethod
+    def block_real(self, a: Block) -> Block:
+        """The real part of a complex number, elementwise."""
+        ...
+
+    @abstractmethod
+    def block_real_if_close(self, a: Block, tol: float) -> Block:
+        """If a block is close to its real part, return the real part. Otherwise the original block.
+        Elementwise."""
+        ...
+
+    @abstractmethod
+    def _block_repr_lines(self, a: Block, indent: str, max_width: int, max_lines: int) -> list[str]:
+        ...
+
+    @abstractmethod
+    def block_reshape(self, a: Block, shape: tuple[int]) -> Block:
+        ...
+
+    def block_scale_axis(self, block: Block, factors: Block, axis: int) -> Block:
+        """multiply block with the factors (a 1D block), along a given axis.
+        E.g. if block is 4D and ``axis==2`` with numpy-like broadcasting, this is would be
+        ``block * factors[None, None, :, None]``.
+        """
+        idx = [None] * len(self.block_shape(block))
+        idx[axis] = slice(None, None,  None)
+        return block * factors[tuple(idx)]
+
+    @abstractmethod
+    def block_shape(self, a: Block) -> tuple[int]:
+        ...
+
+    def block_split_legs(self, a: Block, idcs: list[int], dims: list[list[int]]) -> Block:
+        old_shape = self.block_shape(a)
+        new_shape = []
+        start = 0
+        for i, i_dims in zip(idcs, dims):
+            new_shape.extend(old_shape[start:i])
+            new_shape.extend(i_dims)
+            start = i + 1
+        new_shape.extend(old_shape[start:])
+        return self.block_reshape(a, tuple(new_shape))
+
+    @abstractmethod
+    def block_sqrt(self, a: Block) -> Block:
+        """The elementwise square root"""
+        ...
+
+    @abstractmethod
+    def block_squeeze_legs(self, a: Block, idcs: list[int]) -> Block:
+        # TODO rename to squeeze_axes ?
+        ...
+
+    @abstractmethod
     def block_stable_log(self, block: Block, cutoff: float) -> Block:
         """Elementwise stable log. For entries > cutoff, yield their natural log. Otherwise 0."""
+        ...
+
+    @abstractmethod
+    def block_sum(self, a: Block, ax: int) -> Block:
+        """The sum over a single axis."""
+        ...
+
+    @abstractmethod
+    def block_sum_all(self, a: Block) -> float | complex:
+        """The sum of all entries of the block.
+        If the block contains boolean values, this should return the number of ``True`` entries.
+        """
+        ...
+
+    @abstractmethod
+    def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]
+                   ) -> Block:
+        ...
+
+    def block_tensor_outer(self, a: Block, b: Block, K: int) -> Block:
+        """Version of ``tensors.outer`` on blocks.
+
+        Note the different leg order to usual outer products::
+
+            res[i1,...,iK,j1,...,jM,i{K+1},...,iN] == a[i1,...,iN] * b[j1,...,jM]
+
+        intended to be used with ``K == a_num_codomain_legs``.
+        """
+        res = self.block_outer(a, b)  # [i1,...,iN,j1,...,jM]
+        N = len(self.block_shape(a))
+        M = len(self.block_shape(b))
+        return self.block_permute_axes(res, [*range(K), *range(N, N + M), *range(K, N)])
+
+    @abstractmethod
+    def block_to_dtype(self, a: Block, dtype: Dtype) -> Block:
+        ...
+
+    def block_to_numpy(self, a: Block, numpy_dtype=None) -> np.ndarray:
+        # BlockBackends may override, if this implementation is not valid
+        return np.asarray(a, dtype=numpy_dtype)
+
+    @abstractmethod
+    def block_trace_full(self, a: Block) -> float | complex:
+        ...
+
+    @abstractmethod
+    def block_trace_partial(self, a: Block, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Block:
+        ...
+
+    def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
+        """The identity matrix, reshaped to a block.
+
+        Note the unusual leg order ``[m1,...,mJ,mJ*,...,m1*]``,
+        which is chosen to match :meth:`eye_data`.
+
+        Note also that the ``legs`` only specify the dimensions of the first half,
+        namely ``m1,...,mJ``.
+        """
+        J = len(legs)
+        eye = self.eye_matrix(prod(legs), dtype)
+        # [M, M*] -> [m1,...,mJ,m1*,...,mJ*]
+        eye = self.block_reshape(eye, legs * 2)
+        # [m1,...,mJ,mJ*,...,m1*]
+        return self.block_permute_axes(eye, [*range(J), *reversed(range(J, 2 * J))])
+
+    @abstractmethod
+    def eye_matrix(self, dim: int, dtype: Dtype) -> Block:
+        """The ``dim x dim`` identity matrix"""
+        ...
+
+    @abstractmethod
+    def get_block_element(self, a: Block, idcs: list[int]) -> complex | float | bool:
+        ...
+
+    @abstractmethod
+    def matrix_dot(self, a: Block, b: Block) -> Block:
+        """As in numpy.dot, both a and b might be matrix or vector."""
+        # TODO can probably remove this? was only used in an old version of tdot.
+        ...
+
+    def matrix_eig_based_svd(self, a: Block, compute_u: bool, compute_vh: bool
+                             ) -> tuple[Block, Block, Block]:
+        """Eig-based SVD of a 2D block.
+
+        With full_matrices=False, i.e. shape ``(n,m) -> (n,k), (k,) (k,m)`` where
+        ``k = min(n,m)``.
+        
+        Assumes that U and Vh have the same dtype as a, while S has a matching real dtype.
+        """
+        # TODO should we actually contract the full square a.hc @ a or can we work with the
+        #      factored form?
+        #      consider discussion in https://www.math.wsu.edu/math/faculty/watkins/pdfiles/1-44311.pdf
+        m, n = self.block_shape(a)
+        k = min(m, n)
+        if compute_u and compute_vh:
+            raise ValueError('Can not compute both U and Vh.')
+        if (not compute_u) and (not compute_vh):
+            if m > n:  # a.hc @ a is n x n, thus its cheaper to compute its eigenvalues
+                square = self.block_tdot(self.block_conj(a), a, [0], [0])
+            else:
+                square = self.block_tdot(a, self.block_conj(a), [1], [1])
+            S_sq = self.block_eigvalsh(square)
+            U = Vh = None
+        if compute_u:  # decompose a @ a.hc = U @ S**2 @ U.hc
+            a_ahc = self.block_tdot(a, self.block_conj(a), [1], [1])
+            S_sq, U = self.block_eigh(a_ahc, sort='>')
+            U = U[:, :k]
+            Vh = None
+        else:  # decompose a.hc @ a = V @ S**2 @ V.hc  (note that we want V.hc !)
+            ahc_a = self.block_tdot(self.block_conj(a), a, [0], [0])
+            S_sq, V = self.block_eigh(ahc_a, sort='>')
+            Vh = self.block_permute_axes(self.block_conj(V), [1, 0])[:k, :]
+            U = None
+        # economic SVD: only k=min(m, n) singular values
+        S = self.block_sqrt(abs(S_sq[:k]))
+        return U, S, Vh
+
+    @abstractmethod
+    def matrix_exp(self, matrix: Block) -> Block:
+        ...
+
+    @abstractmethod
+    def matrix_log(self, matrix: Block) -> Block:
+        ...
+
+    @abstractmethod
+    def matrix_qr(self, a: Block, full: bool) -> tuple[Block, Block]:
+        """QR decomposition of a 2D block"""
+        ...
+
+    def matrix_svd(self, a: Block, algorithm: str | None, compute_u: bool, compute_vh: bool
+                   ) -> tuple[Block, Block, Block]:
+        """SVD of a 2D block.
+
+        With full_matrices=False, i.e. shape ``(n,m) -> (n,k), (k,) (k,m)`` where
+        ``k = min(n,m)``.
+        
+        Assumes that U and Vh have the same dtype as a, while S has a matching real dtype.
+        """
+        if algorithm == 'eigh':
+            return self.matrix_eig_based_svd(a, compute_u=compute_u, compute_vh=compute_vh)
+        return self._matrix_svd(a, algorithm)
+
+    @abstractmethod
+    def _matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
+        """Internal version of :meth:`matrix_svd`, to be implemented by subclasses."""
+        ...
+
+    @abstractmethod
+    def ones_block(self, shape: list[int], dtype: Dtype) -> Block:
+        ...
+
+    @abstractmethod
+    def set_block_element(self, a: Block, idcs: list[int], value: complex | float | bool) -> Block:
+        """Return a modified copy, with the entry at `idcs` set to `value`"""
+        ...
+
+    def synchronize(self):
+        """Wait for asynchronous processes (if any) to finish"""
+        pass
+
+    def test_block_sanity(self, block, expect_shape: tuple[int, ...] | None = None,
+                          expect_dtype: Dtype | None = None):
+        assert isinstance(block, self.BlockCls), 'wrong block type'
+        if expect_shape is not None:
+            assert self.block_shape(block) == expect_shape, 'wrong block shape'
+        if expect_dtype is not None:
+            assert self.block_dtype(block) == expect_dtype, 'wrong block dtype'
+
+    @abstractmethod
+    def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
         ...
 
 
