@@ -1349,9 +1349,31 @@ def test_move_leg():
     pytest.skip('Test not written yet')  # TODO
 
 
-# TODO
-def test_norm():
-    pytest.skip('Test not written yet')  # TODO
+@pytest.mark.parametrize(
+    'cls, cod, dom',
+    [pytest.param(SymmetricTensor, 2, 2, id='Sym-2-2'),
+     pytest.param(SymmetricTensor, 3, 1, id='Sym-3-1'),
+     pytest.param(SymmetricTensor, 3, 0, id='Sym-2-0'),
+     pytest.param(SymmetricTensor, 0, 2, id='Sym-0-2'),
+     pytest.param(ChargedTensor, 0, 2, id='Charged-0-2'),
+     pytest.param(ChargedTensor, 2, 2, id='Charged-2-2'),
+     pytest.param(DiagonalTensor, 1, 1, id='Diag'),
+     pytest.param(Mask, 1, 1, id='Mask'),]
+)
+def test_norm(cls, cod, dom, make_compatible_tensor):
+    T: cls = make_compatible_tensor(cod, dom, cls=cls)
+    
+    res = tensors.norm(T)
+
+    if isinstance(T.backend, backends.FusionTreeBackend) \
+            and isinstance(T.symmetry, ProductSymmetry) \
+            and (cod > 1 or dom + int(cls is ChargedTensor) > 1):
+        with pytest.raises(NotImplementedError):
+            _ = T.to_numpy()
+        pytest.xfail()
+
+    expect = np.linalg.norm(T.to_numpy())
+    npt.assert_almost_equal(res, expect)
 
 
 @pytest.mark.parametrize(
