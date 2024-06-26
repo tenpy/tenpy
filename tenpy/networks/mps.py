@@ -4442,6 +4442,10 @@ class MPS(BaseMPSExpectationValue):
             assert self.bc == psis[i].bc
 
         eig_error = TruncationError()
+        trunc_par = asConfig(trunc_par, "trunc_params")
+        site_trunc_par = trunc_par.copy()
+        chi_max = site_trunc_par.get('chi_max', 100)    # Maximum bond dimension allowed on any bond
+        # site_dims = [s.dim for s in self.sites]       # Only needed if we impose edge constraints
 
         current_Cs = []
         for i in range(len(psis)):
@@ -4449,11 +4453,24 @@ class MPS(BaseMPSExpectationValue):
 
         for j in reversed(range(1, L)):
             current_vL_dim = current_Cs[0].get_leg('vL').ind_len
+
+            # We want to ensure that the bond dimension after expansion is at most chi_max so that SingleSiteTDVP respects
+            # the maximum bond dimension. We know that the bond dimension must respect the exponential bounds from the edge
+            # of the chain (2**i or (L-2)**i for the two edges for spin-1/2 Hilbert spaces). However, I find that if we
+            # impose the edge constraints, the first site is decoupled from the rest when using Krylov vectors (random expansion
+            # works, however). So instead, we just force the bond dimension to be less than chi_max and then the SVDs will
+            # enforce the edge constraints.
+            # site_chi_max = int(np.min([chi_max, np.prod(site_dims[:j]), np.prod(site_dims[j:])])) - current_vL_dim
+            site_chi_max = int(chi_max - current_vL_dim)  # How much do we allow vL to grow?
+            site_trunc_par['chi_max'] = site_chi_max
+
             _, exact_B = npc.lq(current_Cs[0].combine_legs(['p', 'vR']), mode='reduced', inner_labels=['vR', 'vL'])
             eBhc_eB = npc.tensordot(exact_B.conj(), exact_B, axes=(['vL*'], ['vL']))    # (p.vR)*, (p.vR)
             proj = npc.eye_like(eBhc_eB, labels=eBhc_eB.get_leg_labels()) - eBhc_eB
             rho = proj.zeros_like()
-            if npc.norm(proj) < 1.e-12:
+            if npc.norm(proj) < 1.e-12 or site_chi_max <= 0:
+                # First condition: original tensor already spans the virtual Hilbert space
+                # Second condition: we don't have any bond dimension budget for growth
                 new_B = exact_B.split_legs()
             else:
                 if len(current_Cs) > 1:
@@ -4471,7 +4488,7 @@ class MPS(BaseMPSExpectationValue):
                 if npc.norm(proj_rho) < 1.e-12:
                     new_B = exact_B.split_legs()
                 else:
-                    w_enl_trunc, B_enl_trunc, err_trunc = eigh_rho(proj_rho, trunc_par=trunc_par, sort='m>')
+                    w_enl_trunc, B_enl_trunc, err_trunc = eigh_rho(proj_rho, trunc_par=site_trunc_par, sort='m>')
                     new_B = npc.concatenate([exact_B, B_enl_trunc.conj().transpose()], axis=0).split_legs()
                     eig_error += err_trunc
 
