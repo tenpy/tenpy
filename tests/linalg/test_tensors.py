@@ -1824,53 +1824,34 @@ def test_scale_axis(cls, codom, dom, which_leg, make_compatible_tensor, np_rando
     npt.assert_array_equal(res.to_numpy(), expect)
 
 
-# TODO
-def test_squeeze_legs():
-    pytest.skip('Test not written yet')  # TODO
+def test_squeeze_legs(make_compatible_tensor, compatible_symmetry):
+    trivial_leg = ElementarySpace.from_trivial_sector(1, symmetry=compatible_symmetry)
+    T = make_compatible_tensor([None, trivial_leg, trivial_leg, None], [None, None, trivial_leg],
+                               labels=list('abcdefg'))
 
-    # TODO old test::
-    
-    # def OLD_test_squeeze_legs(make_compatible_tensor, compatible_symmetry):
-    #     for i in range(10):
-    #         trivial_leg = Space(compatible_symmetry,
-    #                             compatible_symmetry.trivial_sector[np.newaxis, :])
-    #         assert trivial_leg.is_trivial
-    #         tens = make_compatible_tensor(legs=[None, trivial_leg, None, trivial_leg.dual, trivial_leg],
-    #                                     labels=list('abcde'))
-    #         if not tens.legs[0].is_trivial and not tens.legs[2].is_trivial:
-    #             break
-    #     else:
-    #         pytest.skip("can't generate non-trivial leg")
-    #     #
-    #     if isinstance(tens.backend, backends.FusionTreeBackend) and isinstance(tens.symmetry, ProductSymmetry):
-    #         with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
-    #             dense = tens.to_numpy()
-    #         return  # TODO
-    #     dense = tens.to_numpy()
-    #     #
-    #     print('squeezing all legs (default arg)')
-    #     #
-    #     if isinstance(tens.backend, backends.FusionTreeBackend):
-    #         with pytest.raises(NotImplementedError, match='squeeze_legs not implemented'):
-    #             res = tensors.squeeze_legs(tens)
-    #         return  # TODO
-    #     #
-    #     res = tensors.squeeze_legs(tens)
-    #     res.test_sanity()
-    #     assert res.labels == ['a', 'c']
-    #     npt.assert_array_equal(res.to_numpy(), dense[:, 0, :, 0, 0])
-    #     #
-    #     print('squeeze specific leg by idx')
-    #     res = tensors.squeeze_legs(tens, 1)
-    #     res.test_sanity()
-    #     assert res.labels == ['a', 'c', 'd', 'e']
-    #     npt.assert_array_equal(res.to_numpy(), dense[:, 0, :, :, :])
-    #     #
-    #     print('squeeze legs by labels')
-    #     res = tensors.squeeze_legs(tens, ['b', 'e'])
-    #     res.test_sanity()
-    #     assert res.labels == ['a', 'c', 'd']
-    #     npt.assert_array_equal(res.to_numpy(), dense[:, 0, :, :, 0])
+    if isinstance(T.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError):
+            _ = tensors.squeeze_legs(T)
+        pytest.xfail()
+
+    res_all = tensors.squeeze_legs(T)
+    res_all.test_sanity()
+    res_1 = tensors.squeeze_legs(T, 1)
+    res_1.test_sanity()
+    res_2 = tensors.squeeze_legs(T, [1, 4])
+    res_2.test_sanity()
+
+    assert res_all.labels == ['a', 'd', 'f', 'g']
+    assert res_1.labels == ['a', 'c', 'd', 'e', 'f', 'g']
+    assert res_2.labels == ['a', 'c', 'd', 'f', 'g']
+
+    T_np = T.to_numpy()
+    expect_all = T_np[:, 0, 0, :, 0, :, :]
+    expect_1 = T_np [:, 0]
+    expect_2 = T_np[:, 0, :, :, 0]
+    npt.assert_allclose(res_all.to_numpy(), expect_all)
+    npt.assert_allclose(res_1.to_numpy(), expect_1)
+    npt.assert_allclose(res_2.to_numpy(), expect_2)
 
 
 @pytest.mark.parametrize(

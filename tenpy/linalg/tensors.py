@@ -4128,7 +4128,21 @@ def squeeze_legs(tensor: Tensor, legs: int | str | list[int | str] = None) -> Te
             tensor.charged_state
         )
     # Remaining case: SymmetricTensor
-    raise NotImplementedError  # TODO
+    remaining = [n for n in range(tensor.num_legs) if n not in legs]
+    data = tensor.backend.squeeze_legs(tensor, legs)
+    # since the legs we remove are all trivial, the sectors of the (co-)domain do not change
+    codomain = ProductSpace(
+        [tensor.codomain[n] for n in range(tensor.num_codomain_legs) if n not in legs],
+        symmetry=tensor.symmetry, backend=tensor.backend, _sectors=tensor.codomain.sectors,
+        _multiplicities=tensor.codomain.multiplicities
+    )
+    domain = ProductSpace(
+        [tensor.domain[n] for n in range(tensor.num_domain_legs) if (tensor.num_legs - 1 - n) not in legs],
+        symmetry=tensor.symmetry, backend=tensor.backend, _sectors=tensor.domain.sectors,
+        _multiplicities=tensor.domain.multiplicities
+    )
+    return SymmetricTensor(data, codomain, domain, backend=tensor.backend,
+                           labels=[tensor._labels[n] for n in remaining])
 
 
 @_elementwise_function(block_func='block_stable_log', func_kwargs=dict(cutoff=1e-30),

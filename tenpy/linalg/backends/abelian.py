@@ -1638,27 +1638,14 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return AbelianBackendData(a.data.dtype, new_blocks, new_block_inds, is_sorted=True)
 
     def squeeze_legs(self, a: SymmetricTensor, idcs: list[int]) -> Data:
-        raise NotImplementedError  # TODO not yet reviewed
         n_legs = a.num_legs
         if len(a.data.blocks) == 0:
             block_inds = np.zeros([0, n_legs - len(idcs)], dtype=int)
             return AbelianBackendData(a.data.dtype, [], block_inds, is_sorted=True)
         blocks = [self.block_squeeze_legs(b, idcs) for b in a.data.blocks]
-        block_inds = a.data.block_inds
-        # TODO dont use legs! use conventional_leg_order / domain / codomain
-        symmetry = a.legs[0].symmetry
-        sector = symmetry.trivial_sector
-        for i in idcs:
-            bi = block_inds[0, i]
-            assert np.all(block_inds[:, i] == bi)
-            # TODO dont use legs! use conventional_leg_order / domain / codomain
-            sector = symmetry.fusion_outcomes(sector, a.legs[i].sector(bi))[0]
-        if not np.all(sector == symmetry.trivial_sector):
-            # TODO return corresponding ChargedTensor instead in this case?
-            raise ValueError("Squeezing legs drops non-trivial charges, would give ChargedTensor.")
         keep = np.ones(n_legs, dtype=bool)
         keep[idcs] = False
-        block_inds = block_inds[:, keep]
+        block_inds = a.data.block_inds[:, keep]
         return AbelianBackendData(a.data.dtype, blocks, block_inds, is_sorted=True)
 
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
