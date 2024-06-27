@@ -120,14 +120,41 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def combine_legs(self, a: SymmetricTensor, combine_slices: list[int, int],
-                     product_spaces: list[ProductSpace], new_axes: list[int],
-                     final_legs: list[Space]) -> Data:
-        """combine legs of `a` (without transpose).
+    def combine_legs(self,
+                     tensor: SymmetricTensor,
+                     leg_idcs_combine: list[list[int]],
+                     product_spaces: list[ProductSpace],
+                     new_codomain_combine: list[tuple[list[int], ProductSpace]],
+                     new_domain_combine: list[tuple[list[int], ProductSpace]],
+                     new_codomain: ProductSpace,
+                     new_domain: ProductSpace,
+                     ) -> Data:
+        """Implementation of :func:`tenpy.linalg.tensors.combine_legs`.
 
-        ``combine_slices[i]=(begin, end)`` sorted in ascending order of `begin` indicates that
-        ``a.legs[begin:end]`` is to be combined to `product_spaces[i]`, yielding `final_legs`.
-        `new_axes[i]` is the index of `product_spaces[i]` in `final_legs` (also fixed by `combine_slices`).
+        Assumptions:
+        
+        - Legs have been permuted, such that each group of legs to be combined appears contiguously
+          and either entirely in the codomain or entirely in the domain
+
+        Parameters
+        ----------
+        tensor: SymmetricTensor
+            The tensor to modify
+        leg_idcs_combine: list of list of int
+            All leg indices of in any given sublist are supposed to be combined.
+        product_spaces: list of ProductSpace
+            The resulting ProductSpaces. Same length and order as `leg_idcs_combine`.
+            Same entries as in new_(co)domain_combine (in particular wrt duality in the domain!),
+        new_codomain_combine:
+            A list of tuples ``(positions, combined)``, where positions are all the codomain-indices
+            which should be combined and ``combined`` is the resulting :class:`ProductSpace`,
+            i.e. ``combined == ProductSpace([tensor.codomain[n] for n in positions])``
+        new_domain_combine:
+            Similar as `new_codomain_combine` but for the domain. Note that ``positions`` are
+            domain-indices, i.e ``n = positions[i]`` refers to ``tensor.domain[n]``, *not*
+            ``tensor.legs[n]`` !
+        new_codomain, new_domain: ProductSpace
+            The codomain and domain of the resulting tensor
         """
         ...
 
@@ -788,16 +815,19 @@ class BlockBackend(metaclass=ABCMeta):
         """Like :meth:`block_argsort` but can assume real valued block, and sort ascending"""
         ...
 
-    def block_combine_legs(self, a: Block, legs_slices: list[tuple[int]]) -> Block:
+    def block_combine_legs(self, a: Block, leg_idcs_combine: list[list[int]]) -> Block:
         """no transpose, only reshape ``legs[b:e] for b,e in legs_slice`` to single legs"""
         old_shape = self.block_shape(a)
         new_shape = []
-        last_e = 0
-        for b, e in legs_slices:  # ascending!
-            new_shape.extend(old_shape[last_e:b])
-            new_shape.append(np.prod(old_shape[b:e]))
-            last_e = e
-        new_shape.extend(old_shape[last_e:])
+        last_stop = 0
+        for group in leg_idcs_combine:
+            start = group[0]
+            stop = group[-1] + 1
+            assert list(group) == list(range(start, stop))  # TODO rm check
+            new_shape.extend(old_shape[last_stop:start])  # all leg *not* to be combined
+            new_shape.append(np.prod(old_shape[start:stop]))
+            last_stop = stop
+        new_shape.extend(old_shape[last_stop:])
         return self.block_reshape(a, tuple(new_shape))
 
     @abstractmethod

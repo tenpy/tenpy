@@ -285,27 +285,43 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
             res_block_inds = np.zeros((0, 2), int)
         return AbelianBackendData(tensor.dtype, res_blocks, res_block_inds, is_sorted=True)
 
-    def combine_legs(self, a: SymmetricTensor, combine_slices: list[int, int], product_spaces: list[ProductSpace],
-                     new_axes: list[int], final_legs: list[Space]) -> Data:
-        raise NotImplementedError  # TODO not yet reviewed
-        res_dtype = a.data.dtype
-        old_block_inds = a.data.block_inds
+    def combine_legs(self,
+                     tensor: SymmetricTensor,
+                     leg_idcs_combine: list[list[int]],
+                     product_spaces: list[ProductSpace],
+                     new_codomain_combine: list[tuple[list[int], ProductSpace]],
+                     new_domain_combine: list[tuple[list[int], ProductSpace]],
+                     new_codomain: ProductSpace,
+                     new_domain: ProductSpace,
+                     ) -> Data:
+        num_result_legs = tensor.num_legs - sum(len(group) - 1 for group in leg_idcs_combine)
+        old_block_inds = tensor.data.block_inds
+        old_blocks = tensor.data.blocks
+        #
         # first, find block indices of the final array to which we map
-        map_inds = [self.product_space_map_incoming_block_inds(product_space, old_block_inds[:, b:e])
-                    for product_space, (b,e) in zip(product_spaces, combine_slices)]
-        old_block_inds = a.data.block_inds
-        old_blocks = a.data.blocks
-        res_block_inds = np.empty((len(old_block_inds), len(final_legs)), dtype=int)
-        last_e = 0
-        last_i = -1
-        for i, (b, e), product_space, map_ind in zip(new_axes, combine_slices, product_spaces, map_inds):
-            res_block_inds[:, last_i + 1:i] = old_block_inds[:, last_e:b]
-            block_ind_map = product_space.get_metadata('_block_ind_map', backend=self)
+        map_inds = [
+            self.product_space_map_incoming_block_inds(p_space, old_block_inds[:, first:last + 1])
+            for p_space, (first, *_, last) in zip(product_spaces, leg_idcs_combine)
+        ]
+        #
+        # build result block_inds
+        res_block_inds = np.empty((len(old_block_inds), num_result_legs), int)
+        i = 0  # res_block_inds[:, :i] is already set
+        j = 0  # old_block_inds[:, :j] are already considered
+        for group, p_space, map_ind in zip(leg_idcs_combine, product_spaces, map_inds):
+            # fill in block_inds for the uncombined legs that came up since the last group
+            num_uncombined = group[0] - j
+            res_block_inds[:, i:i + num_uncombined] = old_block_inds[:, j:j + num_uncombined]
+            i += num_uncombined
+            j += num_uncombined
+            # fill in block_inds for the current combined group
+            block_ind_map = p_space.get_metadata('_block_ind_map', backend=self)
             res_block_inds[:, i] = block_ind_map[map_ind, -1]
-            last_e = e
-            last_i = i
-        res_block_inds[:, last_i + 1:] = old_block_inds[:, last_e:]
-
+            i += 1
+            j += len(group)
+        # trailing uncombined legs:
+        res_block_inds[:, i:] = old_block_inds[:, j:]
+        #
         # now we have probably many duplicate rows in res_block_inds, since many combinations of
         # non-combined block indices map to the same block index in product space
         # -> find unique entries by sorting res_block_inds
@@ -313,45 +329,60 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         res_block_inds = res_block_inds[sort]
         old_blocks = [old_blocks[i] for i in sort]
         map_inds = [map_[sort] for map_ in map_inds]
-
+        #
         # determine slices in the new blocks
-        block_slices = np.zeros((len(old_blocks), len(final_legs), 2), int)
-        block_shape = np.empty((len(old_blocks), len(final_legs)), int)
-        for i, leg in enumerate(final_legs):  # legs not in new_axes
-            if i not in new_axes:
-                # block_slices[:, i, 0] = 0
-                block_slices[:, i, 1] = block_shape[:, i] = leg.multiplicities[res_block_inds[:, i]]
-        for i, product_space, map_ind in zip(new_axes, product_spaces, map_inds):  # legs in new_axes
-            block_ind_map = product_space.get_metadata('_block_ind_map', backend=self)
+        block_slices = np.zeros((len(old_blocks), num_result_legs, 2), int)
+        block_shape = np.empty((len(old_blocks), num_result_legs), int)
+        i = 0  # have already set info for new_legs[:i]
+        j = 0  # have already considered old_legs[:j]
+        for group, p_space, map_ind in zip(leg_idcs_combine, product_spaces, map_inds):
+            # uncombined legs since previous group
+            num_uncombined = group[0] - j
+            for n in range(num_uncombined):
+                # block_slices[:, i + n, 0] = 0 is already set, since we initialized zeros
+                i2 = i + n
+                leg_idx = j + n
+                mult = tensor.get_leg_co_domain(leg_idx).multiplicities[res_block_inds[:, i2]]
+                block_slices[:, i2, 1] = mult
+                block_shape[:, i2] = mult
+            i += num_uncombined
+            j += num_uncombined
+            # current combined group
+            block_ind_map = p_space.get_metadata('_block_ind_map', backend=self)
             slices = block_ind_map[map_ind, :2]
             block_slices[:, i, :] = slices
             block_shape[:, i] = slices[:, 1] - slices[:, 0]
-
+            i += 1
+            j += len(group)
+        # trailing uncombined legs
+        for n in range(tensor.num_legs - j):
+            i2 = i + n
+            leg_idx = j + n
+            mult = tensor.get_leg_co_domain(leg_idx).multiplicities[res_block_inds[:, i2]]
+            block_slices[:, i2, 1] = mult
+            block_shape[:, i2] = mult
+        #
         # split res_block_inds into parts, which give a unique new blocks
         diffs = find_row_differences(res_block_inds, include_len=True)  # including 0 and len to have slices later
         res_num_blocks = len(diffs) - 1
-        res_block_inds = res_block_inds[diffs[:res_num_blocks], :]
-        res_block_shapes = np.empty((res_num_blocks, len(final_legs)), int)
-        for i, leg in enumerate(final_legs):
+        res_block_inds = res_block_inds[diffs[:-1], :]
+        res_block_shapes = np.empty((res_num_blocks, num_result_legs), int)
+        for i, leg in enumerate(conventional_leg_order(new_codomain, new_domain)):
             res_block_shapes[:, i] = leg.multiplicities[res_block_inds[:, i]]
-
-        # now the hard part: map data
+        #
+        # map the data
         res_blocks = []
-        # iterate over ranges of equal qindices in qdata
-        for res_block_shape, beg, end in zip(res_block_shapes, diffs[:-1], diffs[1:]):
-            new_block = self.zero_block(res_block_shape, dtype=res_dtype)
-            for old_row in range(beg, end):  # copy blocks
-                shape = block_shape[old_row]  # this has multiplied dimensions for combined legs
-                old_block = self.block_reshape(old_blocks[old_row], shape)
-                new_slices = tuple(slice(b, e) for b, e in block_slices[old_row])
-
-                new_block[new_slices] = old_block  # actual data copy
-
+        for shape, start, stop in zip(res_block_shapes, diffs[:-1], diffs[1:]):
+            new_block = self.zero_block(shape, dtype=tensor.dtype)
+            for old_row in range(start, stop):  # copy blocks
+                old_block = self.block_reshape(old_blocks[old_row], block_shape[old_row])
+                new_slices = tuple(slice(b, e) for (b, e) in block_slices[old_row])
+                new_block[new_slices] = old_block
             res_blocks.append(new_block)
-
+        
         # we lexsort( .T)-ed res_block_inds while it still had duplicates, and then indexed by diffs,
         # which is sorted and thus preserves lexsort( .T)-ing of res_block_inds
-        return AbelianBackendData(res_dtype, res_blocks, res_block_inds, is_sorted=True)
+        return AbelianBackendData(tensor.dtype, res_blocks, res_block_inds, is_sorted=True)
 
     def compose(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
         """
@@ -1834,7 +1865,7 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def state_tensor_product(self, state1: Block, state2: Block, prod_space: ProductSpace):
         #TODO clearly define what this should do in tensors.py first!
-        raise NotImplementedError
+        raise NotImplementedError('state_tensor_product not implemented')
 
     def to_dense_block(self, a: SymmetricTensor) -> Block:
         res = self.zero_block(a.shape, a.data.dtype)
@@ -2058,8 +2089,6 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
             For each row j of `incoming_block_inds` an index `J` such that
             ``self.metadata['_block_ind_map'][J, 2:-1] == block_inds[j]``.
         """
-        raise NotImplementedError  # TODO not yet reviewed
-        # TODO move this back to ProductSpace?
         assert incoming_block_inds.shape[1] == len(space.spaces)
         # calculate indices of _block_ind_map by using the appropriate strides
         strides = space.get_metadata('_strides', backend=self)

@@ -78,11 +78,16 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
         return self.block_apply_mask(tensor.data, mask.data, ax=0)
 
-    def combine_legs(self, a: SymmetricTensor, combine_slices: list[int, int],
-                     product_spaces: list[ProductSpace], new_axes: list[int],
-                     final_legs: list[Space]) -> Data:
-        raise NotImplementedError  # TODO not yet reviewed
-        return self.block_combine_legs(a.data, combine_slices)
+    def combine_legs(self,
+                     tensor: SymmetricTensor,
+                     leg_idcs_combine: list[list[int]],
+                     product_spaces: list[ProductSpace],
+                     new_codomain_combine: list[tuple[list[int], ProductSpace]],
+                     new_domain_combine: list[tuple[list[int], ProductSpace]],
+                     new_codomain: ProductSpace,
+                     new_domain: ProductSpace,
+                     ) -> Data:
+         return self.block_combine_legs(tensor.data, leg_idcs_combine)
 
     def compose(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
         a_domain = list(reversed(range(a.num_codomain_legs, a.num_legs)))
@@ -381,7 +386,7 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def state_tensor_product(self, state1: Block, state2: Block, prod_space: ProductSpace):
         #TODO clearly define what this should do in tensors.py first!
-        raise NotImplementedError
+        raise NotImplementedError('state_tensor_product not implemented')
 
     def to_dense_block(self, a: SymmetricTensor) -> Block:
         return a.data

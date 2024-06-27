@@ -227,9 +227,24 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
         raise NotImplementedError('apply_mask_to_DiagonalTensor not implemented')  # TODO
     
-    def combine_legs(self, a: SymmetricTensor, combine_slices: list[int, int],
-                     product_spaces: list[ProductSpace], new_axes: list[int],
-                     final_legs: list[Space]) -> Data:
+    def combine_legs(self,
+                     tensor: SymmetricTensor,
+                     leg_idcs_combine: list[list[int]],
+                     product_spaces: list[ProductSpace],
+                     new_codomain_combine: list[tuple[list[int], ProductSpace]],
+                     new_domain_combine: list[tuple[list[int], ProductSpace]],
+                     new_codomain: ProductSpace,
+                     new_domain: ProductSpace,
+                     ) -> Data:
+        # TODO depending on how this implementation will actually look like, we may want to adjust
+        #      the signature.
+        #      - new_codomain_combine and new_domain_combine are not used by the other backends.
+        #        We have them available from tensors.combine_legs and I (Jakob) expect that they
+        #        may be useful here. If they are not, may as well remove them from the args.
+        #      - Should clearly design the metadata for productspaces first, then consider;
+        #        During the manipulations here, we may accumulate all info to form the new
+        #        codomain (in particular the metadata!). Then we should not compute it in
+        #        tensors.combine_legs, but rather here. Note that sectors and mults are known (unchanged)
         raise NotImplementedError('combine_legs not implemented')  # TODO
 
     def compose(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:

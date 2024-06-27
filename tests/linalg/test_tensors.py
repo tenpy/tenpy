@@ -1051,18 +1051,27 @@ def test_bend_legs(cls, codomain, domain, num_codomain_legs, make_compatible_ten
     npt.assert_array_almost_equal_nulp(res.to_numpy(), tensor_np, 100)
 
 
-# TODO
 def test_combine_split(make_compatible_tensor):
-    pytest.xfail(reason='combine_legs not done')  # TODO
-    
     T: SymmetricTensor = make_compatible_tensor(['a', 'b'], ['c', 'd'])
 
-    combined = tensors.combine_legs(T, [1, 2])  # TODO more combinations. also combine multiple groups
+    if isinstance(T.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError):
+            _ = tensors.combine_legs(T, [1, 2])
+        pytest.xfail()
+
+    # TODO more cases, with more legs. also combine multiple groups. include a case with braids.
+    combined = tensors.combine_legs(T, [1, 2])
     combined.test_sanity()
-    assert combined.labels == ['a', '(b.c)', 'd']
-    # note: we can not easily compare to numpy.reshape,
-    # since combine_legs includes a basis transformation
-    # TODO test separately?
+    
+    assert combined.labels == ['a', '(b.d)', 'c']
+    assert combined.codomain[0] == T.codomain[0]
+    assert combined.codomain[1].spaces == [T.codomain[1], T.domain[1].dual]
+    assert combined.domain[0] == T.domain[0]
+    # note: we can not easily compare to numpy.reshape
+
+    with pytest.raises(NotImplementedError):
+        _ = tensors.split_legs(combined, 1)
+    pytest.xfail('need to implement split_legs first')  # TODO
 
     print('check that split reverses combine')
     split = tensors.split_legs(combined, 1)
@@ -1096,11 +1105,6 @@ def test_combine_split(make_compatible_tensor):
     #     trafo = combined.get_legs('(a.b)')[0].get_basis_transformation()  # [a, b, (a.b)]
     #     reconstruct_combined = np.tensordot(trafo, dense, [[0, 1], [0, 1]])  # [(a.b), c]
     #     npt.assert_array_almost_equal_nulp(dense_combined, reconstruct_combined, 100)
-
-
-# TODO
-def test_combine_to_matrix():
-    pytest.skip('Test not written yet')  # TODO
 
 
 @pytest.mark.parametrize(
@@ -1576,7 +1580,7 @@ def test_outer(cls_A, cls_B, cA, dA, cB, dB, make_compatible_tensor):
             _ = tensors.outer(A, B, relabel1={'a': 'x'}, relabel2={'h': 'y'})
         pytest.xfail()
     if cls_A is ChargedTensor and cls_B is ChargedTensor:
-        with pytest.raises(NotImplementedError, match='tensors.combine_legs not implemented'):
+        with pytest.raises(NotImplementedError, match='state_tensor_product not implemented'):
             _ = tensors.outer(A, B, relabel1={'a': 'x'}, relabel2={'h': 'y'})
         pytest.xfail()
 

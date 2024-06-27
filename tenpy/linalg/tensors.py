@@ -2318,7 +2318,7 @@ class ChargedTensor(Tensor):
         Parameters
         -
         """
-        inv_part = combine_legs(invariant_part, [-1, -2])
+        inv_part = combine_legs(invariant_part, [-2, -1])
         inv_part.set_label(-1, cls._CHARGE_LEG_LABEL)
         if state1 is None and state2 is None:
             state = None
@@ -2843,8 +2843,8 @@ def combine_legs(tensor: Tensor,
                  ) -> Tensor:
     """Combine (multiple) groups of legs, each to a :class:`ProductSpace`.
 
-    If the legs to be combined are contiguous to begin with, the combination is just a grouping
-    of the legs::
+    If the legs to be combined are contiguous to begin with (and ordered within each group),
+    the combine is just a grouping of the legs::
 
         |        ║          │    ║ 
         |       ╭╨──┬───╮   │   ╭╨──╮
@@ -2856,7 +2856,23 @@ def combine_legs(tensor: Tensor,
         |       │   │   ╰───┴──╥╯   │
         |       │   │          ║    │
 
+    Note that the conventional leg order in the domain goes right to left, such that the first
+    element in the group, ``7``, is the *right*-most leg in the product and we have
+    ``result.domain[2] == ProductSpace([T.domain[9], T.domain[8], T.domain[7]])``.
+    This is needed to make :func:`combine_legs` cooperate seamlessly with :func:`bend_legs`,
+    i.e. you get the same result if you bend legs 6-9 to the codomain first and combine ``[7, 8, 9]``
+    there or if you combine them in the domain and then bend leg 6 and the newly combined leg.
+    Another way to see this is that we perform the product of spaces in the ``T.legs`` first,
+    and then take the dual if we need the combined leg in the domain::
+
+        prod = ProductSpace([T.legs[7], T.legs[8], T.legs[9]])
+        prod == ProductSpace([T.domain[7].dual, T.domain[8].dual, T.domain[9].dual])
+        result.legs[4] == prod
+        result.domain[2] == prod.dual == ProductSpace([T.domain[9], T.domain[8], T.domain[7]])
+
+    
     In the general case, the legs are permuted first, to match that leg order.
+    The combined leg takes the position of the first of its original legs on the tensor.
     If the symmetry does not have symmetric braids, the `levels` are required to specify the
     chirality of the braids, like in :func:`permute_legs`. For example::
 
@@ -2873,9 +2889,6 @@ def combine_legs(tensor: Tensor,
         |       │           │     ╰──┴─╥╯
         |       │           │          ║ 
 
-    TODO think again about the order of the product on the domain.
-         i.e. is the picture above given by ``[7, 10, 8]`` or ``[8, 10, 7]``?
-
     .. warning ::
         Combining legs introduces a basis-transformation. This is important to consider if
         you convert to a dense block (e.g. via :meth:`Tensor.to_dense_block`).
@@ -2883,6 +2896,7 @@ def combine_legs(tensor: Tensor,
         ``some_tens.combine_legs(...).to_numpy()`` via
         ``some_tens.to_numpy().transpose(transp).reshape(new_shape)``.
         See :meth:`ProductSpace.get_basis_transformation`.
+        TODO include an example / doctest?
 
     Parameters
     ----------
@@ -2891,9 +2905,13 @@ def combine_legs(tensor: Tensor,
     *which_legs : list of {int | str}
         One or more groups of legs to combine.
     combined_spaces: list of {ProductSpace | None}, optional
-        For each group of `legs`, the resulting ProductSpace can be passed to avoid recomputation.
-        Must be the same legs as on the result described below. In particular, choosing the right
-        duality depends on if the resulting combined leg ends up in domain or codomain.
+        For each ``group = which_legs[i]`` of legs, the resulting ProductSpace can be passed to
+        avoid recomputation. If we group to the codomain (``group[0] < tensor.num_codomain_legs``),
+        we expect ``ProductSpace([tensor._as_codomain_leg(i) for i in group])``.
+        Otherwise we expect ``ProductSpace([tensor._as_domain_leg(i) for i in reversed(group)])``.
+        Note the reverse order in the latter case!
+        In the intended use case, when another tensor with the same legs has already been combined,
+        obtain those product spaces via :meth:`Tensor.get_leg_co_domain`.
     levels: optional
         Is ignored if the symmetry has symmetric braids. Otherwise, these levels specify the
         chirality of any possible braids induced by permuting the legs. See :func:`permute_legs`.
@@ -2910,7 +2928,6 @@ def combine_legs(tensor: Tensor,
     Then, each group is replaced by the appropriate product space, either in the domain or the
     codomain.
     """
-
     # 1) Deal with different tensor types. Reduce everything to SymmetricTensor.
     # ==============================================================================================
     
@@ -2964,6 +2981,7 @@ def combine_legs(tensor: Tensor,
             else:
                 to_combine.append(leg.dual)
         if combined_spaces[n] is None:
+            # OPTIMIZE this fusion may also be more efficient in the fusiontree backend...
             combined = ProductSpace(to_combine, backend=tensor.backend)
         else:
             combined = combined_spaces[n]
@@ -3016,7 +3034,7 @@ def combine_legs(tensor: Tensor,
     #   a) preserve list lengths to not invalidate the positions, fill with None
     #   b) remove the Nones
     # [a, b, c, d, e, f, g]
-    #  -> [a, None, None, (b.c.d), e, None, (f.g)]
+    #  -> [a, None, None, (b.c.d), e, None, (f.g)]  # arbitrarily choose to put the group in last spot, for convenience
     #  -> [a, (b.c.d), e, (f.g)]
     
     domain_spaces = tensor.domain.spaces[:]
@@ -3041,9 +3059,10 @@ def combine_legs(tensor: Tensor,
     codomain_spaces = [s for s in codomain_spaces if s is not None]
     domain_labels = [l for l in domain_labels if l is not None]
     codomain_labels = [l for l in codomain_labels if l is not None]
-    
+
+    # OPTIMIZE might be better to compute these in the backend. especially for FusionTree.
     domain = ProductSpace(domain_spaces, backend=tensor.backend,
-                          _sectors=tensor.domain.sectors,
+                          _sectors=tensor.domain.sectors,  # overall fusion outcomes do not change
                           _multiplicities=tensor.domain.multiplicities)
     codomain = ProductSpace(codomain_spaces, backend=tensor.backend,
                             _sectors=tensor.codomain.sectors,
@@ -3051,8 +3070,20 @@ def combine_legs(tensor: Tensor,
 
     # 4) Build the data / finish up
     # ==============================================================================================
-    raise NotImplementedError('tensors.combine_legs not implemented')  # TODO probably need to rework the backend method.
-    data = tensor.backend.combine_legs(tensor, ...)
+    N = tensor.num_legs
+    leg_idcs = []  # OPTIMIZE is rebuilding this redundant??
+    product_spaces = []
+    for positions, p_space in new_codomain_combine:
+        leg_idcs.append(positions)
+        product_spaces.append(p_space)
+    for positions, p_space in reversed(new_domain_combine):  # TODO is the reverse correct? is it needed?
+        leg_idcs.append([N - 1 - p for p in reversed(positions)])
+        product_spaces.append(p_space)
+    data = tensor.backend.combine_legs(
+        tensor, leg_idcs_combine=leg_idcs, product_spaces=product_spaces,
+        new_codomain_combine=new_codomain_combine, new_domain_combine=new_domain_combine,
+        new_codomain=codomain, new_domain=domain
+    )
     return SymmetricTensor(data, codomain=codomain, domain=domain, backend=tensor.backend,
                            labels=[codomain_labels, domain_labels])
 
