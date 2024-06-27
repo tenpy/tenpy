@@ -409,11 +409,6 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         blocks = [self.eye_matrix(block_size(co_domain, c), dtype) for c in coupled_sectors]
         return FusionTreeData(coupled_sectors, blocks, dtype)
 
-    def flip_leg_duality(self, tensor: SymmetricTensor, which_legs: list[int],
-                         flipped_legs: list[Space], perms: list[np.ndarray]) -> Data:
-        # TODO think carefully about what this means.
-        raise NotImplementedError('flip_leg_duality not implemented')  # TODO
-    
     def from_dense_block(self, a: Block, codomain: ProductSpace, domain: ProductSpace, tol: float
                          ) -> FusionTreeData:
         sym = codomain.symmetry
@@ -523,10 +518,6 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def get_element_diagonal(self, a: DiagonalTensor, idx: int) -> complex | float | bool:
         raise NotImplementedError('get_element_diagonal not implemented')  # TODO
-
-    def infer_leg(self, block: Block, legs: list[Space | None], is_dual: bool = False,
-                  ) -> ElementarySpace:
-        raise NotImplementedError('infer_leg not implemented')  # TODO
 
     def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_dagger: bool) -> float | complex:
         raise NotImplementedError('inner not implemented')  # TODO
@@ -642,17 +633,6 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def scale_axis(self, a: SymmetricTensor, b: DiagonalTensor, leg: int) -> Data:
         raise NotImplementedError('scale_axis not implemented')  # TODO
 
-    def set_element(self, a: SymmetricTensor, idcs: list[int], value: complex | float) -> Data:
-        # TODO not sure this can even be done sensibly, one entry of the dense block
-        #      affects in general many entries of the blocks.
-        raise NotImplementedError('set_element not implemented')  # TODO
-
-    def set_element_diagonal(self, a: DiagonalTensor, idx: int, value: complex | float | bool
-                             ) -> DiagonalData:
-        # TODO not sure this can even be done sensibly, one entry of the dense block
-        #      affects in general many entries of the blocks.
-        raise NotImplementedError('set_element_diagonal not implemented')  # TODO
-
     def split_legs(self, a: SymmetricTensor, leg_idcs: list[int],
                    final_legs: list[Space]) -> Data:
         # TODO do we need metadata to split, like in abelian?
@@ -670,12 +650,6 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         # TODO need to redesign Backend.svd specification! need to allow more than two legs!
         # TODO need to be able to specify levels of braiding in general case!
         raise NotImplementedError('svd not implemented')  # TODO
-
-    def tdot(self, a: SymmetricTensor, b: SymmetricTensor, axs_a: list[int],
-             axs_b: list[int]) -> Data:
-        # TODO need to be able to specify levels of braiding in general case!
-        # TODO offer separate planar version? or just high
-        raise NotImplementedError('tdot not implemented')  # TODO
 
     def state_tensor_product(self, state1: Block, state2: Block, prod_space: ProductSpace):
         #TODO clearly define what this should do in tensors.py first!

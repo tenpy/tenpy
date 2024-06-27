@@ -2,7 +2,6 @@
 from __future__ import annotations
 from abc import ABCMeta
 from typing import TYPE_CHECKING, Callable
-import numpy as np
 
 from .abstract_backend import (Backend, BlockBackend, Data, DiagonalData, MaskData, Block,
                                conventional_leg_order)
@@ -158,10 +157,6 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         #       the basis perms.
         return self.eye_block(legs=[l.dim for l in co_domain.spaces], dtype=dtype)
 
-    def flip_leg_duality(self, tensor: SymmetricTensor, which_legs: list[int],
-                         flipped_legs: list[Space], perms: list[np.ndarray]) -> Data:
-        return tensor.data
-
     def from_dense_block(self, a: Block, codomain: ProductSpace, domain: ProductSpace, tol: float
                          ) -> Data:
         return a
@@ -196,14 +191,6 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def get_element_diagonal(self, a: DiagonalTensor, idx: int) -> complex | float | bool:
         # a.data is a single 1D block
         return self.get_block_element(a.data, [idx])
-
-    def infer_leg(self, block: Block, legs: list[Space | None], is_dual: bool = False
-                  ) -> ElementarySpace:
-        idx, *more = [n for n, leg in enumerate(legs) if leg is None]
-        if more:
-            raise ValueError('Can only infer one leg')
-        dim = self.block_shape(block)[idx]
-        return ElementarySpace.from_trivial_sector(dim, is_dual=is_dual)
 
     def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_dagger: bool) -> float | complex:
         return self.block_inner(a.data, b.data, do_dagger=do_dagger)
@@ -352,13 +339,6 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def scale_axis(self, a: SymmetricTensor, b: DiagonalTensor, leg: int) -> Data:
         return self.block_scale_axis(a.data, b.data, leg)
 
-    def set_element(self, a: SymmetricTensor, idcs: list[int], value: complex | float) -> Data:
-        return self.set_block_element(a.data, idcs, value)
-
-    def set_element_diagonal(self, a: DiagonalTensor, idx: int, value: complex | float | bool
-                             ) -> DiagonalData:
-        return self.set_block_element(a.data, [idx], value)
-    
     def split_legs(self, a: SymmetricTensor, leg_idcs: list[int],
                    final_legs: list[Space]) -> Data:
         raise NotImplementedError  # TODO not yet reviewed
@@ -378,11 +358,6 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         u, s, vh = self.matrix_svd(a.data, algorithm=algorithm, compute_u=compute_u, compute_vh=compute_vh)
         new_leg = ElementarySpace.from_trivial_sector(len(s), is_dual=new_vh_leg_dual)
         return u, s, vh, new_leg
-
-    def tdot(self, a: SymmetricTensor, b: SymmetricTensor, axs_a: list[int], axs_b: list[int]) -> Data:
-        # TODO interface may change
-        raise NotImplementedError  # TODO not yet reviewed
-        return self.block_tdot(a.data, b.data, axs_a, axs_b)
 
     def state_tensor_product(self, state1: Block, state2: Block, prod_space: ProductSpace):
         #TODO clearly define what this should do in tensors.py first!

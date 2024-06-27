@@ -288,11 +288,6 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def flip_leg_duality(self, tensor: SymmetricTensor, which_legs: list[int],
-                         flipped_legs: list[Space], perms: list[np.ndarray]) -> Data:
-        ...
-
-    @abstractmethod
     def from_dense_block(self, a: Block, codomain: ProductSpace, domain: ProductSpace, tol: float
                          ) -> Data:
         """Convert a dense block to the data for a symmetric tensor.
@@ -362,13 +357,6 @@ class Backend(metaclass=ABCMeta):
             The index for both legs. Checks have already been performed, i.e. we may assume that
             ``0 <= idx < leg.dim``
         """
-        ...
-
-    @abstractmethod
-    def infer_leg(self, block: Block, legs: list[Space | None], is_dual: bool = False,
-                  is_real: bool = False) -> ElementarySpace:
-        """Infer a missing leg from the dense block"""
-        # TODO make it poss
         ...
 
     @abstractmethod
@@ -541,39 +529,6 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def set_element(self, a: SymmetricTensor, idcs: list[int], value: complex | float) -> Data:
-        """Return a copy of the data of a tensor, with a single element changed.
-
-        Parameters
-        ----------
-        idcs
-            The indices. Checks have already been performed, i.e. we may assume that
-            - len(idcs) == a.num_legs
-            - 0 <= idx < leg.dim
-            - the indices reference an allowed (by the charge rule) entry.
-            The indices are w.r.t. the internal (sorted) order.
-        value
-            A value of the appropriate type ``a.dtype.python_type``.
-        """
-        ...
-
-    @abstractmethod
-    def set_element_diagonal(self, a: DiagonalTensor, idx: int, value: complex | float | bool
-                             ) -> DiagonalData:
-        """Return a copy of the data of a diagonal tensor, with a single element changed.
-
-        Parameters
-        ----------
-        idx
-            The index for both legs. Checks have already been performed, i.e. we may assume that
-            - 0 <= idx < leg.dim
-            The index are w.r.t. the internal (sorted) order.
-        value
-            A value of the appropriate type ``a.dtype.python_type``.
-        """
-        ...
-
-    @abstractmethod
     def split_legs(self, a: SymmetricTensor, leg_idcs: list[int], final_legs: list[Space]) -> Data:
         """split multiple product space legs."""
         ...
@@ -608,11 +563,6 @@ class Backend(metaclass=ABCMeta):
         new_leg :
             ElementarySpace the new leg of vh.
         """
-        ...
-
-    @abstractmethod
-    def tdot(self, a: SymmetricTensor, b: SymmetricTensor, axs_a: list[int], axs_b: list[int]) -> Data:
-        """Tensordot i.e. pairwise contraction"""
         ...
 
     @abstractmethod
