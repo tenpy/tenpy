@@ -674,12 +674,12 @@ def test_product_symmetry(np_random):
     s2 = np.array([3, 2, 0])  # e.g. spin 3/2 , 2 particles , even parity ("bosonic")
     sectors = np.array([s1, s2])
     common_checks(sym, example_sectors=sectors, example_sectors_low_qdim=sectors,
-                  np_random=np_random, skip_fusion_tensor=True)  # TODO dont skip!
+                  np_random=np_random, skip_fusion_tensor=False)
 
     u1_z3 = symmetries.u1_symmetry * symmetries.z3_symmetry
     common_checks(u1_z3, example_sectors=np.array([[42, 1], [-1, 2], [-2, 0]]),
                   example_sectors_low_qdim=np.array([[42, 1], [-1, 2], [-2, 0]]),
-                  np_random=np_random, skip_fusion_tensor=True)  # TODO dont skip!
+                  np_random=np_random, skip_fusion_tensor=False)
 
     print('instancecheck and is_abelian')
     assert not isinstance(sym, symmetries.AbelianGroup)

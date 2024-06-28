@@ -922,6 +922,46 @@ class ProductSymmetry(Symmetry):
 
         return rsym
 
+    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector, Z_a: bool = False, Z_b: bool = False) -> np.ndarray:
+
+        if _DO_FUSION_INPUT_CHECKS:
+            is_correct = self.can_fuse_to(a, b, c)
+            if not is_correct:
+                raise SymmetryError('Sectors are not consistent with fusion rules.')
+        if not self.can_be_dropped:
+            raise SymmetryError(f'fusion tensor can not be written as array for {self}')
+
+        contributions = []
+        for i, f_i in enumerate(self.factors):
+            a_k = a[self.sector_slices[i]:self.sector_slices[i + 1]]
+            b_k = b[self.sector_slices[i]:self.sector_slices[i + 1]]
+            c_k = c[self.sector_slices[i]:self.sector_slices[i + 1]]
+
+            contributions.append(f_i._fusion_tensor(a_k, b_k, c_k, Z_a, Z_b))
+
+        ftensor = np.kron(contributions[0], contributions[1])
+        for i in contributions[2:]:
+            ftensor = np.kron(ftensor, i)
+
+        return ftensor
+
+    def Z_iso(self, a: Sector) -> np.ndarray:
+
+        if not self.can_be_dropped:
+            raise SymmetryError(f'Z iso can not be written as array for {self}')
+
+        contributions = []
+        for i, f_i in enumerate(self.factors):
+            a_k = a[self.sector_slices[i]:self.sector_slices[i + 1]]
+
+            contributions.append(f_i.Z_iso(a_k))
+
+        ProdZiso = np.kron(contributions[0], contributions[1])
+        for i in contributions[2:]:
+            ProdZiso = np.kron(ProdZiso, i)
+
+        return ProdZiso
+
 
 
 class _ABCFactorSymmetryMeta(ABCMeta):
