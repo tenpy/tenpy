@@ -13,7 +13,7 @@ from tenpy.linalg.tensors import DiagonalTensor, SymmetricTensor, Mask, ChargedT
 from tenpy.linalg.backends.backend_factory import get_backend
 from tenpy.linalg.dtypes import Dtype
 from tenpy.linalg.spaces import ElementarySpace, ProductSpace
-from tenpy.linalg.symmetries import ProductSymmetry, z4_symmetry, SU2Symmetry
+from tenpy.linalg.symmetries import z4_symmetry, SU2Symmetry
 from tenpy.linalg.misc import duplicate_entries
 
 
@@ -165,13 +165,6 @@ def test_SymmetricTensor(make_compatible_tensor, leg_nums):
     assert T.num_domain_legs == leg_nums[1]
 
     print('checking to_numpy')
-    if (isinstance(backend, backends.FusionTreeBackend)) and (isinstance(T.symmetry, ProductSymmetry)):
-        if T.codomain.num_spaces > 1 or T.domain.num_spaces > 1:
-            # if both have at most one leg, we actually dont need fusion tensors to convert.
-            with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
-                numpy_block = T.to_numpy()
-            pytest.xfail()
-
     numpy_block = T.to_numpy()
     dense_block = backend.block_from_numpy(numpy_block)
 
@@ -444,12 +437,6 @@ def test_ChargedTensor(make_compatible_tensor, make_compatible_sectors, compatib
     assert T.num_domain_legs == leg_nums[1]
 
     print('checking to_numpy')
-    if (isinstance(backend, backends.FusionTreeBackend)) and (isinstance(T.symmetry, ProductSymmetry)):
-        if T.codomain.num_spaces > 1 or T.domain.num_spaces > 0:
-            # if both have at most one leg, we actually dont need fusion tensors to convert.
-            with pytest.raises(NotImplementedError, match='should be implemented by subclass'):
-                numpy_block = T.to_numpy()
-            pytest.xfail()
     numpy_block = T.to_numpy()
     assert T.shape == numpy_block.shape
     
@@ -924,11 +911,6 @@ def test_Tensor_str_repr(cls, codomain, domain, make_compatible_tensor, str_max_
 def test_add_trivial_leg(cls, domain, codomain, is_dual, make_compatible_tensor, np_random):
     tens: cls = make_compatible_tensor(domain, codomain, cls=cls)
 
-    need_fusion_tensor = isinstance(tens.backend, backends.FusionTreeBackend) and (tens.num_codomain_legs > 1 or tens.num_domain_legs > 1)
-    if need_fusion_tensor and isinstance(tens.symmetry, ProductSymmetry):
-        with pytest.raises(NotImplementedError):
-            tens_np = tens.to_numpy()
-        pytest.xfail()
     tens_np = tens.to_numpy()
 
     if isinstance(tens.backend, backends.FusionTreeBackend):
@@ -1040,13 +1022,6 @@ def test_bend_legs(cls, codomain, domain, num_codomain_legs, make_compatible_ten
     res.test_sanity()
     assert res.legs == tensor.legs
 
-    if isinstance(tensor.backend, backends.FusionTreeBackend) \
-            and isinstance(tensor.symmetry, ProductSymmetry)\
-            and (codomain > 1 or domain > 1):
-        with pytest.raises(NotImplementedError):
-            _ = tensor.to_numpy()
-        pytest.xfail()
-    
     tensor_np = tensor.to_numpy()
     npt.assert_array_almost_equal_nulp(res.to_numpy(), tensor_np, 100)
 
@@ -1181,13 +1156,6 @@ def test_dagger(cls, cod, dom, make_compatible_tensor, np_random):
     if how_to_call == '.dagger':
         res = T.dagger
     res.test_sanity()
-
-    if isinstance(T.backend, backends.FusionTreeBackend) \
-            and isinstance(T.symmetry, ProductSymmetry)\
-            and (cod > 1 or dom > 1):
-        with pytest.raises(NotImplementedError):
-            _ = T.to_numpy()
-        pytest.xfail()
 
     assert res.codomain == T.domain
     assert res.domain == T.codomain
@@ -1439,11 +1407,6 @@ def test_item(make_compatible_tensor, make_compatible_sectors, compatible_symmet
 
     res = tensors.item(T)
 
-    if isinstance(T.backend, backends.FusionTreeBackend) and isinstance(T.symmetry, ProductSymmetry):
-        with pytest.raises(NotImplementedError):
-            _ = T.to_numpy()
-        pytest.xfail()
-    
     expect = T.to_numpy().item()
     npt.assert_almost_equal(res, expect)
 
@@ -1458,13 +1421,6 @@ def test_linear_combination(make_compatible_tensor_any_class):
     assert v.domain == w.domain
     assert v.codomain == w.codomain
     
-    needs_fusion_tensor = type(v) in [SymmetricTensor, ChargedTensor] \
-        and isinstance(v.backend, backends.FusionTreeBackend)
-    if needs_fusion_tensor and isinstance(v.symmetry, ProductSymmetry):
-        with pytest.raises(NotImplementedError):
-            _ = v.to_numpy()
-        pytest.xfail()
-
     v_np = v.to_numpy()
     w_np = w.to_numpy()
     for valid_scalar in [0, 1., 2. + 3.j, -42]:
@@ -1517,16 +1473,6 @@ def test_move_leg(cls, cod, dom, leg, codomain_pos, domain_pos, levels, make_com
     assert res.legs == [T.get_leg(n) for n in perm]
     assert res.num_codomain_legs == cod + int(codomain_pos is not None) - int(leg < cod)
 
-    if isinstance(T.backend, backends.FusionTreeBackend) and isinstance(T.symmetry, ProductSymmetry):
-        if cod > 1 or dom > 1:
-            with pytest.raises(NotImplementedError):
-                _ = T.to_numpy()
-            pytest.xfail()
-        if res.num_codomain_legs > 1 or res.num_domain_legs > 1:
-            with pytest.raises(NotImplementedError):
-                _ = res.to_numpy()
-            pytest.xfail()
-    
     expect = T.to_numpy().transpose(perm)
     npt.assert_allclose(res.to_numpy(), expect)
 
@@ -1544,16 +1490,7 @@ def test_move_leg(cls, cod, dom, leg, codomain_pos, domain_pos, levels, make_com
 )
 def test_norm(cls, cod, dom, make_compatible_tensor):
     T: cls = make_compatible_tensor(cod, dom, cls=cls)
-    
     res = tensors.norm(T)
-
-    if isinstance(T.backend, backends.FusionTreeBackend) \
-            and isinstance(T.symmetry, ProductSymmetry) \
-            and (cod > 1 or dom + int(cls is ChargedTensor) > 1):
-        with pytest.raises(NotImplementedError):
-            _ = T.to_numpy()
-        pytest.xfail()
-
     expect = np.linalg.norm(T.to_numpy())
     npt.assert_almost_equal(res, expect)
 
@@ -1664,11 +1601,6 @@ def test_partial_trace(cls, codom, dom, make_compatible_space, make_compatible_t
     #
     # 3) Test the result
     #
-    if isinstance(T.backend, backends.FusionTreeBackend) and isinstance(T.symmetry, ProductSymmetry) and (T.num_codomain_legs > 1 or T.num_domain_legs > 1):
-        with pytest.raises(NotImplementedError):
-            _ = T.to_numpy()
-        pytest.xfail()
-    #
     num_open = T.num_legs - 2 * len(pairs)
     if num_open == 0:
         assert isinstance(res, (float, complex))
@@ -1739,14 +1671,6 @@ def test_permute_legs(cls, num_cod, num_dom, codomain, domain, levels, make_comp
 
     if T.symmetry.can_be_dropped:
         # makes sense to compare with dense blocks
-
-        if isinstance(T.backend, backends.FusionTreeBackend) \
-                and isinstance(T.symmetry, ProductSymmetry)\
-                and (num_cod > 1 or num_dom > 1):
-            with pytest.raises(NotImplementedError):
-                _ = T.to_numpy()
-            pytest.xfail()
-        
         expect = np.transpose(T.to_numpy(), [*codomain, *reversed(domain)])
         actual = res.to_numpy()
         npt.assert_allclose(actual, expect)
@@ -1758,13 +1682,6 @@ def test_permute_legs(cls, num_cod, num_dom, codomain, domain, levels, make_comp
 
 def test_scalar_multiply(make_compatible_tensor_any_class):
     T = make_compatible_tensor_any_class()
-    
-    needs_fusion_tensor = type(T) in [SymmetricTensor, ChargedTensor] \
-        and isinstance(T.backend, backends.FusionTreeBackend)
-    if needs_fusion_tensor and isinstance(T.symmetry, ProductSymmetry):
-        with pytest.raises(NotImplementedError):
-            T_np = T.to_numpy()
-        pytest.xfail()
     
     T_np = T.to_numpy()
     for valid_scalar in [0, 1., 2. + 3.j, -42]:
@@ -1979,11 +1896,6 @@ def test_trace(cls, legs, make_compatible_tensor, compatible_symmetry, make_comp
 
     res = tensors.trace(tensor)
     assert isinstance(res, (float, complex))
-
-    if isinstance(tensor.backend, backends.FusionTreeBackend) and isinstance(tensor.symmetry, ProductSymmetry) and legs > 1:
-        with pytest.raises(NotImplementedError):
-            _ = tensor.to_numpy()
-        pytest.xfail()
 
     expect = tensor.to_numpy()
     while expect.ndim > 0:
