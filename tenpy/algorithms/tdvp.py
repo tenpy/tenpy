@@ -106,17 +106,20 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
     # run() from TimeEvolutionAlgorithm
 
     def prepare_evolve(self, dt):
-        """Expand the basis using Krylov updates, i.e. the algorithm from `:cite:yang20202`.
+        """Expand the basis using Krylov or random vectors using the algorithm from `:cite:yang20202`.
 
         This action of this function is specified by the 'Krylov_options' field of the options passed when constructing the
-        TDVP engine. Below, I list the possible keys of the 'Krylov_options' dictionary::
+        TDVP engine. Below, I list the possible keys of the 'Krylov_options' dictionary:
 
         1. Krylov_expansion_dim: how many additional vectors do we use to expand the basis; > 1 is sufficient for random extension.
+
         2. mpo: what MPO do we use for expanion? If none is specified, we use the Hamiltonian. If 'None' is specified, we do
             random extension.
+
         3. trunc_params: standard dictionary for truncation settings.
                 chi_max: max number of states that are added on each site.
-                svd_min: cutoff for kept eigenvalues of the RDM
+                svd_min: cutoff for kept sqrt(eigenvalues) of the RDM
+
         4. apply_mpo_options: how do we apply the MPO to the MPS; e.g. SVD, zip_up, variational and associated parameters.
         """
         Krylov_expansion_dim = self.Krylov_options.get('expansion_dim', 0)

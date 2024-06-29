@@ -353,7 +353,7 @@ def eigh_rho(rho, trunc_par, UPLO='L', sort=None):
                                      or new_len_W != trunc_par['chi_max']):
         msg = "Catastrophic reduction in chi: {0:d} -> {1:d}".format(len(W), new_len_W)
         # NANs are excluded in npc.svd
-        VHU = npc.tensordot(V.conj(), V, axes=[[0], [0]])
+        VHV = npc.tensordot(V.conj(), V, axes=[[0], [0]])
         msg += " |V^d V - 1| = {0:f}".format(npc.norm(VHV - npc.eye_like(VHV)))
         warnings.warn(msg, stacklevel=2)
     W = W[piv] / new_norm**2 * renormalization
