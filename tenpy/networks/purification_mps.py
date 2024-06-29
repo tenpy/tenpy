@@ -465,7 +465,8 @@ class PurificationMPS(MPS):
                             last_site=None,
                             ops=None,
                             rng=None,
-                            norm_tol=1.e-12):
+                            norm_tol=1.e-12,
+                            complex_amplitude=True):
         """Sample measurement results in the computational basis.
 
         See :meth:`tenpy.networks.mps.MPS.sample_measurements` for documentation of the function.
@@ -476,7 +477,7 @@ class PurificationMPS(MPS):
         q leg to sample from the distribution just on the physical legs. The probability we return
         is the joint probability of both p and q outcomes. We don't care about in which basis we
         sample the q legs, and additionally we do not return the q outcomes to the user.
-        
+
         2. Leave the ancilla leg behind on each site. Then we sample directly from the distribution
         on p legs, but this is more expensive. The total cost of sampling is now O(chi^3) rather
         than O(chi^2). The returned probability is just that of the p outcomes, so this is physical.
@@ -489,6 +490,9 @@ class PurificationMPS(MPS):
              Do we sample the q leg (True) or leave it behind (False)?
         first_site, last_site, ops, rng, norm_tol :
             Same as in :meth:`tenpy.networks.mps.MPS.sample_measurements`.
+        complex_amplitude : bool
+            Do we return the amplitude (True) of the sampled bit string or the probability (False),
+            which is the |amplitude|**2. This MUST be False for the purification MPS function.
 
         Returns
         -------
@@ -505,7 +509,11 @@ class PurificationMPS(MPS):
             i.e. the probability of measuring ``|sigmas...>`` on the physical legs.
             If `sample_q` == True, we return the probability of measuring a particular configuration
             on both physical and ancilla legs, even though we don't return the ancilla configuration.
+            Hence, the returned probability isn't really meaningful.
         """
+        if complex_amplitude:
+            raise ValueError("Sampling a purification MPS only retuns the probability of the sampled string; rerun with 'complex_amplitude=False'.")
+
         if last_site is None:
             last_site = self.L - 1
         if rng is None:
