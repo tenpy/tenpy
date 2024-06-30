@@ -248,7 +248,24 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         raise NotImplementedError('combine_legs not implemented')  # TODO
 
     def compose(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
-        raise NotImplementedError('compose not implemented')
+        res_dtype = Dtype.common(a.dtype, b.dtype)
+        a_blocks = a.data.blocks
+        b_blocks = b.data.blocks
+        if a.dtype != res_dtype:
+            a_blocks = [self.block_to_dtype(bl, res_dtype) for bl in a_blocks]
+        if b.dtype != res_dtype:
+            b_blocks = [self.block_to_dtype(bl, res_dtype) for bl in b_blocks]
+        blocks = []
+        coupled = []
+        a_coupled = a.data.coupled_sectors
+        for i, j in iter_common_sorted_arrays(a_coupled, b.data.coupled_sectors):
+            blocks.append(self.matrix_dot(a_blocks[i], b_blocks[j]))
+            coupled.append(a_coupled[i])
+        if len(coupled) == 0:
+            coupled = a.symmetry.empty_sector_array
+        else:
+            coupled = np.array(coupled, int)
+        return FusionTreeData(coupled, blocks, res_dtype)
 
     def copy_data(self, a: SymmetricTensor) -> FusionTreeData:
         return FusionTreeData(

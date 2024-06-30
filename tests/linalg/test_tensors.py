@@ -1096,11 +1096,6 @@ def test_compose(cls_A, cls_B, cod_A, shared, dom_B, make_compatible_tensor):
         codomain=A.domain, domain=dom_B, labels=labels_B, cls=cls_B
     )
 
-    if isinstance(A.backend, backends.FusionTreeBackend):
-        with pytest.raises(NotImplementedError):
-            _ = tensors.compose(A, B, relabel1={'a': 'x'}, relabel2={'j': 'y'})
-        pytest.xfail()
-    
     res = tensors.compose(A, B, relabel1={'a': 'x'}, relabel2={'m': 'y'})
 
     if cod_A == 0 == dom_B:  # scalar result
@@ -1350,8 +1345,11 @@ def test_inner(cls, cod, dom, do_dagger, make_compatible_tensor):
         with pytest.raises(NotImplementedError, match='tensors._compose_with_Mask not implemented for Mask'):
             _ = tensors.inner(A, B, do_dagger=do_dagger)
         pytest.xfail()
-    if isinstance(A.backend, backends.FusionTreeBackend) and cls is not DiagonalTensor:
-        with pytest.raises(NotImplementedError, match='(inner|permute_legs|compose) not implemented'):
+
+    if isinstance(A.backend, backends.FusionTreeBackend) \
+            and (cls is not DiagonalTensor) \
+            and not (cls is ChargedTensor and dom == 0):
+        with pytest.raises(NotImplementedError, match='(inner|permute_legs) not implemented'):
             _ = tensors.inner(A, B, do_dagger=do_dagger)
         pytest.xfail()
 
