@@ -648,6 +648,27 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return func(numbers)
         
     def scale_axis(self, a: SymmetricTensor, b: DiagonalTensor, leg: int) -> Data:
+        in_domain, co_codomain_idx, leg_idx = a._parse_leg_idx(leg)
+        a_blocks = a.data.blocks
+        b_blocks = b.data.blocks
+        a_coupled = a.data.coupled_sectors
+        
+        if in_domain and a.domain.num_spaces == 1:
+            blocks = []
+            coupled = []
+            for i, j in iter_common_sorted_arrays(a_coupled, b.data.coupled_sectors):
+                blocks.append(self.block_scale_axis(a_blocks[i], b_blocks[j], axis=1))
+                coupled.append(a_coupled[i])
+            return FusionTreeData(coupled, blocks, a.dtype)
+        
+        if (not in_domain) and a.codomain.num_spaces == 1:
+            blocks = []
+            coupled = []
+            for i, j in iter_common_sorted_arrays(a_coupled, b.data.coupled_sectors):
+                blocks.append(self.block_scale_axis(a_blocks[i], b_blocks[j], axis=0))
+                coupled.append(a_coupled[i])
+            return FusionTreeData(coupled, blocks, a.dtype)
+
         raise NotImplementedError('scale_axis not implemented')  # TODO
 
     def split_legs(self, a: SymmetricTensor, leg_idcs: list[int],
