@@ -206,7 +206,17 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def linear_combination(self, a, v: SymmetricTensor, b, w: SymmetricTensor) -> Data:
         return self.block_linear_combination(a, v.data, b, w.data)
-        
+
+    def lq(self, tensor: SymmetricTensor, new_leg: ElementarySpace) -> tuple[Data, Data]:
+        l_dims = tensor.shape[:tensor.num_codomain_legs]
+        q_dims = tensor.shape[tensor.num_codomain_legs:]
+        mat = self.block_reshape(tensor.data, (prod(l_dims), prod(q_dims)))
+        l, q = self.matrix_qr(mat, full=False)
+        k = self.block_shape(q)[-1]
+        l = self.block_reshape(l, l_dims + (k,))
+        q = self.block_reshape(q, (k,) + q_dims)
+        return l, q
+    
     def mask_binary_operand(self, mask1: Mask, mask2: Mask, func
                             ) -> tuple[DiagonalData, ElementarySpace]:
         large_leg = mask1.large_leg
@@ -328,12 +338,15 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         data = self.block_permute_axes(a.data, [*codomain_idcs, *reversed(domain_idcs)])
         return data, codomain, domain
 
-    def qr(self, a: SymmetricTensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, ElementarySpace]:
-        raise NotImplementedError  # TODO not yet reviewed
-        q, r = self.matrix_qr(a.data, full=full)
-        new_leg_dim = self.block_shape(r)[0]
-        new_leg = ElementarySpace.from_trivial_sector(new_leg_dim, is_dual=new_r_leg_dual)
-        return q, r, new_leg
+    def qr(self, a: SymmetricTensor, new_leg: ElementarySpace) -> tuple[Data, Data]:
+        q_dims = a.shape[:a.num_codomain_legs]
+        r_dims = a.shape[a.num_codomain_legs:]
+        mat = self.block_reshape(a.data, (prod(q_dims), prod(r_dims)))
+        q, r = self.matrix_qr(mat, full=False)
+        k = self.block_shape(r)[-1]
+        q = self.block_reshape(q, q_dims + (k,))
+        r = self.block_reshape(r, (k,) + r_dims)
+        return q, r
 
     def reduce_DiagonalTensor(self, tensor: DiagonalTensor, block_func, func) -> float | complex:
         return block_func(tensor.data)

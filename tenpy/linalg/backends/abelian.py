@@ -973,7 +973,50 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         else:
             res_block_inds = np.zeros((0, v.num_legs), int)
         return AbelianBackendData(common_dtype, res_blocks, res_block_inds, is_sorted=True)
-        
+
+    def lq(self, a: SymmetricTensor, new_leg: ElementarySpace) -> tuple[Data, Data]:
+        assert a.num_codomain_legs == 1 == a.num_domain_legs  # since self.can_decompose_tensors is False
+        l_blocks = []
+        q_blocks = []
+        l_block_inds = []
+        q_block_inds = []
+        a_blocks = a.data.blocks
+        a_block_inds = a.data.block_inds
+        #
+        i = 0  # running index, indicating we have already processed a_blocks[:i]
+        for n, (j, k) in enumerate(iter_common_sorted_arrays(a.codomain.sectors, a.domain.sectors)):
+            # due to the loop setup we have:
+            #   a.codomain.sectors[j] == new_leg.sectors[n]
+            #   a.domain.sectors[k] == new_leg.sectors[n]
+            if i < len(a_block_inds) and a_block_inds[i, 0] == j:
+                # we have a block for that sector -> decompose it
+                l, q = self.matrix_lq(a_blocks[i], full=False)
+                l_blocks.append(l)
+                q_blocks.append(q)
+                l_block_inds.append([j, n])
+                i += 1
+            else:
+                # we do not have a block for that sector
+                # => L_block == 0 and we dont even set it.
+                # can choose arbitrary blocks for q, as long as they are isometric
+                new_leg_dim = new_leg.multiplicities[n]
+                q_blocks.append(
+                    self.eye_matrix(a.domain.multiplicities[k], a.dtype)[:new_leg_dim, :]
+                )
+            q_block_inds.append([j, n])
+        if len(l_blocks) == 0:
+            l_block_inds = np.zeros((0, 2), int)
+        else:
+            l_block_inds = np.array(l_block_inds, int)
+        if len(q_blocks) == 0:
+            q_block_inds = np.zeros((0, 2), int)
+        else:
+            q_block_inds = np.array(q_block_inds, int)
+        #
+        l_data = AbelianBackendData(a.dtype, l_blocks, l_block_inds, is_sorted=True)
+        q_data = AbelianBackendData(a.dtype, q_blocks, q_block_inds, is_sorted=True)
+        return l_data, q_data
+    
     def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[DiagonalData, ElementarySpace]:
         large_leg = mask1.large_leg
         basis_perm = large_leg._basis_perm
@@ -1408,69 +1451,49 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         data = AbelianBackendData(a.dtype, blocks=blocks, block_inds=block_inds, is_sorted=False)
         return data, codomain, domain
 
-    def qr(self, a: SymmetricTensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, ElementarySpace]:
-        raise NotImplementedError  # TODO not yet reviewed
-        # TODO dont use legs! use conventional_leg_order / domain / codomain
-        q_leg_0, r_leg_1 = a.legs
+    def qr(self, a: SymmetricTensor, new_leg: ElementarySpace) -> tuple[Data, Data]:
+        assert a.num_codomain_legs == 1 == a.num_domain_legs  # since self.can_decompose_tensors is False
         q_blocks = []
         r_blocks = []
-        for block in a.data.blocks:
-            q, r = self.matrix_qr(block, full=full)
-            q_blocks.append(q)
-            r_blocks.append(r)
-        sym = a.symmetry
-        if full:
-            new_leg = q_leg_0.as_ElementarySpace()
-            if new_leg.is_dual != new_r_leg_dual:
-                # taking the dual leaves _non_sorted_dual_sectors unaffected and
-                # thus we dont need to adjust anything else
-                new_leg = new_leg.dual
-            # sort q_blocks
-            q_blocks_full = [None] * q_leg_0.num_sectors
-            for i, q in zip(a.data.block_inds[:, 0], q_blocks):
-                q_blocks_full[i] = q
-            if len(q_blocks) < q_leg_0.num_sectors:
-                # there is a block-column in `a` that is completely 0 and not in a.data.blocks
-                # so we need to add corresponding identity blocks in q to ensure q is unitary!
-                dtype = a.data.dtype
-                for i, q in enumerate(q_blocks_full):
-                    if q is None:
-                        q_blocks_full[i] = self.eye_block([q_leg_0.multiplicities[i]], dtype)
-            q_block_inds = np.repeat(np.arange(q_leg_0.num_sectors, dtype=int)[:, None], 2, axis=1)  # sorted
-            r_block_inds = a.data.block_inds.copy() # is already sorted...
-
-            q_data = AbelianBackendData(a.data.dtype, q_blocks_full, q_block_inds, is_sorted=True)
-            r_data = AbelianBackendData(a.data.dtype, r_blocks, r_block_inds, is_sorted=True)
+        q_block_inds = []
+        r_block_inds = []
+        a_blocks = a.data.blocks
+        a_block_inds = a.data.block_inds
+        #
+        i = 0  # running index, indicating we have already processed a_blocks[:i]
+        for n, (j, k) in enumerate(iter_common_sorted_arrays(a.codomain.sectors, a.domain.sectors)):
+            # due to the loop setup we have:
+            #   a.codomain.sectors[j] == new_leg.sectors[n]
+            #   a.domain.sectors[k] == new_leg.sectors[n]
+            if i < len(a_block_inds) and a_block_inds[i, 0] == j:
+                # we have a block for that sector -> decompose it
+                q, r = self.matrix_qr(a_blocks[i], full=False)
+                q_blocks.append(q)
+                r_blocks.append(r)
+                r_block_inds.append([n, k])
+                i += 1
+            else:
+                # we do not have a block for that sector
+                # => R_block == 0 and we dont even set it.
+                # can choose arbitrary blocks for q, as long as they are isometric
+                new_leg_dim = new_leg.multiplicities[n]
+                q_blocks.append(
+                    self.eye_matrix(a.codomain.multiplicities[j], a.dtype)[:, :new_leg_dim]
+                )
+            q_block_inds.append([j, n])
+        #
+        if len(q_blocks) == 0:
+            q_block_inds = np.zeros((0, 2), int)
         else:
-            keep = a.data.block_inds[:, 0]
-
-            # fix the order of sectors on the new leg: by order of appearance in q_leg_0
-            keep_perm = np.argsort(keep)
-            keep_sorted = keep[keep_perm]  # this fixes the order! "by order of appearance in q_leg_0"
-
-            new_leg_sectors = q_leg_0.sectors[keep_sorted, :]  # this is lexsort(x.T)-ed
-            new_leg_mults = np.array([self.block_shape(q)[1] for q in q_blocks], int)[keep_perm]
-            raise NotImplementedError  # TODO review this. duality.
-            new_leg = ElementarySpace(sym, new_leg_sectors, new_leg_mults, is_real=q_leg_0.is_real,
-                                      _is_dual=new_r_leg_dual)
-
-            # determine block_inds for the new leg:
-            # for q_blocks[i], the relevant sector is the same as the sector on the 0 leg:
-            # q_leg_0.sectors[a.data.block_inds[i, 0]]
-            #  == q_leg_0.sectors[keep[i]]
-            #  == q_leg_0.sectors[keep_sorted[inv_keep_perm[i]]]
-            #  == new_leg_sectors[inv_keep_perm[i]]
-            #  == new_leg.sectors[inv_keep_perm[i]]
-            # Thus we have
-            new_block_inds = inverse_permutation(keep_perm)
-            
-            q_block_inds = np.hstack([keep[:, None], new_block_inds[:, None]])  # not sorted.
-            r_block_inds = np.hstack([new_block_inds[:, None], a.data.block_inds[:, 1:2]])  # lexsorted.
-            assert np.all(np.lexsort(r_block_inds.T) == np.arange(len(r_block_inds)))  # TODO remove test
-            q_data = AbelianBackendData(a.dtype, q_blocks, q_block_inds, is_sorted=False)
-            r_data = AbelianBackendData(a.dtype, r_blocks, r_block_inds, is_sorted=True)
-
-        return q_data, r_data, new_leg
+            q_block_inds = np.array(q_block_inds, int)
+        if len(r_blocks) == 0:
+            r_block_inds = np.zeros((0, 2), int)
+        else:
+            r_block_inds = np.array(r_block_inds, int)
+        #
+        q_data = AbelianBackendData(a.dtype, q_blocks, q_block_inds, is_sorted=True)
+        r_data = AbelianBackendData(a.dtype, r_blocks, r_block_inds, is_sorted=True)
+        return q_data, r_data
 
     def reduce_DiagonalTensor(self, tensor: DiagonalTensor, block_func, func) -> float | complex:
         numbers = []
@@ -1640,7 +1663,8 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
             # due to the loop setup we have:
             #   a.codomain.sectors[j] == new_leg.sectors[n]
             #   a.domain.sectors[k] == new_leg.sectors[n]
-            if i < len(a_block_inds) and a_block_inds[i, 0] == j:  # we have a block for that sector -> svd it
+            if i < len(a_block_inds) and a_block_inds[i, 0] == j:
+                # we have a block for that sector -> decompose it
                 u, s, vh = self.matrix_svd(a_blocks[i], algorithm=algorithm)
                 u_blocks.append(u)
                 s_blocks.append(s)

@@ -89,8 +89,8 @@ __all__ = ['Tensor', 'SymmetricTensor', 'DiagonalTensor', 'ChargedTensor', 'Mask
            'add_trivial_leg', 'almost_equal', 'angle', 'apply_mask', 'apply_mask_DiagonalTensor',
            'bend_legs', 'combine_legs', 'combine_to_matrix', 'complex_conj', 'conj', 'dagger',
            'compose', 'enlarge_leg', 'entropy', 'imag', 'inner', 'is_scalar', 'item',
-           'linear_combination', 'move_leg', 'norm', 'outer', 'partial_trace', 'permute_legs',
-           'real', 'real_if_close', 'scalar_multiply', 'scale_axis', 'split_legs', 'sqrt',
+           'linear_combination', 'lq', 'move_leg', 'norm', 'outer', 'partial_trace', 'permute_legs',
+           'qr', 'real', 'real_if_close', 'scalar_multiply', 'scale_axis', 'split_legs', 'sqrt',
            'squeeze_legs', 'stable_log', 'svd', 'tdot', 'trace', 'transpose', 'zero_like',
            'get_same_backend', 'check_same_legs']
 
@@ -4015,6 +4015,55 @@ def permute_legs(tensor: Tensor, codomain: list[int | str] = None, domain: list[
                          err_msg='The given permutation requires levels, but none were given.')
 
 
+def qr(tensor: Tensor, new_labels: str | list[str] = None, new_leg_dual: bool = False
+       ) -> tuple[Tensor, Tensor]:
+    """The QR decomposition of a tensor.
+
+    A :ref:`tensor decomposition <decompositions>` ``tensor ~ Q @ R`` with the following
+    properties:
+
+    - ``Q`` is an isometry: ``dagger(Q) @ Q ~ eye``.
+    - ``R`` has an upper triangular structure *in the coupled basis*.
+
+    Graphically::
+
+        |                                 │   │   │   │
+        |                                ┏┷━━━┷━━━┷━━━┷┓
+        |        │   │   │   │           ┃      Q      ┃
+        |       ┏┷━━━┷━━━┷━━━┷┓          ┗━━━━━━┯━━━━━━┛
+        |       ┃   tensor    ┃    ==           │
+        |       ┗━━┯━━━┯━━━┯━━┛          ┏━━━━━━┷━━━━━━┓
+        |          │   │   │             ┃      R      ┃
+        |                                ┗━━┯━━━┯━━━┯━━┛
+        |                                   │   │   │
+
+    We always compute the "reduced", a.k.a. "economic" version.
+    To group the legs differently, use :func:`permute_legs` or `combine_to_matrix` first.
+
+    Parameters
+    ----------
+    tensor: :class:`Tensor`
+        The tensor to decompose.
+    new_labels: (list of) str
+        Labels for the new legs. Either two legs ``[a, b]`` s.t. ``Q.labels[-1] == a``
+        and ``R.labels[0] == b``. A single label ``a`` is equivalent to ``[a, a*]``.
+    new_leg_dual: bool
+        If the new leg should be a ket space (``False``) or bra space (``True``)
+    """
+    a, b = _decomposition_labels(new_labels)
+    tensor, new_leg, combine_codomain, combine_domain = _decomposition_prepare(tensor, new_leg_dual)
+    q_data, r_data = tensor.backend.qr(tensor, new_leg=new_leg)
+    Q = SymmetricTensor(q_data, codomain=tensor.codomain, domain=[new_leg], backend=tensor.backend,
+                        labels=[tensor.codomain_labels, [a]])
+    R = SymmetricTensor(r_data, codomain=[new_leg], domain=tensor.domain, backend=tensor.backend,
+                        labels=[[b], tensor.domain_labels])
+    if combine_codomain:
+        Q = split_legs(Q, 0)
+    if combine_domain:
+        R = split_legs(R, -1)
+    return Q, R
+
+
 @_elementwise_function(block_func='block_real', maps_zero_to_zero=True)
 def real(x: _ElementwiseType) -> _ElementwiseType:
     """The real part of a complex number, :ref:`elementwise <diagonal_elementwise>`."""
@@ -4039,6 +4088,55 @@ def real_if_close(x: _ElementwiseType, tol: float = 100) -> _ElementwiseType:
     If `x` is close to real, the real part of `x`. Otherwise the original complex `x`.
     """
     return np.real_if_close(x, tol=tol)
+
+
+def lq(tensor: Tensor, new_labels: str | list[str] = None, new_leg_dual: bool = False
+       ) -> tuple[Tensor, Tensor]:
+    """The LQ decomposition of a tensor.
+
+    A :ref:`tensor decomposition <decompositions>` ``tensor ~ Q @ R`` with the following
+    properties:
+
+    - ``L`` has a lower triangular structure *in the coupled basis*.
+    - ``Q`` is an isometry: ``dagger(Q) @ Q ~ eye``.
+
+    Graphically::
+
+        |                                 │   │   │   │
+        |                                ┏┷━━━┷━━━┷━━━┷┓
+        |        │   │   │   │           ┃      L      ┃
+        |       ┏┷━━━┷━━━┷━━━┷┓          ┗━━━━━━┯━━━━━━┛
+        |       ┃   tensor    ┃    ==           │
+        |       ┗━━┯━━━┯━━━┯━━┛          ┏━━━━━━┷━━━━━━┓
+        |          │   │   │             ┃      Q      ┃
+        |                                ┗━━┯━━━┯━━━┯━━┛
+        |                                   │   │   │
+
+    We always compute the "reduced", a.k.a. "economic" version.
+    To group the legs differently, use :func:`permute_legs` or `combine_to_matrix` first.
+
+    Parameters
+    ----------
+    tensor: :class:`Tensor`
+        The tensor to decompose.
+    new_labels: (list of) str
+        Labels for the new legs. Either two legs ``[a, b]`` s.t. ``L.labels[-1] == a``
+        and ``Q.labels[0] == b``. A single label ``a`` is equivalent to ``[a, a*]``.
+    new_leg_dual: bool
+        If the new leg should be a ket space (``False``) or bra space (``True``)
+    """
+    a, b = _decomposition_labels(new_labels)
+    tensor, new_leg, combine_codomain, combine_domain = _decomposition_prepare(tensor, new_leg_dual)
+    l_data, q_data = tensor.backend.lq(tensor, new_leg=new_leg)
+    L = SymmetricTensor(l_data, codomain=tensor.codomain, domain=[new_leg], backend=tensor.backend,
+                        labels=[tensor.codomain_labels, [a]])
+    Q = SymmetricTensor(q_data, codomain=[new_leg], domain=tensor.domain, backend=tensor.backend,
+                        labels=[[b], tensor.domain_labels])
+    if combine_codomain:
+        L = split_legs(L, 0)
+    if combine_domain:
+        Q = split_legs(Q, -1)
+    return L, Q
 
 
 def scalar_multiply(a: Number, v: Tensor) -> Tensor:
@@ -4326,25 +4424,7 @@ def svd(tensor: Tensor,
     if not isinstance(tensor, SymmetricTensor):
         raise TypeError(f'Unexpected tensor type: {type(tensor).__name__}')
 
-    new_leg = ElementarySpace.largest_common_subspace(
-        tensor.codomain, tensor.domain, is_dual=new_leg_dual
-    )
-
-    # combine legs, if needed
-    if not tensor.backend.can_decompose_tensors:
-        combine_codomain = tensor.num_codomain_legs > 1
-        combine_domain = tensor.num_domain_legs > 1
-        if combine_codomain and combine_domain:
-            tensor = combine_legs(tensor, range(tensor.num_codomain_legs),
-                                  range(tensor.num_codomain_legs, tensor.num_legs))
-        elif combine_codomain:
-            tensor = combine_legs(tensor, range(tensor.num_codomain_legs))
-        elif combine_domain:
-            tensor = combine_legs(tensor, range(tensor.num_codomain_legs, tensor.num_legs))
-    else:
-        combine_codomain = combine_domain = False
-
-    # backend call
+    tensor, new_leg, combine_codomain, combine_domain = _decomposition_prepare(tensor, new_leg_dual)
     u_data, s_data, vh_data = tensor.backend.svd(tensor, new_leg=new_leg, algorithm=algorithm)
     U = SymmetricTensor(u_data, codomain=tensor.codomain, domain=[new_leg], backend=tensor.backend,
                         labels=[tensor.codomain_labels, [a]])
@@ -4662,6 +4742,48 @@ T = TypeVar('T')
 def _combine_leg_labels(labels: list[str | None]) -> str:
     """the label that a combined leg should have"""
     return '(' + '.'.join(f'?{n}' if l is None else l for n, l in enumerate(labels)) + ')'
+
+
+def _decomposition_prepare(tensor: Tensor, new_leg_dual: bool
+                           ) -> tuple[SymmetricTensor, ElementarySpace, bool, bool]:
+    """Common steps to prepare a SymmetricTensor before a decomposition"""
+    assert tensor.num_codomain_legs > 0, 'empty codomain'
+    assert tensor.num_domain_legs > 0, 'empty domain'
+
+    if isinstance(tensor, ChargedTensor):
+        # do not define decompositions for ChargedTensors.
+        raise NotImplementedError
+    tensor = tensor.as_SymmetricTensor()
+    
+    new_leg = ElementarySpace.largest_common_subspace(
+        tensor.codomain, tensor.domain, is_dual=new_leg_dual
+    )
+    if tensor.backend.can_decompose_tensors:
+        combine_codomain = combine_domain = False
+    else:
+        combine_codomain = tensor.num_codomain_legs > 1
+        combine_domain = tensor.num_domain_legs > 1
+        if combine_codomain and combine_domain:
+            tensor = combine_legs(tensor, range(tensor.num_codomain_legs),
+                                  range(tensor.num_codomain_legs, tensor.num_legs))
+        elif combine_codomain:
+            tensor = combine_legs(tensor, range(tensor.num_codomain_legs))
+        elif combine_domain:
+            tensor = combine_legs(tensor, range(tensor.num_codomain_legs, tensor.num_legs))
+    return tensor, new_leg, combine_codomain, combine_domain
+
+
+def _decomposition_labels(new_labels: str | None | list[str]) -> tuple[str, str]:
+    """"""
+    new_labels = to_iterable(new_labels)
+    if len(new_labels) == 1:
+        a = new_labels[0]
+        b = _dual_leg_label(a)
+    elif len(new_labels) == 2:
+        a, b = new_labels
+    else:
+        raise ValueError(f'Expected 1 or 2 labels. Got {len(new_labels)}')
+    return a, b
 
 
 def _dual_label_list(labels: list[str | None]) -> list[str | None]:

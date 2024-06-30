@@ -1681,6 +1681,29 @@ def test_permute_legs(cls, num_cod, num_dom, codomain, domain, levels, make_comp
         raise NotImplementedError  # how to verify instead? permute back?
 
 
+@pytest.mark.parametrize(
+    'cls, dom, cod, new_leg_dual',
+    [pytest.param(SymmetricTensor, 1, 1, True, id='Sym-1-1-True'),]
+)
+def test_qr_lq(cls, dom, cod, new_leg_dual, make_compatible_tensor):
+    T_labels = list('efghijk')[:dom + cod]
+    T: cls = make_compatible_tensor(dom, cod, cls=cls, labels=T_labels)
+
+    Q, R = tensors.qr(T, new_leg_dual=new_leg_dual)
+    Q.test_sanity()
+    R.test_sanity()
+    assert tensors.almost_equal(Q @ R, T, allow_different_types=True)
+    eye = tensors.SymmetricTensor.from_eye(Q.domain, backend=T.backend)
+    assert tensors.almost_equal(Q.hc @ Q, eye, allow_different_types=True)
+
+    L, Q2 = tensors.lq(T, new_leg_dual=new_leg_dual)
+    L.test_sanity()
+    Q2.test_sanity()
+    assert tensors.almost_equal(L @ Q2, T, allow_different_types=True)
+    eye = tensors.SymmetricTensor.from_eye(Q.codomain, backend=T.backend)
+    assert tensors.almost_equal(Q @ Q.hc, eye, allow_different_types=True)
+    
+
 def test_scalar_multiply(make_compatible_tensor_any_class):
     T = make_compatible_tensor_any_class()
     

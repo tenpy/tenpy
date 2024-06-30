@@ -576,7 +576,36 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         else:
             coupled_sectors = np.array(coupled_sectors)
         return FusionTreeData(coupled_sectors, blocks, dtype)
-        
+
+    def lq(self, a: SymmetricTensor, new_leg: ElementarySpace) -> tuple[Data, Data]:
+        a_blocks = a.data.blocks
+        a_coupled = a.data.coupled_sectors
+        #
+        l_blocks = []
+        q_blocks = []
+        i = 0  # running index, indicating we have already processed a_blocks[:i]
+        for n, (j, k) in enumerate(iter_common_sorted_arrays(a.codomain.sectors, a.domain.sectors)):
+            # due to the loop setup we have:
+            #   a.codomain.sectors[j] == new_leg.sectors[n]
+            #   a.domain.sectors[k] == new_leg.sectors[n]
+            if i < len(a_coupled) and np.all(new_leg.sectors[n] == a_coupled[i]):
+                # we have a block for that sector
+                l, q = self.matrix_lq(a_blocks[i], full=False)
+                l_blocks.append(l)
+                q_blocks.append(q)
+                i += 1
+            else:
+                # there is no block for that sector. => l=0, no need to set it.
+                # choose basis vectors for q as standard basis vectors (cols/rows of eye)
+                new_leg_block_size = new_leg.multiplicities[n]
+                domain_block_size = a.domain.multiplicities[k]
+                q_blocks.append(
+                    self.eye_matrix(domain_block_size, a.dtype)[:new_leg_block_size, :]
+                )
+        l_data = FusionTreeData(a_coupled, l_blocks, a.dtype)
+        q_data = FusionTreeData(new_leg.sectors, q_blocks, a.dtype)
+        return l_data, q_data
+    
     def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[MaskData, ElementarySpace]:
         raise NotImplementedError('mask_binary_operand not implemented')
 
@@ -637,10 +666,34 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                      levels: list[int] | None) -> tuple[Data | None, ProductSpace, ProductSpace]:
         raise NotImplementedError('permute_legs not implemented')  # TODO
 
-    def qr(self, a: SymmetricTensor, new_r_leg_dual: bool, full: bool
-           ) -> tuple[Data, Data, ElementarySpace]:
-        # TODO do SVD first, comments there apply.
-        raise NotImplementedError('qr not implemented')  # TODO
+    def qr(self, a: SymmetricTensor, new_leg: ElementarySpace) -> tuple[Data, Data]:
+        a_blocks = a.data.blocks
+        a_coupled = a.data.coupled_sectors
+        #
+        q_blocks = []
+        r_blocks = []
+        i = 0  # running index, indicating we have already processed a_blocks[:i]
+        for n, (j, k) in enumerate(iter_common_sorted_arrays(a.codomain.sectors, a.domain.sectors)):
+            # due to the loop setup we have:
+            #   a.codomain.sectors[j] == new_leg.sectors[n]
+            #   a.domain.sectors[k] == new_leg.sectors[n]
+            if i < len(a_coupled) and np.all(new_leg.sectors[n] == a_coupled[i]):
+                # we have a block for that sector
+                q, r = self.matrix_qr(a_blocks[i], full=False)
+                q_blocks.append(q)
+                r_blocks.append(r)
+                i += 1
+            else:
+                # there is no block for that sector. => r=0, no need to set it.
+                # choose basis vectors for q as standard basis vectors (cols/rows of eye)
+                codomain_block_size = a.codomain.multiplicities[j]
+                new_leg_block_size = new_leg.multiplicities[n]
+                q_blocks.append(
+                    self.eye_matrix(codomain_block_size, a.dtype)[:, :new_leg_block_size]
+                )
+        q_data = FusionTreeData(new_leg.sectors, q_blocks, a.dtype)
+        r_data = FusionTreeData(a_coupled, r_blocks, a.dtype)
+        return q_data, r_data
 
     def reduce_DiagonalTensor(self, tensor: DiagonalTensor, block_func, func) -> float | complex:
         numbers = []

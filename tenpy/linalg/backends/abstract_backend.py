@@ -389,6 +389,10 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def lq(self, tensor: SymmetricTensor, new_leg: ElementarySpace) -> tuple[Data, Data]:
+        ...
+
+    @abstractmethod
     def mask_binary_operand(self, mask1: Mask, mask2: Mask, func) -> tuple[MaskData, ElementarySpace]:
         """Elementwise binary function acting on two masks.
 
@@ -499,18 +503,7 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def qr(self, a: SymmetricTensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, ElementarySpace]:
-        """QR decomposition of a Tensor `a` with two legs.
-
-        The legs of `a` may be :class:`~tenpy.linalg.spaces.ProductSpace`
-
-        Returns
-        -------
-        q, r:
-            Data of corresponding tensors.
-        new_leg : ElementarySpace
-            the new leg of r.
-        """
+    def qr(self, a: SymmetricTensor, new_leg: ElementarySpace) -> tuple[Data, Data]:
         ...
 
     @abstractmethod
@@ -1100,6 +1093,10 @@ class BlockBackend(metaclass=ABCMeta):
     def matrix_log(self, matrix: Block) -> Block:
         ...
 
+    def matrix_lq(self, a: Block, full: bool) -> tuple[Block, Block]:
+        q, r = self.matrix_qr(self.block_permute_axes(a, [1, 0]), full=full)
+        return self.block_permute_axes(r, [1, 0]), self.block_permute_axes(q, [1, 0])
+    
     @abstractmethod
     def matrix_qr(self, a: Block, full: bool) -> tuple[Block, Block]:
         """QR decomposition of a 2D block"""
