@@ -2,6 +2,7 @@
 from __future__ import annotations
 from abc import ABCMeta
 from typing import TYPE_CHECKING, Callable
+from math import prod
 
 from .abstract_backend import (Backend, BlockBackend, Data, DiagonalData, MaskData, Block,
                                conventional_leg_order)
@@ -43,6 +44,7 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     """
     DataCls = "Block of BlockBackend"  # is dynamically set by __init__
+    can_decompose_tensors = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -351,14 +353,17 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
         return symmetry == no_symmetry
 
-    def svd(self, a: SymmetricTensor, new_vh_leg_dual: bool, algorithm: str | None, compute_u: bool,
-            compute_vh: bool) -> tuple[Data, DiagonalData, Data, ElementarySpace]:
-        # TODO interface may change
-        raise NotImplementedError  # TODO not yet reviewed
-        u, s, vh = self.matrix_svd(a.data, algorithm=algorithm, compute_u=compute_u, compute_vh=compute_vh)
-        new_leg = ElementarySpace.from_trivial_sector(len(s), is_dual=new_vh_leg_dual)
-        return u, s, vh, new_leg
-
+    def svd(self, a: SymmetricTensor, new_leg: ElementarySpace, algorithm: str | None
+            ) -> tuple[Data, DiagonalData, Data]:
+        u_dims = a.shape[:a.num_codomain_legs]
+        vh_dims = a.shape[a.num_codomain_legs:]
+        mat = self.block_reshape(a.data, (prod(u_dims), prod(vh_dims)))
+        u, s, vh = self.matrix_svd(mat, algorithm=algorithm)
+        k = self.block_shape(s)[0]
+        u = self.block_reshape(u, u_dims + (k,))
+        vh = self.block_reshape(vh, (k,) + vh_dims)
+        return u, s, vh
+      
     def state_tensor_product(self, state1: Block, state2: Block, prod_space: ProductSpace):
         #TODO clearly define what this should do in tensors.py first!
         raise NotImplementedError('state_tensor_product not implemented')

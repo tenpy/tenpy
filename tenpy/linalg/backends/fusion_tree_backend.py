@@ -5,9 +5,10 @@ from typing import TYPE_CHECKING, Callable, Iterator
 from math import prod
 import numpy as np
 
+from ..misc import iter_common_noncommon_sorted_arrays, iter_common_sorted_arrays
+
 from .abstract_backend import (
-    Backend, BlockBackend, Block, Data, DiagonalData, MaskData, iter_common_sorted_arrays,
-    iter_common_noncommon_sorted_arrays
+    Backend, BlockBackend, Block, Data, DiagonalData, MaskData
 )
 from ..dtypes import Dtype
 from ..symmetries import Sector, SectorArray, Symmetry
@@ -174,6 +175,7 @@ class FusionTreeData:
 class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     
     DataCls = FusionTreeData
+    can_decompose_tensors = True
 
     def test_data_sanity(self, a: SymmetricTensor | DiagonalTensor | Mask, is_diagonal: bool):
         super().test_data_sanity(a, is_diagonal=is_diagonal)
@@ -660,20 +662,16 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         b_blocks = b.data.blocks
         a_coupled = a.data.coupled_sectors
         
-        if in_domain and a.domain.num_spaces == 1:
+        if (in_domain and a.domain.num_spaces == 1) or (not in_domain and a.codomain.num_spaces == 1):
             blocks = []
             coupled = []
             for i, j in iter_common_sorted_arrays(a_coupled, b.data.coupled_sectors):
                 blocks.append(self.block_scale_axis(a_blocks[i], b_blocks[j], axis=1))
                 coupled.append(a_coupled[i])
-            return FusionTreeData(coupled, blocks, a.dtype)
-        
-        if (not in_domain) and a.codomain.num_spaces == 1:
-            blocks = []
-            coupled = []
-            for i, j in iter_common_sorted_arrays(a_coupled, b.data.coupled_sectors):
-                blocks.append(self.block_scale_axis(a_blocks[i], b_blocks[j], axis=0))
-                coupled.append(a_coupled[i])
+            if len(coupled) == 0:
+                coupled = a.symmetry.empty_sector_array
+            else:
+                coupled = np.array(coupled, int)
             return FusionTreeData(coupled, blocks, a.dtype)
 
         raise NotImplementedError('scale_axis not implemented')  # TODO
@@ -690,11 +688,43 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         # supports all symmetries
         return isinstance(symmetry, Symmetry)
 
-    def svd(self, a: SymmetricTensor, new_vh_leg_dual: bool, algorithm: str | None,
-            compute_u: bool, compute_vh: bool) -> tuple[Data, DiagonalData, Data, ElementarySpace]:
-        # TODO need to redesign Backend.svd specification! need to allow more than two legs!
-        # TODO need to be able to specify levels of braiding in general case!
-        raise NotImplementedError('svd not implemented')  # TODO
+    def svd(self, a: SymmetricTensor, new_leg: ElementarySpace, algorithm: str | None
+            ) -> tuple[Data, DiagonalData, Data]:
+        a_blocks = a.data.blocks
+        a_coupled = a.data.coupled_sectors
+        #
+        u_blocks = []
+        s_blocks = []
+        vh_blocks = []
+        i = 0  # running index, indicating we have already processed a_blocks[:i]
+        for n, (j, k) in enumerate(iter_common_sorted_arrays(a.codomain.sectors, a.domain.sectors)):
+            # due to the loop setup we have:
+            #   a.codomain.sectors[j] == new_leg.sectors[n]
+            #   a.domain.sectors[k] == new_leg.sectors[n]
+            if i < len(a_coupled) and np.all(new_leg.sectors[n] == a_coupled[i]):
+                # we have a block for that sector
+                u, s, vh = self.matrix_svd(a_blocks[i], algorithm=algorithm)
+                u_blocks.append(u)
+                s_blocks.append(s)
+                vh_blocks.append(vh)
+                i += 1
+            else: 
+                # there is no block for that sector. => s=0, no need to set it.
+                # choose basis vectors for u/vh as standard basis vectors (cols/rows of eye)
+                codomain_block_size = a.codomain.multiplicities[j]
+                domain_block_size = a.domain.multiplicities[k]
+                new_leg_block_size = new_leg.multiplicities[n]
+                u_blocks.append(
+                    self.eye_matrix(codomain_block_size, a.dtype)[:, :new_leg_block_size]
+                )
+                vh_blocks.append(
+                    self.eye_matrix(domain_block_size, a.dtype)[:new_leg_block_size, :]
+                )
+                
+        u_data = FusionTreeData(new_leg.sectors, u_blocks, a.dtype)
+        s_data = FusionTreeData(a_coupled, s_blocks, a.dtype.to_real)
+        vh_data = FusionTreeData(new_leg.sectors, vh_blocks, a.dtype)
+        return u_data, s_data, vh_data
 
     def state_tensor_product(self, state1: Block, state2: Block, prod_space: ProductSpace):
         #TODO clearly define what this should do in tensors.py first!

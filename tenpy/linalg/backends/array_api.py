@@ -170,7 +170,7 @@ class ArrayApiBlockBackend(BlockBackend):
         return self._api.matmul(a, b)
 
     # noinspection PyTypeChecker
-    def _matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
+    def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
         if algorithm is None:
             algorithm = 'default'
 

@@ -236,7 +236,7 @@ class NumpyBlockBackend(BlockBackend):
     def matrix_qr(self, a: Block, full: bool) -> tuple[Block, Block]:
         return scipy.linalg.qr(a, mode='full' if full else 'economic')
 
-    def _matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
+    def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
         if algorithm is None:
             algorithm = 'gesdd'
 

@@ -15,13 +15,11 @@ which provides the :class:`~tenpy.linalg.tensors.Tensor` class used by the rest 
     tensors
     random_matrix
     sparse
-    matrix_operations
 """
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
 
-from . import (spaces, backends, symmetries, tensors, random_matrix, sparse,
-               matrix_operations, krylov_based, trees)
+from . import (spaces, backends, symmetries, tensors, random_matrix, sparse, krylov_based, trees)
 from .symmetries import *
 from .trees import *
 from .spaces import *
@@ -29,7 +27,6 @@ from .backends import *
 from .tensors import *
 from .random_matrix import *
 from .sparse import *
-from .matrix_operations import *
 from .krylov_based import *
 from .dtypes import *
 
@@ -42,7 +39,6 @@ __all__ = ['symmetries', 'spaces', 'trees', 'backends', 'tensors', 'random_matri
            *tensors.__all__,
            *random_matrix.__all__,
            *sparse.__all__,
-           *matrix_operations.__all__,
            *krylov_based.__all__,
            *dtypes.__all__,
            ]

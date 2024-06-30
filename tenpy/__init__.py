@@ -48,7 +48,6 @@ from .linalg.spaces import *
 from .linalg.tensors import *
 from .linalg import random_matrix
 from .linalg.sparse import *
-from .linalg.matrix_operations import *
 # from .models.lattice import (Lattice, TrivialLattice, SimpleLattice, MultiSpeciesLattice,
 #                              IrregularLattice, HelicalLattice, Chain, Ladder, NLegLadder, Square,
 #                              Triangular, Honeycomb, Kagome, get_lattice)
@@ -112,7 +111,7 @@ __all__ = [
     # 'TwoSiteVUMPSEngine',
     # # from tenpy.linalg
     'Dtype', 'get_backend', *linalg.symmetries.__all__, *linalg.spaces.__all__, *linalg.tensors.__all__,
-     *linalg.sparse.__all__,  *linalg.matrix_operations.__all__,
+     *linalg.sparse.__all__,
     # # from tenpy.models
     # 'Lattice', 'TrivialLattice', 'SimpleLattice', 'MultiSpeciesLattice', 'IrregularLattice',
     # 'HelicalLattice', 'Chain', 'Ladder', 'NLegLadder', 'Square', 'Triangular', 'Honeycomb',

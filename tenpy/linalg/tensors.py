@@ -54,6 +54,12 @@ The dagger ``dagger(A)`` has legs signature ``[W] -> [V]`` and legs ``[V, W.dual
 it can be directly contracted with ``A``.
 
 
+.. _decompositions
+
+Tensor Decompositions
+---------------------
+TODO elaborate on the details of decompositions (svd, eig, qr, ...) that they have in common.
+I.e. viewing tensors as linear maps, combining legs or not, mention :func:`combine_to_matrix`.
 
 """
 # Copyright (C) TeNPy Developers, GNU GPLv3
@@ -85,7 +91,7 @@ __all__ = ['Tensor', 'SymmetricTensor', 'DiagonalTensor', 'ChargedTensor', 'Mask
            'enlarge_leg', 'entropy', 'imag', 'inner', 'is_scalar', 'item', 'linear_combination',
            'move_leg', 'norm', 'outer', 'partial_trace', 'permute_legs', 'real', 'real_if_close',
            'scalar_multiply', 'scale_axis', 'split_legs', 'sqrt', 'squeeze_legs', 'stable_log',
-           'tdot', 'trace', 'transpose', 'zero_like', 'get_same_backend', 'check_same_legs']
+           'svd', 'tdot', 'trace', 'transpose', 'zero_like', 'get_same_backend', 'check_same_legs']
 
 
 # TENSOR CLASSES
@@ -498,6 +504,9 @@ class Tensor(metaclass=ABCMeta):
 
     def __float__(self):
         raise TypeError('float() of a tensor is not defined. Use tenpy.item() instead.')
+
+    def __matmul__(self, other):
+        return compose(self, other)
 
     def __mul__(self, other):
         if isinstance(other, Number):
@@ -3182,6 +3191,10 @@ def dagger(tensor: Tensor) -> Tensor:
             labels=[_dual_leg_label(l) for l in reversed(tensor._labels)]
         )
     if isinstance(tensor, DiagonalTensor):
+        if tensor.dtype == Dtype.bool:
+            res = tensor.copy(deep=False)
+            res.set_labels([_dual_leg_label(l) for l in reversed(tensor._labels)])
+            return res
         return conj(tensor).set_labels([_dual_leg_label(l) for l in reversed(tensor._labels)])
     if isinstance(tensor, SymmetricTensor):
         return SymmetricTensor(
@@ -4120,7 +4133,7 @@ def split_legs(tensor: Tensor, legs: list[int | str] = None):
             legs = tensor.get_leg_idcs(legs)
         return ChargedTensor(split_legs(tensor.invariant_part, legs), tensor.charged_state)
     # remaining case: SymmetricTensor.
-    raise NotImplementedError  # TODO
+    raise NotImplementedError('split_legs not implemented')  # TODO
 
 
 @_elementwise_function(block_func='block_sqrt', maps_zero_to_zero=True)
@@ -4186,6 +4199,142 @@ def stable_log(x: _ElementwiseType, cutoff=1e-30) -> _ElementwiseType:
     """
     assert cutoff > 0
     return np.where(x > cutoff, np.log(x), 0.)
+
+
+def svd(tensor: Tensor,
+        new_labels: str | list[str] | None = None,
+        new_leg_dual: bool = False,
+        algorithm: str | None = None,
+        ) -> tuple[Tensor, DiagonalTensor, Tensor]:
+    """The singular value decomposition (SVD) of a tensor.
+
+    A :ref:`tensor decomposition <decompositions>` ``tensor ~ U @ S @ Vh`` with the following
+    properties:
+
+    - ``Vh`` and ``U``are isometries: ``dagger(U) @ U ~ eye ~ Vh @ dagger(Vh)``.
+    - ``S`` is a :class:`DiagonalTensor` with real, non-negative entries.
+    - If `tensor` is a matrix (i.e. if it has exactly one leg each in domain and codomain), it
+      reproduces the usual matrix SVD.
+
+    .. note ::
+        The basis for the newly generated leg is chosen arbitrarily, and in particular unlike
+        e.g. :func:`numpy.linalg.svd` it is not guaranteed that ``S.diag_numpy`` is sorted.
+        
+    Graphically::
+
+        |                                 │   │   │   │
+        |                                ┏┷━━━┷━━━┷━━━┷┓
+        |                                ┃      U      ┃
+        |        │   │   │   │           ┗━━━━━━┯━━━━━━┛
+        |       ┏┷━━━┷━━━┷━━━┷┓               ┏━┷━┓
+        |       ┃   tensor    ┃    ==         ┃ S ┃
+        |       ┗━━┯━━━┯━━━┯━━┛               ┗━┯━┛
+        |          │   │   │             ┏━━━━━━┷━━━━━━┓
+        |                                ┃      Vh     ┃
+        |                                ┗━━┯━━━┯━━━┯━━┛
+        |                                   │   │   │
+
+    We always compute the "reduced", a.k.a. "economic" version of SVD, where the isometries are
+    (in general) not full unitaries.
+    
+    To group the legs differently, use :func:`permute_legs` or `combine_to_matrix` first.
+
+    Parameters
+    ----------
+    tensor: :class:`Tensor`
+        The tensor to decompose.
+    new_labels: (list of) str, optional
+        The labels for the new legs can be specified in the following ways three ways.
+        Four labels ``[a, b, c, d]`` result in ``U.labels[-1] == a``, ``S.labels == [b, c]`` and
+        ``Vh.labels[0] == d``.
+        Two labels ``[a, b]`` are equivalent to ``[a, b, a, b]``.
+        A single label ``a`` is equivalent to ``[a, a*, a, a*]``.  TODO is this a good convention?
+        The new legs are unlabelled by default.
+    new_leg_dual: bool
+        If the new leg should be a ket space (``False``) or bra space (``True``)
+    algorithm: str, optional
+        The algorithm (a.k.a. "driver") for the block-wise svd.
+        Choices are backend-specific (TODO doc them).
+
+    Returns
+    -------
+    U: Tensor
+        TODO specify how the type depends on tensors type.
+    S: DiagonalTensor
+    Vh: Tensor
+        TODO specify how the type depends on tensors type.
+    """
+    assert tensor.num_codomain_legs > 0, 'empty codomain'
+    assert tensor.num_domain_legs > 0 , 'empty domain'
+
+    if isinstance(tensor, ChargedTensor):
+        # TODO unclear what to do.
+        #      for higher-dim charge leg with charge state, the "isometry" concept is problematic.
+        raise NotImplementedError
+            
+    a, b, c, d = _svd_new_labels(new_labels)
+    
+    if isinstance(tensor, Mask):
+        if tensor.is_projection:
+            new_leg = tensor.codomain[0]
+            U = DiagonalTensor.from_eye(
+                new_leg, backend=tensor.backend, labels=[tensor.labels[0], a], dtype=tensor.dtype
+            )
+            Vh = tensor.copy(deep=False).set_labels([d, tensor.labels[1]])
+        else:
+            new_leg = tensor.domain[0]
+            U = tensor.copy(deep=False).set_labels([tensor.labels[0], a])
+            Vh = DiagonalTensor.from_eye(
+                new_leg, backend=tensor.backend, labels=[d, tensor.labels[1]], dtype=tensor.dtype
+            )
+        S = DiagonalTensor.from_eye(
+            new_leg, backend=tensor.backend, labels=[b, c], dtype=Dtype.float64  # TODO select dtype...?
+        )
+        if new_leg.is_dual != new_leg_dual:
+            raise NotImplementedError
+        return U, S, Vh
+
+    if isinstance(tensor, DiagonalTensor):
+        # OPTIMIZE could do sth like U = eye, S = abs(tensor), Vh = sign(tensor)
+        #          BUT: need to worry about (a) what if tensor.leg is a ProductSpace?
+        #                                   (b) what it tensor.leg has the wrong duality?
+        tensor = tensor.as_SymmetricTensor()
+
+    if not isinstance(tensor, SymmetricTensor):
+        raise TypeError(f'Unexpected tensor type: {type(tensor).__name__}')
+
+    new_leg = ElementarySpace.largest_common_subspace(
+        tensor.codomain, tensor.domain, is_dual=new_leg_dual
+    )
+
+    # combine legs, if needed
+    if not tensor.backend.can_decompose_tensors:
+        combine_codomain = tensor.num_codomain_legs > 1
+        combine_domain = tensor.num_domain_legs > 1
+        if combine_codomain and combine_domain:
+            tensor = combine_legs(tensor, range(tensor.num_codomain_legs),
+                                  range(tensor.num_codomain_legs, tensor.num_legs))
+        elif combine_codomain:
+            tensor = combine_legs(tensor, range(tensor.num_codomain_legs))
+        elif combine_domain:
+            tensor = combine_legs(tensor, range(tensor.num_codomain_legs, tensor.num_legs))
+    else:
+        combine_codomain = combine_domain = False
+
+    # backend call
+    u_data, s_data, vh_data = tensor.backend.svd(tensor, new_leg=new_leg, algorithm=algorithm)
+    U = SymmetricTensor(u_data, codomain=tensor.codomain, domain=[new_leg], backend=tensor.backend,
+                        labels=[tensor.codomain_labels, [a]])
+    S = DiagonalTensor(s_data, new_leg, backend=tensor.backend, labels=[b, c])
+    Vh = SymmetricTensor(vh_data, codomain=[new_leg], domain=tensor.domain, backend=tensor.backend,
+                         labels=[[d], tensor.domain_labels])
+
+    # split legs, if they were previously combined
+    if combine_codomain:
+        U = split_legs(U, 0)
+    if combine_domain:
+        Vh = split_legs(Vh, -1)
+    return U, S, Vh
 
 
 def tdot(tensor1: Tensor, tensor2: Tensor,
@@ -4586,6 +4735,26 @@ def _split_leg_label(label: str | None, num: int = None) -> list[str | None]:
         return [None if l.startswith('?') else l for l in labels]
     else:
         raise ValueError('Invalid format for a combined label')
+
+
+def _svd_new_labels(new_labels: str | Sequence[str]) -> tuple[str, str, str, str]:
+    """Parse label for :func:`svd`."""
+    if new_labels is None:
+        a = b = c = d = None
+    else:
+        new_labels = to_iterable(new_labels)
+        if len(new_labels) == 1:
+            a = c = new_labels[0]
+            b = d = _dual_leg_label(new_labels[0])
+        elif len(new_labels) == 2:
+            a = c = new_labels[0]
+            b = d = new_labels[1]
+        elif len(new_labels) == 4:
+            a, b, c, d = new_labels
+        else:
+            raise ValueError(f'Expected 1, 2 or 4 new_labels. Got {len(new_labels)}')
+        assert (b is None) or b != c
+    return a, b, c, d
 
 
 class _TensorIndexHelper:

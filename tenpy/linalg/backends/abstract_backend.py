@@ -15,8 +15,7 @@ from ..spaces import Space, ElementarySpace, ProductSpace
 from ..dtypes import Dtype
 
 __all__ = ['Data', 'DiagonalData', 'MaskData', 'Block', 'Backend', 'BlockBackend',
-           'conventional_leg_order', 'iter_common_sorted', 'iter_common_sorted_arrays',
-           'iter_common_nonstrict_sorted_arrays', 'iter_common_noncommon_sorted_arrays']
+           'conventional_leg_order']
 
 
 if TYPE_CHECKING:
@@ -64,6 +63,10 @@ class Backend(metaclass=ABCMeta):
     However, the ``XxxYyyBackend`` class may also override any of the methods, if needed.
     """
     DataCls = None  # to be set by subclasses
+    
+    can_decompose_tensors = False
+    """If the decompositions (SVD, QR, EIGH, ...) can operate on many-leg tensors,
+    or require legs to be combined first."""
 
     def __repr__(self):
         return f'{type(self).__name__}'
@@ -543,26 +546,8 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def svd(self, a: SymmetricTensor, new_vh_leg_dual: bool, algorithm: str | None, compute_u: bool,
-            compute_vh: bool) -> tuple[Data, DiagonalData, Data, ElementarySpace]:
-        """SVD of a Matrix, `a` has only two legs (often ProductSpace).
-        
-        Parameters
-        ----------
-        algorithm : str
-            (Backend-specific) algorithm to use for computing the SVD.
-            See e.g. the :attr:`~BlockBackend.svd_algorithms` attribute.
-            We also implement ``'eigh'`` for all backends.
-        compute_u, compute_vh : bool
-            Only for ``algorithm='eigh'``.
-        
-        Returns
-        -------
-        u, s, vh :
-            Data of corresponding tensors.
-        new_leg :
-            ElementarySpace the new leg of vh.
-        """
+    def svd(self, a: SymmetricTensor, new_leg: ElementarySpace, algorithm: str | None
+            ) -> tuple[Data, DiagonalData, Data]:
         ...
 
     @abstractmethod
@@ -1107,43 +1092,6 @@ class BlockBackend(metaclass=ABCMeta):
         # TODO can probably remove this? was only used in an old version of tdot.
         ...
 
-    def matrix_eig_based_svd(self, a: Block, compute_u: bool, compute_vh: bool
-                             ) -> tuple[Block, Block, Block]:
-        """Eig-based SVD of a 2D block.
-
-        With full_matrices=False, i.e. shape ``(n,m) -> (n,k), (k,) (k,m)`` where
-        ``k = min(n,m)``.
-        
-        Assumes that U and Vh have the same dtype as a, while S has a matching real dtype.
-        """
-        # TODO should we actually contract the full square a.hc @ a or can we work with the
-        #      factored form?
-        #      consider discussion in https://www.math.wsu.edu/math/faculty/watkins/pdfiles/1-44311.pdf
-        m, n = self.block_shape(a)
-        k = min(m, n)
-        if compute_u and compute_vh:
-            raise ValueError('Can not compute both U and Vh.')
-        if (not compute_u) and (not compute_vh):
-            if m > n:  # a.hc @ a is n x n, thus its cheaper to compute its eigenvalues
-                square = self.block_tdot(self.block_conj(a), a, [0], [0])
-            else:
-                square = self.block_tdot(a, self.block_conj(a), [1], [1])
-            S_sq = self.block_eigvalsh(square)
-            U = Vh = None
-        if compute_u:  # decompose a @ a.hc = U @ S**2 @ U.hc
-            a_ahc = self.block_tdot(a, self.block_conj(a), [1], [1])
-            S_sq, U = self.block_eigh(a_ahc, sort='>')
-            U = U[:, :k]
-            Vh = None
-        else:  # decompose a.hc @ a = V @ S**2 @ V.hc  (note that we want V.hc !)
-            ahc_a = self.block_tdot(self.block_conj(a), a, [0], [0])
-            S_sq, V = self.block_eigh(ahc_a, sort='>')
-            Vh = self.block_permute_axes(self.block_conj(V), [1, 0])[:k, :]
-            U = None
-        # economic SVD: only k=min(m, n) singular values
-        S = self.block_sqrt(abs(S_sq[:k]))
-        return U, S, Vh
-
     @abstractmethod
     def matrix_exp(self, matrix: Block) -> Block:
         ...
@@ -1157,21 +1105,8 @@ class BlockBackend(metaclass=ABCMeta):
         """QR decomposition of a 2D block"""
         ...
 
-    def matrix_svd(self, a: Block, algorithm: str | None, compute_u: bool, compute_vh: bool
-                   ) -> tuple[Block, Block, Block]:
-        """SVD of a 2D block.
-
-        With full_matrices=False, i.e. shape ``(n,m) -> (n,k), (k,) (k,m)`` where
-        ``k = min(n,m)``.
-        
-        Assumes that U and Vh have the same dtype as a, while S has a matching real dtype.
-        """
-        if algorithm == 'eigh':
-            return self.matrix_eig_based_svd(a, compute_u=compute_u, compute_vh=compute_vh)
-        return self._matrix_svd(a, algorithm)
-
     @abstractmethod
-    def _matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
+    def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
         """Internal version of :meth:`matrix_svd`, to be implemented by subclasses."""
         ...
 
@@ -1210,114 +1145,3 @@ def conventional_leg_order(tensor_or_codomain: SymmetricTensor | ProductSpace,
         codomain = tensor_or_codomain
     yield from codomain.spaces
     yield from reversed(domain.spaces)
-
-
-def iter_common_sorted(a, b):
-    """Yield indices ``i, j`` for which ``a[i] == b[j]``.
-
-    *Assumes* that `a` and `b` are strictly ascending 1D arrays.
-    Given that, it is equivalent to (but faster than)
-    ``[(i, j) for j, i in itertools.product(range(len(b)), range(len(a)) if a[i] == b[j]]``
-    """
-    # when we call this function, we basically wanted iter_common_sorted_arrays,
-    # but used strides to merge multiple columns to avoid too much python loops
-    # for C-implementation, this is definitely no longer necessary.
-    l_a = len(a)
-    l_b = len(b)
-    i, j = 0, 0
-    while i < l_a and j < l_b:
-        if a[i] < b[j]:
-            i += 1
-        elif b[j] < a[i]:
-            j += 1
-        else:
-            yield i, j
-            i += 1
-            j += 1
-
-
-def iter_common_sorted_arrays(a, b):
-    """Yield indices ``i, j`` for which ``a[i, :] == b[j, :]``.
-
-    *Assumes* that `a` and `b` are strictly lex-sorted (according to ``np.lexsort(a.T)``).
-    Given that, it is equivalent to (but faster than)
-    ``[(i, j) for j, i in itertools.product(range(len(b)), range(len(a)) if all(a[i,:] == b[j,:]]``
-    """
-    l_a, d_a = a.shape
-    l_b, d_b = b.shape
-    assert d_a == d_b
-    i, j = 0, 0
-    while i < l_a and j < l_b:
-        for k in reversed(range(d_a)):
-            if a[i, k] < b[j, k]:
-                i += 1
-                break
-            elif b[j, k] < a[i, k]:
-                j += 1
-                break
-        else:
-            yield (i, j)
-            i += 1
-            j += 1
-    # done
-
-
-def iter_common_nonstrict_sorted_arrays(a, b):
-    """Yield indices ``i, j`` for which ``a[i, :] == b[j, :]``.
-
-    Like iter_common_sorted_arrays, but allows duplicate rows in `a`.
-    I.e. `a.T` is lex-sorted, but not strictly. `b.T` is still assumed to be strictly lexsorted.
-    """
-    l_a, d_a = a.shape
-    l_b, d_b = b.shape
-    assert d_a == d_b
-    i, j = 0, 0
-    while i < l_a and j < l_b:
-        for k in reversed(range(d_a)):
-            if a[i, k] < b[j, k]:
-                i += 1
-                break
-            elif b[j, k] < a[i, k]:
-                j += 1
-                break
-        else:  # (no break)
-            yield (i, j)
-            # difference to iter_common_sorted_arrays:
-            # dont increase j because a[i + 1] might also match b[j]
-            i += 1
-
-
-def iter_common_noncommon_sorted_arrays(a, b):
-    """Yield the following pairs ``i, j`` of indices:
-
-    - Matching entries, i.e. ``(i, j)`` such that ``all(a[i, :] == b[j, :])``
-    - Entries only in `a`, i.e. ``(i, None)`` such that ``a[i, :]`` is not in `b`
-    - Entries only in `b`, i.e. ``(None, j)`` such that ``b[j, :]`` is not in `a`
-
-    *Assumes* that `a` and `b` are strictly lex-sorted (according to ``np.lexsort(a.T)``).
-    """
-    l_a, d_a = a.shape
-    l_b, d_b = b.shape
-    assert d_a == d_b
-    i, j = 0, 0
-    both = []  # TODO (JU) @jhauschild : this variable is unused? did something get lost while copying from old tenpy?
-    while i < l_a and j < l_b:
-        for k in reversed(range(d_a)):
-            if a[i, k] < b[j, k]:
-                yield i, None
-                i += 1
-                break
-            elif a[i, k] > b[j, k]:
-                yield None, j
-                j += 1
-                break
-        else:
-            yield i, j
-            i += 1
-            j += 1
-    # can still have i < l_a or j < l_b, but not both
-    for i2 in range(i, l_a):
-        yield i2, None
-    for j2 in range(j, l_b):
-        yield None, j2
-    # done

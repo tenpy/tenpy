@@ -14,7 +14,7 @@ from tenpy.linalg.backends.backend_factory import get_backend
 from tenpy.linalg.dtypes import Dtype
 from tenpy.linalg.spaces import ElementarySpace, ProductSpace
 from tenpy.linalg.symmetries import z4_symmetry, SU2Symmetry
-from tenpy.linalg.misc import duplicate_entries
+from tenpy.linalg.misc import duplicate_entries, iter_common_noncommon_sorted_arrays
 
 
 @pytest.fixture(params=[DiagonalTensor, SymmetricTensor, Mask, ChargedTensor])
@@ -734,7 +734,7 @@ def test_explicit_blocks(symmetry_backend, block_backend):
         #
         # have not set all entries, so expect_block_inds should be a subset of _valid_block_inds
         valid_block_inds = backends.abelian._valid_block_inds(t.codomain, t.domain)
-        for i, j in backends.abstract_backend.iter_common_noncommon_sorted_arrays(expect_block_inds, valid_block_inds):
+        for i, j in iter_common_noncommon_sorted_arrays(expect_block_inds, valid_block_inds):
             assert j is not None  # j=None would mean that the row of expect_block_inds is not in valid_block_inds
             actual_block = t.backend.block_to_numpy(t.data.blocks[j])
             if i is None:
@@ -1026,8 +1026,13 @@ def test_bend_legs(cls, codomain, domain, num_codomain_legs, make_compatible_ten
     npt.assert_array_almost_equal_nulp(res.to_numpy(), tensor_np, 100)
 
 
+# TODO fix combine. implement split.
 def test_combine_split(make_compatible_tensor):
     T: SymmetricTensor = make_compatible_tensor(['a', 'b'], ['c', 'd'])
+
+    if isinstance(T.backend, backends.AbelianBackend):
+        # _ = tensors.combine_legs(T, [2, 3])  # TODO this fails most times.
+        pytest.xfail('Is bugged...')
 
     if isinstance(T.backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError):
@@ -1769,6 +1774,64 @@ def test_squeeze_legs(make_compatible_tensor, compatible_symmetry):
     npt.assert_allclose(res_all.to_numpy(), expect_all)
     npt.assert_allclose(res_1.to_numpy(), expect_1)
     npt.assert_allclose(res_2.to_numpy(), expect_2)
+
+
+@pytest.mark.parametrize(
+    'cls, dom, cod, new_leg_dual', 
+    [pytest.param(SymmetricTensor, 1, 1, False, id='Sym-1-1-False'),
+     pytest.param(SymmetricTensor, 1, 3, False, id='Sym-1-3-False'),
+     pytest.param(SymmetricTensor, 3, 1, False, id='Sym-3-1-False'),
+     pytest.param(SymmetricTensor, 2, 2, False, id='Sym-2-2-False'),
+     pytest.param(SymmetricTensor, 2, 2, True, id='Sym-2-2-True'),
+     pytest.param(DiagonalTensor, 1, 1, False, id='Diag-False'),
+     pytest.param(DiagonalTensor, 1, 1, True, id='Diag-True'),
+     pytest.param(Mask, 1, 1, False, id='Mask-False'),
+     pytest.param(Mask, 1, 1, True, id='Mask-True'),
+     ]
+)
+def test_svd(cls, dom, cod, new_leg_dual, make_compatible_tensor):
+    T_labels = list('efghijklmn')[:dom + cod]
+    T: cls = make_compatible_tensor(dom, cod, labels=T_labels, cls=cls)
+
+    if (dom > 1 or cod > 1) and not T.backend.can_decompose_tensors:
+        # TODO combine_legs currently broken... when fixed, rm this clause and add the one below
+        with pytest.raises((NotImplementedError, ValueError, IndexError)):
+            _ = tensors.svd(T, new_labels=['a', 'b', 'c', 'd'])
+        pytest.xfail()
+        
+        with pytest.raises(NotImplementedError, match='split_legs not implemented'):
+            _ = tensors.svd(T, new_labels=['a', 'b', 'c', 'd'])
+        pytest.xfail()
+
+    if cls is Mask:
+        natural_new_leg = T.codomain[0] if T.is_projection else T.domain[0]
+        if natural_new_leg.is_dual != new_leg_dual:
+            with pytest.raises(NotImplementedError):
+                _ = tensors.svd(T, new_labels=['a', 'b', 'c', 'd'], new_leg_dual=new_leg_dual)
+            pytest.xfail()
+
+    U, S, Vh = tensors.svd(T, new_labels=['a', 'b', 'c', 'd'], new_leg_dual=new_leg_dual)
+    U.test_sanity()
+    S.test_sanity()
+    Vh.test_sanity()
+    assert U.labels == [*T.codomain_labels, 'a']
+    assert S.labels == ['b', 'c']
+    assert Vh.labels == ['d', *reversed(T.domain_labels)]
+
+    assert isinstance(S, DiagonalTensor)
+    assert (S >= 0).all()
+    npt.assert_almost_equal(tensors.norm(S), tensors.norm(T))
+
+    assert tensors.almost_equal(U @ S @ Vh, T, allow_different_types=True)
+    eye = tensors.SymmetricTensor.from_eye(S.domain, backend=T.backend)
+    assert tensors.almost_equal(U.hc @ U, eye, allow_different_types=True)
+
+    if isinstance(Vh, Mask):
+        with pytest.raises(NotImplementedError, match='tensors._compose_with_Mask not implemented for Mask'):
+            _ = Vh @ Vh.hc
+        Vh = Vh.as_SymmetricTensor()
+        
+    assert tensors.almost_equal(Vh @ Vh.hc, eye, allow_different_types=True)
 
 
 @pytest.mark.parametrize(

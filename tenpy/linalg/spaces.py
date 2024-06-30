@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING, Sequence, Iterator
 from .dummy_config import printoptions
 from .symmetries import (Sector, SectorArray, Symmetry, ProductSymmetry, no_symmetry, FusionStyle,
                          SymmetryError)
-from .misc import make_stride, find_row_differences, unstridify, UNSPECIFIED
+from .misc import (
+    make_stride, find_row_differences, unstridify, UNSPECIFIED, iter_common_sorted_arrays
+)
 from ..tools.misc import inverse_permutation, rank_data, to_iterable
 from ..tools.string import format_like_list
 
@@ -197,6 +199,16 @@ class Space(metaclass=ABCMeta):
     def num_parameters(self) -> int:
         """The number of linearly independent *symmetric* tensors in this space."""
         return self.sector_multiplicity(self.symmetry.trivial_sector)
+
+    def largest_common_subspace(self, other: Space, is_dual: bool = False) -> ElementarySpace:
+        """The largest common subspace."""
+        assert self.symmetry == other.symmetry
+        sectors = []
+        mults = []
+        for i, j in iter_common_sorted_arrays(self.sectors, other.sectors):
+            sectors.append(self.sectors[i])
+            mults.append(min(self.multiplicities[i], other.multiplicities[j]))
+        return ElementarySpace(self.symmetry, sectors, mults, is_dual=is_dual)
 
     def sectors_where(self, sector: Sector) -> int | None:
         # TODO / OPTIMIZE : use that sectors are sorted to speed up the lookup
