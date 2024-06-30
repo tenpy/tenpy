@@ -537,7 +537,14 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         raise NotImplementedError('get_element_diagonal not implemented')  # TODO
 
     def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_dagger: bool) -> float | complex:
-        raise NotImplementedError('inner not implemented')  # TODO
+        res = 0.
+        a_blocks = a.data.blocks
+        b_blocks = b.data.blocks
+        a_coupled = a.data.coupled_sectors
+        for i, j in iter_common_sorted_arrays(a_coupled, b.data.coupled_sectors):
+            d_c = a.symmetry.qdim(a_coupled[i])
+            res += d_c * self.block_inner(a_blocks[i], b_blocks[j], do_dagger=do_dagger)
+        return res
     
     def inv_part_from_dense_block_single_sector(self, vector: Block, space: Space,
                                                charge_leg: ElementarySpace) -> Data:

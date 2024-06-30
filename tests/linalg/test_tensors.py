@@ -1346,10 +1346,8 @@ def test_inner(cls, cod, dom, do_dagger, make_compatible_tensor):
             _ = tensors.inner(A, B, do_dagger=do_dagger)
         pytest.xfail()
 
-    if isinstance(A.backend, backends.FusionTreeBackend) \
-            and (cls is not DiagonalTensor) \
-            and not (cls is ChargedTensor and dom == 0):
-        with pytest.raises(NotImplementedError, match='(inner|permute_legs) not implemented'):
+    if isinstance(A.backend, backends.FusionTreeBackend) and (cls is ChargedTensor) and (dom != 0):
+        with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
             _ = tensors.inner(A, B, do_dagger=do_dagger)
         pytest.xfail()
 
