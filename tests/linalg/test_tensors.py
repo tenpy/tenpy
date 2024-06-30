@@ -1181,8 +1181,8 @@ def test_dagger(cls, cod, dom, make_compatible_tensor, np_random):
      pytest.param(DiagonalTensor.__abs__, np.abs, Dtype.float64, {}, id='abs()-real'),
      pytest.param(DiagonalTensor.__abs__, np.abs, Dtype.complex128, {}, id='abs()-complex'),
      pytest.param(tensors.real, np.real, Dtype.float64, {}, id='real()-real'),
-     pytest.param(tensors.conj, np.conj, Dtype.float64, {}, id='conj()-real'),
-     pytest.param(tensors.conj, np.conj, Dtype.complex128, {}, id='conj()-complex'),
+     pytest.param(tensors.complex_conj, np.conj, Dtype.float64, {}, id='conj()-real'),
+     pytest.param(tensors.complex_conj, np.conj, Dtype.complex128, {}, id='conj()-complex'),
     ]
      # TODO more functions? exp, log
 )

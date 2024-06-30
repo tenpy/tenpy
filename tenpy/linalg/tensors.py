@@ -87,11 +87,12 @@ from ..tools.misc import to_iterable, rank_data
 
 __all__ = ['Tensor', 'SymmetricTensor', 'DiagonalTensor', 'ChargedTensor', 'Mask',
            'add_trivial_leg', 'almost_equal', 'angle', 'apply_mask', 'apply_mask_DiagonalTensor',
-           'bend_legs', 'combine_legs', 'combine_to_matrix', 'conj', 'dagger', 'compose',
-           'enlarge_leg', 'entropy', 'imag', 'inner', 'is_scalar', 'item', 'linear_combination',
-           'move_leg', 'norm', 'outer', 'partial_trace', 'permute_legs', 'real', 'real_if_close',
-           'scalar_multiply', 'scale_axis', 'split_legs', 'sqrt', 'squeeze_legs', 'stable_log',
-           'svd', 'tdot', 'trace', 'transpose', 'zero_like', 'get_same_backend', 'check_same_legs']
+           'bend_legs', 'combine_legs', 'combine_to_matrix', 'complex_conj', 'conj', 'dagger',
+           'compose', 'enlarge_leg', 'entropy', 'imag', 'inner', 'is_scalar', 'item',
+           'linear_combination', 'move_leg', 'norm', 'outer', 'partial_trace', 'permute_legs',
+           'real', 'real_if_close', 'scalar_multiply', 'scale_axis', 'split_legs', 'sqrt',
+           'squeeze_legs', 'stable_log', 'svd', 'tdot', 'trace', 'transpose', 'zero_like',
+           'get_same_backend', 'check_same_legs']
 
 
 # TENSOR CLASSES
@@ -3146,9 +3147,29 @@ def combine_to_matrix(tensor: Tensor,
 
 
 @_elementwise_function(block_func='block_conj', maps_zero_to_zero=True)
-def conj(x: _ElementwiseType) -> _ElementwiseType:
+def complex_conj(x: _ElementwiseType) -> _ElementwiseType:
     """Complex conjugation, :ref:`elementwise <diagonal_elementwise>`"""
     return np.conj(x)
+
+
+def conj(tensor: Tensor) -> Tensor:
+    """The conjugate tensor, defined as ``transpose(dagger(tensor))``.
+
+    The resulting tensor has dual legs::
+
+        |        a   b   c           a*  b*  c*
+        |        │   │   │           │   │   │
+        |       ┏┷━━━┷━━━┷┓         ┏┷━━━┷━━━┷┓
+        |       ┃    A    ┃         ┃ conj(A) ┃
+        |       ┗━━┯━━━┯━━┛         ┗━━┯━━━┯━━┛
+        |          │   │               │   │
+        |          e   d               e*  d*
+
+    It can be thought of as complex conjugation in the following sense;
+    The coefficients of ``conj(A)`` in the new dual basis are the elementwise complex conjugates
+    of the coefficients of ``A`` in the original basis.
+    """
+    return transpose(dagger(tensor))
 
 
 def dagger(tensor: Tensor) -> Tensor:
@@ -3195,7 +3216,9 @@ def dagger(tensor: Tensor) -> Tensor:
             res = tensor.copy(deep=False)
             res.set_labels([_dual_leg_label(l) for l in reversed(tensor._labels)])
             return res
-        return conj(tensor).set_labels([_dual_leg_label(l) for l in reversed(tensor._labels)])
+        res = complex_conj(tensor)
+        res.set_labels([_dual_leg_label(l) for l in reversed(tensor._labels)])
+        return res
     if isinstance(tensor, SymmetricTensor):
         return SymmetricTensor(
             data=tensor.backend.dagger(tensor),
