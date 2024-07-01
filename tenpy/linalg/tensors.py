@@ -69,6 +69,7 @@ from abc import ABCMeta, abstractmethod
 import operator
 from typing import TypeVar, Sequence
 from numbers import Number, Integral
+from math import exp as math_exp
 import numpy as np
 import warnings
 import functools
@@ -88,7 +89,7 @@ from ..tools.misc import to_iterable, rank_data
 __all__ = ['Tensor', 'SymmetricTensor', 'DiagonalTensor', 'ChargedTensor', 'Mask',
            'add_trivial_leg', 'almost_equal', 'angle', 'apply_mask', 'apply_mask_DiagonalTensor',
            'bend_legs', 'combine_legs', 'combine_to_matrix', 'complex_conj', 'conj', 'dagger',
-           'compose', 'eigh', 'enlarge_leg', 'entropy', 'imag', 'inner', 'is_scalar', 'item',
+           'compose', 'eigh', 'enlarge_leg', 'entropy', 'exp', 'imag', 'inner', 'is_scalar', 'item',
            'linear_combination', 'lq', 'move_leg', 'norm', 'outer', 'partial_trace', 'permute_legs',
            'qr', 'real', 'real_if_close', 'scalar_multiply', 'scale_axis', 'split_legs', 'sqrt',
            'squeeze_legs', 'stable_log', 'svd', 'tdot', 'trace', 'transpose', 'zero_like',
@@ -117,6 +118,9 @@ class Tensor(metaclass=ABCMeta):
     |      ┃          T          ┃
     |      ┗┯━━━┯━━━┯━━━┯━━━┯━━━┯┛
     |      11  10   9   8   7   6
+
+    A similar graphical representation is available as :attr:`Tensor.ascii_diagram` and can be
+    printed to stdout using :meth:`Tensor.dbg`.
 
     Attributes
     ----------
@@ -3525,6 +3529,36 @@ def entropy(p: DiagonalTensor | Sequence[float], n=1):
     if n == np.inf:
         return -np.log(np.max(p))
     return np.log(np.sum(p ** n)) / (1. - n)
+
+
+def exp(obj: Tensor | complex | float) -> Tensor | complex | float:
+    """The exponential function.
+
+    For a tensor, viewed as a linear map from its domain to its codomain, the exponential
+    function is defined via its power series. For a diagonal tensor, this is equivalent to
+    the :ref:`elementwise <diagonal_elementwise>` exponential function.
+    """
+    if isinstance(obj, DiagonalTensor):
+        return obj._elementwise_unary(obj.backend.block_exp)
+    if isinstance(obj, ChargedTensor):
+        raise TypeError('ChargedTensor can not be exponentiated.')
+    if isinstance(obj, Tensor):
+        obj = obj.as_SymmetricTensor()
+        assert obj.domain == obj.codomain
+
+        # TODO refactor to support general power-series functions?
+        combine = (not obj.backend.can_decompose_tensors) and obj.num_domain_legs > 1
+        if combine:
+            # OPTIMIZE avoid re-computing the ProductSpace metadata
+            obj = combine_legs(obj, range(obj.num_codomain_legs),
+                                  range(obj.num_codomain_legs, obj.num_legs))
+        data = obj.backend.act_block_diagonal_square_matrix(obj, obj.backend.matrix_exp)
+        res = SymmetricTensor(data, codomain=obj.codomain, domain=obj.domain,
+                              backend=obj.backend, labels=obj.labels)
+        if combine:
+            res = split_legs(res, [0, 1])
+        return res
+    return math_exp(obj)
 
 
 def get_same_backend(*tensors: Tensor, error_msg: str = 'Incompatible backends.') -> Backend:
