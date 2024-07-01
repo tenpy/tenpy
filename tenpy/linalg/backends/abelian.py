@@ -789,23 +789,21 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return dual_leg, data
     
     def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
-        raise NotImplementedError  # TODO not yet reviewed. interface may change.
-        # for missing blocks, i.e. a zero block, the eigenvalues are zero, so we can just skip adding
-        # that block to the eigenvalues.
+        a_block_inds = a.data.block_inds
+        # for missing blocks, i.e. a zero block, the eigenvalues are zero, so we can just skip
+        # adding that block to the eigenvalues.
         # for the eigenvectors, we choose the computational basis vectors, i.e. the matrix
         # representation within that block is the identity matrix.
-        # we initialize all blocks to eye and override those where a has blocks.
-        # TODO dont use legs! use conventional_leg_order / domain / codomain
-        eigvects_data = self.eye_data(legs=a.legs[0:1], dtype=a.dtype)
-        eigvals_blocks = []
-        for block, bi in zip(a.data.blocks, a.data.block_inds):
+        # we initialize all blocks to eye and override those where `a` has blocks.
+        v_data = self.eye_data(a.domain, a.dtype)
+        w_blocks = []
+        for block, bi in zip(a.data.blocks, a_block_inds):
             vals, vects = self.block_eigh(block, sort=sort)
-            eigvals_blocks.append(vals)
-            assert bi[0] == bi[1]  # TODO remove this check
-            eigvects_data.blocks[bi[0]] = vects
-        eigvals_data = AbelianBackendData(dtype=a.dtype.to_real, blocks=eigvals_blocks,
-                                          block_inds=a.data.block_inds, is_sorted=True)
-        return eigvals_data, eigvects_data
+            w_blocks.append(vals)
+            v_data.blocks[bi[0]] = vects
+        w_data = AbelianBackendData(dtype=a.dtype.to_real, blocks=w_blocks, block_inds=a_block_inds,
+                                    is_sorted=True)
+        return w_data, v_data
 
     def eye_data(self, co_domain: ProductSpace, dtype: Dtype) -> Data:
         # Note: the identity has the same matrix elements in all ONB, so ne need to consider

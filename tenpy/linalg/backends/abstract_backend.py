@@ -271,7 +271,7 @@ class Backend(metaclass=ABCMeta):
 
     @abstractmethod
     def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
-        """Eigenvalue decomposition of a 2-leg hermitian tensor
+        """Eigenvalue decomposition of a hermitian tensor
 
         Parameters
         ----------

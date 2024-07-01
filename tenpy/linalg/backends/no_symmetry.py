@@ -152,7 +152,14 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return tens.leg.dual, tens.data
 
     def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
-        return self.block_eigh(a.data, sort=sort)
+        J = a.num_codomain_legs
+        N = 2 * J
+        mat = self.block_permute_axes(a.data, [*range(J), *reversed(range(J, N))])
+        k = a.domain.dim
+        mat = self.block_reshape(mat, (k,) * 2)
+        w, v = self.block_eigh(mat, sort=sort)
+        v = self.block_reshape(v, a.shape[:J] + (k,))
+        return w, v
 
     def eye_data(self, co_domain: ProductSpace, dtype: Dtype) -> Data:
         # Note: the identity has the same matrix elements in all ONB, so ne need to consider

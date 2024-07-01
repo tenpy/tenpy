@@ -418,8 +418,27 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         raise NotImplementedError('diagonal_transpose not implemented')
         
     def eigh(self, a: SymmetricTensor, sort: str = None) -> tuple[DiagonalData, Data]:
-        # TODO do SVD first, comments there apply.
-        raise NotImplementedError('eigh not implemented')  # TODO
+        a_blocks = a.data.blocks
+        a_coupled = a.data.coupled_sectors
+        domain_sectors = a.domain.sectors
+        domain_mults = a.domain.multiplicities
+        #
+        v_blocks = []
+        w_blocks = []
+        for i, j in iter_common_noncommon_sorted_arrays(a_coupled, domain_sectors):
+            if i is None:
+                # there is not block for that sector. => eigenvalues are 0.
+                # choose eigenvectors as standard basis vectors (eye matrix)
+                block_size = domain_mults[j]
+                v_blocks.append(self.eye_matrix(block_size, a.dtype))
+            else:
+                vals, vects = self.block_eigh(a_blocks[i], sort=sort)
+                v_blocks.append(vects)
+                w_blocks.append(vals)
+        #
+        v_data = FusionTreeData(domain_sectors, v_blocks, a.dtype)
+        w_data = FusionTreeData(a_coupled, w_blocks, a.dtype.to_real)
+        return w_data, v_data
 
     def eye_data(self, co_domain: ProductSpace, dtype: Dtype) -> FusionTreeData:
         # Note: the identity has the same matrix elements in all ONB, so ne need to consider

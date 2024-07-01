@@ -1248,6 +1248,44 @@ def test_DiagonalTensor_elementwise_binary(cls, op, dtype, make_compatible_tenso
 
 
 @pytest.mark.parametrize(
+    'cls, dom, new_leg_dual',
+    [pytest.param(SymmetricTensor, 1, False, id='Sym-1-False'),
+     pytest.param(SymmetricTensor, 1, True, id='Sym-1-True'),
+     pytest.param(SymmetricTensor, 2, False, id='Sym-2-False'),
+     pytest.param(DiagonalTensor, 1, False, id='Diag-False'),
+     pytest.param(DiagonalTensor, 1, True, id='Diag-True'),]
+)
+def test_eigh(cls, dom, new_leg_dual, make_compatible_tensor):
+    # prepare hermitian tensor
+    T: cls = make_compatible_tensor(dom, dom, cls=cls)
+    T: cls = make_compatible_tensor(T.domain, T.domain, cls=cls)
+    T = T + T.hc
+    T.set_labels(list('efghijk')[:2 * dom])
+    T.test_sanity()
+
+    if (not T.backend.can_decompose_tensors) and (dom > 1):
+        # TODO combine_legs currently broken... when fixed, rm this clause and keep the one below
+        with pytest.raises((NotImplementedError, ValueError, IndexError)):
+            _ = tensors.eigh(T, new_labels=['a', 'b', 'c'], new_leg_dual=new_leg_dual)
+        pytest.xfail()
+        
+        with pytest.raises(NotImplementedError, match='split_legs not implemented'):
+            _ = tensors.eigh(T, new_labels=['a', 'b', 'c'], new_leg_dual=new_leg_dual)
+        pytest.xfail()
+
+    W, V = tensors.eigh(T, new_labels=['a', 'b', 'c'], new_leg_dual=new_leg_dual)
+    W.test_sanity()
+    V.test_sanity()
+    assert W.labels == ['b', 'c']
+    assert V.codomain_labels == T.codomain_labels
+    assert V.domain_labels == ['a']
+
+    assert tensors.almost_equal(V @ W @ V.hc, T, allow_different_types=True)  # is decomposition
+    assert tensors.almost_equal(V @ V.hc, SymmetricTensor.from_eye(V.codomain, T.backend))  # unitary 1)
+    assert tensors.almost_equal(V.hc @ V, SymmetricTensor.from_eye(V.domain, T.backend))  # unitary 2)
+
+
+@pytest.mark.parametrize(
     'cls, codomain, domain, which_leg',
     [pytest.param(SymmetricTensor, 2, 2, 1, id='Symm-2-2-codom'),
      pytest.param(SymmetricTensor, 2, 2, 3, id='Symm-2-2-dom'),
@@ -1817,7 +1855,7 @@ def test_svd(cls, dom, cod, new_leg_dual, make_compatible_tensor):
     T: cls = make_compatible_tensor(dom, cod, labels=T_labels, cls=cls)
 
     if (dom > 1 or cod > 1) and not T.backend.can_decompose_tensors:
-        # TODO combine_legs currently broken... when fixed, rm this clause and add the one below
+        # TODO combine_legs currently broken... when fixed, rm this clause and keep the one below
         with pytest.raises((NotImplementedError, ValueError, IndexError)):
             _ = tensors.svd(T, new_labels=['a', 'b', 'c', 'd'])
         pytest.xfail()
