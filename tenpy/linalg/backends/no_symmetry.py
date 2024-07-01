@@ -218,8 +218,8 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         l_dims = tensor.shape[:tensor.num_codomain_legs]
         q_dims = tensor.shape[tensor.num_codomain_legs:]
         mat = self.block_reshape(tensor.data, (prod(l_dims), prod(q_dims)))
-        l, q = self.matrix_qr(mat, full=False)
-        k = self.block_shape(q)[-1]
+        l, q = self.matrix_lq(mat, full=False)
+        k = self.block_shape(q)[0]
         l = self.block_reshape(l, l_dims + (k,))
         q = self.block_reshape(q, (k,) + q_dims)
         return l, q
@@ -350,7 +350,7 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         r_dims = a.shape[a.num_codomain_legs:]
         mat = self.block_reshape(a.data, (prod(q_dims), prod(r_dims)))
         q, r = self.matrix_qr(mat, full=False)
-        k = self.block_shape(r)[-1]
+        k = self.block_shape(r)[0]
         q = self.block_reshape(q, q_dims + (k,))
         r = self.block_reshape(r, (k,) + r_dims)
         return q, r

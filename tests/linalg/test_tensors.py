@@ -1721,11 +1721,29 @@ def test_permute_legs(cls, num_cod, num_dom, codomain, domain, levels, make_comp
 
 @pytest.mark.parametrize(
     'cls, dom, cod, new_leg_dual',
-    [pytest.param(SymmetricTensor, 1, 1, True, id='Sym-1-1-True'),]
+    [pytest.param(SymmetricTensor, 1, 1, False, id='Sym-1-1-False'),
+     pytest.param(SymmetricTensor, 1, 1, True, id='Sym-1-1-True'),
+     pytest.param(SymmetricTensor, 3, 1, False, id='Sym-3-1-False'),
+     pytest.param(SymmetricTensor, 2, 2, False, id='Sym-2-2-False'),
+     pytest.param(SymmetricTensor, 2, 2, True, id='Sym-2-2-True'),
+     pytest.param(DiagonalTensor, 1, 1, False, id='Diag-False'),
+     pytest.param(DiagonalTensor, 1, 1, True, id='Diag-True'),
+     pytest.param(Mask, 1, 1, False, id='Mask-False'),
+     pytest.param(Mask, 1, 1, True, id='Mask-True'),]
 )
 def test_qr_lq(cls, dom, cod, new_leg_dual, make_compatible_tensor):
     T_labels = list('efghijk')[:dom + cod]
     T: cls = make_compatible_tensor(dom, cod, cls=cls, labels=T_labels)
+
+    if (dom > 1 or cod > 1) and not T.backend.can_decompose_tensors:
+        # TODO combine_legs currently broken... when fixed, rm this clause and keep the one below
+        with pytest.raises((NotImplementedError, ValueError, IndexError)):
+            _ = tensors.qr(T, new_leg_dual=new_leg_dual)
+        pytest.xfail()
+        
+        with pytest.raises(NotImplementedError, match='split_legs not implemented'):
+            _ = tensors.qr(T, new_leg_dual=new_leg_dual)
+        pytest.xfail()
 
     Q, R = tensors.qr(T, new_leg_dual=new_leg_dual)
     Q.test_sanity()
@@ -1738,8 +1756,8 @@ def test_qr_lq(cls, dom, cod, new_leg_dual, make_compatible_tensor):
     L.test_sanity()
     Q2.test_sanity()
     assert tensors.almost_equal(L @ Q2, T, allow_different_types=True)
-    eye = tensors.SymmetricTensor.from_eye(Q.codomain, backend=T.backend)
-    assert tensors.almost_equal(Q @ Q.hc, eye, allow_different_types=True)
+    eye = tensors.SymmetricTensor.from_eye(Q2.codomain, backend=T.backend)
+    assert tensors.almost_equal(Q2 @ Q2.hc, eye, allow_different_types=True)
     
 
 def test_scalar_multiply(make_compatible_tensor_any_class):
@@ -1863,13 +1881,6 @@ def test_svd(cls, dom, cod, new_leg_dual, make_compatible_tensor):
         with pytest.raises(NotImplementedError, match='split_legs not implemented'):
             _ = tensors.svd(T, new_labels=['a', 'b', 'c', 'd'])
         pytest.xfail()
-
-    if cls is Mask:
-        natural_new_leg = T.codomain[0] if T.is_projection else T.domain[0]
-        if natural_new_leg.is_dual != new_leg_dual:
-            with pytest.raises(NotImplementedError):
-                _ = tensors.svd(T, new_labels=['a', 'b', 'c', 'd'], new_leg_dual=new_leg_dual)
-            pytest.xfail()
 
     U, S, Vh = tensors.svd(T, new_labels=['a', 'b', 'c', 'd'], new_leg_dual=new_leg_dual)
     U.test_sanity()

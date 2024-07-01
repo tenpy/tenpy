@@ -1001,7 +1001,7 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
                 q_blocks.append(
                     self.eye_matrix(a.domain.multiplicities[k], a.dtype)[:new_leg_dim, :]
                 )
-            q_block_inds.append([j, n])
+            q_block_inds.append([n, k])
         if len(l_blocks) == 0:
             l_block_inds = np.zeros((0, 2), int)
         else:

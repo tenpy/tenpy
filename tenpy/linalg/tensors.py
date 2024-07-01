@@ -3434,7 +3434,7 @@ def eigh(tensor: Tensor, new_labels: str | list[str] | None, new_leg_dual: bool,
     if combine:
         tensor = combine_legs(tensor, range(tensor.num_codomain_legs),
                               range(tensor.num_codomain_legs, tensor.num_legs))
-    w_data, v_data = tensor.backend.eigh(tensor, new_leg=new_leg, sort=sort)
+    w_data, v_data = tensor.backend.eigh(tensor, sort=sort)
     W = DiagonalTensor(w_data, new_leg, tensor.backend, [b, c])
     V = SymmetricTensor(v_data, codomain=tensor.codomain, domain=[new_leg], backend=tensor.backend,
                         labels=[tensor.codomain_labels, [a]])
