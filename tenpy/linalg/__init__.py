@@ -31,7 +31,7 @@ from .krylov_based import *
 from .dtypes import *
 
 __all__ = ['symmetries', 'spaces', 'trees', 'backends', 'tensors', 'random_matrix', 'sparse',
-           'matrix_operations', 'krylov_based', 'dtypes',
+           'krylov_based', 'dtypes',
            *symmetries.__all__,
            *trees.__all__,
            *spaces.__all__,

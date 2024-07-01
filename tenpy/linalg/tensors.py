@@ -4130,6 +4130,12 @@ def permute_legs(tensor: Tensor, codomain: list[int | str] = None, domain: list[
                          err_msg='The given permutation requires levels, but none were given.')
 
 
+def pinv(tensor: Tensor, cutoff=1e-15) -> Tensor:
+    """The Moore-Penrose pseudo-inverse of a tensor."""
+    U, S, Vh = truncated_svd(tensor, options=dict(svd_min=cutoff))
+    return dagger(U @ (1. / S) @ Vh)
+
+
 def qr(tensor: Tensor, new_labels: str | list[str] = None, new_leg_dual: bool = False
        ) -> tuple[Tensor, Tensor]:
     """The QR decomposition of a tensor.

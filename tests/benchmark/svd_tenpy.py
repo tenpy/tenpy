@@ -1,7 +1,7 @@
 """To be used in the `-m` argument of benchmark.py."""
 # Copyright 2023 TeNPy Developers, GNU GPLv3
 
-from tenpy.linalg.matrix_operations import svd
+from tenpy.linalg.tensors import svd
 from tenpy.tools.misc import to_iterable
 
 from tdot_tenpy import parse_symmetry, get_backend, get_random_tensor

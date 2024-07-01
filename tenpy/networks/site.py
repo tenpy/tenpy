@@ -26,9 +26,8 @@ from typing import TypeVar, Type
 from functools import partial, reduce
 
 from ..linalg.tensors import (Tensor, SymmetricTensor, SymmetricTensor, ChargedTensor,
-                              DiagonalTensor, almost_equal, angle, real_if_close)
+                              DiagonalTensor, almost_equal, angle, real_if_close, exp)
 from ..linalg.backends import Backend, Block
-from ..linalg.matrix_operations import exp
 from ..linalg.symmetries import (ProductSymmetry, Symmetry, SU2Symmetry, U1Symmetry, ZNSymmetry,
                              no_symmetry, SectorArray)
 from ..linalg.spaces import Space, ElementarySpace, ProductSpace
@@ -784,7 +783,7 @@ class GroupedSite(Site):
             with labels ``['p', 'p*']``.
         """
         if all(isinstance(op, DiagonalTensor) for op in ops):
-            # TODO proper implementation? e.g. in tenpy.linalg.matrix_operations?
+            # TODO proper implementation?
             # note that block_kron is associative, order does not matter
             diag = reduce(self.backend.block_kron, (op.diag_block for op in ops))
             return DiagonalTensor.from_diag(diag, self.leg, backend=self.backend, labels=['p', 'p*'])
