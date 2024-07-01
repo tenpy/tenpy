@@ -1869,6 +1869,13 @@ def test_squeeze_legs(make_compatible_tensor, compatible_symmetry):
      ]
 )
 def test_svd(cls, dom, cod, new_leg_dual, make_compatible_tensor):
+    """Test svd and various related functions. Covers
+
+    - svd
+    - truncated_svd
+        - truncate_singular_values
+        - svd_apply_mask
+    """
     T_labels = list('efghijklmn')[:dom + cod]
     T: cls = make_compatible_tensor(dom, cod, labels=T_labels, cls=cls)
 
@@ -1881,6 +1888,8 @@ def test_svd(cls, dom, cod, new_leg_dual, make_compatible_tensor):
         with pytest.raises(NotImplementedError, match='split_legs not implemented'):
             _ = tensors.svd(T, new_labels=['a', 'b', 'c', 'd'])
         pytest.xfail()
+
+    print('Normal (non-truncated) SVD')
 
     U, S, Vh = tensors.svd(T, new_labels=['a', 'b', 'c', 'd'], new_leg_dual=new_leg_dual)
     U.test_sanity()
@@ -1897,13 +1906,29 @@ def test_svd(cls, dom, cod, new_leg_dual, make_compatible_tensor):
     assert tensors.almost_equal(U @ S @ Vh, T, allow_different_types=True)
     eye = tensors.SymmetricTensor.from_eye(S.domain, backend=T.backend)
     assert tensors.almost_equal(U.hc @ U, eye, allow_different_types=True)
-
-    if isinstance(Vh, Mask):
-        with pytest.raises(NotImplementedError, match='tensors._compose_with_Mask not implemented for Mask'):
-            _ = Vh @ Vh.hc
-        Vh = Vh.as_SymmetricTensor()
-        
     assert tensors.almost_equal(Vh @ Vh.hc, eye, allow_different_types=True)
+
+    if isinstance(T.backend, backends.FusionTreeBackend):
+        with pytest.raises(NotImplementedError, match='mask_from_block not implemented'):
+            _ = tensors.truncated_svd(T, new_leg_dual=new_leg_dual)
+        return  # TODO
+
+    print('Truncated SVD')
+    for svd_min, normalize_to in [(1e-14, None), (1e-4, None), (1e-4, 2.7)]:
+        options = dict(svd_min=svd_min)
+        U, S, Vh, err, renormalize = tensors.truncated_svd(
+            T, new_leg_dual=new_leg_dual, normalize_to=normalize_to, options=options
+        )
+        U.test_sanity()
+        S.test_sanity()
+        Vh.test_sanity()
+        # check that U @ S @ Vd recovers the original tensor up to the error incurred
+        T_approx = U @ S @ Vh / renormalize
+        npt.assert_almost_equal(err, tensors.norm(T.as_SymmetricTensor() - T_approx))
+        # check isometric properties
+        eye = tensors.SymmetricTensor.from_eye(S.domain, backend=T.backend)
+        assert tensors.almost_equal(U.hc @ U, eye, allow_different_types=True)
+        assert tensors.almost_equal(Vh @ Vh.hc, eye, allow_different_types=True)
 
 
 @pytest.mark.parametrize(

@@ -84,6 +84,7 @@ from .backends.backend_factory import get_backend
 from .backends.abstract_backend import Block, Backend, conventional_leg_order
 from .dtypes import Dtype
 from ..tools.misc import to_iterable, rank_data
+from ..tools.params import asConfig
 
 
 __all__ = ['Tensor', 'SymmetricTensor', 'DiagonalTensor', 'ChargedTensor', 'Mask',
@@ -92,8 +93,9 @@ __all__ = ['Tensor', 'SymmetricTensor', 'DiagonalTensor', 'ChargedTensor', 'Mask
            'compose', 'eigh', 'enlarge_leg', 'entropy', 'exp', 'imag', 'inner', 'is_scalar', 'item',
            'linear_combination', 'lq', 'move_leg', 'norm', 'outer', 'partial_trace', 'permute_legs',
            'qr', 'real', 'real_if_close', 'scalar_multiply', 'scale_axis', 'split_legs', 'sqrt',
-           'squeeze_legs', 'stable_log', 'svd', 'tdot', 'trace', 'transpose', 'zero_like',
-           'get_same_backend', 'check_same_legs']
+           'squeeze_legs', 'stable_log', 'svd', 'svd_apply_mask', 'tdot', 'trace', 'transpose',
+           'truncate_singular_values', 'truncated_svd', 'zero_like', 'get_same_backend',
+           'check_same_legs']
 
 
 # TENSOR CLASSES
@@ -4514,6 +4516,18 @@ def svd(tensor: Tensor,
     return U, S, Vh
 
 
+def svd_apply_mask(U: SymmetricTensor, S: DiagonalTensor, Vh: SymmetricTensor, mask: Mask
+                   ) -> tuple[SymmetricTensor, DiagonalTensor, SymmetricTensor]:
+    """Truncate an existing SVD"""
+    assert mask.is_projection
+    assert mask.domain[0] == S.domain[0]
+
+    U = _compose_with_Mask(U, dagger(mask), -1)
+    S = apply_mask_DiagonalTensor(S, mask)
+    Vh = _compose_with_Mask(Vh, mask, 0)
+    return U, S, Vh
+
+
 def tdot(tensor1: Tensor, tensor2: Tensor,
          legs1: int | str | list[int | str], legs2: int | str | list[int | str],
          relabel1: dict[str, str] = None, relabel2: dict[str, str] = None):
@@ -4787,6 +4801,167 @@ def transpose(tensor: Tensor) -> Tensor:
     raise TypeError
 
 
+def truncate_singular_values(S: DiagonalTensor, options: dict = {}) -> tuple[Mask, float, float]:
+    r"""Given *normalized* singular values, determine which to keep.
+
+    Options
+    -------
+    .. cfg:config:: truncation
+
+        chi_max : int
+            Keep at most `chi_max` singular values.
+        chi_min : int
+            Keep at least `chi_min` singular values
+        degeneracy_tol : float
+            Don't cut between neighboring singular values with
+            ``|log(S[i]/S[j])| < degeneracy_tol``, or equivalently
+            ``|S[i] - S[j]|/S[j] < exp(degeneracy_tol) - 1 ~= degeneracy_tol``
+            for small `degeneracy_tol`.
+            In other words, keep either both `i` and `j` or none, if the
+            Schmidt values are degenerate with a relative error smaller
+            than `degeneracy_tol`, which we expect to happen in the case
+            of symmetries.
+        svd_min : float
+            Discard all small singular values ``S[i] < svd_min``.
+        trunc_cut : float
+            Discard all small Schmidt values as long as
+            ``sum_{i discarded} S[i]**2 <= trunc_cut**2``.
+
+    Parameters
+    ----------
+    S : DiagonalTensor
+        Singular values, normalized to ``S.norm() == 1``.
+    options : dict-like
+        Config with constraints for the truncation, see :cfg:config:`truncation`.
+        If a constraint can not be fulfilled (without violating a previous one), it is ignored.
+        A value ``None`` indicates that the constraint should be ignored.
+
+    Returns
+    -------
+    mask : Mask
+        A mask, indicating which of the singular values to keep
+    err : float
+        the truncation error introduced, i.e. the norm(S_discarded) = sqrt(\sum_{i=k}^{N} S_i^2).
+        In the context of truncated SVD, this is the relative error in the 2-norm,
+        i.e. ``norm(T - T_approx) / norm(T)``.
+    new_norm : float
+        The norm of S after truncation
+    """
+    options = asConfig(options, "truncation")
+    # by default, only truncate values which are much closer to zero than machine precision.
+    # This is only to avoid problems with taking the inverse of `S`.
+    chi_max = options.get('chi_max', 100)
+    chi_min = options.get('chi_min', None)
+    deg_tol = options.get('degeneracy_tol', None)
+    svd_min = options.get('svd_min', 1.e-14)
+    trunc_cut = options.get('trunc_cut', 1.e-14)
+
+    # OPTIMIZE should we do all of this logic with block-backend instead of numpy?
+    S_np = S.diagonal_as_numpy()
+
+    if trunc_cut is not None and trunc_cut >= 1.:
+        raise ValueError("trunc_cut >=1.")
+    if not np.any(S_np > 1.e-10):
+        warnings.warn("no singular value above 1.e-10", stacklevel=2)
+    if np.any(S_np < -1.e-10):
+        warnings.warn("negative singular values!", stacklevel=2)
+
+    # use 1.e-100 as replacement for <=0 values for a well-defined logarithm.
+    logS = np.log(np.choose(S_np <= 0., [S_np, 1.e-100 * np.ones(len(S_np))]))
+    piv = np.argsort(logS)  # sort *ascending*.
+    logS = logS[piv]
+    # goal: find an index 'cut' such that we keep piv[cut:], i.e. cut between `cut-1` and `cut`.
+    good = np.ones(len(piv), dtype=np.bool_)  # good[cut] = (is `cut` a good choice?)
+    # we choose the smallest 'good' cut.
+
+    if chi_max is not None:
+        # keep at most chi_max values
+        good2 = np.zeros(len(piv), dtype=np.bool_)
+        good2[-chi_max:] = True
+        good = _combine_constraints(good, good2, "chi_max")
+
+    if chi_min is not None and chi_min > 1:
+        # keep at least chi_min values
+        good2 = np.ones(len(piv), dtype=np.bool_)
+        good2[-chi_min + 1:] = False
+        good = _combine_constraints(good, good2, "chi_min")
+
+    if deg_tol:
+        # don't cut between values (cut-1, cut) with ``log(S[cut]/S[cut-1]) < deg_tol``
+        # this is equivalent to
+        # ``(S[cut] - S[cut-1])/S[cut-1] < exp(deg_tol) - 1 = deg_tol + O(deg_tol^2)``
+        good2 = np.empty(len(piv), np.bool_)
+        good2[0] = True
+        good2[1:] = np.greater_equal(logS[1:] - logS[:-1], deg_tol)
+        good = _combine_constraints(good, good2, "degeneracy_tol")
+
+    if svd_min is not None:
+        # keep only values S[i] >= svd_min
+        good2 = np.greater_equal(logS, np.log(svd_min))
+        good = _combine_constraints(good, good2, "svd_min")
+
+    if trunc_cut is not None:
+        good2 = (np.cumsum(S_np[piv]**2) > trunc_cut * trunc_cut)
+        good = _combine_constraints(good, good2, "trunc_cut")
+
+    cut = np.nonzero(good)[0][0]  # smallest possible cut: keep as many S as allowed
+    mask = np.zeros(len(S_np), dtype=np.bool_)
+    np.put(mask, piv[cut:], True)
+    new_norm = np.linalg.norm(S_np[mask])
+    err = np.linalg.norm(S_np[np.logical_not(mask)])
+    mask = Mask.from_block_mask(mask, large_leg=S.legs[0], backend=S.backend)
+    return mask, err, new_norm
+
+
+def truncated_svd(tensor: Tensor,
+                  new_labels: str | list[str] | None = None,
+                  new_leg_dual: bool = False,
+                  algorithm: str | None = None,
+                  normalize_to: float = None,
+                  options: dict = {},
+                  ) -> tuple[Tensor, DiagonalTensor, Tensor, float, float]:
+    """Truncated version of :func:`svd`.
+
+    Parameters
+    ----------
+    tensor, new_labels, new_leg_dual, algorithm
+        Same as for the non-truncated :func:`svd`.
+    normalize_to: float or None
+        If ``None`` (default), the resulting singular values are not renormalized,
+        resulting in an approximation in terms of ``U, S, Vh`` which has smaller norm than `a`.
+        If a ``float``, the singular values are scaled such that ``norm(S) == normalize_to``.
+    options : dict-like
+        Options that determine how many singular values are kept, see :cfg:config:`truncation`.
+
+    Returns
+    -------
+    U, S, Vh
+        The tensors U, S, Vh that form the truncated SVD, such that
+        ``tdot(U, tdot(S, Vh, 1, 0), -1, 0)`` is *approximately* equal to `a`.
+    err : float
+        The relative 2-norm truncation error ``norm(a - U_S_Vh) / norm(a)``.
+        This is the (relative) 2-norm weight of the discarded singular values.
+    renormalize : float
+        Factor, by which `S` was renormalized, i.e. ``norm(S) / norm(a)``, such that
+        ``U @ S @ Vh / renormalize`` has the same norm as `a`.
+
+    See Also
+    --------
+    svd
+    """
+    U, S, Vh = svd(tensor, new_labels=new_labels, new_leg_dual=new_leg_dual, algorithm=algorithm)
+    S_norm = norm(S)
+    mask, err, new_norm = truncate_singular_values(S / S_norm, options=options)
+    U, S, Vh = svd_apply_mask(U, S, Vh, mask)
+    if normalize_to is None:
+        renormalize = 1
+    else:
+        # norm(S[mask]) == S_norm * new_norm
+        renormalize = normalize_to / S_norm / new_norm
+        S = renormalize * S
+    return U, S, Vh, err, renormalize
+
+
 def zero_like(tensor: Tensor) -> Tensor:
     """Return a zero tensor with same type, dtype, legs, backend and labels."""
     if isinstance(tensor, Mask):
@@ -4811,6 +4986,19 @@ def zero_like(tensor: Tensor) -> Tensor:
 
 
 T = TypeVar('T')
+
+
+def _combine_constraints(good1, good2, warn):
+    """return logical_and(good1, good2) if there remains at least one `True` entry.
+
+    Otherwise print a warning and return just `good1`.
+    """
+    assert good1.shape == good2.shape, f'{good1.shape} != {good2.shape}'
+    res = np.logical_and(good1, good2)
+    if np.any(res):
+        return res
+    warnings.warn("truncation: can't satisfy constraint for " + warn, stacklevel=3)
+    return good1
 
 
 def _combine_leg_labels(labels: list[str | None]) -> str:
