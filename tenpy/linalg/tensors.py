@@ -3894,7 +3894,7 @@ def norm(tensor: Tensor) -> float:
                    'Use e.g. norm(tensor.invariant_part).')
             raise ValueError(msg)
         if tensor.charge_leg.dim == 1:
-            factor = tensor.backend.block_item(tensor.charged_state)
+            factor = abs(tensor.backend.block_item(tensor.charged_state))
             return factor * tensor.backend.norm(tensor.invariant_part)
         else:
             # OPTIMIZE
