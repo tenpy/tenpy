@@ -201,8 +201,11 @@ class FusionTree:
             # do not even give it an axis.
             return backend.ones_block([1], dtype=dtype)
         if self.num_uncoupled == 1:
-            dim_c = self.symmetry.sector_dim(self.coupled)
-            return backend.eye_block([dim_c], dtype)
+            if self.are_dual[0]:
+                return self.symmetry.Z_iso(self.coupled)
+            else:
+                dim_c = self.symmetry.sector_dim(self.coupled)
+                return backend.eye_block([dim_c], dtype)
         if self.num_uncoupled == 2:
             mu = self.multiplicities[0]
             # OPTIMIZE should we offer a symmetry function to compute only the mu slice?
