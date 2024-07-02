@@ -64,8 +64,9 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     # ABSTRACT METHODS:
 
-    def act_block_diagonal_square_matrix(self, a: SymmetricTensor, block_method: Callable[[Block], Block]
-                                         ) -> Data:
+    def act_block_diagonal_square_matrix(self, a: SymmetricTensor,
+                                         block_method: Callable[[Block], Block],
+                                         dtype_map: Callable[[Dtype], Dtype] | None) -> Data:
         return block_method(a.data)
 
     def add_trivial_leg(self, a: SymmetricTensor, legs_pos: int, add_to_domain: bool,

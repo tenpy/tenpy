@@ -204,8 +204,21 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     # ABSTRACT METHODS
 
     def act_block_diagonal_square_matrix(self, a: SymmetricTensor,
-                                         block_method: Callable[[Block], Block]) -> Data:
-        raise NotImplementedError('act_block_diagonal_square_matrix not implemented')  # TODO
+                                         block_method: Callable[[Block], Block],
+                                         dtype_map: Callable[[Dtype], Dtype] | None) -> Data:
+        res_blocks = []
+        all_coupled = a.domain.sectors  # this is only true bc. we can assume a.codomain == a.domain
+        for i, j in iter_common_noncommon_sorted_arrays(a.data.coupled_sectors, all_coupled):
+            if i is None:
+                block = self.zero_block(shape=[a.domain.multiplicities[j]] * 2, dtype=a.dtype)
+            else:
+                block = a.data.blocks[i]
+            res_blocks.append(block_method(block))
+        if dtype_map is None:
+            dtype = a.dtype
+        else:
+            dtype = dtype_map(a.dtype)
+        return FusionTreeData(all_coupled, res_blocks, dtype)
 
     def add_trivial_leg(self, a: SymmetricTensor, legs_pos: int, add_to_domain: bool,
                         co_domain_pos: int, new_codomain: ProductSpace, new_domain: ProductSpace

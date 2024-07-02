@@ -95,16 +95,20 @@ class Backend(metaclass=ABCMeta):
     # ABSTRACT METHODS
     
     @abstractmethod
-    def act_block_diagonal_square_matrix(self, a: SymmetricTensor, block_method: Callable[[Block], Block]
-                                         ) -> Data:
+    def act_block_diagonal_square_matrix(self, a: SymmetricTensor,
+                                         block_method: Callable[[Block], Block],
+                                         dtype_map: Callable[[Dtype], Dtype] | None) -> Data:
         """Apply functions like exp() and log() on a (square) block-diagonal `a`.
 
         Parameters
         ----------
         a : Tensor
-            The tensor to act on
+            The tensor to act on. Can assume ``a.codomain == a.domain``.
         block_method : function
             A function with signature ``block_method(a: Block) -> Block`` acting on backend-blocks.
+        dtype_map : function or None
+            Specify how the result dtype depends on the input dtype. ``None`` means unchanged.
+            This is needed in abelian and fusion-tree backends, in case there are 0 blocks.
         """
         ...
 

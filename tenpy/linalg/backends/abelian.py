@@ -230,7 +230,8 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
     # ABSTRACT METHODS
 
     def act_block_diagonal_square_matrix(self, a: SymmetricTensor,
-                                         block_method: Callable[[Block], Block]) -> Data:
+                                         block_method: Callable[[Block], Block],
+                                         dtype_map: Callable[[Dtype], Dtype] | None) -> Data:
         leg = a.domain.spaces[0]
         a_block_inds = a.data.block_inds
         all_block_inds = np.repeat(np.arange(leg.num_sectors)[:, None], 2, axis=1)
@@ -242,7 +243,10 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
             else:
                 block = a.data.blocks[i]
             res_blocks.append(block_method(block))
-        dtype = Dtype.common(*(self.block_dtype(block) for block in res_blocks))
+        if dtype_map is None:
+            dtype = a.dtype
+        else:
+            dtype = dtype_map(a.dtype)
         res_blocks = [self.block_to_dtype(block, dtype) for block in res_blocks]
         return AbelianBackendData(dtype, res_blocks, all_block_inds, is_sorted=True)
 

@@ -3596,7 +3596,9 @@ def exp(obj: Tensor | complex | float) -> Tensor | complex | float:
             # OPTIMIZE avoid re-computing the ProductSpace metadata
             obj = combine_legs(obj, range(obj.num_codomain_legs),
                                   range(obj.num_codomain_legs, obj.num_legs))
-        data = obj.backend.act_block_diagonal_square_matrix(obj, obj.backend.matrix_exp)
+        data = obj.backend.act_block_diagonal_square_matrix(
+            obj, obj.backend.matrix_exp, dtype_map=None
+        )
         res = SymmetricTensor(data, codomain=obj.codomain, domain=obj.domain,
                               backend=obj.backend, labels=obj.labels)
         if combine:
