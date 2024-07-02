@@ -30,14 +30,14 @@ from .algorithms.dmrg_parallel import DMRGThreadPlusHC
 from .algorithms.dmrg import SingleSiteDMRGEngine, TwoSiteDMRGEngine
 from .algorithms.exact_diag import ExactDiag
 from .algorithms.mpo_evolution import ExpMPOEvolution, TimeDependentExpMPOEvolution
-from .algorithms.mps_common import VariationalCompression, VariationalApplyMPO
+from .algorithms.mps_common import VariationalCompression, VariationalApplyMPO, QRBasedVariationalApplyMPO
 from .algorithms.network_contractor import ncon, contract
 from .algorithms.purification import PurificationApplyMPO, PurificationTEBD, PurificationTEBD2
 from .algorithms.tdvp import (SingleSiteTDVPEngine, TwoSiteTDVPEngine, TimeDependentSingleSiteTDVP,
                               TimeDependentTwoSiteTDVP)
 from .algorithms.vumps import SingleSiteVUMPSEngine, TwoSiteVUMPSEngine
 from .algorithms.tebd import TEBDEngine, QRBasedTEBDEngine, RandomUnitaryEvolution, TimeDependentTEBD
-from .algorithms.truncation import TruncationError, truncate, svd_theta
+from .algorithms.truncation import TruncationError, truncate, svd_theta, decompose_theta_qr_based
 from .linalg.charges import ChargeInfo, LegCharge, LegPipe
 from .linalg.krylov_based import Arnoldi, LanczosGroundState, LanczosEvolution, lanczos_arpack
 from .linalg.np_conserved import (Array, zeros, ones, eye_like, diag,
@@ -99,11 +99,11 @@ __all__ = [
     'algorithms', 'linalg', 'models', 'networks', 'simulations', 'tools', 'version',
     # from tenpy.algorithms
     'DMRGThreadPlusHC', 'SingleSiteDMRGEngine', 'TwoSiteDMRGEngine', 'ExactDiag', 'ExpMPOEvolution',
-    'TimeDependentExpMPOEvolution', 'VariationalCompression', 'VariationalApplyMPO', 'ncon',
+    'TimeDependentExpMPOEvolution', 'VariationalCompression', 'VariationalApplyMPO', 'QRBasedVariationalApplyMPO', 'ncon',
     'contract', 'PurificationApplyMPO', 'PurificationTEBD', 'PurificationTEBD2',
     'SingleSiteTDVPEngine', 'TwoSiteTDVPEngine', 'TimeDependentSingleSiteTDVP',
     'TimeDependentTwoSiteTDVP', 'TEBDEngine', 'QRBasedTEBDEngine', 'RandomUnitaryEvolution',
-    'TimeDependentTEBD', 'TruncationError', 'truncate', 'svd_theta', 'SingleSiteVUMPSEngine',
+    'TimeDependentTEBD', 'TruncationError', 'truncate', 'svd_theta', 'decompose_theta_qr_based', 'SingleSiteVUMPSEngine',
     'TwoSiteVUMPSEngine',
     # from tenpy.linalg
     'ChargeInfo', 'LegCharge', 'LegPipe', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution',

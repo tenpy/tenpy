@@ -18,18 +18,25 @@ from tenpy.models.spins import SpinChain
 from tenpy.algorithms import tebd, tdvp, mpo_evolution, exact_diag
 
 
-@pytest.mark.parametrize('bc_MPS, approximation, compression', [
-    ('finite', 'I', 'SVD'),
-    ('finite', 'I', 'variational'),
-    ('finite', 'II', 'variational'),
-    ('finite', 'I', 'zip_up'),
-    ('finite', 'II', 'zip_up'),
-    ('infinite', 'I', 'SVD'),
-    ('infinite', 'II', 'SVD'),
-    ('infinite', 'II', 'variational'),
+@pytest.mark.parametrize('bc_MPS, approximation, compression, use_eig_based_svd', [
+    ('finite', 'I', 'SVD', None),
+    ('finite', 'I', 'variational', None),
+    ('finite', 'II', 'variational', None),
+    ('finite', 'I', 'variationalQR', False),
+    ('finite', 'II', 'variationalQR', False),
+    ('finite', 'I', 'variationalQR', True),
+    ('finite', 'II', 'variationalQR', True),
+    ('finite', 'I', 'zip_up', None),
+    ('finite', 'II', 'zip_up', None),
+    ('infinite', 'I', 'SVD', None),
+    ('infinite', 'II', 'SVD', None),
+    ('infinite', 'II', 'variational', None),
+    ('infinite', 'II', 'variationalQR', False),
+    ('infinite', 'II', 'variationalQR', True),
 ])
+@pytest.mark.filterwarnings("ignore:_eig_based_svd is nonsensical on CPU!!")
 @pytest.mark.slow
-def test_ExpMPOEvolution(bc_MPS, approximation, compression, g=1.5):
+def test_ExpMPOEvolution(bc_MPS, approximation, compression, use_eig_based_svd, g=1.5):
     # Test a time evolution against exact diagonalization for finite bc
     dt = 0.01
     if bc_MPS == 'finite':
@@ -55,6 +62,8 @@ def test_ExpMPOEvolution(bc_MPS, approximation, compression, g=1.5):
             'svd_min': 1.e-8
         }
     }
+    if use_eig_based_svd is not None:
+        options.update(use_eig_based_svd=use_eig_based_svd)
     eng = mpo_evolution.ExpMPOEvolution(psi, M, options)
 
     if bc_MPS == 'finite':
