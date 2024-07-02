@@ -1,0 +1,2 @@
+- Implement :meth:`~tenpy.networks.purification_mps.PurificationMPS.sample_measurements` for
+  :class:`~tenpy.networks.purification_mps.PurificationMPS`.
