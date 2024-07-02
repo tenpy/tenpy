@@ -3186,26 +3186,36 @@ def combine_to_matrix(tensor: Tensor,
 
 @_elementwise_function(block_func='block_conj', maps_zero_to_zero=True)
 def complex_conj(x: _ElementwiseType) -> _ElementwiseType:
-    """Complex conjugation, :ref:`elementwise <diagonal_elementwise>`"""
+    """Complex conjugation, :ref:`elementwise <diagonal_elementwise>`.
+
+    See Also
+    --------
+    conj
+    """
     return np.conj(x)
 
 
 def conj(tensor: Tensor) -> Tensor:
     """The conjugate tensor, defined as ``transpose(dagger(tensor))``.
 
-    The resulting tensor has dual legs::
+    The resulting tensor has dual (co-)domain, i.e. the legs are dual and permuted as follows::
 
-        |        a   b   c           a*  b*  c*
+        |        a   b   c           c*  b*  a*
         |        │   │   │           │   │   │
         |       ┏┷━━━┷━━━┷┓         ┏┷━━━┷━━━┷┓
         |       ┃    A    ┃         ┃ conj(A) ┃
         |       ┗━━┯━━━┯━━┛         ┗━━┯━━━┯━━┛
         |          │   │               │   │
-        |          e   d               e*  d*
+        |          e   d               d*  e*
 
-    It can be thought of as complex conjugation in the following sense;
-    The coefficients of ``conj(A)`` in the new dual basis are the elementwise complex conjugates
-    of the coefficients of ``A`` in the original basis.
+    For a matrix, i.e. if ``len(A.domain) == 1 == len(A.codomain)``, this can be thought of
+    as elementwise complex conjugation, i.e. the coefficients of ``A`` in the computational basis
+    are the elementwise conjugates of the coefficients of ``conj(A)`` in the associates dual basis.
+
+    See Also
+    --------
+    complex_conj
+        Elementwise complex conjugation for DiagonalTensors
     """
     return transpose(dagger(tensor))
 

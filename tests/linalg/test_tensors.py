@@ -515,7 +515,6 @@ def test_ChargedTensor(make_compatible_tensor, make_compatible_sectors, compatib
     #     npt.assert_array_equal(detected, sector)
 
 
-
 @pytest.mark.parametrize('symmetry_backend', ['abelian', pytest.param('fusion_tree', marks=pytest.mark.FusionTree)])
 def test_explicit_blocks(symmetry_backend, block_backend):
     """Do detailed tests with concrete examples.
