@@ -3681,8 +3681,8 @@ class MPS(BaseMPSExpectationValue):
         norm_tol : float
             Tolerance
         complex_amplitude : bool
-            Do we return the amplitude (True) of the sampled bit string or the probability (False),
-            which is the |amplitude|**2.
+            Do we return the complex amplitude (``True``) of the sampled bit string or the
+            probability (``False``), which is the ``abs(amplitude) ** 2``.
 
         Returns
         -------

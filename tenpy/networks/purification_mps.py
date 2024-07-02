@@ -491,8 +491,9 @@ class PurificationMPS(MPS):
         first_site, last_site, ops, rng, norm_tol :
             Same as in :meth:`tenpy.networks.mps.MPS.sample_measurements`.
         complex_amplitude : bool
-            Do we return the amplitude (True) of the sampled bit string or the probability (False),
-            which is the |amplitude|**2. This MUST be False for the purification MPS function.
+            Do we return the complex amplitude (``True``) of the sampled bit string or the
+            probability (``False``), which is the ``abs(amplitude) ** 2``.
+            Only ``False`` is supported for :class:`PurificationMPS`.
 
         Returns
         -------
