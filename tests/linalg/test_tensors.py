@@ -73,6 +73,9 @@ class DummyTensor(tensors.Tensor):
     def as_SymmetricTensor(self) -> SymmetricTensor:
         raise NotImplementedError
 
+    def _get_item(self, idx: list[int]) -> bool | float | complex:
+        raise NotImplementedError
+
 
 def test_base_Tensor(make_compatible_space, compatible_backend):
 
@@ -1359,6 +1362,59 @@ def test_entropy(n, make_compatible_tensor):
     ent = tensors.entropy(p, n)
     expect = tensors.entropy(p_np, n)
     npt.assert_almost_equal(ent, expect)
+
+
+@pytest.mark.parametrize(
+    'cls, cod, dom',
+    [pytest.param(SymmetricTensor, 2, 2, id='Sym-2-2'),
+     pytest.param(SymmetricTensor, 1, 3, id='Sym-1-3'),
+     pytest.param(SymmetricTensor, 3, 0, id='Sym-3-0'),
+     pytest.param(DiagonalTensor, 1, 1, id='Diag'),
+     pytest.param(Mask, 1, 1, id='Mask-1-1'),
+     pytest.param(ChargedTensor, 2, 2, id='Charged-2-2'),
+     pytest.param(ChargedTensor, 0, 3, id='Charged-0-3'),
+     pytest.param(ChargedTensor, 3, 1, id='Charged-3-1'),
+     ]
+)
+def test_getitem(cls, cod, dom, make_compatible_tensor, np_random):
+    T: cls = make_compatible_tensor(cod, dom, cls=cls)
+    T_np = T.to_numpy()
+    random_idx = tuple(np_random.choice(d) for d in T.shape)
+
+    def assert_same(a, b):
+        if T.dtype == Dtype.bool:
+            assert bool(a) == bool(b)
+        else:
+            npt.assert_almost_equal(a, b)
+
+    if isinstance(T.backend, backends.FusionTreeBackend):
+        if cls is DiagonalTensor:
+            # getting an off-diagonal element is handled without going to the backend function
+            with pytest.raises(NotImplementedError, match='get_element.* not implemented'):
+                _ = T[0, 0]
+            pytest.xfail()
+            
+        with pytest.raises(NotImplementedError, match='get_element.* not implemented'):
+            _ = T[random_idx]
+        pytest.xfail()
+    
+    assert_same(T[random_idx], T_np[random_idx])
+
+    # trying to set items raises
+    with pytest.raises(TypeError, match='.* do.* not support item assignment.'):
+        T[random_idx] = T.dtype.zero_scalar
+
+    non_zero_idcs = np.where(np.abs(T_np) > 1e-2)
+    which = np_random.choice(len(non_zero_idcs[0]))
+    non_zero_idx = tuple(ax[which] for ax in non_zero_idcs)
+    assert len(non_zero_idx) > 0
+    assert_same(T[non_zero_idx], T_np[non_zero_idx])
+
+    zero_idcs = np.where(np.abs(T_np) < 1e-8)
+    if len(zero_idcs[0]) > 0:
+        which = np_random.choice(len(zero_idcs[0]))
+        zero_idx = tuple(ax[which] for ax in zero_idcs)
+        assert_same(T[zero_idx], T_np[zero_idx])
 
 
 @pytest.mark.parametrize(

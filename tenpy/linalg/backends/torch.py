@@ -267,11 +267,6 @@ class TorchBlockBackend(BlockBackend):
     def ones_block(self, shape: list[int], dtype: Dtype) -> Block:
         return torch_module.ones(list(shape), dtype=self.backend_dtype_map[dtype], device=self.device)
 
-    def set_block_element(self, a: Block, idcs: list[int], value: complex | float | bool) -> Block:
-        res = self.block_copy(a)
-        res[tuple(idcs)] = value
-        return res
-    
     def synchronize(self):
         """Wait for asynchronous processes (if any) to finish"""
         torch_module.cuda.synchronize(device=self.device)

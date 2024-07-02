@@ -556,6 +556,9 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def get_element_diagonal(self, a: DiagonalTensor, idx: int) -> complex | float | bool:
         raise NotImplementedError('get_element_diagonal not implemented')  # TODO
+    
+    def get_element_mask(self, a: Mask, idcs: list[int]) -> bool:
+        raise NotImplementedError('get_element_mask not implemented')  # TODO
 
     def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_dagger: bool) -> float | complex:
         res = 0.

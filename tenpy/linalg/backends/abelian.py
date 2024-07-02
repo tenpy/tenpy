@@ -145,7 +145,7 @@ class AbelianBackendData:
         or None if no such block exists
         """
         block_num = self.get_block_num(block_inds)
-        return None if block_num is None else self.block[block_num]
+        return None if block_num is None else self.blocks[block_num]
 
 
 class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
@@ -886,22 +886,29 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return a.dtype
 
     def get_element(self, a: SymmetricTensor, idcs: list[int]) -> complex | float | bool:
-        raise NotImplementedError  # TODO not yet reviewed
-        # TODO dont use legs! use conventional_leg_order / domain / codomain
-        pos = np.array([l.parse_index(idx) for l, idx in zip(a.legs, idcs)])
+        pos = np.array([l.parse_index(idx) for l, idx in zip(conventional_leg_order(a), idcs)])
         block = a.data.get_block(pos[:, 0])
         if block is None:
             return a.dtype.zero_scalar
         return self.get_block_element(block, pos[:, 1])
 
     def get_element_diagonal(self, a: DiagonalTensor, idx: int) -> complex | float | bool:
-        raise NotImplementedError  # TODO not yet reviewed
-        # TODO dont use legs! use conventional_leg_order / domain / codomain
-        block_idx, idx_within = a.legs[0].parse_index(idx)
-        block = a.data.get_block(np.array([block_idx]))
+        block_idx, idx_within = a.leg.parse_index(idx)
+        block = a.data.get_block(np.array([block_idx, block_idx]))
         if block is None:
             return a.dtype.zero_scalar
         return self.get_block_element(block, [idx_within])
+
+    def get_element_mask(self, a: Mask, idcs: list[int]) -> bool:
+        pos = np.array([l.parse_index(idx) for l, idx in zip(conventional_leg_order(a), idcs)])
+        block = a.data.get_block(pos[:, 0])
+        if block is None:
+            return False
+        if a.is_projection:
+            small, large = pos[:, 1]
+        else:
+            large, small = pos[:, 1]
+        return self.get_block_mask_element(block, large, small)
         
     def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_dagger: bool) -> float | complex:
         a_blocks = a.data.blocks

@@ -261,11 +261,6 @@ class NumpyBlockBackend(BlockBackend):
     def ones_block(self, shape: list[int], dtype: Dtype) -> Block:
         return np.ones(shape, dtype=self.backend_dtype_map[dtype])
 
-    def set_block_element(self, a: Block, idcs: list[int], value: complex | float | bool) -> Block:
-        res = a.copy()
-        res[tuple(idcs)] = value
-        return res
-
     def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
         return np.zeros(shape, dtype=self.backend_dtype_map[dtype])
 

@@ -219,11 +219,6 @@ class ArrayApiBlockBackend(BlockBackend):
     def get_block_element(self, a: Block, idcs: list[int]) -> complex | float | bool:
         return a[tuple(idcs)].item()
 
-    def set_block_element(self, a: Block, idcs: list[int], value: complex | float | bool) -> Block:
-        res = self.block_copy(a)
-        res[tuple(idcs)] = value
-        return res
-
     def block_get_diagonal(self, a: Block, check_offdiagonal: bool) -> Block:
         raise NotImplementedError  # TODO
         # res = np.diagonal(a)

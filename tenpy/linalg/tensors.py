@@ -92,10 +92,10 @@ __all__ = ['Tensor', 'SymmetricTensor', 'DiagonalTensor', 'ChargedTensor', 'Mask
            'bend_legs', 'combine_legs', 'combine_to_matrix', 'complex_conj', 'conj', 'dagger',
            'compose', 'eigh', 'enlarge_leg', 'entropy', 'exp', 'imag', 'inner', 'is_scalar', 'item',
            'linear_combination', 'lq', 'move_leg', 'norm', 'outer', 'partial_trace', 'permute_legs',
-           'qr', 'real', 'real_if_close', 'scalar_multiply', 'scale_axis', 'split_legs', 'sqrt',
-           'squeeze_legs', 'stable_log', 'svd', 'svd_apply_mask', 'tdot', 'trace', 'transpose',
-           'truncate_singular_values', 'truncated_svd', 'zero_like', 'get_same_backend',
-           'check_same_legs']
+           'pinv', 'qr', 'real', 'real_if_close', 'scalar_multiply', 'scale_axis', 'split_legs',
+           'sqrt', 'squeeze_legs', 'stable_log', 'svd', 'svd_apply_mask', 'tdot', 'trace',
+           'transpose', 'truncate_singular_values', 'truncated_svd', 'zero_like',
+           'get_same_backend', 'check_same_legs']
 
 
 # TENSOR CLASSES
@@ -512,6 +512,18 @@ class Tensor(metaclass=ABCMeta):
     def __float__(self):
         raise TypeError('float() of a tensor is not defined. Use tenpy.item() instead.')
 
+    def __getitem__(self, idx):
+        idx = to_iterable(idx)
+        if len(idx) != self.num_legs:
+            msg = f'Expected {self.num_legs} indices (one per leg). Got {len(idx)}'
+            raise IndexError(msg)
+        try:
+            idx = [int(i) for i in idx]
+        except TypeError:
+            raise IndexError('Indices must be integers.') from None
+        idx = [_normalize_idx(i, d) for i, d in zip(idx, self.shape)]
+        return self._get_item(idx)
+
     def __matmul__(self, other):
         return compose(self, other)
 
@@ -538,6 +550,9 @@ class Tensor(metaclass=ABCMeta):
         if isinstance(other, Number):
             return scalar_multiply(other, self)
         return NotImplemented
+
+    def __setitem__(self, idx, value):
+        raise TypeError('Tensors do not support item assignment.')
 
     def __sub__(self, other):
         if isinstance(other, Tensor):
@@ -569,6 +584,14 @@ class Tensor(metaclass=ABCMeta):
 
     def dbg(self):
         print(self.ascii_diagram)
+
+    @abstractmethod
+    def _get_item(self, idx: list[int]) -> bool | float | complex:
+        """Implementation of :meth:`__getitem__`.
+
+        Can assume we have one non-negative integer index per leg.
+        """
+        ...
 
     def _parse_leg_idx(self, which_leg: int | str) -> tuple[bool, int, int]:
         """Parse a leg index or a leg label.
@@ -695,18 +718,6 @@ class Tensor(metaclass=ABCMeta):
         """Convert to a numpy array"""
         block = self.to_dense_block(leg_order=leg_order)
         return self.backend.block_to_numpy(block, numpy_dtype=numpy_dtype)
-
-    def with_legs(self, *legs: int | str) -> _TensorIndexHelper:
-        """This method allows indexing a tensor "by label".
-
-        It returns a helper object, that can be indexed instead of self.
-        For example, if we have a tensor with labels 'a', 'b' and 'c', but we are not sure about
-        their order, we can call ``tensor.with_legs('a', 'b')[0, 1]``.
-        If ``tensors.labels == ['a', 'b', 'c']`` in alphabetic order, we get ``tensor[0, 1]``.
-        However if the order of labels happens to be different, e.g.
-        ``tensor.labels == ['b', 'c', 'a']`` we get ``tensor[1, :, 0]``.
-        """
-        return _TensorIndexHelper(self, legs)
 
 
 class SymmetricTensor(Tensor):
@@ -1109,6 +1120,9 @@ class SymmetricTensor(Tensor):
             If we should check that the off-diagonal parts vanish.
         """
         return DiagonalTensor.from_tensor(self, check_offdiagonal=check_offdiagonal)
+
+    def _get_item(self, idx: list[int]) -> bool | float | complex:
+        return self.backend.get_element(self, idx)
 
     def to_dense_block(self, leg_order: list[int | str] = None, dtype: Dtype = None) -> Block:
         block = self.backend.to_dense_block(self)
@@ -1625,6 +1639,12 @@ class DiagonalTensor(SymmetricTensor):
         )
         return DiagonalTensor(data, self.leg, backend=self.backend, labels=self.labels)
 
+    def _get_item(self, idx: list[int]) -> bool | float | complex:
+        i1, i2 = idx
+        if i1 != i2:
+            return self.dtype.zero_scalar
+        return self.backend.get_element_diagonal(self, i1)
+        
     def max(self):
         assert self.dtype.is_real
         return self.backend.reduce_DiagonalTensor(self, block_func=self.backend.block_max, func=max)
@@ -2031,6 +2051,9 @@ class Mask(Tensor):
             data = self.data
         return Mask(data, space_in=self.large_leg, space_out=self.small_leg,
                     is_projection=self.is_projection, backend=self.backend, labels=self.labels)
+
+    def _get_item(self, idx: list[int]) -> bool | float | complex:
+        return self.backend.get_element_mask(self, idx)
     
     def logical_not(self):
         """Alias for :meth:`orthogonal_complement`"""
@@ -2385,6 +2408,15 @@ class ChargedTensor(Tensor):
         if deep and self.charged_state is not None:
             charged_state = self.backend.block_copy(charged_state)
         return ChargedTensor(inv_part, charged_state)
+
+    def _get_item(self, idx: list[int]) -> bool | float | complex:
+        if self.charged_state is None:
+            raise IndexError('Can not index a ChargedTensor with unspecified charged_state.')
+        if len(self.charged_state) > 10:
+            raise NotImplementedError  # should do sth smarter...
+        return sum((a * self.invariant_part._get_item([*idx, n])
+                    for n, a in enumerate(self.charged_state)),
+                   start=self.dtype.zero_scalar)
     
     def _repr_header_lines(self, indent: str) -> list[str]:
         lines = Tensor._repr_header_lines(self, indent=indent)
@@ -5167,27 +5199,3 @@ def _svd_new_labels(new_labels: str | Sequence[str]) -> tuple[str, str, str, str
             raise ValueError(f'Expected 1, 2 or 4 new_labels. Got {len(new_labels)}')
         assert (b is None) or b != c
     return a, b, c, d
-
-
-class _TensorIndexHelper:
-    """A helper class that redirects __getitem__ and __setitem__ to a Tensor.
-
-    See :meth:`~tenpy.linalg.tensors.Tensor.with_legs`.
-    """
-    def __init__(self, tensor: Tensor, which_legs: list[int | str]):
-        self.tensor = tensor
-        self.which_legs = [tensor._parse_leg_idx(i)[2] for i in which_legs]
-
-    def transform_idc(self, idcs):
-        idcs = _parse_idcs(idcs, length=len(self.which_legs))
-        res = [slice(None, None, None) for _ in range(self.tensor.num_legs)]
-        for which_leg, idx in zip(self.which_legs, idcs):
-            res[which_leg] = idx
-        return res
-
-    def __getitem__(self, idcs):
-        return self.tensor.__getitem__(self.transform_idcs(idcs))
-
-    def __setitem__(self, idcs, value):
-        return self.tensor.__setitem__(self.transform_idcs(idcs), value)
-

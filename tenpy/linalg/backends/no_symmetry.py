@@ -195,11 +195,21 @@ class NoSymmetryBackend(Backend, BlockBackend, metaclass=ABCMeta):
         return self.block_dtype(a)
 
     def get_element(self, a: SymmetricTensor, idcs: list[int]) -> complex | float | bool:
+        idcs = [l.parse_index(idx)[1] for l, idx in zip(conventional_leg_order(a), idcs)]
         return self.get_block_element(a.data, idcs)
 
     def get_element_diagonal(self, a: DiagonalTensor, idx: int) -> complex | float | bool:
         # a.data is a single 1D block
+        _, idx = a.leg.parse_index(idx)
         return self.get_block_element(a.data, [idx])
+
+    def get_element_mask(self, a: Mask, idcs: list[int]) -> bool:
+        idcs = [l.parse_index(idx)[1] for l, idx in zip(conventional_leg_order(a), idcs)]
+        if a.is_projection:
+            small, large = idcs
+        else:
+            large, small = idcs
+        return self.get_block_mask_element(a.data, large, small)
 
     def inner(self, a: SymmetricTensor, b: SymmetricTensor, do_dagger: bool) -> float | complex:
         return self.block_inner(a.data, b.data, do_dagger=do_dagger)

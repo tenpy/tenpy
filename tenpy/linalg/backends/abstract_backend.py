@@ -338,15 +338,14 @@ class Backend(metaclass=ABCMeta):
     def get_element(self, a: SymmetricTensor, idcs: list[int]) -> complex | float | bool:
         """Get a single scalar element from a tensor.
 
-        TODO we might have a bit of redundancy in checking / parsing the indices
-
+        Should be equivalent to ``a.to_numpy()[tuple(idcs)].item()``.
+        
         Parameters
         ----------
         idcs
             The indices. Checks have already been performed, i.e. we may assume that
             - len(idcs) == a.num_legs
             - 0 <= idx < leg.dim
-            - the indices reference an allowed (by the charge rule) entry.
         """
         ...
 
@@ -354,11 +353,28 @@ class Backend(metaclass=ABCMeta):
     def get_element_diagonal(self, a: DiagonalTensor, idx: int) -> complex | float | bool:
         """Get a single scalar element from a diagonal tensor.
 
+        Should be equivalent to ``a.to_numpy()[idx, idx].item()`` or ``a.diagonal_as_numpy()[idx].item()``.
+
         Parameters
         ----------
         idx
             The index for both legs. Checks have already been performed, i.e. we may assume that
             ``0 <= idx < leg.dim``
+        """
+        ...
+
+    @abstractmethod
+    def get_element_mask(self, a: Mask, idcs: list[int]) -> bool:
+        """Get a single scalar element from a diagonal tensor.
+
+        Should be equivalent to ``a.to_numpy()[tuple(idcs)].item()``.
+
+        Parameters
+        ----------
+        idcs
+            The indices. Checks have already been performed, i.e. we may assume that
+            - len(idcs) == a.num_legs == 2
+            - 0 <= idx < leg.dim
         """
         ...
 
@@ -1079,6 +1095,14 @@ class BlockBackend(metaclass=ABCMeta):
     def get_block_element(self, a: Block, idcs: list[int]) -> complex | float | bool:
         ...
 
+    def get_block_mask_element(self, a: Block, large_leg_idx: int, small_leg_idx: int) -> bool:
+        # if this does not work, need to override.
+        if not a[large_leg_idx]:
+            # if the block has a False entry, the matrix has only False in that column
+            return False
+        # otherwise, there is exactly one True in that column, at index sum(a[:large_leg_idx])
+        return small_leg_idx == self.block_sum_all(a[:large_leg_idx])
+
     @abstractmethod
     def matrix_dot(self, a: Block, b: Block) -> Block:
         """As in numpy.dot, both a and b might be matrix or vector."""
@@ -1109,11 +1133,6 @@ class BlockBackend(metaclass=ABCMeta):
 
     @abstractmethod
     def ones_block(self, shape: list[int], dtype: Dtype) -> Block:
-        ...
-
-    @abstractmethod
-    def set_block_element(self, a: Block, idcs: list[int], value: complex | float | bool) -> Block:
-        """Return a modified copy, with the entry at `idcs` set to `value`"""
         ...
 
     def synchronize(self):
