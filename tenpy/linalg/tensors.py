@@ -2560,9 +2560,6 @@ def add_trivial_leg(tens: Tensor,
         but if `domain_pos` is given, we have ``result.domain[domain_pos].is_dual == is_dual``,
         which are mutually opposite.
     """
-    if isinstance(tens, (DiagonalTensor, Mask)):
-        return add_trivial_leg(tens.as_SymmetricTensor(), legs_pos, codomain_pos=codomain_pos,
-                               domain_pos=domain_pos, label=label, is_dual=is_dual)
 
     res_num_legs = tens.num_legs + 1
     # parse position to format:
@@ -2597,6 +2594,8 @@ def add_trivial_leg(tens: Tensor,
         co_domain_pos = 0
         legs_pos = 0
 
+    if isinstance(tens, (DiagonalTensor, Mask)):
+        tens = tens.as_SymmetricTensor()
     if isinstance(tens, ChargedTensor):
         if add_to_domain:
             # domain[0] is the charge leg, so we need to add 1
@@ -2606,7 +2605,6 @@ def add_trivial_leg(tens: Tensor,
             inv_part = add_trivial_leg(tens.invariant_part, codomain_pos=co_domain_pos, label=label,
                                        is_dual=is_dual)
         return ChargedTensor(inv_part, charged_state=tens.charged_state)
-
     if not isinstance(tens, SymmetricTensor):
         raise TypeError
 

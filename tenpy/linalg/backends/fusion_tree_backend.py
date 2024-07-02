@@ -223,7 +223,8 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def add_trivial_leg(self, a: SymmetricTensor, legs_pos: int, add_to_domain: bool,
                         co_domain_pos: int, new_codomain: ProductSpace, new_domain: ProductSpace
                         ) -> Data:
-        raise NotImplementedError('add_trivial_leg not implemented')  # TODO
+        # does not change blocks or coupled sectors at all.
+        return a.data
 
     def almost_equal(self, a: SymmetricTensor, b: SymmetricTensor, rtol: float, atol: float
                      ) -> bool:
@@ -770,7 +771,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         raise NotImplementedError('split_legs not implemented')  # TODO
 
     def squeeze_legs(self, a: SymmetricTensor, idcs: list[int]) -> Data:
-        raise NotImplementedError('squeeze_legs not implemented')  # TODO
+        return a.data
 
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
         # supports all symmetries

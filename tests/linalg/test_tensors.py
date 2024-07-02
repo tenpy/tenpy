@@ -915,11 +915,6 @@ def test_add_trivial_leg(cls, domain, codomain, is_dual, make_compatible_tensor,
 
     tens_np = tens.to_numpy()
 
-    if isinstance(tens.backend, backends.FusionTreeBackend):
-        with pytest.raises(NotImplementedError):
-            _ = tensors.add_trivial_leg(tens, 0, is_dual=is_dual)
-        pytest.xfail()
-
     print('via positional arg')
     pos = np_random.choice(tens.num_legs + 1)
     res = tensors.add_trivial_leg(tens, pos, is_dual=is_dual)
@@ -1884,11 +1879,6 @@ def test_squeeze_legs(make_compatible_tensor, compatible_symmetry):
     trivial_leg = ElementarySpace.from_trivial_sector(1, symmetry=compatible_symmetry)
     T = make_compatible_tensor([None, trivial_leg, trivial_leg, None], [None, None, trivial_leg],
                                labels=list('abcdefg'))
-
-    if isinstance(T.backend, backends.FusionTreeBackend):
-        with pytest.raises(NotImplementedError):
-            _ = tensors.squeeze_legs(T)
-        pytest.xfail()
 
     res_all = tensors.squeeze_legs(T)
     res_all.test_sanity()
