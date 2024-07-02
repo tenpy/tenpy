@@ -443,8 +443,6 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
         """
         if a.num_codomain_legs == 0 and b.num_domain_legs == 0:
             return self.inner(a, b, do_dagger=False)
-            
-        assert a.num_codomain_legs > 0 or b.num_domain_legs > 0, 'special case: inner'
         if a.num_domain_legs == 0:
             return self._compose_no_contraction(a, b)
         res_dtype = Dtype.common(a.dtype, b.dtype)
@@ -530,13 +528,13 @@ class AbelianBackend(Backend, BlockBackend, metaclass=ABCMeta):
                 *(leg.sectors[bi] for leg, bi in zip(a.codomain, a_block_inds_keep.T))
             )
         else:
-            a_charges = np.repeat(a.symmetry.trivial_sector[:, None], len(a_block_inds_keep), axis=1)
+            a_charges = np.repeat(a.symmetry.trivial_sector[None, :], len(a_block_inds_keep), axis=1)
         if b.num_domain_legs > 0:
             b_charges = a.symmetry.multiple_fusion_broadcast(
                 *(leg.sectors[bi] for leg, bi in zip(b.domain, b_block_inds_keep[:, ::-1].T))
             )
         else:
-            b_charges = np.repeat(a.symmetry.trivial_sector[:, None], len(b_block_inds_keep), axis=1)
+            b_charges = np.repeat(a.symmetry.trivial_sector[None, :], len(b_block_inds_keep), axis=1)
         a_charge_lookup = list_to_dict_list(a_charges)  # lookup table ``tuple(sector) -> idcs_in_a_charges``
 
         # rows_a changes faster than cols_b, such that the resulting block_inds are lex-sorted

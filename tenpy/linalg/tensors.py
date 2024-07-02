@@ -4732,7 +4732,7 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
         return ChargedTensor.from_invariant_part(inv_part, tensor1.charged_state)
     if isinstance(tensor2, ChargedTensor):
         inv_part = tdot(tensor1, tensor2.invariant_part, legs1=legs1, legs2=legs2,
-                            relabel1=relabel1, relabel2=relabel2)
+                        relabel1=relabel1, relabel2=relabel2)
         return ChargedTensor.from_invariant_part(inv_part, tensor2.charged_state)
 
     # Remaining case: both are SymmetricTenor
