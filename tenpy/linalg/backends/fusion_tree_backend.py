@@ -688,7 +688,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         # OPTIMIZE should we offer the square-norm instead?
         norm_sq = 0
         for coupled, block in zip(a.data.coupled_sectors, a.data.blocks):
-            norm_sq += a.symmetry.sector_dim(coupled) * (self.block_norm(block) ** 2)
+            norm_sq += a.symmetry.qdim(coupled) * (self.block_norm(block) ** 2)
         return self.block_sqrt(norm_sq)
 
     def outer(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:

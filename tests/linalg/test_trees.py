@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from tenpy.linalg import trees
-from tenpy.linalg.symmetries import Symmetry, ProductSymmetry
+from tenpy.linalg.symmetries import Symmetry, SymmetryError
 from tenpy.linalg.spaces import ElementarySpace, ProductSpace
 from tenpy.linalg.dtypes import Dtype
 from tenpy.linalg.backends.backend_factory import get_backend
@@ -107,23 +107,25 @@ def test_fusion_trees(any_symmetry: Symmetry, make_any_sectors, np_random):
 
 def check_to_block(symmetry, backend, uncoupled, np_random, dtype):
     """Common implementation for test_to_block and test_to_block_no_backend"""
-    if isinstance(symmetry, ProductSymmetry):
-        pytest.xfail('fusion_tensor not yet implemented')
+    spaces = [ElementarySpace(symmetry, [a]) for a in uncoupled]
+    domain = ProductSpace(spaces, backend=backend)
+    coupled = np_random.choice(domain.sectors)
+    all_trees = list(trees.fusion_trees(symmetry, uncoupled, coupled))
 
+    if not symmetry.can_be_dropped:
+        with pytest.raises(SymmetryError, match='Can not convert to block for symmetry .*'):
+            _ = all_trees[0].as_block(backend, dtype)
+        return
+    
+    coupled_dim = symmetry.sector_dim(coupled)
+    uncoupled_dims = symmetry.batch_sector_dim(uncoupled)
+    all_blocks = [t.as_block(backend, dtype) for t in all_trees]
+    axes = list(range(len(uncoupled)))
     if symmetry.fusion_tensor_dtype.is_complex:
         expect_dtype = dtype.to_complex()
     else:
         expect_dtype = dtype
         
-    uncoupled_dims = symmetry.batch_sector_dim(uncoupled)
-    spaces = [ElementarySpace(symmetry, [a]) for a in uncoupled]
-    domain = ProductSpace(spaces, backend=backend)
-    coupled = np_random.choice(domain.sectors)
-    coupled_dim = symmetry.sector_dim(coupled)
-    all_trees = list(trees.fusion_trees(symmetry, uncoupled, coupled))
-    all_blocks = [t.as_block(backend, dtype) for t in all_trees]
-    axes = list(range(len(uncoupled)))
-
     if backend is None:
         backend = get_backend()
     coupled_eye = backend.eye_block([coupled_dim], dtype)
@@ -141,13 +143,13 @@ def check_to_block(symmetry, backend, uncoupled, np_random, dtype):
 
 @pytest.mark.parametrize('dtype', [Dtype.float64, Dtype.complex128])
 def test_to_block(compatible_symmetry, compatible_backend, make_compatible_sectors, np_random, dtype):
-    # need to test_* functions to generate the cases, implement actual test in check_to_block...
+    # need two test_* functions to generate the cases, implement actual test in check_to_block...
     uncoupled = make_compatible_sectors(4)
     check_to_block(compatible_symmetry, compatible_backend, uncoupled, np_random, dtype)
 
 
 @pytest.mark.parametrize('dtype', [Dtype.float64, Dtype.complex128])
 def test_to_block_no_backend(any_symmetry, make_any_sectors, np_random, dtype):
-    # need to test_* functions to generate the cases, implement actual test in check_to_block
+    # need two test_* functions to generate the cases, implement actual test in check_to_block
     coupled = make_any_sectors(4)
     check_to_block(any_symmetry, None, coupled, np_random, dtype)

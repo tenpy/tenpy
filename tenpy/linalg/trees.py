@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Iterator
 import numpy as np
 
-from .symmetries import Symmetry, Sector, SectorArray, FusionStyle
+from .symmetries import Symmetry, Sector, SectorArray, FusionStyle, SymmetryError
 from .dtypes import Dtype
 from .backends.abstract_backend import BlockBackend, Block
 
@@ -188,6 +188,8 @@ class FusionTree:
         -------
         The matrix elements with axes ``[m_a1, m_a2, ..., m_aJ, m_c]``.
         """
+        if not self.symmetry.can_be_dropped:
+            raise SymmetryError(f'Can not convert to block for symmetry {self.symmetry}')
         if backend is None:
             from .backends.numpy import NumpyBlockBackend
             backend = NumpyBlockBackend()

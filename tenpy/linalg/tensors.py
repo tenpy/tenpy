@@ -513,6 +513,8 @@ class Tensor(metaclass=ABCMeta):
         raise TypeError('float() of a tensor is not defined. Use tenpy.item() instead.')
 
     def __getitem__(self, idx):
+        if not self.symmetry.can_be_dropped:
+            raise SymmetryError(f'Can not access elements for tensor with symmetry {self.symmetry}')
         idx = to_iterable(idx)
         if len(idx) != self.num_legs:
             msg = f'Expected {self.num_legs} indices (one per leg). Got {len(idx)}'
@@ -1599,6 +1601,8 @@ class DiagonalTensor(SymmetricTensor):
         return self
 
     def diagonal_as_block(self, dtype: Dtype = None) -> Block:
+        if not self.symmetry.can_be_dropped:
+            raise SymmetryError
         res = self.backend.diagonal_tensor_to_block(self)
         res = self.backend.apply_basis_perm(res, [self.leg], inv=True)
         if dtype is not None:

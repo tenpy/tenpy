@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 from numpy import testing as npt
 
-from tenpy.linalg import spaces, backends, symmetries
+from tenpy.linalg import spaces, backends, symmetries, SymmetryError
 
 
 def test_vector_space(any_symmetry, make_any_sectors, np_random):
@@ -95,16 +95,17 @@ def test_vector_space(any_symmetry, make_any_sectors, np_random):
     # TODO (JU) test num_parameters when ready
 
     print('check idx_to_sector and parse_idx')
-    idx = 0  # will step this up during the loop
-    for n_sector, sector in enumerate(s1.sectors):
-        d = any_symmetry.sector_dim(sector)
-        for m in range(s1.multiplicities[n_sector]):
-            for mu in range(d):
-                sector_idx, mult_idx = s1.parse_index(idx)
-                assert sector_idx == n_sector
-                assert mult_idx == m * d + mu
-                assert np.all(s1.idx_to_sector(idx) == sector)
-                idx += 1
+    if any_symmetry.can_be_dropped:
+        idx = 0  # will step this up during the loop
+        for n_sector, sector in enumerate(s1.sectors):
+            d = any_symmetry.sector_dim(sector)
+            for m in range(s1.multiplicities[n_sector]):
+                for mu in range(d):
+                    sector_idx, mult_idx = s1.parse_index(idx)
+                    assert sector_idx == n_sector
+                    assert mult_idx == m * d + mu
+                    assert np.all(s1.idx_to_sector(idx) == sector)
+                    idx += 1
 
     print('check sector lookup')
     for expect in [2, 3, 4]:
@@ -114,42 +115,43 @@ def test_vector_space(any_symmetry, make_any_sectors, np_random):
         assert s1.sector_multiplicity(s1.sectors[expect]) == s1.multiplicities[expect]
 
     print('check from_basis')
-    if isinstance(any_symmetry, symmetries.SU2Symmetry):
-        with pytest.raises(ValueError, match='Sectors must appear in whole multiplets'):
-            bad_sectors = np.array([0, 1, 1, 1, 2, 2, 2])[:, None]
-            # have three basis vectors for 2-dimensional spin-1/2
-            _ = spaces.ElementarySpace.from_basis(symmetry=any_symmetry, sectors_of_basis=bad_sectors)
-        
-        # spins 0, 1/2 and 1, each two times
-        #                         0  1  2  3  4  5  6  7  8  9  10 11
-        sectors_of_basis = np.array([0, 2, 2, 1, 2, 1, 2, 2, 0, 2, 1, 1])[:, None]
-        expect_basis_perm = np.array([0, 8, 3, 5, 10, 11, 1, 2, 4, 6, 7, 9])
-        expect_sectors = np.array([0, 1, 2])[:, None]
-        expect_mults = np.array([2, 2, 2])
-    else:
-        if any_symmetry.num_sectors == 1:
-            which_sectors = np.array([0] * 9)
-            expect_basis_perm = np.arange(9)
-            expect_sectors = sectors[:1]
-        elif any_symmetry.num_sectors == 2:
-            #                         0  1  2  3  4  5  6  7  8
-            which_sectors = np.array([1, 0, 0, 1, 1, 0, 1, 1, 1])
-            expect_basis_perm = np.array([1, 2, 5, 0, 3, 4, 6, 7, 8])
-            expect_sectors = sectors[:2]
+    if any_symmetry.can_be_dropped:
+        if isinstance(any_symmetry, symmetries.SU2Symmetry):
+            with pytest.raises(ValueError, match='Sectors must appear in whole multiplets'):
+                bad_sectors = np.array([0, 1, 1, 1, 2, 2, 2])[:, None]
+                # have three basis vectors for 2-dimensional spin-1/2
+                _ = spaces.ElementarySpace.from_basis(symmetry=any_symmetry, sectors_of_basis=bad_sectors)
+            
+            # spins 0, 1/2 and 1, each two times
+            #                         0  1  2  3  4  5  6  7  8  9  10 11
+            sectors_of_basis = np.array([0, 2, 2, 1, 2, 1, 2, 2, 0, 2, 1, 1])[:, None]
+            expect_basis_perm = np.array([0, 8, 3, 5, 10, 11, 1, 2, 4, 6, 7, 9])
+            expect_sectors = np.array([0, 1, 2])[:, None]
+            expect_mults = np.array([2, 2, 2])
         else:
-            assert len(np.unique(sectors[:3], axis=0)) == 3
-            #                         0  1  2  3  4  5  6  7  8  9
-            which_sectors = np.array([2, 0, 1, 2, 2, 2, 0, 0, 1, 2])
-            expect_basis_perm = np.array([1, 6, 7, 2, 8, 0, 3, 4, 5, 9])
-            expect_sectors = sectors[:3]
-        expect_mults = np.sum(which_sectors[:, None] == np.arange(len(expect_sectors))[None, :], axis=0)
-        sectors_of_basis = sectors[which_sectors]
-    space = spaces.ElementarySpace.from_basis(symmetry=any_symmetry, sectors_of_basis=sectors_of_basis)
-    npt.assert_array_equal(space.sectors, expect_sectors)
-    npt.assert_array_equal(space.multiplicities, expect_mults)
-    npt.assert_array_equal(space.basis_perm, expect_basis_perm)
-    # also check sectors_of_basis property
-    npt.assert_array_equal(space.sectors_of_basis, sectors_of_basis)
+            if any_symmetry.num_sectors == 1:
+                which_sectors = np.array([0] * 9)
+                expect_basis_perm = np.arange(9)
+                expect_sectors = sectors[:1]
+            elif any_symmetry.num_sectors == 2:
+                #                         0  1  2  3  4  5  6  7  8
+                which_sectors = np.array([1, 0, 0, 1, 1, 0, 1, 1, 1])
+                expect_basis_perm = np.array([1, 2, 5, 0, 3, 4, 6, 7, 8])
+                expect_sectors = sectors[:2]
+            else:
+                assert len(np.unique(sectors[:3], axis=0)) == 3
+                #                         0  1  2  3  4  5  6  7  8  9
+                which_sectors = np.array([2, 0, 1, 2, 2, 2, 0, 0, 1, 2])
+                expect_basis_perm = np.array([1, 6, 7, 2, 8, 0, 3, 4, 5, 9])
+                expect_sectors = sectors[:3]
+            expect_mults = np.sum(which_sectors[:, None] == np.arange(len(expect_sectors))[None, :], axis=0)
+            sectors_of_basis = sectors[which_sectors]
+        space = spaces.ElementarySpace.from_basis(symmetry=any_symmetry, sectors_of_basis=sectors_of_basis)
+        npt.assert_array_equal(space.sectors, expect_sectors)
+        npt.assert_array_equal(space.multiplicities, expect_mults)
+        npt.assert_array_equal(space.basis_perm, expect_basis_perm)
+        # also check sectors_of_basis property
+        npt.assert_array_equal(space.sectors_of_basis, sectors_of_basis)
 
 
 def test_ElementarySpace_from_sectors(any_symmetry, make_any_sectors, np_random):
@@ -198,6 +200,12 @@ def test_ElementarySpace_from_sectors(any_symmetry, make_any_sectors, np_random)
 
 
 def test_take_slice(make_any_space, any_symmetry, np_random):
+    if not any_symmetry.can_be_dropped:
+        space: spaces.ElementarySpace = make_any_space()
+        with pytest.raises(SymmetryError, match='take_slice is meaningless for .*.'):
+            _ = space.take_slice([True])
+        return
+    
     if isinstance(any_symmetry, symmetries.SU2Symmetry):
         sectors = np.array([0, 1, 2, 4])[:, None]
         mults = np.array([3, 1, 2, 2])
@@ -386,9 +394,22 @@ def test_direct_sum(make_any_space, max_mult=5, max_sectors=5):
     b = make_any_space(max_mult=max_mult, max_sectors=max_sectors, is_dual=a.is_dual)
     c = make_any_space(max_mult=max_mult, max_sectors=max_sectors, is_dual=a.is_dual)
     assert a == spaces.ElementarySpace.direct_sum(a)
-    d = a.direct_sum(b, c)
-    expect = np.concatenate([leg.sectors_of_basis for leg in [a, b, c]], axis=0)
-    npt.assert_array_equal(d.sectors_of_basis, expect)
+    d = spaces.ElementarySpace.direct_sum(a, b, c)
+    if a.symmetry.can_be_dropped:
+        expect = np.concatenate([leg.sectors_of_basis for leg in [a, b, c]], axis=0)
+        npt.assert_array_equal(d.sectors_of_basis, expect)
+    sector2mult = {}
+    for leg in [a, b, c]:
+        for s, m in zip(leg.sectors, leg.multiplicities):
+            key = tuple(s)
+            sector2mult[key] = sector2mult.get(key, 0) + m
+    sectors = np.array(list(sector2mult.keys()))
+    mults = np.array(list(sector2mult.values()))
+    sort = np.lexsort(sectors.T)
+    sectors = sectors[sort]
+    mults = mults[sort]
+    assert np.all(d.sectors == sectors)
+    assert np.all(d.multiplicities == mults)
 
 
 def test_str_repr(make_any_space, str_max_lines=20, repr_max_lines=20):
