@@ -630,15 +630,20 @@ class Tensor(metaclass=ABCMeta):
             labels_str = 'None'
         else:
             labels_str = f'{self._labels}   ;   {self.codomain_labels} <- {self.domain_labels}'
-        codomain_dims = self.shape[:self.num_codomain_legs]
-        domain_dims = tuple(reversed(self.shape[self.num_codomain_legs:]))
-        shape_str = f'{self.shape}   ;   {codomain_dims} <- {domain_dims}'
         lines = [
             f'{indent}* Backend: {self.backend!s}',
             f'{indent}* Symmetry: {self.symmetry!s}',
             f'{indent}* Labels: {labels_str}',
-            f'{indent}* Shape: {shape_str}',
         ]
+        if self.symmetry.can_be_dropped:
+            codomain_dims = self.shape[:self.num_codomain_legs]
+            domain_dims = tuple(reversed(self.shape[self.num_codomain_legs:]))
+            lines.append(f'{indent}* Shape: {self.shape}   ;   {codomain_dims} <- {domain_dims}')
+        if (not self.symmetry.can_be_dropped) or (not self.symmetry.is_abelian):
+            codomain_nums = tuple(np.sum(leg.multiplicities) for leg in self.codomain)
+            domain_nums = tuple(np.sum(leg.multiplicities) for leg in self.domain)
+            all_nums = tuple((*codomain_nums, *reversed(domain_nums)))
+            lines.append(f'{indent}* Num Sectors: {all_nums}   ;   {codomain_nums} <- {domain_nums}')
         return lines
 
     def get_leg(self, which_leg: int | str | list[int | str]) -> Space | list[Space]:
