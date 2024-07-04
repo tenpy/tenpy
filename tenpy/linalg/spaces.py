@@ -427,11 +427,12 @@ class ElementarySpace(Space):
         else:
             multiplicities = np.asarray(multiplicities, dtype=int)
             assert multiplicities.shape == ((len(sectors),))
-        num_states = symmetry.batch_sector_dim(sectors) * multiplicities
-        basis_slices = np.concatenate([[0], np.cumsum(num_states)], axis=0)
+        
         # sort sectors
-        sectors, multiplicities, sort = _sort_sectors(sectors, multiplicities)
         if symmetry.can_be_dropped:
+            num_states = symmetry.batch_sector_dim(sectors) * multiplicities
+            basis_slices = np.concatenate([[0], np.cumsum(num_states)], axis=0)
+            sectors, multiplicities, sort = _sort_sectors(sectors, multiplicities)
             if len(sectors) == 0:
                 basis_perm = np.zeros(0, int)
             else:
@@ -440,6 +441,7 @@ class ElementarySpace(Space):
                 basis_perm = np.concatenate([basis_perm[basis_slices[i]: basis_slices[i + 1]]
                                             for i in sort])
         else:
+            sectors, multiplicities, sort = _sort_sectors(sectors, multiplicities)
             assert basis_perm is None
         # combine duplicate sectors (does not affect basis_perm)
         if not unique_sectors:
