@@ -42,7 +42,7 @@ make_any_space                 any_symmetry            RNG for spaces with ``any
 make_any_block                 any_backend             RNG for blocks of ``any_backend``.
                                                        ``make(size, real=False)``
 =============================  ======================  ===========================================
-compatible_pairs               Generates ~20 cases     Not an public fixture, only generates
+compatible_pairs               Generates ~20 cases     Not a public fixture, only generates
                                                        the cases. Compatible pairs are built like
                                                        combinations of ``any_symmetry_backend``
                                                        and ``any_symmetry``, constrained by
@@ -116,12 +116,17 @@ from tenpy.linalg import backends, spaces, symmetries, tensors, Dtype
 
 _block_backends = ['numpy']  # TODO reactivate 'torch'
 _symmetries = {
+    # groups:
     'NoSymm': symmetries.no_symmetry,
     'U1': symmetries.u1_symmetry,
-    'Z2': symmetries.z2_symmetry,
     'Z4_named': symmetries.ZNSymmetry(4, "My_Z4_symmetry"),
     'U1xZ3': symmetries.ProductSymmetry([symmetries.u1_symmetry, symmetries.z3_symmetry]),
     'SU2': symmetries.SU2Symmetry(),
+    # anyons:
+    'fermion': symmetries.fermion_parity,
+    'FibonacciAnyon': symmetries.fibonacci_anyon_category,
+    'IsingAnyon': symmetries.ising_anyon_category,
+    'Fib_U1': symmetries.fibonacci_anyon_category * symmetries.u1_symmetry,
 }
 
 
@@ -332,7 +337,8 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
             inv_part = make(codomain=codomain, domain=inv_domain, labels=inv_labels,
                             max_blocks=max_blocks, max_block_size=max_block_size, empty_ok=empty_ok,
                             all_blocks=all_blocks, cls=tensors.SymmetricTensor, dtype=dtype)
-            res = tensors.ChargedTensor(inv_part, charged_state=[1])
+            charged_state = [1] if inv_part.symmetry.can_be_dropped else None
+            res = tensors.ChargedTensor(inv_part, charged_state=charged_state)
             res.test_sanity()
             return res
         #
@@ -531,8 +537,11 @@ def random_vector_space(symmetry, max_num_blocks=5, max_block_size=5, is_dual=No
     # if there are very few sectors, e.g. for symmetry==NoSymmetry(), dont let them be one-dimensional
     min_mult = min(max_block_size, max(4 - len(sectors), 1))
     mults = np_random.integers(min_mult, max_block_size, size=(len(sectors),), endpoint=True)
-    dim = np.sum(symmetry.batch_sector_dim(sectors) * mults)
-    basis_perm = np_random.permutation(dim) if np_random.random() < 0.7 else None
+    if symmetry.can_be_dropped:
+        dim = np.sum(symmetry.batch_sector_dim(sectors) * mults)
+        basis_perm = np_random.permutation(dim) if np_random.random() < 0.7 else None
+    else:
+        basis_perm = None
     res = spaces.ElementarySpace(
         symmetry, sectors, mults, basis_perm=basis_perm,
     )
