@@ -11,7 +11,7 @@ from .params import Config
 from collections.abc import Mapping
 import os.path
 import warnings
-from typing import TypeVar, Sequence
+from typing import TypeVar, Sequence, Set
 
 __all__ = [
     'UNSPECIFIED', 'duplicate_entries', 'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan',
@@ -30,7 +30,7 @@ _T = TypeVar('_T')  # used in typing some functions
 _MAX_INT = np.iinfo(int).max
 
 
-def duplicate_entries(seq: Sequence[_T], ignore: Sequence[_T] = []) -> set[_T]:
+def duplicate_entries(seq: Sequence[_T], ignore: Sequence[_T] = []) -> Set[_T]:
     return set(ele for idx, ele in enumerate(seq) if ele in seq[idx + 1:] and ele not in ignore)
 
 
