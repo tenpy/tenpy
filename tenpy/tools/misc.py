@@ -11,17 +11,28 @@ from .params import Config
 from collections.abc import Mapping
 import os.path
 import warnings
+from typing import TypeVar, Sequence
 
 __all__ = [
-    'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
-    'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
-    'zero_if_close', 'pad', 'add_with_None_0', 'group_by_degeneracy', 'get_close',
-    'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive', 'merge_recursive',
-    'flatten', 'setup_logging', 'convert_memory_units', 'consistency_check',
-    'TenpyInconsistencyError', 'TenpyInconsistencyWarning', 'BetaWarning', 'rank_data', 'np_argsort'
+    'UNSPECIFIED', 'duplicate_entries', 'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan',
+    'argsort', 'lexsort', 'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad',
+    'transpose_list_list', 'zero_if_close', 'pad', 'add_with_None_0', 'group_by_degeneracy',
+    'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive',
+    'merge_recursive', 'flatten', 'setup_logging', 'convert_memory_units', 'consistency_check',
+    'TenpyInconsistencyError', 'TenpyInconsistencyWarning', 'BetaWarning', 'rank_data',
+    'np_argsort', 'make_stride', 'find_row_differences', 'unstridify',
+    'iter_common_noncommon_sorted_arrays', 'iter_common_sorted', 'iter_common_sorted_arrays'
 ]
 
-_not_set = object()  # sentinel
+
+UNSPECIFIED = object()  # sentinel, also used elsewhere
+_T = TypeVar('_T')  # used in typing some functions
+_MAX_INT = np.iinfo(int).max
+
+
+def duplicate_entries(seq: Sequence[_T], ignore: Sequence[_T] = []) -> set[_T]:
+    return set(ele for idx, ele in enumerate(seq) if ele in seq[idx + 1:] and ele not in ignore)
+
 
 def to_iterable(a):
     """If `a` is a not iterable or a string, return ``[a]``, else return ``a``."""
@@ -253,6 +264,32 @@ else:
         return np.argsort(a)
 
 
+def make_stride(shape, cstyle=True):
+    """Create the strides for C- (or F-style) arrays with a given shape.
+
+    Equivalent to ``x = np.zeros(shape); return np.array(x.strides, np.intp) // x.itemsize``.
+
+    Note that ``np.sum(inds * _make_stride(np.max(inds, axis=0), cstyle=False), axis=1)`` is
+    sorted for (positive) 2D `inds` if ``np.lexsort(inds.T)`` is sorted.
+    """
+    L = len(shape)
+    stride = 1
+    res = np.empty([L], np.intp)
+    if cstyle:
+        res[L - 1] = 1
+        for a in range(L - 1, 0, -1):
+            stride *= shape[a]
+            res[a - 1] = stride
+        assert stride * shape[0] < _MAX_INT
+    else:
+        res[0] = 1
+        for a in range(0, L - 1):
+            stride *= shape[a]
+            res[a + 1] = stride
+        assert stride * shape[0] < _MAX_INT
+    return res
+
+
 def list_to_dict_list(l):
     """Given a list `l` of objects, construct a lookup table.
 
@@ -278,6 +315,145 @@ def list_to_dict_list(l):
         except KeyError:
             d[k] = [i]
     return d
+
+
+def find_row_differences(sectors, include_len: bool=False):
+    """Return indices where the rows of the 2D array `sectors` change.
+
+    Parameters
+    ----------
+    sectors : 2D array
+        The rows of this array are compared.
+    include_len : bool
+        If ``len(sectors)`` should be included or not.
+    
+    Returns
+    -------
+    diffs: 1D array
+        The indices where rows change, including the first and last. Equivalent to:
+        ``[0] + [i for i in range(1, len(sectors)) if np.any(sectors[i-1] != sectors[i])]``
+    """
+    # note: by default remove last entry [len(sectors)] compared to old.charges
+    len_sectors = len(sectors)
+    diff = np.ones(len_sectors + int(include_len), dtype=np.bool_)
+    diff[1:len_sectors] = np.any(sectors[1:] != sectors[:-1], axis=1)
+    return np.nonzero(diff)[0]  # get the indices of True-values
+
+
+def unstridify(x, strides):
+    """Undo applying strides to an index.
+
+    Parameters
+    ----------
+    x : (..., M) ndarray
+        1D array of non-negative integers. Broadcast over leading axis.
+    strides : (N,) ndarray
+        C-style strides, i.e. positive integers such that ``strides[i]`` is an integer multiple
+        of ``strides[i + 1]``.
+
+    Returns
+    -------
+    (..., M, N) ndarray
+        The unique ``ys`` such that ``x == np.sum(strides * ys, axis=-1)``.
+    """
+    y_list = []
+    for s in strides:
+        y, x = np.divmod(x, s)
+        y_list.append(y)
+    return np.stack(y_list, axis=-1)
+
+
+def iter_common_sorted(a, b):
+    """Yield indices ``i, j`` for which ``a[i] == b[j]``.
+
+    *Assumes* that `a` and `b` are strictly ascending 1D arrays.
+    Given that, it is equivalent to (but faster than)
+    ``[(i, j) for j, i in itertools.product(range(len(b)), range(len(a)) if a[i] == b[j]]``
+    """
+    # when we call this function, we basically wanted iter_common_sorted_arrays,
+    # but used strides to merge multiple columns to avoid too much python loops
+    # for C-implementation, this is definitely no longer necessary.
+    l_a = len(a)
+    l_b = len(b)
+    i, j = 0, 0
+    while i < l_a and j < l_b:
+        if a[i] < b[j]:
+            i += 1
+        elif b[j] < a[i]:
+            j += 1
+        else:
+            yield i, j
+            i += 1
+            j += 1
+
+
+def iter_common_sorted_arrays(a, b, a_strict: bool = True, b_strict: bool = True):
+    """Yield indices ``i, j`` for which ``a[i, :] == b[j, :]``.
+
+    *Assumes* that `a` and `b` are lex-sorted (according to ``np.lexsort(a.T)``).
+    Given that, it is equivalent to (but faster than)
+    ``[(i, j) for j, i in itertools.product(range(len(b)), range(len(a)) if all(a[i,:] == b[j,:])]``
+
+    By default, assume that both are strictly sorted, i.e. contain no duplicate rows.
+    Optionally, the strict requirement may be relaxed for *one* of the two arrays.
+    """
+    if (not a_strict) and (not b_strict):
+        raise ValueError('One of the two arrays must be strictly sorted.')
+    
+    l_a, d_a = a.shape
+    l_b, d_b = b.shape
+    assert d_a == d_b
+    i, j = 0, 0
+    while i < l_a and j < l_b:
+        for k in reversed(range(d_a)):
+            if a[i, k] < b[j, k]:
+                i += 1
+                break
+            elif b[j, k] < a[i, k]:
+                j += 1
+                break
+        else:
+            yield (i, j)
+            if b_strict:
+                # b is strictly sorted => no further b[j + x, : ] will match the same a[i, :]
+                i += 1
+            if a_strict:
+                # a is strictly sorted => no further a[i + x, : ] will match the same b[j, :]
+                j += 1
+
+
+def iter_common_noncommon_sorted_arrays(a, b):
+    """Yield the following pairs ``i, j`` of indices:
+
+    - Matching entries, i.e. ``(i, j)`` such that ``all(a[i, :] == b[j, :])``
+    - Entries only in `a`, i.e. ``(i, None)`` such that ``a[i, :]`` is not in `b`
+    - Entries only in `b`, i.e. ``(None, j)`` such that ``b[j, :]`` is not in `a`
+
+    *Assumes* that `a` and `b` are strictly lex-sorted (according to ``np.lexsort(a.T)``).
+    """
+    l_a, d_a = a.shape
+    l_b, d_b = b.shape
+    assert d_a == d_b
+    i, j = 0, 0
+    while i < l_a and j < l_b:
+        for k in reversed(range(d_a)):
+            if a[i, k] < b[j, k]:
+                yield i, None
+                i += 1
+                break
+            elif a[i, k] > b[j, k]:
+                yield None, j
+                j += 1
+                break
+        else:
+            yield i, j
+            i += 1
+            j += 1
+    # can still have i < l_a or j < l_b, but not both
+    for i2 in range(i, l_a):
+        yield i2, None
+    for j2 in range(j, l_b):
+        yield None, j2
 
 
 def atleast_2d_pad(a, pad_item=0):
@@ -743,7 +919,7 @@ skip_logging_setup = False
 
 def setup_logging(output_filename=None,
                   *,
-                  filename=_not_set,
+                  filename=UNSPECIFIED,
                   to_stdout="INFO",
                   to_file="INFO",
                   format="%(levelname)-8s: %(message)s",
@@ -842,7 +1018,7 @@ def setup_logging(output_filename=None,
             Whether to call :func:`logging.captureWarnings` to include the warnings into the log.
     """
     import logging.config
-    if filename is _not_set:
+    if filename is UNSPECIFIED:
         if output_filename is not None:
             root, ext = os.path.splitext(output_filename)
             assert ext != '.log'

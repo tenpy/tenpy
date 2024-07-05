@@ -28,14 +28,13 @@ from numpy import ndarray
 from .abstract_backend import (
     TensorBackend, Data, DiagonalData, MaskData, Block, conventional_leg_order
 )
-from ..misc import (
-    iter_common_noncommon_sorted_arrays, iter_common_nonstrict_sorted_arrays, iter_common_sorted,
-    iter_common_sorted_arrays, make_stride, find_row_differences
-)
 from ..dtypes import Dtype
 from ..symmetries import BraidingStyle, Symmetry, SectorArray
 from ..spaces import Space, ElementarySpace, ProductSpace
-from ...tools.misc import inverse_permutation, list_to_dict_list, rank_data
+from ...tools.misc import (
+    inverse_permutation, list_to_dict_list, rank_data, iter_common_noncommon_sorted_arrays,
+    iter_common_sorted, iter_common_sorted_arrays, make_stride, find_row_differences
+)
 
 __all__ = ['AbelianBackendData', 'AbelianBackend']
 
@@ -1145,7 +1144,7 @@ class AbelianBackend(TensorBackend):
         res_blocks = []
         res_block_inds = []
         # need to iterate only over the "common" blocks. If either block is zero, so is the result
-        for i, j in iter_common_nonstrict_sorted_arrays(tensor_block_inds_contr, mask_block_inds_contr):
+        for i, j in iter_common_sorted_arrays(tensor_block_inds_contr, mask_block_inds_contr, a_strict=False):
             if large_leg:
                 block = self.block_backend.block_apply_mask(tensor_blocks[i], mask_blocks[j], ax=leg_idx)
             else:
@@ -1557,10 +1556,9 @@ class AbelianBackend(TensorBackend):
         #       we only need to scale the blocks on one axis, not perform a general tensordot.
         #       but this also means that we may encounter duplicates in a_block_inds_cont,
         #       i.e. multiple blocks of `a` which have the same sector on the leg to be scaled.
-        #       -> use iter_common_nonstrict_sorted_arrays instead of iter_common_sorted_arrays
         res_blocks = []
         res_block_inds = []
-        for i, j in iter_common_nonstrict_sorted_arrays(a_block_inds_cont, b_block_inds[:, :1]):
+        for i, j in iter_common_sorted_arrays(a_block_inds_cont, b_block_inds[:, :1], a_strict=False):
             res_blocks.append(self.block_backend.block_scale_axis(a_blocks[i], b_blocks[j], axis=leg))
             res_block_inds.append(a_block_inds[i])
         #

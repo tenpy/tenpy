@@ -4,8 +4,6 @@ from typing import TYPE_CHECKING, Callable, Iterator
 from math import prod
 import numpy as np
 
-from ..misc import iter_common_noncommon_sorted_arrays, iter_common_sorted_arrays
-
 from .abstract_backend import (
     TensorBackend, BlockBackend, Block, Data, DiagonalData, MaskData
 )
@@ -13,6 +11,7 @@ from ..dtypes import Dtype
 from ..symmetries import Sector, SectorArray, Symmetry
 from ..spaces import Space, ElementarySpace, ProductSpace
 from ..trees import FusionTree, fusion_trees
+from ...tools.misc import iter_common_noncommon_sorted_arrays, iter_common_sorted_arrays
 
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import

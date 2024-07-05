@@ -10,10 +10,8 @@ from typing import TYPE_CHECKING, Sequence, Iterator
 from .dummy_config import printoptions
 from .symmetries import (Sector, SectorArray, Symmetry, ProductSymmetry, no_symmetry, FusionStyle,
                          SymmetryError)
-from .misc import (
-    make_stride, find_row_differences, unstridify, UNSPECIFIED, iter_common_sorted_arrays
-)
-from ..tools.misc import inverse_permutation, rank_data, to_iterable
+from ..tools.misc import (inverse_permutation, rank_data, to_iterable, UNSPECIFIED, make_stride,
+                          find_row_differences, unstridify, iter_common_sorted_arrays)
 from ..tools.string import format_like_list
 
 if TYPE_CHECKING:

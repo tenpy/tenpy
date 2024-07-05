@@ -14,7 +14,7 @@ from tenpy.linalg.backends.backend_factory import get_backend
 from tenpy.linalg.dtypes import Dtype
 from tenpy.linalg.spaces import ElementarySpace, ProductSpace
 from tenpy.linalg.symmetries import z4_symmetry, SU2Symmetry, SymmetryError
-from tenpy.linalg.misc import duplicate_entries, iter_common_noncommon_sorted_arrays
+from tenpy.tools.misc import duplicate_entries, iter_common_noncommon_sorted_arrays
 
 
 @pytest.fixture(params=[DiagonalTensor, SymmetricTensor, Mask, ChargedTensor])

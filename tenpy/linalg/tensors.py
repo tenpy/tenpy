@@ -76,14 +76,13 @@ import functools
 import logging
 logger = logging.getLogger(__name__)
 
-from .misc import duplicate_entries
 from .dummy_config import printoptions
 from .symmetries import SymmetryError
 from .spaces import Space, ElementarySpace, ProductSpace, Sector
 from .backends.backend_factory import get_backend
 from .backends.abstract_backend import Block, TensorBackend, conventional_leg_order
 from .dtypes import Dtype
-from ..tools.misc import to_iterable, rank_data, inverse_permutation
+from ..tools.misc import to_iterable, rank_data, inverse_permutation, duplicate_entries
 from ..tools.params import asConfig
 
 

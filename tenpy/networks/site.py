@@ -31,8 +31,7 @@ from ..linalg.backends import TensorBackend, Block
 from ..linalg.symmetries import (ProductSymmetry, Symmetry, SU2Symmetry, U1Symmetry, ZNSymmetry,
                              no_symmetry, SectorArray)
 from ..linalg.spaces import Space, ElementarySpace, ProductSpace
-from ..linalg.misc import make_stride
-from ..tools.misc import find_subclass
+from ..tools.misc import find_subclass, make_stride
 from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = ['Site', 'GroupedSite', 'group_sites', 'set_common_symmetry', 'as_valid_operator_name',
