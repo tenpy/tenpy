@@ -118,8 +118,6 @@ class TensorBackend(metaclass=ABCMeta):
                      tensor: SymmetricTensor,
                      leg_idcs_combine: list[list[int]],
                      product_spaces: list[ProductSpace],
-                     new_codomain_combine: list[tuple[list[int], ProductSpace]],
-                     new_domain_combine: list[tuple[list[int], ProductSpace]],
                      new_codomain: ProductSpace,
                      new_domain: ProductSpace,
                      ) -> Data:
@@ -532,8 +530,22 @@ class TensorBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def split_legs(self, a: SymmetricTensor, leg_idcs: list[int], final_legs: list[Space]) -> Data:
-        """split multiple product space legs."""
+    def split_legs(self, a: SymmetricTensor, leg_idcs: list[int], codomain_split: list[int],
+                   domain_split: list[int], new_codomain: ProductSpace, new_domain: ProductSpace
+                   ) -> Data:
+        """Split (multiple) product space legs.
+
+        Parameters
+        ----------
+        a
+        leg_idcs:
+            List of leg-indices, fulfilling ``0 <= i < a.num_legs``, to split.
+        codomain_split, domain_split
+            Contains the same information as `leg_idcs`. Which legs to split is indices for the
+            (co)domain.
+        new_codomain, new_domain
+            The new (co-)domain, after splitting. Has same sectors and multiplicities.
+        """
         ...
 
     @abstractmethod

@@ -294,11 +294,10 @@ class AbelianBackend(TensorBackend):
                      tensor: SymmetricTensor,
                      leg_idcs_combine: list[list[int]],
                      product_spaces: list[ProductSpace],
-                     new_codomain_combine: list[tuple[list[int], ProductSpace]],
-                     new_domain_combine: list[tuple[list[int], ProductSpace]],
                      new_codomain: ProductSpace,
                      new_domain: ProductSpace,
                      ) -> Data:
+        raise NotImplementedError('currently bugged')  # TODO
         num_result_legs = tensor.num_legs - sum(len(group) - 1 for group in leg_idcs_combine)
         old_block_inds = tensor.data.block_inds
         old_blocks = tensor.data.blocks
@@ -1572,7 +1571,9 @@ class AbelianBackend(TensorBackend):
         #
         return AbelianBackendData(common_dtype, res_blocks, res_block_inds, is_sorted=False)
    
-    def split_legs(self, a: SymmetricTensor, leg_idcs: list[int], final_legs: list[Space]) -> Data:
+    def split_legs(self, a: SymmetricTensor, leg_idcs: list[int], codomain_split: list[int],
+                   domain_split: list[int], new_codomain: ProductSpace, new_domain: ProductSpace
+                   ) -> Data:
         raise NotImplementedError  # TODO not yet reviewed
         # TODO (JH) below, we implement it by first generating the block_inds of the splitted tensor and
         # then extract subblocks from the original one.
@@ -1583,11 +1584,11 @@ class AbelianBackend(TensorBackend):
         # block_split should just be views anyways, not data copies?
 
         if len(a.data.blocks) == 0:
-            return self.zero_data(final_legs, a.data.dtype)
+            return self.zero_data(new_codomain, new_domain, a.data.dtype)
         n_split = len(leg_idcs)
         # TODO dont use legs! use conventional_leg_order / domain / codomain
         product_spaces = [a.legs[i] for i in leg_idcs]
-        res_num_legs = len(final_legs)
+        res_num_legs = new_codomain.num_spaces + new_domain.num_spaces
 
         old_blocks = a.data.blocks
         old_block_inds = a.data.block_inds
@@ -1640,7 +1641,7 @@ class AbelianBackend(TensorBackend):
         old_rows = old_rows[sort]
 
         new_block_shapes = np.empty((res_num_blocks, res_num_legs), dtype=int)
-        for i, leg in enumerate(final_legs):
+        for i, leg in conventional_leg_order(new_codomain, new_domain):
             new_block_shapes[:, i] = leg.multiplicities[new_block_inds[:, i]]
 
         # the actual loop to split the blocks

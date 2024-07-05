@@ -85,8 +85,6 @@ class NoSymmetryBackend(TensorBackend):
                      tensor: SymmetricTensor,
                      leg_idcs_combine: list[list[int]],
                      product_spaces: list[ProductSpace],
-                     new_codomain_combine: list[tuple[list[int], ProductSpace]],
-                     new_domain_combine: list[tuple[list[int], ProductSpace]],
                      new_codomain: ProductSpace,
                      new_domain: ProductSpace,
                      ) -> Data:
@@ -373,11 +371,21 @@ class NoSymmetryBackend(TensorBackend):
     def scale_axis(self, a: SymmetricTensor, b: DiagonalTensor, leg: int) -> Data:
         return self.block_backend.block_scale_axis(a.data, b.data, leg)
 
-    def split_legs(self, a: SymmetricTensor, leg_idcs: list[int],
-                   final_legs: list[Space]) -> Data:
-        raise NotImplementedError  # TODO not yet reviewed
-        return self.block_backend.block_split_legs(a.data, leg_idcs, [[s.dim for s in a.legs[i].spaces]
-                                                        for i in leg_idcs])
+    def split_legs(self, a: SymmetricTensor, leg_idcs: list[int], codomain_split: list[int],
+                   domain_split: list[int], new_codomain: ProductSpace, new_domain: ProductSpace
+                   ) -> Data:
+        dims = []
+        for n in leg_idcs:
+            in_domain, co_domain_idx, _ = a._parse_leg_idx(n)
+            if in_domain:
+                dims.append([s.dim for s in reversed(a.domain[co_domain_idx].spaces)])
+            else:
+                dims.append([s.dim for s in a.codomain[co_domain_idx].spaces])
+        # determine the dims to split to
+        # new_legs = list(conventional_leg_order(new_codomain, new_domain))
+        # dims = [[s.dim for s in l.spaces]
+        #         for n, l in enumerate(conventional_leg_order(a)) if n in leg_idcs]
+        return self.block_backend.block_split_legs(a.data, leg_idcs, dims)
 
     def squeeze_legs(self, a: SymmetricTensor, idcs: list[int]) -> Data:
         return self.block_backend.block_squeeze_legs(a.data, idcs)

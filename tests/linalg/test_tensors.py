@@ -1048,41 +1048,83 @@ def test_bend_legs(cls, codomain, domain, num_codomain_legs, make_compatible_ten
 
 # TODO fix combine. implement split.
 def test_combine_split(make_compatible_tensor):
-    T: SymmetricTensor = make_compatible_tensor(['a', 'b'], ['c', 'd'])
-
-    if isinstance(T.backend, backends.AbelianBackend):
-        # _ = tensors.combine_legs(T, [2, 3])  # TODO this fails most times.
-        pytest.xfail('Is bugged...')
+    T: SymmetricTensor = make_compatible_tensor(['a', 'b'], ['d', 'c'])
+    assert T.labels == ['a', 'b', 'c', 'd']
 
     if isinstance(T.backend, backends.FusionTreeBackend):
         with pytest.raises(NotImplementedError):
             _ = tensors.combine_legs(T, [1, 2])
         pytest.xfail()
 
-    # TODO more cases, with more legs. also combine multiple groups. include a case with braids.
-    combined = tensors.combine_legs(T, [1, 2])
-    combined.test_sanity()
+    if isinstance(T.backend, backends.AbelianBackend):
+        with pytest.raises(NotImplementedError, match='currently bugged'):
+            _ = tensors.combine_legs(T, [1, 2])
+        pytest.xfail()
     
-    assert combined.labels == ['a', '(b.d)', 'c']
-    assert combined.codomain[0] == T.codomain[0]
-    assert combined.codomain[1].spaces == [T.codomain[1], T.domain[1].dual]
-    assert combined.domain[0] == T.domain[0]
-    # note: we can not easily compare to numpy.reshape
+    # 1) combine in codomain
+    combined1 = tensors.combine_legs(T, [0, 1])
+    combined1.test_sanity()
+    assert combined1.labels == ['(a.b)', 'c', 'd']
+    assert len(combined1.codomain) == 1
+    assert combined1.codomain[0].spaces == [T.codomain[0], T.codomain[1]]
+    assert combined1.domain == T.domain
+    #
+    split1 = tensors.split_legs(combined1, 0)
+    split1.test_sanity()
+    assert split1.labels == ['a', 'b', 'c', 'd']
+    assert split1.codomain == T.codomain
+    assert split1.domain == T.domain
+    assert tensors.almost_equal(split1, T)
 
-    with pytest.raises(NotImplementedError):
-        _ = tensors.split_legs(combined, 1)
-    pytest.xfail('need to implement split_legs first')  # TODO
+    # 2) combine in domain
+    combined2 = tensors.combine_legs(T, [2, 3])
+    combined2.test_sanity()
+    assert combined2.labels == ['a', 'b', '(c.d)']
+    assert combined2.codomain == T.codomain
+    assert len(combined2.domain) == 1
+    assert combined2.domain[0].spaces == [T.domain[0], T.domain[1]]
+    #
+    split2 = tensors.split_legs(combined2, '(c.d)')
+    split2.test_sanity()
+    assert split2.labels == ['a', 'b', 'c', 'd']
+    assert split2.codomain == T.codomain
+    assert split2.domain == T.domain
+    assert tensors.almost_equal(split2, T)
 
-    print('check that split reverses combine')
-    split = tensors.split_legs(combined, 1)
-    split.test_sanity()
-    assert split.labels == ['a', 'b', 'c', 'd']
-    T_np = T.to_numpy()
-    npt.assert_almost_equal(split.to_numpy, T_np)
+    # 3) combine in codomain with braid
+    combined3 = tensors.combine_legs(T, [1, 0])
+    combined3.test_sanity()
+    assert combined3.labels == ['(b.a)', 'c', 'd']
+    assert len(combined3.codomain) == 1
+    assert combined3.codomain[0].spaces == [T.codomain[1], T.codomain[0]]
+    assert combined3.domain == T.domain
+    #
+    split3 = tensors.split_legs(combined3)
+    split3.test_sanity()
+    assert split3.labels == ['b', 'a', 'c', 'd']
+    assert split3.codomain.spaces == [T.codomain[1], T.codomain[0]]
+    assert split3.domain == T.domain
+    assert tensors.almost_equal(split3, tensors.permute_legs(T, [1, 0]))
 
-    print('check splitting a non-combined leg raises')
-    with pytest.raises(ValueError, match='foo'):
-        _ = tensors.split(combined, 0)
+    # 4) combine, one from codomain, one from domain
+    combined4 = tensors.combine_legs(T, [1, 2])
+    combined4.test_sanity()
+    assert combined4.labels == ['a', '(b.c)', 'd']
+    assert len(combined4.codomain) == 2
+    assert combined4.codomain[0] == T.codomain[0]
+    assert combined4.codomain[1].spaces == [T.codomain[1], T.domain[1].dual]
+    assert combined4.domain.spaces == [T.domain[0]]
+    #
+    split4 = tensors.split_legs(combined4, 1)
+    split4.test_sanity()
+    assert split4.labels == ['a', 'b', 'c', 'd']
+    assert split4.codomain.spaces == [T.codomain[0], T.codomain[1], T.domain[1].dual]
+    assert split4.domain.spaces == [T.domain[0]]
+    assert tensors.almost_equal(split4, tensors.permute_legs(T, [0, 1, 2]))
+
+    # check splitting a non-combined leg raises
+    with pytest.raises(ValueError, match='Not a ProductSpace.'):
+        _ = tensors.split_legs(combined4, 0)
 
     # TODO incorporate OLD_test_combine_legs_basis_trafo::
     # @pytest.mark.xfail  # TODO
@@ -1680,7 +1722,11 @@ def test_outer(cls_A, cls_B, cA, dA, cB, dB, make_compatible_tensor):
             _ = tensors.outer(A, B, relabel1={'a': 'x'}, relabel2={'h': 'y'})
         pytest.xfail()
     if cls_A is ChargedTensor and cls_B is ChargedTensor:
-        with pytest.raises(NotImplementedError, match='state_tensor_product not implemented'):
+        if isinstance(A.backend, backends.AbelianBackend):
+            match = 'currently bugged'
+        else:
+            match = 'state_tensor_product not implemented'
+        with pytest.raises(NotImplementedError, match=match):
             _ = tensors.outer(A, B, relabel1={'a': 'x'}, relabel2={'h': 'y'})
         pytest.xfail()
 

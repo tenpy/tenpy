@@ -83,7 +83,7 @@ from .spaces import Space, ElementarySpace, ProductSpace, Sector
 from .backends.backend_factory import get_backend
 from .backends.abstract_backend import Block, TensorBackend, conventional_leg_order
 from .dtypes import Dtype
-from ..tools.misc import to_iterable, rank_data
+from ..tools.misc import to_iterable, rank_data, inverse_permutation
 from ..tools.params import asConfig
 
 
@@ -175,10 +175,11 @@ class Tensor(metaclass=ABCMeta):
         self.symmetry = symmetry
         codomain_num_legs = codomain.num_spaces
         domain_num_legs = domain.num_spaces
-        self.num_legs = codomain_num_legs + domain_num_legs
+        self.num_legs = num_legs = codomain_num_legs + domain_num_legs
         self.dtype = dtype
         self.shape = tuple(sp.dim for sp in codomain.spaces) + tuple(sp.dim for sp in reversed(domain.spaces))
         self._labels = labels = self._init_parse_labels(labels, codomain=codomain, domain=domain)
+        assert len(labels) == num_legs
         self._labelmap = {label: legnum
                           for legnum, label in enumerate(labels)
                           if label is not None}
@@ -2922,20 +2923,20 @@ def combine_legs(tensor: Tensor,
         |       │   │          ║    │
 
     Note that the conventional leg order in the domain goes right to left, such that the first
-    element in the group, ``7``, is the *right*-most leg in the product and we have
-    ``result.domain[2] == ProductSpace([T.domain[9], T.domain[8], T.domain[7]])``.
+    element in the group, ``7``, is the *right*-most leg in the product, but we still have
+    ``result.domain[2] == ProductSpace([T.domain[2], T.domain[3], T.domain[4]])`` in left-to-right
+    order.
     This is needed to make :func:`combine_legs` cooperate seamlessly with :func:`bend_legs`,
     i.e. you get the same result if you bend legs 6-9 to the codomain first and combine ``[7, 8, 9]``
     there or if you combine them in the domain and then bend leg 6 and the newly combined leg.
     Another way to see this is that we perform the product of spaces in the ``T.legs`` first,
     and then take the dual if we need the combined leg in the domain::
 
-        prod = ProductSpace([T.legs[7], T.legs[8], T.legs[9]])
-        prod == ProductSpace([T.domain[7].dual, T.domain[8].dual, T.domain[9].dual])
-        result.legs[4] == prod
-        result.domain[2] == prod.dual == ProductSpace([T.domain[9], T.domain[8], T.domain[7]])
+        result.domain[2] == result.legs[4].dual
+                         == ProductSpace([T.legs[7], T.legs[8], T.legs[9]]).dual
+                         == ProductSpace([T.domain[4].dual, T.domain[3].dual, T.domain[2].dual]).dual
+                         == ProductSpace([T.domain[2], T.domain[3], T.domain[4]])
 
-    
     In the general case, the legs are permuted first, to match that leg order.
     The combined leg takes the position of the first of its original legs on the tensor.
     If the symmetry does not have symmetric braids, the `levels` are required to specify the
@@ -2995,7 +2996,6 @@ def combine_legs(tensor: Tensor,
     """
     # 1) Deal with different tensor types. Reduce everything to SymmetricTensor.
     # ==============================================================================================
-    
     if isinstance(tensor, (DiagonalTensor, Mask)):
         msg = (f'Converting {tensor.__class__.__name__} to SymmetricTensor for combine_legs. '
                f'To suppress this warning, explicitly use as_SymmetricTensor() first.')
@@ -3003,7 +3003,7 @@ def combine_legs(tensor: Tensor,
         tensor = tensor.as_SymmetricTensor()
 
     which_legs = [tensor.get_leg_idcs(group) for group in which_legs]
-
+    #
     if isinstance(tensor, ChargedTensor):
         # note: its important to parse negative integers before via tensor.get_leg_idcs, since
         #       the invariant part has an additional leg.
@@ -3011,147 +3011,110 @@ def combine_legs(tensor: Tensor,
             tensor.invariant_part, *which_legs, combined_spaces=combined_spaces
         )
         return ChargedTensor(inv_part, charged_state=tensor.charged_state)
-
+    #
     # 2) permute legs such that the groups are contiguous and fully in codomain or fully in domain
     # ==============================================================================================
-
-    if combined_spaces is None:
-        combined_spaces = [None] * len(which_legs)
-
-    # 2a) populate the following data structures:
-    domain_groups = {}  # {domain_pos: (leg_idcs_to_combine, combined_ProductSpace)}
-    domain_skip = []  # [domain_pos to skip, bc they are part of a group[1:]]
-    codomain_groups = {}  # same as above, but for codomain
-    codomain_skip = []  # same as above, but for codomain
-    
-    for n, group in enumerate(which_legs):
-        combine_to_domain, combined_pos, first_leg = tensor._parse_leg_idx(group[0])
-        group_idcs = [first_leg]
-        to_combine = []  # the legs we need to combine. duality adjusted if they need to be bent.
-        if combine_to_domain:
-            to_combine.append(tensor.domain.spaces[combined_pos])
-        else:
-            to_combine.append(tensor.codomain.spaces[combined_pos])
-        for l in group[1:]:
-            in_domain, pos, leg_idx = tensor._parse_leg_idx(l)
-            group_idcs.append(leg_idx)
-            if in_domain:
-                domain_skip.append(pos)
-                leg = tensor.domain.spaces[pos]
-            else:
-                codomain_skip.append(pos)
-                leg = tensor.codomain.spaces[pos]
-            if in_domain == combine_to_domain:
-                to_combine.append(leg)
-            else:
-                to_combine.append(leg.dual)
-        if combined_spaces[n] is None:
-            # OPTIMIZE this fusion may also be more efficient in the fusiontree backend...
-            combined = ProductSpace(to_combine, backend=tensor.backend)
-        else:
-            combined = combined_spaces[n]
-            assert combined.spaces == to_combine
-        if combine_to_domain:
-            domain_groups[combined_pos] = (group_idcs, combined)
-        else:
-            codomain_groups[combined_pos] = (group_idcs, combined)
-
-    # 2b) populate the following data structures:
-    new_domain_combine = []  # list[tuple[list[domain_pos], ProductSpace]], instructions for after permuting
-    new_codomain_combine = []  # same as above, but for codomain
-    codomain_idcs = []  # [leg_idx], input for permute_legs
-    domain_idcs = []  # [leg_idx], input for permute_legs
-    
-    for n in range(tensor.num_codomain_legs):
-        # for codomain, n==leg_idx
-        if n in codomain_skip:
-            continue
-        group = codomain_groups.get(n, None)
-        if group is None:
+    N = tensor.num_legs
+    J = tensor.num_codomain_legs
+    to_combine = [idx for group in which_legs for idx in group]
+    if duplicate_entries(to_combine):
+        raise ValueError('Groups may not contain duplicates.')
+    #
+    # build indices for permute_legs
+    codomain_groups = {group[0]: group for group in which_legs if group[0] < J}
+    domain_groups = {group[0]: group for group in which_legs if group[0] >= J}
+    codomain_idcs = []  
+    domain_idcs_reversed = []  # easier to build right-to-left.
+    for n in range(N):
+        if n in codomain_groups:
+            codomain_idcs.extend(codomain_groups[n])
+        elif n in domain_groups:
+            # note: the group is given in right-to-left convention, but this is what we expect.
+            domain_idcs_reversed.extend(domain_groups[n])
+        elif n in to_combine:
+            # n is one of the legs to be combined, but it is not the first of its group.
+            pass
+        elif n < J:
             codomain_idcs.append(n)
-            continue
-        leg_idcs, combined = group
-        start = len(codomain_idcs)
-        num = len(leg_idcs)
-        new_codomain_combine.append((range(start, start + num), combined))
-        codomain_idcs.extend(leg_idcs)
-    for n in range(tensor.num_domain_legs):
-        if n in domain_skip:
-            continue
-        group = domain_groups.get(n, None)
-        if group is None:
-            leg_idx = tensor.num_legs - 1 - n
-            domain_idcs.append(leg_idx)
-            continue
-        leg_idcs, combined = group
-        start = len(domain_idcs)
-        num = len(leg_idcs)
-        new_domain_combine.append((range(start, start + num), combined))
-        domain_idcs.extend(leg_idcs)
-
-    # 2c) finally, do the permute
-    tensor = _permute_legs(tensor, codomain_idcs, domain_idcs, levels=levels)
-
+        else:
+            domain_idcs_reversed.append(n)
+    #
+    tensor = permute_legs(tensor, codomain_idcs, domain_idcs_reversed[::-1], levels=levels)
+    # leg positions have changed, so we need to update the following lists/dicts:
+    inv_perm = inverse_permutation([*codomain_idcs, *domain_idcs_reversed])
+    which_legs = [[inv_perm[l] for l in group] for group in which_legs]
+    to_combine = [idx for group in which_legs for idx in group]
+    codomain_groups = {group[0]: group for group in which_legs if group[0] < J}
+    domain_groups = {group[0]: group for group in which_legs if group[0] >= J}
+    #
     # 3) build new domain and codomain, labels
     # ==============================================================================================
-
-    # strategy:
-    #   a) preserve list lengths to not invalidate the positions, fill with None
-    #   b) remove the Nones
-    # [a, b, c, d, e, f, g]
-    #  -> [a, None, None, (b.c.d), e, None, (f.g)]  # arbitrarily choose to put the group in last spot, for convenience
-    #  -> [a, (b.c.d), e, (f.g)]
-    
-    domain_spaces = tensor.domain.spaces[:]
-    codomain_spaces = tensor.codomain.spaces[:]
-    domain_labels = tensor.domain_labels
-    codomain_labels = tensor.codomain_labels
-    for positions, combined in new_domain_combine:
-        first, *_, last = positions
-        label = _combine_leg_labels(domain_labels[first:last + 1])
-        domain_spaces[first:last] = [None] * (last - first)
-        domain_spaces[last] = combined
-        domain_labels[first:last] = [None] * (last - first)
-        domain_labels[last] = label
-    for positions, combined in new_codomain_combine:
-        first, *_, last = positions
-        label = _combine_leg_labels(codomain_labels[first:last + 1])
-        codomain_spaces[first:last] = [None] * (last - first)
-        codomain_spaces[last] = combined
-        codomain_labels[first:last] = [None] * (last - first)
-        codomain_labels[last] = label
-    domain_spaces = [s for s in domain_spaces if s is not None]
-    codomain_spaces = [s for s in codomain_spaces if s is not None]
-    domain_labels = [l for l in domain_labels if l is not None]
-    codomain_labels = [l for l in codomain_labels if l is not None]
-
+    if combined_spaces is None:
+        combined_spaces = [None] * len(which_legs)
+    codomain_spaces = []
+    codomain_labels = []
+    domain_labels_reversed = []
+    domain_spaces_reversed = []
+    i = 0  # have already used combined_spaces[:i]
+    for n in range(N):
+        if n in codomain_groups:
+            group = codomain_groups[n]
+            spaces_to_combine = tensor.codomain[group[0]:group[-1] + 1]
+            combined = combined_spaces[i]
+            if combined is None:
+                combined = ProductSpace(
+                    spaces_to_combine, symmetry=tensor.symmetry, backend=tensor.backend
+                )
+                combined_spaces[i] = combined
+            else:
+                assert combined.spaces == spaces_to_combine
+            codomain_spaces.append(combined)
+            codomain_labels.append(_combine_leg_labels(tensor.labels[group[0]:group[-1] + 1]))
+            i += 1
+        elif n in domain_groups:
+            group = domain_groups[n]
+            domain_idx1 = N - 1 - group[0]
+            codomain_idx2 = N - 1 - group[-1]
+            spaces_to_combine = tensor.domain[codomain_idx2:domain_idx1 + 1]
+            combined = combined_spaces[i]
+            if combined is None:
+                combined = ProductSpace(
+                    spaces_to_combine, symmetry=tensor.symmetry, backend=tensor.backend
+                )
+                combined_spaces[i] = combined
+            else:
+                assert combined.spaces == spaces_to_combine
+            domain_spaces_reversed.append(combined)
+            domain_labels_reversed.append(
+                _combine_leg_labels(tensor.labels[group[0]:group[-1] + 1])
+            )
+        elif n in to_combine:
+            # n is part of a group, but not the *first* of its group
+            pass
+        elif n < J:
+            codomain_spaces.append(tensor.codomain[n])
+            codomain_labels.append(tensor.labels[n])
+        else:
+            domain_spaces_reversed.append(tensor.domain[N - 1 - n])
+            domain_labels_reversed.append(tensor.labels[n])
+    #
     # OPTIMIZE might be better to compute these in the backend. especially for FusionTree.
-    domain = ProductSpace(domain_spaces, backend=tensor.backend,
-                          _sectors=tensor.domain.sectors,  # overall fusion outcomes do not change
-                          _multiplicities=tensor.domain.multiplicities)
     codomain = ProductSpace(codomain_spaces, backend=tensor.backend,
                             _sectors=tensor.codomain.sectors,
                             _multiplicities=tensor.codomain.multiplicities)
-
+    domain = ProductSpace(domain_spaces_reversed[::-1], backend=tensor.backend,
+                          _sectors=tensor.domain.sectors,
+                          _multiplicities=tensor.domain.multiplicities)
+    #
     # 4) Build the data / finish up
     # ==============================================================================================
-    N = tensor.num_legs
-    leg_idcs = []  # OPTIMIZE is rebuilding this redundant??
-    product_spaces = []
-    for positions, p_space in new_codomain_combine:
-        leg_idcs.append(positions)
-        product_spaces.append(p_space)
-    for positions, p_space in reversed(new_domain_combine):  # TODO is the reverse correct? is it needed?
-        leg_idcs.append([N - 1 - p for p in reversed(positions)])
-        product_spaces.append(p_space)
     data = tensor.backend.combine_legs(
-        tensor, leg_idcs_combine=leg_idcs, product_spaces=product_spaces,
-        new_codomain_combine=new_codomain_combine, new_domain_combine=new_domain_combine,
-        new_codomain=codomain, new_domain=domain
+        tensor, leg_idcs_combine=which_legs, product_spaces=combined_spaces, new_codomain=codomain,
+        new_domain=domain
     )
     return SymmetricTensor(data, codomain=codomain, domain=domain, backend=tensor.backend,
-                           labels=[codomain_labels, domain_labels])
-
+                           labels=[*codomain_labels, *domain_labels_reversed])
+    
 
 def combine_to_matrix(tensor: Tensor,
                       codomain: int | str | list[int | str] | None = None,
@@ -4409,7 +4372,7 @@ def scale_axis(tensor: Tensor, diag: DiagonalTensor, leg: int | str) -> Tensor:
                            domain=tensor.domain, backend=backend, labels=tensor._labels)
 
 
-def split_legs(tensor: Tensor, legs: list[int | str] = None):
+def split_legs(tensor: Tensor, legs: int | str | list[int | str] | None = None):
     """Split legs that were previously combined using :func:`combine_legs`.
 
     |       │   │   │   │   │   │
@@ -4420,7 +4383,7 @@ def split_legs(tensor: Tensor, legs: list[int | str] = None):
     |       │   │   ╭───┬──╨╮   │
     |       │   │   │   │   │   │
 
-    This is the inverse of :func:`combine_legs`, *only up to possible :func:`permute_legs`*!
+    This is the inverse of :func:`combine_legs`, up to a possible :func:`permute_legs`.
 
     Parameters
     ----------
@@ -4437,7 +4400,60 @@ def split_legs(tensor: Tensor, legs: list[int | str] = None):
             legs = tensor.get_leg_idcs(legs)
         return ChargedTensor(split_legs(tensor.invariant_part, legs), tensor.charged_state)
     # remaining case: SymmetricTensor.
-    raise NotImplementedError('split_legs not implemented')  # TODO
+    #
+    # parse indices
+    if legs is None:
+        codomain_split = [n for n, l in enumerate(tensor.codomain) if isinstance(l, ProductSpace)]
+        domain_split = [n for n, l in enumerate(tensor.domain) if isinstance(l, ProductSpace)]
+        leg_idcs = [*codomain_split, *(tensor.num_legs - 1 - n for n in domain_split)]
+    else:
+        leg_idcs = []
+        codomain_split = []
+        domain_split = []
+        for l in to_iterable(legs):
+            in_domain, co_domain_idx, leg_idx = tensor._parse_leg_idx(l)
+            leg_idcs.append(leg_idx)
+            if in_domain:
+                domain_split.append(co_domain_idx)
+            else:
+                codomain_split.append(co_domain_idx)
+            if not isinstance(tensor.get_leg_co_domain(leg_idx), ProductSpace):
+                raise ValueError('Not a ProductSpace.')
+    #
+    # build new (co)domain
+    codomain_spaces = []
+    for n, l in enumerate(tensor.codomain):
+        if n in codomain_split:
+            codomain_spaces.extend(l.spaces)
+        else:
+            codomain_spaces.append(l)
+    domain_spaces = []
+    for n, l in enumerate(tensor.domain):
+        if n in domain_split:
+            domain_spaces.extend(l.spaces)
+        else:
+            domain_spaces.append(l)
+    codomain = ProductSpace(
+        codomain_spaces, symmetry=tensor.symmetry, backend=tensor.backend,
+        _sectors=tensor.codomain.sectors, _multiplicities=tensor.codomain.multiplicities
+    )
+    domain = ProductSpace(
+        domain_spaces, symmetry=tensor.symmetry, backend=tensor.backend,
+        _sectors=tensor.domain.sectors, _multiplicities=tensor.domain.multiplicities
+    )
+    # OPTIMIZE any way to avoid recomputing the metadata?
+    #
+    # build labels
+    labels = []
+    for n, l in enumerate(tensor.labels):
+        if n in leg_idcs:
+            labels.extend(_split_leg_label(l, num=tensor.get_leg_co_domain(n).num_spaces))
+        else:
+            labels.append(l)
+    #
+    data = tensor.backend.split_legs(tensor, leg_idcs, codomain_split, domain_split, codomain,
+                                     domain)
+    return SymmetricTensor(data, codomain, domain, backend=tensor.backend, labels=labels)
 
 
 @_elementwise_function(block_func='block_sqrt', maps_zero_to_zero=True)

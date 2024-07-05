@@ -246,8 +246,6 @@ class FusionTreeBackend(TensorBackend):
                      tensor: SymmetricTensor,
                      leg_idcs_combine: list[list[int]],
                      product_spaces: list[ProductSpace],
-                     new_codomain_combine: list[tuple[list[int], ProductSpace]],
-                     new_domain_combine: list[tuple[list[int], ProductSpace]],
                      new_codomain: ProductSpace,
                      new_domain: ProductSpace,
                      ) -> Data:
