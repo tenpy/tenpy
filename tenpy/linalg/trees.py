@@ -192,7 +192,9 @@ class FusionTree:
             raise SymmetryError(f'Can not convert to block for symmetry {self.symmetry}')
         if backend is None:
             from .backends.numpy import NumpyBlockBackend
-            backend = NumpyBlockBackend()
+            block_backend = NumpyBlockBackend()
+        else:
+            block_backend = backend.block_backend
         if dtype is None:
             dtype = self.symmetry.fusion_tensor_dtype
         # handle special cases of small trees
@@ -201,34 +203,34 @@ class FusionTree:
         if self.num_uncoupled == 0:
             # must be identity on the trivial sector. But since there is no uncoupled sector,
             # do not even give it an axis.
-            return backend.ones_block([1], dtype=dtype)
+            return block_backend.ones_block([1], dtype=dtype)
         if self.num_uncoupled == 1:
             if self.are_dual[0]:
                 return self.symmetry.Z_iso(self.coupled)
             else:
                 dim_c = self.symmetry.sector_dim(self.coupled)
-                return backend.eye_block([dim_c], dtype)
+                return block_backend.eye_block([dim_c], dtype)
         if self.num_uncoupled == 2:
             mu = self.multiplicities[0]
             # OPTIMIZE should we offer a symmetry function to compute only the mu slice?
             X = self.symmetry.fusion_tensor(*self.uncoupled, self.coupled, *self.are_dual)[mu]
-            return backend.block_from_numpy(X, dtype)  # [a0, a1, c]
+            return block_backend.block_from_numpy(X, dtype)  # [a0, a1, c]
         # larger trees: iterate over vertices
         mu0 = self.multiplicities[0]
         X0 = self.symmetry.fusion_tensor(
             self.uncoupled[0], self.uncoupled[1], self.inner_sectors[0],
             Z_a=self.are_dual[0], Z_b=self.are_dual[1]
         )[mu0]
-        res = backend.block_from_numpy(X0, dtype)  # [a0, a1, i0]
+        res = block_backend.block_from_numpy(X0, dtype)  # [a0, a1, i0]
         for vertex in range(1, self.num_vertices):
             mu = self.multiplicities[vertex]
             a = self.inner_sectors[vertex - 1]
             b = self.uncoupled[vertex + 1]
             c = self.inner_sectors[vertex] if vertex < self.num_inner_edges else self.coupled
             X = self.symmetry.fusion_tensor(a, b, c, Z_b=self.are_dual[vertex + 1])[mu]
-            X_block = backend.block_from_numpy(X, dtype)
+            X_block =block_backend.block_from_numpy(X, dtype)
             #  [a0, a1, ..., an, i{n-1}] & [i{n-1}, a{n+1}, in] -> [a0, a1, ..., a{n+1}, in]
-            res = backend.block_tdot(res, X_block, [-1], [0])
+            res = block_backend.block_tdot(res, X_block, [-1], [0])
         return res
 
     def copy(self, deep=False) -> FusionTree:

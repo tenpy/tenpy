@@ -19,7 +19,7 @@ from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator, ArpackNoC
 
 from .spaces import Space, ProductSpace, Sector
 from .tensors import Tensor, SymmetricTensor, ChargedTensor
-from .backends.abstract_backend import Backend
+from .backends.abstract_backend import TensorBackend
 from .dtypes import Dtype
 from ..tools.math import speigs, speigsh
 from ..tools.misc import argsort
@@ -70,7 +70,7 @@ class LinearOperator(metaclass=ABCMeta):
         """
         ...
 
-    def to_matrix(self, backend: Backend = None) -> Tensor:
+    def to_matrix(self, backend: TensorBackend = None) -> Tensor:
         """The tensor representation of self, reshaped to a matrix."""
         # OPTIMIZE could find a way to store the ProductSpace and use it here
         N = self.vector_shape.num_legs
@@ -370,7 +370,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
     shape : (int, int)
         The shape of self as an operator on 1D numpy arrays
     """
-    def __init__(self, tenpy_matvec, legs: list[Space], backend: Backend, dtype,
+    def __init__(self, tenpy_matvec, legs: list[Space], backend: TensorBackend, dtype,
                  labels: list[str] = None,
                  charge_sector: None | Sector | Literal['trivial'] = 'trivial'):
         self.tenpy_matvec = tenpy_matvec

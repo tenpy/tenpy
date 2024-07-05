@@ -128,17 +128,17 @@ def check_to_block(symmetry, backend, uncoupled, np_random, dtype):
         
     if backend is None:
         backend = get_backend()
-    coupled_eye = backend.eye_block([coupled_dim], dtype)
-    coupled_zero = backend.zero_block([coupled_dim, coupled_dim], dtype)
+    coupled_eye = backend.block_backend.eye_block([coupled_dim], dtype)
+    coupled_zero = backend.block_backend.zero_block([coupled_dim, coupled_dim], dtype)
     for i, X in enumerate(all_blocks):
-        assert backend.block_shape(X) == (*uncoupled_dims, coupled_dim)
-        assert backend.block_dtype(X) == expect_dtype
+        assert backend.block_backend.block_shape(X) == (*uncoupled_dims, coupled_dim)
+        assert backend.block_backend.block_dtype(X) == expect_dtype
         for j, Y in enumerate(all_blocks):
             if i < j:
                 continue  # redundant with (i, j) <-> (j, i)
-            X_Y = backend.block_tdot(backend.block_conj(X), Y, axes, axes)
+            X_Y = backend.block_backend.block_tdot(backend.block_backend.block_conj(X), Y, axes, axes)
             expect = coupled_eye if i == j else coupled_zero
-            assert backend.block_allclose(X_Y, expect, rtol=1e-8, atol=1e-5)
+            assert backend.block_backend.block_allclose(X_Y, expect, rtol=1e-8, atol=1e-5)
 
 
 @pytest.mark.parametrize('dtype', [Dtype.float64, Dtype.complex128])

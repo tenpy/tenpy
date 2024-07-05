@@ -280,16 +280,19 @@ class ArrayApiBlockBackend(BlockBackend):
         return self._api.where(block > cutoff, self._api.log(block), 0.)
 
 
-class NoSymmetryArrayApiBackend(ArrayApiBlockBackend, NoSymmetryBackend):
+class NoSymmetryArrayApiBackend(NoSymmetryBackend):
     def __init__(self, api_namespace):
-        ArrayApiBlockBackend.__init__(self, api_namespace=api_namespace)
+        block_backend = ArrayApiBlockBackend(api_namespace)
+        NoSymmetryBackend.__init__(self, block_backend=block_backend)
 
 
-class AbelianArrayApiBackend(ArrayApiBlockBackend, AbelianBackend):
+class AbelianArrayApiBackend(AbelianBackend):
     def __init__(self, api_namespace):
-        ArrayApiBlockBackend.__init__(self, api_namespace=api_namespace)
+        block_backend = ArrayApiBlockBackend(api_namespace)
+        AbelianBackend.__init__(self, block_backend=block_backend)
 
 
-class FusionTreeArrayApiBackend(ArrayApiBlockBackend, FusionTreeBackend):
+class FusionTreeArrayApiBackend(FusionTreeBackend):
     def __init__(self, api_namespace):
-        ArrayApiBlockBackend.__init__(self, api_namespace=api_namespace)
+        block_backend = ArrayApiBlockBackend(api_namespace)
+        FusionTreeBackend.__init__(self, block_backend=block_backend)

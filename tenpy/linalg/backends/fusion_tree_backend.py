@@ -1,6 +1,5 @@
 # Copyright (C) TeNPy Developers, GNU GPLv3
 from __future__ import annotations
-from abc import ABCMeta
 from typing import TYPE_CHECKING, Callable, Iterator
 from math import prod
 import numpy as np
@@ -8,7 +7,7 @@ import numpy as np
 from ..misc import iter_common_noncommon_sorted_arrays, iter_common_sorted_arrays
 
 from .abstract_backend import (
-    Backend, BlockBackend, Block, Data, DiagonalData, MaskData
+    TensorBackend, BlockBackend, Block, Data, DiagonalData, MaskData
 )
 from ..dtypes import Dtype
 from ..symmetries import Sector, SectorArray, Symmetry
@@ -172,7 +171,7 @@ class FusionTreeData:
 # TODO do we need to inherit from ABC again?? (same in abelian and no_symmetry)
 # TODO eventually remove BlockBackend inheritance, it is not needed,
 #      jakob only keeps it around to make his IDE happy  (same in abelian and no_symmetry)
-class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
+class FusionTreeBackend(TensorBackend):
     
     DataCls = FusionTreeData
     can_decompose_tensors = True
@@ -191,7 +190,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                 assert expect_shape[0] == expect_shape[1]
                 expect_shape = (expect_shape[0],)
             assert all(dim > 0 for dim in expect_shape), 'should skip forbidden block'
-            self.test_block_sanity(block, expect_shape=expect_shape, expect_dtype=a.dtype)
+            self.block_backend.test_block_sanity(block, expect_shape=expect_shape, expect_dtype=a.dtype)
 
     def test_mask_sanity(self, a: Mask):
         raise NotImplementedError  # TODO
@@ -210,7 +209,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         all_coupled = a.domain.sectors  # this is only true bc. we can assume a.codomain == a.domain
         for i, j in iter_common_noncommon_sorted_arrays(a.data.coupled_sectors, all_coupled):
             if i is None:
-                block = self.zero_block(shape=[a.domain.multiplicities[j]] * 2, dtype=a.dtype)
+                block = self.block_backend.zero_block(shape=[a.domain.multiplicities[j]] * 2, dtype=a.dtype)
             else:
                 block = a.data.blocks[i]
             res_blocks.append(block_method(block))
@@ -230,13 +229,13 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                      ) -> bool:
         for i, j in iter_common_noncommon_sorted_arrays(a.data.coupled_sectors, b.data.coupled_sectors):
             if j is None:
-                if self.block_max_abs(a.data.blocks[i]) > atol:
+                if self.block_backend.block_max_abs(a.data.blocks[i]) > atol:
                     return False
             if i is None:
-                if self.block_max_abs(b.data.blocks[j]) > atol:
+                if self.block_backend.block_max_abs(b.data.blocks[j]) > atol:
                     return False
             else:
-                if not self.block_allclose(a.data.blocks[i], b.data.blocks[j], rtol=rtol, atol=atol):
+                if not self.block_backend.block_allclose(a.data.blocks[i], b.data.blocks[j], rtol=rtol, atol=atol):
                     return False
         return True
 
@@ -268,14 +267,14 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         a_blocks = a.data.blocks
         b_blocks = b.data.blocks
         if a.dtype != res_dtype:
-            a_blocks = [self.block_to_dtype(bl, res_dtype) for bl in a_blocks]
+            a_blocks = [self.block_backend.block_to_dtype(bl, res_dtype) for bl in a_blocks]
         if b.dtype != res_dtype:
-            b_blocks = [self.block_to_dtype(bl, res_dtype) for bl in b_blocks]
+            b_blocks = [self.block_backend.block_to_dtype(bl, res_dtype) for bl in b_blocks]
         blocks = []
         coupled = []
         a_coupled = a.data.coupled_sectors
         for i, j in iter_common_sorted_arrays(a_coupled, b.data.coupled_sectors):
-            blocks.append(self.matrix_dot(a_blocks[i], b_blocks[j]))
+            blocks.append(self.block_backend.matrix_dot(a_blocks[i], b_blocks[j]))
             coupled.append(a_coupled[i])
         if len(coupled) == 0:
             coupled = a.symmetry.empty_sector_array
@@ -286,14 +285,14 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def copy_data(self, a: SymmetricTensor) -> FusionTreeData:
         return FusionTreeData(
             coupled_sectors=a.data.coupled_sectors.copy(),  # OPTIMIZE do we need to copy these?
-            blocks=[self.block_copy(block) for block in a.data.blocks],
+            blocks=[self.block_backend.block_copy(block) for block in a.data.blocks],
             dtype=a.data.dtype
         )
 
     def dagger(self, a: SymmetricTensor) -> Data:
         return FusionTreeData(
             coupled_sectors=a.data.coupled_sectors,
-            blocks=[self.block_dagger(b) for b in a.data.blocks],
+            blocks=[self.block_backend.block_dagger(b) for b in a.data.blocks],
             dtype=a.dtype
         )
 
@@ -302,17 +301,17 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
             raise ValueError("More than 1 block!")
         if len(a.blocks) == 0:
             return a.dtype.zero_scalar
-        return self.block_item(a.blocks[0])
+        return self.block_backend.block_item(a.blocks[0])
 
     def diagonal_all(self, a: DiagonalTensor) -> bool:
         if len(a.data.blocks) < a.domain.num_sectors:
             # there are missing blocks. -> they contain False -> all(a) == False
             return False
         # now it is enough to check the existing blocks
-        return all(self.block_all(b) for b in a.data.blocks)
+        return all(self.block_backend.block_all(b) for b in a.data.blocks)
 
     def diagonal_any(self, a: DiagonalTensor) -> bool:
-        return any(self.block_any(b) for b in a.data.blocks)
+        return any(self.block_backend.block_any(b) for b in a.data.blocks)
     
     def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
                                     func_kwargs, partial_zero_is_zero: bool) -> DiagonalData:
@@ -338,21 +337,21 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                     i_a += 1
                     ac_ia = None if i_a >= len(a_coupled) else a_coupled[i_a]
                 else:
-                    a_block = self.zero_block([block_size(a.domain, coupled)], dtype=a.dtype)
+                    a_block = self.block_backend.zero_block([block_size(a.domain, coupled)], dtype=a.dtype)
                 if bc_ib is not None and np.all(coupled == b_coupled[i_b]):
                     b_block = b.data.blocks[i_b]
                     i_b += 1
                     bc_ib = None if i_b >= len(b_coupled) else b_coupled[i_b]
                 else:
-                    b_block = self.zero_block([block_size(a.domain, coupled)], dtype=b.dtype)
+                    b_block = self.block_backend.zero_block([block_size(a.domain, coupled)], dtype=b.dtype)
                 blocks.append(func(a_block, b_block, **func_kwargs))
         if len(blocks) > 0:
-            dtype = self.block_dtype(blocks[0])
+            dtype = self.block_backend.block_dtype(blocks[0])
         else:
-            a_block = self.ones_block([1], dtype=a.dtype)
-            b_block = self.ones_block([1], dtype=b.dtype)
+            a_block = self.block_backend.ones_block([1], dtype=a.dtype)
+            b_block = self.block_backend.ones_block([1], dtype=b.dtype)
             example_block = func(a_block, b_block, **func_kwargs)
-            dtype = self.block_dtype(example_block)
+            dtype = self.block_backend.block_dtype(example_block)
         return FusionTreeData(coupled_sectors=coupled_sectors, blocks=blocks, dtype=dtype)
 
     def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs,
@@ -365,27 +364,30 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
             blocks = []
             for i, j in iter_common_noncommon_sorted_arrays(coupled_sectors, a.data.coupled_sectors):
                 if j is None:
-                    block = self.zero_block([block_size(a.domain, coupled_sectors[i])], dtype=a.dtype)
+                    block = self.block_backend.zero_block([block_size(a.domain, coupled_sectors[i])], dtype=a.dtype)
                 else:
                     block = a.data.blocks[j]
                 blocks.append(func(block, **func_kwargs))
         if len(blocks) > 0:
-            dtype = self.block_dtype(blocks[0])
+            dtype = self.block_backend.block_dtype(blocks[0])
         else:
-            dtype = self.block_dtype(func(self.ones_block([1], dtype=a.dtype), **func_kwargs))
+            example_block = func(self.block_backend.ones_block([1], dtype=a.dtype), **func_kwargs)
+            dtype = self.block_backend.block_dtype(example_block)
         return FusionTreeData(coupled_sectors=coupled_sectors, blocks=blocks, dtype=dtype)
 
     def diagonal_from_block(self, a: Block, co_domain: ProductSpace, tol: float) -> DiagonalData:
-        dtype = self.block_dtype(a)
+        dtype = self.block_backend.block_dtype(a)
         coupled_sectors = co_domain.sectors
         blocks = []
         for coupled, mult, slc in zip(co_domain.sectors, co_domain.multiplicities, co_domain.slices):
             dim_c = co_domain.symmetry.sector_dim(coupled)
-            entries = self.block_reshape(a[slice(*slc)], (dim_c, mult))
+            entries = self.block_backend.block_reshape(a[slice(*slc)], (dim_c, mult))
             # project onto the identity on the coupled sector
-            block = self.block_sum(entries, 0) / dim_c
-            projected = self.block_outer(self.ones_block([dim_c], dtype=dtype), block)
-            if self.block_norm(entries - projected) > tol * self.block_norm(entries):
+            block = self.block_backend.block_sum(entries, 0) / dim_c
+            projected = self.block_backend.block_outer(
+                self.block_backend.ones_block([dim_c], dtype=dtype), block
+            )
+            if self.block_backend.block_norm(entries - projected) > tol * self.block_backend.block_norm(entries):
                 raise ValueError('Block is not symmetric up to tolerance.')
             blocks.append(block)
         return FusionTreeData(coupled_sectors, blocks, dtype)
@@ -399,7 +401,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         else:
             sample_block = func((1,), co_domain.symmetry.trivial_sector)
             coupled_sectors = co_domain.symmetry.empty_sector_array
-        dtype = self.block_dtype(sample_block)
+        dtype = self.block_backend.block_dtype(sample_block)
         return FusionTreeData(coupled_sectors, blocks, dtype)
 
     def diagonal_tensor_from_full_tensor(self, a: SymmetricTensor, check_offdiagonal: bool
@@ -410,18 +412,18 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         res = a.dtype.zero_scalar
         for coupled, block in zip(a.data.coupled_sectors, a.data.blocks):
             d_c = a.symmetry.qdim(coupled)
-            res += d_c * self.block_sum_all(block)
+            res += d_c * self.block_backend.block_sum_all(block)
         return res
 
     def diagonal_tensor_to_block(self, a: DiagonalTensor) -> Block:
         assert a.symmetry.can_be_dropped
-        res = self.zero_block([a.leg.dim], a.dtype)
+        res = self.block_backend.zero_block([a.leg.dim], a.dtype)
         for i, j in iter_common_sorted_arrays(a.leg.sectors, a.data.coupled_sectors):
             coupled = a.leg.sectors[i]
-            symmetry_data = self.ones_block([a.symmetry.sector_dim(coupled)], dtype=a.dtype)
+            symmetry_data = self.block_backend.ones_block([a.symmetry.sector_dim(coupled)], dtype=a.dtype)
             degeneracy_data = a.data.blocks[j]
-            entries = self.block_outer(symmetry_data, degeneracy_data)
-            entries = self.block_reshape(entries, (-1,))
+            entries = self.block_backend.block_outer(symmetry_data, degeneracy_data)
+            entries = self.block_backend.block_reshape(entries, (-1,))
             res[slice(*a.leg.slices[i])] = entries
         return res
 
@@ -444,9 +446,9 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                 # there is not block for that sector. => eigenvalues are 0.
                 # choose eigenvectors as standard basis vectors (eye matrix)
                 block_size = domain_mults[j]
-                v_blocks.append(self.eye_matrix(block_size, a.dtype))
+                v_blocks.append(self.block_backend.eye_matrix(block_size, a.dtype))
             else:
-                vals, vects = self.block_eigh(a_blocks[i], sort=sort)
+                vals, vects = self.block_backend.block_eigh(a_blocks[i], sort=sort)
                 v_blocks.append(vects)
                 w_blocks.append(vals)
         #
@@ -458,7 +460,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         # Note: the identity has the same matrix elements in all ONB, so ne need to consider
         #       the basis perms.
         coupled_sectors = co_domain.sectors
-        blocks = [self.eye_matrix(block_size(co_domain, c), dtype) for c in coupled_sectors]
+        blocks = [self.block_backend.eye_matrix(block_size(co_domain, c), dtype) for c in coupled_sectors]
         return FusionTreeData(coupled_sectors, blocks, dtype)
 
     def from_dense_block(self, a: Block, codomain: ProductSpace, domain: ProductSpace, tol: float
@@ -470,8 +472,8 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         K = len(domain.spaces)
         num_legs = J + K
         # [i1,...,iJ,jK,...,j1] -> [i1,...,iJ,j1,...,jK]
-        a = self.block_permute_axes(a, [*range(J), *reversed(range(J, num_legs))])
-        dtype = Dtype.common(self.block_dtype(a), sym.fusion_tensor_dtype)
+        a = self.block_backend.block_permute_axes(a, [*range(J), *reversed(range(J, num_legs))])
+        dtype = Dtype.common(self.block_backend.block_dtype(a), sym.fusion_tensor_dtype)
         # main loop: iterate over coupled sectors and construct the respective block.
         coupled_sectors = []
         blocks = []
@@ -480,7 +482,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
             coupled = domain.sectors[i]
             dim_c = sym.sector_dim(coupled)
             # OPTIMIZE could be sth like np.empty
-            block = self.zero_block([block_size(codomain, coupled), block_size(domain, coupled)], dtype)
+            block = self.block_backend.zero_block([block_size(codomain, coupled), block_size(domain, coupled)], dtype)
             # iterate over uncoupled sectors / forest-blocks within the block
             i1 = 0  # start row index of the current forest block
             i2 = 0  # start column index of the current forest block
@@ -495,10 +497,10 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                     shape = [0] * (2 * num_legs)
                     shape[::2] = [*a_dims, *b_dims]
                     shape[1::2] = m_dims + n_dims
-                    entries = self.block_reshape(entries, shape)
+                    entries = self.block_backend.block_reshape(entries, shape)
                     # permute to [a1,...,aJ, b1,...,bK, m1,...,mJ, n1,...nK]
                     perm = [*range(0, 2 * num_legs, 2), *range(1, 2 * num_legs, 2)]
-                    entries = self.block_permute_axes(entries, perm)
+                    entries = self.block_backend.block_permute_axes(entries, perm)
                     num_alpha_trees, num_beta_trees = self._add_forest_block_entries(
                         block, entries, sym, codomain, domain, coupled, dim_c, a_sectors, b_sectors,
                         tree_block_width, tree_block_height, i1, i2
@@ -508,7 +510,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                     i1 += forest_block_height  # move down by one forest-block
                 i1 = 0  # reset to the top of the block
                 i2 += forest_block_width  # move right by one forest-block
-            block_norm = self.block_norm(block, order=2)
+            block_norm = self.block_backend.block_norm(block, order=2)
             if block_norm <= 0.:  # TODO small finite tolerance instead?
                 continue
             coupled_sectors.append(coupled)
@@ -520,7 +522,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         # orthogonal, we have  ``norm(a) ** 2 = norm(a_sym) ** 2 + norm(a_rest) ** 2``.
         # thus ``abs_err = norm(a - a_sym) = norm(a_rest) = sqrt(norm(a) ** 2 - norm(a_sym) ** 2)``
         if tol is not None:
-            a_norm_sq = self.block_norm(a, order=2) ** 2
+            a_norm_sq = self.block_backend.block_norm(a, order=2) ** 2
             norm_diff_sq = a_norm_sq - norm_sq_projected
             abs_tol_sq = tol * tol * a_norm_sq
             if norm_diff_sq > abs_tol_sq > 0:
@@ -552,11 +554,11 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         else:
             sample_block = func((1, 1), codomain.symmetry.trivial_sector)
             coupled_sectors = domain.symmetry.empty_sector_array
-        dtype = self.block_dtype(sample_block)
+        dtype = self.block_backend.block_dtype(sample_block)
         return FusionTreeData(coupled_sectors, blocks, dtype)
 
     def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
-        blocks = [self.block_from_diagonal(block) for block in a.data.blocks]
+        blocks = [self.block_backend.block_from_diagonal(block) for block in a.data.blocks]
         return FusionTreeData(a.data.coupled_sectors, blocks, dtype=a.dtype)
 
     def full_data_from_mask(self, a: Mask, dtype: Dtype) -> Data:
@@ -581,7 +583,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         a_coupled = a.data.coupled_sectors
         for i, j in iter_common_sorted_arrays(a_coupled, b.data.coupled_sectors):
             d_c = a.symmetry.qdim(a_coupled[i])
-            res += d_c * self.block_inner(a_blocks[i], b_blocks[j], do_dagger=do_dagger)
+            res += d_c * self.block_backend.block_inner(a_blocks[i], b_blocks[j], do_dagger=do_dagger)
         return res
     
     def inv_part_from_dense_block_single_sector(self, vector: Block, space: Space,
@@ -593,19 +595,21 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
 
     def linear_combination(self, a, v: SymmetricTensor, b, w: SymmetricTensor) -> Data:
         dtype = v.data.dtype.common(w.data.dtype)
-        v_blocks = [self.block_to_dtype(_a, dtype) for _a in v.data.blocks]
-        w_blocks = [self.block_to_dtype(_b, dtype) for _b in w.data.blocks]
+        v_blocks = [self.block_backend.block_to_dtype(_a, dtype) for _a in v.data.blocks]
+        w_blocks = [self.block_backend.block_to_dtype(_b, dtype) for _b in w.data.blocks]
         blocks = []
         coupled_sectors = []
         for i, j in iter_common_noncommon_sorted_arrays(v.data.coupled_sectors, w.data.coupled_sectors):
             if i is None:
-                blocks.append(self.block_mul(b, w_blocks[j]))
+                blocks.append(self.block_backend.block_mul(b, w_blocks[j]))
                 coupled_sectors.append(w.data.coupled_sectors[j])
             elif j is None:
-                blocks.append(self.block_mul(a, v_blocks[i]))
+                blocks.append(self.block_backend.block_mul(a, v_blocks[i]))
                 coupled_sectors.append(v.data.coupled_sectors[i])
             else:
-                blocks.append(self.block_linear_combination(a, v_blocks[i], b, w_blocks[j]))
+                blocks.append(
+                    self.block_backend.block_linear_combination(a, v_blocks[i], b, w_blocks[j])
+                 )
                 coupled_sectors.append(v.data.coupled_sectors[i])
         if len(blocks) == 0:
             coupled_sectors = v.symmetry.empty_sector_array
@@ -626,7 +630,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
             #   a.domain.sectors[k] == new_leg.sectors[n]
             if i < len(a_coupled) and np.all(new_leg.sectors[n] == a_coupled[i]):
                 # we have a block for that sector
-                l, q = self.matrix_lq(a_blocks[i], full=False)
+                l, q = self.block_backend.matrix_lq(a_blocks[i], full=False)
                 l_blocks.append(l)
                 q_blocks.append(q)
                 i += 1
@@ -636,7 +640,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                 new_leg_block_size = new_leg.multiplicities[n]
                 domain_block_size = a.domain.multiplicities[k]
                 q_blocks.append(
-                    self.eye_matrix(domain_block_size, a.dtype)[:new_leg_block_size, :]
+                    self.block_backend.eye_matrix(domain_block_size, a.dtype)[:new_leg_block_size, :]
                 )
         l_data = FusionTreeData(a_coupled, l_blocks, a.dtype)
         q_data = FusionTreeData(new_leg.sectors, q_blocks, a.dtype)
@@ -674,22 +678,22 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
     def mul(self, a: float | complex, b: SymmetricTensor) -> Data:
         if a == 0.:
             return self.zero_data(b.codomain, b.domain, b.dtype)
-        blocks = [self.block_mul(a, T) for T in b.data.blocks]
+        blocks = [self.block_backend.block_mul(a, T) for T in b.data.blocks]
         if len(blocks) == 0:
             if isinstance(a, float):
                 dtype = b.data.dtype
             else:
                 dtype = b.data.dtype.to_complex()
         else:
-            dtype = self.block_dtype(blocks[0])
+            dtype = self.block_backend.block_dtype(blocks[0])
         return FusionTreeData(b.data.coupled_sectors, blocks, dtype)
 
     def norm(self, a: SymmetricTensor | DiagonalTensor) -> float:
         # OPTIMIZE should we offer the square-norm instead?
         norm_sq = 0
         for coupled, block in zip(a.data.coupled_sectors, a.data.blocks):
-            norm_sq += a.symmetry.qdim(coupled) * (self.block_norm(block) ** 2)
-        return self.block_sqrt(norm_sq)
+            norm_sq += a.symmetry.qdim(coupled) * (self.block_backend.block_norm(block) ** 2)
+        return self.block_backend.block_sqrt(norm_sq)
 
     def outer(self, a: SymmetricTensor, b: SymmetricTensor) -> Data:
         raise NotImplementedError('outer not implemented')  # TODO
@@ -715,7 +719,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
             #   a.domain.sectors[k] == new_leg.sectors[n]
             if i < len(a_coupled) and np.all(new_leg.sectors[n] == a_coupled[i]):
                 # we have a block for that sector
-                q, r = self.matrix_qr(a_blocks[i], full=False)
+                q, r = self.block_backend.matrix_qr(a_blocks[i], full=False)
                 q_blocks.append(q)
                 r_blocks.append(r)
                 i += 1
@@ -725,7 +729,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                 codomain_block_size = a.codomain.multiplicities[j]
                 new_leg_block_size = new_leg.multiplicities[n]
                 q_blocks.append(
-                    self.eye_matrix(codomain_block_size, a.dtype)[:, :new_leg_block_size]
+                    self.block_backend.eye_matrix(codomain_block_size, a.dtype)[:, :new_leg_block_size]
                 )
         q_data = FusionTreeData(new_leg.sectors, q_blocks, a.dtype)
         r_data = FusionTreeData(a_coupled, r_blocks, a.dtype)
@@ -741,7 +745,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                 block = blocks[i]
                 i += 1
             else:
-                block = self.zero_block([m], dtype=tensor.dtype)
+                block = self.block_backend.zero_block([m], dtype=tensor.dtype)
             numbers.append(block_func(block))
         return func(numbers)
         
@@ -755,7 +759,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
             blocks = []
             coupled = []
             for i, j in iter_common_sorted_arrays(a_coupled, b.data.coupled_sectors):
-                blocks.append(self.block_scale_axis(a_blocks[i], b_blocks[j], axis=1))
+                blocks.append(self.block_backend.block_scale_axis(a_blocks[i], b_blocks[j], axis=1))
                 coupled.append(a_coupled[i])
             if len(coupled) == 0:
                 coupled = a.symmetry.empty_sector_array
@@ -792,7 +796,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
             #   a.domain.sectors[k] == new_leg.sectors[n]
             if i < len(a_coupled) and np.all(new_leg.sectors[n] == a_coupled[i]):
                 # we have a block for that sector
-                u, s, vh = self.matrix_svd(a_blocks[i], algorithm=algorithm)
+                u, s, vh = self.block_backend.matrix_svd(a_blocks[i], algorithm=algorithm)
                 u_blocks.append(u)
                 s_blocks.append(s)
                 vh_blocks.append(vh)
@@ -804,10 +808,10 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                 domain_block_size = a.domain.multiplicities[k]
                 new_leg_block_size = new_leg.multiplicities[n]
                 u_blocks.append(
-                    self.eye_matrix(codomain_block_size, a.dtype)[:, :new_leg_block_size]
+                    self.block_backend.eye_matrix(codomain_block_size, a.dtype)[:, :new_leg_block_size]
                 )
                 vh_blocks.append(
-                    self.eye_matrix(domain_block_size, a.dtype)[:new_leg_block_size, :]
+                    self.block_backend.eye_matrix(domain_block_size, a.dtype)[:new_leg_block_size, :]
                 )
                 
         u_data = FusionTreeData(new_leg.sectors, u_blocks, a.dtype)
@@ -830,7 +834,7 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         # build in codomain/domain leg order first, then permute legs in the end
         # [i1,...,iJ,j1,...,jK]
         shape = [leg.dim for leg in a.codomain.spaces] + [leg.dim for leg in a.domain.spaces]
-        res = self.zero_block(shape, dtype)
+        res = self.block_backend.zero_block(shape, dtype)
         for coupled, block in zip(a.data.coupled_sectors, a.data.blocks):
             i1 = 0  # start row index of the current forest block
             i2 = 0  # start column index of the current forest block
@@ -852,31 +856,31 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
                     # entries : [a1,...,aJ, b1,...,bK, m1,...,mJ, n1,...,nK]
                     # permute to [a1,m1,...,aJ,mJ, b1,n1,...,bK,nK]
                     perm = [i + offset for i in range(num_legs) for offset in [0, num_legs]]
-                    entries = self.block_permute_axes(entries, perm)
+                    entries = self.block_backend.block_permute_axes(entries, perm)
                     # reshape to [(a1,m1),...,(aJ,mJ), (b1,n1),...,(bK,nK)]
                     shape = [d_a * m for d_a, m in zip(a_dims, m_dims)] \
                             + [d_b * n for d_b, n in zip(b_dims, n_dims)]
-                    entries = self.block_reshape(entries, shape)
+                    entries = self.block_backend.block_reshape(entries, shape)
                     res[(*j1, *j2)] += entries
                     i1 += forest_b_height  # move down by one forest-block
                 i1 = 0  # reset to the top of the block
                 i2 += forest_b_width  # move right by one forest-block
         # permute leg order [i1,...,iJ,j1,...,jK] -> [i1,...,iJ,jK,...,j1]
-        res = self.block_permute_axes(res, [*range(J), *reversed(range(J, J + K))])
+        res = self.block_backend.block_permute_axes(res, [*range(J), *reversed(range(J, J + K))])
         return res
 
     def to_dense_block_trivial_sector(self, tensor: SymmetricTensor) -> Block:
         raise NotImplementedError('to_dense_block_trivial_sector not implemented')  # TODO
 
     def to_dtype(self, a: SymmetricTensor, dtype: Dtype) -> FusionTreeData:
-        blocks = [self.block_to_dtype(block, dtype) for block in a.data.blocks]
+        blocks = [self.block_backend.block_to_dtype(block, dtype) for block in a.data.blocks]
         return FusionTreeData(a.data.coupled_sectors, blocks, dtype)
 
     def trace_full(self, a: SymmetricTensor) -> float | complex:
         res = a.dtype.zero_scalar
         for coupled, block in zip(a.data.coupled_sectors, a.data.blocks):
             d_c = a.symmetry.qdim(coupled)
-            res += d_c * self.block_trace_full(block)
+            res += d_c * self.block_backend.block_trace_full(block)
         return res
 
     def transpose(self, a: SymmetricTensor) -> tuple[Data, ProductSpace, ProductSpace]:
@@ -930,18 +934,18 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         i2 = i2_init  # i2: start column index of the current tree block within the block
         alpha_tree_iter = fusion_trees(sym, a_sectors, coupled, [sp.is_dual for sp in codomain.spaces])
         beta_tree_iter = fusion_trees(sym, b_sectors, coupled, [sp.is_dual for sp in domain.spaces])
-        entries = self.zero_block([*a_dims, *b_dims, *m_dims, *n_dims], dtype)
+        entries = self.block_backend.zero_block([*a_dims, *b_dims, *m_dims, *n_dims], dtype)
         for alpha_tree in alpha_tree_iter:
-            Y = self.block_conj(alpha_tree.as_block(backend=self))  # [a1,...,aJ,c]
+            Y = self.block_backend.block_conj(alpha_tree.as_block(backend=self))  # [a1,...,aJ,c]
             for beta_tree in beta_tree_iter:
                 X = beta_tree.as_block(backend=self)  # [b1,...,bK,c]
-                symmetry_data = self.block_tdot(Y, X, -1, -1)  # [a1,...,aJ,b1,...,bK]
+                symmetry_data = self.block_backend.block_tdot(Y, X, -1, -1)  # [a1,...,aJ,b1,...,bK]
                 idx1 = slice(i1, i1 + tree_block_height)
                 idx2 = slice(i2, i2 + tree_block_width)
                 degeneracy_data = block[idx1, idx2]  # [M, N]
                 # [M, N] -> [m1,...,mJ,n1,...,nK]
-                degeneracy_data = self.block_reshape(degeneracy_data, m_dims + n_dims)
-                entries += self.block_outer(symmetry_data, degeneracy_data)  # [{aj} {bk} {mj} {nk}]
+                degeneracy_data = self.block_backend.block_reshape(degeneracy_data, m_dims + n_dims)
+                entries += self.block_backend.block_outer(symmetry_data, degeneracy_data)  # [{aj} {bk} {mj} {nk}]
                 i2 += tree_block_width
             i2 = i2_init  # reset to the left of the current forest-block
             i1 += tree_block_height
@@ -989,14 +993,14 @@ class FusionTreeBackend(Backend, BlockBackend, metaclass=ABCMeta):
         for alpha_tree in alpha_tree_iter:
             X = alpha_tree.as_block(backend=self)
             # entries: [a1,...,aJ,b1,...,bK,m1,...,mJ,n1,...,nK]
-            projected = self.block_tdot(entries, X, range_J, range_J)  # [{bk}, {mj}, {nk}, c]
+            projected = self.block_backend.block_tdot(entries, X, range_J, range_J)  # [{bk}, {mj}, {nk}, c]
             for beta_tree in beta_tree_iter:
-                Y = self.block_conj(beta_tree.as_block(backend=self))
-                projected = self.block_tdot(projected, Y, range_K, range_K)  # [{mj}, {nk}, c, c']
+                Y = self.block_backend.block_conj(beta_tree.as_block(backend=self))
+                projected = self.block_backend.block_tdot(projected, Y, range_K, range_K)  # [{mj}, {nk}, c, c']
                 # projected onto the identity on [c, c']
-                tree_block = self.block_trace_partial(projected, [-2], [-1], range_JK) / dim_c
+                tree_block = self.block_backend.block_trace_partial(projected, [-2], [-1], range_JK) / dim_c
                 # [m1,...,mJ,n1,...,nK] -> [M, N]
-                ms_ns = self.block_shape(tree_block)
+                ms_ns = self.block_backend.block_shape(tree_block)
                 tree_block = np.reshape(tree_block, (prod(ms_ns[:J]), prod(ms_ns[J:])))
                 idx1 = slice(i1, i1 + tree_block_height)
                 idx2 = slice(i2, i2 + tree_block_width)

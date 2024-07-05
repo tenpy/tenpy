@@ -150,7 +150,7 @@ def any_symmetry_backend(request) -> str:
 
 
 @pytest.fixture
-def any_backend(block_backend, any_symmetry_backend) -> backends.Backend:
+def any_backend(block_backend, any_symmetry_backend) -> backends.TensorBackend:
     return backends.backend_factory.get_backend(any_symmetry_backend, block_backend)
 
 
@@ -180,7 +180,7 @@ def make_any_space(any_symmetry, np_random):
 def make_any_block(any_backend, np_random):
     def make(size: tuple[int, ...], real=False) -> backends.Block:
         # return Block
-        return random_block(any_backend, size, real=real, np_random=np_random)
+        return random_block(any_backend.block_backend, size, real=real, np_random=np_random)
     return make
 
 
@@ -211,7 +211,7 @@ def compatible_symmetry_backend(_compatible_backend_symm_pairs) -> str:
 
 
 @pytest.fixture
-def compatible_backend(compatible_symmetry_backend, block_backend) -> backends.Backend:
+def compatible_backend(compatible_symmetry_backend, block_backend) -> backends.TensorBackend:
     return backends.backend_factory.get_backend(compatible_symmetry_backend, block_backend)
 
 
@@ -242,7 +242,7 @@ def make_compatible_space(compatible_symmetry, np_random):
 def make_compatible_block(compatible_backend, np_random):
     def make(size: tuple[int, ...], real: bool = False) -> backends.Block:
         # returns Block
-        return random_block(compatible_backend, size, real=real, np_random=np_random)
+        return random_block(compatible_backend.block_backend, size, real=real, np_random=np_random)
     return make
 
 
@@ -492,11 +492,11 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, compatible_s
 
 # RANDOM GENERATION
 
-def random_block(backend, size, real=False, np_random=np.random.default_rng(0)):
+def random_block(block_backend, size, real=False, np_random=np.random.default_rng(0)):
     block = np_random.normal(size=size)
     if not real:
         block = block + 1.j * np_random.normal(size=size)
-    return backend.block_from_numpy(block)
+    return block_backend.block_from_numpy(block)
 
 
 def random_symmetry_sectors(symmetry: symmetries.Symmetry, num: int, sort: bool = False,

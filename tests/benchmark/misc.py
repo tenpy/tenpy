@@ -3,7 +3,7 @@
 from __future__ import annotations
 import numpy as np
 from tenpy.linalg import spaces, symmetries
-from tenpy.linalg.backends.abstract_backend import Backend
+from tenpy.linalg.backends.abstract_backend import TensorBackend
 from tenpy.linalg.backends.numpy import NumpyBlockBackend
 from tenpy.linalg.backends.no_symmetry import NoSymmetryBackend
 from tenpy.linalg.backends.abelian import AbelianBackend
@@ -151,7 +151,7 @@ def get_compatible_leg(legs: list[spaces.Space]) -> spaces.ElementarySpace:
     return res
 
 
-def get_random_tensor(symmetry: symmetries.Symmetry, backend: Backend,
+def get_random_tensor(symmetry: symmetries.Symmetry, backend: TensorBackend,
                       legs: list[spaces.ElementarySpace | None], leg_dim: int, sectors_per_leg: int,
                       real: bool = False):
     assert sectors_per_leg <= leg_dim

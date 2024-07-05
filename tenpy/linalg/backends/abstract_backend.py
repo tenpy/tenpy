@@ -14,7 +14,7 @@ from ..symmetries import Symmetry
 from ..spaces import Space, ElementarySpace, ProductSpace
 from ..dtypes import Dtype
 
-__all__ = ['Data', 'DiagonalData', 'MaskData', 'Block', 'Backend', 'BlockBackend',
+__all__ = ['Data', 'DiagonalData', 'MaskData', 'Block', 'TensorBackend', 'BlockBackend',
            'conventional_leg_order']
 
 
@@ -33,40 +33,27 @@ MaskData = TypeVar('MaskData')
 Block = TypeVar('Block')
 
 
-class Backend(metaclass=ABCMeta):
-    """Abstract base class for backends.
+class TensorBackend(metaclass=ABCMeta):
+    """Abstract base class for tensor-backends.
 
-    A backend implements functions that acts on tensors.
+    A backends implements functions that act on tensors.
     We abstract two separate concepts for a backend.
     There is a block backend, that abstracts what the numerical data format (numpy array,
-    torch Tensor, CUDA tensor, ...) and a SymmetryBackend that abstracts how block-sparse
+    torch Tensor, CUDA tensor, ...) is and a tensor-backend that abstracts how block-sparse
     structures that arise from symmetries are accounted for.
 
-    The implementation strategy is then to implement a BlockBackend subclass for every type of
-    block we want to support. Similarly, we implement a direct subclass of Backend for every
-    class of symmetry (no symmetry, abelian symmetry, nonabelian symmetry, more general grading)
-    that uses the methods provided by the BlockBackend.
-    In the simplest case, a concrete backend with a specific block type and symmetry class can
-    then by implemented simply by inheriting from both of those, e.g. ::
-    
-        |           Backend                    BlockBackend
-        |              |                            |
-        |          XxxBackend                 YyyBlockBackend
-        |              |                            |
-        |              ------------------------------
-        |                            |
-        |                      XxxYyyBackend
-
-    Where Xxx describes the symmetry backend, e.g. NoSymmetry, Abelian, FusionTree
-    and Yyy describes the numerical routines that handle the blocks, e.g. numpy, torch, ...
-
-    However, the ``XxxYyyBackend`` class may also override any of the methods, if needed.
+    A tensor backend has a the :attr:`block_backend` as an attribute and can call its functions
+    to operate on blocks. This allows the tensor backend to be agnostic of the details of these
+    blocks.
     """
     DataCls = None  # to be set by subclasses
     
     can_decompose_tensors = False
     """If the decompositions (SVD, QR, EIGH, ...) can operate on many-leg tensors,
     or require legs to be combined first."""
+
+    def __init__(self, block_backend: BlockBackend):
+        self.block_backend = block_backend
 
     def __repr__(self):
         return f'{type(self).__name__}'

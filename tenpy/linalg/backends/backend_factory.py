@@ -3,55 +3,37 @@ from __future__ import annotations
 
 import logging
 
-from .abstract_backend import Backend
-from .numpy import NoSymmetryNumpyBackend, AbelianNumpyBackend, FusionTreeNumpyBackend
-from .torch import NoSymmetryTorchBackend, AbelianTorchBackend, FusionTreeTorchBackend
+from .abstract_backend import TensorBackend
+from .no_symmetry import NoSymmetryBackend
+from .abelian import AbelianBackend
+from .fusion_tree_backend import FusionTreeBackend
+from .numpy import NumpyBlockBackend
+from .torch import TorchBlockBackend
 from ..symmetries import Symmetry, no_symmetry, AbelianGroup
 
 __all__ = ['get_backend', 'todo_get_backend']
 
 logger = logging.getLogger(__name__)
 
-
-_backend_lookup = dict(
-    no_symmetry=dict(
-        numpy=(NoSymmetryNumpyBackend, {}),
-        torch=(NoSymmetryTorchBackend, {}),
-        tensorflow=None,  # TODO
-        jax=None,  # TODO
-        cpu=(NoSymmetryNumpyBackend, {}),
-        gpu=(NoSymmetryTorchBackend, dict(device='cuda')),
-        apple_silicon=(NoSymmetryTorchBackend, dict(device='mps')),
-        tpu=None,  # TODO
-    ),
-    #
-    abelian=dict(
-        numpy=(AbelianNumpyBackend, {}),
-        torch=(AbelianTorchBackend, {}),
-        tensorflow=None,  # FUTURE
-        jax=None,  # FUTURE
-        cpu=(AbelianNumpyBackend, {}),
-        gpu=(AbelianTorchBackend, dict(device='cuda')),
-        apple_silicon=(AbelianTorchBackend, dict(device='mps')),
-        tpu=None,  # FUTURE
-    ),
-    #
-    fusion_tree=dict(
-        numpy=(FusionTreeNumpyBackend, {}),
-        torch=(FusionTreeTorchBackend, {}),
-        tensorflow=None,  # FUTURE
-        jax=None,  # FUTURE
-        cpu=(FusionTreeNumpyBackend, {}),
-        gpu=(FusionTreeTorchBackend, dict(device='cuda')),
-        apple_silicon=(FusionTreeTorchBackend, dict(device='mps')),
-        tpu=None,  # FUTURE
-    ),
+_tensor_backend_classes = dict(  # values: (cls, kwargs)
+    no_symmetry=(NoSymmetryBackend, {}),
+    abelian=(AbelianBackend, {}),
+    fusion_tree=(FusionTreeBackend, {})
 )
+_block_backends = dict(  # values: (cls, kwargs)
+    numpy=(NumpyBlockBackend, {}),
+    torch=(TorchBlockBackend, {}),
+    tensorflow=None,  # TODO
+    jax=None,  # TODO
+    cpu=(NumpyBlockBackend, {}),
+    gpu=(TorchBlockBackend, dict(device='cuda')),
+    apple_silicon=(TorchBlockBackend, dict(device='mps')),
+    tpu=None,  # TODO
+)
+_instantiated_backends = {}  # keys: (tensor_backend: str, block_backend: str)
 
-_instantiated_backends = {}  # keys: (symmetry_backend, block_backend, kwargs)
 
-
-def get_backend(symmetry: Symmetry | str = None, block_backend: str = None) -> Backend:
+def get_backend(symmetry: Symmetry | str = None, block_backend: str = None) -> TensorBackend:
     """
     Parameters
     ----------
@@ -68,32 +50,27 @@ def get_backend(symmetry: Symmetry | str = None, block_backend: str = None) -> B
     if isinstance(symmetry, Symmetry):
         # figure out minimal symmetry_backend that supports that symmetry
         if symmetry == no_symmetry:
-            symmetry_backend = 'no_symmetry'
+            tensor_backend = 'no_symmetry'
         elif isinstance(symmetry, AbelianGroup):
-            symmetry_backend = 'abelian'
+            tensor_backend = 'abelian'
         else:
-            symmetry_backend = 'fusion_tree'
+            tensor_backend = 'fusion_tree'
     else:
-        symmetry_backend = symmetry
+        tensor_backend = symmetry
 
-    assert block_backend in ['numpy', 'torch', 'tensorflow', 'jax', 'cpu', 'gpu', 'tpu']
-    assert symmetry_backend in ['no_symmetry', 'abelian', 'fusion_tree']
+    key = (tensor_backend, block_backend)
+    backend = _instantiated_backends.get(key, None)
+    if backend is not None:
+        return backend
 
-    res = _backend_lookup[symmetry_backend][block_backend]
-    if res is None:
-        raise NotImplementedError(f'Backend not implemented {symmetry_backend} & {block_backend}')
-    cls, kwargs = res
-
-    key = (symmetry_backend, block_backend, tuple(kwargs.items()))
-    if key not in _instantiated_backends:
-        backend = cls(**kwargs)
-        _instantiated_backends[key] = backend
-    else:
-        backend = _instantiated_backends[key]
+    BlockBackendCls, block_kwargs = _block_backends[block_backend]
+    TensorBackendCls, tensor_kwargs = _tensor_backend_classes[tensor_backend]
+    backend = TensorBackendCls(block_backend=BlockBackendCls(**block_kwargs), **tensor_kwargs)
 
     if isinstance(symmetry, Symmetry):
         assert backend.supports_symmetry(symmetry)
-        
+
+    _instantiated_backends[key] = backend
     return backend
 
 

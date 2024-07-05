@@ -265,16 +265,19 @@ class NumpyBlockBackend(BlockBackend):
         return np.zeros(shape, dtype=self.backend_dtype_map[dtype])
 
 
-class NoSymmetryNumpyBackend(NumpyBlockBackend, NoSymmetryBackend):
-    pass
+class NoSymmetryNumpyBackend(NoSymmetryBackend):
+    def __init__(self):
+        NoSymmetryBackend.__init__(self, block_backend=NumpyBlockBackend())
 
 
-class AbelianNumpyBackend(NumpyBlockBackend, AbelianBackend):
-    pass
+class AbelianNumpyBackend(AbelianBackend):
+    def __init__(self):
+        AbelianBackend.__init__(self, block_backend=NumpyBlockBackend())
 
 
-class FusionTreeNumpyBackend(NumpyBlockBackend, FusionTreeBackend):
-    pass
+class FusionTreeNumpyBackend(FusionTreeBackend):
+    def __init__(self):
+        FusionTreeBackend.__init__(self, block_backend=NumpyBlockBackend())
 
 
 def _svd_gesvd(a):

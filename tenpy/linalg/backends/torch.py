@@ -275,19 +275,19 @@ class TorchBlockBackend(BlockBackend):
         return torch_module.zeros(list(shape), dtype=self.backend_dtype_map[dtype], device=self.device)
 
 
-class NoSymmetryTorchBackend(TorchBlockBackend, NoSymmetryBackend):
+class NoSymmetryTorchBackend(NoSymmetryBackend):
     def __init__(self, device: str = 'cpu'):
-        TorchBlockBackend.__init__(self, device=device)
-        NoSymmetryBackend.__init__(self)
+        block_backend =  TorchBlockBackend(device=device)
+        NoSymmetryBackend.__init__(self, block_backend=block_backend)
 
 
-class AbelianTorchBackend(TorchBlockBackend, AbelianBackend):
+class AbelianTorchBackend(AbelianBackend):
     def __init__(self, device: str = 'cpu'):
-        TorchBlockBackend.__init__(self, device=device)
-        AbelianBackend.__init__(self)
+        block_backend =  TorchBlockBackend(device=device)
+        AbelianBackend.__init__(self, block_backend=block_backend)
 
 
-class FusionTreeTorchBackend(TorchBlockBackend, FusionTreeBackend):
+class FusionTreeTorchBackend(FusionTreeBackend):
     def __init__(self, device: str = 'cpu'):
-        TorchBlockBackend.__init__(self, device=device)
-        FusionTreeBackend.__init__(self)
+        block_backend =  TorchBlockBackend(device=device)
+        FusionTreeBackend.__init__(self, block_backend=block_backend)

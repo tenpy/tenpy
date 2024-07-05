@@ -27,7 +27,7 @@ from functools import partial, reduce
 
 from ..linalg.tensors import (Tensor, SymmetricTensor, SymmetricTensor, ChargedTensor,
                               DiagonalTensor, almost_equal, angle, real_if_close, exp)
-from ..linalg.backends import Backend, Block
+from ..linalg.backends import TensorBackend, Block
 from ..linalg.symmetries import (ProductSymmetry, Symmetry, SU2Symmetry, U1Symmetry, ZNSymmetry,
                              no_symmetry, SectorArray)
 from ..linalg.spaces import Space, ElementarySpace, ProductSpace
@@ -126,7 +126,7 @@ class Site(Hdf5Exportable):
         their hermitian conjugates. Use :meth:`get_hc_op_name` to obtain entries.
     """
     
-    def __init__(self, leg: Space, backend: Backend = None,
+    def __init__(self, leg: Space, backend: TensorBackend = None,
                  state_labels: list[str] = None, JW: DiagonalTensor | Block = None):
         self.leg = leg
         self.state_labels = {}
@@ -1095,7 +1095,7 @@ class ChargedOperator:
         self.op_R.test_sanity()
 
     @property
-    def backend(self) -> Backend:
+    def backend(self) -> TensorBackend:
         return self.op_L.backend
 
     @property
@@ -1160,7 +1160,7 @@ class SpinHalfSite(Site):
     backend : :class:`~tenpy.linalg.backends.Backend`, optional
         The backend used to create the operators.
     """
-    def __init__(self, conserve: str = 'Sz', backend: Backend = None):
+    def __init__(self, conserve: str = 'Sz', backend: TensorBackend = None):
         # make leg
         if conserve == 'Stot':
             leg = ElementarySpace(symmetry=SU2Symmetry('Stot'), sectors=[[1]])
@@ -1260,7 +1260,7 @@ class SpinSite(Site):
         The backend used to create the operators.
     """
 
-    def __init__(self, S: float = 0.5, conserve: str = 'Sz', backend: Backend = None):
+    def __init__(self, S: float = 0.5, conserve: str = 'Sz', backend: TensorBackend = None):
         self.S = S = float(S)
         d = 2 * S + 1
         if d <= 1:
@@ -1383,7 +1383,7 @@ class FermionSite(Site):
         The backend used to create the operators.
     """
 
-    def __init__(self, conserve: str = 'N', filling: float = 0.5, backend: Backend = None):
+    def __init__(self, conserve: str = 'N', filling: float = 0.5, backend: TensorBackend = None):
         # make leg
         if conserve == 'N':
             leg = ElementarySpace.from_sectors(U1Symmetry('N'), [[0], [1]])
@@ -1516,7 +1516,7 @@ class SpinHalfFermionSite(Site):
     """
 
     def __init__(self, conserve_N: str = 'N', conserve_S: str = 'Sz', filling: float = 1.,
-                 backend: Backend = None):
+                 backend: TensorBackend = None):
         # parse conserve_N
         if conserve_N == 'N':
             sectors_N = np.array([0, 1, 1, 2])
@@ -1664,7 +1664,7 @@ class SpinHalfHoleSite(Site):
     """
 
     def __init__(self, conserve_N: str = 'N', conserve_S: str = 'Sz', filling: float = 1.,
-                 backend: Backend = None):
+                 backend: TensorBackend = None):
         # parse conserve_N
         if conserve_N == 'N':
             sectors_N = np.array([0, 1, 1])
@@ -1811,7 +1811,7 @@ class BosonSite(Site):
     """
 
     def __init__(self, Nmax: int = 1, conserve: str = 'N', filling: float = 0.,
-                 backend: Backend = None):
+                 backend: TensorBackend = None):
         assert Nmax > 0
         d = Nmax + 1
         N = np.arange(d)
@@ -1985,7 +1985,7 @@ class ClockSite(Site):
     backend : :class:`~tenpy.linalg.backends.Backend`, optional
         The backend used to create the operators.
     """
-    def __init__(self, q: int, conserve: str = 'Z', backend: Backend = None):
+    def __init__(self, q: int, conserve: str = 'Z', backend: TensorBackend = None):
         if not (isinstance(q, int) and q > 1):
             raise ValueError(f'invalid q: {q}')
         # make leg

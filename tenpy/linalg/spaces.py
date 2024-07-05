@@ -17,7 +17,7 @@ from ..tools.misc import inverse_permutation, rank_data, to_iterable
 from ..tools.string import format_like_list
 
 if TYPE_CHECKING:
-    from .backends.abstract_backend import Backend, Block
+    from .backends.abstract_backend import TensorBackend, Block
 
 __all__ = ['Space', 'ElementarySpace', 'ProductSpace']
 
@@ -129,7 +129,7 @@ class Space(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def change_symmetry(self, symmetry: Symmetry, sector_map: callable, backend: Backend = None,
+    def change_symmetry(self, symmetry: Symmetry, sector_map: callable, backend: TensorBackend = None,
                         injective: bool = False) -> ElementarySpace:
         """Change the symmetry by specifying how the sectors change.
 
@@ -631,7 +631,7 @@ class ElementarySpace(Space):
             return self
         return self.with_opposite_duality()
 
-    def change_symmetry(self, symmetry: Symmetry, sector_map: callable, backend: Backend = None,
+    def change_symmetry(self, symmetry: Symmetry, sector_map: callable, backend: TensorBackend = None,
                         injective: bool = False
                         ) -> ElementarySpace:
         # backend is just there to have the same signature as ProductSpace.change_symmetry
@@ -837,7 +837,7 @@ class ProductSpace(Space):
     ----------
     spaces, symmetry
         Like the attributes of the same name
-    backend: Backend | None
+    backend: TensorBackend | None
         The backend, used in :meth:`_fuse_spaces`, to add backend-specific :attr:`metadata`.
     _sectors, _multiplicities, _metadata
         Can optionally be passed to avoid recomputation.
@@ -845,12 +845,12 @@ class ProductSpace(Space):
     Attributes
     ----------
     metadata: dict
-        Backend-specific additional data, added by :meth:`Backend._fuse_spaces`.
+        Backend-specific additional data, added by :meth:`TensorBackend._fuse_spaces`.
         Metadata is considered optional and can be computed on-demand via :meth:`get_metadata`.
         A common entry is accessible via the property :attr:`fusion_outcomes_sort`.
     """
 
-    def __init__(self, spaces: list[Space], symmetry: Symmetry = None, backend: Backend = None,
+    def __init__(self, spaces: list[Space], symmetry: Symmetry = None, backend: TensorBackend = None,
                  _sectors: SectorArray = UNSPECIFIED, _multiplicities: ndarray = UNSPECIFIED,
                  _metadata: dict = UNSPECIFIED):
         self.spaces = spaces[:]
@@ -885,7 +885,7 @@ class ProductSpace(Space):
         Space.test_sanity(self)
 
     @classmethod
-    def from_partial_products(cls, *factors: ProductSpace, backend: Backend | None = None
+    def from_partial_products(cls, *factors: ProductSpace, backend: TensorBackend | None = None
                               ) -> ProductSpace:
         """Given multiple product spaces, create the flat product of all their :attr:`spaces`.
 
@@ -926,7 +926,7 @@ class ProductSpace(Space):
     def is_trivial(self) -> bool:
         return all(s.is_trivial for s in self.spaces)
 
-    def get_metadata(self, key: str, backend: Backend = None):
+    def get_metadata(self, key: str, backend: TensorBackend = None):
         if key not in self.metadata:
             _, _, metadata = _fuse_spaces(self.symmetry, self.spaces, backend)
             self.metadata.update(metadata)
@@ -996,7 +996,7 @@ class ProductSpace(Space):
             res = res.as_bra_space()
         return res
 
-    def change_symmetry(self, symmetry: Symmetry, sector_map: callable, backend: Backend = None
+    def change_symmetry(self, symmetry: Symmetry, sector_map: callable, backend: TensorBackend = None
                         ) -> ProductSpace:
         sectors, multiplicities = _unique_sorted_sectors(
             sector_map(self.sectors), self.multiplicities
@@ -1013,7 +1013,7 @@ class ProductSpace(Space):
         return ProductSpace(spaces=[sp.drop_symmetry(which) for sp in self.spaces],
                             symmetry=remaining_symmetry)
 
-    def fuse_states(self, states: list[Block], backend: Backend) -> Block:
+    def fuse_states(self, states: list[Block], backend: TensorBackend) -> Block:
         """TODO"""
         if not self.symmetry.can_be_dropped:
             raise SymmetryError
@@ -1216,7 +1216,7 @@ class ProductSpace(Space):
         degeneracy_part = np.sum(degeneracy_idcs * degeneracy_strides, axis=0)
         return inverse_permutation(sector_part + degeneracy_part)
 
-    def insert_multiply(self, other: Space, pos: int, backend: Backend | None = None
+    def insert_multiply(self, other: Space, pos: int, backend: TensorBackend | None = None
                         ) -> ProductSpace:
         """Insert an additional factor at given position.
 
@@ -1246,21 +1246,21 @@ class ProductSpace(Space):
         """Iterate over all combinations of sectors"""
         return it.product(*(s.sectors for s in self.spaces))
 
-    def left_multiply(self, other: Space, backend: Backend | None = None) -> ProductSpace:
+    def left_multiply(self, other: Space, backend: TensorBackend | None = None) -> ProductSpace:
         """Add a new factor at the left / beginning of the spaces"""
         return self.insert_multiply(other, 0, backend=backend)
 
-    def right_multiply(self, other: Space, backend: Backend | None = None) -> ProductSpace:
+    def right_multiply(self, other: Space, backend: TensorBackend | None = None) -> ProductSpace:
         """Add a new factor at the right / end of the spaces"""
         return self.insert_multiply(other, -1, backend=backend)
 
 
-def _fuse_spaces(symmetry: Symmetry, spaces: list[Space], backend: Backend | None = None):
+def _fuse_spaces(symmetry: Symmetry, spaces: list[Space], backend: TensorBackend | None = None):
     """Helper function, called as part of ``ProductSpace.__init__``.
     
     It determines the sectors and multiplicities of the ProductSpace.
     There is also a version of this function in the backends, i.e.
-    :meth:`~tenpy.linalg.backends.abstract_backend.Backend._fuse_spaces`, which may
+    :meth:`~tenpy.linalg.backends.abstract_backend.TensorBackend._fuse_spaces`, which may
     customize this behavior and in particular may return metadata, i.e. attributes to be added to
     the ProductSpace.
     This default implementation returns default metadata, with only ``fusion_outcomes_sort``
