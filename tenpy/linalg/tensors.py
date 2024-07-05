@@ -642,8 +642,8 @@ class Tensor(metaclass=ABCMeta):
             domain_dims = tuple(reversed(self.shape[self.num_codomain_legs:]))
             lines.append(f'{indent}* Shape: {self.shape}   ;   {codomain_dims} <- {domain_dims}')
         if (not self.symmetry.can_be_dropped) or (not self.symmetry.is_abelian):
-            codomain_nums = tuple(np.sum(leg.multiplicities) for leg in self.codomain)
-            domain_nums = tuple(np.sum(leg.multiplicities) for leg in self.domain)
+            codomain_nums = tuple(np.sum(leg.multiplicities).item() for leg in self.codomain)
+            domain_nums = tuple(np.sum(leg.multiplicities).item() for leg in self.domain)
             all_nums = tuple((*codomain_nums, *reversed(domain_nums)))
             lines.append(f'{indent}* Num Sectors: {all_nums}   ;   {codomain_nums} <- {domain_nums}')
         return lines
@@ -2438,7 +2438,7 @@ class ChargedTensor(Tensor):
     
     def _repr_header_lines(self, indent: str) -> list[str]:
         lines = Tensor._repr_header_lines(self, indent=indent)
-        lines.append(f'{indent}* Charge Leg: dim={self.charge_leg.dim} sectors={self.charge_leg.sectors}')
+        lines.append(f'{indent}* Charge Leg: dim={round(self.charge_leg.dim, 3)} sectors={self.charge_leg.sectors}')
         start = f'{indent}* Charged State: '
         if self.charged_state is None:
             lines.append(f'{start}unspecified')
