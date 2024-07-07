@@ -612,7 +612,8 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
             theta_approx = npc.tensordot(T_Lc, T_Rc, ['vR', 'vL'])
         else:
             theta_approx = npc.tensordot(T_Lc.scale_axis(S, axis='vR'), T_Rc, ['vR', 'vL'])
-        eps = npc.norm(theta / npc.norm(theta) - theta_approx) ** 2
+        N_theta = npc.norm(theta)
+        eps = npc.norm(theta / N_theta - theta_approx * renormalization / N_theta) ** 2
         trunc_err = TruncationError(eps, 1. - 2. * eps)
     else:
         trunc_err = TruncationError(np.nan, np.nan)

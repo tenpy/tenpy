@@ -141,7 +141,7 @@ def test_decompose_theta_qr_based(use_eig_based_svd, conserve, tol=1e-12):
                 raise NotImplementedError
             norm_err = npc.norm(theta_approx - theta.split_legs())
             expect_err = np.sqrt(err_qr.eps) * npc.norm(theta)
-            assert abs(norm_err - expect_err) < 1e-6  # TODO we dont compute exactly this eps!!!
+            assert abs(norm_err - expect_err) < tol
             
             # Check that QR truncated theta has the same accuracy as SVD truncated theta
             assert abs(err_svd.eps - err_qr.eps) < max(err_svd.eps * 0.01, 1e-15)
