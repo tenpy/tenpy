@@ -580,7 +580,7 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
             Xi, need_U=move_right, need_Vd=(not move_right), inner_labels=['vR', 'vL'], trunc_params=trunc_params
         )
     else:
-        U, S, Vd, _, renormalization = svd_theta(Xi, trunc_params) # <- TODO: Is it fine to not specify the charges here?
+        U, S, Vd, _, renormalization = svd_theta(Xi, trunc_params)
 
     # Assign return matrices
     T_Lc, T_Rc = None, None
