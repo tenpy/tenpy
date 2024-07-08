@@ -1,26 +1,8 @@
-- Add :class:`~tenpy.algorithms.mps_common.QRBasedVariationalApplyMPO`.
-- The following functions are moved (and renamed):
-  :func:`~tenpy.algorithms.tebd._qr_based_decomposition` to
-  :func:`~tenpy.algorithms.truncation.decompose_theta_qr_based`.
-  :func:`~tenpy.algorithms.tebd._qr_tebd_cbe_Y0` to
-  :func:`~tenpy.algorithms.truncation._qr_theta_Y0`.
-  :func:`~tenpy.algorithms.tebd._eig_based_svd` to
-  :func:`~tenpy.algorithms.truncation._eig_based_svd`.
-- The following functions have new features: 
-  :func:`~tenpy.algorithms.truncation.decompose_theta_qr_based`
-  can perform a side specific theta decompositions and 
-  returns both tensors for `use_eig_based_svd=True`.
-  :func:`~tenpy.algorithms.truncation._qr_theta_Y0` can generate 
-  a side specific initial guess for the left or right isometry.
-- The following functions need additional or different parameters:
-  :func:`~tenpy.algorithms.truncation.decompose_theta_qr_based`,
-  :func:`~tenpy.algorithms.truncation._qr_theta_Y0`.
-- The following function returns an additional parameter:
-  :func:`~tenpy.algorithms.truncation.decompose_theta_qr_based`,
-- The following behavior has changed:
-  :func:`~tenpy.algorithms.truncation.decompose_theta_qr_based` 
-  computes a slightly different truncation error to match the 
-  convention of :func:`~tenpy.algorithms.truncation.svd_theta`.
-  Therefore, :meth:`~tenpy.algorithms.tebd.QRBasedTEBDEngine.update_bond` 
-  and :meth:`~tenpy.algorithms.tebd.QRBasedTEBDEngine.update_bond_imag` 
-  return a slightly different `trunc_err`.
+- Added :class:`~tenpy.algorithms.mps_common.QRBasedVariationalApplyMPO`.
+- The following functions, which are used both by :class:`~tenpy.algorithms.tebd.QRBasedTEBDEngine`
+  and by the new :class:`~tenpy.algorithms.mps_common.QRBasedVariationalApplyMPO` have been moved
+  from :mod:`tenpy.algorithms.tebd` to :mod:`tenpy.algorithms.truncation`, have been changed
+  substantially in parameters, behavior and return values;
+  The old ``_qr_based_decomposition``, which is renamed to
+  :func:`tenpy.algorithms.truncation.decompose_theta_qr_based`, as well as the private helper
+  functions ``_qr_tebd_cbe_Y0`` and ``_eig_based_svd``.
