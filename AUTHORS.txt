@@ -23,6 +23,7 @@ Michael Rader
 Umberto Borla
 Nico Kirchner
 Yantao Wu
+Martin Hefel
 
 Further, the code is based on an earlier version of the library, mainly developed by
 Frank Pollmann, Michael P. Zaletel and Roger S. K. Mong.

@@ -49,7 +49,7 @@ from ..tools.hdf5_io import Hdf5Exportable
 import warnings
 from ..tools.params import asConfig
 
-__all__ = ['TruncationError', 'truncate', 'svd_theta']
+__all__ = ['TruncationError', 'truncate', 'svd_theta', 'decompose_theta_qr_based']
 
 
 
@@ -305,6 +305,330 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
     U.iproject(piv, axes=1)  # U = U[:, piv]
     VH.iproject(piv, axes=0)  # VH = VH[piv, :]
     return U, S, VH, err, renormalization
+
+
+def _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, move_right: bool, expand: float, min_block_increase: int):
+    """Generate the initial guess `Y0` for the (left) right isometry for the QR based theta decomposition `decompose_theta_qr_based()`.
+
+    Parameters
+    ----------
+    old_qtotal_L : 1D array
+        The total charge of the old left tensor.
+        e.g. ``old_qtotal_L = T_L.qtotal``
+    old_qtotal_R : 1D array
+        The total charge of the old right tensor.
+        e.g. ``old_qtotal_R = T_R.qtotal``
+    old_bond_leg : :class:`~tenpy.linalg.charges.LegCharge`
+        The leg between the old left tensor and the old right tensor.
+        e.g. ``old_bond_leg = T_L.get_leg('vR')`` or ``old_bond_leg = T_R.get_leg('vL')``
+    theta : Array with legs [(vL.p0), (p1.vR)]
+    move_right : bool 
+    expand : float
+    min_block_increase : int
+
+    Returns
+    -------
+    Y0 : Array with legs [vL, (p1.vR)] or [(vL.p0), vR]
+        If ``move_right=True``, the legs of Y0 are [vL, (p1.vR)].
+        If ``move_right=False``, the legs of Y0 are [(vL.p0), vR].
+    """
+
+    assert min_block_increase >= 0
+    assert expand is not None and expand != 0
+    
+    if move_right:
+        Y0 = theta.copy(deep=False)
+        Y0.legs[1] = Y0.legs[1].to_LegCharge()
+        Y0.ireplace_label('(p1.vR)', 'vR')
+        if any(old_qtotal_R != 0):
+            Y0.gauge_total_charge('vR', new_qtotal=old_qtotal_L)
+        vR_old = old_bond_leg
+        if not vR_old.is_blocked():
+            vR_old = vR_old.sort()[1]
+        vR_new = Y0.get_leg('vR')  # is blocked, since created from pipe
+        v_old, v_new = vR_old, vR_new
+        q_axis, norm_axis = 1, 0
+    else:
+        Y0 = theta.copy(deep=False)
+        Y0.legs[0] = Y0.legs[0].to_LegCharge()
+        Y0.ireplace_label('(vL.p0)', 'vL')
+        if any(old_qtotal_L != 0):
+            Y0.gauge_total_charge('vL', new_qtotal=old_qtotal_R)
+        vL_old = old_bond_leg
+        if not vL_old.is_blocked():
+            vL_old = vL_old.sort()[1]
+        vL_new = Y0.get_leg('vL')  # is blocked, since created from pipe
+        v_old, v_new = vL_old, vL_new
+        q_axis, norm_axis = 0, 1
+
+    # vL(R)_old is guaranteed to be a slice of vL(R)_new by charge rule in T_L(R)_old
+    piv = np.zeros(v_new.ind_len, dtype=bool)  # indices to keep in v_new
+    increase_per_block = max(min_block_increase, int(v_old.ind_len * expand // v_new.block_number))
+    sizes_old = v_old.get_block_sizes()
+    sizes_new = v_new.get_block_sizes()
+
+    # iterate over charge blocks in vL(R)_new and vL(R)_old at the same time
+    j_old = 0
+    q_old = v_old.charges[j_old, :]
+    qdata_order = np.argsort(Y0._qdata[:, q_axis])
+    qdata_idx = 0
+    for j_new, q_new in enumerate(v_new.charges):
+        if all(q_new == q_old):  # have charge block in both v_new and v_old
+            s_new = sizes_old[j_old] + increase_per_block
+            # move to next charge block in next loop iteration
+            j_old += 1
+            if j_old < len(v_old.charges):
+                q_old = v_old.charges[j_old, :]
+        else:  # charge block only in v_new
+            s_new = increase_per_block
+        s_new = min(s_new, sizes_new[j_new])  # don't go beyond block
+
+        if Y0._qdata[qdata_order[qdata_idx], q_axis] != j_new:
+            # block does not exist
+            # while we could set corresponding piv entries to True, it would not help, since
+            # the corresponding "entries" of Y0 are zero anyway
+            continue
+
+        # block has axis [(vL.p0),vR]. want to keep the s_new slices of the vR axis
+        #  that have the largest norm
+        norms = np.linalg.norm(Y0._data[qdata_order[qdata_idx]], axis=norm_axis)
+        kept_slices = np.argsort(-norms)[:s_new]  # negative sign so we sort large to small
+        start = v_new.slices[j_new]
+        piv[start + kept_slices] = True
+
+        qdata_idx += 1
+        if qdata_idx >= Y0._qdata.shape[0]:
+            break
+    
+    if move_right:
+        Y0.iproject(piv, 'vR')
+    else:
+        Y0.iproject(piv, 'vL')
+
+    return Y0
+
+
+def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[None, None],
+                   trunc_params=None):
+    """Computes the singular value decomposition of a matrix A via eigh
+
+    Singular values and vectors are obtained by diagonalizing the "square" A.hc @ A and/or A @ A.hc,
+    i.e. with two eigh calls instead of an svd call.
+
+    Truncation if performed if and only if trunc_params are given.
+    This performs better on GPU, but is not really useful on CPU.
+    If isometries U or Vd are not needed, their computation can be omitted for performance.
+
+    Does not (yet) support computing both U and Vd
+    """
+    warnings.warn('_eig_based_svd is nonsensical on CPU!!')
+    assert A.rank == 2
+
+    if need_U and need_Vd:
+        # TODO (JU) just doing separate eighs for U, S and for S, Vd is not sufficient
+        #  the phases of U / Vd are arbitrary.
+        #  Need to put in more work in that case...
+        raise NotImplementedError
+
+    if need_U:
+        Vd = None
+        A_Ahc = npc.tensordot(A, A.conj(), [1, 1])
+        L, U = npc.eigh(A_Ahc, sort='>')
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentally negative values close to zero
+        U = U.ireplace_label('eig', inner_labels[0])
+    elif need_Vd:
+        U = None
+        Ahc_A = npc.tensordot(A.conj(), A, [0, 0])
+        L, V = npc.eigh(Ahc_A, sort='>')
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentally negative values close to zero
+        Vd = V.iconj().itranspose().ireplace_label('eig*', inner_labels[1])
+    else:
+        U = None
+        Vd = None
+        # use the smaller of the two square matrices -- they have the same eigenvalues
+        if A.shape[1] >= A.shape[0]:
+            A2 = npc.tensordot(A, A.conj(), [1, 0])
+        else:
+            A2 = npc.tensordot(A.conj(), A, [1, 0])
+        L = npc.eigvalsh(A2)
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentally negative values close to zero
+
+    if trunc_params is not None:
+        piv, renormalize, trunc_err = truncate(S, trunc_params)
+        S = S[piv]
+        S /= renormalize
+        if need_U:
+            U.iproject(piv, 1)
+        if need_Vd:
+            Vd.iproject(piv, 0)
+    else:
+        renormalize = np.linalg.norm(S)
+        S /= renormalize
+        trunc_err = TruncationError()
+
+    return U, S, Vd, trunc_err, renormalize
+
+
+def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, 
+                             move_right: bool, expand: float, min_block_increase: int, 
+                             use_eig_based_svd: bool, trunc_params: dict, compute_err: bool, 
+                             return_both_T: bool):
+    r"""Performs a QR based decomposition of a matrix `theta` (= the wavefunction) and truncates it.
+    The result is an approximation.
+
+    The decomposition for ``use_eig_based_svd=False`` is::
+
+        |   -- theta --   ~=   renormalization * -- T_Lc --- S --- T_Rc --
+        |      |   |                                 |              |
+
+    Where `T_Lc` is in `'A'` form and `T_Rc` in `'B'` form.
+
+    The decomposition for ``use_eig_based_svd=True`` is::
+
+        |   -- theta --   ~=   renormalization * -- T_Lc --- T_Rc --
+        |      |   |                                 |        |
+
+    Where `T_Lc` is in `'A'` (`'Th'`) form and `T_Rc` in `'Th'` (`'B'`) form, if ``move_right=True`` 
+    (``move_right=False``).
+    
+    Parameters
+    ----------
+    old_qtotal_L : 1D array
+        The total charge of the old left tensor.
+        e.g. ``old_qtotal_L = T_L.qtotal``
+    old_qtotal_R : 1D array
+        The total charge of the old right tensor.
+        e.g. ``old_qtotal_R = T_R.qtotal``
+    old_bond_leg : :class:`~tenpy.linalg.charges.LegCharge`
+        The leg between the old left tensor and the old right tensor.
+        e.g. ``old_bond_leg = T_L.get_leg('vR')`` or ``old_bond_leg = T_R.get_leg('vL')``
+    theta : npc.Array
+        Array with legs [(vL.p0), (p1.vR)]
+    expand : float | None
+        Expansion rate. The QR-based decomposition is carried out at an expanded bond dimension.
+    min_block_increase : int
+        Minimum bond dimension increase for each block.
+    move_right : bool 
+        If `True`, the left tensor `T_Lc` is returned in `'A'` form and the right tensor `T_Rc` is set to `None`.
+        If `False`, the right tensor `T_Rc` is returned in `'B'` form and the left tensor `T_Lc` is set to `None`.
+    use_eig_based_svd : bool
+        Whether the SVD of the bond matrix :math:`\Xi` should be carried out numerically via
+        the eigensystem. This is faster on GPUs, but less accurate.
+        It makes no sense to do this on CPU.
+    trunc_par : dict
+        truncation parameters as described in :func:`truncate`.
+    compute_err : bool
+        Whether the truncation error should be computed exactly.
+        Computing the truncation error is significantly more expensive.
+        If `True`, the full error is computed and ``return_both_T=True``.
+        Otherwise, the truncation error is set to NaN.
+    return_both_T : bool
+        Whether the other tensor (associated with ``not move_right``) should be returned as well.
+        If `True` and ``move_right=True``, the right tensor `T_Rc` is returned in `'Th'` (`'B'`) form, 
+        if ``use_eig_based_svd=True`` (``use_eig_based_svd=False``).
+        If `True` and ``move_right=False``, the left tensor `T_Lc` is returned in `'Th'` (`'A'`) form, 
+        if ``use_eig_based_svd=True`` (``use_eig_based_svd=False``).
+
+    Returns
+    -------
+    T_Lc : array with legs [(vL.p), vR] or None
+    S : 1D numpy array
+        The singular values of the array.
+        Normalized to ``np.linalg.norm(S)==1``.
+    T_Rc : array with legs [vL, (p.vR)] or None
+    form : list
+        List containing two entries providing the form of the two arrays `T_Lc` and `T_Rc` in string form.
+        e.g. ``['A','Th']``
+    trunc_err : TruncationError
+    renormalization : float
+        Factor, by which S was renormalized.
+    """
+
+    if compute_err:
+        return_both_T = True
+    
+    if move_right:
+        # Get initial guess for the left isometry
+        Y0 = _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta, move_right, expand, min_block_increase) # Y0: [(vL.p0), vR]
+
+        # QR based updates
+        theta_i1 = npc.tensordot(Y0.conj(), theta, ['(vL*.p0*)', '(vL.p0)']).ireplace_label('vR*', 'vL') # theta_i1: [vL,(p1.vR)]
+        theta_i1.itranspose(['(p1.vR)', 'vL']) # theta_i1: [(p1.vR),vL]
+        B_R, _ = npc.qr(theta_i1, inner_labels=['vL', 'vR'], inner_qconj=-1) # B_R: [(p1.vR),vL] 
+        B_R.itranspose(['vL', '(p1.vR)']) # B_R: [vL,(p1.vR)] 
+
+        theta_i0 = npc.tensordot(theta, B_R.conj(), ['(p1.vR)', '(p1*.vR*)']).ireplace_label('vL*', 'vR') # theta_i0: [(vL.p0),vR]
+        A_L, Xi = npc.qr(theta_i0, inner_labels=['vR', 'vL']) # A_L: [(vL.p0), vR]
+        
+    else:
+        # Get initial guess for the right isometry
+        Y0 = _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta, move_right, expand, min_block_increase) # Y0: [vL, (p1.vR)]
+
+        # QR based updates
+        theta_i0 = npc.tensordot(theta, Y0.conj(), ['(p1.vR)', '(p1*.vR*)']).ireplace_label('vL*', 'vR') # theta_i0: [(vL.p0),vR]
+        A_L, _ = npc.qr(theta_i0, inner_labels=['vR', 'vL']) # A_L: [(vL.p0), vR]
+
+        theta_i1 = npc.tensordot(A_L.conj(), theta, ['(vL*.p0*)', '(vL.p0)']).ireplace_label('vR*', 'vL') # theta_i1: [vL,(p1.vR)]
+        theta_i1.itranspose(['(p1.vR)', 'vL']) # theta_i1: [(p1.vR),vL]
+        B_R, Xi = npc.qr(theta_i1, inner_labels=['vL', 'vR'], inner_qconj=-1)
+        B_R.itranspose(['vL', '(p1.vR)'])
+        Xi.itranspose(['vL', 'vR'])
+
+    # SVD of bond matrix Xi
+    if use_eig_based_svd:
+        U, S, Vd, _, renormalization = _eig_based_svd(
+            Xi, need_U=move_right, need_Vd=(not move_right), inner_labels=['vR', 'vL'], trunc_params=trunc_params
+        )
+    else:
+        U, S, Vd, _, renormalization = svd_theta(Xi, trunc_params)
+
+    # Assign return matrices
+    T_Lc, T_Rc = None, None
+    form = ['A','B']
+    if move_right:
+        T_Lc = npc.tensordot(A_L, U, ['vR', 'vL'])
+        if return_both_T:
+            if use_eig_based_svd:
+                T_Rc = npc.tensordot(Xi, B_R, ['vR', 'vL'])
+                T_Rc = npc.tensordot(U.iconj(), T_Rc, ['vL*', 'vL']).ireplace_label('vR*', 'vL')
+                T_Rc /= npc.norm(T_Rc)
+                form[1] = 'Th'
+            else:
+                T_Rc = npc.tensordot(Vd, B_R, ['vR', 'vL'])
+    else:
+        T_Rc = npc.tensordot(Vd, B_R, ['vR', 'vL'])
+        if return_both_T:
+            if use_eig_based_svd:
+                T_Lc = npc.tensordot(A_L, Xi, ['vR', 'vL'])
+                T_Lc = npc.tensordot(T_Lc, Vd.iconj(), ['vR', 'vR*']).ireplace_label('vL*', 'vR')
+                T_Lc /= npc.norm(T_Lc)
+                form[0] = 'Th'
+            else:
+                T_Lc = npc.tensordot(A_L, U, ['vR', 'vL'])
+    
+    # Compute error
+    if compute_err:
+        if use_eig_based_svd:
+            theta_approx = npc.tensordot(T_Lc, T_Rc, ['vR', 'vL'])
+        else:
+            theta_approx = npc.tensordot(T_Lc.scale_axis(S, axis='vR'), T_Rc, ['vR', 'vL'])
+        N_theta = npc.norm(theta)
+        eps = npc.norm(theta / N_theta - theta_approx * renormalization / N_theta) ** 2
+        trunc_err = TruncationError(eps, 1. - 2. * eps)
+    else:
+        trunc_err = TruncationError(np.nan, np.nan)
+
+    # Replace labels
+    if move_right:
+        T_Lc.ireplace_label('(vL.p0)', '(vL.p)')
+        if return_both_T:
+            T_Rc.ireplace_label('(p1.vR)', '(p.vR)')
+    else:
+        T_Rc.ireplace_label('(p1.vR)', '(p.vR)')
+        if return_both_T:
+            T_Lc.ireplace_label('(vL.p0)', '(vL.p)')
+        
+    return T_Lc, S, T_Rc, form, trunc_err, renormalization
 
 
 def _combine_constraints(good1, good2, warn):

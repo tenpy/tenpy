@@ -1215,6 +1215,10 @@ class MPO:
         elif method == 'zip_up':
             trunc_err = self.apply_zipup(psi, options)
             return trunc_err + psi.compress_svd(trunc_params)
+        elif method == 'variationalQR':
+            from ..algorithms.mps_common import QRBasedVariationalApplyMPO
+            return QRBasedVariationalApplyMPO(psi, self, options).run()
+
         # TODO: zipup method infinite?
         raise ValueError("Unknown compression method: " + repr(method))
 
