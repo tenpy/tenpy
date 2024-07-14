@@ -9,8 +9,7 @@ import tenpy
 
 
 def main():
-    print(tenpy.show_config())
-    print(tenpy.__file__)
+    tenpy.show_config()
     
     # arg-parsing
     parser = argparse.ArgumentParser()
@@ -19,6 +18,9 @@ def main():
     parser.add_argument(
         '--debug-plot', action='store_true',
         help='only plot the most recent debugging results, without rerunning the simulation'
+    )
+    parser.add_argument(
+        '--plot', metavar='FOLDER', type=str, default=None, help='Plot results in the given folder'
     )
     parser.add_argument(
         '-o', type=str, default=None, help='Folder for output'
@@ -52,6 +54,10 @@ def main():
     
     if args.debug_plot:
         test_plotting(outfolder, args.conserve)
+        return
+
+    if args.plot:
+        make_plot(folder=args.plot)
         return
     
     g_list = np.linspace(2, 4, 101, endpoint=True)
@@ -199,7 +205,6 @@ def plot_results(results, plot_file=None, show=False):
     
     import matplotlib.pyplot as plt
     import matplotlib as mpl
-
     fontsize = 10
     textwidth = 7.05826
     mpl.rcParams.update({'font.size': fontsize})
@@ -250,6 +255,93 @@ def plot_results(results, plot_file=None, show=False):
         print(f'saved plot to {plot_file}')
     if show:
         plt.show()
+
+
+def make_plot(folder):
+    print()
+    
+    results_None = {}
+    results_best = {}
+    for fn in os.listdir(folder):
+        if not str(fn).startswith('tfi_2D'):
+            continue
+        if not str(fn).endswith('.pkl'):
+            continue
+        _, rest = fn.split('tfi_2D_conserve_')
+        conserve, rest = rest.split('_Ly_')
+        Ly, rest = rest.split('_chi_')
+        chi, _ = rest.split('.pkl')
+        Ly = int(Ly)
+        chi = int(chi)
+        with open(os.path.join(folder, fn), 'rb') as f:
+            res = pickle.load(f)
+        if conserve == 'best':
+            results_best[Ly, chi] = res
+        else:
+            assert conserve == 'None'
+            results_None[Ly, chi] = res
+    
+    import matplotlib.pyplot as plt
+    import matplotlib as mpl
+    fontsize = 12
+    textwidth = 7.05826
+    mpl.rcParams.update({'font.size': fontsize})
+
+    for conserve, results in zip(['best', 'None'], [results_best, results_None]):
+        _g_lists = [res['g_list'] for res in results.values()]
+        g_list = _g_lists[0]
+        for other in _g_lists[1:]:
+            assert np.allclose(other, g_list)
+        
+        fig_width = textwidth
+        aspect = .7
+        fig, axs = plt.subplots(2, 2, figsize=(fig_width, aspect * fig_width), sharex=True)
+        for ax in axs[1]:
+            ax.set_xlabel('$g/J$')
+            ax.set_xlim(min(g_list), max(g_list))
+
+        # define line styles
+        min_chi = 2
+        max_chi = 500
+        plot_styles = {
+            (Ly, chi): dict(
+                label=f'${Ly},~{chi}$',
+                color=mpl.colormaps['Reds' if Ly == 8 else 'Blues'](
+                    np.log(chi / min_chi) / np.log(max_chi / min_chi)
+                ),
+                ls={20: '-', 50: '--', 200: '-.'}[chi],
+                lw={4: 1.5, 8: 2}[Ly]
+            )
+            for Ly, chi in results
+        }  # plot_styles[Ly, chi] == kwargs_for_plot_function
+
+        sorted_keys = [(Ly, chi) for Ly, chi in sorted(results.keys()) if Ly != 6]
+        print(sorted_keys)
+
+        # subplot: <Z> magnetization
+        axs[0, 0].set_ylabel(r'$\langle \sigma^z \rangle$')
+        for key in sorted_keys:
+            axs[0, 0].plot(g_list, results[key]['mag_z_list'], **plot_styles[key])
+
+        # subplot: S_vN entropy
+        axs[0, 1].set_ylabel(r'$S_{\text{vN}} ~/~ \mathrm{log} 2$')
+        for key in sorted_keys:
+            axs[0, 1].plot(g_list, results[key]['entropies'] / np.log(2), **plot_styles[key])
+
+        # subplot: <X> magnetization
+        axs[1, 0].set_ylabel(r'$\langle \sigma^x \rangle$')
+        for key in sorted_keys:
+            axs[1, 0].plot(g_list, np.abs(results[key]['mag_x_list']), **plot_styles[key])
+
+        # subplot: <XX> correlations
+        axs[1, 1].set_ylabel(r'$\langle \sigma^x_i \sigma^x_j \rangle$')
+        for key in sorted_keys:
+            axs[1, 1].plot(g_list, results[key]['corr_xx_list'], **plot_styles[key])
+
+        axs[1, 1].legend(title=('     $L_y,~\\chi$'))
+        fig.suptitle(f'conserve="{conserve}"', y=1.02)
+        fig.tight_layout(pad=0.1)
+        plt.savefig(os.path.join(folder, f'plot_conserve_{conserve}.pdf'), bbox_inches='tight')
 
 
 if __name__ == '__main__':
