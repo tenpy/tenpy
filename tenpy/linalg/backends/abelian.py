@@ -109,21 +109,13 @@ class AbelianBackendData:
     """
     def __init__(self, dtype: Dtype, blocks: list[Block], block_inds: ndarray,
                  is_sorted: bool = False):
+        if not is_sorted:
+            perm = np.lexsort(block_inds.T)
+            block_inds = block_inds[perm, :]
+            blocks = [blocks[n] for n in perm]
         self.dtype = dtype
         self.blocks = blocks
         self.block_inds = block_inds
-        if not is_sorted:
-            self._sort_block_inds()
-
-    def _sort_block_inds(self):
-        """Bring `block_inds` (back) into the conventional sorted order.
-
-        To speed up functions as tensordot, we always keep the blocks in a well-defined order
-        where ``np.lexsort(block_inds.T)`` is trivial."""
-        perm = np.lexsort(self.block_inds.T)
-        self.block_inds = self.block_inds[perm, :]
-        self.blocks = [self.blocks[p] for p in perm]
-        return perm
 
     def get_block_num(self, block_inds: ndarray) -> Block | None:
         """Return the index ``n`` of the block which matches the block_inds.

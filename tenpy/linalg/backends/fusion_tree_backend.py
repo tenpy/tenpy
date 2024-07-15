@@ -138,28 +138,23 @@ class FusionTreeData:
     block_inds : 2D array
         Indices that specify the coupled sectors of the non-zero blocks.
         ``block_inds[n] == [i, j]`` indicates that the coupled sector is given by
-        ``tensor.codomain.sectors[i] == tensor.domain.sectors[j]``.
-        Must be ``np.lexsort( .T)``-ed (this is not checked!).
-        This is equivalent to demanding that the
-        ``coupled_sectors == tensor.codomain.sectors[block_inds[:, 0]]`` are lexsorted.
+        ``tensor.codomain.sectors[i] == coupled == tensor.domain.sectors[j]``.
     blocks : list of 2D Block
         The nonzero blocks, ``blocks[n]`` corresponding to ``coupled_sectors[n]``.
+    is_sorted : bool
+        If ``False`` (default), we permute `blocks` and `block_inds` according to
+        ``np.lexsort(block_inds.T)``.
+        If ``True``, we assume they are sorted *without* checking.
     """
-    def __init__(self, block_inds: np.ndarray, blocks: list[Block], dtype: Dtype):
-        assert block_inds.ndim == 2
-        assert block_inds.shape == (len(blocks), 2)
+    def __init__(self, block_inds: np.ndarray, blocks: list[Block], dtype: Dtype,
+                 is_sorted: bool = False):
+        if not is_sorted:
+            perm = np.lexsort(block_inds.T)
+            block_inds = block_inds[perm, :]
+            blocks = [blocks[n] for n in perm]
         self.block_inds = block_inds
         self.blocks = blocks
         self.dtype = dtype
-
-    @classmethod
-    def from_unsorted(cls, block_inds: np.ndarray, blocks: list[Block], domain: ProductSpace,
-                      codomain: ProductSpace, dtype: Dtype):
-        """Like __init__, but block_inds does not need to be sorted"""
-        perm = np.lexsort(block_inds.T)
-        block_inds = block_inds[perm, :]
-        blocks = [blocks[n] for n in perm]
-        return cls(block_inds, blocks, domain, codomain, dtype)
 
 
 # TODO do we need to inherit from ABC again?? (same in abelian and no_symmetry)
