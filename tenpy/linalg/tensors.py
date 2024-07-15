@@ -88,7 +88,7 @@ from ..tools.params import asConfig
 
 __all__ = ['Tensor', 'SymmetricTensor', 'DiagonalTensor', 'ChargedTensor', 'Mask',
            'add_trivial_leg', 'almost_equal', 'angle', 'apply_mask', 'apply_mask_DiagonalTensor',
-           'bend_legs', 'combine_legs', 'combine_to_matrix', 'complex_conj', 'conj', 'dagger',
+           'bend_legs', 'combine_legs', 'combine_to_matrix', 'complex_conj', 'dagger',
            'compose', 'eigh', 'enlarge_leg', 'entropy', 'exp', 'imag', 'inner', 'is_scalar', 'item',
            'linear_combination', 'lq', 'move_leg', 'norm', 'outer', 'partial_trace', 'permute_legs',
            'pinv', 'qr', 'real', 'real_if_close', 'scalar_multiply', 'scale_axis', 'split_legs',
@@ -3165,38 +3165,8 @@ def combine_to_matrix(tensor: Tensor,
 
 @_elementwise_function(block_func='block_conj', maps_zero_to_zero=True)
 def complex_conj(x: _ElementwiseType) -> _ElementwiseType:
-    """Complex conjugation, :ref:`elementwise <diagonal_elementwise>`.
-
-    See Also
-    --------
-    conj
-    """
+    """Complex conjugation, :ref:`elementwise <diagonal_elementwise>`."""
     return np.conj(x)
-
-
-def conj(tensor: Tensor) -> Tensor:
-    """The conjugate tensor, defined as ``transpose(dagger(tensor))``.
-
-    The resulting tensor has dual (co-)domain, i.e. the legs are dual and permuted as follows::
-
-        |        a   b   c           c*  b*  a*
-        |        │   │   │           │   │   │
-        |       ┏┷━━━┷━━━┷┓         ┏┷━━━┷━━━┷┓
-        |       ┃    A    ┃         ┃ conj(A) ┃
-        |       ┗━━┯━━━┯━━┛         ┗━━┯━━━┯━━┛
-        |          │   │               │   │
-        |          e   d               d*  e*
-
-    For a matrix, i.e. if ``len(A.domain) == 1 == len(A.codomain)``, this can be thought of
-    as elementwise complex conjugation, i.e. the coefficients of ``A`` in the computational basis
-    are the elementwise conjugates of the coefficients of ``conj(A)`` in the associates dual basis.
-
-    See Also
-    --------
-    complex_conj
-        Elementwise complex conjugation for DiagonalTensors
-    """
-    return transpose(dagger(tensor))
 
 
 def dagger(tensor: Tensor) -> Tensor:
