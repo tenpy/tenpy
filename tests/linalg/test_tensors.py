@@ -601,7 +601,7 @@ def test_explicit_blocks(symmetry_backend, block_backend):
             npt.assert_array_almost_equal_nulp(t.backend.block_backend.block_to_numpy(actual), expect, 100)
     
     elif symmetry_backend == 'fusion_tree':
-        assert np.all(t.data.coupled_sectors == q0[None, :])
+        assert np.all(t.data.block_inds == np.array([0, 0])[None, :])
         forest_block_00 = block_00.reshape((-1, 1))
         forest_block_22 = block_22.reshape((-1, 1))
         forest_block_31 = block_31.reshape((-1, 1))
@@ -677,8 +677,10 @@ def test_explicit_blocks(symmetry_backend, block_backend):
             npt.assert_array_almost_equal_nulp(t.backend.block_backend.block_to_numpy(actual), expect, 100)
     
     elif symmetry_backend == 'fusion_tree':
-        expect_coupled = np.stack([q0, q2, q3])
-        npt.assert_array_equal(t.data.coupled_sectors, expect_coupled)
+        # expect coupled sectors q0, q2, q3.
+        # codomain.sectors == [q0, q2, q3]
+        # domain.sectors == [q0, q1, q2, q3]
+        npt.assert_array_equal(t.data.block_inds, np.array([[0, 0], [1, 2], [2, 3]]))
         expect_blocks = [block_00, block_22, block_33]
         assert len(expect_blocks) == len(t.data.blocks)
         for i, (actual, expect) in enumerate(zip(t.data.blocks, expect_blocks)):
@@ -760,8 +762,11 @@ def test_explicit_blocks(symmetry_backend, block_backend):
             npt.assert_array_almost_equal_nulp(actual_block, expect_block, 100)
 
     elif symmetry_backend == 'fusion_tree':
-        expect_coupled = np.stack([q0, q1, q2, q3])
-        npt.assert_array_equal(t.data.coupled_sectors, expect_coupled)
+        # check block_inds. first make sure the (co)domain.sectors are what we expect
+        assert np.all(t.codomain.sectors == np.stack([q0, q1, q2, q3]))
+        assert np.all(t.domain.sectors == np.stack([q0, q1, q2, q3]))
+        # expect coupled sectors [q0, q1, q2, q3]
+        assert np.all(t.data.block_inds == np.repeat(np.arange(4)[:, None], 2, axis=1))
         #
         # build the blocks for fixed coupled sectors
         # note: when setting the data we listed the uncoupled sectors of the domain
@@ -812,7 +817,7 @@ def test_from_block_su2_symm(symmetry_backend, block_backend):
         backend=backend, labels=[['p1', 'p2'], ['p1*', 'p2*']]
     )
     tens_4.test_sanity()
-    assert np.all(tens_4.data.coupled_sectors == np.array([[0], [2]]))  # spin 0, spin 1
+    assert np.all(tens_4.data.block_inds == np.array([[0, 0], [1, 1]]))  # spin 0, spin 1
     # The blocks are the eigenvalue of the Heisenberg coupling in the fixed total spin sectors
     # For singlet states (coupled=spin-0), we have eigenvalue -3/4
     # For triplet states (coupled=spin-1), we have eigenvalue +1/4

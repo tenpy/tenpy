@@ -21,7 +21,8 @@ __all__ = [
     'merge_recursive', 'flatten', 'setup_logging', 'convert_memory_units', 'consistency_check',
     'TenpyInconsistencyError', 'TenpyInconsistencyWarning', 'BetaWarning', 'rank_data',
     'np_argsort', 'make_stride', 'find_row_differences', 'unstridify',
-    'iter_common_noncommon_sorted_arrays', 'iter_common_sorted', 'iter_common_sorted_arrays'
+    'iter_common_noncommon_sorted', 'iter_common_noncommon_sorted_arrays', 'iter_common_sorted',
+    'iter_common_sorted_arrays'
 ]
 
 
@@ -361,6 +362,36 @@ def unstridify(x, strides):
         y, x = np.divmod(x, s)
         y_list.append(y)
     return np.stack(y_list, axis=-1)
+
+
+def iter_common_noncommon_sorted(a, b):
+    """Yield the following pairs ``i, j`` of indices:
+
+    - Matching entries, i.e. ``(i, j)`` such that ``a[i] == b[j]``
+    - Entries only in `a`, i.e. ``(i, None)`` such that ``a[i]`` is not in `b`
+    - Entries only in `b`, i.e. ``(None, j)`` such that ``b[j]`` is not in `a`
+
+    *Assumes* that `a` and `b` are strictly ascending.
+    """
+    l_a = len(a)
+    l_b = len(b)
+    i, j = 0, 0
+    while i < l_a and j < l_b:
+        if a[i] < b[j]:
+            yield i, None
+            i += 1
+        elif a[i] > b[j]:
+            yield None, j
+            j += 1
+        else:
+            yield i, j
+            i += 1
+            j += 1
+    # can still have i < l_a or j < l_b but not both
+    for i2 in range(i, l_a):
+        yield i2, None
+    for j2 in range(j, l_b):
+        yield None, j2
 
 
 def iter_common_sorted(a, b):
