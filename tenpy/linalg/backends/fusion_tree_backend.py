@@ -137,7 +137,7 @@ class FusionTreeData:
     ----------
     block_inds : 2D array
         Indices that specify the coupled sectors of the non-zero blocks.
-        ``block_inds[n] == [i, j]`` indicates that the coupled sector is given by
+        ``block_inds[n] == [i, j]`` indicates that the coupled sector for ``blocks[n]`` is given by
         ``tensor.codomain.sectors[i] == coupled == tensor.domain.sectors[j]``.
     blocks : list of 2D Block
         The nonzero blocks, ``blocks[n]`` corresponding to ``coupled_sectors[n]``.
