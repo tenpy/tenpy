@@ -47,6 +47,7 @@ class ClockModel(CouplingMPOModel):
             The number of states per site.
         J, g : float | array
             Couplings as defined for the Hamiltonian above.
+            Defaults to ``J=g=1``.
 
     """
 

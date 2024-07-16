@@ -46,6 +46,7 @@ class tJModel(CouplingMPOModel):
             see :class:`~tenpy.networks.site.SpinHalfHoleSite` for details.
         t, J: float | array
             Couplings as defined for the Hamiltonian above. Note the signs!
+            Defaults to ``t=J=1``
     """
 
     def init_sites(self, model_params):

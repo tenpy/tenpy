@@ -60,6 +60,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
             What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
         Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
             Coupling as defined for the Hamiltonian above.
+            Defaults to all ``Jx=Jy=Jz=Jxp=Jyp=Jzp=1`` and zero fields ``h*=0``.
         bc_MPS : {'finite' | 'infinite'}
             MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
 
