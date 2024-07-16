@@ -70,22 +70,6 @@ class VUMPSEngine(IterativeSweeps):
 
     Attributes
     ----------
-    EffectiveH : class type
-        Class for the effective Hamiltonian, i.e., a subclass of
-        :class:`~tenpy.algorithms.mps_common.EffectiveH`. Has a `length` class attribute which
-        specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
-        VUMPS).
-    chi_list : dict | ``None``
-        See :cfg:option:`DMRGEngine.chi_list`
-    eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
-        Effective single-site or two-site Hamiltonian.
-    shelve : bool
-        If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
-        terminate with `shelve = True`.
-    sweeps : int
-        The number of sweeps already performed. (Useful for re-start).
-    time0 : float
-        Time marker for the start of the run.
     update_stats : dict
         A dictionary with detailed statistics of the convergence at local update-level.
         For each key in the following table, the dictionary contains a list where one value is
@@ -400,20 +384,7 @@ class VUMPSEngine(IterativeSweeps):
         pass
 
     def reset_stats(self, resume_data=None):
-        """Reset the statistics, useful if you want to start a new sweep run.
-
-        .. cfg:configoptions :: VUMPSEngine
-
-            chi_list : dict | None
-                A dictionary to gradually increase the `chi_max` parameter of
-                `trunc_params`. The key defines starting from which sweep
-                `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}`` uses
-                ``chi_max=50`` for the first 20 sweeps and ``chi_max=100``
-                afterwards. Overwrites `trunc_params['chi_list']``.
-                By default (``None``) this feature is disabled.
-            sweep_0 : int
-                The number of sweeps already performed. (Useful for re-start).
-        """
+        """Reset the statistics, useful if you want to start a new sweep run."""
 
         super().reset_stats(resume_data)
         self.update_stats = {

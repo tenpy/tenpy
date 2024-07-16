@@ -1,0 +1,3 @@
+- document default model coupling parameters explicitly in docstrings
+- Allow `None` value in :option:`Sweep.chi_list` which is to be replaced by ``trunc_params['chi_max']`` at class initialization.
+  

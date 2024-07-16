@@ -119,6 +119,8 @@ class Sweep(Algorithm):
         Cutoff for singular values when taking inverses of them is required.
     time0 : float
         Time marker for the start of the run.
+    eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
+        Effective single-site or two-site Hamiltonian.
     trunc_err_list : list
         List of truncation errors from the last sweep.
     chi_list : dict | ``None``
@@ -302,6 +304,8 @@ class Sweep(Algorithm):
                 the value `chi` is to be used for ``trunc_params['chi_max']``.
                 For example ``chi_list={0: 50, 20: 100}`` uses ``chi_max=50`` for the first
                 20 sweeps and ``chi_max=100`` afterwards.
+                A value of `None` is initialized to the current value of 
+                ``trunc_params['chi_max']`` at algorithm initialization.
         """
         self.sweeps = 0
         if resume_data is not None and 'sweeps' in resume_data:
@@ -309,6 +313,10 @@ class Sweep(Algorithm):
         self.shelve = False
         self.chi_list = self.options.get('chi_list', None)
         if self.chi_list is not None:
+            for k, v in self.chi_list.items():
+                if v is None:
+                    self.chi_list[k] = chi_max = self.trunc_params['chi_max']
+                    logger.info("Setting chi_list[%d]=%d", k, chi_max)
             done = [k for k in self.chi_list.keys() if k < self.sweeps]
             if len(done) > 0:
                 chi_max = self.chi_list[max(done)]
@@ -2297,7 +2305,7 @@ class VariationalApplyMPO(VariationalCompression):
 
     The goal is to find a new MPS `phi` (with `N` tensors) which is optimally close
     to ``U_MPO|psi>``, i.e. it is normalized and maximizes ``| <phi|U_MPO|psi> |^2``.
-    The network for this (with `M` tensors for `psi`) is given by
+    The network for this (with `M` tensors for `psi`) is given by::
 
 
         |     .-------M[0]----M[1]----M[2]---- ...  ----.

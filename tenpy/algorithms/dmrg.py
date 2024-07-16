@@ -124,22 +124,6 @@ class DMRGEngine(IterativeSweeps):
 
     Attributes
     ----------
-    EffectiveH : class type
-        Class for the effective Hamiltonian, i.e., a subclass of
-        :class:`~tenpy.algorithms.mps_common.EffectiveH`. Has a `length` class attribute which
-        specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
-        DMRG).
-    chi_list : dict | ``None``
-        See :cfg:option:`DMRGEngine.chi_list`
-    eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
-        Effective two-site Hamiltonian.
-    shelve : bool
-        If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
-        terminate with `shelve = True`.
-    sweeps : int
-        The number of sweeps already performed. (Useful for re-start).
-    time0 : float
-        Time marker for the start of the run.
     update_stats : dict
         A dictionary with detailed statistics of the convergence at local update-level.
         For each key in the following table, the dictionary contains a list where one value is
@@ -494,20 +478,7 @@ class DMRGEngine(IterativeSweeps):
             self.psi.canonical_form()
 
     def reset_stats(self, resume_data=None):
-        """Reset the statistics, useful if you want to start a new sweep run.
-
-        .. cfg:configoptions :: DMRGEngine
-
-            chi_list : dict | None
-                A dictionary to gradually increase the `chi_max` parameter of
-                `trunc_params`. The key defines starting from which sweep
-                `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}`` uses
-                ``chi_max=50`` for the first 20 sweeps and ``chi_max=100``
-                afterwards. Overwrites `trunc_params['chi_list']``.
-                By default (``None``) this feature is disabled.
-            sweep_0 : int
-                The number of sweeps already performed. (Useful for re-start).
-        """
+        """Reset the statistics, useful if you want to start a new sweep run."""
         super().reset_stats(resume_data)
         self.update_stats = {
             'i0': [],
@@ -873,67 +844,6 @@ class TwoSiteDMRGEngine(DMRGEngine):
     -------
     .. cfg:config :: TwoSiteDMRGEngine
         :include: DMRGEngine
-
-    Attributes
-    ----------
-    eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
-        Effective two-site Hamiltonian.
-    mixer : :class:`~tenpy.algorithms.mps_common.Mixer` | ``None``
-        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
-    shelve : bool
-        If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
-        terminate with ``shelve = True``.
-    sweeps : int
-        The number of sweeps already performed. (Useful for re-start).
-    time0 : float
-        Time marker for the start of the run.
-    update_stats : dict
-        A dictionary with detailed statistics of the convergence.
-        For each key in the following table, the dictionary contains a list where one value is
-        added each time :meth:`DMRGEngine.update_bond` is called.
-
-        =========== ===================================================================
-        key         description
-        =========== ===================================================================
-        i0          An update was performed on sites ``i0, i0+1``.
-        ----------- -------------------------------------------------------------------
-        age         The number of physical sites involved in the simulation.
-        ----------- -------------------------------------------------------------------
-        E_total     The total energy before truncation.
-        ----------- -------------------------------------------------------------------
-        N_lanczos   Dimension of the Krylov space used in the lanczos diagonalization.
-        ----------- -------------------------------------------------------------------
-        time        Wallclock time evolved since :attr:`time0` (in seconds).
-        =========== ===================================================================
-
-    sweep_stats : dict
-        A dictionary with detailed statistics of the convergence.
-        For each key in the following table, the dictionary contains a list where one value is
-        added each time :meth:`DMRGEngine.sweep` is called (with ``optimize=True``).
-
-        ============= ===================================================================
-        key           description
-        ============= ===================================================================
-        sweep         Number of sweeps performed so far.
-        ------------- -------------------------------------------------------------------
-        E             The energy *before* truncation (as calculated by Lanczos).
-        ------------- -------------------------------------------------------------------
-        Delta_E       The change in `E` (above) since the last iteration.
-        ------------- -------------------------------------------------------------------
-        S             Maximum entanglement entropy.
-        ------------- -------------------------------------------------------------------
-        Delta_S       The change in `S` (above) since the last iteration.
-        ------------- -------------------------------------------------------------------
-        time          Wallclock time evolved since :attr:`time0` (in seconds).
-        ------------- -------------------------------------------------------------------
-        max_trunc_err The maximum truncation error in the last sweep
-        ------------- -------------------------------------------------------------------
-        max_E_trunc   Maximum change or Energy due to truncation in the last sweep.
-        ------------- -------------------------------------------------------------------
-        max_chi       Maximum bond dimension used.
-        ------------- -------------------------------------------------------------------
-        norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
-        ============= ===================================================================
     """
     EffectiveH = TwoSiteH
     DefaultMixer = mps_common.DensityMatrixMixer
@@ -1040,71 +950,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
     .. cfg:config :: SingleSiteDMRGEngine
         :include: DMRGEngine
 
-    Attributes
-    ----------
-    chi_list : dict | ``None``
-        A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
-        defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
-        uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
-        `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
-    eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
-        Effective two-site Hamiltonian.
-    mixer : :class:`~tenpy.algorithms.mps_common.Mixer` | ``None``
-        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
-    shelve : bool
-        If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
-        terminate with ``shelve = True``.
-    sweeps : int
-        The number of sweeps already performed. (Useful for re-start).
-    time0 : float
-        Time marker for the start of the run.
-    update_stats : dict
-        A dictionary with detailed statistics of the convergence.
-        For each key in the following table, the dictionary contains a list where one value is
-        added each time :meth:`DMRGEngine.update_bond` is called.
-
-        =========== ===================================================================
-        key         description
-        =========== ===================================================================
-        i0          An update was performed on sites ``i0, i0+1``.
-        ----------- -------------------------------------------------------------------
-        age         The number of physical sites involved in the simulation.
-        ----------- -------------------------------------------------------------------
-        E_total     The total energy before truncation.
-        ----------- -------------------------------------------------------------------
-        N_lanczos   Dimension of the Krylov space used in the lanczos diagonalization.
-        ----------- -------------------------------------------------------------------
-        time        Wallclock time evolved since :attr:`time0` (in seconds).
-        =========== ===================================================================
-
-    sweep_stats : dict
-        A dictionary with detailed statistics of the convergence.
-        For each key in the following table, the dictionary contains a list where one value is
-        added each time :meth:`DMRGEngine.sweep` is called (with ``optimize=True``).
-
-        ============= ===================================================================
-        key           description
-        ============= ===================================================================
-        sweep         Number of sweeps performed so far.
-        ------------- -------------------------------------------------------------------
-        E             The energy *before* truncation (as calculated by Lanczos).
-        ------------- -------------------------------------------------------------------
-        Delta_E       The change in `E` (above) since the last iteration.
-        ------------- -------------------------------------------------------------------
-        S             Maximum entanglement entropy.
-        ------------- -------------------------------------------------------------------
-        Delta_S       The change in `S` (above) since the last iteration.
-        ------------- -------------------------------------------------------------------
-        time          Wallclock time evolved since :attr:`time0` (in seconds).
-        ------------- -------------------------------------------------------------------
-        max_trunc_err The maximum truncation error in the last sweep
-        ------------- -------------------------------------------------------------------
-        max_E_trunc   Maximum change or Energy due to truncation in the last sweep.
-        ------------- -------------------------------------------------------------------
-        max_chi       Maximum bond dimension used.
-        ------------- -------------------------------------------------------------------
-        norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
-        ============= ===================================================================
     """
     EffectiveH = OneSiteH
     DefaultMixer = mps_common.SubspaceExpansion
