@@ -659,8 +659,11 @@ class Simulation:
     def make_measurements(self):
         """Perform measurements and merge the results into ``self.results['measurements']``."""
         self.logger.info("make measurements")
+        m_start_time = time.time()
         results = self.perform_measurements()
         self._merge_measurement_results(results)
+        m_end_time = time.time()
+        self.logger.info(f"measurements took {m_end_time-m_start_time:.2f}s")
 
     def _merge_measurement_results(self, results):
         """Merge dictionary `results` from measurements into ``self.results['measurement']``."""
