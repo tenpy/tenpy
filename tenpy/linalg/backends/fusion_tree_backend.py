@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Iterator
 from math import prod
 import numpy as np
+from itertools import product
 
 from .abstract_backend import (
     TensorBackend, BlockBackend, Block, Data, DiagonalData, MaskData
@@ -45,7 +46,7 @@ def forest_block_slice(space: ProductSpace, uncoupled: tuple[Sector], coupled: S
     for _unc in space.iter_uncoupled():
         if all(np.all(a == b) for a, b in zip(_unc, uncoupled)):
             break
-        offset += forest_block_size(space, _unc)
+        offset += forest_block_size(space, _unc, coupled)
     else:  # no break ocurred
         raise ValueError('Uncoupled sectors incompatible with `space`')
     size = forest_block_size(space, uncoupled, coupled)
@@ -59,7 +60,7 @@ def tree_block_slice(space: ProductSpace, tree: FusionTree) -> slice:
     for _unc in space.iter_uncoupled():
         if all(np.all(a == b) for a, b in zip(_unc, tree.uncoupled)):
             break
-        offset += forest_block_size(space, _unc)
+        offset += forest_block_size(space, _unc, tree.coupled)
     else:  # no break ocurred
         raise ValueError('Uncoupled sectors incompatible with `space`')
     offset += fusion_trees(space.symmetry, tree.uncoupled, tree.coupled).index(tree)
@@ -67,7 +68,7 @@ def tree_block_slice(space: ProductSpace, tree: FusionTree) -> slice:
     return slice(offset, offset + size)
 
 
-def _tree_block_iter(a: SymmetricTensor, backend: BlockBackend):
+def _tree_block_iter(a: SymmetricTensor):
     sym = a.symmetry
     domain_are_dual = [sp.is_dual for sp in a.domain.spaces]
     codomain_are_dual = [sp.is_dual for sp in a.codomain.spaces]
@@ -75,9 +76,9 @@ def _tree_block_iter(a: SymmetricTensor, backend: BlockBackend):
         coupled = a.codomain.sectors[bi]
         i1_forest = 0  # start row index of the current forest block
         i2_forest = 0  # start column index of the current forest block
-        for b_sectors, n_dims, j2 in _iter_sectors_mults_slices(a.domain.spaces, sym):
+        for b_sectors in _iter_sectors(a.domain.spaces, sym):
             tree_block_width = tree_block_size(a.domain, b_sectors)
-            for a_sectors, m_dims, j1 in _iter_sectors_mults_slices(a.codomain.spaces, sym):
+            for a_sectors in _iter_sectors(a.codomain.spaces, sym):
                 tree_block_height = tree_block_size(a.codomain, a_sectors)
                 i1 = i1_forest  # start row index of the current tree block
                 i2 = i2_forest  # start column index of the current tree block
@@ -87,7 +88,6 @@ def _tree_block_iter(a: SymmetricTensor, backend: BlockBackend):
                         idx1 = slice(i1, i1 + tree_block_height)
                         idx2 = slice(i2, i2 + tree_block_width)
                         entries = block[idx1, idx2]
-                        entries = backend.block_reshape(entries, m_dims + n_dims)
                         yield alpha_tree, beta_tree, entries
                         i2 += tree_block_width  # move right by one tree block
                     i1 += tree_block_height  # move down by one tree block
@@ -98,6 +98,24 @@ def _tree_block_iter(a: SymmetricTensor, backend: BlockBackend):
             i2_forest += forest_block_width
 
 
+def _iter_sectors(spaces: list[Space], symmetry: Symmetry) -> Iterator[SectorArray]:
+    """Helper iterator over all combinations of sectors.
+    Simplified version of `_iter_sectors_mults_slices`.
+
+    Yields
+    ------
+    uncoupled : list of 1D array of int
+        A combination ``[spaces[0].sectors[i0], spaces[1].sectors[i1], ...]``
+        of uncoupled sectors
+    """
+    if len(spaces) == 0:
+        yield symmetry.empty_sector_array
+        return
+
+    for charges in product(*[space.sectors for space in spaces]):
+        yield np.array(charges)
+
+        
 def _iter_sectors_mults_slices(spaces: list[Space], symmetry: Symmetry
                                ) -> Iterator[tuple[SectorArray, list[int], list[slice]]]:
     """Helper iterator over all combinations of sectors and respective mults and slices.
