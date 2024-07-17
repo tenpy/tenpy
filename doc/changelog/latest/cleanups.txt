@@ -1,3 +1,4 @@
 - document default model coupling parameters explicitly in docstrings
 - Allow `None` value in :option:`Sweep.chi_list` which is to be replaced by ``trunc_params['chi_max']`` at class initialization.
-  
+- Handle SIGINT singal during simulation runs to continue until next algorithm checkpoint, save and then exit "gracefully" by raising KeyboardInterrupt.
+  See :meth:`~tenpy.simulations.Simulation.handle_abort_signal`.
