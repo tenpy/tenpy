@@ -201,6 +201,7 @@ class Simulation:
         if cwd is not None:
             if not os.path.exists(cwd):
                 os.mkdir(cwd)
+            self._orig_dir = os.getcwd()  # save current dir to return to it in __exit__()
             os.chdir(cwd)
         self.fix_output_filenames()
         if setup_logging:
@@ -258,6 +259,9 @@ class Simulation:
                                   exc_info=(exc_type, exc_value, traceback))
         self.options.warn_unused(True)
         signal.signal(signal.SIGINT, self._orig_sigint_handler)
+        orig_dir = getattr(self, '_orig_dir', None)
+        if orig_dir is not None:
+            os.chdir(orig_dir)
 
     def handle_abort_signal(self, signum, frame):
         """Handle a SIGINT signal, usually caused by a CTRL-C press.
