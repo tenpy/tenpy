@@ -314,7 +314,7 @@ def _apply_single_c_symbol_inefficient(ten: SymmetricTensor, leg: int | str, lev
     return new_data, new_codomain, new_domain
 
 
-def _apply_single_C_symbol_more_efficient(ten: SymmetricTensor, leg: int | str, levels: list[int]
+def _apply_single_c_symbol_more_efficient(ten: SymmetricTensor, leg: int | str, levels: list[int]
                                           ) -> tuple[FusionTreeData, ProductSpace, ProductSpace]:
     """More efficient implementation of a single C symbol compared to `_apply_single_C_symbol_inefficient`.
     Still not the final version.
