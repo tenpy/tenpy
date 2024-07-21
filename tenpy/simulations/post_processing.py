@@ -68,7 +68,7 @@ class DataLoader:
 
         if filename is not None:
             self.filename = Path(filename)
-            self.logger.info(f"Loading data from {self.filename.name}")
+            self.logger.info(f"Loading data from {self.filename!s}")
             if self.filename.suffix == '.h5' or self.filename.suffix == '.hdf5':
                 # create a h5group (which is open)
                 self.logger.info(
@@ -80,7 +80,7 @@ class DataLoader:
             else:
                 self.logger.info(f"Not using hdf5 data-format.\nLoading data can be slow")
                 # all data is loaded as other filenames
-                self._all_data = hdf5_io.load(self.filename.name)
+                self._all_data = hdf5_io.load(self.filename)
 
             self.sim_params = self._load('simulation_parameters')
 
@@ -110,6 +110,13 @@ class DataLoader:
         if hasattr(self, '_Hdf5Loader'):
             self._Hdf5Loader.h5group.close()
             self.logger.info(f"Closed {self.filename}")
+
+    def __repr__(self):
+        if self.filename is not None:
+            return f"DataLoader(filename={self.filename!r})"
+        if hasattr(self, 'sim'):
+            return f"DataLoader(simulation={self.sim!r})"
+        return "Dataloader(data=...)"
 
     @property
     def measurements(self):
@@ -169,8 +176,8 @@ class DataLoader:
                 raise ValueError("Can't find any results.")
             if isinstance(value, Config):
                 value = value.as_dict()
-            if convert_to_numpy is True:
-                value = self.convert_list_to_ndarray(value)
+            if convert_to_numpy:
+                value = self.convert_list_to_ndarray(value, key=key)
             return value
         except KeyError:
             warnings.warn(f"{key} does not exist!")
@@ -182,23 +189,29 @@ class DataLoader:
         return self._load(key, prefix=prefix, convert_to_numpy=convert_to_numpy)
 
     @staticmethod
-    def convert_list_to_ndarray(value):
-        try:
-            if isinstance(value, list):
-                value = np.array(value)
-                if value.dtype == np.dtype(object):
-                    raise Exception("Can't convert results to numpy array")
-        except Exception as e:
-            logging.exception(f"{e}, proceeding without converting")
+    def convert_list_to_ndarray(value, key):
+        if isinstance(value, list):
+            converted_value = np.array(value)
+            if converted_value.dtype == np.dtype(object):
+                self.logger.info("Can't convert %s to numpy array, proceed without conversion",
+                                 key)
+            else:
+                value = converted_value
         return value
 
     @property
     def model(self):
         if not hasattr(self, '_model'):
-            self._model = self.get_model()
+            self._model = self._get_model()
         return self._model
 
     def get_model(self):
+        """Deprecated in favor of the simpler property access via :attr:`DataLoader.model`."""
+        warnings.warn("Use ``DataLoader.model`` instead of ``DataLoader.get_model()``",
+                      FutureWarning, 2)
+        return self.model
+
+    def _get_model(self):
         model_class_name = self.sim_params['model_class']
         model_params = self.sim_params['model_params']
         model_class = find_subclass(Model, model_class_name)
