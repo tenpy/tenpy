@@ -240,6 +240,122 @@ class DataLoader:
             raise ValueError("Can't find any results.")
 
 
+class DataFiles:
+    """Hold multiple DataLoader instances open, indexed by the filename.
+
+    Acts like a dictionary mapping filenames to :class:`DataLoader`.
+    Item accesss implicitly opens files that are not yet loaded.
+
+    Parameters
+    ----------
+    files : list of str
+        Filenames of output files to be opened.
+
+    Examples
+    --------
+    >>> data_files = DataFiles(['results/output_1.h5',
+    ...                         'results_other/output_3.h5'])
+    >>> data_files['results/output_1.h5']
+    DataLoader(filename='results/output_1.h5')
+    >>> data_files['results/output_2.h5']
+    loading results/output_2.h5 ... successful
+    """
+    def __init__(self, files=None, folder=None):
+        self._open_files = {} # filename -> DataLoader
+        self._resolve_filenames = {}
+        self._keys = []
+        if files:
+            for file in files:
+                _ = self[file]
+        if folder:
+            self.load_from_folder(folder)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
+    def close(self):
+        """Close all files held open by self."""
+        for dl in self._open_files.values():
+            dl.close()
+
+    def __getitem__(self, filename):
+        normalized = self._normalize_filename(filename)
+        data = self._open_files.get(normalized, None)
+        if data is None:
+            filename = str(filename)
+            try:
+                data = DataLoader(filename)
+            except OSError as e:
+                print(f"Erorr: failed to open {filename}")
+                raise e from None
+            self._keys.append(filename)
+            self._open_files[normalized] = data
+        return data
+
+    def __setitem__(self, filename, data_loader):
+        if filename is None:
+            filename = data_loader.filename
+        normalized = self._normalize_filename(filename)
+        self._open_files[normalized] = data_loader
+        return data_loader  # TODO: do we need to return this?
+
+    def _normalize_filename(self, filename):
+        filename = str(filename)
+        resolved = self._resolve_filenames.get(filename, None)
+        if resolved is None:
+            resolved = str(Path(filename).resolve())
+            self._resolve_filenames[filename] = resolved
+        return resolved
+
+    def keys(self):
+        """Return paths of the files opened."""
+        return self._keys
+
+    def values(self):
+        """Return iterator over the :class:`DataLoader` instances."""
+        return self._open_files.values()
+
+    def items(self):
+        return zip(self._keys, self.values())
+
+    def __delitem__(self, filename):
+        normalized = self._normalize_filename(filename)
+        self._open_files[normalized].close()
+        del self._open_files[normalized]
+        for key in self._keys:
+            if self._resolve_filenames[key] == normalized:
+                self._keys.remove(key)
+                break
+        for key, val in list(self._resolve_filenames.items()):
+            if val == normalized:
+                del self._resolve_filenames[key]
+
+    def __repr__(self):
+        if self._open_files:
+            return "<DataFiles() with files\n    " + '\n    '.join(self.keys()) + ">"
+
+    def load_from_folder(self, folder, glob="*.h5"):
+        """Load all data files from a given folder."""
+        files = Path(folder).glob(glob)
+        for file in files:
+            print(f"loading {file!s}", end=' ')
+            try:
+                _ = self[file]
+            except OSError as e:
+                print("... FAILED! Ignoring.")
+            else:
+                print("... successful")
+        # done
+
+    # TODO: tests for this
+
+    # TODO: semi-automatically analyze sim_params and find differences?
+    # TODO get pandas.DataFrame from changing keys
+
+
 def pp_spectral_function(DL: DataLoader,
                          *,
                          correlation_key,
