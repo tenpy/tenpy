@@ -1,5 +1,6 @@
 """A collection of tests for tenpy.linalg.backends.fusion_tree_backend"""
 # Copyright (C) TeNPy Developers, GNU GPLv3
+from typing import Callable
 import pytest
 import numpy as np
 
@@ -7,7 +8,7 @@ from tenpy.linalg import backends
 from tenpy.linalg.backends import fusion_tree_backend, get_backend
 from tenpy.linalg.spaces import ElementarySpace, ProductSpace
 from tenpy.linalg.tensors import SymmetricTensor
-from tenpy.linalg.symmetries import fibonacci_anyon_category
+from tenpy.linalg.symmetries import ProductSymmetry, fibonacci_anyon_category, SU2Symmetry
 from tenpy.linalg.dtypes import Dtype
 
 
@@ -22,6 +23,46 @@ def test_block_sizes(any_symmetry, make_any_space, make_any_sectors, block_backe
                     for uncoupled in domain.iter_uncoupled())
         res = fusion_tree_backend.block_size(domain, coupled)
         assert res == expect
+
+
+def assert_tensors_almost_equal(a: SymmetricTensor, expect: SymmetricTensor, eps: float):
+    assert a.codomain == expect.codomain
+    assert a.domain == expect.domain
+    assert a.backend.almost_equal(a, expect, rtol=eps, atol=eps)
+
+
+def assert_repeated_braids_trivial(a: SymmetricTensor, funcs: list[Callable], levels: list[int], repeat: int, eps: float):
+    for func in funcs:
+        for leg in range(a.num_legs-1):
+            if leg == a.num_codomain_legs - 1:
+                continue
+            new_a = a.copy()
+            for _ in range(repeat):
+                new_data, new_codomain, new_domain = func(new_a, leg=leg, levels=levels)
+                new_a = SymmetricTensor(new_data, new_codomain, new_domain, backend=a.backend)
+
+            assert_tensors_almost_equal(new_a, a, eps)
+
+
+def assert_clockwise_counterclockwise_trivial(a: SymmetricTensor, funcs: list[Callable], levels: list[int], eps: float):
+    # we still allow for input levels to test clockwise -> counterclockwise and counterclockwise -> clockwise
+    for func in funcs:
+        for leg in range(a.num_legs-1):
+            if leg == a.num_codomain_legs - 1:
+                continue
+            new_a = a.copy()
+            new_levels = levels[:]
+            for _ in range(2):
+                new_data, new_codomain, new_domain = func(new_a, leg=leg, levels=new_levels)
+                new_a = SymmetricTensor(new_data, new_codomain, new_domain, backend=a.backend)
+                new_levels[leg:leg+2] = new_levels[leg:leg+2][::-1]
+
+            assert_tensors_almost_equal(new_a, a, eps)
+
+
+def assert_braiding_and_scale_axis_commutation(a: SymmetricTensor, funcs: list[Callable], levels: list[int], eps: float):
+    # TODO
+    raise NotImplementedError
 
 
 def test_c_symbol_fibonacci_anyons(block_backend: backends.BlockBackend):
@@ -84,9 +125,7 @@ def test_c_symbol_fibonacci_anyons(block_backend: backends.BlockBackend):
         new_data, new_codomain, new_domain = func(tens, leg=0, levels=levels)
         new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
 
-        assert new_codomain == expect_codomain
-        assert new_domain == domain
-        assert backend.almost_equal(new_tens, expect_tens, rtol=eps, atol=eps)
+        assert_tensors_almost_equal(new_tens, expect_tens, eps)
 
 
     # exchanges legs 5 and 6 (in domain)
@@ -110,9 +149,7 @@ def test_c_symbol_fibonacci_anyons(block_backend: backends.BlockBackend):
         new_data, new_codomain, new_domain = func(tens, leg=5, levels=levels)
         new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
 
-        assert new_codomain == codomain
-        assert new_domain == expect_domain
-        assert backend.almost_equal(new_tens, expect_tens, rtol=eps, atol=eps)
+        assert_tensors_almost_equal(new_tens, expect_tens, eps)
 
 
     # exchanges legs 2 and 3 (in codomain)  e,c,d   a,c,f conj()
@@ -154,38 +191,130 @@ def test_c_symbol_fibonacci_anyons(block_backend: backends.BlockBackend):
         new_data, new_codomain, new_domain = func(tens, leg=2, levels=levels)
         new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
 
-        assert new_codomain == codomain
-        assert new_domain == domain
-        assert backend.almost_equal(new_tens, expect_tens, rtol=eps, atol=eps)
+        assert_tensors_almost_equal(new_tens, expect_tens, eps)
 
 
     # braid 10 times == trivial
-    for func in funcs:
-        for leg in range(tens.num_legs-1):
-            if leg == tens.num_codomain_legs - 1:
-                continue
-            new_tens = tens.copy()
-            for _ in range(10):
-                new_data, new_codomain, new_domain = func(new_tens, leg=leg, levels=levels)
-                new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
-
-            assert new_codomain == codomain
-            assert new_domain == domain
-            assert backend.almost_equal(new_tens, tens, rtol=eps, atol=eps)
-
+    assert_repeated_braids_trivial(tens, funcs, levels, repeat=10, eps=eps)
 
     # braid clockwise and then counter-clockwise == trivial
-    for func in funcs:
-        for leg in range(tens.num_legs-1):
-            if leg == tens.num_codomain_legs - 1:
-                continue
-            new_tens = tens.copy()
-            new_levels = levels[:]
-            for _ in range(2):
-                new_data, new_codomain, new_domain = func(new_tens, leg=leg, levels=new_levels)
-                new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
-                new_levels[leg:leg+2] = new_levels[leg:leg+2][::-1]
+    assert_clockwise_counterclockwise_trivial(tens, funcs, levels, eps=eps)
 
-            assert new_codomain == codomain
-            assert new_domain == domain
-            assert backend.almost_equal(new_tens, tens, rtol=eps, atol=eps)
+
+
+def test_c_symbol_product_sym(block_backend: backends.BlockBackend):
+    # TODO rescaling axes commutes with braiding
+    # test c symbols
+    
+    funcs = [fusion_tree_backend._apply_single_c_symbol_inefficient,
+             fusion_tree_backend._apply_single_c_symbol_more_efficient]
+    backend = backends.FusionTreeBackend(block_backend=block_backend)
+    eps = 1.e-14
+    sym = ProductSymmetry([fibonacci_anyon_category, SU2Symmetry()])
+    s1 = ElementarySpace(sym, [[1, 1]], [2])  # only (tau, spin-1/2)
+    s2 = ElementarySpace(sym, [[0, 0], [1, 1]], [1, 2])  # (1, spin-0) and (tau, spin-1/2)
+    codomain = ProductSpace([s2, s2, s2])
+    domain = ProductSpace([s2, s1, s2])
+
+    # block charges: 0: [0, 0], 1: [1, 0], 2: [0, 1], 3: [1, 1]
+    #                4: [0, 2], 5: [1, 2], 6: [0, 3], 7: [1, 3]
+    block_inds = np.array([[i, i] for i in range(8)])
+    shapes = [(13, 8), (12, 8), (16, 16), (38, 34), (12, 8), (12, 8), (8, 8), (16, 16)]
+    blocks = [np.arange(shp[0]*shp[1], dtype=complex).reshape(shp) for shp in shapes]
+    blocks = [backend.block_backend.block_random_uniform(shp, Dtype.complex128) for shp in shapes]
+    data = backends.FusionTreeData(block_inds, blocks, Dtype.complex128)
+
+    tens = SymmetricTensor(data, codomain, domain, backend=backend)
+
+    levels = list(range(tens.num_legs))[::-1]  # for the exchanges
+
+    # exchange legs 0 and 1 (in codomain)
+    r1 = np.exp(-4j*np.pi/5)  # Fib R symbols
+    rtau = np.exp(3j*np.pi/5)
+    exc = [0, 2, 1, 3]
+    exc2 = [4, 5, 6, 7, 0, 1, 2, 3]
+    exc3 = [0, 1, 4, 5, 2, 3, 6, 7]
+
+    expect = [np.zeros(shp, dtype=complex) for shp in shapes]
+
+    expect[0][:9, :] = blocks[0][[0] + [1 + i for i in exc2], :]
+    expect[0][9:, :] = blocks[0][[9 + i for i in exc], :] * r1 * -1
+
+    expect[1][:8, :] = blocks[1][exc2, :]
+    expect[1][8:, :] = blocks[1][[8 + i for i in exc], :] * rtau * -1
+
+    expect[2][:8, :] = blocks[2][exc3, :] * rtau * -1
+    expect[2][8:, :] = blocks[2][[8 + i for i in exc3], :] * rtau
+
+    expect[3][:6, :] = blocks[3][[0, 1, 4, 5, 2, 3], :]
+    expect[3][6:14, :] = blocks[3][[6 + i for i in exc3], :] * r1 * -1
+    expect[3][14:22, :] = blocks[3][[14 + i for i in exc3], :] * r1
+    expect[3][22:30, :] = blocks[3][[22 + i for i in exc3], :] * rtau * -1
+    expect[3][30:, :] = blocks[3][[30 + i for i in exc3], :] * rtau
+
+    expect[4][:8, :] = blocks[4][exc2, :]
+    expect[4][8:, :] = blocks[4][[8 + i for i in exc], :] * r1
+
+    expect[5][:8, :] = blocks[5][exc2, :]
+    expect[5][8:, :] = blocks[5][[8 + i for i in exc], :] * rtau
+
+    expect[6][:, :] = blocks[6][exc3, :] * rtau
+
+    expect[7][:8, :] = blocks[7][exc3, :] * r1
+    expect[7][8:, :] = blocks[7][[8 + i for i in exc3], :] * rtau
+
+    expect_data = backends.FusionTreeData(block_inds, expect, Dtype.complex128)
+    expect_tens = SymmetricTensor(expect_data, codomain, domain, backend=backend)
+
+    for func in funcs:
+        new_data, new_codomain, new_domain = func(tens, leg=0, levels=levels)
+        new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
+
+        assert_tensors_almost_equal(new_tens, expect_tens, eps)
+
+
+    # exchange legs 4 and 5 (in domain)
+    expect = [np.zeros(shp, dtype=complex) for shp in shapes]
+
+    expect[0][:, :4] = blocks[0][:, :4]
+    expect[0][:, 4:] = blocks[0][:, [4 + i for i in exc]] * r1 * -1
+
+    expect[1][:, :4] = blocks[1][:, :4]
+    expect[1][:, 4:] = blocks[1][:, [4 + i for i in exc]] * rtau * -1
+
+    expect[2][:, :8] = blocks[2][:, exc3] * rtau * -1
+    expect[2][:, 8:] = blocks[2][:, [8 + i for i in exc3]] * rtau
+
+    expect[3][:, :2] = blocks[3][:, :2]
+    expect[3][:, 2:10] = blocks[3][:, [2 + i for i in exc3]] * r1 * -1
+    expect[3][:, 10:18] = blocks[3][:, [10 + i for i in exc3]] * r1
+    expect[3][:, 18:26] = blocks[3][:, [18 + i for i in exc3]] * rtau * -1
+    expect[3][:, 26:34] = blocks[3][:, [26 + i for i in exc3]] * rtau
+
+    expect[4][:, :4] = blocks[4][:, :4]
+    expect[4][:, 4:] = blocks[4][:, [4 + i for i in exc]] * r1
+
+    expect[5][:, :4] = blocks[5][:, :4]
+    expect[5][:, 4:] = blocks[5][:, [4 + i for i in exc]] * rtau
+
+    expect[6][:, :] = blocks[6][:, exc3] * rtau
+
+    expect[7][:, :8] = blocks[7][:, exc3] * r1
+    expect[7][:, 8:] = blocks[7][:, [8 + i for i in exc3]] * rtau
+
+    expect_data = backends.FusionTreeData(block_inds, expect, Dtype.complex128)
+    expect_domain = ProductSpace([s1, s2, s2])
+    expect_tens = SymmetricTensor(expect_data, codomain, expect_domain, backend=backend)
+
+    for func in funcs:
+        new_data, new_codomain, new_domain = func(tens, leg=4, levels=levels)
+        new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
+
+        assert_tensors_almost_equal(new_tens, expect_tens, eps)
+
+
+    # braid 10 times == trivial
+    assert_repeated_braids_trivial(tens, funcs, levels, repeat=10, eps=eps)
+
+    # braid clockwise and then counter-clockwise == trivial
+    assert_clockwise_counterclockwise_trivial(tens, funcs, levels, eps=eps)
