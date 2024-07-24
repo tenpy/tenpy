@@ -70,7 +70,7 @@ def test_c_symbol_fibonacci_anyons(block_backend: backends.BlockBackend):
 
     funcs = [fusion_tree_backend._apply_single_c_symbol_inefficient,
              fusion_tree_backend._apply_single_c_symbol_more_efficient]
-    backend = backends.FusionTreeBackend(block_backend=block_backend)
+    backend = get_backend('fusion_tree', block_backend)
     eps = 1.e-14
     sym = fibonacci_anyon_category
     s1 = ElementarySpace(sym, [[1]], [1])  # only tau
@@ -152,7 +152,7 @@ def test_c_symbol_fibonacci_anyons(block_backend: backends.BlockBackend):
         assert_tensors_almost_equal(new_tens, expect_tens, eps)
 
 
-    # exchanges legs 2 and 3 (in codomain)  e,c,d   a,c,f conj()
+    # exchanges legs 2 and 3 (in codomain)
     phi = (1 + 5**0.5) / 2
     ctttt11 = phi**-1 * r1.conj()  # C symbols
     cttttt1 = phi**-0.5 * rtau * r1.conj()
@@ -208,7 +208,7 @@ def test_c_symbol_product_sym(block_backend: backends.BlockBackend):
     
     funcs = [fusion_tree_backend._apply_single_c_symbol_inefficient,
              fusion_tree_backend._apply_single_c_symbol_more_efficient]
-    backend = backends.FusionTreeBackend(block_backend=block_backend)
+    backend = get_backend('fusion_tree', block_backend)
     eps = 1.e-14
     sym = ProductSymmetry([fibonacci_anyon_category, SU2Symmetry()])
     s1 = ElementarySpace(sym, [[1, 1]], [2])  # only (tau, spin-1/2)
@@ -220,7 +220,6 @@ def test_c_symbol_product_sym(block_backend: backends.BlockBackend):
     #                4: [0, 2], 5: [1, 2], 6: [0, 3], 7: [1, 3]
     block_inds = np.array([[i, i] for i in range(8)])
     shapes = [(13, 8), (12, 8), (16, 16), (38, 34), (12, 8), (12, 8), (8, 8), (16, 16)]
-    blocks = [np.arange(shp[0]*shp[1], dtype=complex).reshape(shp) for shp in shapes]
     blocks = [backend.block_backend.block_random_uniform(shp, Dtype.complex128) for shp in shapes]
     data = backends.FusionTreeData(block_inds, blocks, Dtype.complex128)
 
