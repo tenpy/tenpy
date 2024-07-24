@@ -9,6 +9,8 @@ on:
   # PRs
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+    branches-ignore:
+      - v2_*
 
 
 jobs:
