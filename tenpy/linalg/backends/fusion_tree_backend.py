@@ -6,7 +6,7 @@ import numpy as np
 from itertools import product
 
 from .abstract_backend import (
-    TensorBackend, BlockBackend, Block, Data, DiagonalData, MaskData
+    TensorBackend, Block, Data, DiagonalData, MaskData
 )
 from ..dtypes import Dtype
 from ..symmetries import Sector, SectorArray, Symmetry
