@@ -237,9 +237,9 @@ class FusionTree:
         """Return a shallow (or deep) copy."""
         if deep:
             return FusionTree(self.symmetry, self.uncoupled.copy(), self.coupled.copy(),
-                              self.are_dual.copy(), self.inner_sectors.copy())
+                              self.are_dual.copy(), self.inner_sectors.copy(), self.multiplicities.copy())
         return FusionTree(self.symmetry, self.uncoupled, self.coupled, self.are_dual,
-                          self.inner_sectors)
+                          self.inner_sectors, self.multiplicities)
 
     def insert(self, t2: FusionTree) -> FusionTree:
         """Insert a tree `t2` below the first uncoupled sector.
