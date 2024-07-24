@@ -5,3 +5,6 @@
 
 - go back to original dir after finishing a simulation (end of context manager) such that relative 'directory' options work as expected when repeatedly running simulations
   
+
+- Fix: When saving simulation results, convert list from `update_stats` and `sweep_stats` into numpy arrays.
+  This can significantly reduce saving time and the size of the resulting hdf5 file - we have seen the size go down from 30MB to 700kB, when no psi and environment were saved!

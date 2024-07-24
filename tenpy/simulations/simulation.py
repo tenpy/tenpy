@@ -23,6 +23,7 @@ import copy
 
 from ..models.model import Model
 from ..algorithms.algorithm import Algorithm
+from ..algorithms.truncation import TruncationError
 from ..networks.mps import InitialStateBuilder
 from ..models.model import NearestNeighborModel
 from ..tools import hdf5_io
@@ -1102,16 +1103,30 @@ class Simulation:
         if len(self.errors_during_run) > 0:
             results['errors_during_run'] = self.errors_during_run
         results['simulation_parameters'] = self.options.as_dict()
-        if 'measurements' in results:
-            # try to convert measurements into numpy arrays to store more compactly
-            results['measurements'] = measurements = results['measurements'].copy()
-            for k, v in measurements.items():
-                try:
-                    v = np.array(v)
-                except:
-                    continue
-                if v.dtype != np.dtype(object):
-                    measurements[k] = v
+        for key in ['measurements', 'sweep_stats', 'update_stats']:
+            if key in results:
+                # try to convert lists into numpy arrays to store more compactly
+                data = results[key].copy()
+                for k, v in results[key].items():
+                    if isinstance(v, list):
+                        if len(v) > 0 and isinstance(v[0], TruncationError):
+                            # special handling for TruncationError: convert to _eps and _ov lists
+                            try:
+                                v_err = [err.eps for err in v]
+                                v_ov = [err.ov for err in v]
+                                del data[k]
+                                data[k + "_eps"] = np.array(v_err)
+                                data[k + "_ov"] = np.array(v_ov)
+                            except:
+                                pass
+                            continue
+                        try:
+                            v = np.array(v)
+                        except:
+                            continue
+                        if v.dtype != np.dtype(object):
+                            data[k] = v
+                results[key] = data
         if self.options.get('save_resume_data', self.options['save_psi'], bool):
             results['resume_data'] = self.get_resume_data()
         return results
