@@ -6,7 +6,7 @@ import numpy as np
 from itertools import product
 
 from .abstract_backend import (
-    TensorBackend, Block, Data, DiagonalData, MaskData
+    TensorBackend, BlockBackend, Block, Data, DiagonalData, MaskData
 )
 from ..dtypes import Dtype
 from ..symmetries import Sector, SectorArray, Symmetry
@@ -63,8 +63,9 @@ def tree_block_slice(space: ProductSpace, tree: FusionTree) -> slice:
         offset += forest_block_size(space, _unc, tree.coupled)
     else:  # no break ocurred
         raise ValueError('Uncoupled sectors incompatible with `space`')
-    offset += fusion_trees(space.symmetry, tree.uncoupled, tree.coupled).index(tree)
-    size = tree_block_size(space, tree.uncoupled)
+    tree_block_sizes = tree_block_size(space, tree.uncoupled)
+    offset += fusion_trees(space.symmetry, tree.uncoupled, tree.coupled).index(tree) * tree_block_sizes
+    size = tree_block_sizes
     return slice(offset, offset + size)
 
 
@@ -78,6 +79,7 @@ def _tree_block_iter(a: SymmetricTensor):
         i2_forest = 0  # start column index of the current forest block
         for b_sectors in _iter_sectors(a.domain.spaces, sym):
             tree_block_width = tree_block_size(a.domain, b_sectors)
+            forest_block_width = 0
             for a_sectors in _iter_sectors(a.codomain.spaces, sym):
                 tree_block_height = tree_block_size(a.codomain, a_sectors)
                 i1 = i1_forest  # start row index of the current tree block
@@ -92,10 +94,30 @@ def _tree_block_iter(a: SymmetricTensor):
                         i2 += tree_block_width  # move right by one tree block
                     i1 += tree_block_height  # move down by one tree block
                 forest_block_height = i1 - i1_forest
-                forest_block_width = i2 - i2_forest
+                forest_block_width = max(forest_block_width, i2 - i2_forest)
                 i1_forest += forest_block_height
             i1_forest = 0  # reset to the top of the block
             i2_forest += forest_block_width
+
+
+def _tree_block_iter_product_space(space: ProductSpace, coupled: SectorArray | list[Sector],
+                                   symmetry: Symmetry) -> Iterator[tuple[FusionTree, slice, Sector]]:
+    """Iterator over all trees in `space` with total charge in `coupled`.
+    Yields the `FusionTree`s consistent with the input together with the corresponding slices and
+    the index of the total charge within `coupled`. This index coincides with the index enumerating
+    the blocks in `FusionTreeData` if `coupled` is lexsorted.
+    This function can be used to iterate over domain OR codomain rather than both, as done in
+    `_tree_block_iter`.
+    """
+    are_dual = [sp.is_dual for sp in space.spaces]
+    for ind, c in enumerate(coupled):
+        i = 0
+        for sectors in _iter_sectors(space.spaces, symmetry):
+            tree_block_width = tree_block_size(space, sectors)
+            for tree in fusion_trees(symmetry, sectors, c, are_dual):
+                slc = slice(i, i + tree_block_width)
+                yield tree, slc, ind
+                i += tree_block_width
 
 
 def _iter_sectors(spaces: list[Space], symmetry: Symmetry) -> Iterator[SectorArray]:
@@ -146,6 +168,280 @@ def _iter_sectors_mults_slices(spaces: list[Space], symmetry: Symmetry
             yield np.concatenate([a_0[None, :], a_rest]), [m_0, *m_rest], [slice(*slc_0), *slc_rest]
 
 
+def _apply_single_c_symbol_inefficient(ten: SymmetricTensor, leg: int | str, levels: list[int],
+                                       ) -> tuple[FusionTreeData, ProductSpace, ProductSpace]:
+    """Naive and inefficient implementation of a single C symbol for test purposes.
+    `ten.legs[leg]` is exchanged with `ten.legs[leg + 1]`
+
+    TODO we start by creating zero blocks; should we explicitly check that only non-zero blocks are obtained?
+    NOTE this function may be deleted at a later stage
+    """
+    # NOTE the case of braiding in domain and codomain are treated separately despite being similar
+    # This way, it is easier to understand the more compact and more efficient function
+
+    index = ten.get_leg_idcs(leg)[0]
+    backend = ten.backend.block_backend
+
+    # NOTE do these checks in permute_legs for the actual (efficient) function
+    # we do it here because we directly call this function in the tests
+    assert index != ten.num_codomain_legs - 1, 'Cannot apply C symbol without applying B symbol first.'
+    assert index < ten.num_legs - 1
+
+    in_domain = index > ten.num_codomain_legs - 1
+
+    if in_domain:
+        domain_index = ten.num_legs - 1 - (index + 1)  # + 1 because it braids with the leg left of it
+        new_mul = ten.domain.multiplicities
+        new_mul[domain_index:domain_index + 2] = new_mul[domain_index:domain_index + 2][::-1]
+        new_domain = ProductSpace(ten.domain[:domain_index] + [ten.domain[domain_index + 1]]
+                                  + [ten.domain[domain_index]] + ten.domain[domain_index + 2:],
+                                  symmetry=ten.symmetry, backend=ten.backend, _sectors=ten.domain.sectors,
+                                  _multiplicities=new_mul)
+        new_codomain = ten.codomain
+    else:
+        new_mul = ten.codomain.multiplicities
+        new_mul[index:index + 2] = new_mul[index:index + 2][::-1]
+        new_codomain = ProductSpace(ten.codomain[:index] + [ten.codomain[index + 1]]
+                                    + [ten.codomain[index]] + ten.codomain[index + 2:],
+                                    symmetry=ten.symmetry, backend=ten.backend, _sectors=ten.codomain.sectors,
+                                    _multiplicities=new_mul)
+        new_domain = ten.domain
+
+    zero_blocks = [backend.zero_block(block.shape, dtype=Dtype.complex128) for block in ten.data.blocks]
+    new_data = FusionTreeData(ten.data.block_inds, zero_blocks, ten.data.dtype)
+    shape_perm = np.arange(ten.num_legs)  # for permuting the shape of the tree blocks
+    shifted_index = ten.num_codomain_legs + domain_index if in_domain else index
+    shape_perm[shifted_index:shifted_index+2] = shape_perm[shifted_index:shifted_index+2][::-1]
+
+    for alpha_tree, beta_tree, tree_block in _tree_block_iter(ten):
+        block_charge = ten.domain.sectors_where(alpha_tree.coupled)
+        block_charge = ten.data.block_ind_from_domain_sector_ind(block_charge)
+
+        initial_shape = backend.block_shape(tree_block)
+        modified_shape = [ten.codomain[i].sector_multiplicity(sec) for i, sec in enumerate(alpha_tree.uncoupled)]
+        modified_shape += [ten.domain[i].sector_multiplicity(sec) for i, sec in enumerate(beta_tree.uncoupled)]
+
+        tree_block = backend.block_reshape(tree_block, tuple(modified_shape))
+        tree_block = backend.block_permute_axes(tree_block, shape_perm)
+        tree_block = backend.block_reshape(tree_block, initial_shape)
+
+        if index == 0 or index == ten.num_legs - 2:
+            if in_domain:
+                alpha_slice = tree_block_slice(new_codomain, alpha_tree)
+                b = beta_tree.copy(True)
+                b_unc, b_in, b_mul = b.uncoupled, b.inner_sectors, b.multiplicities
+                if ten.symmetry.braiding_style.value >= 20 and levels[index] > levels[index + 1]:
+                    r = ten.symmetry.r_symbol(b_unc[0], b_unc[1], b_in[0])[b_mul[0]]
+                else:
+                    r = ten.symmetry.r_symbol(b_unc[1], b_unc[0], b_in[0])[b_mul[0]].conj()
+                b_unc[domain_index:domain_index+2] = b_unc[domain_index:domain_index+2][::-1]
+                beta_slice = tree_block_slice(new_domain, b)
+            else:
+                beta_slice = tree_block_slice(new_domain, beta_tree)
+                a = alpha_tree.copy(True)
+                a_unc, a_in, a_mul = a.uncoupled, a.inner_sectors, a.multiplicities
+                if ten.symmetry.braiding_style.value >= 20 and levels[index] > levels[index + 1]:
+                    r = ten.symmetry.r_symbol(a_unc[1], a_unc[0], a_in[0])[a_mul[0]]
+                else:
+                    r = ten.symmetry.r_symbol(a_unc[0], a_unc[1], a_in[0])[a_mul[0]].conj()
+                a_unc[index:index+2] = a_unc[index:index+2][::-1]
+                alpha_slice = tree_block_slice(new_codomain, a)
+
+            new_data.blocks[block_charge][alpha_slice, beta_slice] += r * tree_block
+        else:
+            if in_domain:
+                alpha_slice = tree_block_slice(new_codomain, alpha_tree)
+
+                beta_unc, beta_in, beta_mul = beta_tree.uncoupled, beta_tree.inner_sectors, beta_tree.multiplicities
+
+                if domain_index == 1:
+                    left_charge = beta_unc[domain_index-1]
+                else:
+                    left_charge = beta_in[domain_index-2]
+                if domain_index == ten.num_domain_legs - 2:
+                    right_charge = beta_tree.coupled
+                else:
+                    right_charge = beta_in[domain_index]
+
+                for f in ten.symmetry.fusion_outcomes(left_charge, beta_unc[domain_index+1]):
+                    if not ten.symmetry.can_fuse_to(f, beta_unc[domain_index], right_charge):
+                        continue
+
+                    if ten.symmetry.braiding_style.value >= 20 and levels[index] > levels[index + 1]:
+                        cs = ten.symmetry.c_symbol(left_charge, beta_unc[domain_index], beta_unc[domain_index+1],
+                                                    right_charge, beta_in[domain_index-1], f)[
+                                                    beta_mul[domain_index-1], beta_mul[domain_index], :, :]
+                    else:
+                        cs = ten.symmetry.c_symbol(left_charge, beta_unc[domain_index+1], beta_unc[domain_index],
+                                                    right_charge, f, beta_in[domain_index-1])[:, :,
+                                                    beta_mul[domain_index-1], beta_mul[domain_index]].conj()
+
+                    b = beta_tree.copy(True)
+                    b_unc, b_in, b_mul = b.uncoupled, b.inner_sectors, b.multiplicities
+
+                    b_unc[domain_index:domain_index+2] = b_unc[domain_index:domain_index+2][::-1]
+                    b_in[domain_index-1] = f
+                    for (kap, lam), c in np.ndenumerate(cs):
+                        if abs(c) < ten.backend.eps:
+                            continue
+                        b_mul[domain_index-1] = kap
+                        b_mul[domain_index] = lam
+
+                        beta_slice = tree_block_slice(new_domain, b)
+                        new_data.blocks[block_charge][alpha_slice, beta_slice] += c * tree_block
+            else:
+                beta_slice = tree_block_slice(new_domain, beta_tree)
+                alpha_unc, alpha_in, alpha_mul = alpha_tree.uncoupled, alpha_tree.inner_sectors, alpha_tree.multiplicities
+
+                left_charge = alpha_unc[0] if index == 1 else alpha_in[index-2]
+                right_charge = alpha_tree.coupled if index == ten.num_codomain_legs - 2 else alpha_in[index]
+
+                for f in ten.symmetry.fusion_outcomes(left_charge, alpha_unc[index+1]):
+                    if not ten.symmetry.can_fuse_to(f, alpha_unc[index], right_charge):
+                        continue
+
+                    if ten.symmetry.braiding_style.value >= 20 and levels[index] > levels[index + 1]:
+                        cs = ten.symmetry.c_symbol(left_charge, alpha_unc[index+1], alpha_unc[index],
+                                                    right_charge, f, alpha_in[index-1])[:, :,
+                                                    alpha_mul[index-1], alpha_mul[index]]
+                    else:
+                        cs = ten.symmetry.c_symbol(left_charge, alpha_unc[index], alpha_unc[index+1],
+                                                    right_charge, alpha_in[index-1], f)[
+                                                    alpha_mul[index-1], alpha_mul[index], :, :].conj()
+
+                    a = alpha_tree.copy(True)
+                    a_unc, a_in, a_mul = a.uncoupled, a.inner_sectors, a.multiplicities
+                    
+                    a_unc[index:index+2] = a_unc[index:index+2][::-1]
+                    a_in[index-1] = f
+                    for (kap, lam), c in np.ndenumerate(cs):
+                        if abs(c) < ten.backend.eps:
+                            continue
+                        a_mul[index-1] = kap
+                        a_mul[index] = lam
+
+                        alpha_slice = tree_block_slice(new_codomain, a)
+                        new_data.blocks[block_charge][alpha_slice, beta_slice] += c * tree_block
+    return new_data, new_codomain, new_domain
+
+
+# OPTIMIZE add a new function that keeps track of the necessary operations using dicts such that
+# multilple Cs and maybe also Bs can be combined.
+# (the operations on the tensor blocks are carried out one rather than after each C and B)
+def _apply_single_c_symbol_more_efficient(ten: SymmetricTensor, leg: int | str, levels: list[int]
+                                          ) -> tuple[FusionTreeData, ProductSpace, ProductSpace]:
+    """More efficient implementation of a single C symbol compared to `_apply_single_C_symbol_inefficient`.
+    Still not the final version.
+    `ten.legs[leg]` is exchanged with `ten.legs[leg + 1]`
+
+    NOTE this function may be deleted at a later stage
+    """
+    index = ten.get_leg_idcs(leg)[0]
+    backend = ten.backend.block_backend
+
+    # NOTE do these checks in permute_legs for the actual (efficient) function
+    assert index != ten.num_codomain_legs - 1, 'Cannot apply C symbol without applying B symbol first.'
+    assert index < ten.num_legs - 1
+
+    in_domain = index > ten.num_codomain_legs - 1
+
+    if in_domain:
+        index = ten.num_legs - 1 - (index + 1)  # + 1 because it braids with the leg left of it
+        levels = levels[::-1]
+        new_mul = ten.domain.multiplicities
+        new_mul[index:index + 2] = new_mul[index:index + 2][::-1]
+        new_domain = ProductSpace(ten.domain[:index] + ten.domain[index:index+2][::-1] + ten.domain[index+2:],
+                                  symmetry=ten.symmetry, backend=ten.backend, _sectors=ten.domain.sectors,
+                                  _multiplicities=new_mul)
+        new_codomain = ten.codomain
+        shape_perm = np.append([0], np.arange(1, ten.num_domain_legs+1))  # for permuting the shape of the tree blocks
+        shape_perm[index+1:index+3] = shape_perm[index+1:index+3][::-1]
+    else:
+        new_mul = ten.codomain.multiplicities
+        new_mul[index:index + 2] = new_mul[index:index + 2][::-1]
+        new_codomain = ProductSpace(ten.codomain[:index] + ten.codomain[index:index+2][::-1] + ten.codomain[index+2:],
+                                    symmetry=ten.symmetry, backend=ten.backend, _sectors=ten.codomain.sectors,
+                                    _multiplicities=new_mul)
+        new_domain = ten.domain
+        shape_perm = np.append(np.arange(ten.num_codomain_legs), [ten.num_codomain_legs])
+        shape_perm[index:index+2] = shape_perm[index:index+2][::-1]
+
+    zero_blocks = [backend.zero_block(block.shape, dtype=Dtype.complex128) for block in ten.data.blocks]
+    new_data = FusionTreeData(ten.data.block_inds, zero_blocks, ten.data.dtype)
+    iter_space = [ten.codomain, ten.domain][in_domain]
+
+    for tree, slc, _ in _tree_block_iter_product_space(iter_space, ten.domain.sectors, ten.symmetry):
+        block_charge = ten.domain.sectors_where(tree.coupled)
+        block_charge = ten.data.block_ind_from_domain_sector_ind(block_charge)
+
+        tree_block = ten.data.blocks[block_charge][:,slc] if in_domain else ten.data.blocks[block_charge][slc,:]
+
+        initial_shape = tree_block.shape
+
+        modified_shape = [iter_space[i].sector_multiplicity(sec) for i, sec in enumerate(tree.uncoupled)]
+        modified_shape.insert((not in_domain) * len(modified_shape), initial_shape[not in_domain])
+
+        tree_block = backend.block_reshape(tree_block, tuple(modified_shape))
+        tree_block = backend.block_permute_axes(tree_block, shape_perm)
+        tree_block = backend.block_reshape(tree_block, initial_shape)
+
+        if index == 0 or index == ten.num_legs - 2:
+            new_tree = tree.copy(deep=True)
+            _unc, _in, _mul = new_tree.uncoupled, new_tree.inner_sectors, new_tree.multiplicities
+
+            if ten.symmetry.braiding_style.value >= 20 and levels[index] > levels[index + 1]:
+                r = ten.symmetry._r_symbol(_unc[1], _unc[0], _in[0])[_mul[0]]
+            else:
+                r = ten.symmetry._r_symbol(_unc[0], _unc[1], _in[0])[_mul[0]].conj()
+
+            if in_domain:
+                r = r.conj()
+
+            _unc[index:index+2] = _unc[index:index+2][::-1]
+            new_slc = tree_block_slice([new_codomain, new_domain][in_domain], new_tree)
+
+            if in_domain:
+                new_data.blocks[block_charge][:, new_slc] += r * tree_block
+            else:
+                new_data.blocks[block_charge][new_slc, :] += r * tree_block
+        else:
+            _unc, _in, _mul = tree.uncoupled, tree.inner_sectors, tree.multiplicities
+
+            left_charge = _unc[0] if index == 1 else _in[index-2]
+            right_charge = tree.coupled if index == _in.shape[0] else _in[index]
+
+            for f in ten.symmetry.fusion_outcomes(left_charge, _unc[index+1]):
+                if not ten.symmetry.can_fuse_to(f, _unc[index], right_charge):
+                    continue
+
+                if ten.symmetry.braiding_style.value >= 20 and levels[index] > levels[index+1]:
+                    cs = ten.symmetry._c_symbol(left_charge, _unc[index+1], _unc[index], right_charge,
+                                                f, _in[index-1])[:, :, _mul[index-1], _mul[index]]
+                else:
+                    cs = ten.symmetry._c_symbol(left_charge, _unc[index], _unc[index+1], right_charge,
+                                                _in[index-1], f)[_mul[index-1], _mul[index], :, :].conj()
+
+                if in_domain:
+                    cs = cs.conj()
+
+                new_tree = tree.copy(deep=True)
+                new_tree.uncoupled[index:index+2] = new_tree.uncoupled[index:index+2][::-1]
+                new_tree.inner_sectors[index-1] = f
+                for (kap, lam), c in np.ndenumerate(cs):
+                    if abs(c) < ten.backend.eps:
+                        continue
+                    new_tree.multiplicities[index-1] = kap
+                    new_tree.multiplicities[index] = lam
+
+                    new_slc = tree_block_slice([new_codomain, new_domain][in_domain], new_tree)
+
+                    if in_domain:
+                        new_data.blocks[block_charge][:, new_slc] += c * tree_block
+                    else:
+                        new_data.blocks[block_charge][new_slc, :] += c * tree_block
+    return new_data, new_codomain, new_domain
+
+
 class FusionTreeData:
     r"""Data stored in a Tensor for :class:`FusionTreeBackend`.
 
@@ -174,6 +470,15 @@ class FusionTreeData:
         self.blocks = blocks
         self.dtype = dtype
 
+    def block_ind_from_domain_sector_ind(self, domain_sector_ind: int) -> int:
+        "Returns `ind` such that ``block_inds[ind][1] == domain_sector_ind``"
+        ind = np.searchsorted(self.block_inds[:,1], domain_sector_ind)
+        if self.block_inds[ind, 1] != domain_sector_ind:
+            return None
+        if ind + 1 < self.block_inds.shape[0] and self.block_inds[ind + 1, 1] == domain_sector_ind:
+            raise RuntimeError
+        return ind
+
 
 # TODO do we need to inherit from ABC again?? (same in abelian and no_symmetry)
 # TODO eventually remove BlockBackend inheritance, it is not needed,
@@ -182,6 +487,10 @@ class FusionTreeBackend(TensorBackend):
     
     DataCls = FusionTreeData
     can_decompose_tensors = True
+
+    def __init__(self, block_backend: BlockBackend, eps: float = 1.e-14):
+        self.eps = eps
+        super().__init__(block_backend)
 
     def test_data_sanity(self, a: SymmetricTensor | DiagonalTensor | Mask, is_diagonal: bool):
         super().test_data_sanity(a, is_diagonal=is_diagonal)
@@ -752,6 +1061,10 @@ class FusionTreeBackend(TensorBackend):
 
     def permute_legs(self, a: SymmetricTensor, codomain_idcs: list[int], domain_idcs: list[int],
                      levels: list[int] | None) -> tuple[Data | None, ProductSpace, ProductSpace]:
+        # do this test only after checking that braids are involved;
+        # levels are not necessary if we only do a bend for example
+        # if a.symmetry.braiding_style.value >= 20:
+        #     assert levels is not None
         raise NotImplementedError('permute_legs not implemented')  # TODO
 
     def qr(self, a: SymmetricTensor, new_leg: ElementarySpace) -> tuple[Data, Data]:
