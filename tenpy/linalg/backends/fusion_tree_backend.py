@@ -1061,8 +1061,10 @@ class FusionTreeBackend(TensorBackend):
 
     def permute_legs(self, a: SymmetricTensor, codomain_idcs: list[int], domain_idcs: list[int],
                      levels: list[int] | None) -> tuple[Data | None, ProductSpace, ProductSpace]:
-        if a.symmetry.braiding_style.value >= 20:
-            assert levels is not None
+        # do this test only after checking that braids are involved;
+        # levels are not necessary if we only do a bend for example
+        # if a.symmetry.braiding_style.value >= 20:
+        #     assert levels is not None
         raise NotImplementedError('permute_legs not implemented')  # TODO
 
     def qr(self, a: SymmetricTensor, new_leg: ElementarySpace) -> tuple[Data, Data]:
