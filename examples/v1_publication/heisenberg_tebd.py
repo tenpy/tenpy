@@ -112,7 +112,7 @@ def plot(results):
     ax_mag.set_ylabel(r'Site $i$')
     ax_mag.set_yticks([0, 12, 24, 36, 49])
     ax_mag.xaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda x, pos: str(dt_measure * int(x))))
-    im = ax_mag.imshow(results[max_chi]['mag_z'].T, aspect='auto', cmap='inferno')
+    im = ax_mag.pcolor(results[max_chi]['mag_z'].T, cmap='inferno', edgecolor='face')
     # cmap candidates: viridis, inferno, coolwarm, bwr, RdBu, 
     divider = make_axes_locatable(ax_mag)
     cax = divider.append_axes('right', size='5%', pad=0.05)
