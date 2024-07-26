@@ -224,9 +224,10 @@ def make_plot(folder):
     
     import matplotlib.pyplot as plt
     import matplotlib as mpl
-    fontsize = 10
     linewidth = 5.90666
-    mpl.rcParams.update({'font.size': fontsize})
+    mpl.rcParams.update({'font.size': 10})
+    mpl.rcParams.update({'legend.fontsize': 8})
+    mpl.rcParams.update({'legend.title_fontsize': 8})
 
     for conserve, results in zip(['best', 'None'], [results_best, results_None]):
         _g_lists = [res['g_list'] for res in results.values()]

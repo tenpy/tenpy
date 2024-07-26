@@ -1,5 +1,6 @@
 """An example simulating the dynamics of the Neel state under Heisenberg evolution, using TEBD."""
 # Copyright (C) TeNPy Developers, GNU GPLv3
+import argparse
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -27,15 +28,31 @@ engine_params = dict(
 dt_measure = engine_params['dt'] * engine_params['N_steps']
 
 
-def main(load_existing=False, file='results.pkl'):
+def main():
+    parser = argparse.ArgumentParser(
+        description='Either simulate and save results or just load results. Then plot.'
+    )
+    parser.add_argument('--load', action='store_true',
+                        help='load from FILE instead of running the simulation.')
+    parser.add_argument('--file', default='results.pkl',
+                        help='Results file to store to / load from. Default: `results.pkl` (in CWD).')
+    parser.add_argument('-o', default='heisenberg_tebd.pdf',
+                        help='Output file for the plot. Default `heisenberg_tebd.pdf` (in CWD)')
+    args = parser.parse_args()
+    load_existing = args.load
+    file = args.file
+    
     if load_existing:
+        print('Loading existing file')
         with open(file, 'rb') as f:
             results = pickle.load(f)
     else:
+        print('Starting simulation')
         results = run()
         with open(file, 'wb') as f:
             pickle.dump(results, f)
-    plot(results)
+    print('Plotting...')
+    plot(results, outfile=args.o)
 
 
 def run():
@@ -80,11 +97,13 @@ def run_at_fixed_chi(chi):
                 err=err)
 
 
-def plot(results):
+def plot(results, outfile):
     fontsize = 10
     linewidth = 5.90666  # inches
     L = model_params['L']
     mpl.rcParams.update({'font.size': fontsize})
+    mpl.rcParams.update({'legend.fontsize': 8})
+    mpl.rcParams.update({'legend.title_fontsize': 8})
     chis = sorted(results.keys())
     max_chi = max(chis)
 
@@ -101,7 +120,6 @@ def plot(results):
                             [':', '--', '-.', '-'])
         for which in [None, 'S', 'Imb', 'err']
     }
-
 
     aspect = .7
     fig, ((ax_mag, ax_S), (ax_Imb, ax_err)) = plt.subplots(2, 2, figsize=(linewidth, aspect * linewidth))
@@ -139,7 +157,8 @@ def plot(results):
         ax_err.semilogy(results[chi]['t'], results[chi]['err'], **plot_styles[chi, 'err'])
 
     fig.tight_layout(pad=0.1)
-    fig.savefig('heisenberg_tebd.pdf', bbox_inches='tight')
+    fig.savefig(outfile, bbox_inches='tight')
+    print(f'saved to {outfile}')
 
 
 if __name__ == '__main__':
