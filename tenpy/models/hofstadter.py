@@ -8,14 +8,16 @@
 
 import numpy as np
 
-from .lattice import Square
 from ..networks.site import BosonSite, FermionSite
+from .lattice import Square
 from .model import CouplingMPOModel
 
 __all__ = ['HofstadterBosons', 'HofstadterFermions', 'gauge_hopping']
 
+_INCOMMENSURATION_ERROR_MSG: str = "Incommensurate magnetic unit cell and lattice"
 
-def gauge_hopping(model_params):
+
+def gauge_hopping(model_params, bc):
     r"""Compute hopping amplitudes for the Hofstadter models based on a gauge choice.
 
     In the Hofstadter model, the magnetic field enters as an Aharonov-Bohm phase.
@@ -74,6 +76,8 @@ def gauge_hopping(model_params):
     my = model_params.get('my', None, int)
     Jx = model_params.get('Jx', 1., 'real')
     Jy = model_params.get('Jy', 1., 'real')
+    Lx = model_params.get('Lx', 1., int)
+    Ly = model_params.get('Ly', 1., int)
     phi_p, phi_q = model_params.get('phi', (1, 3))
     phi = 2 * np.pi * phi_p / phi_q
 
@@ -85,6 +89,8 @@ def gauge_hopping(model_params):
             mx = phi_q
         hop_x = -Jx
         hop_y = -Jy * np.exp(1.j * phi * np.arange(mx)[:, np.newaxis])  # has shape (mx, 1)
+        if Lx % mx and not bc[0]:
+            raise ValueError(_INCOMMENSURATION_ERROR_MSG)
     elif gauge == 'landau_y':
         # hopping in x-direction: depends on y, shape (1, my)
         # hopping in y-direction: uniform
@@ -93,6 +99,8 @@ def gauge_hopping(model_params):
             my = phi_q
         hop_y = -Jy
         hop_x = -Jx * np.exp(-1.j * phi * np.arange(my)[np.newaxis, :])  # has shape (1, my)
+        if Ly % my and not bc[1]:
+            raise ValueError(_INCOMMENSURATION_ERROR_MSG)
     elif gauge == 'symmetric':
         # hopping in x-direction: depends on y, shape (mx, my)
         # hopping in y-direction: depends on x, shape (mx, my)
@@ -100,6 +108,8 @@ def gauge_hopping(model_params):
             mx = my = phi_q
         hop_x = -Jx * np.exp(-1.j * (phi / 2) * np.arange(my)[np.newaxis, :])  # shape (1, my)
         hop_y = -Jy * np.exp(1.j * (phi / 2) * np.arange(mx)[:, np.newaxis])  # shape (mx, 1)
+        if (Lx % (2 * mx) and not bc[0]) or (Ly % (2 * my) and not bc[1]):
+            raise ValueError(_INCOMMENSURATION_ERROR_MSG)
     else:
         raise ValueError("Undefined gauge " + repr(gauge))
     return hop_x, hop_y
@@ -163,12 +173,10 @@ class HofstadterFermions(CouplingMPOModel):
         return site
 
     def init_terms(self, model_params):
-        Lx = self.lat.shape[0]
-        Ly = self.lat.shape[1]
         phi_ext = model_params.get('phi_ext', 0., 'real')
         mu = np.asarray(model_params.get('mu', 0., 'real_or_array'))
         v = np.asarray(model_params.get('v', 0, 'real_or_array'))
-        hop_x, hop_y = gauge_hopping(model_params)
+        hop_x, hop_y = gauge_hopping(model_params, bc=self.lat.bc)
 
         # 6) add terms of the Hamiltonian
         self.add_onsite(-mu, 0, 'N')
@@ -243,12 +251,10 @@ class HofstadterBosons(CouplingMPOModel):
         return site
 
     def init_terms(self, model_params):
-        Lx = self.lat.shape[0]
-        Ly = self.lat.shape[1]
         phi_ext = model_params.get('phi_ext', 0., 'real')
         mu = np.asarray(model_params.get('mu', 0., 'real_or_array'))
         U = np.asarray(model_params.get('U', 0, 'real_or_array'))
-        hop_x, hop_y = gauge_hopping(model_params)
+        hop_x, hop_y = gauge_hopping(model_params, bc=self.lat.bc)
 
         # 6) add terms of the Hamiltonian
         self.add_onsite(U / 2, 0, 'NN')
