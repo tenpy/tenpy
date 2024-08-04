@@ -9,11 +9,42 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       COV_PERCENT: ${{ steps.save-coverage.outputs.COV_PERCENT }}
+
     steps:
-      #TODO: calculate coverage here....
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade setuptools build
+          python -m pip install --upgrade pytest
+          python -m pip install --upgrade coverage
+
+      - name: Build and install tenpy
+        # also installs extra dependencies defined in pyproject.toml
+        run: |
+          python -m build .
+          python -m pip install ".[io, test, extra]"
+
+      - name: Run pytest with coverage
+        # pytest configuration in pyproject.toml
+        # Note: This runs in the repo root directory, which contains the uncompiled tenpy package.
+        #       To use the version we just installed, it is important to run `coverage`
+        #       instead of `python -m coverage`.
+        run: |
+          coverage run -m pytest .
+          coverage report -m --skip-covered --sort=miss
+          coverage json
+
       - name: save coverage
         id: save-coverage
-        run: echo "COV_PERCENT=0.5" >> $GITHUB_OUTPUT
+        run: echo "COV_PERCENT=$(jq .totals.percent_covered coverage.json | xargs printf "%.0f")" >> $GITHUB_OUTPUT
 
   comment:
     needs: [calc_coverage]
@@ -24,5 +55,7 @@ jobs:
       - uses: mshick/add-pr-comment@v2
         with:
           message: |
-            Coverage on new code:  ${{ needs.calc_coverage.outputs.COV_PERCENT }}%
+            Thank you for working on this Pull request!
+            Here are some stats on your progress.
+            The overall test coverage on TenPy, including the changes within this PR, is now ${{ needs.calc_coverage.outputs.COV_PERCENT }}%.
           refresh-message-position: true
