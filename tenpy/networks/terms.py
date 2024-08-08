@@ -1583,7 +1583,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
         """Check the format of self.exp_decaying_terms."""
         L = self.L
         for term in self.exp_decaying_terms:
-            strength, lambda_, op_i, op_j, subsites, op_string = term
+            strength, lambda_, op_i, op_j, subsites, fixed_site, op_string = term
             for i in subsites:
                 for op in op_i, op_j:
                     if not sites[i].valid_opname(op):
