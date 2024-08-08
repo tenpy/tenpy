@@ -1366,14 +1366,28 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                                             op_i,
                                             op_j,
                                             subsites=None,
+                                            fixed_site=None,
                                             op_string='Id'):
         """Add an exponentially decaying long-range coupling.
+
+        If `fixed_site == None`:
 
         .. math ::
             strength sum_{i < j} lambda^{|i-j|} A_{subsites[i]} B_{subsites[j]}
 
+        else:
+
+        .. math ::
+            strength sum_{j < fixed_site} lambda^{|fixed_site-j|} B_{subsites[j]} A_{subsites[fixed_site]}
+            + strength sum_{j > fixed_site} lambda^{|fixed_site-j|} A_{subsites[fixed_site]} B_{subsites[j]}
+
         Where the operator `A` is given by `op_i`, and `B` is given by `op_j`.
-        Note that the sum over i,j is long-range, for infinite systems beyond the MPS unit cell.
+        Note that the sum over i,j is long-range, for infinite systems going beyond the MPS
+        unit cell.
+        Moreover, note that the distance in the exponent is the distance within `subsites`.
+        If `fixed_site != None`, then we only sum over `j != i` and set `i=fixed_site` in
+        the above expression. Note that 'op_i' is on `fixed_site` while `op_j` is on the
+        summed-over site.
 
         Parameters
         ----------
@@ -1386,6 +1400,9 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
         subsites : None | 1D array
             Selects a subset of sites within the MPS unit cell on which the operators act.
             Needs to be sorted. ``None`` selects all sites.
+        fixed_site : None | int
+            Sets the fixed site within the MPS on which `op_i` acts, while `op_j` runs over
+            all sites in `subsites`. ``None`` selects all sites.
         op_string : string
             The operator to be inserted between `A` and `B`; for Fermions this should be ``"JW"``.
         """
@@ -1397,7 +1414,11 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                 raise ValueError("subsites needs to be sorted; choose a different MPS ordering!")
             assert subsites[0] >= 0
             assert subsites[-1] < self.L
-        self.exp_decaying_terms.append((strength, lambda_, op_i, op_j, subsites, op_string))
+            if fixed_site is not None:
+                if fixed_site not in subsites:
+                    raise ValueError("fixed_site is not in subsites!")
+
+        self.exp_decaying_terms.append((strength, lambda_, op_i, op_j, subsites, fixed_site, op_string))
 
     def add_to_graph(self, graph, key="exp-decay"):
         """Add terms from :attr:`onsite_terms` to an MPOGraph.
@@ -1424,7 +1445,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
         key_nr = 1000  # start with high value such that they get added in the end of the MPO
         finite = (graph.bc == 'finite')
 
-        for (strength, lambda_, op_i, op_j, subsites, op_string) in self.exp_decaying_terms:
+        for (strength, lambda_, op_i, op_j, subsites, fixed_site, op_string) in self.exp_decaying_terms:
             while (key_nr, key) in all_states:
                 key_nr += 1
             label = (key_nr, key)
@@ -1435,6 +1456,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
             last_subsite = subsites[-1]
             assert last_subsite < self.L
             if not finite:
+                assert fixed_site is None
                 for i in range(self.L):
                     if in_subsites[i]:
                         graph.add(i, 'IdL', label, op_i, lambda_)
@@ -1443,16 +1465,38 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                     else:
                         graph.add(i, label, label, op_string, 1.)
             else:
-                # first subsite
-                graph.add(first_subsite, 'IdL', label, op_i, lambda_)
-                for i in range(first_subsite + 1, last_subsite):
-                    if in_subsites[i]:
-                        graph.add(i, 'IdL', label, op_i, lambda_)
-                        graph.add(i, label, label, op_string, lambda_)
-                        graph.add(i, label, 'IdR', op_j, strength)
-                    else:
-                        graph.add(i, label, label, op_string, 1.)
-                graph.add(last_subsite, label, 'IdR', op_j, strength)
+                if fixed_site is None:
+                    # first subsite
+                    graph.add(first_subsite, 'IdL', label, op_i, lambda_)
+                    for i in range(first_subsite + 1, last_subsite):
+                        if in_subsites[i]:
+                            graph.add(i, 'IdL', label, op_i, lambda_)
+                            graph.add(i, label, label, op_string, lambda_)
+                            graph.add(i, label, 'IdR', op_j, strength)
+                        else:
+                            graph.add(i, label, label, op_string, 1.)
+                    graph.add(last_subsite, label, 'IdR', op_j, strength)
+                else:
+                    if fixed_site != first_subsite: # op_j first
+                        graph.add(first_subsite, 'IdL', label, op_j, lambda_)   # Open op_j
+                        for i in range(first_subsite + 1, fixed_site):
+                            if in_subsites[i]:
+                                graph.add(i, 'IdL', label, op_j, lambda_)       # Open op_j
+                                graph.add(i, label, label, op_string, lambda_)  # Continue op_j with lambda * op_string
+                            else:
+                                graph.add(i, label, label, op_string, 1.)       # Continue op_j with op_string
+                        graph.add(fixed_site, label, 'IdR', op_i, strength)     # Close op_j with op_i
+
+                    if fixed_site != last_subsite:  #op_j last
+                        graph.add(fixed_site, 'IdL', label, op_i, lambda_)      # Open op_i
+                        for i in range(fixed_site + 1, last_subsite):
+                            if in_subsites[i]:
+                                graph.add(i, label, label, op_string, lambda_)  # Continue op_i with lambda * op_sting
+                                graph.add(i, label, 'IdR', op_j, strength)      # Close op_i with op_j
+                            else:
+                                graph.add(i, label, label, op_string, 1.)       # Continue op_i with op_string
+                        graph.add(last_subsite, label, 'IdR', op_j, strength)   # Close op_i with op_j
+
         if graph.max_range is not None:
             graph.max_range = np.inf
 
@@ -1476,19 +1520,34 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
         strengths = []
         L = self.L
         for term in self.exp_decaying_terms:
-            strength, lambda_, op_i, op_j, subsites, op_string = term
+            strength, lambda_, op_i, op_j, subsites, fixed_site, op_string = term
             N = len(subsites)
             if bc == 'finite':
-                for i2, i in enumerate(subsites):
-                    for d, j in enumerate(subsites[i2:]):
-                        if d == 0:
+                if fixed_site is None:
+                    for i2, i in enumerate(subsites):
+                        for d, j in enumerate(subsites[i2:]):
+                            if d == 0:
+                                continue
+                            pref = strength * lambda_**d
+                            if abs(pref) < cutoff:
+                                break
+                            terms.append([(op_i, i), (op_j, j)])
+                            strengths.append(pref)
+                else:
+                    fs_loc = subsites.index(fixed_site)
+                    for d, j in enumerate(subsites):
+                        if fixed_site == j:
                             continue
-                        pref = strength * lambda_**d
+                        pref = strength * lambda_**np.abs(fs_loc - d)
                         if abs(pref) < cutoff:
-                            break
-                        terms.append([(op_i, i), (op_j, j)])
+                            continue
+                        if j < fixed_site:
+                            terms.append([(op_j, j), (op_i, fixed_site)])
+                        else:
+                            terms.append([(op_i, fixed_site), (op_j, j)])
                         strengths.append(pref)
             elif bc == 'infinite':
+                assert fixed_site is None
                 for i2, i in enumerate(subsites):
                     for d in range(1, 1000):
                         j2 = i2 + d
