@@ -1534,11 +1534,13 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                             terms.append([(op_i, i), (op_j, j)])
                             strengths.append(pref)
                 else:
-                    fs_loc = subsites.index(fixed_site)
+                    fs_loc,  = np.where(subsites==fixed_site)
                     for d, j in enumerate(subsites):
                         if fixed_site == j:
                             continue
                         pref = strength * lambda_**np.abs(fs_loc - d)
+                        if type(pref) == np.ndarray:    # pref is a numpy array for some reason
+                            pref = pref.item()
                         if abs(pref) < cutoff:
                             continue
                         if j < fixed_site:
