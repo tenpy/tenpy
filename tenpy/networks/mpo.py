@@ -335,7 +335,7 @@ class MPO:
             import numpy as np
 
         .. doctest :: from_wavepacket
-        
+
             >>> L, k0, x0, sigma, = 50, np.pi/8., 10., 5.
             >>> x = np.arange(L)
             >>> coeff = np.exp(-1.j * k0 * x) * np.exp(- 0.5 * (x - x0)**2 / sigma**2)
@@ -348,7 +348,7 @@ class MPO:
         Indeed, we can apply this to a (vacuum) MPS and get the correct state:
 
         .. doctest :: from_wavepacket
-        
+
             >>> psi = MPS.from_product_state([site] * L, ['empty'] * L)
             >>> wp.apply(psi, dict(compression_method='SVD'))
             TruncationError()
@@ -655,7 +655,7 @@ class MPO:
         return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf)
 
     def make_U_II(self, dt):
-        r"""Creates the :math:`U_II` propagator.
+        r"""Creates the :math:`U_{II}` propagator.
 
         Parameters
         ----------
@@ -1366,6 +1366,67 @@ class MPO:
 
         return trunc_err
 
+    def add_identity(self, alpha, beta):
+        r"""returns new MPO :math:`alpha Id + beta * O`.
+
+        This could be used to make a simple (non-unitary) first-order approximation to
+        the time evolution unitary :math:`e^{-i t H} \approx 1 - i t H`.
+
+        This function only works for finite MPOs for now, as we simply modify the first
+        tensor. So if you extract a segment from the new operator, you will only get the
+        segment of the original operator.
+
+        The first tensor (ignoring the second wL entry since it's unnecessary).
+
+        [1 C D] -> [beta*1 beta*C alpha*1+beta*D]
+
+        Parameters
+        ----------
+        alpha : float|complex
+            Coefficient for identity
+        beta : float|complex
+            Coefficient for existing MPO
+
+        Returns
+        -------
+        mpo : :class:`~tenpy.networks.mpo.MPO`
+            MPO representing the operator :math:`\alpha * 1 + \beta O`
+        """
+        if self.bc != 'finite':
+            raise NotImplementedError("MPO.add_identity only works for finite MPO.")
+        
+        dtype = np.result_type(beta, np.result_type(alpha, self.dtype))
+        IdL = self.IdL
+        IdR = self.IdR
+
+        chinfo = self.chinfo
+        trivial = chinfo.make_valid()
+
+        labels = ['wL', 'wR', 'p', 'p*']
+        W = self.get_W(0).itranspose(labels)
+        assert np.all(W.qtotal == trivial)
+        DL, DR, d, d = W.shape
+        
+        A_npc, B_npc, C_npc, D_npc = _partition_W(W, IdL[0], IdR[0], IdL[1], IdR[1])
+        Id_npc = npc.eye_like(D_npc, labels=['p', 'p*'])
+        dW = np.empty((DL, DR), dtype=object)
+
+        # First Row - only this is modified
+        dW[0,0] = beta*Id_npc
+        for i in range(0, DR-2):
+            dW[0,i+1] = beta*C_npc[0,i]
+        dW[0,-1] = beta*D_npc + alpha*Id_npc
+        # Middle Rows
+        for i in range(0, DL-2):
+            for j in range(0, DR-2):
+                dW[i+1,j+1] = A_npc[i,j]
+            dW[i+1, -1] = B_npc[i,0]
+        #Bottom Rows
+        dW[-1,-1] = Id_npc
+        
+        dW = npc.grid_outer(dW, [W.get_leg('wL'), W.get_leg('wR')], W.qtotal, ['wL', 'wR'])
+        return MPO(self.sites, [dW] + self._W[1:], self.bc, IdL, IdR, max_range=self.max_range)
+
     def _to_valid_index(self, i, bond=False):
         """Make sure `i` is a valid index (depending on `self.bc`)."""
         if not self.finite:
@@ -1408,7 +1469,7 @@ class MPO:
         """
         if self.explicit_plus_hc != other.explicit_plus_hc:
             raise ValueError('Can not add MPOs with different explicit_plus_hc flags')
-        
+
         L = self.L
         assert self.bc == other.bc
         assert other.L == L
@@ -2865,3 +2926,31 @@ def _mpo_graph_state_order(key):
         # fallback: compare strings
         return (0, key)
     return (0, str(key))
+
+def _partition_W(W, IdL_L, IdR_L, IdL_R, IdR_R):
+    """Split MPO into blocks with respect to standard upper triangular form.
+
+    1 C D
+    0 A B
+    0 0 1
+
+    """
+    DL, DR, d, d = W.shape
+    proj_L = np.ones(DL, dtype=np.bool_)
+    proj_L[IdL_L] = False
+    proj_L[IdR_L] = False
+    proj_R = np.ones(DR, dtype=np.bool_)
+    proj_R[IdL_R] = False
+    proj_R[IdR_R] = False
+
+    #Extract (A, B, C, D)
+    D_npc = W.copy()
+    D_npc.iproject([IdL_L, IdR_R], ['wL','wR'])
+    D_npc = D_npc.squeeze() # remove dummy wL, wR legs
+    C_npc = W.copy()
+    C_npc.iproject([IdL_L, proj_R], ['wL','wR'])
+    B_npc = W.copy()
+    B_npc.iproject([proj_L, IdR_R], ['wL','wR'])
+    A_npc = W.copy()
+    A_npc.iproject([proj_L, proj_R], ['wL','wR'])
+    return A_npc, B_npc, C_npc, D_npc
