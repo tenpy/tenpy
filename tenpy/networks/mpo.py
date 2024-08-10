@@ -1352,7 +1352,7 @@ class MPO:
 
         return trunc_err
 
-    def add_identity(self, alpha, beta):
+    def add_identity(self, alpha, beta, sites=[0]):
         r"""returns new MPO :math:`alpha Id + beta * O`.
 
         This could be used to make a simple (non-unitary) first-order approximation to
@@ -1360,11 +1360,17 @@ class MPO:
 
         This function only works for finite MPOs for now, as we simply modify the first
         tensor. So if you extract a segment from the new operator, you will only get the
-        segment of the original operator.
+        segment of the original operator. This is a special case of `__add__`, as we don't
+        need an MPO for Id to start and the final MPO has the same bond dimension as the
+        original.
+
+        Additionally, there is significant freedom in how we incorporate the linear
+        combination into the MPO structure. One naive choice is to only modify the first tensor.
 
         The first tensor (ignoring the second wL entry since it's unnecessary).
-
         [1 C D] -> [beta*1 beta*C alpha*1+beta*D]
+
+        Another choice is to modify `N` tensors specified by the input argument `sites`.
 
         Parameters
         ----------
@@ -1372,7 +1378,9 @@ class MPO:
             Coefficient for identity
         beta : float|complex
             Coefficient for existing MPO
-
+        sites : list
+            List of MPO indices of which tensors to modify
+            
         Returns
         -------
         mpo : :class:`~tenpy.networks.mpo.MPO`
@@ -1380,38 +1388,62 @@ class MPO:
         """
         if self.bc != 'finite':
             raise NotImplementedError("MPO.add_identity only works for finite MPO.")
+
+        N = len(sites)
+        assert N <= self.L
+        if not set(sites).issubset(set(list(range(self.L)))):
+            raise ValueError(f'The sites {sites} are not strictly contained in {{1, ..., {self.L-1}}}.')
         
+        t_beta = beta**(1/N)
+        t_alpha = alpha / N
+        gamma = lambda k: 1 if k != 0 else beta
+        delta = lambda k: 1 if k != N-1 else beta
+        def params_in_sites(k, counter):
+            if k in sites:
+                return t_beta, t_alpha, gamma(counter), delta(counter), counter + 1
+            else:
+                return 1., 0., 1., 1., counter
+
         dtype = np.result_type(beta, np.result_type(alpha, self.dtype))
         IdL = self.IdL
         IdR = self.IdR
 
         chinfo = self.chinfo
         trivial = chinfo.make_valid()
+        U = []
+        counter = 0
+        for k in range(0, self.L):
+            labels = ['wL', 'wR', 'p', 'p*']
+            W = self.get_W(k).itranspose(labels)
+            assert np.all(W.qtotal == trivial)
+            DL, DR, d, d = W.shape
 
-        labels = ['wL', 'wR', 'p', 'p*']
-        W = self.get_W(0).itranspose(labels)
-        assert np.all(W.qtotal == trivial)
-        DL, DR, d, d = W.shape
-        
-        A_npc, B_npc, C_npc, D_npc = _partition_W(W, IdL[0], IdR[0], IdL[1], IdR[1])
-        Id_npc = npc.eye_like(D_npc, labels=['p', 'p*'])
-        dW = np.empty((DL, DR), dtype=object)
+            A_npc, B_npc, C_npc, D_npc = _partition_W(W, IdL[k], IdR[k], IdL[k+1], IdR[k+1])
+            Id_npc = npc.eye_like(D_npc, labels=['p', 'p*'])
+            dW = np.empty((DL, DR), dtype=object)
 
-        # First Row - only this is modified
-        dW[0,0] = beta*Id_npc
-        for i in range(0, DR-2):
-            dW[0,i+1] = beta*C_npc[0,i]
-        dW[0,-1] = beta*D_npc + alpha*Id_npc
-        # Middle Rows
-        for i in range(0, DL-2):
-            for j in range(0, DR-2):
-                dW[i+1,j+1] = A_npc[i,j]
-            dW[i+1, -1] = B_npc[i,0]
-        #Bottom Rows
-        dW[-1,-1] = Id_npc
-        
-        dW = npc.grid_outer(dW, [W.get_leg('wL'), W.get_leg('wR')], W.qtotal, ['wL', 'wR'])
-        return MPO(self.sites, [dW] + self._W[1:], self.bc, IdL, IdR, max_range=self.max_range)
+            # Get coefficients depending on if site k in sites and if so
+            # what number site in sites it is.
+            b, a, g, d, counter = params_in_sites(k, counter)
+            
+            # First Row - only this is modified
+            dW[0,0] = d*Id_npc
+            for i in range(0, DR-2):
+                dW[0,i+1] = b**(counter)*C_npc[0,i]
+            dW[0,-1] = (b**N)*D_npc + a*Id_npc
+            # Middle Rows
+            for i in range(0, DL-2):
+                for j in range(0, DR-2):
+                    dW[i+1,j+1] = b*A_npc[i,j]
+                dW[i+1, -1] = b**(N-counter+1)*B_npc[i,0]
+            #Bottom Rows
+            dW[-1,-1] = g*Id_npc
+            U.append(dW)
+            
+        assert counter == N
+        IdL = [0] * (self.L + 1) # I guess we have enforced that the MPO look upper block triangular without any permutations
+        IdR = [-1] * (self.L + 1)
+        return MPO.from_grids(self.sites, U, self.bc, IdL, IdR, max_range=self.max_range, explicit_plus_hc=self.explicit_plus_hc)
 
     def overlap(self, other, understood_infinite: bool = False, num_sites: int = None):
         """Overlap between two MPOs.
