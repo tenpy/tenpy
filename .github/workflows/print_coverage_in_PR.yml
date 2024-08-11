@@ -58,4 +58,3 @@ jobs:
             Thank you for working on this Pull request!
             Here are some stats on your progress.
             The overall test coverage on TenPy, including the changes within this PR, is now ${{ needs.calc_coverage.outputs.COV_PERCENT }}%.
-          refresh-message-position: true
