@@ -3656,7 +3656,8 @@ class MPS(BaseMPSExpectationValue):
                             last_site=None,
                             ops=None,
                             rng=None,
-                            norm_tol=1.e-12):
+                            norm_tol=1.e-12,
+                            complex_amplitude=True):
         """Sample measurement results in the computational basis.
 
         This function samples projective measurements on a contiguous range of sites,
@@ -3680,6 +3681,9 @@ class MPS(BaseMPSExpectationValue):
             The random number generator; if None, a new `numpy.random.default_rng()` is generated.
         norm_tol : float
             Tolerance
+        complex_amplitude : bool
+            Do we return the complex amplitude (``True``) of the sampled bit string or the
+            probability (``False``), which is the ``abs(amplitude) ** 2``.
 
         Returns
         -------
@@ -3688,12 +3692,12 @@ class MPS(BaseMPSExpectationValue):
             as specified in the corresponding :class:`~tenpy.networks.site.Site` in :attr:`sites`.
             Note that this can change depending on whether/what charges you conserve!
             Explicitly specifying the measurement operator will avoid that issue.
-        weight : float
+        weight : complex
             The weight ``sqrt(trace(|psi><psi|sigmas...><sigmas...|))``, i.e.,
             the probability of measuring ``|sigmas...>`` is ``weight**2``.
             For a finite system where we sample all sites (i.e., the trace over the compliment of
             the sites is trivial), this is the actual overlap ``<sigmas...|psi>``
-            including the phase.
+            including the phase. If complex_amplitude is True, we return ``weight**2``.
         """
         if tuple(self._p_label) != ('p', ):
             raise NotImplementedError("Only works for a single physical 'p' leg")
@@ -3741,6 +3745,9 @@ class MPS(BaseMPSExpectationValue):
                 assert theta.shape == (1, 1)
                 # already divided by norm, so only include the phase now
                 total_weight = total_weight * theta[0, 0] / weight
+            if not complex_amplitude:
+                # return probability
+                total_weight = np.abs(total_weight)**2
         return sigmas, total_weight
 
     def norm_test(self):
