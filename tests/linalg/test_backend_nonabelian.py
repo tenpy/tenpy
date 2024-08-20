@@ -129,7 +129,7 @@ def test_c_symbol_fibonacci_anyons(block_backend: str):
         assert_tensors_almost_equal(new_tens, expect_tens, eps)
 
 
-    # exchanges legs 5 and 6 (in domain)
+    # exchange legs 5 and 6 (in domain)
     expect = [np.zeros((8, 3), dtype=complex), np.zeros((13, 5), dtype=complex)]
 
     expect[0][:, 0] = blocks[0][:, 0]
@@ -153,7 +153,7 @@ def test_c_symbol_fibonacci_anyons(block_backend: str):
         assert_tensors_almost_equal(new_tens, expect_tens, eps)
 
 
-    # exchanges legs 2 and 3 (in codomain)
+    # exchange legs 2 and 3 (in codomain)
     phi = (1 + 5**0.5) / 2
     ctttt11 = phi**-1 * r1.conj()  # C symbols
     cttttt1 = phi**-0.5 * rtau * r1.conj()
@@ -195,6 +195,30 @@ def test_c_symbol_fibonacci_anyons(block_backend: str):
         assert_tensors_almost_equal(new_tens, expect_tens, eps)
 
 
+    # exchange legs 4 and 5 (in domain)
+    expect = [np.zeros((8, 3), dtype=complex), np.zeros((13, 5), dtype=complex)]
+
+    expect[0][:, 0] = blocks[0][:, 0] * r1
+    expect[0][:, 1] = blocks[0][:, 1]
+    expect[0][:, 2] = blocks[0][:, 2] * rtau
+
+    expect[1][:, 0] = blocks[1][:, 0]
+    expect[1][:, 1] = blocks[1][:, 1] * rtau
+    expect[1][:, 2] = blocks[1][:, 2]
+    expect[1][:, 3] = blocks[1][:, 3] * ctttt11 + blocks[1][:, 4] * cttttt1
+    expect[1][:, 4] = blocks[1][:, 3] * ctttt1t + blocks[1][:, 4] * ctttttt
+
+    expect_data = backends.FusionTreeData(block_inds, expect, Dtype.complex128)
+    expect_domain = ProductSpace([s2, s2, s1])
+    expect_tens = SymmetricTensor(expect_data, codomain, expect_domain, backend=backend)
+
+    for func in funcs:
+        new_data, new_codomain, new_domain = func(tens, leg=4, levels=levels)
+        new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
+
+        assert_tensors_almost_equal(new_tens, expect_tens, eps)
+
+
     # braid 10 times == trivial
     assert_repeated_braids_trivial(tens, funcs, levels, repeat=10, eps=eps)
 
@@ -202,10 +226,8 @@ def test_c_symbol_fibonacci_anyons(block_backend: str):
     assert_clockwise_counterclockwise_trivial(tens, funcs, levels, eps=eps)
 
 
-
 def test_c_symbol_product_sym(block_backend: str):
     # TODO rescaling axes commutes with braiding
-    # test c symbols
     
     funcs = [fusion_tree_backend._apply_single_c_symbol_inefficient,
              fusion_tree_backend._apply_single_c_symbol_more_efficient]
@@ -313,6 +335,68 @@ def test_c_symbol_product_sym(block_backend: str):
         assert_tensors_almost_equal(new_tens, expect_tens, eps)
 
 
+    # exchange legs 3 and 4 (in domain)
+    phi = (1 + 5**0.5) / 2
+    ctttt11 = phi**-1 * r1.conj()  # C symbols
+    cttttt1 = phi**-0.5 * rtau * r1.conj()
+    ctttt1t = phi**-0.5 * rtau.conj()
+    ctttttt = -1*phi**-1
+    exc4 = [0, 2, 1, 3, 4, 6, 5, 7]
+
+    expect = [np.zeros(shp, dtype=complex) for shp in shapes]
+
+    expect[0][:, :4] = blocks[0][:, exc] * r1 * -1
+    expect[0][:, 4:] = blocks[0][:, 4:]
+
+    expect[1][:, :4] = blocks[1][:, exc] * rtau * -1
+    expect[1][:, 4:] = blocks[1][:, 4:]
+
+    # f-symbols for su(2) [e -> f]: 0 -> 0: -1/2, 2 -> 2: 1/2, 0 -> 2 and 2 -> 0: 3**.5/2
+    expect[2][:, :8] = (blocks[2][:, exc4] * rtau * (-1/4 + 3/4)
+                       + blocks[2][:, [8 + i for i in exc4]] * rtau * (3**0.5/4 + 3**0.5/4))
+    expect[2][:, 8:] = (blocks[2][:, exc4] * rtau * (3**0.5/4 + 3**0.5/4)
+                       + blocks[2][:, [8 + i for i in exc4]] * rtau * (1/4 - 3/4))
+
+    expect[3][:, :2] = blocks[3][:, :2]
+    expect[3][:, 2:10] = (blocks[3][:, [2 + i for i in exc4]] * ctttt11 * (-1/4 + 3/4)
+                         + blocks[3][:, [10 + i for i in exc4]] * ctttt11 * (3**0.5/4 + 3**0.5/4)
+                         + blocks[3][:, [18 + i for i in exc4]] * cttttt1 * (-1/4 + 3/4)
+                         + blocks[3][:, [26 + i for i in exc4]] * cttttt1 * (3**0.5/4 + 3**0.5/4))
+    expect[3][:, 10:18] = (blocks[3][:, [2 + i for i in exc4]] * ctttt11 * (3**0.5/4 + 3**0.5/4)
+                          + blocks[3][:, [10 + i for i in exc4]] * ctttt11 * (1/4 - 3/4)
+                          + blocks[3][:, [18 + i for i in exc4]] * cttttt1 * (3**0.5/4 + 3**0.5/4)
+                          + blocks[3][:, [26 + i for i in exc4]] * cttttt1 * (1/4 - 3/4))
+    expect[3][:, 18:26] = (blocks[3][:, [2 + i for i in exc4]] * ctttt1t * (-1/4 + 3/4)
+                          + blocks[3][:, [10 + i for i in exc4]] * ctttt1t * (3**0.5/4 + 3**0.5/4)
+                          + blocks[3][:, [18 + i for i in exc4]] * ctttttt * (-1/4 + 3/4)
+                          + blocks[3][:, [26 + i for i in exc4]] * ctttttt * (3**0.5/4 + 3**0.5/4))
+    expect[3][:, 26:34] = (blocks[3][:, [2 + i for i in exc4]] * ctttt1t * (3**0.5/4 + 3**0.5/4)
+                          + blocks[3][:, [10 + i for i in exc4]] * ctttt1t * (1/4 - 3/4)
+                          + blocks[3][:, [18 + i for i in exc4]] * ctttttt * (3**0.5/4 + 3**0.5/4)
+                          + blocks[3][:, [26 + i for i in exc4]] * ctttttt * (1/4 - 3/4))
+
+    expect[4][:, :4] = blocks[4][:, exc] * r1
+    expect[4][:, 4:] = blocks[4][:, 4:]
+
+    expect[5][:, :4] = blocks[5][:, exc] * rtau
+    expect[5][:, 4:] = blocks[5][:, 4:]
+
+    expect[6][:, :] = blocks[6][:, exc4] * rtau
+
+    expect[7][:, :8] = blocks[7][:, exc4] * ctttt11 + blocks[7][:, [8 + i for i in exc4]] * cttttt1
+    expect[7][:, 8:] = blocks[7][:, exc4] * ctttt1t + blocks[7][:, [8 + i for i in exc4]] * ctttttt
+
+    expect_data = backends.FusionTreeData(block_inds, expect, Dtype.complex128)
+    expect_domain = ProductSpace([s2, s2, s1])
+    expect_tens = SymmetricTensor(expect_data, codomain, expect_domain, backend=backend)
+
+    for func in funcs:
+        new_data, new_codomain, new_domain = func(tens, leg=3, levels=levels)
+        new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
+
+        assert_tensors_almost_equal(new_tens, expect_tens, eps)
+
+
     # braid 10 times == trivial
     assert_repeated_braids_trivial(tens, funcs, levels, repeat=10, eps=eps)
 
@@ -321,8 +405,7 @@ def test_c_symbol_product_sym(block_backend: str):
 
 
 def test_c_symbol_su3_3(block_backend: str):
-    # TODO SU(3)_3
-    # braid in domain
+    # TODO rescaling axes commutes with braiding
 
     funcs = [fusion_tree_backend._apply_single_c_symbol_inefficient,
              fusion_tree_backend._apply_single_c_symbol_more_efficient]
@@ -462,6 +545,49 @@ def test_c_symbol_su3_3(block_backend: str):
 
     for func in funcs:
         new_data, new_codomain, new_domain = func(tens, leg=1, levels=levels)
+        new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
+
+        assert_tensors_almost_equal(new_tens, expect_tens, eps)
+
+
+    # exchange legs 3 and 4 (in domain)
+    exc = [0, 2, 1, 3]
+    exc4, exc8 = [4 + i for i in exc], [8 + i for i in exc]
+    exc28, exc32 = [28 + i for i in exc], [32 + i for i in exc]
+
+    expect = [np.zeros(shp, dtype=complex) for shp in shapes]
+
+    expect[0][:, :4] = blocks[0][:, exc] * r8[0]
+    expect[0][:, 4:8] = blocks[0][:, exc4] * r8[1]
+    expect[0][:, 8:] = blocks[0][:, exc8] * -1
+
+    v = [blocks[1][:, [4*i + j for j in exc]] for i in range(7)]
+    for i in range(7):
+        w = [csym(c1, c1, c1, c1, charges[i], charges[j])[mul1[i], mul2[i], mul1[j], mul2[j]] for j in range(7)]
+        expect[1][:, 4*i:4*(i+1)] = np.sum([v[j] * w[j] for j in range(7)], axis=0)
+
+    expect[1][:, 28:32] = (blocks[1][:, exc28] * (f1[0,0]*r8[0]*f2[0,0] + f1[0,1]*r8[1]*f2[1,0])
+                          + blocks[1][:, exc32] * (f1[1,0]*r8[0]*f2[0,0] + f1[1,1]*r8[1]*f2[1,0]))
+    expect[1][:, 32:] = (blocks[1][:, exc28] * (f1[0,0]*r8[0]*f2[0,1] + f1[0,1]*r8[1]*f2[1,1])
+                        + blocks[1][:, exc32] * (f1[1,0]*r8[0]*f2[0,1] + f1[1,1]*r8[1]*f2[1,1]))
+
+    expect[2][:, :4] = (blocks[2][:, exc] * (f1[0,0]*r8[0]*f2[0,0] + f1[0,1]*r8[1]*f2[1,0])
+                       + blocks[2][:, exc4] * (f1[1,0]*r8[0]*f2[0,0] + f1[1,1]*r8[1]*f2[1,0]))
+    expect[2][:, 4:8] = (blocks[2][:, exc] * (f1[0,0]*r8[0]*f2[0,1] + f1[0,1]*r8[1]*f2[1,1])
+                        + blocks[2][:, exc4] * (f1[1,0]*r8[0]*f2[0,1] + f1[1,1]*r8[1]*f2[1,1]))
+    expect[2][:, 8:] = blocks[2][:, exc8] * -1
+
+    expect[3][:, :4] = (blocks[3][:, exc] * (f2[0,0]*r8[0]*f1[0,0] + f2[0,1]*r8[1]*f1[1,0])
+                       + blocks[3][:, exc4] * (f2[1,0]*r8[0]*f1[0,0] + f2[1,1]*r8[1]*f1[1,0]))
+    expect[3][:, 4:8] = (blocks[3][:, exc] * (f2[0,0]*r8[0]*f1[0,1] + f2[0,1]*r8[1]*f1[1,1])
+                        + blocks[3][:, exc4] * (f2[1,0]*r8[0]*f1[0,1] + f2[1,1]*r8[1]*f1[1,1]))
+    expect[3][:, 8:] = blocks[3][:, exc8] * -1
+
+    expect_data = backends.FusionTreeData(block_inds, expect, Dtype.complex128)
+    expect_tens = SymmetricTensor(expect_data, codomain, domain, backend=backend)
+
+    for func in funcs:
+        new_data, new_codomain, new_domain = func(tens, leg=3, levels=levels)
         new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
 
         assert_tensors_almost_equal(new_tens, expect_tens, eps)
