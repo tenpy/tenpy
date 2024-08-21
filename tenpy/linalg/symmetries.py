@@ -1334,6 +1334,467 @@ class SU2Symmetry(GroupSymmetry):
         return _su2data.Z_iso(a[0])
 
 
+class SUNSymmetry(GroupSymmetry):
+    """SU(N) group symmetry
+
+    The sectors are lists of length N which correspond to first rows of normalized Gelfand-Tsetlin patterns
+     (see https://arxiv.org/pdf/1009.0437 ).
+     E.g. for SU(3) the 8 dimensional irreducible representation is labeled by [2,1,0]
+
+     Clebsch Gordan coefficients and F/R symbols need to be calculated within the clebsch_gordan_coefficients package and exported as hdf5 file.
+
+     CGfile: hdf5 file containing the clebsch gordan coefficients
+     Ffile: hdf5 file containing the F symbols
+     Rfile: hdf5 file containing the R Symbols
+
+    """
+
+    def __init__(self, N:int, CGfile, Ffile, Rfile):
+
+        assert isinstance(N, int)
+        if not isinstance(N, int) and N > 1:
+            raise ValueError("Invalid N!")
+
+        if not N == CGfile.attrs['N'] or not N == Ffile.attrs['N'] or not N == Rfile.attrs['N']:
+            raise ValueError("Files must contain data for same N!")
+        self.N = N
+        self.CGfile = CGfile
+        self.Ffile = Ffile
+        self.Rfile = Rfile
+
+        GroupSymmetry.__init__(self,
+                               fusion_style=FusionStyle.general,
+                               trivial_sector=np.array([0]*N, dtype=int),
+                               group_name=f'SU({N})',
+                               num_sectors=np.inf,
+                               descriptive_name=None)
+
+    def is_valid_sector(self, a: Sector) -> bool:
+        l = (type(a) == Sector)
+        m = (len(a) == 3)
+        n = (a[-1] == 0)
+        return l and m and n
+
+
+    def sector_dim(self, a: Sector) -> int:
+        '''
+        dimension of irrep given as first row of GT pattern
+        '''
+
+        N = len(a)
+
+        dim = 1
+
+        for kp in range(2, N + 1):
+            for k in range(1, kp):
+                dim *= (1 + ((a[k - 1] - a[kp - 1]) / (kp - k)))
+
+        return int(dim)
+
+
+    def dual_sector(self, a: Sector) -> Sector:
+        '''
+        Finds the dual irrep for a given input irrep. if the irrep is self dual, then the input irrep is returned.
+        Dual irreps have the same highest weight and dimension.
+
+        :param a: irrep i.e. first row of a GT pattern
+        :return: dual irrep
+        '''
+
+        def gen_irreps(N, k):
+            '''generates a list of all possible irreps for given N and highest weight k'''
+
+            if N <= 0:
+                return [[]]
+            r = []
+            for i in range(k, -1, -1):
+                for comb in gen_irreps(N - 1, i):
+                    a = [i] + comb
+                    if a[-1] == 0:
+                        r.append(a[:])
+            return r
+
+        hweight = a[0]
+        dimA = self.sector_dim(a)
+
+        irreps = gen_irreps(len(a), hweight)
+        irreps = [k for k in irreps if a[0] == hweight]
+
+        for i in irreps:
+            dimI = self.sector_dim(i)
+            if dimI == dimA and not i == a:
+                return i
+
+        return a
+
+    # def N_from_CG(self) -> int:
+    #     """Returns the N in SU(N) from a given hdf5 file containing the CG coefficients"""
+    #
+    #     return int(self.CGfile.attrs['N'])
+
+    def hweight_from_CG_hdf5(self) -> int:
+        return int(self.CGfile.attrs['Highest_Weight'])
+
+    def hweight_from_F_hdf5(self) -> int:
+        return int(self.Ffile.attrs['Highest_Weight'])
+
+    def hweight_from_R_hdf5(self) -> int:
+        return int(self.Rfile.attrs['Highest_Weight'])
+
+    def can_fuse_to(self, a: Sector, b: Sector, c: Sector) -> bool:
+        """Returns True if c appears at least once in the decomposition of a x b and False otherwise
+
+            Parameters:
+            -----------
+            a,b: lists, labeling an irrep i.e. first row of GT pattern e.g. [1,0]
+            c: list, labeling an irrep i.e. first row of GT pattern e.g. [1,0]
+            file: hdf5 file containing the Clebsch Gordan coefficients
+            """
+
+        hmax = self.hweight_from_CG_hdf5()
+        if a[0] > hmax or b[0] > hmax:
+            raise ValueError('Input irreps have higher weight than highest weight irrep in HDF5-file')
+
+        if c[0] > a[0] + b[0]:
+            return False
+
+        N = '/N_' + str(self.N) + '/'
+
+        astr = "/".join(tuple(map(str, a))) + '/'
+        bstr = "/".join(tuple(map(str, b))) + '/'
+
+        key = N + astr + bstr
+
+        if not key in self.CGfile:
+            key = N + bstr + astr
+
+        dec = []
+
+        for i in list(self.CGfile[key]):
+            dec.append(list(self.CGfile[key][str(i)].attrs['Irreplabel']))
+
+        if c in dec:
+            return True
+
+        return False
+
+    def fusion_multiplicity(self, a: Sector, b: Sector, c: Sector) -> int:
+        """returns the fusion multiplicity of an irrep c in the decomposition of a x b specified in the file
+
+        Parameters:
+        -----------
+        a,b: lists, labeling an irrep i.e. first row of GT pattern e.g. [1,0]
+        c: list, labeling an irrep i.e. first row of GT pattern e.g. [1,0]
+        file: hdf5 file containing the Clebsch Gordan coefficients
+
+        Returns:
+        --------
+        Fusion multiplicity (value of N^{ab}_c symbol) as integer
+        """
+
+        N = '/N_' + str(self.N) + '/'
+
+        a = "/".join(tuple(map(str, a))) + '/'
+        b = "/".join(tuple(map(str, b))) + '/'
+
+        c = 'Irrep' + "".join(map(str, c)) + 'a1'
+
+        key = N + a + b
+
+        if not key in self.CGfile:
+            key = N + b + a
+
+        if c not in list(self.CGfile[key]):
+            return 0
+
+        return self.CGfile[key][c].attrs['Outer Multiplicity']
+
+    def S_index_irrep_weight(self, a: Sector) -> int:
+        """ to every su(N) irrep, labeled by the first row of a GT pattern, we can assign an integer number S
+        """
+
+        N = self.N
+        S = 0
+
+        for k in range(1, N):
+            S += math.comb(N - k + a[k - 1] - 1, N - k)
+
+        return int(S)
+
+    def highest_irrep_in_decomp(self, a: Sector, b: Sector) -> Sector:
+        '''
+        Returns the highest irrep (i.e. first row of GT pattern) which appears in the decomposition of irrep1 x irrep2.
+        '''
+
+        #assert len(a) == len(b)
+        return np.array(a) + np.array(b)
+
+    def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
+        """Returns a SectorArray of all irreps appearing in the decomposition of  a x b
+        The irreps in this list are again Sectors of the form [2,1,0]. i.e. first rows of a GT pattern
+         """
+
+        hmax = self.hweight_from_CG_hdf5()
+        if a[0] > hmax or b[0] > hmax:
+            raise ValueError('Input irreps have higher weight than highest weight irrep in HDF5-file')
+
+        N = '/N_' + str(self.N) + '/'
+
+        a = "/".join(tuple(map(str, a))) + '/'
+        b = "/".join(tuple(map(str, b))) + '/'
+
+        key = N + a + b
+
+        if not key in self.CGfile:
+            key = N + b + a
+
+        dec = np.array([])
+        for i in list(self.CGfile[key]):
+            np.append(dec,np.array(self.CGfile[key][str(i)].attrs['Irreplabel']), axis=1)
+
+        return dec
+
+    def dims_of_irreps(self, a: Sector, b: Sector) -> dict:
+        """Returns a dictionary with irreps as keys and their dimension as values.
+        The irreps are the ones appearing in the decomposition of a x b
+        Does not contain multiplicities!
+        """
+
+        dec = self.fusion_outcomes(a, b)
+        N = '/N_' + str(self.N) + '/'
+
+        a = "/".join(tuple(map(str, a))) + '/'
+        b = "/".join(tuple(map(str, b))) + '/'
+
+        key = N + a + b
+
+        C = {}
+        keys = []
+
+        for i in dec:
+            keys.append(tuple(i))
+
+        for k in keys:
+            obj = 'Irrep' + ''.join(map(str, k)) + 'a1'
+            C[k] = int(self.CGfile[key][obj].attrs['Dimension'])
+
+        return C
+
+    def outer_multiplicity_from_CG(self, a: Sector, b: Sector) -> dict:
+        '''
+
+        returns a dictionary with the outer multiplicities for the corresp. irrep (as key) in the decomp of a x b
+        '''
+
+        dec = self.fusion_outcomes(a, b)
+        N = '/N_' + str(self.N) + '/'
+
+        a = "/".join(tuple(map(str, a))) + '/'
+        b = "/".join(tuple(map(str, b))) + '/'
+
+        key = N + a + b
+
+        C = {}
+        keys = []
+
+        for i in dec:
+            keys.append(tuple(i))
+
+        for k in keys:
+            obj = 'Irrep' + ''.join(map(str, k)) + 'a1'
+            C[k] = int(self.CGfile[key][obj].attrs['Outer Multiplicity'])
+
+        return C
+
+    def clebschgordan(self, a: Sector, q_a: int, b: Sector, q_b: int, c: Sector, q_c: int, mu: int) -> float:
+        '''
+
+        :param a:       irrep a
+        :param q_a:     index of the Gelfand Tsetlin pattern
+        :param b:       irrep b
+        :param q_b:     index of the Gelfand Tsetlin pattern
+        :param c:       irrep c
+        :param q_c:     index of the Gelfand Tsetlin pattern
+        :param mu:      multiplicity index 1 <= mu
+        :param file:    the file that contains the CG coefficients
+        :return:        the CG coefficient for the given input
+        '''
+
+
+        hw = self.hweight_from_CG_hdf5()
+
+        if a[0] > hw or b[0] > hw or c[0] > hw:
+            raise ValueError('Input irreps have higher weight than highest weight irrep in HDF5-file')
+
+
+        N = '/N_' + str(self.N) + '/'
+
+        a = "/".join(tuple(map(str, a))) + '/'
+        b = "/".join(tuple(map(str, b))) + '/'
+
+        c = "".join(map(str, c))
+
+        ms = [float(q_a), float(q_b), float(q_c)]
+
+        key1 = N + a + b
+        key2 = 'Irrep' + c + 'a' + str(mu)
+
+        if key1 in self.CGfile:
+            arr = np.array(self.CGfile[key1][key2])[0]
+        else:
+            key1 = N + b + a  # we only save a x b  and not also b x a since the clebsch gordan coefficients are the same in both cases
+            arr = np.array(self.CGfile[key1][key2])[0]
+
+            ms = [float(q_b), float(q_a), float(q_c)]
+
+        for i in range(len(arr)):
+            if list(arr[i][0:3]) == ms:
+                return arr[i][3]
+
+        return 0.
+
+
+    def fusion_tensor(self, a: Sector, b: Sector, c: Sector, Z_a: bool = False, Z_b: bool = False
+                      ) -> np.ndarray:
+        '''
+        a,b,c are irreps (first rows of GT patterns)
+        CG_coeffs is the np.array from CG code for decomposition a x b = mu * c
+
+        '''
+
+
+        hw = self.hweight_from_CG_hdf5()
+
+        if a[0] > hw or b[0] > hw or c[0] > hw:
+            raise ValueError('Input irreps have higher weight than highest weight irrep in HDF5-file')
+
+
+        dim_Sa = self.sector_dim(a)
+        dim_Sb = self.sector_dim(b)
+        dim_Sc = self.sector_dim(c)
+        dim_mu = self.fusion_multiplicity(a, b, c)
+
+        if dim_mu == 0:
+            return np.zeros((dim_Sa, dim_Sb, dim_Sc, 1), dtype=np.float64)
+
+        X = np.zeros((dim_Sa, dim_Sb, dim_Sc, dim_mu), dtype=np.float64)
+
+        for m_a in range(1, dim_Sa + 1):
+            for m_b in range(1, dim_Sb + 1):
+                for m_c in range(1, dim_Sc + 1):
+                    for mu in range(1, dim_mu + 1):
+                        # print(m_a,m_b,m_c)
+                        # print(clebschgordan(a, m_a, b, m_b, c, m_c, mu, file))
+                        rr = self.clebschgordan(a, m_a, b, m_b, c, m_c, mu)
+                        X[m_a - 1, m_b - 1, m_c - 1, mu - 1] = rr
+
+        return X
+
+    def _f_symbol_from_CG(self,a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector):
+        """a,b,c,d,e,f are irrep labels, i.e. first rows of GT patterns
+        output is the conjugated F symbol [F^{abc}_{def}]^*_{mu,nu,kappa, lambda}
+        where a x b = mu c, c x d =nu e, b x d= kappa f and a x f =lambda e """
+
+
+        hw = self.hweight_from_CG_hdf5()
+
+        if a[0] > hw or b[0] > hw or c[0] > hw or d[0] > hw or e[0] > hw or f[0] > hw:
+            raise ValueError('Input irreps have higher weight than highest weight irrep in HDF5-file')
+
+        X1 = self.fusion_tensor(a, b, f)  # [a,b,f, kappa]
+        X2 = self.fusion_tensor(f, c, d)  # [f,c,d, lambda]
+
+        X3 = self.fusion_tensor(b, c, e)  # [b,c,e, mu]
+        X4 = self.fusion_tensor(a, e, d)  # [a,e,d, nu]
+
+        if not X1.any() or not X2.any() or not X3.any() or not X4.any():
+            return np.zeros((1, 1, 1, 1), dtype=complex)
+
+        X12 = np.tensordot(X1, X2, axes=[[2], [0]])  # [a,b,[f], kappa] ; [[f],c,d, lambda] --> [a,b,kappa,c,d, lambda]
+        X12 = X12.transpose([0, 1, 3, 4, 2, 5])  # [a,b,c,d,kappa,lambda]
+
+        X34 = np.tensordot(X3, X4, axes=[[2], [1]])  # [b,c,[e], mu] ; [a,[e],d, nu] --> [b,c,mu,a,d,nu]
+        X34 = X34.transpose([3, 0, 1, 4, 2, 5])  # [a,b,c,d,mu,nu]
+
+        F = np.tensordot(X12, np.conj(X34), axes=[[0, 1, 2, 3], [0, 1, 2, 3]])  # [a,b,c,d,kappa,lambda] ; [a,b,c,d,mu,nu] --> [kappa,lambda,mu,nu]
+
+        F = F.transpose([2, 3, 0, 1])  # [mu, nu, kappa, lambda]
+
+        F[np.abs(F) < (10 ** -12)] = 0
+
+        return F / ((self.sector_dim(d) + 0.j))
+
+    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
+                 ) -> np.ndarray:
+        '''
+        Returns the F-symbol F^{abc mu nu}_{def kappa lambda} from the hdf5 file
+        '''
+
+        hmax = self.hweight_from_F_hdf5()
+
+        if a[0] > hmax or b[0] > hmax or c[0] > hmax or d[0] > hmax or e[0] > hmax or f[0] > hmax:
+            raise ValueError('Input irreps have higher weight than highest weight irrep in HDF5-file')
+
+        abar = self.dual_sector(a)
+        bbar = self.dual_sector(b)
+        cbar = self.dual_sector(c)
+        dbar = self.dual_sector(d)
+        ebar = self.dual_sector(e)
+        fbar = self.dual_sector(f)
+
+        key = 'F' + str(a) + str(b) + str(c) + str(d) + str(e) + str(f)
+        keybar = 'F' + str(abar) + str(bbar) + str(cbar) + str(dbar) + str(ebar) + str(fbar)
+
+        if key in self.Ffile['/F_sym/']:
+            return np.array(self.Ffile['/F_sym/'][key])
+
+        elif keybar in self.Ffile['/F_sym/']:
+            return np.array(self.Ffile['/F_sym/'][keybar])
+
+        return np.zeros((1, 1, 1, 1), dtype=complex)
+
+    def _r_symbol_from_CG(self, a: Sector ,b: Sector ,c: Sector):
+        """a,b,c are irrep labels, i.e. first rows of GT patterns
+        output is the R symbol [R^{ab}_{c}]^*_{mu,nu}
+        where a x b = mu c, c x d =nu e, b x d= kappa f and a x f =lambda e """
+
+        hw = self.hweight_from_CG_hdf5()
+
+        mult = self.fusion_multiplicity(a, b, c)
+
+        if a[0] > hw or b[0] > hw or c[0] > hw:
+            raise ValueError('Input irreps have higher weight than highest weight irrep in HDF5-file')
+
+        X1 = self.fusion_tensor(a, b, c)  # [a,b,c, nu]
+        Y1 = self.fusion_tensor(b, a, c).conj()  # [b,a,c,mu]
+
+        if not X1.any() or not Y1.any():
+            return np.zeros((1), dtype=complex)
+
+        R = np.tensordot(X1, Y1, axes=[[0, 1, 2], [1, 0, 2]])  # [[a],(b),{c}, nu] , [(b),[a],{c},mu] --> [nu,mu]
+
+        R = R.transpose([1, 0]) / ((self.sector_dim(c) + 0.j))
+
+        return np.diag(R)
+
+    def _r_symbol(self, a: Sector, b: Sector, c: Sector):
+        '''
+        Returns the R-symbol R^{ab}_{c mu} from the hdf5 file
+        '''
+
+        hmax = self.hweight_from_R_hdf5()
+
+        if a[0] > hmax or b[0] > hmax or c[0] > hmax:
+            raise ValueError('Input irreps have higher weight than highest weight irrep in HDF5-file')
+
+        key = 'F' + str(a) + str(b) + str(c)
+
+        if key in self.Rfile['/R_sym/']:
+            return np.array(self.Rfile['/R_sym/'][key])
+
+        return np.zeros((1,), dtype=complex)
+
+
 class FermionParity(Symmetry):
     """Fermionic Parity.
 
