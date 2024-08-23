@@ -1,4 +1,5 @@
 # Copyright (C) TeNPy Developers, GNU GPLv3
+import h5py
 import pytest
 import numpy as np
 from numpy.testing import assert_array_equal, assert_array_almost_equal
@@ -106,7 +107,9 @@ def sample_sector_sextets(symmetry: symmetries.Symmetry, sectors, num_samples: i
             f = np_rng.choice(symmetry.fusion_outcomes(a, b))
             d = np_rng.choice(symmetry.fusion_outcomes(f, c))
             # need to find an f from the fusion products of b x c such that a x f -> d is allowed
-            for e in np_rng.permuted(symmetry.fusion_outcomes(b, c), axis=0):
+            outcomes=symmetry.fusion_outcomes(b, c)
+            np_rng.shuffle(outcomes, axis=0)
+            for e in outcomes:
                 if symmetry.can_fuse_to(a, e, d):
                     yield a, b, c, d, e, f
                     break
@@ -909,6 +912,78 @@ def test_su2_symmetry(np_random):
         np.stack([spin_1, spin_3_half])
     )
 
+@pytest.mark.parametrize('N', [3])
+@pytest.mark.parametrize('CGfile', ['Test_N_3_HWeight_7.hdf5'])
+@pytest.mark.parametrize('Ffile', ['Test_Fsymb_3_HWeight_4.hdf5'])
+@pytest.mark.parametrize('Rfile', ['Test_Rsymb_3_HWeight_4.hdf5'])
+def test_suN_symmetry(N,CGfile, Ffile, Rfile, np_random):
+    def gen_irrepsTEST(N, k):
+        '''generates a list of all possible irreps for given N and highest weight k'''
+
+        if N <= 0:
+            return [[]]
+        r = []
+        for i in range(k, -1, -1):
+            for comb in gen_irrepsTEST(N - 1, i):
+                a = [i] + comb
+                if a[-1] == 0:
+                    r.append(a[:])
+        return r
+
+    CGfile=h5py.File(CGfile,"r")
+    Ffile = h5py.File(Ffile, "r")
+    Rfile = h5py.File(Rfile, "r")
+    sym = symmetries.SUNSymmetry(N, CGfile, Ffile, Rfile)
+    common_checks(sym, example_sectors=np.array(gen_irrepsTEST(N,2)),
+                  example_sectors_low_qdim=np.array([[0]*N, [1]+[0]*(N-1), [2]+[0]*(N-1)]), np_random=np_random)
+
+    # spin_1 = np.array([2])
+    # spin_3_half = np.array([3])
+    # sym_with_name = symmetries.SU2Symmetry('foo')
+
+    print('instancecheck and is_abelian')
+    assert not isinstance(sym, symmetries.AbelianGroup)
+    assert isinstance(sym, symmetries.GroupSymmetry)
+    assert not sym.is_abelian
+
+    print('checking valid sectors')
+    for valid in gen_irrepsTEST(N,2):
+        assert sym.is_valid_sector(np.array(valid))
+    for invalid in [[-1], [0, 0]]:
+        assert not sym.is_valid_sector(np.array(invalid))
+
+    # print('checking fusion_outcomes')
+    # # 1 x 3/2 = 1/2 + 3/2 + 5/2
+    # assert_array_equal(
+    #     sym.fusion_outcomes(spin_1, spin_3_half),
+    #     np.array([[1], [3], [5]])
+    # )
+
+    # print('checking fusion_outcomes_broadcast')
+    # with pytest.raises(AssertionError):
+    #     # sym does not have FusionStyle.single, so this should raise
+    #     _ = sym.fusion_outcomes_broadcast(spin_1[None, :], spin_3_half[None, :])
+
+    print('checking sector dimensions')
+    assert sym.sector_dim([0]*N) == 1
+    #assert sym.sector_dim(spin_3_half) == 4
+
+    print('checking equality')
+    assert sym == sym
+    # assert sym != sym_with_name
+    # assert sym == symmetries.SU2Symmetry()
+    # assert sym != symmetries.fermion_parity
+
+    # print('checking dual_sector')
+    # assert_array_equal(sym.dual_sector(spin_1), spin_1)
+    # assert_array_equal(sym.dual_sector(spin_3_half), spin_3_half)
+
+    # print('checking dual_sectors')
+    # assert_array_equal(
+    #     sym.dual_sectors(np.stack([spin_1, spin_3_half])),
+    #     np.stack([spin_1, spin_3_half])
+    # )
+
 
 def test_fermion_parity(np_random):
     sym = symmetries.FermionParity()
@@ -1260,3 +1335,6 @@ def test_SU2_kAnyonCategory(k, handedness, np_random):
 
     print('checking dual_sectors')
     assert_array_equal(sym.dual_sectors(sectors_a), sectors_a)
+
+
+test_suN_symmetry(3,'/space/ge36xeh/TenpyV2a/Test_N_3_HWeight_7.hdf5', '/space/ge36xeh/TenpyV2a/Test_Fsymb_3_HWeight_4.hdf5', '/space/ge36xeh/TenpyV2a/Test_Rsymb_3_HWeight_4.hdf5', default_rng)
