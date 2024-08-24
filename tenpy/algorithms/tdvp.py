@@ -114,7 +114,8 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
         1. Krylov_expansion_dim: how many additional vectors do we use to expand the basis; > 1 is sufficient for random extension.
 
         2. mpo: what MPO do we use for expanion? If none is specified, we use the Hamiltonian. If 'None' is specified, we do
-            random extension.
+            random extension. If a list is given, one applies multiple MPOs to get the next Krylov vector, e.g. with WII and a
+            higher order time step.
 
         3. trunc_params: standard dictionary for truncation settings.
                 chi_max: max number of states that are added on each site.
@@ -137,13 +138,16 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
             if Krylov_mpo is None:  # Random expansion
                 extension_err = self.psi.subspace_expansion(expand_into=[], trunc_par=Krylov_trunc_params)
             else:                   # Expansion by MPO application
+                # Cast to list to allow for multiple mpos (i.e. W2 with order > 1)
+                Krylov_mpo = [Krylov_mpo] if not isinstance(Krylov_mpo, list) else Krylov_mpo
                 # First generate Krylov basis
                 Krylov_apply_mpo_options = self.Krylov_options.subconfig('apply_mpo_options')
                 # Needs to contain 'compression_method' and options for doing the MPO application
                 Krylov_extended_basis = []
                 new_psi = self.psi.copy()
                 for i in range(Krylov_expansion_dim):
-                    Krylov_mpo.apply(new_psi, Krylov_apply_mpo_options)
+                    for krylov_mpo in Krylov_mpo:
+                        krylov_mpo.apply(new_psi, Krylov_apply_mpo_options)
                     Krylov_extended_basis.append(new_psi.copy())
                 extension_err = self.psi.subspace_expansion(expand_into=Krylov_extended_basis, trunc_par=Krylov_trunc_params)
             logger.info(f"Extended bond dimension: {self.psi.chi}.")
