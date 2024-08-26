@@ -418,7 +418,7 @@ class MPO:
         if self._has_permutations:
             assert len(self._charge_permutations)==self.L+1, "missing charge permutations for virtual MPO legs?"
             if not self.finite:
-                assert self._charge_permutations[0]==self._charge_permutations[self.L], "permutations of outer virtual legs don't match"
+                assert np.allclose(self._charge_permutations[0],self._charge_permutations[self.L]), "permutations of outer virtual legs don't match"
 
     @property
     def L(self):
