@@ -1437,6 +1437,13 @@ class MPO:
             raise ValueError("expected list with L+1={0:d} entries".format(L + 1))
         return Id
 
+    def _perm_index(self, j_site, ij):
+        """ converts unsorted indices ij = (i,j) at site j_site to sorted if the virtual indices were sorted """
+        if not self._has_permutations:
+            return ij
+        else:
+            return (self._charge_permutations[j_site][ij[0]],self._charge_permutations[j_site+1][ij[1]])
+
     def __add__(self, other):
         """Return an MPO representing `self + other`.
 
@@ -1510,6 +1517,7 @@ class MPO:
             max_range = max(self.max_range, other.max_range)
         else:
             max_range = None
+        # unsure about this one regarding the legcharges
         return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range, self.explicit_plus_hc)
 
     def _get_block_projections(self, i):
@@ -1543,6 +1551,46 @@ class MPO:
             proj_other = None
         return (proj_IdL, proj_other, proj_IdR)
 
+    def _norm_diagonal_entries(self, tol=1.e-14):
+        """ Classifies the diagonal elements W[0]_jj*W[1]_jj*W[2]_jj... of H
+            and checks that all diagonal entries are identities up to prefactors
+        
+        Returns
+        ----------
+        nonzero_entries : list of int
+            unpermuted indices of diagonal elements with norm>tol
+        norms : list of float
+            norm of the corresponding diagonal entries
+        """
+        if self.bc=='finite':
+            raise ValueError("This makes sense only for periodic MPOs")
+        elif self.finite: # segment boundary conditions
+            self.get_W(0).get_leg('wL').test_contractible(self.get_W(self.L-1).get_leg("wR"))
+        if self._has_permutations:
+            if self._charge_permutations[0]!=self._charge_permutations[self.L]:
+                raise ValueError("Permutations on boundary virtual legs are incompatible")
+        nonzero_entries = []
+        norms = []
+        for i in range(self.L):
+            self.H.get_W(i).itranspose(['wL', 'wR', 'p', 'p*'])
+        for j in range(self.H.chi[0]):
+            norm = 1.
+            for site in range(self.L):
+                Wjj = self.get_W(site)[self._perm_index(site, (j,j))]
+                # if Wjj is of the form factor*id, factor>0 this works
+                factor = npc.norm(Wjj, ord=1)/Wjj.shape[0] 
+                if factor<tol:
+                    break # norm close to zero => norm of total entry close to zero
+                # check that Wjj == factor*id
+                is_id = npc.norm(Wjj-factor*npc.diag(1., Wjj.get_leg("p")), ord=1)<tol
+                if not is_id:
+                    raise ValueError("Diagonal entry at index {0} of W[{1}] not close to identity up to tol={2}".format(j, site, tol))
+                norm *= factor
+            if norm>tol:
+                nonzero_entries.append(j)
+                norms.append(norm)
+        return nonzero_entries, norms
+          
 
 def make_W_II(t, A, B, C, D):
     r"""W_II approx to exp(t H) from MPO parts (A, B, C, D).
@@ -1615,49 +1663,6 @@ def make_W_II(t, A, B, C, D):
         if Nc == 0:
             W = expm(t * D).reshape([1, 1, d, d])
     return W
-
-def _norm_diagonal_entries(self, tol=1.e-10):
-    pass # needed for environment calculation
-
-def __norm_diags_simple(self, tol=1.e-10):
-    """
-    Simple understandable implementation of _norm_diagonal_entries without charge conservation
-    For understanding reasons, will be removed at the end
-    Also includes comments about what can go wrong depending on the assumptions on the MPO   
-    """
-    if self.finite:
-        raise NotImplementedError("Makes only sense for an iMPO")
-    D = self.H.chi[0] # same as chi[self.L+1]
-    types = []
-    # order all W matrices correctly
-    for site in range(self.L):
-        self.H.get_W(site).itranspose(['wL', 'wR', 'p', 'p*'])       
-    for j in range(D):
-        curr_type = 'id'
-        for site in range(self.L):
-            perm_jj = (self.H._perm_index(site, j),self.H._perm_index(site+1, j))
-            Wjj = self.H.get_W(site)[perm_jj].to_ndarray()
-            # diagonal element is zero
-            if np.allclose(Wjj,np.zeros(Wjj.shape),atol=tol):
-                curr_type = 'zero'
-                break
-            abs_max_eig = np.linalg.norm(Wjj,ord=2)
-            if abs_max_eig > 1.+tol:
-                raise ValueError('MPO contains operator with 2-norm larger one at W[{site}]_{j}{j}'.format(site=site,j=j))
-            is_id = np.allclose(Wjj,Wjj[0,0]*np.eye(Wjj.shape[0]),atol=tol)
-            # lx
-            if abs(abs_max_eig-1.)>tol and not is_id:
-                curr_type = 'lx'
-            # lid
-            elif abs(abs_max_eig-1.)>tol:
-                curr_type = 'lid' if 'id' in curr_type else 'lx'
-            # x
-            elif not is_id:
-                curr_type = 'lx' if 'x' in curr_type else 'x'
-            # id -> no change
-        types.append(curr_type)
-    n_ones = types.count('id')+types.count('x')
-    return n_ones, types
 
 
 class MPOGraph:
