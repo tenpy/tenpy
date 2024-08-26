@@ -605,6 +605,18 @@ class MPO:
             if IdR is not None:
                 IdR = IdR % chi[b]
                 self.IdR[b] = np.nonzero(p == IdR)[0][0]
+        # old_W[n][i,j] = new_W[n][perm[n]^-1[i],perm[n+1]^-1[j]]
+        inv_perms = []
+        for perm in perms:
+            inv_perm = np.empty_like(perm)
+            inv_perm[perm] = np.arange(len(inv_perm), dtype=int)
+            inv_perms.append(inv_perm)
+        if not self._has_permutations:
+            self._has_permutations = True
+            self._charge_permutations = inv_perms
+        else:            
+            # compute compositions (inv_perms[n])o(self._charge_permutations[n])
+            self._charge_permutations = [inv_perms[j][self._charge_permutations[j]] for j in range(self.L+1)] 
         # done
 
     def make_U(self, dt, approximation='II'):
@@ -685,7 +697,7 @@ class MPO:
         else:
             IdLR_0 = IdL
         IdLR = [IdLR_0] + IdLR
-
+        # attrs:`_charge_permutations` not tracked here, needed?
         return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf)
 
     def make_U_II(self, dt):
@@ -750,6 +762,7 @@ class MPO:
             # TODO: could sort by charges.
             U.append(W_II)
         Id = [0] * (self.L + 1)
+        # attrs:`_charge_permutations` not tracked here, needed?
         return MPO(self.sites, U, self.bc, Id, Id, max_range=self.max_range)
 
     def expectation_value(self, psi, tol=1.e-10, max_range=100, init_env_data={}):
@@ -1149,7 +1162,8 @@ class MPO:
             Ws[0].legs[0] = Ws[0].legs[0].flip_charges_qconj()
         else:
             Ws[0].legs[0] = wR.conj()
-        return MPO(self.sites, Ws, self.bc, self.IdL, self.IdR, self.max_range)
+        # should not change the permutations on the virtual indices
+        return MPO(self.sites, Ws, self.bc, self.IdL, self.IdR, self.max_range, self._charge_permutations)
 
     def is_hermitian(self, eps=1.e-10, max_range=None):
         """Check if `self` is a hermitian MPO.
