@@ -3197,7 +3197,7 @@ def detect_qtotal(flat_array, legcharges, cutoff=None):
     Returns
     -------
     qtotal : charge
-        The total charge fo the first non-zero (i.e. > cutoff) charge block.
+        The total charge for the first non-zero (i.e. > cutoff) charge block.
 
     See also
     --------

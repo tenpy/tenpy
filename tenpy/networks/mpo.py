@@ -83,6 +83,8 @@ class MPO:
     explicit_plus_hc : bool
         If True, this flag indicates that the hermitian conjugate of the MPO should be
         computed and added at runtime, i.e., `self` is not (necessarily) hermitian.
+    charge_permutations : {list of 1D array | None}
+        permutations of the virtual legs as described in :attr:`_charge_permutations`
 
     Attributes
     ----------
@@ -114,6 +116,13 @@ class MPO:
         The matrices of the MPO. Labels are ``'wL', 'wR', 'p', 'p*'``.
     _valid_bc : tuple of str
         Class attribute. Valid boundary conditions; the same as for an MPS.
+    _charge_permutations : {list of 1D arrays | None}
+        If None, the Ws are in the "usual" upper triangular form
+        If given, the virtual legs of the Ws are permuted, such that
+        _W[n][charge_permutations[n][i],charge_permutations[n+1][j]] = W_trivial[n][i,j]
+        This is the same as the inverse permutations obtained by self.sort_legcharges          
+    _has_permutations : bool
+        True if attrs:`_charge_permutations` are present
     """
 
     _valid_bc = _MPS._valid_bc  # same valid boundary conditions as an MPS.
@@ -125,7 +134,8 @@ class MPO:
                  IdL=None,
                  IdR=None,
                  max_range=None,
-                 explicit_plus_hc=False):
+                 explicit_plus_hc=False,
+                 charge_permutations=None):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
         self.dtype = dtype = np.result_type(*[W.dtype for W in Ws])
@@ -136,6 +146,8 @@ class MPO:
         self.bc = bc
         self.max_range = max_range
         self.explicit_plus_hc = explicit_plus_hc
+        self._charge_permutations = charge_permutations
+        self._has_permutations = True if isinstance(self._charge_permutations, list) else False
         self.test_sanity()
 
     def copy(self):
@@ -155,6 +167,7 @@ class MPO:
         :attr:`IdL` as ``"index_identity_left"``,
         :attr:`IdR` as ``"index_identity_right"``, and
         :attr:`bc` as ``"boundary_condition"``.
+        :attr:`_charge_permutations` as ``"_perms"``
         Moreover, it saves :attr:`L`, :attr:`explicit_plus_hc` and :attr:`grouped` as HDF5 attributes,
         as well as the maximum of :attr:`chi` under the name :attr:`max_bond_dimension`.
 
@@ -175,6 +188,7 @@ class MPO:
         h5gr.attrs["grouped"] = self.grouped
         hdf5_saver.save(self.bc, subpath + "boundary_condition")
         hdf5_saver.save(self.max_range, subpath + "max_range")
+        hdf5_saver.save(self._charge_permutations, subpath + "_perms")
         h5gr.attrs["explicit_plus_hc"] = self.explicit_plus_hc
         h5gr.attrs["L"] = self.L  # not needed for loading, but still useful metadata
         h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
@@ -211,6 +225,8 @@ class MPO:
         obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
         obj.bc = hdf5_loader.load(subpath + "boundary_condition")
         obj.max_range = hdf5_loader.load(subpath + "max_range")
+        obj._charge_permutations = hdf5_loader.load(subpath + "_perms")
+        obj._has_permutations = True if isinstance(obj._charge_permutations, list) else False
         obj.explicit_plus_hc = h5gr.attrs.get("explicit_plus_hc", False)
         obj.test_sanity()
         return obj
@@ -225,7 +241,8 @@ class MPO:
                    Ws_qtotal=None,
                    legs=None,
                    max_range=None,
-                   explicit_plus_hc=False):
+                   explicit_plus_hc=False,
+                   charge_permutations=None):
         """Initialize an MPO from `grids`.
 
         Parameters
@@ -257,7 +274,8 @@ class MPO:
         explicit_plus_hc : bool
             If True, the Hermitian conjugate of the MPO is computed at runtime,
             rather than saved in the MPO.
-
+        charge_permutations: { list of 1D array | None}
+            permutations of the virtual legs as described in :attrs:`_charge_permutations`
         See also
         --------
         grid_insert_ops : used to plug in `entries` of the grid.
@@ -299,7 +317,7 @@ class MPO:
         for i in range(L):
             W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i], ['wL', 'wR'])
             Ws.append(W)
-        return cls(sites, Ws, bc, IdL, IdR, max_range, explicit_plus_hc)
+        return cls(sites, Ws, bc, IdL, IdR, max_range, explicit_plus_hc, charge_permutations)
 
     @classmethod
     def from_wavepacket(cls, sites, coeff, op, eps=1.e-15):
@@ -397,6 +415,10 @@ class MPO:
                 W.get_leg('wR').test_contractible(W2.get_leg('wL'))
         if not (len(self.IdL) == len(self.IdR) == self.L + 1):
             raise ValueError("wrong len of `IdL`/`IdR`")
+        if self._has_permutations:
+            assert len(self._charge_permutations)==self.L+1, "missing charge permutations for virtual MPO legs?"
+            if not self.finite:
+                assert self._charge_permutations[0]==self._charge_permutations[self.L], "permutations of outer virtual legs don't match"
 
     @property
     def L(self):
@@ -469,6 +491,8 @@ class MPO:
         self._W = factor * self._W
         self.IdL = factor * self.IdL[:-1] + [self.IdL[-1]]
         self.IdR = factor * self.IdR[:-1] + [self.IdR[-1]]
+        if self._has_permutations:
+            self._charge_permutations = (factor-1)*self._charge_permutations[:-1]+self._charge_permutations
         self.test_sanity()
 
     def group_sites(self, n=2, grouped_sites=None):
@@ -495,6 +519,8 @@ class MPO:
         Ws = []
         IdL = []
         IdR = [self.IdR[0]]
+        if self._has_permutations:
+            charge_perm = [self._charge_permutations[0]]
         i = 0
         for gs in grouped_sites:
             new_W = self.get_W(i).itranspose(['wL', 'p', 'p*', 'wR'])
@@ -507,12 +533,16 @@ class MPO:
             IdL.append(self.get_IdL(i))
             i += gs.n_sites
             IdR.append(self.get_IdR(i - 1))
+            if self._has_permutations:
+                charge_perm.append(self._charge_permutations[i])
         IdL.append(self.IdL[-1])
         self.IdL = IdL
         self.IdR = IdR
         self._W = Ws
         self.sites = grouped_sites
         self.grouped = self.grouped * n
+        if self._has_permutations:
+            self._charge_permutations = charge_perm
 
     def extract_segment(self, first, last):
         """Extract a segment from the MPO.
@@ -538,7 +568,11 @@ class MPO:
         IdL.append(self.IdL[last % L + 1])
         IdR = [self.IdR[i % L] for i in range(first, last + 1)]
         IdR.append(self.IdR[last % L + 1])
-        cp = self.__class__(sites, W, 'segment', IdL, IdR, self.max_range, self.explicit_plus_hc)
+        if self._has_permutations:
+            charge_perm = [self._charge_permutations[i%L] for i in range(first, last+2)]
+        else:
+            charge_perm = None
+        cp = self.__class__(sites, W, 'segment', IdL, IdR, self.max_range, self.explicit_plus_hc, charge_perm)
         cp.grouped = self.grouped
         return cp
 
@@ -1568,6 +1602,49 @@ def make_W_II(t, A, B, C, D):
             W = expm(t * D).reshape([1, 1, d, d])
     return W
 
+def _norm_diagonal_entries(self, tol=1.e-10):
+    pass # needed for environment calculation
+
+def __norm_diags_simple(self, tol=1.e-10):
+    """
+    Simple understandable implementation of _norm_diagonal_entries without charge conservation
+    For understanding reasons, will be removed at the end
+    Also includes comments about what can go wrong depending on the assumptions on the MPO   
+    """
+    if self.finite:
+        raise NotImplementedError("Makes only sense for an iMPO")
+    D = self.H.chi[0] # same as chi[self.L+1]
+    types = []
+    # order all W matrices correctly
+    for site in range(self.L):
+        self.H.get_W(site).itranspose(['wL', 'wR', 'p', 'p*'])       
+    for j in range(D):
+        curr_type = 'id'
+        for site in range(self.L):
+            perm_jj = (self.H._perm_index(site, j),self.H._perm_index(site+1, j))
+            Wjj = self.H.get_W(site)[perm_jj].to_ndarray()
+            # diagonal element is zero
+            if np.allclose(Wjj,np.zeros(Wjj.shape),atol=tol):
+                curr_type = 'zero'
+                break
+            abs_max_eig = np.linalg.norm(Wjj,ord=2)
+            if abs_max_eig > 1.+tol:
+                raise ValueError('MPO contains operator with 2-norm larger one at W[{site}]_{j}{j}'.format(site=site,j=j))
+            is_id = np.allclose(Wjj,Wjj[0,0]*np.eye(Wjj.shape[0]),atol=tol)
+            # lx
+            if abs(abs_max_eig-1.)>tol and not is_id:
+                curr_type = 'lx'
+            # lid
+            elif abs(abs_max_eig-1.)>tol:
+                curr_type = 'lid' if 'id' in curr_type else 'lx'
+            # x
+            elif not is_id:
+                curr_type = 'lx' if 'x' in curr_type else 'x'
+            # id -> no change
+        types.append(curr_type)
+    n_ones = types.count('id')+types.count('x')
+    return n_ones, types
+
 
 class MPOGraph:
     """Representation of an MPO by a graph, based on a 'finite state machine'.
@@ -2141,6 +2218,8 @@ class MPOEnvironment(BaseEnvironment):
           with :meth:`init_LP` / :meth:`init_RP`.
         - If `start_env_sites` is None, and :attr:`bra` is :attr:`ket`,
           get `init_LP` and `init_RP` with :meth:`MPOTransferMatrix.find_init_LP_RP`.
+
+        For **infinte** MPS, there is an additional scheme following Phien2012 - this is implemented here
 
         Parameters
         ----------
