@@ -67,7 +67,7 @@ def run(psi, model, options, **kwargs):
     model : :class:`~tenpy.models.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
     options : dict
-        Further optional parameters as described in :cfg:config:`DMRGEngine`.
+        Further optional parameters as described in :cfg:config:`DMRG`.
     **kwargs :
         Further keyword arguments for the algorithm classes :class:`TwoSiteDMRGEngine` or
         :class:`SingleSiteDMRGEngine`.
@@ -217,7 +217,7 @@ class DMRGEngine(IterativeSweeps):
         Options
         -------
         .. cfg:configoptions :: DMRGEngine
-        
+
             E_tol_to_trunc : float
                 It's reasonable to choose the Lanczos convergence criteria
                 ``'E_tol'`` not many magnitudes lower than the current
@@ -284,7 +284,7 @@ class DMRGEngine(IterativeSweeps):
         else:
             E_old = self.sweep_stats['E'][-1]
             S_old = self.sweep_stats['S'][-1]
-        
+
         # perform sweeps
         logger.info('Running sweep with optimization')
         for i in range(self.N_sweeps_check - 1):
@@ -374,7 +374,7 @@ class DMRGEngine(IterativeSweeps):
         Options
         -------
         .. cfg:configoptions :: DMRGEngine
-        
+
             max_E_err : float
                 Convergence if the change of the energy in each step
                 satisfies ``|Delta E / max(E, 1)| < max_E_err``. Note that
@@ -390,14 +390,14 @@ class DMRGEngine(IterativeSweeps):
         Delta_E = self.sweep_stats['Delta_E'][-1]
         Delta_S = self.sweep_stats['Delta_S'][-1]
         return abs(Delta_E / max(E, 1.)) < max_E_err and abs(Delta_S) < max_S_err
-    
+
     def post_run_cleanup(self):
         """Perform any final steps or clean up after the main loop has terminated.
 
         Options
         -------
         .. cfg:configoptions :: DMRGEngine
-        
+
             norm_tol : float
                 After the DMRG run, update the environment with at most
                 `norm_tol_iter` sweeps until
@@ -411,7 +411,7 @@ class DMRGEngine(IterativeSweeps):
                 :meth:`~tenpy.networks.mps.canonical_form` to canonicalize
                 instead. This tolerance should be stricter than `norm_tol`
                 to ensure canonical form even if DMRG cannot fully converge.
-        
+
         """
         super().post_run_cleanup()
         self._canonicalize(True)
@@ -441,7 +441,7 @@ class DMRGEngine(IterativeSweeps):
             i.e. just a reference to :attr:`psi`.
         """
         return super().run()
-    
+
     def _canonicalize(self, warn=False):
         #Update environment until norm_tol is reached. If norm_tol_final
         #is not reached, call canonical_form.
@@ -844,6 +844,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
     -------
     .. cfg:config :: TwoSiteDMRGEngine
         :include: DMRGEngine
+
     """
     EffectiveH = TwoSiteH
     DefaultMixer = mps_common.DensityMatrixMixer

@@ -1,6 +1,6 @@
 - :issue:`443` document default model coupling parameters explicitly in docstrings
-- Allow `None` value in :option:`Sweep.chi_list` which is to be replaced by ``trunc_params['chi_max']`` at class initialization.
-- Handle SIGINT singal during simulation runs to continue until next algorithm checkpoint, save and then exit "gracefully" by raising KeyboardInterrupt.
+- Allow `None` value in :cfg:option:`Sweep.chi_list` which is to be replaced by ``trunc_params['chi_max']`` at class initialization.
+- Handle SIGINT signal during simulation runs to continue until next algorithm checkpoint, save and then exit "gracefully" by raising KeyboardInterrupt.
   See :meth:`~tenpy.simulations.Simulation.handle_abort_signal`.
 
 - go back to original dir after finishing a simulation (end of context manager) such that relative 'directory' options work as expected when repeatedly running simulations
@@ -8,3 +8,4 @@
 
 - Fix: When saving simulation results, convert list from `update_stats` and `sweep_stats` into numpy arrays.
   This can significantly reduce saving time and the size of the resulting hdf5 file - we have seen the size go down from 30MB to 700kB, when no psi and environment were saved!
+- Fix: :class:`~tenpy.algorithms.tdvp.TwoSiteTDVP` wasn't using the `start_trunc_err` option.

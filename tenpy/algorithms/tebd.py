@@ -65,8 +65,6 @@ class TEBDEngine(TimeEvolutionAlgorithm):
     .. cfg:config :: TEBDEngine
         :include: TimeEvolutionAlgorithm
 
-        start_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
-            Initial truncation error for :attr:`trunc_err`.
         order : int
             Order of the algorithm. The total error for evolution up to a fixed time `t`
             scales as ``O(t*dt^order)``.
@@ -81,13 +79,6 @@ class TEBDEngine(TimeEvolutionAlgorithm):
 
     Attributes
     ----------
-    trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
-        The error of the represented state which is introduced due to the truncation during
-        the sequence of update steps.
-    psi : :class:`~tenpy.networks.mps.MPS`
-        The MPS, time evolved in-place.
-    model : :class:`~tenpy.models.model.NearestNeighborModel`
-        The model defining the Hamiltonian.
     _U : list of list of :class:`~tenpy.linalg.np_conserved.Array`
         Exponentiated `H_bond` (bond Hamiltonians), i.e. roughly ``exp(-i H_bond dt_i)``.
         First list for different `dt_i` as necessary for the chosen `order`,

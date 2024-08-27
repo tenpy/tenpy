@@ -18,10 +18,10 @@ We have implemented:
 Much of the code is very similar to DMRG, and also based on the
 :class:`~tenpy.algorithms.mps_common.Sweep` class.
 
-.. warning ::
-    The interface changed compared to version 0.9.0: Using :class:`TDVPEngine` will result
-    in a error. Use :class:`SingleSiteTDVPEngine` or :class:`TwoSiteTDVPEngine` instead.
-    The old code is still around as :class:`OldTDVPEngine`.
+.. versionchanged :: 0.10.0 
+    The interface changed compared to version 0.9.0: 
+    Just :class:`TDVPEngine` will result in a error.
+    Use :class:`SingleSiteTDVPEngine` or :class:`TwoSiteTDVPEngine` instead.
 
 .. todo ::
     extend code to infinite MPS
@@ -60,7 +60,7 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
     Options
     -------
     .. cfg:config :: TDVP
-        :include: TimeEvolutionAlgorithm
+        :include: TimeEvolutionAlgorithm, Sweep
 
         trunc_params : dict
             Truncation parameters as described in :func:`~tenpy.algorithms.truncation.truncate`
@@ -75,14 +75,6 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
 
     Attributes
     ----------
-    options: dict
-        Optional parameters.
-    evolved_time : float | complex
-        Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
-    psi : :class:`~tenpy.networks.mps.MPS`
-        The MPS, time evolved in-place.
-    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
-        The environment, storing the `LP` and `RP` to avoid recalculations.
     lanczos_options : :class:`~tenpy.tools.params.Config`
         Options passed on to :class:`~tenpy.linalg.lanczos.LanczosEvolution`.
     """
@@ -93,7 +85,6 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
             msg = ("TDVP interface changed. \n"
                    "The new TDVPEngine has subclasses SingleSiteTDVPEngine"
                    " and TwoSiteTDVPEngine that you can use.\n"
-                   "For now, the previous version is still available as OldTDVPEngine."
                    )
             raise NameError(msg)
         if psi.bc != 'finite':
@@ -148,14 +139,6 @@ class TwoSiteTDVPEngine(TDVPEngine):
 
     Attributes
     ----------
-    options: dict
-        Optional parameters.
-    evolved_time : float | complex
-        Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
-    psi : :class:`~tenpy.networks.mps.MPS`
-        The MPS, time evolved in-place.
-    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
-        The environment, storing the `LP` and `RP` to avoid recalculations.
     lanczos_options : :class:`~tenpy.tools.params.Config`
         Options passed on to :class:`~tenpy.linalg.lanczos.LanczosEvolution`.
     """
@@ -163,7 +146,6 @@ class TwoSiteTDVPEngine(TDVPEngine):
 
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
-        self.trunc_err = TruncationError()
 
     def get_sweep_schedule(self):
         """Slightly different sweep schedule than DMRG"""
