@@ -162,11 +162,11 @@ class TwoSiteTDVPEngine(TDVPEngine):
         i0 = self.i0
         L = self.psi.L
 
-        dt = self.dt
+        dt = -0.5j * self.dt
         if i0 == L - 2:
             dt = 2. * dt  # instead of updating the last pair of sites twice, we double the time
         # update two-site wavefunction
-        theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_options).run(-0.5j * dt)
+        theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_options).run(dt)
         if self.combine:
             theta.itranspose(['(vL.p0)', '(p1.vR)'])  # shouldn't do anything
         else:
@@ -256,12 +256,12 @@ class SingleSiteTDVPEngine(TDVPEngine):
         i0 = self.i0
         L = self.psi.L
 
-        dt = self.dt
+        dt = -0.5j * self.dt
         if i0 == L - 1:
             dt = 2. * dt  # instead of updating the last site twice, we double the time
 
         # update one-site wavefunction
-        theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_options).run(-0.5j * dt)
+        theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_options).run(dt)
         if self.move_right:
             self.right_moving_update(i0, theta)
         else:
