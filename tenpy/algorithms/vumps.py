@@ -48,6 +48,7 @@ from ..algorithms.mps_common import DensityMatrixMixer, SubspaceExpansion
 from ..linalg.krylov_based import LanczosGroundState
 from ..tools.math import entropy
 from ..tools.process import memory_usage
+from ..tools.params import asConfig
 from .mps_common import IterativeSweeps, ZeroSiteH, OneSiteH, TwoSiteH
 from .truncation import svd_theta
 from .plane_wave_excitation import append_right_env, append_left_env, construct_orthogonal
@@ -62,6 +63,10 @@ class VUMPSEngine(IterativeSweeps):
     It contains all methods that are generic between :class:`SingleSiteVUMPSEngine` and
     :class:`TwoSiteVUMPSEngine`.
     Use the latter two classes for actual VUMPS runs.
+
+    .. versionchanged :: 1.1
+        Previously had separate `lanczos_options`, which have been renamed to `lanczos_params`
+        for consistency with the Sweep class.
 
     Options
     -------
@@ -141,7 +146,6 @@ class VUMPSEngine(IterativeSweeps):
     EffectiveH = None
 
     def __init__(self, psi, model, options, **kwargs):
-        #options = asConfig(options, self.__class__.__name__)
         if not isinstance(psi, UniformMPS):
             assert isinstance(psi, MPS)
             psi = UniformMPS.from_MPS(psi)  # psi is an MPS, so convert it to a uMPS
@@ -163,6 +167,13 @@ class VUMPSEngine(IterativeSweeps):
         mixer_params.setdefault('amplitude', 1.e-5)
         mixer_params.setdefault('decay', 2)
         mixer_params.setdefault('disable_after', 5)
+    
+    @property
+    def lanczos_options(self):
+        """Deprecated alias of :attr:`lanczos_params`."""
+        warnings.warn("Accessing deprecated alias TDVPEngine.lanczos_options instead of lanczos_params",
+                      FutureWarning, stacklevel=2)
+        return self.lanczos_params
 
     @property
     def S_inv_cutoff(self):
@@ -596,13 +607,13 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
         i0 = self.i0
         H0_1, H0_2, H1 = self.eff_H0_1, self.eff_H0_2, self.eff_H
         AC, C1, C2 = theta
-        lanczos_options = self.options.subconfig('lanczos_options')
+        lanczos_params = self.options.subconfig('lanczos_params')
 
-        E0_1, theta0_1, N0_1 = LanczosGroundState(H0_1, C1, lanczos_options).run()
+        E0_1, theta0_1, N0_1 = LanczosGroundState(H0_1, C1, lanczos_params).run()
 
         if self.psi.L > 1:
-            E0_2, theta0_2, N0_2 = LanczosGroundState(H0_2, C2, lanczos_options).run()
-        E1, theta1, N1 = LanczosGroundState(H1, AC, lanczos_options).run()
+            E0_2, theta0_2, N0_2 = LanczosGroundState(H0_2, C2, lanczos_params).run()
+        E1, theta1, N1 = LanczosGroundState(H1, AC, lanczos_params).run()
 
         if self.psi.L == 1:
             E0_2, theta0_2, N0_2 = E0_1, theta0_1, N0_1
@@ -733,10 +744,10 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         H0_1, H0_2, H2 = self.eff_H0_1, self.eff_H0_2, self.eff_H
         AC, C1, C2 = theta
 
-        lanczos_options = self.options.subconfig('lanczos_options')
-        E0_1, theta0_1, N0_1 = LanczosGroundState(H0_1, C1, lanczos_options).run()
-        E0_2, theta0_2, N0_2 = LanczosGroundState(H0_2, C2, lanczos_options).run()
-        E2, theta2, N2 = LanczosGroundState(H2, AC, lanczos_options).run()
+        lanczos_params = self.options.subconfig('lanczos_params')
+        E0_1, theta0_1, N0_1 = LanczosGroundState(H0_1, C1, lanczos_params).run()
+        E0_2, theta0_2, N0_2 = LanczosGroundState(H0_2, C2, lanczos_params).run()
+        E2, theta2, N2 = LanczosGroundState(H2, AC, lanczos_params).run()
 
         U, S, VH, err, S_approx = self.mixed_svd(
             theta2.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1]))
