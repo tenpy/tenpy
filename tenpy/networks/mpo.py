@@ -1567,7 +1567,7 @@ class MPO:
         elif self.finite: # segment boundary conditions
             self.get_W(0).get_leg('wL').test_contractible(self.get_W(self.L-1).get_leg("wR"))
         if self._has_permutations:
-            if self._charge_permutations[0]!=self._charge_permutations[self.L]:
+            if not np.allclose(self._charge_permutations[0],self._charge_permutations[self.L]):
                 raise ValueError("Permutations on boundary virtual legs are incompatible")
         nonzero_entries = []
         norms = []
