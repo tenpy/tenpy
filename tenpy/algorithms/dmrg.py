@@ -197,14 +197,14 @@ class DMRGEngine(IterativeSweeps):
         if self.chi_list is not None:
             default_min_sweeps = max(max(self.chi_list.keys()), default_min_sweeps)
         self.options.setdefault('min_sweeps', default_min_sweeps)
-        mixer_options = self.options.subconfig('mixer_params')
-        mixer_options.setdefault('amplitude', 1.e-5)
+        mixer_params = self.options.subconfig('mixer_params')
+        mixer_params.setdefault('amplitude', 1.e-5)
         disable_finite = 15
         disable_infinite = 50
         decay_finite = 2.
         decay_infinite = decay_finite ** (disable_finite / disable_infinite)
-        mixer_options.setdefault('decay', decay_finite if self.finite else decay_infinite)
-        mixer_options.setdefault('disable_after', disable_finite if self.finite else disable_infinite)
+        mixer_params.setdefault('decay', decay_finite if self.finite else decay_infinite)
+        mixer_params.setdefault('disable_after', disable_finite if self.finite else disable_infinite)
 
     def pre_run_initialize(self):
         super().pre_run_initialize()

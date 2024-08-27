@@ -159,10 +159,10 @@ class VUMPSEngine(IterativeSweeps):
         if self.chi_list is not None:
             default_min_sweeps = max(max(self.chi_list.keys()), default_min_sweeps)
         self.options.setdefault('min_sweeps', default_min_sweeps)
-        mixer_options = self.options.subconfig('mixer_params')
-        mixer_options.setdefault('amplitude', 1.e-5)
-        mixer_options.setdefault('decay', 2)
-        mixer_options.setdefault('disable_after', 5)
+        mixer_params = self.options.subconfig('mixer_params')
+        mixer_params.setdefault('amplitude', 1.e-5)
+        mixer_params.setdefault('decay', 2)
+        mixer_params.setdefault('disable_after', 5)
 
     @property
     def S_inv_cutoff(self):
@@ -176,7 +176,7 @@ class VUMPSEngine(IterativeSweeps):
         Options
         -------
         .. cfg:configoptions :: VUMPSEngine
-        
+
             diagonal_gauge_frequency : int
                 Number of sweeps how often we restore the UniformMPS to the diagonal gauge
             cutoff : float

@@ -1806,8 +1806,8 @@ class MPS(BaseMPSExpectationValue):
             msg = "MPS.from_random_unitary_evolution not implemented for segment BC."
             raise NotImplementedError(msg)
         psi = MPS.from_product_state(sites, p_state, bc, dtype, permute, form, chargeL)
-        tebd_options = dict(N_steps = 10, trunc_params={'chi_max': chi})
-        eng = RandomUnitaryEvolution(psi, tebd_options)
+        tebd_params = dict(N_steps = 10, trunc_params={'chi_max': chi})
+        eng = RandomUnitaryEvolution(psi, tebd_params)
         _max_iter = 1000
         for _ in range(_max_iter):
             if psi.finite and (max(psi.chi) >= chi):
