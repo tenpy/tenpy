@@ -22,7 +22,7 @@ __all__ = [
 
 # hard-coded version for people without git...
 #: current release version as a string
-version = '0.11.0'
+version = '1.0.3'
 
 #: whether this is a released version or modified
 released = False
@@ -67,9 +67,10 @@ def _get_git_description():
         descr = subprocess.check_output(['git', 'describe', '--tags', '--long'],
                                         cwd=os.path.dirname(os.path.abspath(__file__)),
                                         stderr=subprocess.STDOUT).decode().strip()
+        n_commits = int(descr.split('-')[1])
     except:
-        return 0
-    return int(descr.split('-')[1])
+        n_commits = 0
+    return n_commits
 
 
 #: the hash of the last git commit (if available)
@@ -92,7 +93,6 @@ def _get_version_summary():
     from .tools.optimization import have_cython_functions, compiled_with_MKL
     import numpy
     import scipy
-    import warnings
 
     if have_cython_functions:
         cython_info = "compiled"

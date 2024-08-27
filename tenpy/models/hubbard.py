@@ -51,9 +51,9 @@ class BoseHubbardModel(CouplingMPOModel):
             circumference of the cylinder acquire a phase ``2 pi phi_ext``.
     """
     def init_sites(self, model_params):
-        n_max = model_params.get('n_max', 3)
-        filling = model_params.get('filling', 0.5)
-        conserve = model_params.get('conserve', 'N')
+        n_max = model_params.get('n_max', 3, int)
+        filling = model_params.get('filling', 0.5, 'real')
+        conserve = model_params.get('conserve', 'N', str)
         if conserve == 'best':
             conserve = 'N'
             self.logger.info("%s: set conserve to %s", self.name, conserve)
@@ -62,11 +62,11 @@ class BoseHubbardModel(CouplingMPOModel):
 
     def init_terms(self, model_params):
         # 0) Read and set parameters.
-        t = model_params.get('t', 1.)
-        U = model_params.get('U', 0.)
-        V = model_params.get('V', 0.)
-        mu = model_params.get('mu', 0)
-        phi_ext = model_params.get('phi_ext', None)
+        t = model_params.get('t', 1., 'real_or_array')
+        U = model_params.get('U', 0., 'real_or_array')
+        V = model_params.get('V', 0., 'real_or_array')
+        mu = model_params.get('mu', 0, 'real_or_array')
+        phi_ext = model_params.get('phi_ext', None, 'real')
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu - U / 2., u, 'N')
             self.add_onsite(U / 2., u, 'NN')
@@ -116,7 +116,7 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
         for mod in chinfo.mod:
             if mod == 1:
                 savings *= 1/8. # this is what we found empirically
-        return self.options.get("mem_saving_factor", savings)
+        return self.options.get("mem_saving_factor", savings, 'real')
 
 
 class FermiHubbardModel(CouplingMPOModel):
@@ -165,18 +165,18 @@ class FermiHubbardModel(CouplingMPOModel):
             circumference of the cylinder acquire a phase ``2 pi phi_ext``.
     """
     def init_sites(self, model_params):
-        cons_N = model_params.get('cons_N', 'N')
-        cons_Sz = model_params.get('cons_Sz', 'Sz')
+        cons_N = model_params.get('cons_N', 'N', str)
+        cons_Sz = model_params.get('cons_Sz', 'Sz', str)
         site = SpinHalfFermionSite(cons_N=cons_N, cons_Sz=cons_Sz)
         return site
 
     def init_terms(self, model_params):
         # 0) Read out/set default parameters.
-        t = model_params.get('t', 1.)
-        U = model_params.get('U', 0)
-        V = model_params.get('V', 0)
-        mu = model_params.get('mu', 0.)
-        phi_ext = model_params.get('phi_ext', None)
+        t = model_params.get('t', 1., 'real_or_array')
+        U = model_params.get('U', 0, 'real_or_array')
+        V = model_params.get('V', 0, 'real_or_array')
+        mu = model_params.get('mu', 0., 'real_or_array')
+        phi_ext = model_params.get('phi_ext', None, 'real')
 
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu, u, 'Ntot')
@@ -228,19 +228,19 @@ class FermiHubbardModel2(CouplingMPOModel):
     """
 
     def init_sites(self, model_params):
-        cons_N = model_params.get('cons_N', 'N')
-        cons_Sz = model_params.get('cons_Sz', 'Sz')
+        cons_N = model_params.get('cons_N', 'N', str)
+        cons_Sz = model_params.get('cons_Sz', 'Sz', str)
         return spin_half_species(FermionSite, cons_N=cons_N, cons_Sz=cons_Sz)
         # special syntax: returns tuple (sites, species_names) to cause
         # CouplingMPOModel.init_lattice to initialize a MultiSpeciesLattice
         # based on the lattice specified in the model parameters
 
     def init_terms(self, model_params):
-        t = model_params.get('t', 1.)
-        U = model_params.get('U', 0)
-        V = model_params.get('V', 0)
-        mu = model_params.get('mu', 0.)
-        phi_ext = model_params.get('phi_ext', None)
+        t = model_params.get('t', 1., 'real_or_array')
+        U = model_params.get('U', 0, 'real_or_array')
+        V = model_params.get('V', 0, 'real_or_array')
+        mu = model_params.get('mu', 0., 'real_or_array')
+        phi_ext = model_params.get('phi_ext', None, 'real')
 
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu, u, 'N')

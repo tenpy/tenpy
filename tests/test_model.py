@@ -1,14 +1,12 @@
 """A collection of tests for (classes in) :mod:`tenpy.models.model`."""
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
-import warnings
 import itertools
 
 from tenpy.models import model, lattice
 from tenpy.models.xxz_chain import XXZChain
 import tenpy.networks.site
 import tenpy.linalg.np_conserved as npc
-from tenpy.tools.params import Config
 from tenpy.algorithms.exact_diag import ExactDiag
 import numpy as np
 import numpy.testing as npt

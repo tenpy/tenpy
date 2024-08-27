@@ -86,7 +86,10 @@ However, these are just guidelines - it still helps if you contribute something,
   ``.. todo ::`` block, such that we can keep track of it.
 
   Unfinished functions should ``raise NotImplementedError()``.
-- Summarize the changes you have made in the Changelog under :doc:`/changelog/latest`.
+- Summarize the changes you have made in the changelog. For PRs and larger changes, make a new file,
+  and e.g. name it after the PR, ``doc/changelog/latest/pr_401.txt`` or similar. Make sure to use ``.txt`` suffix.
+  It should contain only bullet points (``- `` followed by text, additional lines starting with two spaces).
+  For very small changes, you may add to (or create, if it doesn't exist yet) ``doc/changelog/latest/misc.txt``.
 - If you want to try out new things in temporary files: any folder named ``playground`` is ignored by `git`.
 - If you add a new toycode or example: add a reference to include it in the documentation.
 - We've created a sphinx extensions for `documenting config-option dictionaries <https://sphinx-cfg-options.readthedocs.io/en/latest/>`_.

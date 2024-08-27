@@ -12,9 +12,12 @@ on:
       - main
   # PRs
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
 
 jobs:
   build:
+    if: github.event.pull_request.draft == false
 
     runs-on: ubuntu-latest
     env:
@@ -24,7 +27,7 @@ jobs:
       max-parallel: 5
       matrix:
         # Note: python 3.12 is covered by code_coverage.yml
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
 
     steps:
     - name: Checkout
@@ -42,9 +45,10 @@ jobs:
         python -m pip install --upgrade pytest
     
     - name: Build and install tenpy
+      # also installs extra dependencies defined in pyproject.toml
       run: |
         python -m build .
-        python -m pip install .
+        python -m pip install ".[io, test, extra]"
     
     - name: Run pytest
       # configuration in pyproject.toml

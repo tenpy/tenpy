@@ -8,9 +8,13 @@ on:
       - main
   # PRs
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
 
 jobs:
   build:
+    if: github.event.pull_request.draft == false
+    
     runs-on: ubuntu-latest
     env:
       # make pytest output in color
@@ -40,10 +44,11 @@ jobs:
         python -m pip install .
     
     - name: Run pytest on notebooks
-      # Note: we exclude the dmrg mixer notebook, since it runs very long.
-      # TODO: Excluding 13 and 14 temporarily, until they are debugged.
+      # Note: we exclude the dmrg mixer notebook 12, since it runs very long.
+      # Note: unlike in the codebase, we ignore warnings (``-W ignore`` flag)
+      # TODO: Excluding 14 temporarily, until it is debugged.
       run: |
         pytest --nbmake notebooks \
           --ignore=notebooks/12_dmrg_mixer.ipynb \
-          --ignore=notebooks/13_time_dependent_H_evolution.ipynb \
-          --ignore=notebooks/14_segment_half_infinite.ipynb
+          --ignore=notebooks/14_segment_half_infinite.ipynb \
+          -W ignore

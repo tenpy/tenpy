@@ -1,13 +1,13 @@
 """This module contains some base classes for algorithms."""
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
-import warnings
 import time
 import numpy as np
 import logging
 logger = logging.getLogger(__name__)
 
 from .truncation import TruncationError
+from ..tools.misc import consistency_check
 from ..tools.events import EventHandler
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
@@ -44,6 +44,15 @@ class Algorithm:
 
         trunc_params : dict
             Truncation parameters as described in :cfg:config:`truncation`.
+        max_N_sites_per_ring : int | None
+            Threshold for raising errors on too many sites per ring. Default ``18``.
+            See :meth:`~tenpy.tools.misc.consistency_check`.
+            In a higher-dimensional geometry, the area law implies that the entropy of a bipartition
+            is linear in ``N_sites_per_ring`` and thus the required bond dimension is exponential
+            in it. This makes MPS simulations with large ``N_sites_per_ring`` unfeasible.
+            If it is too large, you will not be able to choose a reasonably large bond dimension
+            *and* have enough RAM to do the simulation. We raise an error in that case.
+            Can be downgraded to a warning by setting this option to ``None``.
 
     Attributes
     ----------
@@ -79,6 +88,12 @@ class Algorithm:
         self.cache = cache
         self.checkpoint = EventHandler("algorithm")
         self._resume_psi = None
+        try:
+            N_sites_per_ring = model.lat.N_sites_per_ring
+        except AttributeError:  # for e.g. VariationalApplyMPO, model is just the MPO and has no lat
+            N_sites_per_ring = 1
+        consistency_check(N_sites_per_ring, self.options, 'max_N_sites_per_ring', 18,
+                          'Maximum number of sites per ring (``max_N_sites_per_ring``) exceeded.')
 
     @classmethod
     def switch_engine(cls, other_engine, *, options=None, **kwargs):
@@ -120,13 +135,6 @@ class Algorithm:
         obj = cls(other_engine.psi, other_engine.model, options, **kwargs)
         obj.checkpoint = other_engine.checkpoint  # TODO: do this?
         return obj
-
-    @property
-    def verbose(self):
-        warnings.warn(
-            "verbose is deprecated, we're using logging now! \n"
-            "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
-        return self.options.get('verbose', 1.)
 
     def run(self):
         """Actually run the algorithm.
@@ -173,14 +181,14 @@ class Algorithm:
         -------
         resume_data : dict
             Dictionary with necessary data (apart from copies of `psi`, `model`, `options`)
-            that allows to continue the simulation from where we are now.
+            that allows to continue the algorithm run from where we are now.
             It might contain an explicit copy of `psi`.
         """
         psi = self._resume_psi
         if psi is not None:
-            return {'psi': psi}
+            return {'psi': psi, 'sequential_simulations': sequential_simulations}
         else:
-            return {'psi': self.psi}
+            return {'psi': self.psi, 'sequential_simulations': sequential_simulations}
 
     def estimate_RAM(self, mem_saving_factor=None):
         """Gives an approximate prediction for the required memory usage.
@@ -305,7 +313,7 @@ class Algorithm:
         if mem_saving_factor is None:
             mem_saving_factor = self.model.estimate_RAM_saving_factor()
 
-        logger.debug("We get a total of %.3e = %d entries for the RAM esitmate", entry_size, entry_size)
+        logger.debug("We get a total of %.3e = %d entries for the RAM estimate", entry_size, entry_size)
         logger.debug("Each entry uses %d byte", entry_size)
         RAM = total_entries * entry_size
         logger.debug("We have a saving factor of %.5f ~= 1/%d",
@@ -351,8 +359,8 @@ class TimeEvolutionAlgorithm(Algorithm):
 
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
-        self.evolved_time = self.options.get('start_time', 0.)
-        self.trunc_err = self.options.get('start_trunc_err', TruncationError())
+        self.evolved_time = self.options.get('start_time', 0., 'real')
+        self.trunc_err = self.options.get('start_trunc_err', TruncationError(), TruncationError)
         self.force_prepare_evolve = False
         if self.resume_data:
             self.evolved_time = self.resume_data['evolved_time']
@@ -369,8 +377,8 @@ class TimeEvolutionAlgorithm(Algorithm):
         The recommended way to do this is via the
         :class:`~tenpy.simulations.time_evolution.RealTimeEvolution`.
         """
-        dt = self.options.get('dt', 0.1)
-        N_steps = self.options.get('N_steps', 1)
+        dt = self.options.get('dt', 0.1, 'real')
+        N_steps = self.options.get('N_steps', 1, int)
 
         start_time = time.time()
         Sold = np.mean(self.psi.entanglement_entropy())
@@ -395,7 +403,7 @@ class TimeEvolutionAlgorithm(Algorithm):
         This is the inner part of :meth:`run` without the logging.
         For parameters see :cfg:config:`TimeEvolutionAlgorithm`.
         """
-        preserve_norm = self.options.get('preserve_norm', None)
+        preserve_norm = self.options.get('preserve_norm', None, bool)
         if preserve_norm is None:  # default: preserve norm for real time evolution
             preserve_norm = not np.iscomplex(dt)
         if preserve_norm:
@@ -436,6 +444,16 @@ class TimeEvolutionAlgorithm(Algorithm):
         dt : float
             Small time step. Might be ignored if already used in :meth:`prepare_update`.
 
+        Options
+        -------
+        .. cfg:config :: TimeEvolutionAlgorithm
+
+            max_trunc_err : float
+                Threshold for raising errors on too large truncation errors. Default ``0.01``.
+                See :meth:`~tenpy.tools.misc.consistency_check`.
+                When the total accumulated truncation error (its ``eps``) exceeds this value,
+                we raise. Can be downgraded to a warning by setting this option to ``None``.
+
         Returns
         -------
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
@@ -445,6 +463,8 @@ class TimeEvolutionAlgorithm(Algorithm):
 
         for _ in range(N_steps):
             trunc_err += self.evolve_step(dt)
+            consistency_check(trunc_err.eps, self.options, 'max_trunc_err', 0.01,
+                              'Maximum truncation error (``max_trunc_err``) exceeded.')
 
         self.evolved_time = self.evolved_time + N_steps * dt
         # (this is done to avoid problems of users storing self.trunc_err after each `update`)
@@ -489,7 +509,7 @@ class TimeDependentHAlgorithm(TimeEvolutionAlgorithm):
         Updates the model after each time step `dt` to account for changing H(t).
         For parameters see :cfg:config:`TimeEvolutionAlgorithm`.
         """
-        preserve_norm = self.options.get('preserve_norm', None)
+        preserve_norm = self.options.get('preserve_norm', None, bool)
         if preserve_norm is None:  # default: preserve norm for real time evolution
             preserve_norm = not np.iscomplex(dt)
         if preserve_norm:
@@ -513,7 +533,7 @@ class TimeDependentHAlgorithm(TimeEvolutionAlgorithm):
         Skips re-initialization if the ``model.options['time']`` is the same as `evolved_time`.
         The model should read out the option ``'time'`` and initialize the corresponding ``H(t)``.
         """
-        model_time = self.model.options.get('time', None)
+        model_time = self.model.options.get('time', None, 'real')
         if model_time is not None and model_time == self.evolved_time:
             return  # already had that time defined during model init, so no need to update
         self.model = self.model.update_time_parameter(self.evolved_time)

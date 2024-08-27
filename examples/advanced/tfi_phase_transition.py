@@ -65,7 +65,7 @@ def run(gs):
         SxSx.append(psi.correlation_function("Sigmax", "Sigmax", [0], 20)[0, :])
         print("<Sigmax_0 Sigmax_i>", SxSx[-1])
         if old_psi is not None:
-            fidelity.append(np.abs(old_psi.overlap(psi)))
+            fidelity.append(np.abs(old_psi.overlap(psi, understood_infinite=True)))
             print("fidelity", fidelity[-1])
         old_psi = psi.copy()
         dmrg_params['start_env'] = 0  # (some of) the parameters are read out again

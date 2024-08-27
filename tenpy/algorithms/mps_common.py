@@ -24,11 +24,11 @@ from ..linalg import np_conserved as npc
 from .algorithm import Algorithm
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
 from ..networks.mpo import MPOEnvironment
-from ..networks.mps import MPSEnvironment, MPS
-from .truncation import truncate, svd_theta, TruncationError
+from ..networks.mps import MPSEnvironment
+from .truncation import truncate, svd_theta, decompose_theta_qr_based, TruncationError
 from ..linalg import np_conserved as npc
 from ..tools.params import asConfig
-from ..tools.misc import find_subclass
+from ..tools.misc import find_subclass, consistency_check
 from ..tools.process import memory_usage
 import numpy as np
 import time
@@ -52,6 +52,7 @@ __all__ = [
     'SubspaceExpansion',
     'VariationalCompression',
     'VariationalApplyMPO',
+    'QRBasedVariationalApplyMPO',
 ]
 
 
@@ -82,7 +83,7 @@ class Sweep(Algorithm):
             :meth:`matvec` is formally more expensive,
             :math:`O(2 d^3 \chi^3 D)`.
         lanczos_params : dict
-            Lanczos parameters as described in :cfg:config:`Lanczos`.
+            Lanczos parameters as described in :cfg:config:`KrylovBased`.
 
     Attributes
     ----------
@@ -135,7 +136,7 @@ class Sweep(Algorithm):
         super().__init__(psi, model, options, **kwargs)
         options = self.options
 
-        self.combine = options.get('combine', False)
+        self.combine = options.get('combine', False, bool)
         self.finite = self.psi.finite
         self.lanczos_params = options.subconfig('lanczos_params')
         self.mixer = None  # set to an actual mixer (if at all) in :meth:`mixer_activate``
@@ -146,11 +147,6 @@ class Sweep(Algorithm):
         self.i0 = 0
         self.move_right = True
         self.update_LP_RP = (True, False)
-
-    @property
-    def engine_params(self):
-        warnings.warn("renamed self.engine_params -> self.options", FutureWarning, stacklevel=2)
-        return self.options
 
     @property
     def _all_envs(self):
@@ -219,23 +215,9 @@ class Sweep(Algorithm):
 
         Options
         -------
-        .. deprecated :: 0.6.0
-            Options `LP`, `LP_age`, `RP` and `RP_age` are now collected in a dictionary
-            `init_env_data` with different keys `init_LP`, `init_RP`, `age_LP`, `age_RP`
-
-        .. deprecated :: 0.8.0
-            Instead of passing the `init_env_data` as a option, it should be passed
-            as dict entry of `resume_data`.
 
         .. cfg:configoptions :: Sweep
-
-            init_env_data : dict
-                Dictionary as returned by ``self.env.get_initialization_data()`` from
-                :meth:`~tenpy.networks.mpo.MPOEnvironment.get_initialization_data`.
-                Deprecated, use the `resume_data` function/class argument instead.
-            orthogonal_to : list of :class:`~tenpy.networks.mps.MPS`
-                Deprecated in favor of the `orthogonal_to` function argument (forwarded from the
-                class argument) with the same effect.
+                
             start_env : int
                 Number of sweeps to be performed without optimization to update the environment.
 
@@ -249,9 +231,6 @@ class Sweep(Algorithm):
         # extract `init_env_data` from options or previous env
         if resume_data is None:
             resume_data = {}
-        if 'init_env_data' in self.options:
-            warnings.warn("put init_env_data in resume_data instead of options!", FutureWarning)
-            resume_data.setdefault('init_env_data', self.options['init_env_data'])
         init_env_data = {}
         if self.env is not None and self.psi.bc != 'finite':
             # reuse previous environments.
@@ -261,39 +240,28 @@ class Sweep(Algorithm):
         if not self.psi.finite and init_env_data and \
                 self.options.get('chi_list', None) is not None:
             warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
-        replaced = [('LP', 'init_LP'), ('LP_age', 'age_LP'), ('RP', 'init_RP'),
-                    ('RP_age', 'age_RP')]
-        if any([key_old in self.options for key_old, _ in replaced]):
-            warnings.warn("Deprecated options LP/RP/LP_age/RP_age: collected in `init_env_data`",
-                          FutureWarning)
-            for key_old, key_new in replaced:
-                if key_old in self.options:
-                    init_env_data[key_new] = self.options[key_old]
 
         # actually initialize the environment
-        if self.env is None:
-            cache = self.cache.create_subcache('env')
-        else:
-            cache = self.env.cache  # re-initialize and reuse the cache!
-            cache.clear()  # remove old entries which might no longer be valid
-        self.env = MPOEnvironment(self.psi, H, self.psi, cache=cache, **init_env_data)
+        self._init_mpo_env(H, init_env_data)
         self._init_ortho_to_envs(orthogonal_to, resume_data)
 
         self.reset_stats(resume_data)
 
         # initial sweeps of the environment (without mixer)
         if not self.finite:
-            start_env = self.options.get('start_env', 1)
+            start_env = self.options.get('start_env', 1, int)
             self.environment_sweeps(start_env)
+
+    def _init_mpo_env(self, H, init_env_data):
+        if self.env is None:
+            cache = self.cache.create_subcache('env')
+        else:
+            cache = self.env.cache  # re-initialize and reuse the cache!
+            cache.clear()  # remove old entries which might no longer be valid
+        self.env = MPOEnvironment(self.psi, H, self.psi, cache=cache, **init_env_data)
 
     def _init_ortho_to_envs(self, orthogonal_to, resume_data):
         # (re)initialize ortho_to_envs
-        if 'orthogonal_to' in self.options:
-            warnings.warn(
-                "Deprecated `orthogonal_to` in dmrg options: instead give "
-                "`orthogonal_to` as keyword to the Algorithm class.", FutureWarning)
-            assert orthogonal_to is None
-            orthogonal_to = self.options['orthogonal_to']
         if 'orthogonal_to' in resume_data:
             orthogonal_to = resume_data['orthogonal_to']  # precedence for resume_data!
 
@@ -324,10 +292,6 @@ class Sweep(Algorithm):
 
         Options
         -------
-        .. deprecated : 0.9
-            sweep_0 : int
-                Number of sweeps that have already been performed.
-                Pass as ``resume_data['sweeps']`` instead.
 
         .. cfg:configoptions :: Sweep
 
@@ -340,10 +304,6 @@ class Sweep(Algorithm):
                 20 sweeps and ``chi_max=100`` afterwards.
         """
         self.sweeps = 0
-        if 'sweep_0' in self.options:
-            warnings.warn("Deprecated sweep_0 option: set as resume_data['sweep'] instead.",
-                          FutureWarning)
-            self.sweeps = self.options['sweep_0']
         if resume_data is not None and 'sweeps' in resume_data:
             self.sweeps = resume_data['sweeps']
         self.shelve = False
@@ -405,7 +365,7 @@ class Sweep(Algorithm):
             if new_chi_max is not None:
                 logger.info("Setting chi_max=%d", new_chi_max)
                 self.trunc_params['chi_max'] = new_chi_max
-                if self.options.get('chi_list_reactivates_mixer', True):
+                if self.options.get('chi_list_reactivates_mixer', True, bool):
                     self.mixer_activate()
 
         # the actual sweep
@@ -691,12 +651,7 @@ class Sweep(Algorithm):
         if Mixer_class is True:
             Mixer_class = self.DefaultMixer
         if isinstance(Mixer_class, str):
-            if Mixer_class == "Mixer":
-                msg = 'Use `True` instead of "Mixer" for DMRG parameter "mixer"'
-                warnings.warn(msg, FutureWarning)
-                Mixer_class = self.DefaultMixer
-            else:
-                Mixer_class = find_subclass(Mixer, Mixer_class)
+            Mixer_class = find_subclass(Mixer, Mixer_class)
         mixer_params = self.options.subconfig('mixer_params')
         self.mixer = Mixer_class(mixer_params, self.sweeps)
         logger.info(f'activate {Mixer_class.__name__} with initial amplitude {self.mixer.amplitude}')
@@ -714,14 +669,79 @@ class Sweep(Algorithm):
         """Cleanup the effects of a mixer.
 
         A :meth:`sweep` with an enabled :class:`~tenpy.algorithms.mps_common.Mixer` leaves the MPS
-        `psi` with 2D arrays in `S`.
-        To recover the original form, this function simply performs one sweep with disabled mixer.
+        `psi` with 2D arrays in `S`. This method recovers the original form by performing SVDs
+        of the `S` and updating the MPS tensors accordingly.
         """
-        if any([self.psi.get_SL(i).ndim > 1 for i in range(self.psi.L)]):
-            mixer = self.mixer
-            self.mixer = None  # disable the mixer
-            self.sweep(optimize=False)  # (discard return value)
-            self.mixer = mixer  # recover the original mixer
+        # Do SVDs ::  S[i] = U[i] * new_S[i] * V[i]
+        # Keep state consistent by absorbing into Gammas:
+        #   new_G[i] = V[i] * G[i] * U[i + 1]
+        # For Th form tensors this means
+        #   new_Th[i] = new_S[i] * new_G[i] * new_S[i + 1]
+        #             = hc(U[i]) * S[i] * G[i] * S[i + 1] * hc(V[i])
+        #             = hc(U[i]) * Th[i] * hc(V[i])
+        # For A and B form tensors, we get a mix of the above, i.e.
+        #   new_A[i] = hc(U[i]) * A[i] * U[i + 1]
+        #   new_B[i] = V[i] * B[i] * hc(V[i + 1])
+        # LP environments transform like A tensors on the vR(*) leg(s)
+        # RP environments transform like B tensors on the vL(*) leg(s)
+        
+        if self.psi.finite:
+            assert self.psi.get_SL(0).ndim == 1
+            assert self.psi.get_SR(self.psi.L - 1).ndim == 1
+            first = 1
+        else:
+            first = 0
+        
+        for i in range(first, self.psi.L):  # converting S to the left of site i
+            S = self.psi.get_SL(i)
+            if S.ndim == 1:
+                # nothing to do
+                continue
+            U, S, V = npc.svd(S, full_matrices=False, inner_labels=['vR', 'vL'])
+            _, form_L = self.psi.form[self.psi._to_valid_index(i - 1)]
+            form_R, _ = self.psi.form[i]
+            B_L = self.psi.get_B(i - 1, form=None)
+            B_R = self.psi.get_B(i, form=None)
+            # Update psi._B to the left and right
+            if form_L == 0.:  # A or Gamma to the left
+                B_L = npc.tensordot(B_L, U, ['vR', 'vL'])
+            elif form_L == 1.:  # B or C to the left
+                X_L = V.conj().replace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+                B_L = npc.tensordot(B_L, X_L, ['vR', 'vL'])
+            else:
+                msg = (f'Array S are only supported in A, B, Th or G form. '
+                       f'Got form {self.psi.form[self.psi._to_valid_index(i - 1)]} on site {i - 1}.')
+                raise RuntimeError(msg)
+            if form_R == 0.:  # B or Gamma to the right
+                B_R = npc.tensordot(V, B_R, ['vR', 'vL'])
+            elif form_R == 1.:  # A or C to the left
+                X_R = U.conj().replace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+                B_R = npc.tensordot(X_R, B_R, ['vR', 'vL'])
+            else:
+                msg = (f'Array S are only supported in A, B, Th or G form. '
+                       f'Got form {self.psi.form[i]} on site {i}.')
+                raise RuntimeError(msg)
+            self.psi.set_B(i - 1, B_L, form=self.psi.form[i - 1])
+            self.psi.set_SL(i, S)
+            self.psi.set_B(i, B_R, form=self.psi.form[i])
+            
+            # Update environment LP and RP
+            assert self.env.bra is self.psi
+            update_env_ket_leg = (self.env.ket is self.psi)
+            if self.env.has_LP(i):
+                LP = self.env.get_LP(i)
+                LP = npc.tensordot(LP, U.conj(), ['vR*', 'vL*'])
+                if update_env_ket_leg:
+                    LP = npc.tensordot(LP, U, ['vR', 'vL'])
+                LP.itranspose(['vR*', 'wR', 'vR'])
+                self.env.set_LP(i, LP, age=self.env.get_LP_age(i))
+            if self.env.has_RP(i - 1):
+                RP = self.env.get_RP(i - 1)
+                RP = npc.tensordot(V.conj(), RP, ['vR*', 'vL*'])
+                if update_env_ket_leg:
+                    RP = npc.tensordot(V, RP, ['vR', 'vL'])
+                RP.itranspose(['vL', 'wL', 'vL*'])
+                self.env.set_RP(i - 1, RP, age=self.env.get_RP_age(i - 1))
 
 
 class IterativeSweeps(Sweep):
@@ -737,6 +757,13 @@ class IterativeSweeps(Sweep):
     -------
     .. cfg:config :: IterativeSweeps
         :include: Sweep
+
+        max_trunc_err : float
+            Threshold for raising errors on too large truncation errors. Default ``0.0001``.
+            See :meth:`~tenpy.tools.misc.consistency_check`.
+            If the any truncation error :attr:`~tenpy.algorithms.truncation.TruncationError.eps`
+            on the final sweep exceeds this value, we raise.
+            Can be downgraded to a warning by setting this option to ``None``.
     
     """
 
@@ -754,6 +781,8 @@ class IterativeSweeps(Sweep):
             self.status_update(iteration_start_time=iteration_start_time)
             is_first_sweep = False
         self.post_run_cleanup()
+        consistency_check(np.max(self.trunc_err_list), self.options, 'max_trunc_err', 1e-4,
+                          'Maximum truncation error (``max_trunc_err``) exceeded.')
         return result
 
     def pre_run_initialize(self):
@@ -828,9 +857,9 @@ class IterativeSweeps(Sweep):
         should_break : bool
             If ``True``, the main loop in :meth:`run` is broken.
         """
-        min_sweeps = self.options.get('min_sweeps', 1)
-        max_sweeps = self.options.get('max_sweeps', 1000)
-        max_seconds = 3600 * self.options.get('max_hours', 24 * 365)
+        min_sweeps = self.options.get('min_sweeps', 1, int)
+        max_sweeps = self.options.get('max_sweeps', 1000, int)
+        max_seconds = 3600 * self.options.get('max_hours', 24 * 365, 'real')
         
         if self.sweeps > max_sweeps:
             if self.is_converged():
@@ -1027,6 +1056,22 @@ class OneSiteH(EffectiveH):
                   self.RP.get_leg('vL').ind_len)
         if combine:
             self.combine_Heff(env)
+
+    @classmethod
+    def from_LP_W0_RP(cls, LP, W0, RP, i0=0, combine=False, move_right=True):
+        self = cls.__new__(cls)
+        if combine:
+            raise NotImplementedError("Shouldn't need this for vumps")
+        self.i0 = i0
+        self.LP = LP.itranspose(['vR*', 'wR', 'vR'])
+        self.RP = RP.itranspose(['wL', 'vL', 'vL*'])
+        self.W0 = W0.replace_labels(['p', 'p*'], ['p0', 'p0*'])
+        self.dtype = LP.dtype
+        self.combine = combine
+        self.move_right = move_right
+        self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
+                  self.RP.get_leg('vL').ind_len)
+        return self
 
     def matvec(self, theta):
         """Apply the effective Hamiltonian to `theta`.
@@ -1517,10 +1562,10 @@ class Mixer:
 
     def __init__(self, options, sweep_activated=0):
         self.options = options = asConfig(options, 'Mixer')
-        self.amplitude = options.get('amplitude', self._default_amplitude)
-        self.decay = decay = options.get('decay', self._default_decay)
+        self.amplitude = options.get('amplitude', self._default_amplitude, 'real')
+        self.decay = decay = options.get('decay', self._default_decay, 'real')
         assert decay is None or decay >= 1.
-        self.disable_after = disable_after = options.get('disable_after', self._default_disable_after)
+        self.disable_after = disable_after = options.get('disable_after', self._default_disable_after, int)
         assert disable_after is None or disable_after > 0
         self.sweep_activated = sweep_activated
 
@@ -2077,9 +2122,6 @@ class VariationalCompression(IterativeSweeps):
     The algorithm is the same as described in :class:`VariationalApplyMPO`,
     except that we don't have an MPO in the networks - one can think of the MPO being trivial.
 
-    .. deprecated :: 0.9.1
-        Renamed the option `N_sweeps` to `max_sweeps`.
-
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
@@ -2121,12 +2163,9 @@ class VariationalCompression(IterativeSweeps):
 
     def pre_run_initialize(self):
         super().pre_run_initialize()
-        self.options.deprecated_alias("N_sweeps", "max_sweeps",
-                                      "Also check out the other new convergence parameters "
-                                      "min_N_sweeps and tol_theta_diff!")
-        max_sweeps = self._max_sweeps = self.options.get("max_sweeps", 2)
-        min_sweeps = self._min_sweeps = self.options.get("min_sweeps", 1)
-        tol_diff = self._tol_theta_diff = self.options.get("tol_theta_diff", 1.e-8)
+        max_sweeps = self._max_sweeps = self.options.get("max_sweeps", 2, int)
+        min_sweeps = self._min_sweeps = self.options.get("min_sweeps", 1, int)
+        tol_diff = self._tol_theta_diff = self.options.get("tol_theta_diff", 1.e-8, 'real')
         if min_sweeps == max_sweeps and tol_diff is not None:
             warnings.warn("VariationalCompression with min_sweeps=max_sweeps: "
                           "we recommend to set tol_theta_diff=None to avoid overhead")
@@ -2182,7 +2221,7 @@ class VariationalCompression(IterativeSweeps):
             resume_data = {}
         init_env_data = resume_data.get("init_env_data", {})
         old_psi = self.psi.copy()
-        start_env_sites = self.options.get('start_env_sites', 2)
+        start_env_sites = self.options.get('start_env_sites', 2, int)
         if start_env_sites is not None and not self.psi.finite:
             init_env_data['start_env_sites'] = start_env_sites
         if self.env is None:
@@ -2332,7 +2371,7 @@ class VariationalApplyMPO(VariationalCompression):
         init_env_data = resume_data.get("init_env_data", {})
         old_psi = self.psi.copy()
         start_env_sites = 0 if self.psi.finite else self.psi.L
-        start_env_sites = self.options.get("start_env_sites", start_env_sites)
+        start_env_sites = self.options.get("start_env_sites", start_env_sites, int)
         if start_env_sites is not None:
             init_env_data['start_env_sites'] = start_env_sites
         # note: we need explicit `start_env_sites` since `bra` != `ket`, so we can't converge
@@ -2354,3 +2393,114 @@ class VariationalApplyMPO(VariationalCompression):
         if not self.eff_H.combine:
             th = th.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
         return self.update_new_psi(th)
+
+
+class QRBasedVariationalApplyMPO(VariationalApplyMPO):
+    r"""Variational MPO application, using QR-based decompositions instead of SVD.
+
+    The QR-based decomposition, introduced in :arxiv:`2212.09782` is used for TEBD, as implemented
+    in :class:`~tenpy.algorithms.tebd.QRBasedTEBDEngine`. This engine is a version of
+    :class:`VariationalApplyMPO` that uses the same QR-based decomposition instead of SVD in
+    the truncation step after the variational update.
+
+    Options
+    -------
+    .. cfg:config :: QRBasedVariationalApplyMPO
+        :include: VariationalApplyMPO
+
+        cbe_expand : float
+            Expansion rate. The QR-based decomposition is carried out at an expanded bond dimension
+            ``eta = (1 + cbe_expand) * chi``, where ``chi`` is the bond dimension before the time step.
+            Default is `0.1`.
+        cbe_expand_0 : float
+            Expansion rate at low ``chi``.
+            If given, the expansion rate decreases linearly from ``cbe_expand_0`` at ``chi == 1``
+            to ``cbe_expand`` at ``chi == trunc_params['chi_max']``, then remains constant.
+            If not given, the expansion rate is ``cbe_expand`` at all ``chi``.
+        cbe_min_block_increase : int
+            Minimum bond dimension increase for each block. Default is `1`.
+        use_eig_based_svd : bool
+            Whether the SVD of the bond matrix :math:`\Xi` should be carried out numerically via
+            the eigensystem. This is faster on GPUs, but less accurate.
+            It makes no sense to do this on CPU. It is currently not supported for update_imag.
+            Default is `False`.
+        compute_err : bool
+            Whether the truncation error should be computed exactly.
+            Compared to SVD-based TEBD, computing the truncation error is significantly more expensive.
+            If `True` (default), the full error is computed.
+            Otherwise, the truncation error is set to NaN.
+    """
+
+    def _expansion_rate(self, i):
+        """get expansion rate for updating bond i"""
+        expand = self.options.get('cbe_expand', 0.1, 'real')
+        expand_0 = self.options.get('cbe_expand_0', None, 'real')
+
+        if expand_0 is None or expand_0 == expand:
+            return expand
+
+        chi_max = self.trunc_params.get('chi_max', None, int)
+        if chi_max is None:
+            raise ValueError('Need to specify trunc_params["chi_max"] in order to use cbe_expand_0.')
+
+        chi = min(self.psi.get_SL(i).shape)
+        return max(expand_0 - chi / chi_max * (expand_0 - expand), expand)
+
+    def update_new_psi(self, theta: npc.Array):
+        """Given a new two-site wave function `theta`, split it and save it in :attr:`psi`."""
+        i0 = self.i0
+        new_psi = self.psi
+
+        if self.move_right:
+            old_T_L = new_psi.get_B(i0, 'Th')
+            old_T_R = new_psi.get_B(i0+1, 'B')
+            old_bond_leg = old_T_R.get_leg('vL')
+            # for old_T_L `'B'` form fine as well, but i0 in `'Th'` form if ``use_eig_based_svd=True``
+        else:
+            old_T_L = new_psi.get_B(i0, 'A')
+            old_T_R = new_psi.get_B(i0+1, 'Th')
+            old_bond_leg = old_T_L.get_leg('vR')
+            # for old_T_R `'A'` form fine as well, but i0+1 in `'Th'` form if ``use_eig_based_svd=True``
+        expand = self._expansion_rate(i0)
+        use_eig_based_svd = self.options.get('use_eig_based_svd', False, bool)
+        
+        T_Lc, S, T_Rc, form, err, renormalize = decompose_theta_qr_based(
+            old_qtotal_L=old_T_L.qtotal, old_qtotal_R=old_T_R.qtotal, old_bond_leg=old_bond_leg, 
+            theta=theta, move_right=self.move_right,
+            expand=expand, min_block_increase = self.options.get('cbe_min_block_increase', 1, int),
+            use_eig_based_svd=use_eig_based_svd,
+            trunc_params=self.trunc_params, 
+            compute_err=self.options.get('compute_err', True, bool),
+            return_both_T=True
+        )
+
+        if self.move_right:
+            assert form[0] == 'A'
+            U = T_Lc
+        else:
+            assert form[1] == 'B'
+            VH = T_Rc
+        
+        T_L = T_Lc.split_legs(['(vL.p)'])
+        T_R = T_Rc.split_legs(['(p.vR)'])
+        U, VH = None, None
+        
+        self.renormalize.append(renormalize)
+
+        # compare to old best guess to check convergence of the sweeps
+        if self._tol_theta_diff is not None and self.update_LP_RP[0] == False:
+            theta_old = new_psi.get_theta(i0)
+            if use_eig_based_svd:
+                theta_new_trunc = npc.tensordot(T_L, T_R, ['vR', 'vL'])
+            else:
+                theta_new_trunc = npc.tensordot(T_L.scale_axis(S, 'vR'), T_R, ['vR', 'vL'])
+            theta_new_trunc.iset_leg_labels(['vL', 'p0', 'p1', 'vR'])
+            ov = npc.inner(theta_new_trunc, theta_old, do_conj=True, axes='labels')
+            theta_diff = 1. - abs(ov)
+            self._theta_diff.append(theta_diff)
+        
+        # set the new tensors to the MPS
+        new_psi.set_B(i0, T_L, form=form[0])
+        new_psi.set_B(i0+1, T_R, form=form[1])
+        new_psi.set_SR(i0, S)
+        return {'U': U, 'VH': VH, 'err': err}

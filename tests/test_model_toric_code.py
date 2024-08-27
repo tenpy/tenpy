@@ -6,7 +6,6 @@ import pytest
 from tenpy.networks.mps import MPS
 from tenpy.algorithms import dmrg
 import numpy as np
-import warnings
 
 
 @pytest.mark.slow
