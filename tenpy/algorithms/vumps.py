@@ -36,6 +36,7 @@ the single-site algorithm, which is the more principled algorithm.
 import numpy as np
 import time
 import logging
+import warnings
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +150,9 @@ class VUMPSEngine(IterativeSweeps):
         if not isinstance(psi, UniformMPS):
             assert isinstance(psi, MPS)
             psi = UniformMPS.from_MPS(psi)  # psi is an MPS, so convert it to a uMPS
+        options = asConfig(options, self.__class__.__name__)
+        options.deprecated_alias("lanczos_options", "lanczos_params",
+                                 "See also https://github.com/tenpy/tenpy/issues/459")
         super().__init__(psi, model, options, **kwargs)
         self.guess_init_env_data = self.env.get_initialization_data()
         self.env.clear()

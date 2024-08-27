@@ -188,8 +188,7 @@ class DataLoader:
     def get_data(self, key, prefix='', convert_to_numpy=False):
         return self._load(key, prefix=prefix, convert_to_numpy=convert_to_numpy)
 
-    @staticmethod
-    def convert_list_to_ndarray(value, key):
+    def convert_list_to_ndarray(self, value, key):
         if isinstance(value, list):
             converted_value = np.array(value)
             if converted_value.dtype == np.dtype(object):
