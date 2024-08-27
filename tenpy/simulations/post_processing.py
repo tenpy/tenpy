@@ -244,7 +244,7 @@ class DataFiles:
     """Hold multiple DataLoader instances open, indexed by the filename.
 
     Acts like a dictionary mapping filenames to :class:`DataLoader`.
-    Item accesss implicitly opens files that are not yet loaded.
+    Item access implicitly opens files that are not yet loaded.
 
     Parameters
     ----------
@@ -253,12 +253,15 @@ class DataFiles:
 
     Examples
     --------
-    >>> data_files = DataFiles(['results/output_1.h5',
-    ...                         'results_other/output_3.h5'])
-    >>> data_files['results/output_1.h5']
-    DataLoader(filename='results/output_1.h5')
-    >>> data_files['results/output_2.h5']
-    loading results/output_2.h5 ... successful
+    .. doctest ::
+        :skipif: True
+
+        >>> data_files = DataFiles(['results/output_1.h5',
+        ...                         'results_other/output_3.h5'])
+        >>> data_files['results/output_1.h5']
+        DataLoader(filename='results/output_1.h5')
+        >>> data_files['results/output_2.h5']
+        loading results/output_2.h5 ... successful
     """
     def __init__(self, files=None, folder=None):
         self._open_files = {} # filename -> DataLoader
