@@ -1572,14 +1572,15 @@ class MPO:
         nonzero_entries = []
         norms = []
         for i in range(self.L):
-            self.H.get_W(i).itranspose(['wL', 'wR', 'p', 'p*'])
-        for j in range(self.H.chi[0]):
+            self.get_W(i).itranspose(['wL', 'wR', 'p', 'p*'])
+        for j in range(self.chi[0]):
             norm = 1.
             for site in range(self.L):
                 Wjj = self.get_W(site)[self._perm_index(site, (j,j))]
                 # if Wjj is of the form factor*id, factor>0 this works
                 factor = npc.norm(Wjj, ord=1)/Wjj.shape[0] 
                 if factor<tol:
+                    norm=0.
                     break # norm close to zero => norm of total entry close to zero
                 # check that Wjj == factor*id
                 is_id = npc.norm(Wjj-factor*npc.diag(1., Wjj.get_leg("p")), ord=1)<tol
