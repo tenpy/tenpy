@@ -191,7 +191,7 @@ def stitch_changelog_latest():
         '\n',
         '\n',
     ]
-    
+
     for fn in os.listdir(folder):
         fn = os.path.join(folder, fn)
         if not fn.endswith('.txt'):
@@ -199,8 +199,8 @@ def stitch_changelog_latest():
         with open(fn, 'r') as f:
             lines = f.readlines()
         contents.extend(lines)
-        contents.append('\n')  # empty line between files
-    
+        contents.append('\n\n')  # at least one empty line between (even if no \n at file end)
+
     with open(outfile, 'w') as f:
         f.writelines(contents)
     # done
