@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 import tenpy.linalg.np_conserved as npc
-from tenpy.algorithms import truncation
+from tenpy.linalg import truncation
 from tenpy.networks.mps import MPS
 from tenpy.models.tf_ising import TFIChain
 from tenpy.algorithms import mpo_evolution
@@ -93,7 +93,7 @@ def test_decompose_theta_qr_based(use_eig_based_svd, conserve, tol=1e-12):
     for i in range(15):
         eng.run()
     assert psi.chi[8] == 50  # make sure we actually saturated chi to 50.
-    
+
     # Fabricate dummy theta (not actually updated)
     S = psi.get_SL(8)
     old_T_L = psi.get_B(8, 'B').ireplace_label('p','p0')
@@ -112,12 +112,12 @@ def test_decompose_theta_qr_based(use_eig_based_svd, conserve, tol=1e-12):
 
             # QR decomposition and truncation
             T_Lc, S_qr, T_Rc, form, err_qr, renormalize_qr = truncation.decompose_theta_qr_based(
-                old_qtotal_L=old_T_L.qtotal, old_qtotal_R=old_T_R.qtotal, old_bond_leg=old_T_R.get_leg('vL'), 
+                old_qtotal_L=old_T_L.qtotal, old_qtotal_R=old_T_R.qtotal, old_bond_leg=old_T_R.get_leg('vL'),
                 theta=theta, move_right=move_right,
-                expand=options.get('cbe_expand'), 
+                expand=options.get('cbe_expand'),
                 min_block_increase=options.get('cbe_min_block_increase'),
                 use_eig_based_svd=use_eig_based_svd,
-                trunc_params=options.get('trunc_params'), 
+                trunc_params=options.get('trunc_params'),
                 compute_err=True,
                 return_both_T=True
             )
@@ -142,7 +142,7 @@ def test_decompose_theta_qr_based(use_eig_based_svd, conserve, tol=1e-12):
             norm_err = npc.norm(theta_approx - theta.split_legs())
             expect_err = np.sqrt(err_qr.eps) * npc.norm(theta)
             assert abs(norm_err - expect_err) < tol
-            
+
             # Check that QR truncated theta has the same accuracy as SVD truncated theta
             assert abs(err_svd.eps - err_qr.eps) < max(err_svd.eps * 0.01, 1e-15)
 

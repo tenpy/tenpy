@@ -25,7 +25,7 @@ from .algorithm import Algorithm
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
 from ..networks.mpo import MPOEnvironment
 from ..networks.mps import MPSEnvironment
-from .truncation import truncate, svd_theta, decompose_theta_qr_based, TruncationError
+from ..linalg.truncation import truncate, svd_theta, decompose_theta_qr_based, TruncationError
 from ..linalg import np_conserved as npc
 from ..tools.params import asConfig
 from ..tools.misc import find_subclass, consistency_check

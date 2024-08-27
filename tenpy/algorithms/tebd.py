@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg import np_conserved as npc
-from .truncation import svd_theta, decompose_theta_qr_based, TruncationError
+from ..linalg.truncation import svd_theta, decompose_theta_qr_based, TruncationError
 from ..linalg import random_matrix
 from ..tools.misc import consistency_check
 
@@ -698,7 +698,7 @@ class QRBasedTEBDEngine(TEBDEngine):
             expand = expand, min_block_increase=self.options.get('cbe_min_block_increase', 1, int),
             use_eig_based_svd=self.options.get('use_eig_based_svd', False, bool),
             trunc_params=self.trunc_params,
-            compute_err=self.options.get('compute_err', True, bool), 
+            compute_err=self.options.get('compute_err', True, bool),
             return_both_T=True,
         )
         assert form == ['A','B']

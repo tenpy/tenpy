@@ -14,7 +14,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
-from .truncation import svd_theta
+from ..linalg.truncation import svd_theta
 from ..tools.math import entropy
 from ..linalg import random_matrix as rand_mat
 

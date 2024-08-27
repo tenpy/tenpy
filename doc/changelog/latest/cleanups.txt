@@ -4,6 +4,8 @@
   See :meth:`~tenpy.simulations.Simulation.handle_abort_signal`.
 
 - go back to original dir after finishing a simulation (end of context manager) such that relative 'directory' options work as expected when repeatedly running simulations
+
+- move `tenpy.algorithms.truncation` module to `tenpy.linalg.truncation`.
   
 
 - Fix: When saving simulation results, convert list from `update_stats` and `sweep_stats` into numpy arrays.

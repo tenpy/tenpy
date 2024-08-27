@@ -33,7 +33,7 @@ Much of the code is very similar to DMRG, and also based on the
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
 from ..linalg.krylov_based import LanczosEvolution
-from .truncation import svd_theta, TruncationError
+from ..linalg.truncation import svd_theta, TruncationError
 from .mps_common import Sweep, ZeroSiteH, OneSiteH, TwoSiteH
 from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg import np_conserved as npc
@@ -95,7 +95,7 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
         super().__init__(psi, model, options, **kwargs)
 
     # run() from TimeEvolutionAlgorithm
-    
+
     @property
     def lanczos_options(self):
         """Deprecated alias of :attr:`lanczos_params`."""

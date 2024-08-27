@@ -6,7 +6,7 @@ import numpy as np
 import logging
 logger = logging.getLogger(__name__)
 
-from .truncation import TruncationError
+from ..linalg.truncation import TruncationError
 from ..tools.misc import consistency_check
 from ..tools.events import EventHandler
 from ..tools.params import asConfig

@@ -23,7 +23,7 @@ import copy
 
 from ..models.model import Model
 from ..algorithms.algorithm import Algorithm
-from ..algorithms.truncation import TruncationError
+from ..linalg.truncation import TruncationError
 from ..networks.mps import InitialStateBuilder
 from ..models.model import NearestNeighborModel
 from ..tools import hdf5_io

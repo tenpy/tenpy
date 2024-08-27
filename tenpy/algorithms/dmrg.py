@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from ..linalg.krylov_based import lanczos_arpack, LanczosGroundState
-from .truncation import svd_theta
+from ..linalg.truncation import svd_theta
 from ..tools.params import asConfig
 from ..tools.math import entropy
 from ..tools.process import memory_usage

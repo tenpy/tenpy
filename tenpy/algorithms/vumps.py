@@ -45,13 +45,13 @@ from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS
 from ..networks.uniform_mps import UniformMPS
 from ..linalg.sparse import SumNpcLinearOperator
-from ..algorithms.mps_common import DensityMatrixMixer, SubspaceExpansion
+from .mps_common import DensityMatrixMixer, SubspaceExpansion
 from ..linalg.krylov_based import LanczosGroundState
 from ..tools.math import entropy
 from ..tools.process import memory_usage
 from ..tools.params import asConfig
 from .mps_common import IterativeSweeps, ZeroSiteH, OneSiteH, TwoSiteH
-from .truncation import svd_theta
+from ..linalg.truncation import svd_theta
 from .plane_wave_excitation import append_right_env, append_left_env, construct_orthogonal
 
 __all__ = ['VUMPSEngine', 'SingleSiteVUMPSEngine', 'TwoSiteVUMPSEngine']
@@ -171,7 +171,7 @@ class VUMPSEngine(IterativeSweeps):
         mixer_params.setdefault('amplitude', 1.e-5)
         mixer_params.setdefault('decay', 2)
         mixer_params.setdefault('disable_after', 5)
-    
+
     @property
     def lanczos_options(self):
         """Deprecated alias of :attr:`lanczos_params`."""
