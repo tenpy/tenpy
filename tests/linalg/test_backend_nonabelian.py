@@ -6,7 +6,7 @@ import pytest
 import numpy as np
 
 from tenpy.linalg import backends
-from tenpy.linalg.backends import fusion_tree_backend, get_backend
+from tenpy.linalg.backends import fusion_tree_backend, get_backend, TensorBackend
 from tenpy.linalg.spaces import ElementarySpace, ProductSpace
 from tenpy.linalg.tensors import SymmetricTensor
 from tenpy.linalg.symmetries import ProductSymmetry, fibonacci_anyon_category, SU2Symmetry, SU3_3AnyonCategory
@@ -62,6 +62,45 @@ def assert_clockwise_counterclockwise_trivial(a: SymmetricTensor, funcs: list[Ca
 
 
 def assert_braiding_and_scale_axis_commutation(a: SymmetricTensor, funcs: list[Callable], levels: list[int], eps: float):
+    # TODO
+    raise NotImplementedError
+
+
+def assert_bending_up_and_down_trivial(codomains: list[ProductSpace], domains: list[ProductSpace],
+                                       funcs: list[Callable], backend: TensorBackend, multiple: bool, eps: float):
+    """Check that bending a leg up and down (or down and up) is trivial. All given codomains are combined with all
+    given domains to construct random tensors for which the identities are checked. All codomains and domains must
+    have the same symmetry; this is not explicitly checked.
+    If `multiple == True`, the identity is also checked for bending multiple (i.e. more than one) legs up and down
+    up to the maximum number possible. Otherwise, the identity is only checked for a single leg.
+    """
+    for codomain in codomains:
+        for domain in domains:
+            tens = SymmetricTensor.from_random_uniform(codomain, domain, backend=backend)
+
+            bending = []
+            for i in range(tens.num_domain_legs):
+                bends = [True] * (i+1) + [False] * (i+1)
+                bending.append(bends)
+                if not multiple:
+                    break
+            for i in range(tens.num_codomain_legs):
+                bends = [False] * (i+1) + [True] * (i+1)
+                bending.append(bends)
+                if not multiple:
+                    break
+
+            for func in funcs:
+                for bends in bending:
+                    new_tens = tens.copy()
+                    for bend in bends:
+                        new_data, new_codomain, new_domain = func(new_tens, bend)
+                        new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
+
+                    assert_tensors_almost_equal(new_tens, tens, eps)
+
+
+def assert_bending_and_scale_axis_commutation(a: SymmetricTensor, funcs: list[Callable], eps: float):
     # TODO
     raise NotImplementedError
 
@@ -598,3 +637,157 @@ def test_c_symbol_su3_3(block_backend: str):
 
     # braid clockwise and then counter-clockwise == trivial
     assert_clockwise_counterclockwise_trivial(tens, funcs, levels, eps=eps)
+
+
+def test_b_symbol_fibonacci_anyons(block_backend: str):
+    # TODO rescaling axes commutes with bending
+
+    funcs = [fusion_tree_backend._apply_single_b_symbol]
+    backend = get_backend('fusion_tree', block_backend)
+    multiple = True
+    eps = 1.e-14
+    sym = fibonacci_anyon_category
+    s1 = ElementarySpace(sym, [[1]], [1])  # only tau
+    s2 = ElementarySpace(sym, [[0], [1]], [1, 1])  # 1 and tau
+    s3 = ElementarySpace(sym, [[0], [1]], [2, 3])  # 1 and tau
+
+    # tensor with single leg in codomain; bend down
+    codomain = ProductSpace([s2])
+    domain = ProductSpace([], symmetry=sym)
+
+    block_inds = np.array([[0,0]])
+    blocks = [backend.block_backend.block_random_uniform((1, 1), Dtype.complex128)]
+    data = backends.FusionTreeData(block_inds, blocks, Dtype.complex128)
+
+    tens = SymmetricTensor(data, codomain, domain, backend=backend)
+
+    expect_codomain = ProductSpace([], symmetry=sym)
+    expect_domain = ProductSpace([s2.dual])
+    expect_tens = SymmetricTensor(data, expect_codomain, expect_domain, backend=backend)
+
+    for func in funcs:
+        new_data, new_codomain, new_domain = func(tens, False)
+        new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
+
+        assert_tensors_almost_equal(new_tens, expect_tens, eps)
+
+
+    # tensor with single leg in domain; bend up
+    codomain = ProductSpace([], symmetry=sym)
+    domain = ProductSpace([s3])
+
+    block_inds = np.array([[0,0]])
+    blocks = [backend.block_backend.block_random_uniform((1, 2), Dtype.complex128)]
+    data = backends.FusionTreeData(block_inds, blocks, Dtype.complex128)
+
+    tens = SymmetricTensor(data, codomain, domain, backend=backend)
+
+    expect = [backend.block_backend.block_reshape(blocks[0], (2, 1))]
+    expect_data = backends.FusionTreeData(block_inds, expect, Dtype.complex128)
+    expect_codomain = ProductSpace([s3.dual])
+    expect_domain = ProductSpace([], symmetry=sym)
+    expect_tens = SymmetricTensor(expect_data, expect_codomain, expect_domain, backend=backend)
+
+    for func in funcs:
+        new_data, new_codomain, new_domain = func(tens, True)
+        new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
+
+        assert_tensors_almost_equal(new_tens, expect_tens, eps)
+
+
+    # more complicated tensor
+    codomain = ProductSpace([s2, s1, s1])
+    domain = ProductSpace([s2, s1, s2])
+
+    block_inds = np.array([[0,0], [1,1]])
+    blocks = [backend.block_backend.block_random_uniform((2, 3), Dtype.complex128),
+              backend.block_backend.block_random_uniform((3, 5), Dtype.complex128)]
+    data = backends.FusionTreeData(block_inds, blocks, Dtype.complex128)
+
+    tens = SymmetricTensor(data, codomain, domain, backend=backend)
+
+    # bend up
+    phi = (1 + 5**0.5) / 2
+
+    expect = [np.zeros((5, 1), dtype=complex), np.zeros((8, 2), dtype=complex)]
+
+    expect[0][0, 0] = blocks[0][0, 1] # (0, 0, 0) = (a, b, c) as in _b_symbol(a, b, c)
+    expect[0][1, 0] = blocks[1][0, 3] * phi**0.5 # (0, 1, 1)
+    expect[0][2, 0] = blocks[0][1, 1] # (0, 0, 0)
+    expect[0][3, 0] = blocks[1][1, 3] * phi**0.5 # (0, 1, 1)
+    expect[0][4, 0] = blocks[1][2, 3] * phi**0.5 # (0, 1, 1)
+
+    expect[1][0, 0] = blocks[1][0, 0] # (1, 0, 1)
+    expect[1][1, 0] = blocks[0][0, 0] * phi**-0.5 # (1, 1, 0)
+    expect[1][2, 0] = blocks[1][0, 1] # (1, 1, 1)
+    expect[1][3, 0] = blocks[1][1, 0] # (1, 0, 1)
+    expect[1][4, 0] = blocks[1][2, 0] # (1, 0, 1)
+    expect[1][5, 0] = blocks[1][1, 1] # (1, 1, 1)
+    expect[1][6, 0] = blocks[0][1, 0] * phi**-0.5 # (1, 1, 0)
+    expect[1][7, 0] = blocks[1][2, 1] # (1, 1, 1)
+
+    expect[1][0, 1] = blocks[1][0, 2] # (1, 0, 1)
+    expect[1][1, 1] = blocks[0][0, 2] * phi**-0.5 # (1, 1, 0)
+    expect[1][2, 1] = blocks[1][0, 4] # (1, 1, 1)
+    expect[1][3, 1] = blocks[1][1, 2] # (1, 0, 1)
+    expect[1][4, 1] = blocks[1][2, 2] # (1, 0, 1)
+    expect[1][5, 1] = blocks[1][1, 4] # (1, 1, 1)
+    expect[1][6, 1] = blocks[0][1, 2] * phi**-0.5 # (1, 1, 0)
+    expect[1][7, 1] = blocks[1][2, 4] # (1, 1, 1)
+
+    expect_data = backends.FusionTreeData(block_inds, expect, Dtype.complex128)
+    expect_codomain = ProductSpace([s2, s1, s1, s2.dual])
+    expect_domain = ProductSpace([s2, s1])
+    expect_tens = SymmetricTensor(expect_data, expect_codomain, expect_domain, backend=backend)
+
+    for func in funcs:
+        new_data, new_codomain, new_domain = func(tens, True)
+        new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
+
+        assert_tensors_almost_equal(new_tens, expect_tens, eps)
+
+
+    # bend down
+    expect = [np.zeros((1, 5), dtype=complex), np.zeros((2, 8), dtype=complex)]
+
+    expect[0][0, 0] = blocks[1][1, 0] * phi**0.5 # (0, 1, 1)
+    expect[0][0, 1] = blocks[1][1, 1] * phi**0.5 # (0, 1, 1)
+    expect[0][0, 2] = blocks[1][1, 2] * phi**0.5 # (0, 1, 1)
+    expect[0][0, 3] = blocks[1][1, 3] * phi**0.5 # (0, 1, 1)
+    expect[0][0, 4] = blocks[1][1, 4] * phi**0.5 # (0, 1, 1)
+
+    expect[1][0, 0] = blocks[1][0, 0] # (1, 1, 1)
+    expect[1][0, 1] = blocks[0][0, 0] * phi**-0.5 # (1, 1, 0)
+    expect[1][0, 2] = blocks[1][0, 1] # (1, 1, 1)
+    expect[1][0, 3] = blocks[0][0, 1] * phi**-0.5 # (1, 1, 0)
+    expect[1][0, 4] = blocks[1][0, 2] # (1, 1, 1)
+    expect[1][0, 5] = blocks[1][0, 3] # (1, 1, 1)
+    expect[1][0, 6] = blocks[0][0, 2] * phi**-0.5 # (1, 1, 0)
+    expect[1][0, 7] = blocks[1][0, 4] # (1, 1, 1)
+
+    expect[1][1, 0] = blocks[1][2, 0] # (1, 1, 1)
+    expect[1][1, 1] = blocks[0][1, 0] * phi**-0.5 # (1, 1, 0)
+    expect[1][1, 2] = blocks[1][2, 1] # (1, 1, 1)
+    expect[1][1, 3] = blocks[0][1, 1] * phi**-0.5 # (1, 1, 0)
+    expect[1][1, 4] = blocks[1][2, 2] # (1, 1, 1)
+    expect[1][1, 5] = blocks[1][2, 3] # (1, 1, 1)
+    expect[1][1, 6] = blocks[0][1, 2] * phi**-0.5 # (1, 1, 0)
+    expect[1][1, 7] = blocks[1][2, 4] # (1, 1, 1)
+
+    expect_data = backends.FusionTreeData(block_inds, expect, Dtype.complex128)
+    expect_codomain = ProductSpace([s2, s1])
+    expect_domain = ProductSpace([s2, s1, s2, s1.dual])
+    expect_tens = SymmetricTensor(expect_data, expect_codomain, expect_domain, backend=backend)
+
+    for func in funcs:
+        new_data, new_codomain, new_domain = func(tens, False)
+        new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
+
+        assert_tensors_almost_equal(new_tens, expect_tens, eps)
+
+
+    spaces1 = [ProductSpace([], symmetry=sym), ProductSpace([s2]), ProductSpace([s3]),
+               ProductSpace([s1, s3]), ProductSpace([s2, s3]), ProductSpace([s3, s1, s3, s2])]
+
+    # bend up and down again (and vice versa) == trivial
+    assert_bending_up_and_down_trivial(spaces1, spaces1, [func], backend, multiple=multiple, eps=eps)

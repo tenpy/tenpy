@@ -495,7 +495,9 @@ def _apply_single_b_symbol(ten: SymmetricTensor, bend_up: bool
                 coupled = ten.symmetry.trivial_sector
             else:
                 coupled = beta_tree.inner_sectors[-1] if beta_tree.inner_sectors.shape[0] > 0 else beta_tree.uncoupled[0]
-            #final_shape = (prod(modified_shape[:ten.num_codomain_legs+1]), prod(modified_shape[ten.num_codomain_legs+1:]))
+            modified_shape = (prod(modified_shape[:ten.num_codomain_legs]),
+                              prod(modified_shape[ten.num_codomain_legs:ten.num_legs-1]),
+                              modified_shape[ten.num_legs-1])
             sec_mul = ten.domain[-1].sector_multiplicity(beta_tree.uncoupled[-1])
             final_shape = (tree_block.shape[0] * sec_mul, tree_block.shape[1] // sec_mul)
         else:
@@ -503,14 +505,16 @@ def _apply_single_b_symbol(ten: SymmetricTensor, bend_up: bool
                 coupled = ten.symmetry.trivial_sector
             else:
                 coupled = alpha_tree.inner_sectors[-1] if alpha_tree.inner_sectors.shape[0] > 0 else alpha_tree.uncoupled[0]
-            #final_shape = (prod(modified_shape[:ten.num_codomain_legs-1]), prod(modified_shape[ten.num_codomain_legs-1:]))
+            modified_shape = (prod(modified_shape[:ten.num_codomain_legs-1]),
+                              modified_shape[ten.num_codomain_legs-1],
+                              prod(modified_shape[ten.num_codomain_legs:ten.num_legs]))
             sec_mul = ten.codomain[-1].sector_multiplicity(alpha_tree.uncoupled[-1])
             final_shape = (tree_block.shape[0] // sec_mul, tree_block.shape[1] * sec_mul)
         block_ind = new_domain.sectors_where(coupled)
         block_ind = new_data.block_ind_from_domain_sector_ind(block_ind)
 
-        # TODO necessary??
-        #tree_block = backend.block_reshape(tree_block, tuple(modified_shape))
+        tree_block = backend.block_reshape(tree_block, modified_shape)
+        tree_block = backend.block_permute_axes(tree_block, [0, 2, 1])
         tree_block = backend.block_reshape(tree_block, final_shape)
 
         trees = [alpha_tree, beta_tree]
@@ -534,6 +538,8 @@ def _apply_single_b_symbol(ten: SymmetricTensor, bend_up: bool
             b_sym *= ten.symmetry.frobenius_schur(tree1.uncoupled[-1])
         mu = tree1.multiplicities[-1] if tree1.multiplicities.shape[0] > 0 else 0
         for nu in range(b_sym.shape[1]):
+            if abs(b_sym[mu, nu]) < ten.backend.eps:
+                continue
             new_tree2.multiplicities[-1] = nu
 
             if bend_up:
