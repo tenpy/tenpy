@@ -146,8 +146,12 @@ class MPO:
         self.bc = bc
         self.max_range = max_range
         self.explicit_plus_hc = explicit_plus_hc
-        self._charge_permutations = charge_permutations
-        self._has_permutations = True if isinstance(self._charge_permutations, list) else False
+        self._has_permutations = True if isinstance(charge_permutations, list) else False
+        if self._has_permutations:
+            # explicitly convert to np.array in case tuples or lists were passed
+            self._charge_permutations = [np.array(perm) for perm in charge_permutations]
+        else:
+            self._charge_permutations = charge_permutations
         self.test_sanity()
 
     def copy(self):
@@ -417,9 +421,14 @@ class MPO:
             raise ValueError("wrong len of `IdL`/`IdR`")
         if self._has_permutations:
             assert len(self._charge_permutations)==self.L+1, "missing charge permutations for virtual MPO legs?"
+            for j in range(self.L):
+                assert self._charge_permutations[j].shape[0] == self._W[j].get_leg("wL").ind_len, "permutation does not match ind_len of `wL` at site {0}".format(j+1)
+            assert self._charge_permutations[self.L].shape[0] == self._W[-1].get_leg("wR").ind_len, "permutation does not match ind_len of `wR` at site L"
             if not self.finite:
                 assert np.allclose(self._charge_permutations[0],self._charge_permutations[self.L]), "permutations of outer virtual legs don't match"
-
+        else:
+            assert self._charge_permutations == None, "Virtual legs should not be permuted. Did you pass the permutations as list?"
+    
     @property
     def L(self):
         """Number of physical sites; for an iMPO the len of the MPO unit cell."""
