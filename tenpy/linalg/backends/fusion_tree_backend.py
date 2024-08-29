@@ -458,6 +458,7 @@ def _apply_single_b_symbol(ten: SymmetricTensor, bend_up: bool
         assert ten.num_domain_legs > 0, 'There is no leg to bend in the domain!'
     else:
         assert ten.num_codomain_legs > 0, 'There is no leg to bend in the codomain!'
+    assert len(ten.data.blocks) > 0, 'The given tensor has no blocks to act on!'
 
     spaces = [ten.codomain, ten.domain]
     space1, space2 = spaces[bend_up], spaces[not bend_up]

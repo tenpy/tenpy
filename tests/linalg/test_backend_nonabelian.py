@@ -77,6 +77,8 @@ def assert_bending_up_and_down_trivial(codomains: list[ProductSpace], domains: l
     for codomain in codomains:
         for domain in domains:
             tens = SymmetricTensor.from_random_uniform(codomain, domain, backend=backend)
+            if len(tens.data.blocks) == 0:  # trivial tensors
+                continue
 
             bending = []
             for i in range(tens.num_domain_legs):
@@ -655,7 +657,7 @@ def test_b_symbol_fibonacci_anyons(block_backend: str):
     codomain = ProductSpace([s2])
     domain = ProductSpace([], symmetry=sym)
 
-    block_inds = np.array([[0,0]])
+    block_inds = np.array([[0, 0]])
     blocks = [backend.block_backend.block_random_uniform((1, 1), Dtype.complex128)]
     data = backends.FusionTreeData(block_inds, blocks, Dtype.complex128)
 
@@ -786,8 +788,197 @@ def test_b_symbol_fibonacci_anyons(block_backend: str):
         assert_tensors_almost_equal(new_tens, expect_tens, eps)
 
 
-    spaces1 = [ProductSpace([], symmetry=sym), ProductSpace([s2]), ProductSpace([s3]),
-               ProductSpace([s1, s3]), ProductSpace([s2, s3]), ProductSpace([s3, s1, s3, s2])]
+    spaces = [ProductSpace([], symmetry=sym), ProductSpace([s2]), ProductSpace([s3]),
+              ProductSpace([s1, s3]), ProductSpace([s2, s3]), ProductSpace([s3, s1, s3, s2])]
 
     # bend up and down again (and vice versa) == trivial
-    assert_bending_up_and_down_trivial(spaces1, spaces1, [func], backend, multiple=multiple, eps=eps)
+    assert_bending_up_and_down_trivial(spaces, spaces, funcs, backend, multiple=multiple, eps=eps)
+
+
+def test_b_symbol_su3_3(block_backend: str):
+    # TODO rescaling axes commutes with bending
+
+    funcs = [fusion_tree_backend._apply_single_b_symbol]
+    backend = get_backend('fusion_tree', block_backend)
+    perm_axes = backend.block_backend.block_permute_axes
+    reshape = backend.block_backend.block_reshape
+    multiple = True
+    eps = 1.e-14
+    sym = SU3_3AnyonCategory()
+    s1 = ElementarySpace(sym, [[1], [2]], [1, 1])  # 8 and 10
+    s2 = ElementarySpace(sym, [[1]], [2])  # 8 with multiplicity 2
+    s3 = ElementarySpace(sym, [[0], [1], [3]], [1, 2, 3])  # 1, 8, 10-
+    c1 = np.array([1])  # charge 8
+    # when multiplying with qdims (from the b symbols), only 8 is relevant since all other qdim are 1
+    # the b symbols are diagonal in the multiplicity index
+
+    # tensor with two legs in codomain; bend down
+    codomain = ProductSpace([s1, s3])
+    domain = ProductSpace([], symmetry=sym)
+
+    block_inds = np.array([[0, 0]])
+    blocks = [backend.block_backend.block_random_uniform((5, 1), Dtype.complex128)]
+    data = backends.FusionTreeData(block_inds, blocks, Dtype.complex128)
+
+    tens = SymmetricTensor(data, codomain, domain, backend=backend)
+
+    expect_block_inds = np.array([[0, 1], [1, 2]])
+    expect = [np.zeros((1, 2), dtype=complex), np.zeros((1, 3), dtype=complex)]
+
+    expect[0][0, :] = blocks[0][:2, 0] * sym.inv_sqrt_qdim(c1)  # (8, 8, 1) = (a, b, c) as in _b_symbol(a, b, c)
+    expect[1][0, :] = blocks[0][2:, 0]  # (10, 10-, 1)
+
+    expect_data = backends.FusionTreeData(expect_block_inds, expect, Dtype.complex128)
+    expect_codomain = ProductSpace([s1])
+    expect_domain = ProductSpace([s3.dual])
+    expect_tens = SymmetricTensor(expect_data, expect_codomain, expect_domain, backend=backend)
+
+    for func in funcs:
+        new_data, new_codomain, new_domain = func(tens, False)
+        new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
+
+        assert_tensors_almost_equal(new_tens, expect_tens, eps)
+
+
+    # tensor with two legs in codomain, one leg in domain; bend down
+    codomain = ProductSpace([s1, s3])
+    domain = ProductSpace([s2])
+
+    block_inds = np.array([[1, 0]])
+    blocks = [backend.block_backend.block_random_uniform((10, 2), Dtype.complex128)]
+    data = backends.FusionTreeData(block_inds, blocks, Dtype.complex128)
+
+    tens = SymmetricTensor(data, codomain, domain, backend=backend)
+
+    expect_block_inds = np.array([[0, 1], [1, 2]])
+    expect = [np.zeros((1, 16), dtype=complex), np.zeros((1, 4), dtype=complex)]
+
+    expect[0][0, :2] = blocks[0][0, :]  # (8, 1, 8)
+    expect[0][0, 2:6] = reshape(perm_axes(blocks[0][1:3, :], [1, 0]), (1, 4))  # (8, 8, 8)
+    expect[0][0, 6:10] = reshape(perm_axes(blocks[0][3:5, :], [1, 0]), (1, 4))  # (8, 8, 8)
+    expect[0][0, 10:] = reshape(perm_axes(blocks[0][5:8, :], [1, 0]), (1, 6)) * -1 # (8, 10-, 8)
+
+    expect[1][0, :] = reshape(perm_axes(blocks[0][8:, :], [1, 0]), (1, 4)) * sym.sqrt_qdim(c1) * -1  # (10, 8, 8)
+
+    expect_data = backends.FusionTreeData(expect_block_inds, expect, Dtype.complex128)
+    expect_codomain = ProductSpace([s1])
+    expect_domain = ProductSpace([s2, s3.dual])
+    expect_tens = SymmetricTensor(expect_data, expect_codomain, expect_domain, backend=backend)
+
+    for func in funcs:
+        new_data, new_codomain, new_domain = func(tens, False)
+        new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
+
+        assert_tensors_almost_equal(new_tens, expect_tens, eps)
+
+
+    # same tensor, bend up
+    expect_block_inds = np.array([[0, 0]])
+    expect = [np.zeros((20, 1), dtype=complex)]
+
+    expect[0][:2, 0] = blocks[0][0, :] * sym.sqrt_qdim(c1)  # (1, 8, 8)
+    expect[0][2:6, :] = reshape(blocks[0][1:3, :], (4, 1)) * sym.sqrt_qdim(c1)  # (1, 8, 8)
+    expect[0][6:10, :] = reshape(blocks[0][3:5, :], (4, 1)) * sym.sqrt_qdim(c1)  # (1, 8, 8)
+    expect[0][10:16, :] = reshape(blocks[0][5:8, :], (6, 1)) * sym.sqrt_qdim(c1)  # (1, 8, 8)
+    expect[0][16:, :] = reshape(blocks[0][8:, :], (4, 1)) * sym.sqrt_qdim(c1)  # (1, 8, 8)
+
+    expect_data = backends.FusionTreeData(expect_block_inds, expect, Dtype.complex128)
+    expect_codomain = ProductSpace([s1, s3, s2.dual])
+    expect_domain = ProductSpace([], symmetry=sym)
+    expect_tens = SymmetricTensor(expect_data, expect_codomain, expect_domain, backend=backend)
+
+    for func in funcs:
+        new_data, new_codomain, new_domain = func(tens, True)
+        new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
+
+        assert_tensors_almost_equal(new_tens, expect_tens, eps)
+
+
+    # more complicated tensor, bend down
+    codomain = ProductSpace([s1, s2, s2])
+    domain = ProductSpace([s2, s3])
+
+    block_inds = np.array([[i, i] for i in range(4)])
+    shapes = [(12, 4), (36, 16), (12, 4), (12, 4)]
+    blocks = [backend.block_backend.block_random_uniform(shp, Dtype.complex128) for shp in shapes]
+    data = backends.FusionTreeData(block_inds, blocks, Dtype.complex128)
+
+    tens = SymmetricTensor(data, codomain, domain, backend=backend)
+
+    expect_shapes = [(2, 32), (6, 88), (2, 32), (2, 32)]
+    expect = [np.zeros(shp, dtype=complex) for shp in expect_shapes]
+
+    expect[0][:, :4] = reshape(perm_axes(reshape(blocks[1][:4, :2], (2, 2, 2)), [0, 2, 1]), (2, 4)) * sym.sqrt_qdim(c1)  # (1, 8, 8)
+    expect[0][:, 4:12] = reshape(perm_axes(reshape(blocks[1][:4, 2:6], (2, 2, 4)), [0, 2, 1]), (2, 8)) * sym.sqrt_qdim(c1)  # (1, 8, 8)
+    expect[0][:, 12:20] = reshape(perm_axes(reshape(blocks[1][:4, 6:10], (2, 2, 4)), [0, 2, 1]), (2, 8)) * sym.sqrt_qdim(c1)  # (1, 8, 8)
+    expect[0][:, 20:32] = reshape(perm_axes(reshape(blocks[1][:4, 10:16], (2, 2, 6)), [0, 2, 1]), (2, 12)) * sym.sqrt_qdim(c1)  # (1, 8, 8)
+
+    expect[1][:2, :4] = reshape(perm_axes(reshape(blocks[1][4:8, :2], (2, 2, 2)), [0, 2, 1]), (2, 4))  # (8, 8, 8)
+    expect[1][:2, 4:8] = reshape(perm_axes(reshape(blocks[1][12:16, :2], (2, 2, 2)), [0, 2, 1]), (2, 4))  # (8, 8, 8)
+    expect[1][2:4, :4] = reshape(perm_axes(reshape(blocks[1][8:12, :2], (2, 2, 2)), [0, 2, 1]), (2, 4))  # (8, 8, 8)
+    expect[1][2:4, 4:8] = reshape(perm_axes(reshape(blocks[1][16:20, :2], (2, 2, 2)), [0, 2, 1]), (2, 4))  # (8, 8, 8)
+    expect[1][4:, :4] = reshape(perm_axes(reshape(blocks[1][28:32, :2], (2, 2, 2)), [0, 2, 1]), (2, 4))  # (8, 8, 8)
+    expect[1][4:, 4:8] = reshape(perm_axes(reshape(blocks[1][32:, :2], (2, 2, 2)), [0, 2, 1]), (2, 4))  # (8, 8, 8)
+
+    expect[1][:2, 8:16] = reshape(perm_axes(reshape(blocks[0][:4, :], (2, 2, 4)), [0, 2, 1]), (2, 8)) * sym.inv_sqrt_qdim(c1)  # (8, 8, 1)
+    expect[1][2:4, 8:16] = reshape(perm_axes(reshape(blocks[0][4:8, :], (2, 2, 4)), [0, 2, 1]), (2, 8)) * sym.inv_sqrt_qdim(c1)  # (8, 8, 1)
+    expect[1][4:, 8:16] = reshape(perm_axes(reshape(blocks[0][8:, :], (2, 2, 4)), [0, 2, 1]), (2, 8)) * sym.inv_sqrt_qdim(c1)  # (8, 8, 1)
+
+    expect[1][:2, 16:24] = reshape(perm_axes(reshape(blocks[1][4:8, 2:6], (2, 2, 4)), [0, 2, 1]), (2, 8))  # (8, 8, 8)
+    expect[1][2:4, 16:24] = reshape(perm_axes(reshape(blocks[1][8:12, 2:6], (2, 2, 4)), [0, 2, 1]), (2, 8))  # (8, 8, 8)
+    expect[1][4:, 16:24] = reshape(perm_axes(reshape(blocks[1][28:32, 2:6], (2, 2, 4)), [0, 2, 1]), (2, 8))  # (8, 8, 8)
+
+    expect[1][:2, 24:32] = reshape(perm_axes(reshape(blocks[1][4:8, 6:10], (2, 2, 4)), [0, 2, 1]), (2, 8))  # (8, 8, 8)
+    expect[1][2:4, 24:32] = reshape(perm_axes(reshape(blocks[1][8:12, 6:10], (2, 2, 4)), [0, 2, 1]), (2, 8))  # (8, 8, 8)
+    expect[1][4:, 24:32] = reshape(perm_axes(reshape(blocks[1][28:32, 6:10], (2, 2, 4)), [0, 2, 1]), (2, 8))  # (8, 8, 8)
+
+    expect[1][:2, 32:40] = reshape(perm_axes(reshape(blocks[1][12:16, 2:6], (2, 2, 4)), [0, 2, 1]), (2, 8))  # (8, 8, 8)
+    expect[1][2:4, 32:40] = reshape(perm_axes(reshape(blocks[1][16:20, 2:6], (2, 2, 4)), [0, 2, 1]), (2, 8))  # (8, 8, 8)
+    expect[1][4:, 32:40] = reshape(perm_axes(reshape(blocks[1][32:, 2:6], (2, 2, 4)), [0, 2, 1]), (2, 8))  # (8, 8, 8)
+
+    expect[1][:2, 40:48] = reshape(perm_axes(reshape(blocks[1][12:16, 6:10], (2, 2, 4)), [0, 2, 1]), (2, 8))  # (8, 8, 8)
+    expect[1][2:4, 40:48] = reshape(perm_axes(reshape(blocks[1][16:20, 6:10], (2, 2, 4)), [0, 2, 1]), (2, 8))  # (8, 8, 8)
+    expect[1][4:, 40:48] = reshape(perm_axes(reshape(blocks[1][32:, 6:10], (2, 2, 4)), [0, 2, 1]), (2, 8))  # (8, 8, 8)
+
+    expect[1][:2, 48:56] = reshape(perm_axes(reshape(blocks[2][:4, :], (2, 2, 4)), [0, 2, 1]), (2, 8)) * sym.inv_sqrt_qdim(c1) * -1  # (8, 8, 10)
+    expect[1][2:4, 48:56] = reshape(perm_axes(reshape(blocks[2][4:8, :], (2, 2, 4)), [0, 2, 1]), (2, 8)) * sym.inv_sqrt_qdim(c1) * -1  # (8, 8, 10)
+    expect[1][4:, 48:56] = reshape(perm_axes(reshape(blocks[2][8:, :], (2, 2, 4)), [0, 2, 1]), (2, 8)) * sym.inv_sqrt_qdim(c1) * -1  # (8, 8, 10)
+
+    expect[1][:2, 56:64] = reshape(perm_axes(reshape(blocks[3][:4, :], (2, 2, 4)), [0, 2, 1]), (2, 8)) * sym.inv_sqrt_qdim(c1) * -1  # (8, 8, 10-)
+    expect[1][2:4, 56:64] = reshape(perm_axes(reshape(blocks[3][4:8, :], (2, 2, 4)), [0, 2, 1]), (2, 8)) * sym.inv_sqrt_qdim(c1) * -1  # (8, 8, 10-)
+    expect[1][4:, 56:64] = reshape(perm_axes(reshape(blocks[3][8:, :], (2, 2, 4)), [0, 2, 1]), (2, 8)) * sym.inv_sqrt_qdim(c1) * -1  # (8, 8, 10-)
+
+    expect[1][:2, 64:76] = reshape(perm_axes(reshape(blocks[1][4:8, 10:], (2, 2, 6)), [0, 2, 1]), (2, 12))  # (8, 8, 8)
+    expect[1][:2, 76:] = reshape(perm_axes(reshape(blocks[1][12:16, 10:], (2, 2, 6)), [0, 2, 1]), (2, 12))  # (8, 8, 8)
+    expect[1][2:4, 64:76] = reshape(perm_axes(reshape(blocks[1][8:12, 10:], (2, 2, 6)), [0, 2, 1]), (2, 12))  # (8, 8, 8)
+    expect[1][2:4, 76:] = reshape(perm_axes(reshape(blocks[1][16:20, 10:], (2, 2, 6)), [0, 2, 1]), (2, 12))  # (8, 8, 8)
+    expect[1][4:, 64:76] = reshape(perm_axes(reshape(blocks[1][28:32, 10:], (2, 2, 6)), [0, 2, 1]), (2, 12))  # (8, 8, 8)
+    expect[1][4:, 76:] = reshape(perm_axes(reshape(blocks[1][32:, 10:], (2, 2, 6)), [0, 2, 1]), (2, 12))  # (8, 8, 8)
+
+    expect[2][:, :4] = reshape(perm_axes(reshape(blocks[1][20:24, :2], (2, 2, 2)), [0, 2, 1]), (2, 4)) * sym.sqrt_qdim(c1) * -1  # (10, 8, 8)
+    expect[2][:, 4:12] = reshape(perm_axes(reshape(blocks[1][20:24, 2:6], (2, 2, 4)), [0, 2, 1]), (2, 8)) * sym.sqrt_qdim(c1) * -1  # (10, 8, 8)
+    expect[2][:, 12:20] = reshape(perm_axes(reshape(blocks[1][20:24, 6:10], (2, 2, 4)), [0, 2, 1]), (2, 8)) * sym.sqrt_qdim(c1) * -1  # (10, 8, 8)
+    expect[2][:, 20:32] = reshape(perm_axes(reshape(blocks[1][20:24, 10:16], (2, 2, 6)), [0, 2, 1]), (2, 12)) * sym.sqrt_qdim(c1) * -1  # (10, 8, 8)
+
+    expect[3][:, :4] = reshape(perm_axes(reshape(blocks[1][24:28, :2], (2, 2, 2)), [0, 2, 1]), (2, 4)) * sym.sqrt_qdim(c1) * -1  # (10-, 8, 8)
+    expect[3][:, 4:12] = reshape(perm_axes(reshape(blocks[1][24:28, 2:6], (2, 2, 4)), [0, 2, 1]), (2, 8)) * sym.sqrt_qdim(c1) * -1  # (10-, 8, 8)
+    expect[3][:, 12:20] = reshape(perm_axes(reshape(blocks[1][24:28, 6:10], (2, 2, 4)), [0, 2, 1]), (2, 8)) * sym.sqrt_qdim(c1) * -1  # (10-, 8, 8)
+    expect[3][:, 20:32] = reshape(perm_axes(reshape(blocks[1][24:28, 10:16], (2, 2, 6)), [0, 2, 1]), (2, 12)) * sym.sqrt_qdim(c1) * -1  # (10-, 8, 8)
+
+    expect_data = backends.FusionTreeData(block_inds, expect, Dtype.complex128)
+    expect_codomain = ProductSpace([s1, s2])
+    expect_domain = ProductSpace([s2, s3, s2.dual])
+    expect_tens = SymmetricTensor(expect_data, expect_codomain, expect_domain, backend=backend)
+
+    for func in funcs:
+        new_data, new_codomain, new_domain = func(tens, False)
+        new_tens = SymmetricTensor(new_data, new_codomain, new_domain, backend=backend)
+
+        assert_tensors_almost_equal(new_tens, expect_tens, eps)
+
+
+    spaces = [ProductSpace([], symmetry=sym), ProductSpace([s2]), ProductSpace([s3.dual]),
+              ProductSpace([s1, s3]), ProductSpace([s2, s3.dual]), ProductSpace([s1, s3, s2.dual])]
+
+    # bend up and down again (and vice versa) == trivial
+    assert_bending_up_and_down_trivial(spaces, spaces, funcs, backend, multiple=multiple, eps=eps)
