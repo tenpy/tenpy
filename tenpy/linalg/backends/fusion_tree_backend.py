@@ -556,7 +556,7 @@ def _apply_single_b_symbol(ten: SymmetricTensor, bend_up: bool
                     alpha_slice = tree_block_slice(new_codomain, new_tree1)
                 beta_slice = tree_block_slice(new_domain, new_tree2)
 
-            new_data.blocks[block_ind][alpha_slice, beta_slice] = b_sym[mu, nu] * tree_block
+            new_data.blocks[block_ind][alpha_slice, beta_slice] += b_sym[mu, nu] * tree_block
 
     return new_data, new_codomain, new_domain
 
