@@ -31,7 +31,7 @@ except ImportError:
     h5py_version = (0, 0)
 
 __all__ = [
-    'DataLoader', 'pp_spectral_function', 'pp_plot_correlations_on_lattice'
+    'DataLoader', 'DataFiles', 'pp_spectral_function', 'pp_plot_correlations_on_lattice'
 ]
 
 

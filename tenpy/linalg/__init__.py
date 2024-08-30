@@ -33,6 +33,7 @@ from .sparse import *
 from .truncation import *
 
 __all__ = ['charges', 'np_conserved', 'krylov_based', 'random_matrix', 'sparse', 'svd_robust',
+           'truncation',
            *charges.__all__,
            *[n for n in np_conserved.__all__ if n not in ['ChargeInfo', 'LegCharge', 'LegPipe']],
            *krylov_based.__all__,
