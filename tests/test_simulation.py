@@ -8,6 +8,7 @@ import os
 
 import tenpy
 from tenpy.algorithms.algorithm import Algorithm
+from tenpy.algorithms.truncation import TruncationError
 from tenpy.simulations.simulation import *
 from tenpy.simulations.ground_state_search import GroundStateSearch
 from tenpy.simulations.time_evolution import RealTimeEvolution, SpectralSimulation, SpectralSimulationEvolveBraKet
@@ -23,6 +24,7 @@ class DummyAlgorithm(Algorithm):
         self.evolved_time = self.options.get('start_time', 0.)
         init_env_data = {} if resume_data is None else resume_data['init_env_data']
         self.env = DummyEnv(**init_env_data)
+        self.trunc_err = TruncationError()
         if not hasattr(self.psi, "dummy_counter"):
             self.psi.dummy_counter = 0  # note: doesn't get saved!
             # But good enough to check `run_seq_simulations`
