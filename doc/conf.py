@@ -191,7 +191,7 @@ def stitch_changelog_latest():
         '\n',
         '\n',
     ]
-    
+
     for fn in os.listdir(folder):
         fn = os.path.join(folder, fn)
         if not fn.endswith('.txt'):
@@ -200,7 +200,7 @@ def stitch_changelog_latest():
             lines = f.readlines()
         contents.extend(lines)
         contents.append('\n')  # empty line between files
-    
+
     with open(outfile, 'w') as f:
         f.writelines(contents)
     # done
@@ -386,7 +386,10 @@ cfg_options_always_include = ["Config"]
 
 # -- sphinxcontrib.bibtex -------------------------------------------------
 
-bibtex_bibfiles = ['literature.bib', 'papers_using_tenpy.bib']
+bibtex_bibfiles = ['literature.bib', 'papers_using_tenpy.bib', 'theses.bib']
+# note: these bib files are exported from the Zotero library
+# https://www.zotero.org/groups/2569413/tenpy/library
+# with the `betterbibtex` add-on, sorting by bibtex key (can be changed in addon settings).
 
 from pybtex.style.formatting.unsrt import Style as UnsrtStyle
 from pybtex.style.labels import BaseLabelStyle
