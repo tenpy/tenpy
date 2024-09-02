@@ -58,6 +58,7 @@ docbuild = [
     "sphinx_copybutton",
 ]
 test = ["pytest>=6.0", "physics_tenpy[io, memory]"]
+develop = ["pre-commit"]
 all = ["physics_tenpy[plot, io, test, extra, docbuild]"]
 
 
