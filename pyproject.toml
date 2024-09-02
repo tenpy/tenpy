@@ -58,8 +58,8 @@ docbuild = [
     "sphinx_copybutton",
 ]
 test = ["pytest>=6.0", "physics_tenpy[io, memory]"]
-develop = ["pre-commit"]
-all = ["physics_tenpy[plot, io, test, extra, docbuild]"]
+develop = ["pre-commit", "ruff", "physics_tenpy[test]"]
+all = ["physics_tenpy[plot, io, develop, test, extra, docbuild]"]
 
 
 [project.urls]
@@ -110,3 +110,18 @@ markers = [
 log_level = "INFO"
 log_format = "%(asctime)s %(levelname)-8s %(filename)-16s%(lineno)4d: %(message)s"
 testpaths = ["tests"]
+
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+exclude = ["doc/sphinx_ext/*"]
+
+
+[tool.ruff.lint]
+select = []  # all possible rules see here: https://docs.astral.sh/ruff/rules/
+
+
+[tool.ruff.format]
+quote-style = "single"
+docstring-code-format = false

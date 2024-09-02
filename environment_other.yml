@@ -13,3 +13,4 @@ dependencies:
   - pyyaml
   - pytest>=6.0
   - pre-commit
+  - ruff
