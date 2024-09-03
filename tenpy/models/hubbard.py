@@ -44,6 +44,7 @@ class BoseHubbardModel(CouplingMPOModel):
             What should be conserved. See :class:`~tenpy.networks.Site.BosonSite`.
         t, U, V, mu: float | array
             Couplings as defined in the Hamiltonian above. Note the signs!
+            Defaults to `t=1.` without interaction ``V=U=0`` and ``mu=0``.
         phi_ext : float
             For 2D lattices and periodic y boundary conditions only.
             External magnetic flux 'threaded' through the cylinder. Hopping amplitudes for bonds
@@ -158,6 +159,7 @@ class FermiHubbardModel(CouplingMPOModel):
             see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
         t, U, mu : float | array
             Couplings as defined for the Hamiltonian above. Note the signs!
+            Defaults to ``t=1`` without interaction ``U=0`` and ``mu=0``.
         phi_ext : float
             For 2D lattices and periodic y boundary conditions only.
             External magnetic flux 'threaded' through the cylinder. Hopping amplitudes for bonds

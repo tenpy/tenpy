@@ -31,7 +31,7 @@ except ImportError:
     h5py_version = (0, 0)
 
 __all__ = [
-    'DataLoader', 'pp_spectral_function', 'pp_plot_correlations_on_lattice'
+    'DataLoader', 'DataFiles', 'pp_spectral_function', 'pp_plot_correlations_on_lattice'
 ]
 
 
@@ -68,7 +68,7 @@ class DataLoader:
 
         if filename is not None:
             self.filename = Path(filename)
-            self.logger.info(f"Loading data from {self.filename.name}")
+            self.logger.info(f"Loading data from {self.filename!s}")
             if self.filename.suffix == '.h5' or self.filename.suffix == '.hdf5':
                 # create a h5group (which is open)
                 self.logger.info(
@@ -80,7 +80,7 @@ class DataLoader:
             else:
                 self.logger.info(f"Not using hdf5 data-format.\nLoading data can be slow")
                 # all data is loaded as other filenames
-                self._all_data = hdf5_io.load(self.filename.name)
+                self._all_data = hdf5_io.load(self.filename)
 
             self.sim_params = self._load('simulation_parameters')
 
@@ -110,6 +110,13 @@ class DataLoader:
         if hasattr(self, '_Hdf5Loader'):
             self._Hdf5Loader.h5group.close()
             self.logger.info(f"Closed {self.filename}")
+
+    def __repr__(self):
+        if self.filename is not None:
+            return f"DataLoader(filename={self.filename!r})"
+        if hasattr(self, 'sim'):
+            return f"DataLoader(simulation={self.sim!r})"
+        return "Dataloader(data=...)"
 
     @property
     def measurements(self):
@@ -169,8 +176,8 @@ class DataLoader:
                 raise ValueError("Can't find any results.")
             if isinstance(value, Config):
                 value = value.as_dict()
-            if convert_to_numpy is True:
-                value = self.convert_list_to_ndarray(value)
+            if convert_to_numpy:
+                value = self.convert_list_to_ndarray(value, key=key)
             return value
         except KeyError:
             warnings.warn(f"{key} does not exist!")
@@ -181,24 +188,29 @@ class DataLoader:
     def get_data(self, key, prefix='', convert_to_numpy=False):
         return self._load(key, prefix=prefix, convert_to_numpy=convert_to_numpy)
 
-    @staticmethod
-    def convert_list_to_ndarray(value):
-        try:
-            if isinstance(value, list):
-                value = np.array(value)
-                if value.dtype == np.dtype(object):
-                    raise Exception("Can't convert results to numpy array")
-        except Exception as e:
-            logging.exception(f"{e}, proceeding without converting")
+    def convert_list_to_ndarray(self, value, key):
+        if isinstance(value, list):
+            converted_value = np.array(value)
+            if converted_value.dtype == np.dtype(object):
+                self.logger.info("Can't convert %s to numpy array, proceed without conversion",
+                                 key)
+            else:
+                value = converted_value
         return value
 
     @property
     def model(self):
         if not hasattr(self, '_model'):
-            self._model = self.get_model()
+            self._model = self._get_model()
         return self._model
 
     def get_model(self):
+        """Deprecated in favor of the simpler property access via :attr:`DataLoader.model`."""
+        warnings.warn("Use ``DataLoader.model`` instead of ``DataLoader.get_model()``",
+                      FutureWarning, 2)
+        return self.model
+
+    def _get_model(self):
         model_class_name = self.sim_params['model_class']
         model_params = self.sim_params['model_params']
         model_class = find_subclass(Model, model_class_name)
@@ -225,6 +237,125 @@ class DataLoader:
             return self._all_data
         else:
             raise ValueError("Can't find any results.")
+
+
+class DataFiles:
+    """Hold multiple DataLoader instances open, indexed by the filename.
+
+    Acts like a dictionary mapping filenames to :class:`DataLoader`.
+    Item access implicitly opens files that are not yet loaded.
+
+    Parameters
+    ----------
+    files : list of str
+        Filenames of output files to be opened.
+
+    Examples
+    --------
+    .. doctest ::
+        :skipif: True
+
+        >>> data_files = DataFiles(['results/output_1.h5',
+        ...                         'results_other/output_3.h5'])
+        >>> data_files['results/output_1.h5']
+        DataLoader(filename='results/output_1.h5')
+        >>> data_files['results/output_2.h5']
+        loading results/output_2.h5 ... successful
+    """
+    def __init__(self, files=None, folder=None):
+        self._open_files = {} # filename -> DataLoader
+        self._resolve_filenames = {}
+        self._keys = []
+        if files:
+            for file in files:
+                _ = self[file]
+        if folder:
+            self.load_from_folder(folder)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
+    def close(self):
+        """Close all files held open by self."""
+        for dl in self._open_files.values():
+            dl.close()
+
+    def __getitem__(self, filename):
+        normalized = self._normalize_filename(filename)
+        data = self._open_files.get(normalized, None)
+        if data is None:
+            filename = str(filename)
+            try:
+                data = DataLoader(filename)
+            except OSError as e:
+                print(f"Erorr: failed to open {filename}")
+                raise e from None
+            self._keys.append(filename)
+            self._open_files[normalized] = data
+        return data
+
+    def __setitem__(self, filename, data_loader):
+        if filename is None:
+            filename = data_loader.filename
+        normalized = self._normalize_filename(filename)
+        self._open_files[normalized] = data_loader
+        return data_loader  # TODO: do we need to return this?
+
+    def _normalize_filename(self, filename):
+        filename = str(filename)
+        resolved = self._resolve_filenames.get(filename, None)
+        if resolved is None:
+            resolved = str(Path(filename).resolve())
+            self._resolve_filenames[filename] = resolved
+        return resolved
+
+    def keys(self):
+        """Return paths of the files opened."""
+        return self._keys
+
+    def values(self):
+        """Return iterator over the :class:`DataLoader` instances."""
+        return self._open_files.values()
+
+    def items(self):
+        return zip(self._keys, self.values())
+
+    def __delitem__(self, filename):
+        normalized = self._normalize_filename(filename)
+        self._open_files[normalized].close()
+        del self._open_files[normalized]
+        for key in self._keys:
+            if self._resolve_filenames[key] == normalized:
+                self._keys.remove(key)
+                break
+        for key, val in list(self._resolve_filenames.items()):
+            if val == normalized:
+                del self._resolve_filenames[key]
+
+    def __repr__(self):
+        if self._open_files:
+            return "<DataFiles() with files\n    " + '\n    '.join(self.keys()) + ">"
+
+    def load_from_folder(self, folder, glob="*.h5"):
+        """Load all data files from a given folder."""
+        files = Path(folder).glob(glob)
+        for file in files:
+            print(f"loading {file!s}", end=' ')
+            try:
+                _ = self[file]
+            except OSError as e:
+                print("... FAILED! Ignoring.")
+            else:
+                print("... successful")
+        # done
+
+    # TODO: tests for this
+
+    # TODO: semi-automatically analyze sim_params and find differences?
+    # TODO get pandas.DataFrame from changing keys
 
 
 def pp_spectral_function(DL: DataLoader,

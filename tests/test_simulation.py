@@ -4,6 +4,7 @@
 import copy
 import numpy as np
 import sys
+import os
 
 import tenpy
 from tenpy.algorithms.algorithm import Algorithm
@@ -107,18 +108,30 @@ expected_dummy_value = simulation_params['algorithm_params']['N_steps']**2
 
 
 def test_Simulation(tmp_path):
+    os.chdir(tmp_path)
     sim_params = copy.deepcopy(simulation_params)
-    sim_params['directory'] = tmp_path
+    sim_params['directory'] = 'results'
     sim_params['output_filename'] = 'data.pkl'
     sim = Simulation(sim_params)
-    results = sim.run()  # should do exactly two measurements: one before and one after eng.run()
+    with sim:
+        results = sim.run()
+        # should do exactly two measurements: one before and one after eng.run()
     assert sim.model.lat.bc_MPS == 'infinite'  # check whether model parameters were used
     assert 'psi' in results  # should be by default
     meas = results['measurements']
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
     assert np.all(meas['measurement_index'] == np.arange(2))
     assert np.all(meas['dummy_value'] == [-1, expected_dummy_value])
-    assert (tmp_path / sim_params['output_filename']).exists()
+    assert (tmp_path / 'results' / sim_params['output_filename']).exists()
+
+    sim_params['overwrite_output'] = False
+    with pytest.warns(UserWarning, match='changed output filename to data_1.pkl'):
+        sim = Simulation(sim_params)
+
+    with sim:
+        results = sim.run()
+
+    assert (tmp_path / 'results' / 'data_1.pkl').exists()
 
 
 def test_bad_measurements():
@@ -145,7 +158,9 @@ def test_measure_at_algorithm_checkpoint():
     sim_params['connect_measurements'].append(('tenpy.simulations.measurement', 'm_evolved_time'))
     sim_params['measure_at_algorithm_checkpoints'] = True
     sim = Simulation(sim_params)
-    results = sim.run()  # should do exactly two measurements: one before and one after eng.run()
+    with sim:
+        results = sim.run()
+        # should do exactly two measurements: one before and one after eng.run()
     assert sim.model.lat.bc_MPS == 'infinite'  # check whether model parameters were used
     assert 'psi' in results  # should be by default
     meas = results['measurements']
@@ -185,8 +200,9 @@ def test_Simulation_resume(tmp_path):
 
 
 def test_sequential_simulation(tmp_path):
+    os.chdir(tmp_path)
     sim_params = copy.deepcopy(simulation_params)
-    sim_params['directory'] = tmp_path
+    sim_params['directory'] = 'results'
     sim_params['output_filename'] = 'data.pkl'
     sim_params['sequential'] = {
         'recursive_keys': ['algorithm_params.dt'],
@@ -199,9 +215,9 @@ def test_sequential_simulation(tmp_path):
     assert psi.dummy_counter == 3  # should have called Simulation.run 3 times on same psi
     # (this breaks if collect_results_in_memory is used, because dummy_counter isn't copied in
     # psi.copy()!)
-    assert (tmp_path / 'data_dt_0.5.pkl').exists()
-    assert (tmp_path / 'data_dt_0.3.pkl').exists()
-    assert (tmp_path / 'data_dt_0.2.pkl').exists()
+    assert (tmp_path / 'results' / 'data_dt_0.5.pkl').exists()
+    assert (tmp_path / 'results' / 'data_dt_0.3.pkl').exists()
+    assert (tmp_path / 'results' / 'data_dt_0.2.pkl').exists()
 
 
 groundstate_params = copy.deepcopy(simulation_params)

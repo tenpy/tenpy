@@ -7,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
-from .truncation import TruncationError
+from ..linalg.truncation import TruncationError
 from ..tools.misc import consistency_check
 
 __all__ = ['ExpMPOEvolution', 'TimeDependentExpMPOEvolution']
@@ -28,8 +28,6 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
     .. cfg:config :: ExpMPOEvolution
         :include: ApplyMPO, TimeEvolutionAlgorithm
 
-        start_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
-            Initial truncation error for :attr:`trunc_err`
         approximation : 'I' | 'II'
             Specifies which approximation is applied. The default 'II' is more precise.
             See :cite:`zaletel2015` and :meth:`~tenpy.networks.mpo.MPO.make_U`
@@ -46,17 +44,6 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
 
     Attributes
     ----------
-    options : :class:`~tenpy.tools.params.Config`
-        Optional parameters, see :meth:`run` for more details
-    evolved_time : float
-        Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
-    trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
-        The error of the represented state which is introduced due to the truncation during
-        the sequence of update steps
-    psi : :class:`~tenpy.networks.mps.MPS`
-        The MPS, time evolved in-place.
-    model : :class:`~tenpy.models.model.MPOModel`
-        The model defining the Hamiltonian.
     _U : list of :class:`~tenpy.networks.mps.MPO`
         Exponentiated `H_MPO`;
     _U_param : dict
@@ -66,7 +53,6 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
         options = self.options
-        self.trunc_err = options.get('start_trunc_err', TruncationError(), TruncationError)
         self._U_MPO = None
         self._U_param = {}
 

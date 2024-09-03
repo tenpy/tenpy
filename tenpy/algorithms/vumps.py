@@ -36,6 +36,7 @@ the single-site algorithm, which is the more principled algorithm.
 import numpy as np
 import time
 import logging
+import warnings
 
 logger = logging.getLogger(__name__)
 
@@ -44,12 +45,13 @@ from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS
 from ..networks.uniform_mps import UniformMPS
 from ..linalg.sparse import SumNpcLinearOperator
-from ..algorithms.mps_common import DensityMatrixMixer, SubspaceExpansion
+from .mps_common import DensityMatrixMixer, SubspaceExpansion
 from ..linalg.krylov_based import LanczosGroundState
 from ..tools.math import entropy
 from ..tools.process import memory_usage
+from ..tools.params import asConfig
 from .mps_common import IterativeSweeps, ZeroSiteH, OneSiteH, TwoSiteH
-from .truncation import svd_theta
+from ..linalg.truncation import svd_theta
 from .plane_wave_excitation import append_right_env, append_left_env, construct_orthogonal
 
 __all__ = ['VUMPSEngine', 'SingleSiteVUMPSEngine', 'TwoSiteVUMPSEngine']
@@ -63,6 +65,10 @@ class VUMPSEngine(IterativeSweeps):
     :class:`TwoSiteVUMPSEngine`.
     Use the latter two classes for actual VUMPS runs.
 
+    .. versionchanged :: 1.1
+        Previously had separate `lanczos_options`, which have been renamed to `lanczos_params`
+        for consistency with the Sweep class.
+
     Options
     -------
     .. cfg:config :: VUMPSEngine
@@ -70,22 +76,6 @@ class VUMPSEngine(IterativeSweeps):
 
     Attributes
     ----------
-    EffectiveH : class type
-        Class for the effective Hamiltonian, i.e., a subclass of
-        :class:`~tenpy.algorithms.mps_common.EffectiveH`. Has a `length` class attribute which
-        specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
-        VUMPS).
-    chi_list : dict | ``None``
-        See :cfg:option:`DMRGEngine.chi_list`
-    eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
-        Effective single-site or two-site Hamiltonian.
-    shelve : bool
-        If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
-        terminate with `shelve = True`.
-    sweeps : int
-        The number of sweeps already performed. (Useful for re-start).
-    time0 : float
-        Time marker for the start of the run.
     update_stats : dict
         A dictionary with detailed statistics of the convergence at local update-level.
         For each key in the following table, the dictionary contains a list where one value is
@@ -157,10 +147,12 @@ class VUMPSEngine(IterativeSweeps):
     EffectiveH = None
 
     def __init__(self, psi, model, options, **kwargs):
-        #options = asConfig(options, self.__class__.__name__)
         if not isinstance(psi, UniformMPS):
             assert isinstance(psi, MPS)
             psi = UniformMPS.from_MPS(psi)  # psi is an MPS, so convert it to a uMPS
+        options = asConfig(options, self.__class__.__name__)
+        options.deprecated_alias("lanczos_options", "lanczos_params",
+                                 "See also https://github.com/tenpy/tenpy/issues/459")
         super().__init__(psi, model, options, **kwargs)
         self.guess_init_env_data = self.env.get_initialization_data()
         self.env.clear()
@@ -175,10 +167,17 @@ class VUMPSEngine(IterativeSweeps):
         if self.chi_list is not None:
             default_min_sweeps = max(max(self.chi_list.keys()), default_min_sweeps)
         self.options.setdefault('min_sweeps', default_min_sweeps)
-        mixer_options = self.options.subconfig('mixer_params')
-        mixer_options.setdefault('amplitude', 1.e-5)
-        mixer_options.setdefault('decay', 2)
-        mixer_options.setdefault('disable_after', 5)
+        mixer_params = self.options.subconfig('mixer_params')
+        mixer_params.setdefault('amplitude', 1.e-5)
+        mixer_params.setdefault('decay', 2)
+        mixer_params.setdefault('disable_after', 5)
+
+    @property
+    def lanczos_options(self):
+        """Deprecated alias of :attr:`lanczos_params`."""
+        warnings.warn("Accessing deprecated alias TDVPEngine.lanczos_options instead of lanczos_params",
+                      FutureWarning, stacklevel=2)
+        return self.lanczos_params
 
     @property
     def S_inv_cutoff(self):
@@ -192,7 +191,7 @@ class VUMPSEngine(IterativeSweeps):
         Options
         -------
         .. cfg:configoptions :: VUMPSEngine
-        
+
             diagonal_gauge_frequency : int
                 Number of sweeps how often we restore the UniformMPS to the diagonal gauge
             cutoff : float
@@ -298,7 +297,7 @@ class VUMPSEngine(IterativeSweeps):
         Options
         -------
         .. cfg:configoptions :: VUMPSEngine
-        
+
             max_E_err : float
                 Convergence if the change of the energy in each step
                 satisfies ``|Delta E / max(E, 1)| < max_E_err``. Note that
@@ -330,13 +329,13 @@ class VUMPSEngine(IterativeSweeps):
         Options
         -------
         .. cfg:configoptions :: VUMPSEngine
-        
+
             check_overlap : bool
                 Since AL C = C AR is not identically true, the MPS defined by AL and AR are not exactly the same.
                 We can compute the overlap of the two to check.
             norm_tol : float
                 Check if final state is in canonical form.
-        
+
         """
         super().post_run_cleanup()
         check_overlap = self.options.get('check_overlap', True, bool)
@@ -400,20 +399,7 @@ class VUMPSEngine(IterativeSweeps):
         pass
 
     def reset_stats(self, resume_data=None):
-        """Reset the statistics, useful if you want to start a new sweep run.
-
-        .. cfg:configoptions :: VUMPSEngine
-
-            chi_list : dict | None
-                A dictionary to gradually increase the `chi_max` parameter of
-                `trunc_params`. The key defines starting from which sweep
-                `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}`` uses
-                ``chi_max=50`` for the first 20 sweeps and ``chi_max=100``
-                afterwards. Overwrites `trunc_params['chi_list']``.
-                By default (``None``) this feature is disabled.
-            sweep_0 : int
-                The number of sweeps already performed. (Useful for re-start).
-        """
+        """Reset the statistics, useful if you want to start a new sweep run."""
 
         super().reset_stats(resume_data)
         self.update_stats = {
@@ -625,13 +611,13 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
         i0 = self.i0
         H0_1, H0_2, H1 = self.eff_H0_1, self.eff_H0_2, self.eff_H
         AC, C1, C2 = theta
-        lanczos_options = self.options.subconfig('lanczos_options')
+        lanczos_params = self.options.subconfig('lanczos_params')
 
-        E0_1, theta0_1, N0_1 = LanczosGroundState(H0_1, C1, lanczos_options).run()
+        E0_1, theta0_1, N0_1 = LanczosGroundState(H0_1, C1, lanczos_params).run()
 
         if self.psi.L > 1:
-            E0_2, theta0_2, N0_2 = LanczosGroundState(H0_2, C2, lanczos_options).run()
-        E1, theta1, N1 = LanczosGroundState(H1, AC, lanczos_options).run()
+            E0_2, theta0_2, N0_2 = LanczosGroundState(H0_2, C2, lanczos_params).run()
+        E1, theta1, N1 = LanczosGroundState(H1, AC, lanczos_params).run()
 
         if self.psi.L == 1:
             E0_2, theta0_2, N0_2 = E0_1, theta0_1, N0_1
@@ -675,7 +661,7 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
             Center matrix left of site ``i0``
         C2: :class:`~tenpy.linalg.np_conserved.Array`
             Center matrix right of site ``i0``
-        
+
         Returns
         -------
         AL : :class:`~tenpy.linalg.np_conserved.Array`
@@ -762,10 +748,10 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         H0_1, H0_2, H2 = self.eff_H0_1, self.eff_H0_2, self.eff_H
         AC, C1, C2 = theta
 
-        lanczos_options = self.options.subconfig('lanczos_options')
-        E0_1, theta0_1, N0_1 = LanczosGroundState(H0_1, C1, lanczos_options).run()
-        E0_2, theta0_2, N0_2 = LanczosGroundState(H0_2, C2, lanczos_options).run()
-        E2, theta2, N2 = LanczosGroundState(H2, AC, lanczos_options).run()
+        lanczos_params = self.options.subconfig('lanczos_params')
+        E0_1, theta0_1, N0_1 = LanczosGroundState(H0_1, C1, lanczos_params).run()
+        E0_2, theta0_2, N0_2 = LanczosGroundState(H0_2, C2, lanczos_params).run()
+        E2, theta2, N2 = LanczosGroundState(H2, AC, lanczos_params).run()
 
         U, S, VH, err, S_approx = self.mixed_svd(
             theta2.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1]))
@@ -823,7 +809,7 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
             Center matrix left of site ``i0``
         C3: :class:`~tenpy.linalg.np_conserved.Array`
             Center matrix right of site ``i0+1``
-        
+
         Returns
         -------
         AL2 : :class:`~tenpy.linalg.np_conserved.Array`

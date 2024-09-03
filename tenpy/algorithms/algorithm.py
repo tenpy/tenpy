@@ -6,7 +6,7 @@ import numpy as np
 import logging
 logger = logging.getLogger(__name__)
 
-from .truncation import TruncationError
+from ..linalg.truncation import TruncationError
 from ..tools.misc import consistency_check
 from ..tools.events import EventHandler
 from ..tools.params import asConfig
@@ -347,13 +347,18 @@ class TimeEvolutionAlgorithm(Algorithm):
         preserve_norm : bool
             Whether the state will be normalized to its initial norm after each time step.
             Per default, this is ``False`` for real time evolution and ``True`` for imaginary time.
+        start_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            Initial truncation error for :attr:`trunc_err`.
 
     Attributes
     ----------
     evolved_time : float | complex
         Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
-        Not that the real-part of `t` is increasing for a real-time evolution,
+        Note that the real-part of `t` is increasing for a real-time evolution,
         while the imaginary-part of `t` is *decreasing* for a imaginary time evolution.
+    trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        Upper bound for the accumulated error of the represented state,
+        which is introduced due to the truncation during the sequence of update steps.
     """
     time_dependent_H = False  #: whether the algorithm supports time-dependent H
 

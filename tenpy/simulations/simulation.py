@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 import time
 import importlib
+import signal
 import warnings
 import traceback
 import numpy as np
@@ -22,6 +23,7 @@ import copy
 
 from ..models.model import Model
 from ..algorithms.algorithm import Algorithm
+from ..linalg.truncation import TruncationError
 from ..networks.mps import InitialStateBuilder
 from ..models.model import NearestNeighborModel
 from ..tools import hdf5_io
@@ -101,7 +103,7 @@ class Simulation:
             We safeguard measurements with a try-except block to avoid loosing results after an expensive
             simulation. This is the maximum number of errors happening during measurements
             before we abort the whole simulation.
-            Setting this to None disables raising the error due to failed measurements 
+            Setting this to None disables raising the error due to failed measurements
             (also at the end of the simulation).
 
     Attributes
@@ -168,8 +170,11 @@ class Simulation:
         Only set if `grouped` > 1. In that case, :attr:`model` is the modified/grouped model,
         and `model_ungrouped` is the original ungrouped model.
     final_processing : bool
-        Flag that indicates that we're in the final processing and want to avoid raising errors 
+        Flag that indicates that we're in the final processing and want to avoid raising errors
         before saving results.
+    received_signal_sigint : bool
+        Flag to indicate that the user pressed ctrl-c and want's the process to terminate.
+        See :meth:`handle_ctrl_c_sigint` for details.
     """
     #: name of the default algorithm `engine` class
     default_algorithm = 'TwoSiteDMRGEngine'
@@ -197,6 +202,7 @@ class Simulation:
         if cwd is not None:
             if not os.path.exists(cwd):
                 os.mkdir(cwd)
+            self._orig_dir = os.getcwd()  # save current dir to return to it in __exit__()
             os.chdir(cwd)
         self.fix_output_filenames()
         if setup_logging:
@@ -239,10 +245,12 @@ class Simulation:
         self.grouped = 1
         self.final_processing = False
         self.max_errors_before_abort = self.options.get('max_errors_before_abort', 10, int)
+        self.received_signal_sigint = False
 
     def __enter__(self):
         self.init_cache()
         self.cache = self.cache.__enter__()  # start cache context
+        self._orig_sigint_handler = signal.signal(signal.SIGINT, self.handle_abort_signal)
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -251,6 +259,39 @@ class Simulation:
             self.logger.exception("simulation abort with the following exception",
                                   exc_info=(exc_type, exc_value, traceback))
         self.options.warn_unused(True)
+        signal.signal(signal.SIGINT, self._orig_sigint_handler)
+        orig_dir = getattr(self, '_orig_dir', None)
+        if orig_dir is not None:
+            os.chdir(orig_dir)
+
+    def handle_abort_signal(self, signum, frame):
+        """Handle a SIGINT signal, usually caused by a CTRL-C press.
+
+        When the user presses Ctrl-C the first time, we just print a message to stderr that we
+        received the signal and set the flag :attr:`received_signal_sigint`.
+        This allows the simulation to "exit gracefully": it will continue until the next
+        algorithm checkpoint, where :meth:`save_at_checkpoint` checks for this flag,
+        and if set, saves the results obtained so far and only then raises KeyboardInterrupt.
+
+        When Ctrl-C is presssed a second time, we immediately raise a KeyboardInterrupt.
+
+        This feature is especially handy to gracefully interrupt long-running simulations.
+        When running in an HPC cluster linux environment, you can usually still send the SIGINT
+        signal, e.g. with SLURM you can call ``scancel --signal=INT 1234`` for the job ide `1234`.
+        """
+        if signum != signal.SIGINT:
+            raise ValueError(f"unexpected signal to handle: {signum=}")
+        if self.received_signal_sigint:
+            raise KeyboardInterrupt("Got second SIGINT signal; abort the simulation immediately")
+        self.received_signal_sigint = True
+        msg = ("Got SIGINT signal (likely from Ctrl-C in the terminal) the first time. \n"
+               "TeNPy simulation will continue until the next checkpoint, then save and abort.")
+        self.logger.error(msg)
+        print(msg, "\nTo exit immediately, press Ctrl-C again.",
+              file=sys.stderr,
+              flush=True)
+        # the received_signal_sigint flag should be handled in the next save_at_checkpoint call
+        # which is always added to the algorithm checkpoints.
 
     def estimate_RAM(self):
         """Estimates the RAM usage for the simulation, without running it.
@@ -543,7 +584,9 @@ class Simulation:
         kwargs.setdefault('cache', self.cache)
         params = self.options.subconfig('algorithm_params')
         self.engine = AlgorithmClass(self.psi, self.model, params, **kwargs)
-        self.engine.checkpoint.connect(self.save_at_checkpoint)
+        self.engine.checkpoint.connect(self.save_at_checkpoint, priority=-100)
+        # with low prio to make sure we save after another set of potential measurements
+        # enabled by the `measure_at_algorithm_checkpoints` option
         con_checkpoint = list(self.options.get('connect_algorithm_checkpoint', []))
         for entry in con_checkpoint:
             self.engine.checkpoint.connect_by_name(*entry)
@@ -715,8 +758,8 @@ class Simulation:
                                                    psi=psi,
                                                    model=model,
                                                    simulation=self)
-            # we safe-guard the measurements with try-except 
-            # to avoid that mistakes in the measurement cause us to loose all our data, 
+            # we safe-guard the measurements with try-except
+            # to avoid that mistakes in the measurement cause us to loose all our data,
             # e.g. if we were running DMRG for days, and just have a stupid typo in a measurement function
         except Exception:
             err_traceback = traceback.format_exc()
@@ -1063,16 +1106,30 @@ class Simulation:
         if len(self.errors_during_run) > 0:
             results['errors_during_run'] = self.errors_during_run
         results['simulation_parameters'] = self.options.as_dict()
-        if 'measurements' in results:
-            # try to convert measurements into numpy arrays to store more compactly
-            results['measurements'] = measurements = results['measurements'].copy()
-            for k, v in measurements.items():
-                try:
-                    v = np.array(v)
-                except:
-                    continue
-                if v.dtype != np.dtype(object):
-                    measurements[k] = v
+        for key in ['measurements', 'sweep_stats', 'update_stats']:
+            if key in results:
+                # try to convert lists into numpy arrays to store more compactly
+                data = results[key].copy()
+                for k, v in results[key].items():
+                    if isinstance(v, list):
+                        if len(v) > 0 and isinstance(v[0], TruncationError):
+                            # special handling for TruncationError: convert to _eps and _ov lists
+                            try:
+                                v_err = [err.eps for err in v]
+                                v_ov = [err.ov for err in v]
+                                del data[k]
+                                data[k + "_eps"] = np.array(v_err)
+                                data[k + "_ov"] = np.array(v_ov)
+                            except:
+                                pass
+                            continue
+                        try:
+                            v = np.array(v)
+                        except:
+                            continue
+                        if v.dtype != np.dtype(object):
+                            data[k] = v
+                results[key] = data
         if self.options.get('save_resume_data', self.options['save_psi'], bool):
             results['resume_data'] = self.get_resume_data()
         return results
@@ -1111,8 +1168,12 @@ class Simulation:
         """
         save_every = self.options.get('save_every_x_seconds', None, 'real')
         now = time.time()
-        if save_every is not None and now - self._last_save > save_every:
+        if save_every is not None and now - self._last_save > save_every or \
+                self.received_signal_sigint:
             self.save_results()
+            if self.received_signal_sigint:
+                raise KeyboardInterrupt("Got SIGINT interrupt signal during TeNPy simulation, "
+                    "but continued until the next checkpoint and saved checkpoint results")
             time_to_save = time.time() - now
             if time_to_save > 0.1 * save_every > 0.:
                 save_every = 20 * time_to_save

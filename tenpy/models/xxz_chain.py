@@ -41,6 +41,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
             Length of the chain.
         Jxx, Jz, hz : float | array
             Coupling as defined for the Hamiltonian above.
+            Defaults to ``Jxx=Jz=1`` without field ``hz=0``.
         bc_MPS : {'finite' | 'infinite'}
             MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
         sort_charge : bool

@@ -158,14 +158,13 @@ logger = logging.getLogger(__name__)
 from ..linalg import np_conserved as npc
 from ..linalg import sparse
 from ..linalg.krylov_based import Arnoldi
+from ..linalg.truncation import TruncationError, svd_theta, _machine_prec_trunc_par
 from .site import group_sites
 from ..tools.misc import argsort, to_iterable, to_array, get_recursive, inverse_permutation
 from ..tools.math import lcm, entropy
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
 from ..tools import hdf5_io
-from ..algorithms.truncation import TruncationError, svd_theta, _machine_prec_trunc_par
-from ..algorithms.tebd import RandomUnitaryEvolution
 
 __all__ = ['BaseMPSExpectationValue', 'MPS', 'BaseEnvironment', 'MPSEnvironment', 'TransferMatrix',
            'InitialStateBuilder', 'build_initial_state']
@@ -1802,12 +1801,14 @@ class MPS(BaseMPSExpectationValue):
         chargeL : charges
             Leg charges at bond 0, which are purely conventional.
         """
+        from ..algorithms.tebd import RandomUnitaryEvolution  # local import: avoid circular import
+
         if bc == 'segment':
             msg = "MPS.from_random_unitary_evolution not implemented for segment BC."
             raise NotImplementedError(msg)
         psi = MPS.from_product_state(sites, p_state, bc, dtype, permute, form, chargeL)
-        tebd_options = dict(N_steps = 10, trunc_params={'chi_max': chi})
-        eng = RandomUnitaryEvolution(psi, tebd_options)
+        tebd_params = dict(N_steps = 10, trunc_params={'chi_max': chi})
+        eng = RandomUnitaryEvolution(psi, tebd_params)
         _max_iter = 1000
         for _ in range(_max_iter):
             if psi.finite and (max(psi.chi) >= chi):
@@ -4765,7 +4766,7 @@ class MPS(BaseMPSExpectationValue):
         canonicalize : bool
             Wether to call `psi.canonical_from in the end. Defaults to ``not close_1``.
         """
-        from ..algorithms.tebd import RandomUnitaryEvolution
+        from ..algorithms.tebd import RandomUnitaryEvolution  # local import: avoid circular import
         if randomize_params is None:
             randomize_params = {}
         if close_1:

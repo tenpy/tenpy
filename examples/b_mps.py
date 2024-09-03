@@ -22,7 +22,7 @@ from tenpy.networks.site import SpinHalfSite
 from tenpy.models.lattice import Chain
 from tenpy.networks.mps import MPS
 from tenpy.networks.mpo import MPO, MPOEnvironment
-from tenpy.algorithms.truncation import svd_theta
+from tenpy.linalg.truncation import svd_theta
 
 # model parameters
 Jxx, Jz = 1., 1.

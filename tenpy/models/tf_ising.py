@@ -47,6 +47,7 @@ class TFIModel(CouplingMPOModel):
             Whether to sort by charges of physical legs. `True` by default.
         J, g : float | array
             Coupling as defined for the Hamiltonian above.
+            Defaults to ``J=g=1``
 
     """
     def init_sites(self, model_params):

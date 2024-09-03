@@ -19,9 +19,9 @@ logger = logging.getLogger(__name__)
 # note that the order matters!
 from . import tools
 from . import linalg
-from . import algorithms
 from . import networks
 from . import models
+from . import algorithms
 from . import simulations
 from . import version  # needs to be after linalg!
 
@@ -37,7 +37,7 @@ from .algorithms.tdvp import (SingleSiteTDVPEngine, TwoSiteTDVPEngine, TimeDepen
                               TimeDependentTwoSiteTDVP)
 from .algorithms.vumps import SingleSiteVUMPSEngine, TwoSiteVUMPSEngine
 from .algorithms.tebd import TEBDEngine, QRBasedTEBDEngine, RandomUnitaryEvolution, TimeDependentTEBD
-from .algorithms.truncation import TruncationError, truncate, svd_theta, decompose_theta_qr_based
+from .linalg.truncation import TruncationError, truncate, svd_theta, decompose_theta_qr_based
 from .linalg.charges import ChargeInfo, LegCharge, LegPipe
 from .linalg.krylov_based import Arnoldi, LanczosGroundState, LanczosEvolution, lanczos_arpack
 from .linalg.np_conserved import (Array, zeros, ones, eye_like, diag,

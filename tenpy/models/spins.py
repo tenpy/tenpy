@@ -46,7 +46,7 @@ class SpinModel(CouplingMPOModel):
             Whether to sort by charges of physical legs. `True` by default.
         Jx, Jy, Jz, hx, hy, hz, muJ, D, E  : float | array
             Coupling as defined for the Hamiltonian above.
-
+            Defaults to Heisenberg ``Jx=Jy=Jz=1.`` with other couplings 0.
     """
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5, 'real')
