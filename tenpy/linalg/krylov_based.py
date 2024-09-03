@@ -118,16 +118,16 @@ class KrylovBased(metaclass=ABCMeta):
         self.psi0 = psi0
         self._psi0_norm = None
         self.options = options = asConfig(options, self.__class__.__name__)
-        self.N_min = options.get('N_min', 2)
-        self.N_max = options.get('N_max', 20)
+        self.N_min = options.get('N_min', 2, int)
+        self.N_max = options.get('N_max', 20, int)
         self.N_cache = self.N_max
-        self.P_tol = options.get('P_tol', 1.e-14)
-        self.min_gap = options.get('min_gap', 1.e-12)
-        self.reortho = options.get('reortho', False)
-        self.E_shift = options.get('E_shift', None)
+        self.P_tol = options.get('P_tol', 1.e-14, 'real')
+        self.min_gap = options.get('min_gap', 1.e-12, 'real')
+        self.reortho = options.get('reortho', False, bool)
+        self.E_shift = options.get('E_shift', None, 'real')
         if self.N_min < 2:
             raise ValueError("Should perform at least 2 steps.")
-        self._cutoff = options.get('cutoff', psi0.dtype.eps * 100)
+        self._cutoff = options.get('cutoff', psi0.dtype.eps * 100, 'real')
         if self.E_shift is not None:
             if isinstance(self.H, ProjectedLinearOperator):
                 self.H.original_operator = ShiftedLinearOperator(
@@ -209,9 +209,9 @@ class Arnoldi(KrylovBased):
     """
     def __init__(self, H, psi0, options):
         super().__init__(H, psi0, options)
-        self.E_tol = self.options.get('E_tol', np.inf)
-        self.which = self.options.get('which', 'LM')
-        self.num_ev = self.options.get('num_ev', 1)  # number of desired eigenvectors
+        self.E_tol = self.options.get('E_tol', np.inf, 'real')
+        self.which = self.options.get('which', 'LM', str)
+        self.num_ev = self.options.get('num_ev', 1, int)  # number of desired eigenvectors
 
     def run(self):
         """Find the ground state of self.H.
@@ -245,7 +245,7 @@ class Arnoldi(KrylovBased):
         norm = w.norm()
         self.psi0 = w / norm
         for k in range(self.N_max):
-            w = w .multiply_scalar(1. / norm)
+            w = w.multiply_scalar(1. / norm)
             self._to_cache(w)
             w = self.H.matvec(w)
             for i, v_i in enumerate(self._cache):

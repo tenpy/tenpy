@@ -3,7 +3,7 @@
 
 Release Notes
 -------------
-This is the first official release of TeNPy.
+This is the first officially stable release of TeNPy.
 Compared to the :mod:`v0.99 release</changelog/v0.99.0>`, it only introduces necessary
 backwards-incompatible changes and removes deprecated features.
 

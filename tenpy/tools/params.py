@@ -7,6 +7,7 @@ See the doc-string of :class:`Config` for details.
 import warnings
 import numpy
 import numpy as np
+import numbers
 from collections.abc import MutableMapping
 import pprint
 import os
@@ -238,7 +239,7 @@ class Config(MutableMapping):
     def keys(self):
         return self.options.keys()
 
-    def get(self, key, default):
+    def get(self, key, default, expect_type=None):
         """Find the value of `key`; really more like `setdefault` of a :class:`dict`.
 
         If no value is set, return `default` and set the value of `key` to `default` internally.
@@ -249,7 +250,18 @@ class Config(MutableMapping):
             Key for the option being read out.
         default :
             Default value for the parameter.
+        expect_type : str | (sequence of) type
+            If given, we check if the returned value is an instance of *any* of the given types.
+            If it is not, we issue a ``UserWarning``.
+            As an exception, the value ``None`` is always allowed and never triggers a warning.
+            The following string short-hands are accepted as well::
 
+                'real': ``numbers.Real``
+                'complex': ``numbers.Complex``
+                'array': ``[list, numpy.ndarray]``
+                'real_or_array`: ``[numbers.Real, list, numpy.ndarray]``
+                'complex_or_array`: ``[numbers.Complex, list, numpy.ndarray]``
+        
         Returns
         -------
         val :
@@ -259,6 +271,39 @@ class Config(MutableMapping):
         val = self.options.setdefault(key, default)  # get & set default if not existent
         self.log(key, "reading", use_default)
         self.unused.discard(key)  # (does nothing if key not in set)
+        if (expect_type is not None) and (val is not None):  # (val is None) => nothing to check
+            # convert to sequence
+            if expect_type == 'real':
+                expect_type = [numbers.Real]
+            if expect_type == 'complex':
+                expect_type = [numbers.Complex]
+            if expect_type == 'array':
+                expect_type = [list, np.ndarray]
+            if expect_type == 'real_or_array':
+                expect_type = [numbers.Real, list, np.ndarray]
+            if expect_type == 'complex_or_array':
+                expect_type = [numbers.Complex, list, np.ndarray]
+            try:
+                iter(expect_type)
+            except TypeError:
+                expect_type = [expect_type]
+            else:
+                expect_type = list(expect_type)
+            assert len(expect_type) > 0, 'Expected at least one type'
+            type_ok = False
+            for t in expect_type:
+                if not isinstance(t, type):
+                    raise ValueError(f'Not a type: {t}')
+                if isinstance(val, t):
+                    type_ok = True
+                    break
+            if not type_ok:
+                if len(expect_type) == 1:
+                    expected = f'Expected {expect_type[0]}'
+                else:
+                    expected = f'Expected one of {", ".join(t.__name__ for t in expect_type)}'
+                msg = f'Invalid type for key "{key}". {expected}. Got {type(val).__name__}.'
+                warnings.warn(msg, stacklevel=2)
         return val
 
     def silent_get(self, key, default):
@@ -454,7 +499,7 @@ else:
     yaml.add_constructor("!py_eval", _yaml_eval_constructor, Loader=_YamlLoaderWithPyEval)
 
 
-def load_yaml_with_py_eval(filename, context={'np': numpy}):
+def load_yaml_with_py_eval(filename=None, yaml_content=None, context={'np': numpy}):
     """Load a yaml file with support for an additional `!py_eval` tag.
 
     When defining yaml parameter files, it's sometimes convenient to just have python snippets
@@ -487,8 +532,11 @@ def load_yaml_with_py_eval(filename, context={'np': numpy}):
 
     Parameters
     ----------
-    filename : str
+    filename : str | None
         Filename of the file to load.
+    yaml_content : str | None
+        Alternatively to filename directly the content of the yaml file.
+        Pass either `filename` or `yaml_content`.
     context : dict
         The context of ``globals()`` passed to `eval`.
 
@@ -503,6 +551,11 @@ def load_yaml_with_py_eval(filename, context={'np': numpy}):
 
     _YamlLoaderWithPyEval.eval_context = context
 
-    with open(filename, 'r') as stream:
-        config = yaml.load(stream, Loader=_YamlLoaderWithPyEval)
+    if filename is not None:
+        with open(filename, 'r') as stream:
+            config = yaml.load(stream, Loader=_YamlLoaderWithPyEval)
+    elif yaml_content is not None:
+        config = yaml.load(yaml_content, Loader=_YamlLoaderWithPyEval)
+    else:
+        raise ValueError("pass either filename or yaml_content!")
     return config

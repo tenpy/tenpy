@@ -1,0 +1,28 @@
+[v1.0.1] - 2024-05-03
+=====================
+
+Release Notes
+-------------
+This version only introduces small changes, listed below.
+
+
+Changelog
+---------
+
+Backwards incompatible changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- nothing
+
+Added
+^^^^^
+- Add support for the ``!py_eval VALUE`` yaml tag for the command line interface,
+  see :doc:`/intro/options`
+
+Changed
+^^^^^^^
+- Activate consistency checks. Until now, consistency checks using :func:`tenpy.tools.misc.consistency_check`
+  only issued warnings. Now it can also raise errors on inconsistent values.
+
+Fixed
+^^^^^
+- Update examples to comply with the v1 changes
