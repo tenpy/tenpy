@@ -73,6 +73,11 @@ class KrylovBased:
             is used: the orthogonal vectors are *exact* eigenvectors with eigenvalue 0 independent
             of the shift, so you can use it to ensure that the energy is smaller than zero
             to avoid getting those.
+        reortho : bool
+            For poorly conditioned matrices, one can quickly loose orthogonality of the
+            generated Krylov basis.
+            If `reortho` is True, we re-orthogonalize against all the
+            vectors kept in cache to avoid that problem.
 
     Attributes
     ----------
@@ -324,7 +329,7 @@ class Arnoldi(KrylovBased):
         self.num_ev = self.options.get('num_ev', 1, int)  # number of desired eigenvectors
 
     def run(self):
-        """Find the ground state of H.
+        """Find the ground state of self.H.
 
         Returns
         -------
@@ -451,13 +456,6 @@ class LanczosGroundState(KrylovBased):
             Set this to a number >= 2 if you are short on memory.
             The penalty is that one needs another Lanczos iteration to
             determine the ground state in the end, i.e., runtime is large.
-        reortho : bool
-            For poorly conditioned matrices, one can quickly loose orthogonality of the
-            generated Krylov basis.
-            If `reortho` is True, we re-orthogonalize against all the
-            vectors kept in cache to avoid that problem.
-
-
     """
 
     _dtype_h_krylov = np.float64
@@ -495,7 +493,6 @@ class LanczosGroundState(KrylovBased):
         if N == 1:
             return E0, self.psi0.copy(), N  # no better estimate available
         return E0, self._calc_result_full(N), N
-
 
     def _build_krylov(self):
         """Build the Krylov space and the projection of H into it.
