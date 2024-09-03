@@ -19,7 +19,7 @@ __all__ = ['SymmetryError', 'Sector', 'SectorArray', 'FusionStyle', 'BraidingSty
            # abelian groups
            'NoSymmetry', 'U1Symmetry', 'ZNSymmetry',
            # non-abelian groups
-           'SU2Symmetry',
+           'SU2Symmetry', 'SUNSymmetry',
            # anyons
            'FermionParity', 'FibonacciAnyonCategory', 'IsingAnyonCategory', 'SU3_3AnyonCategory',
            'QuantumDoubleZNAnyonCategory', 'SU2_kAnyonCategory', 'ZNAnyonCategory',
@@ -65,7 +65,7 @@ class FusionStyle(Enum):
     -----------------  -----------------------------------------------------------------------------
     general            No assumptions, ``N_symbol in [0, 1, 2, 3, ...]``.
     =================  =============================================================================
-    
+
     """
     single = 0  # only one resulting sector, a ⊗ b = c, e.g. abelian symmetry groups
     multiple_unique = 10  # every sector appears at most once in pairwise fusion, N^{ab}_c \in {0,1}
@@ -93,7 +93,7 @@ class BraidingStyle(Enum):
     no_braiding    Braiding is not defined
     =============  ===========================================
     """
-    
+
     bosonic = 0  # symmetric braiding with trivial twist; v ⊗ w ↦ w ⊗ v
     fermionic = 10  # symmetric braiding with non-trivial twist; v ⊗ w ↦ (-1)^p(v,w) w ⊗ v
     anyonic = 20  # non-symmetric braiding
@@ -164,10 +164,10 @@ class Symmetry(metaclass=ABCMeta):
     """
 
     can_be_dropped: bool = False  # set to False by default. must override for ``True``.
-    
+
     fusion_tensor_dtype = None
     """The dtype of fusion tensors, if available. Set to ``None`` otherwise."""
-    
+
     def __init__(self, fusion_style: FusionStyle, braiding_style: BraidingStyle, trivial_sector: Sector,
                  group_name: str, num_sectors: int | float, descriptive_name: str | None = None):
         self.fusion_style = fusion_style
@@ -179,7 +179,7 @@ class Symmetry(metaclass=ABCMeta):
         self.sector_ind_len = sector_ind_len = len(trivial_sector)
         self.empty_sector_array = np.zeros((0, sector_ind_len), dtype=int)
         self.is_abelian = (fusion_style == FusionStyle.single)
-    
+
     # ABSTRACT METHODS
 
     @abstractmethod
@@ -229,7 +229,7 @@ class Symmetry(metaclass=ABCMeta):
                   ) -> np.ndarray:
         """Internal implementation of :meth:`f_symbol`. Can assume that inputs are valid."""
         ...
-    
+
     @abstractmethod
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         """Internal implementation of :meth:`r_symbol`. Can assume that inputs are valid."""
@@ -252,11 +252,11 @@ class Symmetry(metaclass=ABCMeta):
         However, it may not be itself a sector. It must be isomorphic to one of the sector
         representatives though, which we call :math:`\bar{a}`.
         The Z isomorphism :math:`Z_a : a^* \to \bar{a}` is that isomorphism.
-        
+
         We return the matrix elements
         .. math ::
             (Z_{\bar{a}})_{mn} = \langle m \vert Z_{\bar{a}}(\langle n \vert)
-        
+
         where :math:`m` goes over a (dual) basis of :math:`\bar{a}` and :math:`n` over a basis of
         :math:`a`.
 
@@ -317,7 +317,7 @@ class Symmetry(metaclass=ABCMeta):
             return sectors[0]
         return self._multiple_fusion_broadcast(*sectors)
 
-    def _multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray: 
+    def _multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
         """Internal version of :meth:`multiple_fusion_broadcast`. May assume ``len(sectors) >= 2``."""
         return reduce(self.fusion_outcomes_broadcast, sectors)
 
@@ -330,7 +330,7 @@ class Symmetry(metaclass=ABCMeta):
 
         For bosonic braiding style, e.g. for group symmetries, this coincides with the quantum
         dimension computed by :meth:`qdim`.
-        For other braiding styles, 
+        For other braiding styles,
         """
         if not self.can_be_dropped:
             raise SymmetryError(f'sector_dim is not supported for {self}.')
@@ -983,14 +983,14 @@ class GroupSymmetry(Symmetry, metaclass=_ABCFactorSymmetryMeta):
 
     Notes
     -----
-    
+
     Products of :class:`GroupSymmetry`s are instances described by the :class:`ProductSymmetry`
     class, which is not a sub- or superclass of `GroupSymmetry`. Nevertheless, instancechecks can
     be used to check if a given `ProductSymmetry` *instance* is a group-symmetry.
     See examples in docstring of :class:`AbelianGroup`.
     """
     can_be_dropped = True
-    
+
     def __init__(self, fusion_style: FusionStyle, trivial_sector: Sector, group_name: str,
                  num_sectors: int | float, descriptive_name: str | None = None):
         Symmetry.__init__(self, fusion_style=fusion_style, braiding_style=BraidingStyle.bosonic,
@@ -1019,13 +1019,13 @@ class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
 
     Notes
     -----
-    
+
     A product of several abelian groups is also an abelian group, but represented by a
     ProductSymmetry, which is not a subclass of AbelianGroup.
     We have adjusted instancechecks accordingly, i.e. we have
 
     .. doctest ::
-    
+
         >>> s = ProductSymmetry([z3_symmetry, z5_symmetry])  # product of abelian groups
         >>> isinstance(s, AbelianGroup)
         True
@@ -1050,7 +1050,7 @@ class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
     def sector_str(self, a: Sector) -> str:
         # we know sectors are labelled by a single number
         return str(a.item())
-    
+
     def sector_dim(self, a: Sector) -> int:
         return 1
 
@@ -1290,7 +1290,7 @@ class SU2Symmetry(GroupSymmetry):
 
     def _n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
         return 1
-    
+
     def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
                   ) -> np.ndarray:
         # OPTIMIZE: jutho has a special case if all sectors are trivial ...?
@@ -2202,7 +2202,7 @@ class FibonacciAnyonCategory(Symmetry):
 
     def is_valid_sector(self, a: Sector) -> bool:
         return getattr(a, 'shape', ()) == (1,) and 0 <= a < 2
-    
+
     def are_valid_sectors(self, sectors) -> bool:
         shape = getattr(sectors, 'shape', ())
         return len(shape) == 2 and shape[1] == 1 and np.all(0 <= sectors) and np.all(sectors < 2)
@@ -2487,7 +2487,7 @@ class SU2_kAnyonCategory(Symmetry):
     def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
                   ) -> np.ndarray:
         # The q-deformed 6j symbols have the same symmetries as the usual SU(2) 6j symbols.
-        # We can get all f symbols from the cases 6j symbols for 
+        # We can get all f symbols from the cases 6j symbols for
         # a == np.max([a, b, c, d, e, f]) and b == np.max([b, c, e, f]).
         # I.e., we need to exchange the charges accordingly
 

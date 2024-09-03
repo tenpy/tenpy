@@ -23,11 +23,10 @@ def main(max_print_lines=30):
         print('Checking __all__ attributes')
     lines = check_dunder_all_recursive(tenpy, quiet=quiet)
     if lines:
-        print()
-        print('\n'.join(lines[:max_print_lines]))
+        msg = '\n'.join(lines[:max_print_lines])
         if len(lines) > max_print_lines:
-            print(f'... and {len(lines) - max_print_lines} more lines')
-        raise AssertionError
+            msg += f'... and {len(lines) - max_print_lines} more lines'
+        assert False, msg
     if not quiet:
         print('Checking copyright notices')
     check_copyright_notice()
