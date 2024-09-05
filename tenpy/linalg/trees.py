@@ -125,7 +125,8 @@ class FusionTree:
         else:
             unique_identifier = (self.are_dual, self.coupled, self.uncoupled, self.inner_sectors, self.multiplicities)
 
-        return hash(unique_identifier)
+        unique_identifier = np.concatenate([a.flatten() for a in unique_identifier])
+        return hash(unique_identifier.tobytes())
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, FusionTree):

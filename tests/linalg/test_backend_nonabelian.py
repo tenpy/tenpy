@@ -13,17 +13,58 @@ from tenpy.linalg.symmetries import ProductSymmetry, fibonacci_anyon_category, S
 from tenpy.linalg.dtypes import Dtype
 
 
-@pytest.mark.parametrize('num_spaces', [3, 4, 5])
-def test_block_sizes(any_symmetry, make_any_space, make_any_sectors, block_backend, num_spaces):
-    backend = get_backend('fusion_tree', block_backend)
-    spaces = [make_any_space() for _ in range(num_spaces)]
-    domain = ProductSpace(spaces, symmetry=any_symmetry, backend=backend)
+def apply_single_b_symbol_efficient(ten: SymmetricTensor, bend_up: bool
+                                    ) -> tuple[fusion_tree_backend.FusionTreeData, ProductSpace, ProductSpace]:
+    """Use the efficient implementation of b symbols to return the action of a single
+    b symbol in the same format (input and output) as the inefficient implementation.
+    This is of course inefficient usage of this implementation but a necessity  in order
+    to use the structure of the already implemented tests.
+    """
+    func = ten.backend._find_approproiate_mapping_dict
+    index = ten.num_codomain_legs - 1
+    coupled = [ten.domain.sectors[ind[1]] for ind in ten.data.block_inds]
 
-    for coupled in make_any_sectors(10):
-        expect = sum(fusion_tree_backend.forest_block_size(domain, uncoupled, coupled)
-                    for uncoupled in domain.iter_uncoupled())
-        res = fusion_tree_backend.block_size(domain, coupled)
-        assert res == expect
+    if bend_up:
+        axes_perm = list(range(ten.num_codomain_legs)) + [ten.num_legs - 1]
+        axes_perm += [ten.num_codomain_legs + i for i in range(ten.num_domain_legs - 1)]
+    else:
+        axes_perm = list(range(ten.num_codomain_legs - 1))
+        axes_perm += [ten.num_codomain_legs + i for i in range(ten.num_domain_legs)]
+        axes_perm += [ten.num_codomain_legs - 1]
+
+    mapp, new_codomain, new_domain, _ = func(ten.codomain, ten.domain, index, coupled,
+                                             None, bend_up)
+    new_data = ten.backend._apply_mapping_dict(ten, new_codomain, new_domain, axes_perm,
+                                               mapp, in_domain=None)
+    return new_data, new_codomain, new_domain
+
+
+def apply_single_c_symbol_efficient(ten: SymmetricTensor, leg: int | str, levels: list[int]
+                                    ) -> tuple[fusion_tree_backend.FusionTreeData, ProductSpace, ProductSpace]:
+    """Use the efficient implementation of c symbols to return the action of a single
+    c symbol in the same format (input and output) as the inefficient implementation.
+    This is of course inefficient usage of this implementation but a necessity  in order
+    to use the structure of the already implemented tests.
+    """
+    func = ten.backend._find_approproiate_mapping_dict
+    index = ten.get_leg_idcs(leg)[0]
+    in_domain = index > ten.num_codomain_legs - 1
+    overbraid = levels[index] > levels[index + 1]
+    coupled = [ten.domain.sectors[ind[1]] for ind in ten.data.block_inds]
+
+    if not in_domain:
+        axes_perm = list(range(ten.num_codomain_legs))
+        index_ = index
+    else:
+        axes_perm = list(range(ten.num_domain_legs))
+        index_ = ten.num_legs - 1 - (index + 1)
+    axes_perm[index_:index_ + 2] = axes_perm[index_:index_ + 2][::-1]
+
+    mapp, new_codomain, new_domain, _ = func(ten.codomain, ten.domain, index, coupled,
+                                             overbraid, None)
+    new_data = ten.backend._apply_mapping_dict(ten, new_codomain, new_domain, axes_perm,
+                                               mapp, in_domain)
+    return new_data, new_codomain, new_domain
 
 
 def assert_tensors_almost_equal(a: SymmetricTensor, expect: SymmetricTensor, eps: float):
@@ -107,11 +148,25 @@ def assert_bending_and_scale_axis_commutation(a: SymmetricTensor, funcs: list[Ca
     raise NotImplementedError
 
 
+@pytest.mark.parametrize('num_spaces', [3, 4, 5])
+def test_block_sizes(any_symmetry, make_any_space, make_any_sectors, block_backend, num_spaces):
+    backend = get_backend('fusion_tree', block_backend)
+    spaces = [make_any_space() for _ in range(num_spaces)]
+    domain = ProductSpace(spaces, symmetry=any_symmetry, backend=backend)
+
+    for coupled in make_any_sectors(10):
+        expect = sum(fusion_tree_backend.forest_block_size(domain, uncoupled, coupled)
+                    for uncoupled in domain.iter_uncoupled())
+        res = fusion_tree_backend.block_size(domain, coupled)
+        assert res == expect
+
+
 def test_c_symbol_fibonacci_anyons(block_backend: str):
     # TODO rescaling axes commutes with braiding
 
     funcs = [fusion_tree_backend._apply_single_c_symbol_inefficient,
-             fusion_tree_backend._apply_single_c_symbol_more_efficient]
+             fusion_tree_backend._apply_single_c_symbol_more_efficient,
+             apply_single_c_symbol_efficient]
     backend = get_backend('fusion_tree', block_backend)
     eps = 1.e-14
     sym = fibonacci_anyon_category
@@ -271,7 +326,8 @@ def test_c_symbol_product_sym(block_backend: str):
     # TODO rescaling axes commutes with braiding
     
     funcs = [fusion_tree_backend._apply_single_c_symbol_inefficient,
-             fusion_tree_backend._apply_single_c_symbol_more_efficient]
+             fusion_tree_backend._apply_single_c_symbol_more_efficient,
+             apply_single_c_symbol_efficient]
     backend = get_backend('fusion_tree', block_backend)
     eps = 1.e-14
     sym = ProductSymmetry([fibonacci_anyon_category, SU2Symmetry()])
@@ -449,7 +505,8 @@ def test_c_symbol_su3_3(block_backend: str):
     # TODO rescaling axes commutes with braiding
 
     funcs = [fusion_tree_backend._apply_single_c_symbol_inefficient,
-             fusion_tree_backend._apply_single_c_symbol_more_efficient]
+             fusion_tree_backend._apply_single_c_symbol_more_efficient,
+             apply_single_c_symbol_efficient]
     backend = get_backend('fusion_tree', block_backend)
     eps = 1.e-14
     sym = SU3_3AnyonCategory()
@@ -644,7 +701,7 @@ def test_c_symbol_su3_3(block_backend: str):
 def test_b_symbol_fibonacci_anyons(block_backend: str):
     # TODO rescaling axes commutes with bending
 
-    funcs = [fusion_tree_backend._apply_single_b_symbol]
+    funcs = [fusion_tree_backend._apply_single_b_symbol, apply_single_b_symbol_efficient]
     backend = get_backend('fusion_tree', block_backend)
     multiple = True
     eps = 1.e-14
@@ -798,7 +855,7 @@ def test_b_symbol_fibonacci_anyons(block_backend: str):
 def test_b_symbol_product_sym(block_backend: str):
     # TODO rescaling axes commutes with bending
 
-    funcs = [fusion_tree_backend._apply_single_b_symbol]
+    funcs = [fusion_tree_backend._apply_single_b_symbol, apply_single_b_symbol_efficient]
     backend = get_backend('fusion_tree', block_backend)
     perm_axes = backend.block_backend.block_permute_axes
     reshape = backend.block_backend.block_reshape
@@ -984,7 +1041,7 @@ def test_b_symbol_product_sym(block_backend: str):
 def test_b_symbol_su3_3(block_backend: str):
     # TODO rescaling axes commutes with bending
 
-    funcs = [fusion_tree_backend._apply_single_b_symbol]
+    funcs = [fusion_tree_backend._apply_single_b_symbol, apply_single_b_symbol_efficient]
     backend = get_backend('fusion_tree', block_backend)
     perm_axes = backend.block_backend.block_permute_axes
     reshape = backend.block_backend.block_reshape
