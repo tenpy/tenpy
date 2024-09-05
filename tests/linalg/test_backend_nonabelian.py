@@ -164,10 +164,10 @@ def test_block_sizes(any_symmetry, make_any_space, make_any_sectors, block_backe
 def test_c_symbol_fibonacci_anyons(block_backend: str):
     # TODO rescaling axes commutes with braiding
 
-    funcs = [fusion_tree_backend._apply_single_c_symbol_inefficient,
-             fusion_tree_backend._apply_single_c_symbol_more_efficient,
-             apply_single_c_symbol_efficient]
     backend = get_backend('fusion_tree', block_backend)
+    funcs = [backend._apply_single_c_symbol_inefficient,
+             backend._apply_single_c_symbol_more_efficient,
+             apply_single_c_symbol_efficient]
     eps = 1.e-14
     sym = fibonacci_anyon_category
     s1 = ElementarySpace(sym, [[1]], [1])  # only tau
@@ -325,10 +325,10 @@ def test_c_symbol_fibonacci_anyons(block_backend: str):
 def test_c_symbol_product_sym(block_backend: str):
     # TODO rescaling axes commutes with braiding
     
-    funcs = [fusion_tree_backend._apply_single_c_symbol_inefficient,
-             fusion_tree_backend._apply_single_c_symbol_more_efficient,
-             apply_single_c_symbol_efficient]
     backend = get_backend('fusion_tree', block_backend)
+    funcs = [backend._apply_single_c_symbol_inefficient,
+             backend._apply_single_c_symbol_more_efficient,
+             apply_single_c_symbol_efficient]
     eps = 1.e-14
     sym = ProductSymmetry([fibonacci_anyon_category, SU2Symmetry()])
     s1 = ElementarySpace(sym, [[1, 1]], [2])  # only (tau, spin-1/2)
@@ -504,10 +504,10 @@ def test_c_symbol_product_sym(block_backend: str):
 def test_c_symbol_su3_3(block_backend: str):
     # TODO rescaling axes commutes with braiding
 
-    funcs = [fusion_tree_backend._apply_single_c_symbol_inefficient,
-             fusion_tree_backend._apply_single_c_symbol_more_efficient,
-             apply_single_c_symbol_efficient]
     backend = get_backend('fusion_tree', block_backend)
+    funcs = [backend._apply_single_c_symbol_inefficient,
+             backend._apply_single_c_symbol_more_efficient,
+             apply_single_c_symbol_efficient]
     eps = 1.e-14
     sym = SU3_3AnyonCategory()
     s1 = ElementarySpace(sym, [[1], [2]], [1, 1])  # 8 and 10
@@ -701,8 +701,8 @@ def test_c_symbol_su3_3(block_backend: str):
 def test_b_symbol_fibonacci_anyons(block_backend: str):
     # TODO rescaling axes commutes with bending
 
-    funcs = [fusion_tree_backend._apply_single_b_symbol, apply_single_b_symbol_efficient]
     backend = get_backend('fusion_tree', block_backend)
+    funcs = [backend._apply_single_b_symbol, apply_single_b_symbol_efficient]
     multiple = True
     eps = 1.e-14
     sym = fibonacci_anyon_category
@@ -855,8 +855,8 @@ def test_b_symbol_fibonacci_anyons(block_backend: str):
 def test_b_symbol_product_sym(block_backend: str):
     # TODO rescaling axes commutes with bending
 
-    funcs = [fusion_tree_backend._apply_single_b_symbol, apply_single_b_symbol_efficient]
     backend = get_backend('fusion_tree', block_backend)
+    funcs = [backend._apply_single_b_symbol, apply_single_b_symbol_efficient]
     perm_axes = backend.block_backend.block_permute_axes
     reshape = backend.block_backend.block_reshape
     multiple = True
@@ -1041,8 +1041,8 @@ def test_b_symbol_product_sym(block_backend: str):
 def test_b_symbol_su3_3(block_backend: str):
     # TODO rescaling axes commutes with bending
 
-    funcs = [fusion_tree_backend._apply_single_b_symbol, apply_single_b_symbol_efficient]
     backend = get_backend('fusion_tree', block_backend)
+    funcs = [backend._apply_single_b_symbol, apply_single_b_symbol_efficient]
     perm_axes = backend.block_backend.block_permute_axes
     reshape = backend.block_backend.block_reshape
     multiple = True
