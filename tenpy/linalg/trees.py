@@ -75,10 +75,10 @@ class FusionTree:
         self.are_dual = np.asarray(are_dual)
         if len(inner_sectors) == 0:
             inner_sectors = symmetry.empty_sector_array
-        self.inner_sectors = np.asarray(inner_sectors)
-        if multiplicities is None:
-            multiplicities = np.zeros((num_vertices,), dtype=int)
-        self.multiplicities = np.asarray(multiplicities)
+        self.inner_sectors = np.asarray(inner_sectors, dtype=int)  # empty lists are by default converted
+        if multiplicities is None:                                 # to arrays with dtype=float, which leads
+            multiplicities = np.zeros((num_vertices,), dtype=int)  # to issues in __hash__
+        self.multiplicities = np.asarray(multiplicities, dtype=int)
         self.fusion_style = symmetry.fusion_style
         self.is_abelian = symmetry.is_abelian
         self.braiding_style = symmetry.braiding_style
