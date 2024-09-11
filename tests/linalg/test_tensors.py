@@ -1034,11 +1034,6 @@ def test_apply_mask_DiagonalTensor(make_compatible_tensor):
                           pytest.param(SymmetricTensor, 2, 2, 4),])
 def test_bend_legs(cls, codomain, domain, num_codomain_legs, make_compatible_tensor):
     tensor: cls = make_compatible_tensor(codomain, domain, cls=cls)
-
-    if isinstance(tensor.backend, backends.FusionTreeBackend) and num_codomain_legs != codomain:
-        with pytest.raises(NotImplementedError):
-            _ = tensors.bend_legs(tensor, num_codomain_legs)
-        pytest.xfail()
     
     res = tensors.bend_legs(tensor, num_codomain_legs)
     res.test_sanity()
@@ -1211,11 +1206,6 @@ def test_compose(cls_A, cls_B, cod_A, shared, dom_B, make_compatible_tensor):
 def test_dagger(cls, cod, dom, make_compatible_tensor, np_random):
     T_labels = list('abcdefghi')[:cod + dom]
     T: cls = make_compatible_tensor(cod, dom, cls=cls, labels=T_labels)
-
-    if isinstance(T.backend, backends.FusionTreeBackend) and cls is ChargedTensor:
-        with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
-            _ = T.dagger
-        pytest.xfail()
 
     how_to_call = np_random.choice(['dagger()', '.hc', '.dagger'])
     print(how_to_call)
@@ -1539,11 +1529,6 @@ def test_inner(cls, cod, dom, do_dagger, make_compatible_tensor):
         # but the, we can not compute inner.
         return
 
-    if isinstance(A.backend, backends.FusionTreeBackend) and (cls is ChargedTensor) and (dom != 0):
-        with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
-            _ = tensors.inner(A, B, do_dagger=do_dagger)
-        pytest.xfail()
-
     res = tensors.inner(A, B, do_dagger=do_dagger)
     assert isinstance(res, (float, complex))
 
@@ -1658,12 +1643,6 @@ def test_move_leg(cls, cod, dom, leg, codomain_pos, domain_pos, levels, make_com
         domain_perm[domain_pos:domain_pos] = [leg]
     perm = [*codomain_perm, *reversed(domain_perm)]
     
-    is_trivial = (codomain_perm == list(range(cod))) and (domain_perm == list(reversed(range(cod, cod + dom))))
-    if isinstance(T.backend, backends.FusionTreeBackend) and not is_trivial:
-        with pytest.raises(NotImplementedError):
-            _ = tensors.move_leg(T, leg, codomain_pos=codomain_pos, domain_pos=domain_pos, levels=levels)
-        pytest.xfail()
-
     res = tensors.move_leg(T, leg, codomain_pos=codomain_pos, domain_pos=domain_pos, levels=levels)
     res.test_sanity()
     
@@ -1860,18 +1839,9 @@ def test_partial_trace(cls, codom, dom, make_compatible_space, make_compatible_t
 )
 def test_permute_legs(cls, num_cod, num_dom, codomain, domain, levels, make_compatible_tensor):
     T = make_compatible_tensor(num_cod, num_dom, max_block_size=3, cls=cls)
-    is_trivial = (codomain == [*range(num_cod)]) and (domain == [*reversed(range(num_cod, T.num_legs))])
     
-    if isinstance(T.backend, backends.FusionTreeBackend) and cls in [SymmetricTensor, ChargedTensor] and not is_trivial:
-        with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
-            _ = tensors.permute_legs(T, codomain, domain, levels)
-        pytest.xfail()
-    if isinstance(T.backend, backends.FusionTreeBackend) and cls is DiagonalTensor and codomain == [1]:
-        with pytest.raises(NotImplementedError, match='diagonal_transpose not implemented'):
-            _ = tensors.permute_legs(T, codomain, domain, levels)
-        pytest.xfail()
-    if isinstance(T.backend, backends.FusionTreeBackend) and cls is DiagonalTensor and len(codomain) != 1:
-        with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
+    if isinstance(T.backend, backends.FusionTreeBackend) and cls is Mask and codomain == [1]:
+        with pytest.raises(NotImplementedError, match='mask_transpose not implemented'):
             _ = tensors.permute_legs(T, codomain, domain, levels)
         pytest.xfail()
 
@@ -1975,16 +1945,7 @@ def test_scale_axis(cls, codom, dom, which_leg, make_compatible_tensor, np_rando
         leg = leg.dual
     D: DiagonalTensor = make_compatible_tensor([leg], cls=DiagonalTensor, labels=['x', 'y'])
 
-    # 2) Call functions
-    if isinstance(T.backend, backends.FusionTreeBackend) and need_transpose:
-        with pytest.raises(NotImplementedError, match='diagonal_transpose not implemented'):
-            _ = tensors.scale_axis(T, D, which_leg)
-        pytest.xfail()
-    if isinstance(T.backend, backends.FusionTreeBackend) and cls in [SymmetricTensor, ChargedTensor]:
-        with pytest.raises(NotImplementedError, match='scale_axis not implemented'):
-            _ = tensors.scale_axis(T, D, which_leg)
-        pytest.xfail()
-    
+    # 2) Call functions    
     how_to_call = np_random.choice(['by_idx', 'by_label'])
     if how_to_call == 'by_idx':
         res = tensors.scale_axis(T, D, which_leg)
