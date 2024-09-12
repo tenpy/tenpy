@@ -3226,7 +3226,9 @@ def dagger(tensor: Tensor) -> Tensor:
     if isinstance(tensor, ChargedTensor):
         inv_part = dagger(tensor.invariant_part)  # charge_leg ends up as codomain[0] and is dual.
         inv_part.set_label(0, ChargedTensor._CHARGE_LEG_LABEL)
-        inv_part = move_leg(inv_part, 0, domain_pos=0)
+        # assign highest level to charge leg
+        levels = list(range(inv_part.num_legs, 0, -1))
+        inv_part = move_leg(inv_part, 0, domain_pos=0, levels=levels)
         charged_state = tensor.charged_state
         if charged_state is not None:
             charged_state = tensor.backend.block_backend.block_conj(charged_state)
@@ -4716,7 +4718,7 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
         if num_contr == 1:
             res = scale_axis(tensor1, tensor2, legs1[0])
             res.set_label(legs1[0], tensor2.labels[1 - legs2[0]])
-            return permute_legs(res, domain=legs2)
+            return permute_legs(res, domain=legs1)
         if num_contr == 2:
             res = scale_axis(tensor1, tensor2, legs1[0])
             res = partial_trace(res, legs1)

@@ -219,7 +219,7 @@ class FusionTreeData:
     def block_ind_from_domain_sector_ind(self, domain_sector_ind: int) -> int | None:
         "Return `ind` such that ``block_inds[ind][1] == domain_sector_ind``"
         ind = np.searchsorted(self.block_inds[:,1], domain_sector_ind)
-        if self.block_inds[ind, 1] != domain_sector_ind:
+        if ind >= len(self.block_inds) or self.block_inds[ind, 1] != domain_sector_ind:
             return None
         if ind + 1 < self.block_inds.shape[0] and self.block_inds[ind + 1, 1] == domain_sector_ind:
             raise RuntimeError
@@ -374,9 +374,10 @@ class FusionTreeBackend(TensorBackend):
             b_blocks = [self.block_backend.block_to_dtype(bl, res_dtype) for bl in b_blocks]
         blocks = []
         block_inds = []
-        for i, j in iter_common_sorted(a.data.block_inds[:, 1], b.data.block_inds[:, 0]):
-            blocks.append(self.block_backend.matrix_dot(a_blocks[i], b_blocks[j]))
-            block_inds.append([a_block_inds[i, 0], b_block_inds[j, 1]])
+        if len(a.data.block_inds) > 0 and  len(b.data.block_inds) > 0:
+            for i, j in iter_common_sorted(a.data.block_inds[:, 1], b.data.block_inds[:, 0]):
+                blocks.append(self.block_backend.matrix_dot(a_blocks[i], b_blocks[j]))
+                block_inds.append([a_block_inds[i, 0], b_block_inds[j, 1]])
         if len(block_inds) == 0:
             block_inds = np.zeros((0, 2), int)
         else:
@@ -862,6 +863,8 @@ class FusionTreeBackend(TensorBackend):
         all_exchanges, all_bend_ups = [], []
         num_operations = []
         levels_None = levels == None
+        if not levels_None:
+            levels = levels[:]
 
         # exchanges such that the legs to be bent down are on the right in the codomain
         exchanges = []
@@ -1019,12 +1022,13 @@ class FusionTreeBackend(TensorBackend):
             blocks = []
             block_inds = []
 
-            for n_a, n_b in iter_common_sorted(a_block_inds[:, ax_a], b_block_inds[:, 1 - ax_a]):
-                blocks.append(self.block_backend.block_scale_axis(a_blocks[n_a], b_blocks[n_b], axis=ax_a))
-                if in_domain:
-                    block_inds.append([a_block_inds[n_a, 0], b_block_inds[n_b, 1]])
-                else:
-                    block_inds.append([b_block_inds[n_b, 0], a_block_inds[n_a, 0]])
+            if len(a_block_inds) > 0 and  len(b_block_inds) > 0:
+                for n_a, n_b in iter_common_sorted(a_block_inds[:, ax_a], b_block_inds[:, 1 - ax_a]):
+                    blocks.append(self.block_backend.block_scale_axis(a_blocks[n_a], b_blocks[n_b], axis=ax_a))
+                    if in_domain:
+                        block_inds.append([a_block_inds[n_a, 0], b_block_inds[n_b, 1]])
+                    else:
+                        block_inds.append([b_block_inds[n_b, 0], a_block_inds[n_a, 0]])
             if len(block_inds) == 0:
                 block_inds = np.zeros((0, 2), int)
             else:
