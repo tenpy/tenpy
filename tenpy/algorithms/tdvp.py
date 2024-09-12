@@ -116,7 +116,8 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
             The number of steps to evolve.
         """
         consistency_check(dt, self.options, 'max_dt', 1.,
-                          'dt > ``max_dt`` is unreasonably large for TDVP.')
+                          'dt > ``max_dt`` is unreasonably large for TDVP.',
+                          compare=lambda (dt, max_dt): abs(dt) <= max_dt)
         self.dt = dt
         trunc_err = TruncationError()
         for _ in range(N_steps):
