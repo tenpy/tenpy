@@ -392,9 +392,11 @@ class TimeEvolutionAlgorithm(Algorithm):
 
         S = self.psi.entanglement_entropy()
         logger.info(
-            "--> time=%(t)3.3f, max(chi)=%(chi)d, max(S)=%(S).5f, "
+            "--> time=%(tr)3.3f %(sign)s %(tc)3.3fj, max(chi)=%(chi)d, max(S)=%(S).5f, "
             "avg DeltaS=%(dS).4e, since last update: %(wall_time).1fs", {
-                't': self.evolved_time.real,
+                'tr': self.evolved_time.real,
+                'sign': "+" if self.evolved_time.imag >= 0 else "-",
+                'tc': np.abs(self.evolved_time.imag),
                 'chi': max(self.psi.chi),
                 'S': max(S),
                 'dS': np.mean(S) - Sold,
