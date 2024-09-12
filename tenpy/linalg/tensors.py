@@ -4738,6 +4738,7 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
         relabel2 = {c: c2} if relabel2 is None else {**relabel2, c: c2}
         inv_part = tdot(tensor1.invariant_part, tensor2.invariant_part, legs1=legs1, legs2=legs2,
                         relabel1=relabel1, relabel2=relabel2)
+        # TODO c1 seems to braid with c2. Why? Need to specify levels here...
         inv_part = move_leg(inv_part, c1, domain_pos=0)
         return ChargedTensor.from_two_charge_legs(
             inv_part, state1=tensor1.charged_state, state2=tensor2.charged_state,
@@ -4745,7 +4746,10 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
     if isinstance(tensor1, ChargedTensor):
         inv_part = tdot(tensor1.invariant_part, tensor2, legs1=legs1, legs2=legs2,
                             relabel1=relabel1, relabel2=relabel2)
-        inv_part = move_leg(inv_part, ChargedTensor._CHARGE_LEG_LABEL, domain_pos=0)
+        # assign highest level to charge leg
+        levels = list(range(inv_part.num_legs))
+        levels[inv_part.get_leg_idcs(ChargedTensor._CHARGE_LEG_LABEL)[0]] = inv_part.num_legs
+        inv_part = move_leg(inv_part, ChargedTensor._CHARGE_LEG_LABEL, domain_pos=0, levels=levels)
         return ChargedTensor.from_invariant_part(inv_part, tensor1.charged_state)
     if isinstance(tensor2, ChargedTensor):
         inv_part = tdot(tensor1, tensor2.invariant_part, legs1=legs1, legs2=legs2,
