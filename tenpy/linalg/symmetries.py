@@ -384,7 +384,7 @@ class Symmetry(metaclass=ABCMeta):
 
     def _b_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         """Internal implementation of :meth:`b_symbol`. Can assume that inputs are valid."""
-        F = self._f_symbol(a, b, self.dual_sector(b), a, self.trivial_sector, c)
+        F = self._f_symbol(a, b, self.dual_sector(b), a, self.trivial_sector, c).conj()
         return self.sqrt_qdim(b) * F[0, 0, :, :]
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
