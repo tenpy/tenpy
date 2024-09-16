@@ -1043,9 +1043,6 @@ class FusionTreeBackend(TensorBackend):
         iter_space = [a.codomain, a.domain][ax_a]
         for uncoupled, slc, coupled_ind in _forest_block_iter_product_space(iter_space, coupled_sectors, a.symmetry):
             ind = a.domain.sectors_where(coupled_sectors[coupled_ind])
-            if not ind in a_block_inds[:, 1]:  # TODO delete this later; this is just here for tests
-                assert False, 'this should never occur'
-
             ind_b = b.data.block_ind_from_domain_sector_ind(b.domain.sectors_where(uncoupled[co_domain_idx]))
             if ind_b == None:  # zero block
                 continue

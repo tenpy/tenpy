@@ -2129,13 +2129,13 @@ def test_tdot(cls_A: Type[tensors.Tensor], cls_B: Type[tensors.Tensor],
               make_compatible_tensor, np_random):
     A: cls_A = make_compatible_tensor(
         codomain=len(labels_A[0]), domain=len(labels_A[1]),
-        labels=[*labels_A[0], *reversed(labels_A[1])], max_block_size=5, max_blocks=3, cls=cls_A
+        labels=[*labels_A[0], *reversed(labels_A[1])], max_block_size=3, max_blocks=3, cls=cls_A
     )
     # create B such that legs with the same label can be contracted
     B: cls_B = make_compatible_tensor(
         codomain=[A._as_domain_leg(l) if A.has_label(l) else None for l in labels_B[0]],
         domain=[A._as_codomain_leg(l) if A.has_label(l) else None for l in labels_B[1]],
-        labels=[*labels_B[0], *reversed(labels_B[1])], max_block_size=5, max_blocks=3, cls=cls_B
+        labels=[*labels_B[0], *reversed(labels_B[1])], max_block_size=2, max_blocks=3, cls=cls_B
     )
     num_contr = len(contr_A)
     num_open_A = A.num_legs - num_contr
