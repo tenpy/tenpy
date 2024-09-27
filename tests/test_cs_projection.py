@@ -1,5 +1,5 @@
 """A test for :meth:`~tenpy.networks.mps.MPS.project_onto_charge_sector`"""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 from tenpy.networks.site import SpinSite, FermionSite, SpinHalfFermionSite

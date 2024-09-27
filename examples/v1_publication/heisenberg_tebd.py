@@ -1,5 +1,5 @@
 """An example simulating the dynamics of the Neel state under Heisenberg evolution, using TEBD."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 import argparse
 import matplotlib.pyplot as plt
 import matplotlib as mpl

@@ -22,7 +22,7 @@ can be extended to include excitations that span several sites. This is implemen
 in :class:`MultiSitePlaneWaveExcitationEngine`. Note that with the current implementation, the
 numerical costs scale exponentially with the number of exciting sites.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import logging

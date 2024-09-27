@@ -16,7 +16,7 @@ For example an MPS represents the contraction along the 'virtual' legs/bonds of 
     uniform_mps
     momentum_mps
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from . import site, mps, mpo, purification_mps, momentum_mps, uniform_mps
 

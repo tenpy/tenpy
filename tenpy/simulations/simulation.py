@@ -7,7 +7,7 @@ running the actual algorithm, possibly performing measurements and saving the re
 See :doc:`/intro/simulations` for an overview and
 :doc:`/examples` for a list of example parameter yaml files.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import os
 import sys

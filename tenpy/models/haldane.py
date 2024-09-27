@@ -1,5 +1,5 @@
 """Bosonic and fermionic Haldane models."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 

@@ -1,5 +1,5 @@
 """A collection of tests for :mod:`tenpy.models.site`."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import numpy.testing as npt

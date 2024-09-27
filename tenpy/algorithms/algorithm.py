@@ -1,5 +1,5 @@
 """This module contains some base classes for algorithms."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import time
 import numpy as np

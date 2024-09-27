@@ -2,7 +2,7 @@ r"""Test several time evolution methods and compare to exact expectation values
 
 Setup is a time evolution with TFI Model starting from a spin polarized state.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import scipy.linalg as LA

@@ -3,7 +3,7 @@
 As we put the model on a cylinder, the name "toric code" is a bit misleading, but it is the
 established name for this model...
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 

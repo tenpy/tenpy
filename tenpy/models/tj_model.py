@@ -1,5 +1,5 @@
 """tJ model"""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from .model import CouplingMPOModel, NearestNeighborModel
 from .lattice import Chain

@@ -4,7 +4,7 @@ The AKLT model is famous for having a very simple ground state MPS of bond dimen
 Writing down the Hamiltonian is easiest done in terms of bond couplings.
 This class thus serves as an example how this can be done.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 

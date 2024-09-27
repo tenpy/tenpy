@@ -30,7 +30,7 @@ crucial, as the one-site algorithm cannot increase the MPS bond dimension by its
 A generic protocol for approaching a physics question using DMRG is given in
 :doc:`/intro/dmrg-protocol`.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import time

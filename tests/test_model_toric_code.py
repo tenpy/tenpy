@@ -1,4 +1,4 @@
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from tenpy.models.toric_code import ToricCode
 from test_model import check_general_model

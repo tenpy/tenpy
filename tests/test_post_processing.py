@@ -1,5 +1,5 @@
 """Short tests for the :class:`DataLoader` and for post_processing functions in a Simulation"""
-# Copyright 2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 
 import tenpy

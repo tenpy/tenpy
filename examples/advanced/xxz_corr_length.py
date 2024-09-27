@@ -5,7 +5,7 @@ through the phase transition by changing the field `hz`. It uses
 :meth:`~tenpy.networks.mps.MPS.correlation_length` to extract the correlation length of the ground
 state, and plots it vs. hz in the end.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 

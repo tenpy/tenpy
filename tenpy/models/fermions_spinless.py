@@ -2,7 +2,7 @@
 
 .. todo ::     add further terms (e.g. c^dagger c^dagger + h.c.) to the Hamiltonian.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 
 from .model import CouplingMPOModel, NearestNeighborModel

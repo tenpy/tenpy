@@ -1,5 +1,5 @@
 """An example determining the phase diagram of the 2D transverse field Ising model."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 import pickle
 import numpy as np
 import os

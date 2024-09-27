@@ -3,7 +3,7 @@
 The XXZ chain is contained in the more general :class:`~tenpy.models.spins.SpinChain`; the idea of
 this module is more to serve as a pedagogical example for a model.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from .lattice import Site, Chain
 from .model import CouplingModel, NearestNeighborModel, MPOModel, CouplingMPOModel

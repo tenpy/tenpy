@@ -1,5 +1,5 @@
 """A collection of tests to check the functionality of `tenpy.vumps`"""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from tenpy.models.tf_ising import TFIChain
 from tenpy.algorithms import vumps

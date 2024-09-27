@@ -1,4 +1,4 @@
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 from tenpy.models.haldane import BosonicHaldaneModel, FermionicHaldaneModel
 from test_model import check_general_model
 import pytest

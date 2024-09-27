@@ -2,7 +2,7 @@
 
 Uniform lattice of spin-S sites, coupled by nearest-neighbor interactions.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from ..networks.site import SpinSite
 from .model import CouplingMPOModel, NearestNeighborModel

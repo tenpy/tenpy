@@ -8,7 +8,7 @@ and :class:`~tenpy.simulations.time_evolution.SpectralFunction`.
 However, they can also be used in a standalone way on available results (i.e. in an interactive ipython or
 jupyter notebook session).
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 
