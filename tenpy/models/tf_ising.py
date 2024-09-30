@@ -6,7 +6,7 @@ the idea is more to serve as a pedagogical example for a 'model'.
 
 We choose the field along z to allow to conserve the parity, if desired.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 

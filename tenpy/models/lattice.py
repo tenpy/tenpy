@@ -16,7 +16,7 @@ Further, an overview with plots of the predefined models is given in
 :doc:`/notebooks/90_overview_predefined_lattices`
 
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 from scipy.spatial import ConvexHull, Voronoi

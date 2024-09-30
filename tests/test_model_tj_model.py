@@ -1,4 +1,4 @@
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 from tenpy.models import tj_model
 from test_model import check_general_model
 

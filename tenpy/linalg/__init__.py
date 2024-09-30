@@ -22,7 +22,7 @@ so you probably won't need to import `charges` directly.
     truncation
 
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from . import charges, np_conserved, krylov_based, random_matrix, sparse, svd_robust, truncation
 from .charges import *

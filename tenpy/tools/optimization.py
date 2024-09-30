@@ -76,7 +76,7 @@ knobs you can turn to tweak the most out of this library, explained in the follo
 .. autodata:: have_cython_functions
 .. autodata:: compiled_with_MKL
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from enum import IntEnum
 import warnings

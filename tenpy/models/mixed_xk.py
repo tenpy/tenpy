@@ -62,7 +62,7 @@ The Jordan-Wigner strings follow the *final* DMRG snake.
     exclusion principle implies a possibly large occupation on single k modes, i.e., hard-core
     bosons in x-y-space don't map to hard-core bosons in x-k-space!
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import itertools as it

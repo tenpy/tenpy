@@ -1,5 +1,5 @@
 """Provide helper functions for test of random Arrays."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import itertools as it

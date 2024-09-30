@@ -4,7 +4,7 @@ As of now, we have TDVP only for finite systems. The call structure is quite sim
 difference is that we can run one-site TDVP or two-site TDVP. In the former, the bond dimension can
 not grow; the latter allows to grow the bond dimension and hence requires a truncation.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 import numpy as np
 import tenpy
 from tenpy.algorithms import tdvp

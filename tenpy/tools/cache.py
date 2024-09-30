@@ -7,7 +7,7 @@ Any cache should be handled like a file object that needs to be closed after use
 this is easiest done through a ``with`` statement, see the example in :class:`DictCache`.
 """
 
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import pickle
 import numpy as np

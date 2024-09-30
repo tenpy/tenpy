@@ -1,5 +1,5 @@
 """Check if subpackages define proper __all__."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 import types
 
 import tenpy

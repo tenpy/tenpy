@@ -3,7 +3,7 @@
 The :class:`Site` is the prototype, read it's docstring.
 
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import itertools

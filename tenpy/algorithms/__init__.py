@@ -19,7 +19,7 @@
     exact_diag
     disentangler
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from . import algorithm, dmrg, dmrg_parallel, disentangler, mps_common, tebd, tdvp, \
     exact_diag, purification, network_contractor, mpo_evolution, vumps, plane_wave_excitation

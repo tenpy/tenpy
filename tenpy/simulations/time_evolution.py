@@ -1,6 +1,6 @@
 """Simulations for (real) time evolution, time dependent correlation
 functions and spectral functions."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import warnings

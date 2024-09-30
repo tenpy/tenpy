@@ -9,7 +9,7 @@ Similar to the :mod:`~tenpy.simulations.measurement` the functions provided in t
 the simulation class in a post-processing step. They follow the syntax
 ``def pp_function(DL, *, kwarg1, kwarg_2=default_2):``.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 
 import os

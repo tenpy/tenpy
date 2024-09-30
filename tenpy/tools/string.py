@@ -1,5 +1,5 @@
 """Tools for handling strings."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from typing import Sequence
 import numpy as np

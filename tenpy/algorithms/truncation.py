@@ -4,7 +4,7 @@ The `tenpy.algorithms.truncation` module was moved to :mod:`tenpy.linalg.truncat
 Here we just import all the names again for backwards compatibility,
 to support loading pickle and HDF5 data files with `TruncationError` instances in them.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 # just provide namespace from ..linalg.truncation
 

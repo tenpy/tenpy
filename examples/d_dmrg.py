@@ -3,7 +3,7 @@
 The example functions in this class do the same as the ones in `toycodes/d_dmrg.py`,
 but make use of the classes defined in tenpy.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 

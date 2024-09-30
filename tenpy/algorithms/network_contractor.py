@@ -9,7 +9,7 @@ by Robert N. C. Pfeifer, Glen Evenbly, Sukhwinder Singh, Guifre Vidal, see :arxi
     - implement or wrap netcon.m, a function to find optimal contraction sequences
         (:arxiv:`1304.6112`)
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 from ..linalg import np_conserved as npc

@@ -4,7 +4,7 @@ These are checks for coding guidelines, best practices etc.
 The code may still run fine even if these checks fail.
 We therefore consider them part of a linting routine and do *not* call them from pytest.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import tenpy
 import types
@@ -80,7 +80,7 @@ def check_copyright_notice():
     for fn in tenpy_files:
         with open(fn, 'r') as f:
             for line in f:
-                if line.startswith('# Copyright (C) TeNPy Developers, GNU GPLv3'):
+                if line.startswith('# Copyright (C) TeNPy Developers, Apache license'):
                     break
             else:  # no break
                 raise AssertionError(f'No/wrong copyright notice in {fn}.')

@@ -4,7 +4,7 @@
     Long term: implement different lattices.
     Long term: implement variable hopping strengths Jx, Jy.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 

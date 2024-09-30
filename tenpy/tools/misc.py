@@ -1,5 +1,5 @@
 """Miscellaneous tools, somewhat random mix yet often helpful."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import operator
 import numpy as np

@@ -116,7 +116,7 @@ see :cite:`hauschild2018`.
     Moreover, we don't split the physical and auxiliary space into separate sites, which makes
     TEBD as costly as :math:`O(d^6 \chi^3)`.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import copy
 import numpy as np
