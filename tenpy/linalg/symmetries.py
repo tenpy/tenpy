@@ -1349,6 +1349,8 @@ class SUNSymmetry(GroupSymmetry):
 
     """
 
+    fusion_tensor_dtype = Dtype.float64
+
     def __init__(self, N:int, CGfile, Ffile, Rfile):
 
         assert isinstance(N, int)
@@ -1362,18 +1364,22 @@ class SUNSymmetry(GroupSymmetry):
         self.Ffile = Ffile
         self.Rfile = Rfile
 
+
         GroupSymmetry.__init__(self,
-                               fusion_style=FusionStyle.general,
-                               trivial_sector=np.array([0]*N, dtype=int),
-                               group_name=f'SU({N})',
-                               num_sectors=np.inf,
-                               descriptive_name=None)
+                               fusion_style = FusionStyle.general,
+                               trivial_sector = np.array([0]*N, dtype=int),
+                               group_name = f'SU({N})',
+                               num_sectors = np.inf,
+                               descriptive_name = None)
 
     def is_valid_sector(self, a: Sector) -> bool:
-        l = (type(a) == Sector)
-        m = (len(a) == 3)
+        l = (type(a) == np.ndarray)
+        if not l:
+            return False
+
+        m = (len(a) == self.N)
         n = (a[-1] == 0)
-        return l and m and n
+        return m and n
 
     def is_same_symmetry(self, other) -> bool:
 
@@ -1431,7 +1437,7 @@ class SUNSymmetry(GroupSymmetry):
 
         for i in irreps:
             dimI = self.sector_dim(i)
-            if dimI == dimA and not i == a:
+            if dimI == dimA and not list(i) == list(a):
                 return i
 
         return a
@@ -1697,7 +1703,7 @@ class SUNSymmetry(GroupSymmetry):
                         rr = self.clebschgordan(a, m_a, b, m_b, c, m_c, mu)
                         X[m_a - 1, m_b - 1, m_c - 1, mu - 1] = rr
 
-        return X
+        return X.transpose(3,0,1,2)
 
     def _f_symbol_from_CG(self,a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector):
         """a,b,c,d,e,f are irrep labels, i.e. first rows of GT patterns
@@ -1710,11 +1716,11 @@ class SUNSymmetry(GroupSymmetry):
         if a[0] > hw or b[0] > hw or c[0] > hw or d[0] > hw or e[0] > hw or f[0] > hw:
             raise ValueError('Input irreps have higher weight than highest weight irrep in HDF5-file')
 
-        X1 = self._fusion_tensor(a, b, f)  # [a,b,f, kappa]
-        X2 = self._fusion_tensor(f, c, d)  # [f,c,d, lambda]
+        X1 = self._fusion_tensor(a, b, f).transpose([1,2,3,0])  # [a,b,f, kappa]
+        X2 = self._fusion_tensor(f, c, d).transpose([1,2,3,0])  # [f,c,d, lambda]
 
-        X3 = self._fusion_tensor(b, c, e)  # [b,c,e, mu]
-        X4 = self._fusion_tensor(a, e, d)  # [a,e,d, nu]
+        X3 = self._fusion_tensor(b, c, e).transpose([1,2,3,0])  # [b,c,e, mu]
+        X4 = self._fusion_tensor(a, e, d).transpose([1,2,3,0])  # [a,e,d, nu]
 
         if not X1.any() or not X2.any() or not X3.any() or not X4.any():
             return np.zeros((1, 1, 1, 1), dtype=complex)
@@ -1751,8 +1757,8 @@ class SUNSymmetry(GroupSymmetry):
         ebar = self.dual_sector(e)
         fbar = self.dual_sector(f)
 
-        key = 'F' + str(a) + str(b) + str(c) + str(d) + str(e) + str(f)
-        keybar = 'F' + str(abar) + str(bbar) + str(cbar) + str(dbar) + str(ebar) + str(fbar)
+        key = 'F' + str(list(a)) + str(list(b)) + str(list(c)) + str(list(d)) + str(list(e)) + str(list(f))
+        keybar = 'F' + str(list(abar)) + str(list(bbar)) + str(list(cbar)) + str(list(dbar)) + str(list(ebar)) + str(list(fbar))
 
         if key in self.Ffile['/F_sym/']:
             return np.array(self.Ffile['/F_sym/'][key])
@@ -1804,7 +1810,46 @@ class SUNSymmetry(GroupSymmetry):
         return np.zeros((1,), dtype=complex)
 
     def Z_iso(self, a: Sector) -> npt.NDArray:
-        return np.zeros((self.sector_dim(a),self.sector_dim(a)))
+        if self.N==2:
+            d_a = self.sector_dim(a)
+            Z = np.zeros((d_a, d_a), dtype=float)
+
+            for k in range(d_a):
+                Z[k, d_a - 1 - k] = 1 - 2 * np.mod(a[0] - k, 2)
+
+            return Z
+
+        # elif self.N == 3:
+        #     d_a = self.sector_dim(a)
+        #     Z = np.zeros((d_a, d_a), dtype=float)
+        #     dia=[]
+        #     for n in range(d_a):
+        #         dia += [(-1)**(n)]
+        #     print(np.fliplr(np.diag(dia)))
+        #     return np.fliplr(np.diag(dia))
+
+        elif self.N == 3:
+            d_a = self.sector_dim(a)
+            # Z = np.zeros((d_a, d_a), dtype=float)
+            if d_a==1:
+                return np.array([[1]])
+
+            dia=[-1.j]
+            for n in range(1,d_a-1):
+                dia += [1]
+            dia+=[1.j]
+            print(np.fliplr(np.diag(dia)))
+            return np.fliplr(np.diag(dia))
+
+    def frobenius_schur(self, a: Sector) -> int:
+
+        if self.N==2:
+            return 1 - 2 * (a[0] % 2)
+
+        F=self._f_symbol(a,self.dual_sector(a),a,a,self.trivial_sector, self.trivial_sector)[0,0,0,0]
+        print(a, self.trivial_sector, self._f_symbol(a,self.dual_sector(a),a,a,self.trivial_sector, self.trivial_sector))
+        return int(np.sign(F))
+
 
 
 class FermionParity(Symmetry):

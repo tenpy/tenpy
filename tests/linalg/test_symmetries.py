@@ -139,9 +139,13 @@ def sample_sector_nonets(symmetry: symmetries.Symmetry, sectors, num_samples: in
             e = np_rng.choice(symmetry.fusion_outcomes(g, d))
             # need to find l, k such that a x k -> e is allowed;
             # there may be choices for l such that all possible k are inconsistent
-            for l in np_rng.permuted(symmetry.fusion_outcomes(c, d), axis=0):
+            out_cd=symmetry.fusion_outcomes(c, d)
+            np_rng.shuffle(out_cd, axis=0)
+            for l in out_cd:
                 if symmetry.can_fuse_to(f, l, e):
-                    for k in np_rng.permuted(symmetry.fusion_outcomes(b, l), axis=0):
+                    out_bl=symmetry.fusion_outcomes(b, l)
+                    np_rng.shuffle(out_bl, axis=0)
+                    for k in out_bl:
                         if symmetry.can_fuse_to(a, k, e):
                             yield a, b, c, d, e, f, g, l, k
                             break
@@ -400,7 +404,9 @@ def check_fusion_tensor(sym: symmetries.Symmetry, example_sectors, np_random):
         assert_array_almost_equal(Z_a_hc @ Z_a, np.eye(d_a))
 
         # defining property of frobenius schur?
+        print('FS:',sym.frobenius_schur(a))
         assert_array_almost_equal(Z_a.T, sym.frobenius_schur(a) * Z_a)
+        # assert_array_almost_equal(Z_a_hc, sym.frobenius_schur(a) * Z_a)
     
         # reduces to left/right unitor if one input is trivial?
         X_aua = sym.fusion_tensor(a, sym.trivial_sector, a)
@@ -930,11 +936,12 @@ def test_suN_symmetry(N,CGfile, Ffile, Rfile, np_random):
                     r.append(a[:])
         return r
 
-    CGfile=h5py.File(CGfile,"r")
+    CGfile = h5py.File(CGfile,"r")
     Ffile = h5py.File(Ffile, "r")
     Rfile = h5py.File(Rfile, "r")
     sym = symmetries.SUNSymmetry(N, CGfile, Ffile, Rfile)
-    common_checks(sym, example_sectors=np.array(gen_irrepsTEST(N,2)),
+    exsectors=np.array(gen_irrepsTEST(N,2))
+    common_checks(sym, example_sectors=exsectors,
                   example_sectors_low_qdim=np.array([[0]*N, [1]+[0]*(N-1), [2]+[0]*(N-1)]), np_random=np_random)
 
     # spin_1 = np.array([2])
@@ -1337,4 +1344,5 @@ def test_SU2_kAnyonCategory(k, handedness, np_random):
     assert_array_equal(sym.dual_sectors(sectors_a), sectors_a)
 
 
-test_suN_symmetry(3,'/space/ge36xeh/TenpyV2a/Test_N_3_HWeight_7.hdf5', '/space/ge36xeh/TenpyV2a/Test_Fsymb_3_HWeight_4.hdf5', '/space/ge36xeh/TenpyV2a/Test_Rsymb_3_HWeight_4.hdf5', default_rng)
+test_suN_symmetry(3,'/space/ge36xeh/TenpyV2a/Test_N_3_HWeight_7.hdf5', '/space/ge36xeh/TenpyV2a/Test_Fsymb_3_HWeight_3.hdf5', '/space/ge36xeh/TenpyV2a/Test_Rsymb_3_HWeight_4.hdf5', default_rng)
+#test_suN_symmetry(2,'/space/ge36xeh/TenpyV2a/Test_N_2_HWeight_20.hdf5', '/space/ge36xeh/TenpyV2a/Test_Fsymb_2_HWeight_3.hdf5', '/space/ge36xeh/TenpyV2a/Test_Rsymb_2_HWeight_9.hdf5', default_rng)
