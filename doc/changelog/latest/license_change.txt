@@ -1,1 +1,0 @@
-- We have changed the license from GPL v3 to the less restrictive Apache v2 license, see :issue:`462` for details.
