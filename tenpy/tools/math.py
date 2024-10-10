@@ -260,6 +260,9 @@ def qr_li(A, cutoff=1.e-15):
     assert len(keep) == R.shape[0]
     Q = Q[:, keep]
     R = R[keep, :]
+    if not np.any(keep):
+        # the next QR decomposition would break
+        return Q, R
     # here, A P = Q R, thus A = Q R inv(P)
     R = R[:, misc.inverse_permutation(P)]
     q, R = scipy.linalg.qr(R, mode='economic', pivoting=False)
