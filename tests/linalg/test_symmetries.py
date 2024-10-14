@@ -460,9 +460,11 @@ def check_F_symbols(sym: symmetries.Symmetry, sector_sextets, sector_unitarity_t
         res = np.zeros(shape, dtype=complex)
         for f in sym.fusion_outcomes(a, b):
             if sym.can_fuse_to(f, c, d):
+                print(a,b,c,d,e,f)
                 F1 = sym.f_symbol(a, b, c, d, e, f)
                 F2 = sym.f_symbol(a, b, c, d, g, f).conj()
                 res += np.tensordot(F1, F2, axes=[[2,3], [2,3]])
+                print(res)
         if np.array_equal(e, g):
             assert_array_almost_equal(res, np.eye(shape[0] * shape[1]).reshape(shape))
         else:
@@ -1344,5 +1346,5 @@ def test_SU2_kAnyonCategory(k, handedness, np_random):
     assert_array_equal(sym.dual_sectors(sectors_a), sectors_a)
 
 
-test_suN_symmetry(3,'/space/ge36xeh/TenpyV2a/Test_N_3_HWeight_7.hdf5', '/space/ge36xeh/TenpyV2a/Test_Fsymb_3_HWeight_3.hdf5', '/space/ge36xeh/TenpyV2a/Test_Rsymb_3_HWeight_4.hdf5', default_rng)
-#test_suN_symmetry(2,'/space/ge36xeh/TenpyV2a/Test_N_2_HWeight_20.hdf5', '/space/ge36xeh/TenpyV2a/Test_Fsymb_2_HWeight_3.hdf5', '/space/ge36xeh/TenpyV2a/Test_Rsymb_2_HWeight_9.hdf5', default_rng)
+#test_suN_symmetry(3,'/space/ge36xeh/TenpyV2a/Test_N_3_HWeight_7.hdf5', '/space/ge36xeh/TenpyV2a/Test_Fsymb_3_HWeight_3.hdf5', '/space/ge36xeh/TenpyV2a/Test_Rsymb_3_HWeight_4.hdf5', default_rng)
+test_suN_symmetry(2,'/space/ge36xeh/TenpyV2a/Test_N_2_HWeight_20.hdf5', '/space/ge36xeh/TenpyV2a/Test_Fsymb_2_HWeight_4.hdf5', '/space/ge36xeh/TenpyV2a/Test_Rsymb_2_HWeight_9.hdf5', default_rng)

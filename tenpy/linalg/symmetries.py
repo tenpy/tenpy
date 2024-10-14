@@ -1757,8 +1757,8 @@ class SUNSymmetry(GroupSymmetry):
         ebar = self.dual_sector(e)
         fbar = self.dual_sector(f)
 
-        key = 'F' + str(list(a)) + str(list(b)) + str(list(c)) + str(list(d)) + str(list(e)) + str(list(f))
-        keybar = 'F' + str(list(abar)) + str(list(bbar)) + str(list(cbar)) + str(list(dbar)) + str(list(ebar)) + str(list(fbar))
+        key = str(list(a)) + str(list(b)) + str(list(c)) + str(list(d)) + str(list(e)) + str(list(f))
+        keybar = str(list(abar)) + str(list(bbar)) + str(list(cbar)) + str(list(dbar)) + str(list(ebar)) + str(list(fbar))
 
         if key in self.Ffile['/F_sym/']:
             return np.array(self.Ffile['/F_sym/'][key])
@@ -1828,18 +1828,36 @@ class SUNSymmetry(GroupSymmetry):
         #     print(np.fliplr(np.diag(dia)))
         #     return np.fliplr(np.diag(dia))
 
-        elif self.N == 3:
+        elif self.N==3:
             d_a = self.sector_dim(a)
             # Z = np.zeros((d_a, d_a), dtype=float)
             if d_a==1:
                 return np.array([[1]])
 
-            dia=[-1.j]
-            for n in range(1,d_a-1):
-                dia += [1]
-            dia+=[1.j]
-            print(np.fliplr(np.diag(dia)))
-            return np.fliplr(np.diag(dia))
+            Z=np.zeros((d_a,d_a), dtype=complex)
+            Z[0,d_a-1]=-1.j
+            Z[d_a-1,0]=1.j
+
+            for i in range(1,d_a-1):
+                Z[i,i]=1
+
+            return Z
+
+
+
+        #
+        # elif self.N == 3:
+        #     d_a = self.sector_dim(a)
+        #     # Z = np.zeros((d_a, d_a), dtype=float)
+        #     if d_a==1:
+        #         return np.array([[1]])
+        #
+        #     dia=[-1.j]
+        #     for n in range(1,d_a-1):
+        #         dia += [1]
+        #     dia+=[1.j]
+        #     print(np.fliplr(np.diag(dia)))
+        #     return np.fliplr(np.diag(dia))
 
     def frobenius_schur(self, a: Sector) -> int:
 
