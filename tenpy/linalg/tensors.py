@@ -3226,9 +3226,7 @@ def dagger(tensor: Tensor) -> Tensor:
     if isinstance(tensor, ChargedTensor):
         inv_part = dagger(tensor.invariant_part)  # charge_leg ends up as codomain[0] and is dual.
         inv_part.set_label(0, ChargedTensor._CHARGE_LEG_LABEL)
-        # assign highest level to charge leg
-        levels = list(range(inv_part.num_legs, 0, -1))
-        inv_part = move_leg(inv_part, 0, domain_pos=0, levels=levels)
+        inv_part = move_leg(inv_part, 0, domain_pos=0)
         charged_state = tensor.charged_state
         if charged_state is not None:
             charged_state = tensor.backend.block_backend.block_conj(charged_state)
@@ -4738,7 +4736,6 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
         relabel2 = {c: c2} if relabel2 is None else {**relabel2, c: c2}
         inv_part = tdot(tensor1.invariant_part, tensor2.invariant_part, legs1=legs1, legs2=legs2,
                         relabel1=relabel1, relabel2=relabel2)
-        # TODO c1 seems to braid with c2. Why? Need to specify levels here...
         inv_part = move_leg(inv_part, c1, domain_pos=0)
         return ChargedTensor.from_two_charge_legs(
             inv_part, state1=tensor1.charged_state, state2=tensor2.charged_state,
@@ -4746,10 +4743,7 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
     if isinstance(tensor1, ChargedTensor):
         inv_part = tdot(tensor1.invariant_part, tensor2, legs1=legs1, legs2=legs2,
                             relabel1=relabel1, relabel2=relabel2)
-        # assign highest level to charge leg
-        levels = list(range(inv_part.num_legs))
-        levels[inv_part.get_leg_idcs(ChargedTensor._CHARGE_LEG_LABEL)[0]] = inv_part.num_legs
-        inv_part = move_leg(inv_part, ChargedTensor._CHARGE_LEG_LABEL, domain_pos=0, levels=levels)
+        inv_part = move_leg(inv_part, ChargedTensor._CHARGE_LEG_LABEL, domain_pos=0)
         return ChargedTensor.from_invariant_part(inv_part, tensor1.charged_state)
     if isinstance(tensor2, ChargedTensor):
         inv_part = tdot(tensor1, tensor2.invariant_part, legs1=legs1, legs2=legs2,

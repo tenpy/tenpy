@@ -1207,6 +1207,10 @@ def test_dagger(cls, cod, dom, make_compatible_tensor, np_random):
     T_labels = list('abcdefghi')[:cod + dom]
     T: cls = make_compatible_tensor(cod, dom, cls=cls, labels=T_labels)
 
+    if (isinstance(T.backend, backends.FusionTreeBackend) and cls is ChargedTensor and
+        T.symmetry.braiding_style.value >= 20):
+        pytest.skip('The concept of ChargedTensor is not sensical for anyonic symmetries')
+
     how_to_call = np_random.choice(['dagger()', '.hc', '.dagger'])
     print(how_to_call)
     if how_to_call == 'dagger()':
@@ -1518,6 +1522,9 @@ def test_inner(cls, cod, dom, do_dagger, make_compatible_tensor):
     else:
         B: cls = make_compatible_tensor(codomain=A.domain, domain=A.codomain, cls=cls)
 
+    if (isinstance(A.backend, backends.FusionTreeBackend) and cls is ChargedTensor and
+        A.symmetry.braiding_style.value >= 20):
+        pytest.skip('The concept of ChargedTensor is not sensical for anyonic symmetries')
     if cls is Mask:
         with pytest.raises(NotImplementedError, match='tensors._compose_with_Mask not implemented for Mask'):
             _ = tensors.inner(A, B, do_dagger=do_dagger)
@@ -1641,6 +1648,8 @@ def test_move_leg(cls, cod, dom, leg, codomain_pos, domain_pos, levels, make_com
     T: cls = make_compatible_tensor(cod, dom, labels=T_labels, cls=cls)
 
     if isinstance(T.backend, backends.FusionTreeBackend) and T.symmetry.braiding_style.value >= 20:
+        if cls is ChargedTensor:
+            pytest.skip('The concept of ChargedTensor is not sensical for anyonic symmetries')
         levels = list(np_random.permutation(T.num_legs))
     
     codomain_perm = [n for n in range(cod) if n != leg]
@@ -1852,6 +1861,9 @@ def test_permute_legs(cls, num_cod, num_dom, codomain, domain, levels, make_comp
         with pytest.raises(NotImplementedError, match='mask_transpose not implemented'):
             _ = tensors.permute_legs(T, codomain, domain, levels)
         pytest.xfail()
+    elif (isinstance(T.backend, backends.FusionTreeBackend) and cls is ChargedTensor and
+          T.symmetry.braiding_style.value >= 20):
+        pytest.skip('The concept of ChargedTensor is not sensical for anyonic symmetries')
 
     res = tensors.permute_legs(T, codomain, domain, levels)
     res.test_sanity()
@@ -2137,6 +2149,11 @@ def test_tdot(cls_A: Type[tensors.Tensor], cls_B: Type[tensors.Tensor],
         domain=[A._as_codomain_leg(l) if A.has_label(l) else None for l in labels_B[1]],
         labels=[*labels_B[0], *reversed(labels_B[1])], max_block_size=2, max_blocks=3, cls=cls_B
     )
+
+    if (isinstance(A.backend, backends.FusionTreeBackend) and (cls_A is ChargedTensor or cls_B is ChargedTensor) and
+        A.symmetry.braiding_style.value >= 20):
+        pytest.skip('The concept of ChargedTensor is not sensical for anyonic symmetries')
+
     num_contr = len(contr_A)
     num_open_A = A.num_legs - num_contr
     num_open_B = B.num_legs - num_contr
