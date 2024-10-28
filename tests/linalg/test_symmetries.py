@@ -1,4 +1,7 @@
 # Copyright (C) TeNPy Developers, GNU GPLv3
+import os.path
+
+import h5py
 import pytest
 import numpy as np
 from numpy.testing import assert_array_equal, assert_array_almost_equal
@@ -106,7 +109,9 @@ def sample_sector_sextets(symmetry: symmetries.Symmetry, sectors, num_samples: i
             f = np_rng.choice(symmetry.fusion_outcomes(a, b))
             d = np_rng.choice(symmetry.fusion_outcomes(f, c))
             # need to find an f from the fusion products of b x c such that a x f -> d is allowed
-            for e in np_rng.permuted(symmetry.fusion_outcomes(b, c), axis=0):
+            outcomes=symmetry.fusion_outcomes(b, c)
+            np_rng.shuffle(outcomes, axis=0)
+            for e in outcomes:
                 if symmetry.can_fuse_to(a, e, d):
                     yield a, b, c, d, e, f
                     break
@@ -136,9 +141,13 @@ def sample_sector_nonets(symmetry: symmetries.Symmetry, sectors, num_samples: in
             e = np_rng.choice(symmetry.fusion_outcomes(g, d))
             # need to find l, k such that a x k -> e is allowed;
             # there may be choices for l such that all possible k are inconsistent
-            for l in np_rng.permuted(symmetry.fusion_outcomes(c, d), axis=0):
+            out_cd=symmetry.fusion_outcomes(c, d)
+            np_rng.shuffle(out_cd, axis=0)
+            for l in out_cd:
                 if symmetry.can_fuse_to(f, l, e):
-                    for k in np_rng.permuted(symmetry.fusion_outcomes(b, l), axis=0):
+                    out_bl=symmetry.fusion_outcomes(b, l)
+                    np_rng.shuffle(out_bl, axis=0)
+                    for k in out_bl:
                         if symmetry.can_fuse_to(a, k, e):
                             yield a, b, c, d, e, f, g, l, k
                             break
@@ -397,7 +406,9 @@ def check_fusion_tensor(sym: symmetries.Symmetry, example_sectors, np_random):
         assert_array_almost_equal(Z_a_hc @ Z_a, np.eye(d_a))
 
         # defining property of frobenius schur?
+        print('FS:',sym.frobenius_schur(a))
         assert_array_almost_equal(Z_a.T, sym.frobenius_schur(a) * Z_a)
+        # assert_array_almost_equal(Z_a_hc, sym.frobenius_schur(a) * Z_a)
     
         # reduces to left/right unitor if one input is trivial?
         X_aua = sym.fusion_tensor(a, sym.trivial_sector, a)
@@ -451,9 +462,11 @@ def check_F_symbols(sym: symmetries.Symmetry, sector_sextets, sector_unitarity_t
         res = np.zeros(shape, dtype=complex)
         for f in sym.fusion_outcomes(a, b):
             if sym.can_fuse_to(f, c, d):
+                print(a,b,c,d,e,f)
                 F1 = sym.f_symbol(a, b, c, d, e, f)
                 F2 = sym.f_symbol(a, b, c, d, g, f).conj()
                 res += np.tensordot(F1, F2, axes=[[2,3], [2,3]])
+                print(res)
         if np.array_equal(e, g):
             assert_array_almost_equal(res, np.eye(shape[0] * shape[1]).reshape(shape))
         else:
@@ -909,6 +922,62 @@ def test_su2_symmetry(np_random):
         np.stack([spin_1, spin_3_half])
     )
 
+@pytest.mark.parametrize('N', [3])
+@pytest.mark.parametrize('CGfile', ['Test_N_3_HWeight_7.hdf5'])
+@pytest.mark.parametrize('Ffile', ['Test_Fsymb_3_HWeight_4.hdf5'])
+@pytest.mark.parametrize('Rfile', ['Test_Rsymb_3_HWeight_4.hdf5'])
+def test_suN_symmetry(N,CGfile, Ffile, Rfile, np_random):
+    if not all([os.path.exists(f) for f in [CGfile, Ffile, Rfile]]):
+        pytest.skip('Need to provide files for SU(N) data!')
+    def gen_irrepsTEST(N, k):
+        '''generates a list of all possible irreps for given N and highest weight k'''
+
+        if N <= 0:
+            return [[]]
+        r = []
+        for i in range(k, -1, -1):
+            for comb in gen_irrepsTEST(N - 1, i):
+                a = [i] + comb
+                if a[-1] == 0:
+                    r.append(a[:])
+        return r
+
+    CGfile = h5py.File(CGfile,"r")
+    Ffile = h5py.File(Ffile, "r")
+    Rfile = h5py.File(Rfile, "r")
+    sym = symmetries.SUNSymmetry(N, CGfile, Ffile, Rfile)
+    sym_with_name = symmetries.SUNSymmetry(N, CGfile, Ffile, Rfile, "Some SU(N)")
+    exsectors=np.array(gen_irrepsTEST(N,2))
+    common_checks(sym, example_sectors=exsectors,
+                  example_sectors_low_qdim=np.array([[0]*N, [1]+[0]*(N-1), [2]+[0]*(N-1)]), np_random=np_random)
+
+    # spin_1 = np.array([2])
+    # spin_3_half = np.array([3])
+    # sym_with_name = symmetries.SU2Symmetry('foo')
+
+    print('instancecheck and is_abelian')
+    assert not isinstance(sym, symmetries.AbelianGroup)
+    assert isinstance(sym, symmetries.GroupSymmetry)
+    assert not sym.is_abelian
+
+    print('checking valid sectors')
+    for valid in gen_irrepsTEST(N,2):
+        assert sym.is_valid_sector(np.array(valid))
+    for invalid in [[-1], [-1, 0],[1, 2]]:
+        assert not sym.is_valid_sector(np.array(invalid))
+
+
+    print('checking sector dimensions')
+    assert sym.sector_dim([0]*N) == 1
+
+
+    print('checking equality')
+    assert sym == sym
+    assert sym != sym_with_name
+    assert sym != symmetries.SU2Symmetry()
+    assert sym != symmetries.fermion_parity
+
+
 
 def test_fermion_parity(np_random):
     sym = symmetries.FermionParity()
@@ -1260,3 +1329,7 @@ def test_SU2_kAnyonCategory(k, handedness, np_random):
 
     print('checking dual_sectors')
     assert_array_equal(sym.dual_sectors(sectors_a), sectors_a)
+
+
+#test_suN_symmetry(3,'/space/ge36xeh/TenpyV2a/Test_N_3_HWeight_7.hdf5', '/space/ge36xeh/TenpyV2a/Test_Fsymb_3_HWeight_3.hdf5', '/space/ge36xeh/TenpyV2a/Test_Rsymb_3_HWeight_4.hdf5', default_rng)
+#test_suN_symmetry(2,'/space/ge36xeh/TenpyV2a/Test_N_2_HWeight_20.hdf5', '/space/ge36xeh/TenpyV2a/Test_Fsymb_2_HWeight_6.hdf5', '/space/ge36xeh/TenpyV2a/Test_Rsymb_2_HWeight_6.hdf5', default_rng)
