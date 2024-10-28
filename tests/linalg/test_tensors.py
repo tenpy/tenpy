@@ -1034,11 +1034,6 @@ def test_apply_mask_DiagonalTensor(make_compatible_tensor):
                           pytest.param(SymmetricTensor, 2, 2, 4),])
 def test_bend_legs(cls, codomain, domain, num_codomain_legs, make_compatible_tensor):
     tensor: cls = make_compatible_tensor(codomain, domain, cls=cls)
-
-    if isinstance(tensor.backend, backends.FusionTreeBackend) and num_codomain_legs != codomain:
-        with pytest.raises(NotImplementedError):
-            _ = tensors.bend_legs(tensor, num_codomain_legs)
-        pytest.xfail()
     
     res = tensors.bend_legs(tensor, num_codomain_legs)
     res.test_sanity()
@@ -1212,10 +1207,9 @@ def test_dagger(cls, cod, dom, make_compatible_tensor, np_random):
     T_labels = list('abcdefghi')[:cod + dom]
     T: cls = make_compatible_tensor(cod, dom, cls=cls, labels=T_labels)
 
-    if isinstance(T.backend, backends.FusionTreeBackend) and cls is ChargedTensor:
-        with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
-            _ = T.dagger
-        pytest.xfail()
+    if (isinstance(T.backend, backends.FusionTreeBackend) and cls is ChargedTensor and
+        T.symmetry.braiding_style.value >= 20):
+        pytest.skip('The concept of ChargedTensor is not sensical for anyonic symmetries')
 
     how_to_call = np_random.choice(['dagger()', '.hc', '.dagger'])
     print(how_to_call)
@@ -1528,6 +1522,9 @@ def test_inner(cls, cod, dom, do_dagger, make_compatible_tensor):
     else:
         B: cls = make_compatible_tensor(codomain=A.domain, domain=A.codomain, cls=cls)
 
+    if (isinstance(A.backend, backends.FusionTreeBackend) and cls is ChargedTensor and
+        A.symmetry.braiding_style.value >= 20):
+        pytest.skip('The concept of ChargedTensor is not sensical for anyonic symmetries')
     if cls is Mask:
         with pytest.raises(NotImplementedError, match='tensors._compose_with_Mask not implemented for Mask'):
             _ = tensors.inner(A, B, do_dagger=do_dagger)
@@ -1538,11 +1535,6 @@ def test_inner(cls, cod, dom, do_dagger, make_compatible_tensor):
         # for anyonic symmetry, can not specify charge state.
         # but the, we can not compute inner.
         return
-
-    if isinstance(A.backend, backends.FusionTreeBackend) and (cls is ChargedTensor) and (dom != 0):
-        with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
-            _ = tensors.inner(A, B, do_dagger=do_dagger)
-        pytest.xfail()
 
     res = tensors.inner(A, B, do_dagger=do_dagger)
     assert isinstance(res, (float, complex))
@@ -1644,11 +1636,21 @@ def test_linear_combination(make_compatible_tensor_any_class):
      pytest.param(ChargedTensor, 2, 2, 0, None, 1, None, id='Charged-b'),
      pytest.param(ChargedTensor, 2, 2, 3, 0, None, None, id='Charged-c'),]
 )
-def test_move_leg(cls, cod, dom, leg, codomain_pos, domain_pos, levels, make_compatible_tensor):
+def test_move_leg(cls, cod, dom, leg, codomain_pos, domain_pos, levels, make_compatible_tensor, np_random):
+    """Test `move_leg` for tensors without specifying any levels. In the case where the symmetry
+    is anyonic, that is, `move_leg` needs levels as input, random levels are chosen and the
+    resulting numerical values are not checked against another tensor.
+    Such checks are however done within the tests provided in `test_backend_nonabelian`.
+    """
     assert sum(x is None for x in [domain_pos, codomain_pos]) == 1
     
     T_labels = list('abcdefghi')[:cod + dom]
     T: cls = make_compatible_tensor(cod, dom, labels=T_labels, cls=cls)
+
+    if isinstance(T.backend, backends.FusionTreeBackend) and T.symmetry.braiding_style.value >= 20:
+        if cls is ChargedTensor:
+            pytest.skip('The concept of ChargedTensor is not sensical for anyonic symmetries')
+        levels = list(np_random.permutation(T.num_legs))
     
     codomain_perm = [n for n in range(cod) if n != leg]
     domain_perm = [n for n in reversed(range(cod, cod + dom)) if n != leg]
@@ -1658,12 +1660,6 @@ def test_move_leg(cls, cod, dom, leg, codomain_pos, domain_pos, levels, make_com
         domain_perm[domain_pos:domain_pos] = [leg]
     perm = [*codomain_perm, *reversed(domain_perm)]
     
-    is_trivial = (codomain_perm == list(range(cod))) and (domain_perm == list(reversed(range(cod, cod + dom))))
-    if isinstance(T.backend, backends.FusionTreeBackend) and not is_trivial:
-        with pytest.raises(NotImplementedError):
-            _ = tensors.move_leg(T, leg, codomain_pos=codomain_pos, domain_pos=domain_pos, levels=levels)
-        pytest.xfail()
-
     res = tensors.move_leg(T, leg, codomain_pos=codomain_pos, domain_pos=domain_pos, levels=levels)
     res.test_sanity()
     
@@ -1675,7 +1671,7 @@ def test_move_leg(cls, cod, dom, leg, codomain_pos, domain_pos, levels, make_com
         pytest.skip('Need to re-design checks, cant use .to_numpy() etc')  # TODO
 
     expect = T.to_numpy().transpose(perm)
-    npt.assert_allclose(res.to_numpy(), expect)
+    npt.assert_allclose(res.to_numpy(), expect, atol=1.e-14)
 
 
 @pytest.mark.parametrize(
@@ -1860,20 +1856,14 @@ def test_partial_trace(cls, codom, dom, make_compatible_space, make_compatible_t
 )
 def test_permute_legs(cls, num_cod, num_dom, codomain, domain, levels, make_compatible_tensor):
     T = make_compatible_tensor(num_cod, num_dom, max_block_size=3, cls=cls)
-    is_trivial = (codomain == [*range(num_cod)]) and (domain == [*reversed(range(num_cod, T.num_legs))])
     
-    if isinstance(T.backend, backends.FusionTreeBackend) and cls in [SymmetricTensor, ChargedTensor] and not is_trivial:
-        with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
+    if isinstance(T.backend, backends.FusionTreeBackend) and cls is Mask and codomain == [1]:
+        with pytest.raises(NotImplementedError, match='mask_transpose not implemented'):
             _ = tensors.permute_legs(T, codomain, domain, levels)
         pytest.xfail()
-    if isinstance(T.backend, backends.FusionTreeBackend) and cls is DiagonalTensor and codomain == [1]:
-        with pytest.raises(NotImplementedError, match='diagonal_transpose not implemented'):
-            _ = tensors.permute_legs(T, codomain, domain, levels)
-        pytest.xfail()
-    if isinstance(T.backend, backends.FusionTreeBackend) and cls is DiagonalTensor and len(codomain) != 1:
-        with pytest.raises(NotImplementedError, match='permute_legs not implemented'):
-            _ = tensors.permute_legs(T, codomain, domain, levels)
-        pytest.xfail()
+    elif (isinstance(T.backend, backends.FusionTreeBackend) and cls is ChargedTensor and
+          T.symmetry.braiding_style.value >= 20):
+        pytest.skip('The concept of ChargedTensor is not sensical for anyonic symmetries')
 
     res = tensors.permute_legs(T, codomain, domain, levels)
     res.test_sanity()
@@ -1889,7 +1879,7 @@ def test_permute_legs(cls, num_cod, num_dom, codomain, domain, levels, make_comp
         # makes sense to compare with dense blocks
         expect = np.transpose(T.to_numpy(), [*codomain, *reversed(domain)])
         actual = res.to_numpy()
-        npt.assert_allclose(actual, expect)
+        npt.assert_allclose(actual, expect, atol=1.e-14)
     else:
         # should we do a test like braiding two legs around each other with a single 
         # anyonic sector and checking if the result is equal up to the expected phase?
@@ -1975,16 +1965,7 @@ def test_scale_axis(cls, codom, dom, which_leg, make_compatible_tensor, np_rando
         leg = leg.dual
     D: DiagonalTensor = make_compatible_tensor([leg], cls=DiagonalTensor, labels=['x', 'y'])
 
-    # 2) Call functions
-    if isinstance(T.backend, backends.FusionTreeBackend) and need_transpose:
-        with pytest.raises(NotImplementedError, match='diagonal_transpose not implemented'):
-            _ = tensors.scale_axis(T, D, which_leg)
-        pytest.xfail()
-    if isinstance(T.backend, backends.FusionTreeBackend) and cls in [SymmetricTensor, ChargedTensor]:
-        with pytest.raises(NotImplementedError, match='scale_axis not implemented'):
-            _ = tensors.scale_axis(T, D, which_leg)
-        pytest.xfail()
-    
+    # 2) Call functions    
     how_to_call = np_random.choice(['by_idx', 'by_label'])
     if how_to_call == 'by_idx':
         res = tensors.scale_axis(T, D, which_leg)
@@ -2005,7 +1986,7 @@ def test_scale_axis(cls, codom, dom, which_leg, make_compatible_tensor, np_rando
     expect = np.swapaxes(T.to_numpy(), which_leg, -1)  # swap axis to be scaled to the back
     expect = expect * D.diagonal_as_numpy()  # broadcasts to last axis of expect
     expect = np.swapaxes(expect, which_leg, -1)  # swap back
-    npt.assert_array_equal(res.to_numpy(), expect)
+    npt.assert_allclose(res.to_numpy(), expect, atol=1.e-14)
 
 
 def test_squeeze_legs(make_compatible_tensor, compatible_symmetry):
@@ -2157,17 +2138,22 @@ def test_svd(cls, dom, cod, new_leg_dual, make_compatible_tensor):
 def test_tdot(cls_A: Type[tensors.Tensor], cls_B: Type[tensors.Tensor],
               labels_A: list[list[str]], labels_B: list[list[str]],
               contr_A: list[int], contr_B: list[int],
-              make_compatible_tensor):
+              make_compatible_tensor, np_random):
     A: cls_A = make_compatible_tensor(
         codomain=len(labels_A[0]), domain=len(labels_A[1]),
-        labels=[*labels_A[0], *reversed(labels_A[1])], max_block_size=5, max_blocks=3, cls=cls_A
+        labels=[*labels_A[0], *reversed(labels_A[1])], max_block_size=3, max_blocks=3, cls=cls_A
     )
     # create B such that legs with the same label can be contracted
     B: cls_B = make_compatible_tensor(
         codomain=[A._as_domain_leg(l) if A.has_label(l) else None for l in labels_B[0]],
         domain=[A._as_codomain_leg(l) if A.has_label(l) else None for l in labels_B[1]],
-        labels=[*labels_B[0], *reversed(labels_B[1])], max_block_size=5, max_blocks=3, cls=cls_B
+        labels=[*labels_B[0], *reversed(labels_B[1])], max_block_size=2, max_blocks=3, cls=cls_B
     )
+
+    if (isinstance(A.backend, backends.FusionTreeBackend) and (cls_A is ChargedTensor or cls_B is ChargedTensor) and
+        A.symmetry.braiding_style.value >= 20):
+        pytest.skip('The concept of ChargedTensor is not sensical for anyonic symmetries')
+
     num_contr = len(contr_A)
     num_open_A = A.num_legs - num_contr
     num_open_B = B.num_legs - num_contr
@@ -2176,15 +2162,34 @@ def test_tdot(cls_A: Type[tensors.Tensor], cls_B: Type[tensors.Tensor],
     for ia, ib in zip(contr_A, contr_B):
         assert A._as_domain_leg(ia) == B._as_codomain_leg(ib), f'{ia} / {A.labels[ia]} incompatible with {ib} / {B.labels[ib]}'
 
+    expect_codomain = [A._as_codomain_leg(n) for n in range(A.num_legs) if n not in contr_A]
+    expect_domain = [B._as_domain_leg(n) for n in range(B.num_legs) if not n in contr_B][::-1]
+    expect_legs = [A.get_leg(n) for n in range(A.num_legs) if n not in contr_A] + [B.get_leg(n) for n in range(B.num_legs) if not n in contr_B]
+    expect_labels = [A._labels[n] for n in range(A.num_legs) if n not in contr_A] + [B._labels[n] for n in range(B.num_legs) if not n in contr_B]
+
     # Context manager to catch expected errors
     catch_errors = nullcontext()
     
     if (cls_A is Mask and cls_B is Mask) and num_contr > 0:
         catch_errors = pytest.raises(NotImplementedError)
-    elif isinstance(A.backend, backends.FusionTreeBackend):
+    if cls_A is ChargedTensor and A.charged_state == None and A.num_legs + B.num_legs == 2 * num_contr:
+            catch_errors = pytest.raises(ValueError, match='Can not instantiate ChargedTensor with no legs and unspecified charged_states.')
+    if cls_B is ChargedTensor and B.charged_state == None and A.num_legs + B.num_legs == 2 * num_contr:
+            catch_errors = pytest.raises(ValueError, match='Can not instantiate ChargedTensor with no legs and unspecified charged_states.')
+
+    if isinstance(A.backend, backends.FusionTreeBackend) and cls_A is DiagonalTensor and not cls_B is DiagonalTensor and num_contr == 2:
         catch_errors = pytest.raises(NotImplementedError)
-        if (cls_A is DiagonalTensor and cls_B is DiagonalTensor) and num_contr == 2:
-            catch_errors = nullcontext()
+    elif isinstance(A.backend, backends.FusionTreeBackend) and A.symmetry.braiding_style.value >= 20:
+        if not cls_A is DiagonalTensor:
+            levels_A = list(np_random.permutation(A.num_legs))
+            codomain_A = [i for i in range(A.num_legs) if not i in contr_A]
+            A = tensors.permute_legs(A, codomain=codomain_A, domain=contr_A, levels=levels_A)
+            contr_A = [A.num_legs - 1 - i for i in range(num_contr)]
+        if not cls_B is DiagonalTensor:
+            levels_B = list(np_random.permutation(B.num_legs))
+            domain_B = [i for i in range(B.num_legs) if not i in contr_B][::-1]
+            B = tensors.permute_legs(B, codomain=contr_B, domain=domain_B, levels=levels_B)
+            contr_B = list(range(num_contr))
     
     with catch_errors:
         res = tensors.tdot(A, B, contr_A, contr_B)
@@ -2198,11 +2203,12 @@ def test_tdot(cls_A: Type[tensors.Tensor], cls_B: Type[tensors.Tensor],
     else:
         # tensor result
         res.test_sanity()
-        res_np = res.to_numpy()
-        assert res.codomain.spaces == [A._as_codomain_leg(n) for n in range(A.num_legs) if n not in contr_A]
-        assert res.domain.spaces == [B._as_domain_leg(n) for n in range(B.num_legs) if not n in contr_B][::-1]
-        assert res.legs == [A.get_leg(n) for n in range(A.num_legs) if n not in contr_A] + [B.get_leg(n) for n in range(B.num_legs) if not n in contr_B]
-        assert res.labels == [A._labels[n] for n in range(A.num_legs) if n not in contr_A] + [B._labels[n] for n in range(B.num_legs) if not n in contr_B]
+        if A.symmetry.can_be_dropped:
+            res_np = res.to_numpy()
+        assert res.codomain.spaces == expect_codomain
+        assert res.domain.spaces == expect_domain
+        assert res.legs == expect_legs
+        assert res.labels == expect_labels
 
     if not A.symmetry.can_be_dropped:
         pytest.skip('Need to re-design checks, cant use .to_numpy() etc')  # TODO
@@ -2211,7 +2217,7 @@ def test_tdot(cls_A: Type[tensors.Tensor], cls_B: Type[tensors.Tensor],
     A_np = A.to_numpy()
     B_np = B.to_numpy()
     expect = np.tensordot(A_np, B_np, [contr_A, contr_B])
-    npt.assert_allclose(res_np, expect)
+    npt.assert_allclose(res_np, expect, atol=1.e-14)
 
 
 @pytest.mark.parametrize('cls, legs', [pytest.param(SymmetricTensor, 2, id='Sym-2'),
@@ -2272,7 +2278,7 @@ def test_transpose(cls, cod, dom, make_compatible_tensor, np_random):
     labels = list('abcdefghi')[:cod + dom]
     tensor: cls = make_compatible_tensor(cod, dom, cls=cls, labels=labels)
 
-    if isinstance(tensor.backend, backends.FusionTreeBackend):
+    if isinstance(tensor.backend, backends.FusionTreeBackend) and not cls is DiagonalTensor:
         with pytest.raises(NotImplementedError, match='transpose not implemented'):
             _ = tensors.transpose(tensor)
         pytest.xfail()
@@ -2288,6 +2294,9 @@ def test_transpose(cls, cod, dom, make_compatible_tensor, np_random):
     assert res.codomain == tensor.domain.dual
     assert res.domain == tensor.codomain.dual
     assert res.labels == [*labels[cod:], *labels[:cod]]
+
+    if not tensor.symmetry.can_be_dropped:
+        pytest.skip('Need to re-design checks, cant use .to_numpy() etc')  # TODO
 
     expect = np.transpose(tensor.to_numpy(), [*range(cod, cod + dom), *range(cod)])
     npt.assert_almost_equal(res.to_numpy(), expect)

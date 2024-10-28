@@ -75,10 +75,10 @@ class FusionTree:
         self.are_dual = np.asarray(are_dual)
         if len(inner_sectors) == 0:
             inner_sectors = symmetry.empty_sector_array
-        self.inner_sectors = np.asarray(inner_sectors)
-        if multiplicities is None:
-            multiplicities = np.zeros((num_vertices,), dtype=int)
-        self.multiplicities = np.asarray(multiplicities)
+        self.inner_sectors = np.asarray(inner_sectors, dtype=int)  # empty lists are by default converted
+        if multiplicities is None:                                 # to arrays with dtype=float, which leads
+            multiplicities = np.zeros((num_vertices,), dtype=int)  # to issues in __hash__
+        self.multiplicities = np.asarray(multiplicities, dtype=int)
         self.fusion_style = symmetry.fusion_style
         self.is_abelian = symmetry.is_abelian
         self.braiding_style = symmetry.braiding_style
@@ -125,7 +125,8 @@ class FusionTree:
         else:
             unique_identifier = (self.are_dual, self.coupled, self.uncoupled, self.inner_sectors, self.multiplicities)
 
-        return hash(unique_identifier)
+        unique_identifier = np.concatenate([a.flatten() for a in unique_identifier])
+        return hash(unique_identifier.tobytes())
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, FusionTree):
@@ -237,9 +238,9 @@ class FusionTree:
         """Return a shallow (or deep) copy."""
         if deep:
             return FusionTree(self.symmetry, self.uncoupled.copy(), self.coupled.copy(),
-                              self.are_dual.copy(), self.inner_sectors.copy())
+                              self.are_dual.copy(), self.inner_sectors.copy(), self.multiplicities.copy())
         return FusionTree(self.symmetry, self.uncoupled, self.coupled, self.are_dual,
-                          self.inner_sectors)
+                          self.inner_sectors, self.multiplicities)
 
     def insert(self, t2: FusionTree) -> FusionTree:
         """Insert a tree `t2` below the first uncoupled sector.

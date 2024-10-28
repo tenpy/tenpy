@@ -4716,7 +4716,7 @@ def tdot(tensor1: Tensor, tensor2: Tensor,
         if num_contr == 1:
             res = scale_axis(tensor1, tensor2, legs1[0])
             res.set_label(legs1[0], tensor2.labels[1 - legs2[0]])
-            return permute_legs(res, domain=legs2)
+            return permute_legs(res, domain=legs1)
         if num_contr == 2:
             res = scale_axis(tensor1, tensor2, legs1[0])
             res = partial_trace(res, legs1)
