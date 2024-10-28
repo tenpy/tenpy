@@ -1,4 +1,6 @@
 # Copyright (C) TeNPy Developers, GNU GPLv3
+import os.path
+
 import h5py
 import pytest
 import numpy as np
@@ -925,6 +927,8 @@ def test_su2_symmetry(np_random):
 @pytest.mark.parametrize('Ffile', ['Test_Fsymb_3_HWeight_4.hdf5'])
 @pytest.mark.parametrize('Rfile', ['Test_Rsymb_3_HWeight_4.hdf5'])
 def test_suN_symmetry(N,CGfile, Ffile, Rfile, np_random):
+    if not all([os.path.exists(f) for f in [CGfile, Ffile, Rfile]]):
+        pytest.skip('Need to provide files for SU(N) data!')
     def gen_irrepsTEST(N, k):
         '''generates a list of all possible irreps for given N and highest weight k'''
 
@@ -942,6 +946,7 @@ def test_suN_symmetry(N,CGfile, Ffile, Rfile, np_random):
     Ffile = h5py.File(Ffile, "r")
     Rfile = h5py.File(Rfile, "r")
     sym = symmetries.SUNSymmetry(N, CGfile, Ffile, Rfile)
+    sym_with_name = symmetries.SUNSymmetry(N, CGfile, Ffile, Rfile, "Some SU(N)")
     exsectors=np.array(gen_irrepsTEST(N,2))
     common_checks(sym, example_sectors=exsectors,
                   example_sectors_low_qdim=np.array([[0]*N, [1]+[0]*(N-1), [2]+[0]*(N-1)]), np_random=np_random)
@@ -958,40 +963,20 @@ def test_suN_symmetry(N,CGfile, Ffile, Rfile, np_random):
     print('checking valid sectors')
     for valid in gen_irrepsTEST(N,2):
         assert sym.is_valid_sector(np.array(valid))
-    for invalid in [[-1], [0, 0]]:
+    for invalid in [[-1], [-1, 0],[1, 2]]:
         assert not sym.is_valid_sector(np.array(invalid))
 
-    # print('checking fusion_outcomes')
-    # # 1 x 3/2 = 1/2 + 3/2 + 5/2
-    # assert_array_equal(
-    #     sym.fusion_outcomes(spin_1, spin_3_half),
-    #     np.array([[1], [3], [5]])
-    # )
-
-    # print('checking fusion_outcomes_broadcast')
-    # with pytest.raises(AssertionError):
-    #     # sym does not have FusionStyle.single, so this should raise
-    #     _ = sym.fusion_outcomes_broadcast(spin_1[None, :], spin_3_half[None, :])
 
     print('checking sector dimensions')
     assert sym.sector_dim([0]*N) == 1
-    #assert sym.sector_dim(spin_3_half) == 4
+
 
     print('checking equality')
     assert sym == sym
-    # assert sym != sym_with_name
-    # assert sym == symmetries.SU2Symmetry()
-    # assert sym != symmetries.fermion_parity
+    assert sym != sym_with_name
+    assert sym != symmetries.SU2Symmetry()
+    assert sym != symmetries.fermion_parity
 
-    # print('checking dual_sector')
-    # assert_array_equal(sym.dual_sector(spin_1), spin_1)
-    # assert_array_equal(sym.dual_sector(spin_3_half), spin_3_half)
-
-    # print('checking dual_sectors')
-    # assert_array_equal(
-    #     sym.dual_sectors(np.stack([spin_1, spin_3_half])),
-    #     np.stack([spin_1, spin_3_half])
-    # )
 
 
 def test_fermion_parity(np_random):
@@ -1347,4 +1332,4 @@ def test_SU2_kAnyonCategory(k, handedness, np_random):
 
 
 #test_suN_symmetry(3,'/space/ge36xeh/TenpyV2a/Test_N_3_HWeight_7.hdf5', '/space/ge36xeh/TenpyV2a/Test_Fsymb_3_HWeight_3.hdf5', '/space/ge36xeh/TenpyV2a/Test_Rsymb_3_HWeight_4.hdf5', default_rng)
-test_suN_symmetry(2,'/space/ge36xeh/TenpyV2a/Test_N_2_HWeight_20.hdf5', '/space/ge36xeh/TenpyV2a/Test_Fsymb_2_HWeight_4.hdf5', '/space/ge36xeh/TenpyV2a/Test_Rsymb_2_HWeight_9.hdf5', default_rng)
+#test_suN_symmetry(2,'/space/ge36xeh/TenpyV2a/Test_N_2_HWeight_20.hdf5', '/space/ge36xeh/TenpyV2a/Test_Fsymb_2_HWeight_6.hdf5', '/space/ge36xeh/TenpyV2a/Test_Rsymb_2_HWeight_6.hdf5', default_rng)

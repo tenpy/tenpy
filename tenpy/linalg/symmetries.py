@@ -1351,7 +1351,7 @@ class SUNSymmetry(GroupSymmetry):
 
     fusion_tensor_dtype = Dtype.float64
 
-    def __init__(self, N:int, CGfile, Ffile, Rfile):
+    def __init__(self, N:int, CGfile, Ffile, Rfile, descriptive_name: str | None = None):
 
         assert isinstance(N, int)
         if not isinstance(N, int) and N > 1:
@@ -1370,21 +1370,29 @@ class SUNSymmetry(GroupSymmetry):
                                trivial_sector = np.array([0]*N, dtype=int),
                                group_name = f'SU({N})',
                                num_sectors = np.inf,
-                               descriptive_name = None)
+                               descriptive_name = descriptive_name)
 
     def is_valid_sector(self, a: Sector) -> bool:
         l = (type(a) == np.ndarray)
         if not l:
             return False
 
+        for i in a: #check for negative entries
+            if i<0:
+                return False
+
+        for n in range(len(a)-1): #check that numbers in GT sequence are non increasing
+            if a[n+1]>a[n]:
+                return False
+
         m = (len(a) == self.N)
         n = (a[-1] == 0)
         return m and n
 
     def is_same_symmetry(self, other) -> bool:
-
-        # return isinstance(other, SUNSymmetry())
-        return False
+        if not isinstance(other, SUNSymmetry):
+            return False
+        return self.N == other.N
 
 
     def sector_dim(self, a: Sector) -> int:
@@ -1703,7 +1711,7 @@ class SUNSymmetry(GroupSymmetry):
                         rr = self.clebschgordan(a, m_a, b, m_b, c, m_c, mu)
                         X[m_a - 1, m_b - 1, m_c - 1, mu - 1] = rr
 
-        return X.transpose(3,0,1,2)
+        return X.transpose([3,0,1,2])
 
     def _f_symbol_from_CG(self,a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector):
         """a,b,c,d,e,f are irrep labels, i.e. first rows of GT patterns
@@ -1757,8 +1765,8 @@ class SUNSymmetry(GroupSymmetry):
         ebar = self.dual_sector(e)
         fbar = self.dual_sector(f)
 
-        key = str(list(a)) + str(list(b)) + str(list(c)) + str(list(d)) + str(list(e)) + str(list(f))
-        keybar = str(list(abar)) + str(list(bbar)) + str(list(cbar)) + str(list(dbar)) + str(list(ebar)) + str(list(fbar))
+        key = 'F' + str(list(a)) + str(list(b)) + str(list(c)) + str(list(d)) + str(list(e)) + str(list(f))
+        keybar = 'F' + str(list(abar)) + str(list(bbar)) + str(list(cbar)) + str(list(dbar)) + str(list(ebar)) + str(list(fbar))
 
         if key in self.Ffile['/F_sym/']:
             return np.array(self.Ffile['/F_sym/'][key])
@@ -1802,7 +1810,7 @@ class SUNSymmetry(GroupSymmetry):
         if a[0] > hmax or b[0] > hmax or c[0] > hmax:
             raise ValueError('Input irreps have higher weight than highest weight irrep in HDF5-file')
 
-        key = 'F' + str(a) + str(b) + str(c)
+        key = 'R' + str(list(a)) + str(list(b)) + str(list(c))
 
         if key in self.Rfile['/R_sym/']:
             return np.array(self.Rfile['/R_sym/'][key])
