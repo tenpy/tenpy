@@ -101,17 +101,17 @@ class MolecularModel(CouplingMPOModel):
                     for s in range(norb):
                         h2 = two_body_tensor[q, p, s, r]
                         if p == q == r == s:
-                            self.add_onsite(h2 / 2, p, "Nu")
-                            self.add_onsite(-h2 / 2, p, "Nu Nu")
-                            self.add_onsite(h2 / 2, p, "Nu")
-                            self.add_onsite(-h2 / 2, p, "Cdu Cd Cdd Cu")
-                            self.add_onsite(h2 / 2, p, "Nd")
-                            self.add_onsite(-h2 / 2, p, "Cdd Cu Cdu Cd")
-                            self.add_onsite(h2 / 2, p, "Nd")
-                            self.add_onsite(-h2 / 2, p, "Nd Nd")
+                            self.add_onsite(0.5 * h2, p, "Nu")
+                            self.add_onsite(-0.5 * h2, p, "Nu Nu")
+                            self.add_onsite(0.5 * h2, p, "Nu")
+                            self.add_onsite(-0.5 * h2, p, "Cdu Cd Cdd Cu")
+                            self.add_onsite(0.5 * h2, p, "Nd")
+                            self.add_onsite(-0.5 * h2, p, "Cdd Cu Cdu Cd")
+                            self.add_onsite(0.5 * h2, p, "Nd")
+                            self.add_onsite(-0.5 * h2, p, "Nd Nd")
                         else:
                             self.add_multi_coupling(
-                                h2 / 2,
+                                0.5 * h2,
                                 [
                                     ("Cdu", dx0, p),
                                     ("Cdu", dx0, r),
@@ -120,7 +120,7 @@ class MolecularModel(CouplingMPOModel):
                                 ],
                             )
                             self.add_multi_coupling(
-                                h2 / 2,
+                                0.5 * h2,
                                 [
                                     ("Cdu", dx0, p),
                                     ("Cdd", dx0, r),
@@ -129,7 +129,7 @@ class MolecularModel(CouplingMPOModel):
                                 ],
                             )
                             self.add_multi_coupling(
-                                h2 / 2,
+                                0.5 * h2,
                                 [
                                     ("Cdd", dx0, p),
                                     ("Cdu", dx0, r),
@@ -138,7 +138,7 @@ class MolecularModel(CouplingMPOModel):
                                 ],
                             )
                             self.add_multi_coupling(
-                                h2 / 2,
+                                0.5 * h2,
                                 [
                                     ("Cdd", dx0, p),
                                     ("Cdd", dx0, r),
