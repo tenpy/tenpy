@@ -1,6 +1,7 @@
 """Molecular models."""
 # Copyright (C) TeNPy Developers, Apache license
 
+import itertools
 import numpy as np
 
 from .model import CouplingMPOModel
@@ -86,63 +87,61 @@ class MolecularModel(CouplingMPOModel):
         two_body_tensor = params.get("two_body_tensor", np.zeros((norb, norb, norb, norb)))
         constant = params.get("constant", 0)
 
-        for p in range(norb):
-            for q in range(norb):
-                h1 = one_body_tensor[q, p]
-                if p == q:
-                    self.add_onsite(h1, p, "Nu")
-                    self.add_onsite(h1, p, "Nd")
-                    self.add_onsite(constant / norb, p, "Id")
-                else:
-                    self.add_coupling(h1, p, "Cdu", q, "Cu", dx0)
-                    self.add_coupling(h1, p, "Cdd", q, "Cd", dx0)
+        for p, q in itertools.product(range(norb), repeat=2):
+            h1 = one_body_tensor[q, p]
+            if p == q:
+                self.add_onsite(h1, p, "Nu")
+                self.add_onsite(h1, p, "Nd")
+                self.add_onsite(constant / norb, p, "Id")
+            else:
+                self.add_coupling(h1, p, "Cdu", q, "Cu", dx0)
+                self.add_coupling(h1, p, "Cdd", q, "Cd", dx0)
 
-                for r in range(norb):
-                    for s in range(norb):
-                        h2 = two_body_tensor[q, p, s, r]
-                        if p == q == r == s:
-                            self.add_onsite(0.5 * h2, p, "Nu")
-                            self.add_onsite(-0.5 * h2, p, "Nu Nu")
-                            self.add_onsite(0.5 * h2, p, "Nu")
-                            self.add_onsite(-0.5 * h2, p, "Cdu Cd Cdd Cu")
-                            self.add_onsite(0.5 * h2, p, "Nd")
-                            self.add_onsite(-0.5 * h2, p, "Cdd Cu Cdu Cd")
-                            self.add_onsite(0.5 * h2, p, "Nd")
-                            self.add_onsite(-0.5 * h2, p, "Nd Nd")
-                        else:
-                            self.add_multi_coupling(
-                                0.5 * h2,
-                                [
-                                    ("Cdu", dx0, p),
-                                    ("Cdu", dx0, r),
-                                    ("Cu", dx0, s),
-                                    ("Cu", dx0, q),
-                                ],
-                            )
-                            self.add_multi_coupling(
-                                0.5 * h2,
-                                [
-                                    ("Cdu", dx0, p),
-                                    ("Cdd", dx0, r),
-                                    ("Cd", dx0, s),
-                                    ("Cu", dx0, q),
-                                ],
-                            )
-                            self.add_multi_coupling(
-                                0.5 * h2,
-                                [
-                                    ("Cdd", dx0, p),
-                                    ("Cdu", dx0, r),
-                                    ("Cu", dx0, s),
-                                    ("Cd", dx0, q),
-                                ],
-                            )
-                            self.add_multi_coupling(
-                                0.5 * h2,
-                                [
-                                    ("Cdd", dx0, p),
-                                    ("Cdd", dx0, r),
-                                    ("Cd", dx0, s),
-                                    ("Cd", dx0, q),
-                                ],
-                            )
+            for r, s in itertools.product(range(norb), repeat=2):
+                h2 = two_body_tensor[q, p, s, r]
+                if p == q == r == s:
+                    self.add_onsite(0.5 * h2, p, "Nu")
+                    self.add_onsite(-0.5 * h2, p, "Nu Nu")
+                    self.add_onsite(0.5 * h2, p, "Nu")
+                    self.add_onsite(-0.5 * h2, p, "Cdu Cd Cdd Cu")
+                    self.add_onsite(0.5 * h2, p, "Nd")
+                    self.add_onsite(-0.5 * h2, p, "Cdd Cu Cdu Cd")
+                    self.add_onsite(0.5 * h2, p, "Nd")
+                    self.add_onsite(-0.5 * h2, p, "Nd Nd")
+                else:
+                    self.add_multi_coupling(
+                        0.5 * h2,
+                        [
+                            ("Cdu", dx0, p),
+                            ("Cdu", dx0, r),
+                            ("Cu", dx0, s),
+                            ("Cu", dx0, q),
+                        ],
+                    )
+                    self.add_multi_coupling(
+                        0.5 * h2,
+                        [
+                            ("Cdu", dx0, p),
+                            ("Cdd", dx0, r),
+                            ("Cd", dx0, s),
+                            ("Cu", dx0, q),
+                        ],
+                    )
+                    self.add_multi_coupling(
+                        0.5 * h2,
+                        [
+                            ("Cdd", dx0, p),
+                            ("Cdu", dx0, r),
+                            ("Cu", dx0, s),
+                            ("Cd", dx0, q),
+                        ],
+                    )
+                    self.add_multi_coupling(
+                        0.5 * h2,
+                        [
+                            ("Cdd", dx0, p),
+                            ("Cdd", dx0, r),
+                            ("Cd", dx0, s),
+                            ("Cd", dx0, q),
+                        ],
+                    )
