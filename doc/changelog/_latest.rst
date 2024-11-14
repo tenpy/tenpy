@@ -7,3 +7,7 @@ The contents are auto-generated from multiple files.
 
     Contents are modified by ``stitch_changelog_latest`` in ``doc/conf.py``
     Any ``.txt`` file in ``doc/changelog/latest/`` is included verbatim.
+
+
+- Add the :class:`~tenpy.models.molecular.MolecularModel` class for quantum chemistry applications.
+
