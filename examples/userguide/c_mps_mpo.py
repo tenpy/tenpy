@@ -11,7 +11,7 @@ sites = [spin] * N  # repeat entry of list N times
 pstate = ["up", "down"] * (N // 2)  # Neel state
 psi = MPS.from_product_state(sites, pstate, bc="finite")
 print("<Sz> =", psi.expectation_value("Sz"))
-# <Sz> = [ 0.5 -0.5  0.5 -0.5. 0.5 -0.5]
+# <Sz> = [ 0.5 -0.5  0.5 -0.5  0.5 -0.5]
 print("<Sp_i Sm_j> =", psi.correlation_function("Sp", "Sm"), sep="\n")
 # <Sp_i Sm_j> =
 # [[1. 0. 0. 0. 0. 0.]
