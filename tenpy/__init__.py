@@ -58,6 +58,7 @@ from .models.clock import ClockModel, ClockChain
 from .models.hubbard import (BoseHubbardModel, BoseHubbardChain, FermiHubbardModel,
                              FermiHubbardChain, FermiHubbardModel2)
 from .models.haldane import BosonicHaldaneModel, FermionicHaldaneModel
+from .models.molecular import MolecularModel
 from .models.toric_code import ToricCode
 from .models.aklt import AKLTChain
 from .models.mixed_xk import (MixedXKLattice, MixedXKModel, SpinlessMixedXKSquare,
