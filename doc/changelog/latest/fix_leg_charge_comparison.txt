@@ -1,0 +1,1 @@
+- Fixed a bug in the comparison of :class:`~tenpy.linalg.charges.LegCharge`s, see :issue:`470`.

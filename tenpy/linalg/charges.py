@@ -849,10 +849,12 @@ class LegCharge:
         if self.charges is other.charges and self.qconj == other.qconj and \
                 (self.slices is other.slices or np.all(self.slices == other.slices)):
             return True  # optimize: don't need to check all charges explicitly
-        if not np.array_equal(self.slices, other.slices) or \
-                not np.array_equal(self.charges * self.qconj, other.charges * other.qconj):
+        if not np.array_equal(self.slices, other.slices):
             return False
-        return True
+        return np.array_equal(
+            self.chinfo.make_valid(self.charges * self.qconj),
+            self.chinfo.make_valid(other.charges * other.qconj)
+        )
 
     def __ne__(self, other):
         r"""Define `self != other` as `not (self == other)`"""
