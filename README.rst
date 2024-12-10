@@ -72,7 +72,9 @@ When you use TeNPy for a work published in an academic journal, you can cite `th
 (The license of TeNPy does not force you, however.)
 For example, you could add the sentence ``"Calculations were performed using the TeNPy Library (version X.X.X)\cite{tenpy2024}."`` in the acknowledgements or in the main text.
 
-The corresponding BibTex Entry would be the following (the ``\url{...}`` requires ``\usepackage{hyperref}`` in the LaTeX preamble.)::
+The corresponding BibTex Entry would be the following (the ``\url{...}`` requires ``\usepackage{hyperref}`` in the LaTeX preamble.)
+
+.. code-block:: text
 
     @Article{tenpy2024,
         title={{Tensor network Python (TeNPy) version 1}},
