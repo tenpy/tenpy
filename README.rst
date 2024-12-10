@@ -68,24 +68,23 @@ If you are not sure whether your problem is a bug or a feature, you can also ask
 
 Citing TeNPy
 ------------
-When you use TeNPy for a work published in an academic journal, you can cite `this paper <https://dx.doi.org/10.21468/SciPostPhysLectNotes.5>`_  to acknowledge the work put into the development of TeNPy.
+When you use TeNPy for a work published in an academic journal, you can cite `this paper <https://dx.doi.org/10.21468/SciPostPhysCodeb.41>`_  to acknowledge the work put into the development of TeNPy.
 (The license of TeNPy does not force you, however.)
-For example, you could add the sentence ``"Calculations were performed using the TeNPy Library (version X.X.X)\cite{tenpy}."`` in the acknowledgements or in the main text.
+For example, you could add the sentence ``"Calculations were performed using the TeNPy Library (version X.X.X)\cite{tenpy2024}."`` in the acknowledgements or in the main text.
 
-The corresponding BibTex Entry would be the following (the ``\url{...}`` requires ``\usepackage{hyperref}`` in the LaTeX preamble.)::
+The corresponding BibTex Entry would be the following
 
-    @Article{tenpy,
-        title={{Efficient numerical simulations with Tensor Networks: Tensor Network Python (TeNPy)}},
-        author={Johannes Hauschild and Frank Pollmann},
-        journal={SciPost Phys. Lect. Notes},
-        pages={5},
-        year={2018},
+.. code-block:: text
+
+    @Article{tenpy2024,
+        title={{Tensor network Python (TeNPy) version 1}},
+        author={Johannes Hauschild and Jakob Unfried and Sajant Anand and Bartholomew Andrews and Marcus Bintz and Umberto Borla and Stefan Divic and Markus Drescher and Jan Geiger and Martin Hefel and Kévin Hémery and Wilhelm Kadow and Jack Kemp and Nico Kirchner and Vincent S. Liu and Gunnar Möller and Daniel Parker and Michael Rader and Anton Romen and Samuel Scalet and Leon Schoonderwoerd and Maximilian Schulz and Tomohiro Soejima and Philipp Thoma and Yantao Wu and Philip Zechmann and Ludwig Zweng and Roger S. K. Mong and Michael P. Zaletel and Frank Pollmann},
+        journal={SciPost Phys. Codebases},
+        pages={41},
+        year={2024},
         publisher={SciPost},
-        doi={10.21468/SciPostPhysLectNotes.5},
-        url={https://scipost.org/10.21468/SciPostPhysLectNotes.5},
-        archiveprefix={arXiv},
-        eprint={1805.00055},
-        note={Code available from \url{https://github.com/tenpy/tenpy}},
+        doi={10.21468/SciPostPhysCodeb.41},
+        url={https://scipost.org/10.21468/SciPostPhysCodeb.41},
     }
 
 To keep us motivated, you can also include your work into the list of `papers using TeNPy <https://tenpy.readthedocs.io/en/latest/papers_using_tenpy.html>`_.
