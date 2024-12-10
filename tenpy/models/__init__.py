@@ -29,6 +29,7 @@ All other modules in this folder contain model classes derived from these base c
     aklt
     hofstadter
     haldane
+    molecular
     toric_code
     mixed_xk
     clock
@@ -37,7 +38,7 @@ All other modules in this folder contain model classes derived from these base c
 
 from . import lattice, model
 from . import tf_ising, xxz_chain, spins, spins_nnn
-from . import fermions_spinless, hubbard, tj_model, hofstadter, haldane
+from . import fermions_spinless, hubbard, tj_model, hofstadter, haldane, molecular
 from . import toric_code, aklt, mixed_xk, clock
 from .lattice import *
 from .model import *
@@ -50,6 +51,7 @@ from .hubbard import *
 from .tj_model import *
 from .hofstadter import *
 from .haldane import *
+from .molecular import *
 from .toric_code import *
 from .aklt import *
 from .mixed_xk import *
@@ -57,7 +59,8 @@ from .clock import *
 
 __all__ = [
     'lattice', 'model', 'tf_ising', 'xxz_chain', 'spins', 'spins_nnn', 'fermions_spinless',
-    'hubbard', 'tj_model', 'hofstadter', 'haldane', 'toric_code', 'aklt', 'mixed_xk', 'clock',
+    'hubbard', 'tj_model', 'hofstadter', 'haldane', 'molecular', 'toric_code', 'aklt',
+    'mixed_xk', 'clock',
     *lattice.__all__,
     *model.__all__,
     *tf_ising.__all__,
@@ -69,6 +72,7 @@ __all__ = [
     *tj_model.__all__,
     *hofstadter.__all__,
     *haldane.__all__,
+    *molecular.__all__,
     *toric_code.__all__,
     *aklt.__all__,
     *mixed_xk.__all__,
