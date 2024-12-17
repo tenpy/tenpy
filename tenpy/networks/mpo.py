@@ -1049,8 +1049,8 @@ class MPO:
                 continue
             partial_L[self.get_IdL(i)] = [([], 1.)]
             if self.finite:
-                max_range = min(max_range, L - i)
-            for k in range(max_range):
+                max_range = min(max_range, L - i - 1)
+            for k in range(max_range + 1):
                 j = i + k
                 IdL = self.get_IdL(j)
                 IdR = self.get_IdR(j)
