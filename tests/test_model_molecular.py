@@ -61,7 +61,6 @@ def test_MolecularModel(cons_N, cons_Sz, norb):
         {
             'cons_N': cons_N,
             'cons_Sz': cons_Sz,
-            'norb': norb,
             'one_body_tensor': one_body_tensor,
             'two_body_tensor': two_body_tensor,
             'constant': constant
