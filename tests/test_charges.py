@@ -150,3 +150,9 @@ def test__sliced_copy():
     npt.assert_equal(y[1:5, 0:3, 4:6], z)
     charges._sliced_copy(y, y_beg, y_cpy, y_beg, shape)
     npt.assert_equal(y, y_cpy)
+
+
+def test_fixes_issue_470():
+    z2 = charges.ChargeInfo([2])
+    leg = charges.LegCharge(z2, [0,1,2], [[0],[1]])
+    leg.test_equal(leg.conj())

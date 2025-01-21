@@ -2,11 +2,13 @@
 # Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
+import pytest
 import copy
 
 from tenpy.networks.terms import *
 from tenpy.networks import site
 from tenpy.networks import mpo
+from tenpy.models.spins_nnn import SpinChainNNN2
 
 spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=True)
 fermion = site.FermionSite(conserve='N')
@@ -339,3 +341,22 @@ def test_exp_decaying_terms():
     H2 = G.build_MPO()
     H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='infinite').build_MPO()
     assert H1.is_equal(H2, cutoff)
+
+
+@pytest.mark.parametrize('bc', ['finite', 'infinite'])
+def test_mpo_to_term_list(bc):
+    # Addresses PR 477 / 479
+    L = 6
+    model = SpinChainNNN2(dict(bc_MPS=bc, Jx=0, Jy=0, Jz=1, Jxp=0, Jyp=0, Jzp=1, L=6, S=.5))
+    ts = model.H_MPO.to_TermList(['Id', 'Sp', 'Sm', 'Sz'])
+    ts_expected = [[('Sz', i), ('Sz', i + 1)] for i in range(L - 1)]
+    ts_expected += [[('Sz', i), ('Sz', i + 2)] for i in range(L - 2)]
+    if bc == 'infinite':
+        ts_expected += [[('Sz', L - 1), ('Sz', L)]]
+        ts_expected += [[('Sz', L - 2), ('Sz', L)], [('Sz', L - 1), ('Sz', L + 1)]]
+    # do not have correct order
+    print(sorted(ts_expected))
+    print()
+    print(sorted(ts.terms))
+    assert len(ts.terms) == len(ts_expected)
+    assert sorted(ts.terms) == sorted(ts_expected)

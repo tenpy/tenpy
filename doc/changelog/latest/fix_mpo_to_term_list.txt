@@ -1,0 +1,2 @@
+- Fixed a bug in :meth:`tenpy.networks.mpo.MPO.to_TermList`. A one-off error when handling
+  the ``max_range`` parameter caused some long range terms to be missing.
