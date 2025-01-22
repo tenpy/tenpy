@@ -1,9 +1,10 @@
 """Molecular models."""
 # Copyright (C) TeNPy Developers, Apache license
 
+from __future__ import annotations
+
 import itertools
 import numpy as np
-from typing import Any
 
 from .model import CouplingMPOModel
 from .lattice import Lattice
@@ -56,7 +57,7 @@ class MolecularModel(CouplingMPOModel):
             Constant.
     """
 
-    def __init__(self, params: dict[str, Any]):
+    def __init__(self, params: dict):
         if "one_body_tensor" in params and isinstance(params["one_body_tensor"], np.ndarray):
             self.one_body_tensor = params["one_body_tensor"]
         else:
