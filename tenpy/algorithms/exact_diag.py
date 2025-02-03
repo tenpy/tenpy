@@ -149,7 +149,7 @@ class ExactDiag:
         return cls(M, *args, **kwargs)
 
     def build_full_H_from_mpo(self):
-        """Calculate self.full_H from self.mpo."""
+        """Calculate self.full_H from the MPO (``H_MPO``) of the model."""
         if self._exceeds_max_size():
             return
         mpo = self.model.H_MPO
@@ -169,7 +169,7 @@ class ExactDiag:
         self._set_full_H(full_H)
 
     def build_full_H_from_bonds(self):
-        """Calculate self.full_H from self.mpo."""
+        """Calculate self.full_H from bond terms (``H_bond``) of the model."""
         if self._exceeds_max_size():
             return
         sites = self.model.lat.mps_sites()
