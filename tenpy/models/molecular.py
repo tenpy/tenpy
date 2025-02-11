@@ -56,7 +56,7 @@ class MolecularModel(CouplingMPOModel):
             Constant.
     """
 
-    def __init__(self, params: dict):
+    def __init__(self, params: dict) -> None:
         if "one_body_tensor" in params and isinstance(params["one_body_tensor"], np.ndarray):
             self.one_body_tensor = params["one_body_tensor"]
         else:
