@@ -3,10 +3,12 @@
 
 import itertools
 import numpy as np
+from typing import Any
 
 from .model import CouplingMPOModel
 from .lattice import Lattice
 from ..networks.site import SpinHalfFermionSite
+from ..tools.params import Config
 
 __all__ = ['MolecularModel']
 
@@ -55,7 +57,7 @@ class MolecularModel(CouplingMPOModel):
             Constant.
     """
 
-    def __init__(self, params):
+    def __init__(self, params: dict[str, Any]):
         if "one_body_tensor" in params and isinstance(params["one_body_tensor"], np.ndarray):
             self.one_body_tensor = params["one_body_tensor"]
         else:
@@ -63,13 +65,13 @@ class MolecularModel(CouplingMPOModel):
         self.norb = self.one_body_tensor.shape[0]
         CouplingMPOModel.__init__(self, params)
 
-    def init_sites(self, params) -> SpinHalfFermionSite:
+    def init_sites(self, params: Config) -> SpinHalfFermionSite:
         """Initialize sites."""
         cons_N = params.get("cons_N", "N")
         cons_Sz = params.get("cons_Sz", "Sz")
         return SpinHalfFermionSite(cons_N=cons_N, cons_Sz=cons_Sz)
 
-    def init_lattice(self, params) -> Lattice:
+    def init_lattice(self, params: Config) -> Lattice:
         """Initialize lattice."""
         site = self.init_sites(params)
         basis = np.array(([self.norb, 0], [0, 1]))
@@ -82,7 +84,7 @@ class MolecularModel(CouplingMPOModel):
         )
         return lat
 
-    def init_terms(self, params) -> None:
+    def init_terms(self, params: Config) -> None:
         """Initialize terms."""
         params.touch("one_body_tensor")  # suppress unused key warning
         two_body_tensor = params.get(
