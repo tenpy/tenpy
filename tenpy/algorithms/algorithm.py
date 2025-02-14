@@ -92,8 +92,9 @@ class Algorithm:
             N_sites_per_ring = model.lat.N_sites_per_ring
         except AttributeError:  # for e.g. VariationalApplyMPO, model is just the MPO and has no lat
             N_sites_per_ring = 1
-        consistency_check(N_sites_per_ring, self.options, 'max_N_sites_per_ring', 18,
-                          'Maximum number of sites per ring (``max_N_sites_per_ring``) exceeded.')
+        if N_sites_per_ring is not None:
+            consistency_check(N_sites_per_ring, self.options, 'max_N_sites_per_ring', 18,
+                            'Maximum number of sites per ring (``max_N_sites_per_ring``) exceeded.')
 
     @classmethod
     def switch_engine(cls, other_engine, *, options=None, **kwargs):
