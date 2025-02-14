@@ -975,7 +975,21 @@ def consistency_check(value, options, threshold_key, threshold_default, msg, com
         threshold = threshold_default
     compare_func = {'<=': operator.le, '<': operator.lt, '>': operator.gt, '>=': operator.ge,
                     '!=': operator.ne, '==': operator.eq}.get(compare, compare)
-    if not compare_func(value, threshold):
+
+    try:
+        check_passed = compare_func(value, threshold)
+    except Exception as e:
+        msg = (f'During the consistency check for ``{threshold_key}``, performing the check '
+               f'caused a {type(e).__name__}. This is likely due to a bug. Please report it on '
+               f'github.com/tenpy/tenpy. ')
+        if warn_instead:
+            warnings.warn(msg, category=UserWarning, stacklevel=2)
+        else:
+            msg = msg + (f'As a workaround, try setting  ``{threshold_key}=None`` '
+                         f'in the {options.name} options.')
+            raise RuntimeError(msg) from e
+
+    if not check_passed:
         if warn_instead:
             warnings.warn(msg, category=TenpyInconsistencyWarning, stacklevel=2)
         else:
