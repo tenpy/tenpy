@@ -45,16 +45,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
-from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator
+from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator, ShiftNpcLinearOperator
 from .site import group_sites
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
-from .mps import BaseEnvironment
+from .mps import BaseEnvironment, TransferMatrix
 from .terms import TermList
 from ..tools.misc import to_iterable, add_with_None_0
 from ..tools.math import lcm
 from ..tools.params import asConfig
 from ..algorithms.truncation import TruncationError, svd_theta
+from ..linalg.krylov_based import GMRES
 
 __all__ = [
     'MPO', 'make_W_II', 'MPOGraph', 'MPOEnvironment', 'MPOTransferMatrix', 'grid_insert_ops'
@@ -1568,6 +1569,8 @@ class MPO:
         ----------
         nonzero_entries : list of int
             unpermuted indices of diagonal elements with norm>tol
+        ones : list of int
+            unpermuted indices of diagonal elements with norm=1.
         norms : list of float
             norm of the corresponding diagonal entries
         """
@@ -1578,6 +1581,7 @@ class MPO:
         if self._has_permutations:
             if not np.allclose(self._charge_permutations[0],self._charge_permutations[self.L]):
                 raise ValueError("Permutations on boundary virtual legs are incompatible")
+        ones = []
         nonzero_entries = []
         norms = []
         for i in range(self.L):
@@ -1586,20 +1590,23 @@ class MPO:
             norm = 1.
             for site in range(self.L):
                 Wjj = self.get_W(site)[self._perm_index(site, (j,j))]
-                # if Wjj is of the form factor*id, factor>0 this works
                 factor = npc.norm(Wjj, ord=1)/Wjj.shape[0] 
+                assert factor<1+tol, "Operator norm larger than one up to tol={2} on diagonal entry at index {0} of W[{1}]?".format(j, site, tol)
                 if factor<tol:
                     norm=0.
                     break # norm close to zero => norm of total entry close to zero
-                # check that Wjj == factor*id
+                # check that Wjj == factor*id with factor>0
                 is_id = npc.norm(Wjj-factor*npc.diag(1., Wjj.get_leg("p")), ord=1)<tol
                 if not is_id:
                     raise ValueError("Diagonal entry at index {0} of W[{1}] not close to identity up to tol={2}".format(j, site, tol))
                 norm *= factor
             if norm>tol:
                 nonzero_entries.append(j)
+                if norm>1-tol:
+                    norm = 1.
+                    ones.append(j)
                 norms.append(norm)
-        return nonzero_entries, norms
+        return nonzero_entries, ones, norms
           
 
 def make_W_II(t, A, B, C, D):
@@ -2518,6 +2525,95 @@ class MPOEnvironment(BaseEnvironment):
         if i >= self.L or i < 0:
             raise KeyError("i = {0:d} out of bounds for finite MPS".format(i))
         return i
+    
+    def _compute_LP_RP_iterative(self, which="both"):
+        """ Empty for now """
+        assert which=='LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
+
+        nonzeros, ones, norms = self.H._norm_diagonal_entries()
+        n_diags = len(nonzeros) # number of nonzero diagonal entries
+        leglabels = {"LP": ([self.H.get_W(0).get_leg('wL').conj()], self.ket.get_B(0).get_leg('vL').conj(),
+                            self.ket.get_B(0).get_leg('vL'), ['wR','vR','vR*']),
+                     "RP": ([self.H.get_W(self.L-1).get_leg('wR').conj(), self.ket.get_B(self.L-1).get_leg('vR').conj(),
+                             self.ket.get_B(self.L-1).get_leg('vR')], ['wL','vL','vL*'])}
+        envs = {}
+        epsilons = {}
+
+        for name in ["LP","RP"] if which=="both" else [which]:
+            envs[name] = [npc.Array(leglabels[name][0], dtype=self.dtype, labels=leglabels[1]) for _ in range(n_diags)],
+            epsilons[name] = [1.]*n_diags
+            # first nonzero diagonal entry
+            if name=="LP":
+                i0_perm = self._perm_index(0,(ones[0],0))[0]
+            else:
+                i0_perm = self._perm_index(self.L-1,(0,ones[-1]))[1]
+            envs[name][0][i0_perm] = self._cj_rho(name, leglabels[name])[0]
+            # iteration
+            m = 0
+            if name=="LP":
+                for j in range(ones[0],self.H.chi):
+                    if j in ones:
+                        compute next max
+                        m += 1
+                    for gamma in range(m-1,-1,-1):
+                        compute ctot
+                        if j in nonzeros:
+                            gmres
+                        else:
+                            put
+            else:
+                same as above for RP
+
+
+                
+        pass
+    
+    def _calc_Ctot(self, j, gamma, name, envs, stored, leglabels):
+        inds = self.H._charge_permutations[0][:j] if name=="LP" else self.H._charge_permutations[self.L][j+1:]
+        --- fix charge_permutations
+        for i in inds:
+            if (i_perm, gamma) not in stored[name]:
+                env0 = npc.Array(leglabels[name][0], dtype=self.dtype, labels=leglabels[name][1])
+                env0[:,i_perm,:] = envs[name][gamma][i_perm]
+                if name=="LP":
+                    for j in range(self.L):
+                        env0 = self._contract_LP(j, env0)
+                else:
+                    for j in range(self.L-1,-1,-1):
+                        env0 = self._contract_RP(j, env0)
+                stored[name][(i_perm, gamma)] = env0
+        j_perm = self.H._charge_permutations[0 if name=="LP" else self.L][j]
+        res = stored[name][(inds[0], gamma)][:,j_perm,:]
+        for i_perm in inds[1:]:
+            res += stored[name][(i_perm, gamma)][:,j_perm,:]
+        return res
+            
+    def _cj_rho(self, name, leglabels):
+        """ auxiliary function for _compute_LP_RP_iterative: returns cj, rho where cj=id rho=SVs**2 """
+        cj = npc.diag(1., leglabels[0][1:], dtype=self.dtype, labels=leglabels[1][1:])
+        SVs = self.ket.get_SR(self.L-1)**2 if name=='LP' else self.ket.get_SL(0)**2
+        rho_labels = ['vL*','vL'] if name == 'LP' else ['vR*','vR']
+        rho = npc.diag(SVs, leglabels[0][1:].conj(), labels=rho_labels)
+        return cj, rho 
+    
+    def _solve_cj(self, j, name, b):
+        form, transpose = 'A', True if name=='LP' else 'B', False
+        bra_N = [self.ket.get_B(i, form=form) for i in range(self.L)]
+        ket_M = [npc.tensordot(self.ket.get_B(i, form=form), self.H.get_W(i)[self.H._perm_index(i, (j,j))],
+                               axes=[self.ket._p_label,self.ket._get_p_label('*')]) for i in range(self.L)]
+        TWjj = TransferMatrix.from_Ns_Ms(bra_N, ket_M, transpose=transpose, charge_sector=None, p_label=self.ket._p_label)
+        # initial guess
+        x = b.copy()
+        # global minus sign
+        A = ShiftNpcLinearOperator(TWjj, -1.)
+        solver = GMRES(A, x, b, options={}) # default atm
+        x_sol, res, _, _ = solver.run()
+        # fix legs
+        legs = ['vR*','vR'] if name=='LP' else ['vL*','vL']
+        x_sol.split_legs()
+        x_sol.itranspose(legs)
+        return -x_sol # cancel global minus
+
 
 
 class MPOTransferMatrix(NpcLinearOperator):
