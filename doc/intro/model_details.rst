@@ -4,6 +4,35 @@ Details on the implementation of Models
 In this chapter, we provide some more detail on how models work, and how you might customize them.
 You should probably read :doc:`intro/model` first.
 
+We distinguish three different ways in which the Hamiltonian can be given, and there is a
+base class for each one of them:
+1. In a :class:`~tenpy.models.model.NearestNeighborModel`, we have the Hamiltonian as a sum of
+   two-body terms, which are stored explicitly as a list
+   of :class:`~tenpy.linalg.np_conserved.Array`s.
+   This is the structure you need to do TEBD with the model.
+2. In a :class:`~tenpy.models.model.MPOModel`, we have the Hamiltonian directly given as a
+   :class:`~tenpy.networks.mpo.MPO`.
+   This is the structure you need to do DMRG, ExpMPOEvolution or TDVP.
+3. In a :class:`~tenpy.models.model.CouplingModel`, the Hamiltonian is given symbolically, in
+   the form of terms (see :mod:`~tenpy.networks.terms`).
+   There are (currently) no algorithms in TeNPy that require this particular structure.
+   We can view it more as a convenient way to specify models, which also allows us to
+   initialize the other two structures easily.
+A custom model (as well as the pre-defined models in TeNPy) should then inherit from all of the
+classes that are applicable.
+
+If you define a :class:`~tenpy.models.model.CouplingModel` structure for the model, that class
+offers convenient methods to initialize the other two structures, as shown in more detail below.
+There is a convenience class that achieves this directly, the :class:`~tenpy.models.model.CouplingMPOModel`.
+It uses the same symbolical representation of the Hamiltonian, but in contrast to the
+plain :class:`~tenpy.models.model.CouplingModel`, automates the initialization of the lattice and
+of the MPO. It also automatically initializes ``H_bond``, if it detects that the custom model
+is also a subclass of :class:`~tenpy.models.model.NearestNeighborModel`.
+This means that there is virtually no explicit code needed, e.g. when the
+:class:`~tenpy.models.tf_ising.TFIModel` is specialized to the :class:`~tenpy.models.tf_ising.TFIChain`.
+
+In the rest of this intro, we introduce the classes and their ways of initializing models in more detail.
+
 
 The CouplingModel: general structure
 ------------------------------------
