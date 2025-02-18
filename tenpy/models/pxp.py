@@ -22,11 +22,11 @@ class PXPChain(CouplingMPOModel):
     of the atom.
 
     The model arises from the strong-interaction limit of Rydberg atom chains in the seminal
-    expermient of :doi:`10.1038/nature24622`, which found long oscillations now attributed to
+    experiment of :doi:`10.1038/nature24622`, which found long oscillations now attributed to
     quantum many-body scars in the PXP model.
     """
 
-    default_lattice = 'Chain'
+    default_lattice = Chain
     force_default_lattice = True  # we implicitly assume a 1D chain,
     # otherwise more P's need to be added
 
