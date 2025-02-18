@@ -571,9 +571,9 @@ Some random remarks on models
 
 - Needless to say that we have also various predefined models under :mod:`tenpy.models`.
 - If you want to use random parameters, you should use ``model.rng`` as a random number generator and change ``model_params['random_seed']`` for different configurations.
-- Of course, an MPO is all you need to initialize a :class:`~tenpy.models.model.MPOModel` to be used for DMRG; you don't have to use the :class:`~tenpy.models.model.CouplingModel`k
+- Of course, an MPO is all you need to initialize a :class:`~tenpy.models.model.MPOModel` to be used for DMRG; you don't have to use the :class:`~tenpy.models.model.CouplingModel`
   or :class:`~tenpy.models.model.CouplingMPOModel`.
-  For example an exponentially decaying long-range interactions are not supported by the coupling model but straight-forward to include to an MPO, as demonstrated in the example ``examples/mpo_exponentially_decaying.py``.
+  For example, we build the model directly from an MPO in ``examples/mpo_exponentially_decaying.py``.
   The :class:`~tenpy.models.aklt.AKLTChain` is another example which is directly constructed from the `H_bond` terms.
 - We suggest writing the model to take a single parameter dictionary for the initialization,
   as the :class:`~tenpy.models.model.CouplingMPOModel` does.

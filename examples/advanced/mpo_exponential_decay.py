@@ -3,9 +3,7 @@
 We construct a MPO model for a spin 1/2 Heisenberg chain with an infinite number of
 2-sites interactions, with strength that decays exponentially with the distance between the sites.
 
-Because of the infinite number of couplings it is not possible to construct the MPO from a
-coupling model. However the tensors that form the MPO have a surprisingly simple
-form (see the grid below).
+This can also be achieved via :meth:`~tenpy.models.model.CouplingModel.add_exponentially_decaying_coupling`.
 
 We run the iDMRG algorithm to find the ground state and energy density of the
 system in the thermodynamic limit.
