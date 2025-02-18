@@ -3,19 +3,16 @@
     Contents
     ========
 
-.. raw :: latex
+    Getting Started
+    ---------------
 
-    \part{Getting Started}
+    If you're new here, these might be good places to start reading:
 
-If you're new here, start with the :doc:`readme_wrap`.
-
-For further reading, consider these introduction pages:
-
-* :doc:`intro/overview` For a general overview of the package and whats available.
-* :doc:`intro/simulations` For an introduction to the simulations interface using yaml files.
-* :doc:`intro/models` For an guide on how to define your custom models
-* :doc:`intro/dmrg-protocol` For general workflow and best-practices to get reliable results from DMRG simulations
-* Further articles in :doc:`intro`.
+        * :doc:`readme_wrap`
+        * A general :doc:`/intro/overview` of the package and what is available.
+        * The :doc:`/intro/simulations` framework, using yaml files.
+        * :doc:`/intro/model` -- a guide on how to define your custom models
+        * :doc:`/intro/dmrg-protocol` -- workflow and best-practices to get reliable results from DMRG simulations
 
 
 .. raw :: latex

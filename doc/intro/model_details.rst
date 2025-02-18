@@ -2,13 +2,14 @@ Details on the implementation of Models
 =======================================
 
 In this chapter, we provide some more detail on how models work, and how you might customize them.
-You should probably read :doc:`intro/model` first.
+You should probably read :doc:`/intro/model` first.
 
 We distinguish three different ways in which the Hamiltonian can be given, and there is a
 base class for each one of them:
+
 1. In a :class:`~tenpy.models.model.NearestNeighborModel`, we have the Hamiltonian as a sum of
    two-body terms, which are stored explicitly as a list
-   of :class:`~tenpy.linalg.np_conserved.Array`s.
+   of :class:`~tenpy.linalg.np_conserved.Array`\s.
    This is the structure you need to do TEBD with the model.
 2. In a :class:`~tenpy.models.model.MPOModel`, we have the Hamiltonian directly given as a
    :class:`~tenpy.networks.mpo.MPO`.
@@ -18,6 +19,7 @@ base class for each one of them:
    There are (currently) no algorithms in TeNPy that require this particular structure.
    We can view it more as a convenient way to specify models, which also allows us to
    initialize the other two structures easily.
+
 A custom model (as well as the pre-defined models in TeNPy) should then inherit from all of the
 classes that are applicable.
 
