@@ -38,6 +38,7 @@ i.e. between sites ``i-1`` and ``i``.
 
 import numpy as np
 from scipy.linalg import expm
+from scipy.special import comb
 import warnings
 import copy
 import logging
@@ -2530,86 +2531,99 @@ class MPOEnvironment(BaseEnvironment):
         """ Empty for now """
         assert which=='LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
 
-        nonzeros, ones, norms = self.H._norm_diagonal_entries()
-        n_diags = len(nonzeros) # number of nonzero diagonal entries
-        leglabels = {"LP": ([self.H.get_W(0).get_leg('wL').conj()], self.ket.get_B(0).get_leg('vL').conj(),
-                            self.ket.get_B(0).get_leg('vL'), ['wR','vR','vR*']),
+        nonzeros, ones, _ = self.H._norm_diagonal_entries()
+        n_terms = len(ones) # number of nonzero diagonal entries
+        leglabels = {"LP": ([self.H.get_W(0).get_leg('wL').conj(), self.ket.get_B(0).get_leg('vL').conj(),
+                            self.ket.get_B(0).get_leg('vL')], ['wR','vR','vR*']),
                      "RP": ([self.H.get_W(self.L-1).get_leg('wR').conj(), self.ket.get_B(self.L-1).get_leg('vR').conj(),
                              self.ket.get_B(self.L-1).get_leg('vR')], ['wL','vL','vL*'])}
         envs = {}
-        epsilons = {}
+        epsilons = {} # energies PER UNIT CELL !!!
+        stored = {"LP":{},"RP":{}} # temporary storage for contractions ciTW_ij
 
         for name in ["LP","RP"] if which=="both" else [which]:
-            envs[name] = [npc.Array(leglabels[name][0], dtype=self.dtype, labels=leglabels[1]) for _ in range(n_diags)],
-            epsilons[name] = [1.]*n_diags
-            # first nonzero diagonal entry
+            envs[name] = [npc.Array(leglabels[name][0], dtype=self.dtype, labels=leglabels[name][1]) for _ in range(n_terms)]
+            epsilons[name] = [1.]*n_terms
+            # first nonzero diagonal entry, can use epsilon[0]=1.
             if name=="LP":
-                i0_perm = self._perm_index(0,(ones[0],0))[0]
+                i0_perm = self.H._perm_index(0,(ones[0],0))[0]
             else:
-                i0_perm = self._perm_index(self.L-1,(0,ones[-1]))[1]
-            envs[name][0][i0_perm] = self._cj_rho(name, leglabels[name])[0]
+                i0_perm = self.H._perm_index(self.L-1,(0,ones[-1]))[1]
+            envs[name][0][i0_perm] = self._cj_rho(name, leglabels)[0]
             # iteration
             m = 0
-            if name=="LP":
-                for j in range(ones[0],self.H.chi):
-                    if j in ones:
-                        compute next max
-                        m += 1
-                    for gamma in range(m-1,-1,-1):
-                        compute ctot
-                        if j in nonzeros:
-                            gmres
-                        else:
-                            put
-            else:
-                same as above for RP
-
-
-                
-        pass
-    
+            order = range(ones[0]+1,self.H.chi[0]) if name=="LP" else range(ones[-1]-1,-1,-1)
+            for j in order:
+                j_perm = self.H._perm_index(0,(j,0))[1]
+                if j in ones:
+                    cmj, rho = self._cj_rho(name, leglabels)
+                    m += 1
+                    envs[name][m][j_perm] = cmj
+                    # compute epsilon
+                    ctot_last = self._calc_Ctot(j, m-1, name, envs, stored, leglabels)
+                    epsilons[name][m] = np.real(epsilons[name][m-1]*npc.inner(ctot_last, rho)/npc.inner(cmj, rho))
+                for gamma in range(m-1,-1,-1):
+                    ctot = self._calc_Ctot(j, gamma, name, envs, stored, leglabels)
+                    b = self._b_gmres(j_perm, gamma, m, epsilons[name], ctot, envs, name) 
+                    if j in nonzeros:
+                        res = self._solve_cj(j, name, b)
+                        envs[name][gamma][j_perm] = res
+                    else:
+                        envs[name][gamma][j_perm] = b
+        # should we return energy per site or per unit cell?
+        return envs, epsilons
+                    
     def _calc_Ctot(self, j, gamma, name, envs, stored, leglabels):
-        inds = self.H._charge_permutations[0][:j] if name=="LP" else self.H._charge_permutations[self.L][j+1:]
-        --- fix charge_permutations
-        for i in inds:
+        if self.H._has_permutations:
+            inds = self.H._charge_permutations[0][:j] if name=="LP" else self.H._charge_permutations[self.L][j+1:]
+        else:
+            inds = range(0,j) if name=="LP" else range(j+1,self.H.chi[-1])
+        for i_perm in inds:
             if (i_perm, gamma) not in stored[name]:
                 env0 = npc.Array(leglabels[name][0], dtype=self.dtype, labels=leglabels[name][1])
-                env0[:,i_perm,:] = envs[name][gamma][i_perm]
+                env0[i_perm] = envs[name][gamma][i_perm]
                 if name=="LP":
-                    for j in range(self.L):
-                        env0 = self._contract_LP(j, env0)
+                    for j_site in range(self.L):
+                        env0 = self._contract_LP(j_site, env0)
                 else:
-                    for j in range(self.L-1,-1,-1):
-                        env0 = self._contract_RP(j, env0)
+                    for j_site in range(self.L-1,-1,-1):
+                        env0 = self._contract_RP(j_site, env0)
+                env0.itranspose(leglabels[name][1])
                 stored[name][(i_perm, gamma)] = env0
-        j_perm = self.H._charge_permutations[0 if name=="LP" else self.L][j]
-        res = stored[name][(inds[0], gamma)][:,j_perm,:]
+        if self.H._has_permutations:
+            j_perm = self.H._charge_permutations[0 if name=="LP" else self.L][j]
+        else:
+            j_perm = j
+        res = stored[name][(inds[0], gamma)][j_perm]
         for i_perm in inds[1:]:
-            res += stored[name][(i_perm, gamma)][:,j_perm,:]
+            res += stored[name][(i_perm, gamma)][j_perm]
         return res
             
     def _cj_rho(self, name, leglabels):
         """ auxiliary function for _compute_LP_RP_iterative: returns cj, rho where cj=id rho=SVs**2 """
-        cj = npc.diag(1., leglabels[0][1:], dtype=self.dtype, labels=leglabels[1][1:])
+        cj = npc.diag(1., leglabels[name][0][1], dtype=self.dtype, labels=leglabels[name][1][1:])
         SVs = self.ket.get_SR(self.L-1)**2 if name=='LP' else self.ket.get_SL(0)**2
-        rho_labels = ['vL*','vL'] if name == 'LP' else ['vR*','vR']
-        rho = npc.diag(SVs, leglabels[0][1:].conj(), labels=rho_labels)
+        rho = npc.diag(SVs, leglabels[name][0][1].conj(), labels=leglabels[name][1][1:])
         return cj, rho 
     
+    def _b_gmres(self, j_perm, gamma, m, epsilons, Ctot, envs, name):
+        res = Ctot
+        for alpha in range(gamma+1, m+1):
+            res -= epsilons[alpha]/epsilons[gamma]*comb(alpha, gamma)*envs[name][alpha][j_perm]
+        return res
+
     def _solve_cj(self, j, name, b):
-        form, transpose = 'A', True if name=='LP' else 'B', False
+        form, transpose = ('A', True) if name=='LP' else ('B', False)
         bra_N = [self.ket.get_B(i, form=form) for i in range(self.L)]
         ket_M = [npc.tensordot(self.ket.get_B(i, form=form), self.H.get_W(i)[self.H._perm_index(i, (j,j))],
                                axes=[self.ket._p_label,self.ket._get_p_label('*')]) for i in range(self.L)]
         TWjj = TransferMatrix.from_Ns_Ms(bra_N, ket_M, transpose=transpose, charge_sector=None, p_label=self.ket._p_label)
-        # initial guess
-        x = b.copy()
-        # global minus sign
-        A = ShiftNpcLinearOperator(TWjj, -1.)
+        x = b.copy() # initial guess
+        A = ShiftNpcLinearOperator(TWjj, -1.) # global minus sign
         solver = GMRES(A, x, b, options={}) # default atm
         x_sol, res, _, _ = solver.run()
         # fix legs
-        legs = ['vR*','vR'] if name=='LP' else ['vL*','vL']
+        legs = ['vR','vR*'] if name=='LP' else ['vL','vL*']
         x_sol.split_legs()
         x_sol.itranspose(legs)
         return -x_sol # cancel global minus
