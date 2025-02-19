@@ -2256,7 +2256,8 @@ class MPOEnvironment(BaseEnvironment):
         - If `start_env_sites` is None, and :attr:`bra` is :attr:`ket`,
           get `init_LP` and `init_RP` with :meth:`MPOTransferMatrix.find_init_LP_RP`.
 
-        For **infinte** MPS, there is an additional scheme following Phien2012 - this is implemented here
+        For **infinte** MPS, there is an additional scheme following Phien2012
+            -> this is implemented by MPOEnvironment._init_LP_RP_iterative
 
         Parameters
         ----------
@@ -2527,8 +2528,8 @@ class MPOEnvironment(BaseEnvironment):
             raise KeyError("i = {0:d} out of bounds for finite MPS".format(i))
         return i
     
-    def _compute_LP_RP_iterative(self, which="both"):
-        """ Empty for now """
+    def _init_LP_RP_iterative(self, which="both"):
+        """ make "public" function? If so add comment, mainly on which="LP", "RP", "both" """
         assert which=='LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
 
         nonzeros, ones, _ = self.H._norm_diagonal_entries()
@@ -2543,26 +2544,27 @@ class MPOEnvironment(BaseEnvironment):
 
         for name in ["LP","RP"] if which=="both" else [which]:
             envs[name] = [npc.Array(leglabels[name][0], dtype=self.dtype, labels=leglabels[name][1]) for _ in range(n_terms)]
-            epsilons[name] = [1.]*n_terms
-            # first nonzero diagonal entry, can use epsilon[0]=1.
+            epsilons[name] = [1.]*n_terms # can always use epsilon[0]=1.
+            # first diagonal entry
             if name=="LP":
                 i0_perm = self.H._perm_index(0,(ones[0],0))[0]
-            else:
+            else: # RP
                 i0_perm = self.H._perm_index(self.L-1,(0,ones[-1]))[1]
             envs[name][0][i0_perm] = self._cj_rho(name, leglabels)[0]
-            # iteration
-            m = 0
+            # iteration start
+            m = 1
             order = range(ones[0]+1,self.H.chi[0]) if name=="LP" else range(ones[-1]-1,-1,-1)
             for j in order:
-                j_perm = self.H._perm_index(0,(j,0))[1]
+                j_perm = self.H._perm_index(0,(j,0))[0] if name=="LP" else self.H._perm_index(self.L-1,(0,j))[1]
                 if j in ones:
                     cmj, rho = self._cj_rho(name, leglabels)
-                    m += 1
                     envs[name][m][j_perm] = cmj
                     # compute epsilon
                     ctot_last = self._calc_Ctot(j, m-1, name, envs, stored, leglabels)
-                    epsilons[name][m] = np.real(epsilons[name][m-1]*npc.inner(ctot_last, rho)/npc.inner(cmj, rho))
-                for gamma in range(m-1,-1,-1):
+                    epsilons[name][m] = np.real(epsilons[name][m-1]/m*npc.inner(ctot_last, rho)/npc.inner(cmj, rho))
+                    m += 1
+                offset = 1 if j in ones else 0 # cmj done above if j in ones
+                for gamma in range(m-1-offset,-1,-1):
                     ctot = self._calc_Ctot(j, gamma, name, envs, stored, leglabels)
                     b = self._b_gmres(j_perm, gamma, m, epsilons[name], ctot, envs, name) 
                     if j in nonzeros:
@@ -2570,14 +2572,24 @@ class MPOEnvironment(BaseEnvironment):
                         envs[name][gamma][j_perm] = res
                     else:
                         envs[name][gamma][j_perm] = b
+        # rename env dict keys for consisteny with MPOTransferMatrix.find_init_LP_RP
+        envs["init_LP"] = envs.pop("LP")
+        envs["init_RP"] = envs.pop("RP")
         # should we return energy per site or per unit cell?
         return envs, epsilons
                     
     def _calc_Ctot(self, j, gamma, name, envs, stored, leglabels):
-        if self.H._has_permutations:
-            inds = self.H._charge_permutations[0][:j] if name=="LP" else self.H._charge_permutations[self.L][j+1:]
+        """ auxiliary function for _init_LP_RP_iterative: calculates Ctot^j_gamma = \sum_i<j c_gamma^i TWij """
+        if not self.H._has_permutations:
+            if name=="LP":
+                inds = range(0,j)
+            else: # RP
+                inds = range(j+1,self.H.chi[-1])
         else:
-            inds = range(0,j) if name=="LP" else range(j+1,self.H.chi[-1])
+            if name=="LP":
+                inds = self.H._charge_permutations[0][:j]
+            else: # RP
+                inds = self.H._charge_permutations[self.L][j+1:]
         for i_perm in inds:
             if (i_perm, gamma) not in stored[name]:
                 env0 = npc.Array(leglabels[name][0], dtype=self.dtype, labels=leglabels[name][1])
@@ -2585,7 +2597,7 @@ class MPOEnvironment(BaseEnvironment):
                 if name=="LP":
                     for j_site in range(self.L):
                         env0 = self._contract_LP(j_site, env0)
-                else:
+                else: # RP
                     for j_site in range(self.L-1,-1,-1):
                         env0 = self._contract_RP(j_site, env0)
                 env0.itranspose(leglabels[name][1])
@@ -2600,19 +2612,21 @@ class MPOEnvironment(BaseEnvironment):
         return res
             
     def _cj_rho(self, name, leglabels):
-        """ auxiliary function for _compute_LP_RP_iterative: returns cj, rho where cj=id rho=SVs**2 """
+        """ auxiliary function for _init_LP_RP_iterative: returns cj, rho where cj=id rho=SVs**2 """
         cj = npc.diag(1., leglabels[name][0][1], dtype=self.dtype, labels=leglabels[name][1][1:])
         SVs = self.ket.get_SR(self.L-1)**2 if name=='LP' else self.ket.get_SL(0)**2
-        rho = npc.diag(SVs, leglabels[name][0][1].conj(), labels=leglabels[name][1][1:])
+        rho = npc.diag(SVs, leglabels[name][0][1].conj(), labels=leglabels[name][1][-1:-3:-1])
         return cj, rho 
     
     def _b_gmres(self, j_perm, gamma, m, epsilons, Ctot, envs, name):
+        """ auxiliary function for _init_LP_RP_iterative: computes vector needed for gmres, usually Ctot_0^H.chi - epsilons[1]c_1^j """
         res = Ctot
-        for alpha in range(gamma+1, m+1):
+        for alpha in range(gamma+1, m):
             res -= epsilons[alpha]/epsilons[gamma]*comb(alpha, gamma)*envs[name][alpha][j_perm]
         return res
 
     def _solve_cj(self, j, name, b):
+        """ auxiliary function for _init_LP_RP_iterative: Solves c_gamma^j (1-TWjj) = b_gmres """
         form, transpose = ('A', True) if name=='LP' else ('B', False)
         bra_N = [self.ket.get_B(i, form=form) for i in range(self.L)]
         ket_M = [npc.tensordot(self.ket.get_B(i, form=form), self.H.get_W(i)[self.H._perm_index(i, (j,j))],
