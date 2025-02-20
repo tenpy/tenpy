@@ -153,7 +153,7 @@ In our example, we can conserve :math:`S^z` if :math:`J = 0`, and only its parit
             return SpinHalfSite(conserve=conserve)
 
 
-Note that we added ``conserve`` as a model parameters, such that we can later turn charge
+Note that we added ``conserve`` as a model parameter, such that we can later turn charge
 conservation on or off. The possible values for ``conserve`` are documented in the site class,
 here :class:`~tenpy.networks.site.SpinHalfSite`, and it is common to support ``'best'``
 as a value for the ``conserve`` model parameter and translate it to the largest possible symmetry,
@@ -193,7 +193,6 @@ If you want to use a different pre-defined lattice, you can put it into the para
 as ``model_params['lattice'] = 'Square'``, and the size is taken from ``model_params['Lx']``
 and ``model_params['Ly']``, while the boundary conditions are ``model_params['bc_x']``
 and ``model_params['bc_y']``.
-
 Of course, simply changing the lattice only makes sense if the Hamiltonian is defined in a lattice
 independent language, e.g. in terms of "nearest neighbor pairs".
 As we will explore in the next section, this is in fact the natural way to define Hamiltonians in TeNPy.
@@ -230,7 +229,7 @@ for convenient definition of couplings between e.g. nearest-neighbor pairs.
 There are a bunch of convenience methods implemented in :class:`~tenpy.models.model.CouplingModel`,
 which make this easy. Let us summarize them here:
 
-- :meth:`~tenpy.models.model.CouplingModel.add_onsite` for a sun of onsite terms :math:`\sum_i h_i \hat{A}_i`.
+- :meth:`~tenpy.models.model.CouplingModel.add_onsite` for a sum of onsite terms :math:`\sum_i h_i \hat{A}_i`.
 - :meth:`~tenpy.models.model.CouplingModel.add_coupling` for a sum of two-body couplings :math:`\sum_i J_i \hat{A}_i \hat{B}_{i+n}`.
 - :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling` for a sum of multi-body couplings :math:`\sum_i J_i \hat{A}_i \hat{B}_{i+n} ... \hat{F}_{i+m}`.
 
@@ -240,9 +239,6 @@ which make this easy. Let us summarize them here:
     This means that a Hamiltonian like :math:`H = -3 \sum_i S_i^z` is realized as a **single** call to 
     :meth:`~tenpy.models.model.CouplingModel.add_onsite`, **without**  an explicit loop over `i`.
 
-- :meth:`~tenpy.models.model.CouplingModel.add_local_term` for a single term :math:`\hat{A}_i` or :math:`\hat{A}_i \hat{B}_{j}``
-  or :math:`\hat{A}_i \hat{B}_{j} ... \hat{F}_k`.
-
 .. note ::
     These methods allow the prefactors to be site-dependent; you can either give a single number
     as the prefactor, or a list/array that is tiled to fit the size.
@@ -250,11 +246,14 @@ which make this easy. Let us summarize them here:
     ``strength=[1, -1]`` gives you the corresponding staggered field,
     assuming a chain of even length.
 
+- :meth:`~tenpy.models.model.CouplingModel.add_local_term` for a single term :math:`\hat{A}_i` or :math:`\hat{A}_i \hat{B}_{j}`
+  or :math:`\hat{A}_i \hat{B}_{j} ... \hat{F}_k`.
+
 .. warning ::
     You probably should not directly use :meth:`~tenpy.models.model.CouplingModel.add_onsite_term`,
     :meth:`~tenpy.models.model.CouplingModel.add_coupling_term` and
     :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling_term`.
-    They do not handle Jordan-Wigner strings correctly and they need MPS indices as inputs, not
+    They do not handle Jordan-Wigner strings and they need MPS indices as inputs, not
     lattice positions.
 
 See also :meth:`~tenpy.models.model.CouplingModel.add_exponentially_decaying_coupling`
