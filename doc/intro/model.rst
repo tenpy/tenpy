@@ -371,7 +371,7 @@ To visualize the site order of the lattice, you may run the following snippet::
 
         def init_terms(self, model_params):
             # note: terms dont matter for this plot, so we simplify here
-            self.add_onsite(-hz, 0, 'Sz')
+            self.add_onsite(1., 0, 'Sz')
 
     model = MyModel({'lattice': 'Square', 'Lx': 2, 'Ly': 3})
     plt.figure(figsize=(5, 6))
