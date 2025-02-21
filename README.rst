@@ -7,7 +7,7 @@ TeNPy: Tensor Network Python
 .. image:: https://readthedocs.org/projects/tenpy/badge/?version=latest
     :alt: Documentation
     :target: https://tenpy.readthedocs.io/en/latest/
-.. image:: https://github.com/tenpy/tenpy/workflows/pytest/badge.svg
+.. image:: https://github.com/tenpy/tenpy/actions/workflows/pytest.yml/badge.svg?branch=main
     :alt: Build
     :target: https://github.com/tenpy/tenpy/actions/
 .. image:: https://img.shields.io/github/issues/tenpy/tenpy
