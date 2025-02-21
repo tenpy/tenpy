@@ -290,13 +290,13 @@ For our example, we define the Hamiltonian by implementing::
     If we did not care about charge conservation, we could have also done
     ``add_coupling(Jx, u1, 'Sx', u2, 'Sx', dx)`` and 
     ``add_coupling(Jx, u1, 'Sy', u2, 'Sy', dx)``.
-    This only works if we set ``conserve='None'`` or ``conserve='parity',
+    This only works if we set ``conserve='None'`` or ``conserve='parity'``,
     as otherwise the site does not even define ``'Sx'``. 
 
     Also, note that that the on-site operators ``Sp=``:math:`S^+_i` and ``Sm=``:math:`S^-_i`
     do not conserve the total :math:`S^z`, but you can still use them to define the combined
     coupling :math:`S^+_i S^-_j` that *does* conserve :math:`S^z`.
-   
+
 
 At this point we are done defining our model, and have reproduced the result at the very top
 of the chapter. We should, however, make sure that we defined the model correctly.
@@ -344,7 +344,7 @@ Which gives you the following output for our example::
     -0.20000 * Sz_5
 
 
-You may be surprised to get nine different couplings on this ``2 x 3`` square patch.
+You may be surprised to see nine different two-body couplings on this ``2 x 3`` square patch.
 Let us look at the couplings in detail to figure out why this might be.
 We need to understand the meaning of the site indices, i.e. where does ``Sz_4`` live spatially?
 The convention for site indices comes from the MPS geometry and may be hard to read.
