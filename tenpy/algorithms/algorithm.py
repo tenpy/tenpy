@@ -13,6 +13,9 @@ from ..tools.params import asConfig
 from ..tools.cache import DictCache
 
 __all__ = ['Algorithm', 'TimeEvolutionAlgorithm', 'TimeDependentHAlgorithm']
+__deprecated_submodules__ = [
+    'truncation', # moved to tenpy.linalg
+]
 
 
 class Algorithm:

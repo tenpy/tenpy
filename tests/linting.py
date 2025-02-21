@@ -9,6 +9,8 @@ We therefore consider them part of a linting routine and do *not* call them from
 import tenpy
 import types
 import os
+import inspect
+import pkgutil
 
 
 def main():
@@ -38,24 +40,29 @@ def check_all_attribute(check_module=tenpy):
             nonexistent, _name_))
 
     # find objects in the module, which are not listed in __all__ (although they should be)
-    for n in dir(check_module):
+    for n, obj in inspect.getmembers(check_module):
         if n[0] == '_' or n in _all_:  # private or listed in __all__
             continue
-        obj = getattr(check_module, n)
         if getattr(obj, "__module__", None) == _name_:
             # got a class or function defined in the module
             raise AssertionError("object {0!r} defined in {1} but not in __all__".format(
                 obj, _name_))
-        if hasattr(obj, "__package__") and obj.__name__.startswith(_name_):
-            # imported submodule
-            raise AssertionError("Module {0!r} imported in {1} but not listed in __all__".format(
-                obj.__name__, _name_))
 
     # recurse into submodules
-    submodules = [getattr(check_module, n, None) for n in _all_]
-    for m in submodules:
-        if isinstance(m, types.ModuleType) and m.__name__.startswith('tenpy'):
-            check_all_attribute(m)
+    path = getattr(check_module, '__path__', [])
+    if not path:
+        return  # not package with submodules
+    skip_submodules = getattr(check_module, "__skip_import__", [])
+    for _, name, _ in pkgutil.iter_modules(path):
+        if name.startswith('_') or name in skip_submodules:
+            continue
+        submodule = getattr(check_module, name, None)
+        if not submodule:
+            msg = (f"Submodule {name} not imported in {_name_}. Add it explicitly to list "
+                   f"`__skip_import__` in {_name_}->__init__.py if this is intended.")
+            raise AssertionError(msg)
+        if submodule and submodule.__name__.startswith(_name_):
+            check_all_attribute(submodule)
 
 
 def get_python_files(top):

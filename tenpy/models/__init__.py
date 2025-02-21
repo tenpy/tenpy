@@ -33,6 +33,7 @@ All other modules in this folder contain model classes derived from these base c
     toric_code
     mixed_xk
     clock
+    pxp
 """
 # Copyright (C) TeNPy Developers, Apache license
 
@@ -56,11 +57,9 @@ from .toric_code import *
 from .aklt import *
 from .mixed_xk import *
 from .clock import *
+from .pxp import *
 
 __all__ = [
-    'lattice', 'model', 'tf_ising', 'xxz_chain', 'spins', 'spins_nnn', 'fermions_spinless',
-    'hubbard', 'tj_model', 'hofstadter', 'haldane', 'molecular', 'toric_code', 'aklt',
-    'mixed_xk', 'clock',
     *lattice.__all__,
     *model.__all__,
     *tf_ising.__all__,
@@ -77,4 +76,5 @@ __all__ = [
     *aklt.__all__,
     *mixed_xk.__all__,
     *clock.__all__,
+    *pxp.__all__,
 ]

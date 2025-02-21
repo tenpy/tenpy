@@ -7,6 +7,8 @@ from .model import CouplingMPOModel
 from .lattice import Chain
 from ..networks.site import SpinHalfSite
 
+__all__ = ['PXPChain']
+
 
 class PXPChain(CouplingMPOModel):
     r"""The PXP model as (approximately) implemented by a chain of Rydberg-blockaded atoms.
