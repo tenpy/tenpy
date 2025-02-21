@@ -1726,6 +1726,8 @@ class MPOGraph:
     states : list of set of keys
         ``states[i]`` gives the possible keys at the virtual bond ``(i-1, i)`` of the MPO.
         `L+1` entries.
+    _state_max_range : list of dict with states[i] as keys
+        max range of states remaining, needed to calculate initial permutation
     graph : list of dict of dict of list of tuples
         For each site `i` a dictionary ``{keyL: {keyR: [(opname, strength)]}}`` with
         ``keyL in states[i]`` and ``keyR in states[i+1]``.
@@ -1742,6 +1744,7 @@ class MPOGraph:
         self.states = [set() for _ in range(self.L + 1)]
         self.graph = [{} for _ in range(self.L)]
         self._ordered_states = None
+        self._state_max_range = [{} for _ in range(self.L)]
         self.test_sanity()
 
     @classmethod
@@ -1834,7 +1837,7 @@ class MPOGraph:
         """Number of physical sites; for infinite boundaries the length of the unit cell."""
         return len(self.sites)
 
-    def add(self, i, keyL, keyR, opname, strength, check_op=True, skip_existing=False):
+    def add(self, i, keyL, keyR, opname, strength, dist_j, check_op=True, skip_existing=False):
         """Insert an edge into the graph.
 
         Parameters
@@ -1849,6 +1852,9 @@ class MPOGraph:
             Name of the operator.
         strength : str
             Prefactor of the operator to be inserted.
+        dist_j : int
+            distance to the rightmost operator appearing in the underlying term. Needed to ensure upper triangular form
+            E.g. If we have a term Op1[0]*op_string*op_string*Op2[3] and i=1, dist_j=2
         check_op : bool
             Whether to check that 'opname' exists on the given `site`.
         skip_existing : bool
@@ -1870,8 +1876,12 @@ class MPOGraph:
             entry = D[keyR]
             if not skip_existing or not any([op == opname for op, _ in entry]):
                 entry.append((opname, strength))
+        rangeL = self._state_max_range[i].setdefault(keyL, 0)
+        rangeR = self._state_max_range[i+1].setdefault(keyR, 0)
+        self._state_max_range[i][keyL] = max(dist_j, rangeL)
+        self._state_max_range[i][keyR] = max(dist_j-1, rangeR)
 
-    def add_string_left_to_right(self, i, j, key, opname='Id', check_op=True, skip_existing=True):
+    def add_string_left_to_right(self, i, j, key, opname='Id', check_op=True, skip_existing=True, dist_from_i=None):
         r"""Insert a bunch of edges for an 'operator string' into the graph.
 
         Terms like :math:`S^z_i S^z_j` actually stand for
@@ -1891,12 +1901,15 @@ class MPOGraph:
             Useful for the Jordan-Wigner transformation to fermions.
         skip_existing : bool
             Whether existing graph nodes should be skipped.
-
+        dist_from_i: int
+            as in MPOGraph.add, distance to the rightmost operator of the term. If None, j is taken
+        
         Returns
         -------
         key_i : tuple
             The `key` on the right of site i we connected to.
         """
+        dist_from_i = j if dist_from_i==None else dist_from_i
         if j <= i:
             raise ValueError("j <= i not allowed")
         keyL = keyR = key
@@ -1905,13 +1918,16 @@ class MPOGraph:
                 # necessary to extend key because keyL is already in use at this bond
                 keyR = keyL + (k, opname, opname)  # same structure as for other standard keys
                 # (i, op_i, op_str_right_of_i) e.g. in MultiCouplingTerms.add_to_graph
-            k = k % self.L
-            if not self.has_edge(k, keyL, keyR):
-                self.add(k, keyL, keyR, opname, 1., check_op=check_op, skip_existing=skip_existing)
+            kmod = k % self.L
+            if self.has_edge(kmod, keyL, keyR): # adjust dist_j
+                self._state_max_range[kmod][keyL] = max(dist_from_i+i-k, self._state_max_range[kmod][keyL])
+                self._state_max_range[kmod][keyR] = max(dist_from_i+i-k-1, self._state_max_range[kmod][keyR])
+            if not self.has_edge(kmod, keyL, keyR):
+                self.add(kmod, keyL, keyR, opname, 1., dist_from_i+i-k, check_op=check_op, skip_existing=skip_existing)
             keyL = keyR
         return keyL
 
-    def add_string_right_to_left(self, j, i, key, opname='Id', check_op=True, skip_existing=True):
+    def add_string_right_to_left(self, j, i, key, opname='Id', check_op=True, skip_existing=True, dist_from_i=None):
         r"""Insert a bunch of edges for an 'operator string' into the graph.
 
         Similar as :meth:`add_string_left_to_right`, but in the other direction.
@@ -1928,12 +1944,15 @@ class MPOGraph:
             Useful for the Jordan-Wigner transformation to fermions.
         skip_existing : bool
             Whether existing graph nodes should be skipped.
-
+        dist_from_i: int
+            as in MPOGraph.add, distance to the rightmost operator of the term. If None, j is taken
+        
         Returns
         -------
         key_i : hashable
             The `key` on the right of site i we connected to.
         """
+        dist_from_i = j if dist_from_i==None else dist_from_i
         if j <= i:
             raise ValueError("j <= i not allowed")
         keyL = keyR = key
@@ -1941,9 +1960,12 @@ class MPOGraph:
             if (j - k) % self.L == 0:
                 # necessary to extend key because keyR is already in use at this bond
                 keyL = keyR + (k, opname, opname)
-            k = k % self.L
-            if not self.has_edge(k, keyL, keyR):
-                self.add(k, keyL, keyR, opname, 1., check_op=check_op, skip_existing=skip_existing)
+            kmod = k % self.L
+            if self.has_edge(kmod, keyL, keyR): # adjust dist_j
+                self._state_max_range[kmod][keyL] = max(dist_from_i+i-k, self._state_max_range[kmod][keyL])
+                self._state_max_range[kmod][keyR] = max(dist_from_i+i-k-1, self._state_max_range[kmod][keyR])
+            if not self.has_edge(kmod, keyL, keyR):
+                self.add(kmod, keyL, keyR, opname, 1., dist_from_i+i-k, check_op=check_op, skip_existing=skip_existing)
             keyR = keyL
         return keyR
 
@@ -1970,10 +1992,10 @@ class MPOGraph:
             min_IdR = min([self.L] + [i for i, s in enumerate(self.states[:-1]) if 'IdR' in s])
         for k in range(0, max_IdL):
             if not self.has_edge(k, 'IdL', 'IdL'):
-                self.add(k, 'IdL', 'IdL', 'Id', 1.)
+                self.add(k, 'IdL', 'IdL', 'Id', 1., 0) # sorted by IdL/IdR, dist_j not needed
         for k in range(min_IdR, self.L):
             if not self.has_edge(k, 'IdR', 'IdR'):
-                self.add(k, 'IdR', 'IdR', 'Id', 1.)
+                self.add(k, 'IdR', 'IdR', 'Id', 1., 0) # as above
         # done
 
     def has_edge(self, i, keyL, keyR):
@@ -2034,9 +2056,12 @@ class MPOGraph:
         Set ``self._ordered_states`` to a list of dictionaries ``{state: index}``.
         """
         res = self._ordered_states = []
-        for s in self.states:
+        for s, dists in zip(self.states, self._state_max_range):
             d = {}
-            for i, key in enumerate(sorted(s, key=_mpo_graph_state_order)):
+            set_zipped = set()
+            for key in s:
+                set_zipped.add((key, dists[key]))
+            for i, key, dist in enumerate(sorted(set_zipped, key=_mpo_graph_state_order)):
                 d[key] = i
             res.append(d)
 
@@ -3073,7 +3098,7 @@ def _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, leg0, IdL_0):
     return legs
 
 
-def _mpo_graph_state_order(key):
+def _mpo_graph_state_order(keydist):
     """Key-function for sorting they `states` of an MPO Graph.
 
     For standard TeNPy MPOs we expect keys of the form
@@ -3083,17 +3108,17 @@ def _mpo_graph_state_order(key):
 
     The goal is to ensure that standard TeNPy MPOs yield an upper-right W for the MPO.
     """
+    key, dist = keydist
     if isinstance(key, tuple):
-        if key[0] == "left":  #left states first
-            return (-1, len(key)) + key[1:]
-        elif key[0] == "right":  #right states afterwards
-            return (1, -len(key)) + key[1:]
-        return key
+        if key[0] == "left" or key[0] == "right": # largest dist to furthest term on the right first
+            return (-1, -dist) + key[1:]
+        elif key[0]>1000: # exponentially decaying
+            return (1, key[0])
+        return (-1, -dist) + key # potential key from coupling term without left/right attribute
     if isinstance(key, str):
         if key == 'IdL':  # should be first
             return (-2, )
         if key == 'IdR':  # should be last
             return (2, )
-        # fallback: compare strings
-        return (0, key)
-    return (0, str(key))
+    # fallback: compare strings, should not happen
+    return (0, -dist, str(key))

@@ -353,7 +353,7 @@ class OnsiteTerms(Hdf5Exportable):
         assert self.L == graph.L
         for i, terms in enumerate(self.onsite_terms):
             for opname, strength in terms.items():
-                graph.add(i, 'IdL', 'IdR', opname, strength)
+                graph.add(i, 'IdL', 'IdR', opname, strength, 0)
         if graph.max_range is not None:
             graph.max_range = max(graph.max_range, 1)
 
@@ -704,11 +704,14 @@ class CouplingTerms(Hdf5Exportable):
         for i, d1 in self.coupling_terms.items():
             for (opname_i, op_string), d2 in d1.items():
                 label = ("left", i, opname_i, op_string)
-                graph.add(i, 'IdL', label, opname_i, 1., skip_existing=True)
+                max_j = 0
                 for j, d3 in d2.items():
-                    label_j = graph.add_string_left_to_right(i, j, label, op_string)
+                    max_j = max(j, max_j)
+                    label_j = graph.add_string_left_to_right(i, j, label, op_string) # dist_j = j
                     for opname_j, strength in d3.items():
-                        graph.add(j, label_j, 'IdR', opname_j, strength)
+                        graph.add(j, label_j, 'IdR', opname_j, strength, 0)
+                # need max_j therefore added last
+                graph.add(i, 'IdL', label, opname_i, 1., max_j-i, skip_existing=True) # 
         if graph.max_range is not None:
             graph.max_range = max(graph.max_range, self.max_range())
 
@@ -1132,7 +1135,7 @@ class MultiCouplingTerms(CouplingTerms):
                 assert keyL is None and keyR is None
                 continue
             switchLR, op_switch, shift, strength = connection
-            graph.add(switchLR, keyL, keyR, op_switch, strength)
+            graph.add(switchLR, keyL, keyR, op_switch, strength) 
         if graph.max_range is not None:
             graph.max_range = max(graph.max_range, self._max_range)
 
@@ -1148,10 +1151,10 @@ class MultiCouplingTerms(CouplingTerms):
                 for (op_i, op_string_ij), d2 in d1.items():
                     if from_left:
                         key_from_i = ("left", i, op_i, op_string_ij)
-                        graph.add(i, 'IdL', key_from_i, op_i, 1., skip_existing=True)
+                        graph.add(i, 'IdL', key_from_i, op_i, 1., skip_existing=True) 
                     else:
                         key_from_i = ("right", i, op_i, op_string_ij)
-                        graph.add(i, key_from_i, 'IdR', op_i, 1., skip_existing=True)
+                        graph.add(i, key_from_i, 'IdR', op_i, 1., skip_existing=True) 
                     self._insert_to_graph_rec(graph, all_keys, d2, i, op_string_ij, key_from_i, from_left)
         return all_keys
 
@@ -1163,22 +1166,22 @@ class MultiCouplingTerms(CouplingTerms):
                 for c in d3:
                     switchLR, _, shift, _ = self.connections[c]
                     if from_left:
-                        key_to_switch = graph.add_string_left_to_right(i, switchLR, key_from_i, op_string_ij)
+                        key_to_switch = graph.add_string_left_to_right(i, switchLR, key_from_i, op_string_ij) 
                     else:
-                        key_to_switch = graph.add_string_right_to_left(i, switchLR-shift, key_from_i, op_string_ij)
+                        key_to_switch = graph.add_string_right_to_left(i, switchLR-shift, key_from_i, op_string_ij) 
                     all_keys[c] = key_to_switch
             else:
                 if from_left:
-                    key_to_j = graph.add_string_left_to_right(i, j, key_from_i, op_string_ij)
+                    key_to_j = graph.add_string_left_to_right(i, j, key_from_i, op_string_ij) 
                 else:
-                    key_to_j = graph.add_string_right_to_left(i, j, key_from_i, op_string_ij)
+                    key_to_j = graph.add_string_right_to_left(i, j, key_from_i, op_string_ij) 
                 for (op_j, op_string_jk), d4 in d3.items():
                     if from_left:
                         key_from_j = key_to_j + (j, op_j, op_string_jk)
-                        graph.add(j, key_to_j, key_from_j, op_j, 1., skip_existing=True)
+                        graph.add(j, key_to_j, key_from_j, op_j, 1., skip_existing=True) 
                     else:
                         key_from_j = key_to_j + (j, op_j, op_string_jk)
-                        graph.add(j, key_from_j, key_to_j, op_j, 1., skip_existing=True)
+                        graph.add(j, key_from_j, key_to_j, op_j, 1., skip_existing=True) 
                     self._insert_to_graph_rec(graph, all_keys, d4, j, op_string_jk, key_from_j, from_left)
 
     def remove_zeros(self, tol_zero=1.e-15):
@@ -1437,22 +1440,22 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
             if not finite:
                 for i in range(self.L):
                     if in_subsites[i]:
-                        graph.add(i, 'IdL', label, op_i, lambda_)
-                        graph.add(i, label, label, op_string, lambda_)
-                        graph.add(i, label, 'IdR', op_j, strength)
+                        graph.add(i, 'IdL', label, op_i, lambda_, 0) # ordered via label, no need to track dist_j
+                        graph.add(i, label, label, op_string, lambda_, 0)
+                        graph.add(i, label, 'IdR', op_j, strength, 0)
                     else:
-                        graph.add(i, label, label, op_string, 1.)
+                        graph.add(i, label, label, op_string, 1., 0)
             else:
                 # first subsite
-                graph.add(first_subsite, 'IdL', label, op_i, lambda_)
+                graph.add(first_subsite, 'IdL', label, op_i, lambda_, 0)
                 for i in range(first_subsite + 1, last_subsite):
                     if in_subsites[i]:
-                        graph.add(i, 'IdL', label, op_i, lambda_)
-                        graph.add(i, label, label, op_string, lambda_)
-                        graph.add(i, label, 'IdR', op_j, strength)
+                        graph.add(i, 'IdL', label, op_i, lambda_, 0)
+                        graph.add(i, label, label, op_string, lambda_, 0)
+                        graph.add(i, label, 'IdR', op_j, strength, 0)
                     else:
-                        graph.add(i, label, label, op_string, 1.)
-                graph.add(last_subsite, label, 'IdR', op_j, strength)
+                        graph.add(i, label, label, op_string, 1., 0)
+                graph.add(last_subsite, label, 'IdR', op_j, strength, 0)
         if graph.max_range is not None:
             graph.max_range = np.inf
 
