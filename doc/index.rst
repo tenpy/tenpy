@@ -3,11 +3,22 @@
     Contents
     ========
 
+    Getting Started
+    ---------------
+
+    If you're new here, these might be good places to start reading:
+
+        * :doc:`readme_wrap`
+        * A general :doc:`/intro/overview` of the package and what is available.
+        * The :doc:`/intro/simulations` framework, using yaml files.
+        * :doc:`/intro/model` -- a guide on how to define your custom models
+        * :doc:`/intro/dmrg-protocol` -- workflow and best-practices to get reliable results from DMRG simulations
+
+
 .. raw :: latex
 
     \part{User guide}
 
-If you're new here, start with the :doc:`readme_wrap`.
 
 .. toctree::
     :caption: User guide

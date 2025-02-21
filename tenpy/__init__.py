@@ -47,6 +47,7 @@ from .linalg.np_conserved import (Array, zeros, ones, eye_like, diag,
 from .models.lattice import (Lattice, TrivialLattice, SimpleLattice, MultiSpeciesLattice,
                              IrregularLattice, HelicalLattice, Chain, Ladder, NLegLadder, Square,
                              Triangular, Honeycomb, Kagome, get_lattice)
+from .models.model import (Model, NearestNeighborModel, MPOModel, CouplingModel, CouplingMPOModel)
 from .models.tf_ising import TFIModel, TFIChain
 from .models.xxz_chain import XXZChain, XXZChain2
 from .models.spins import SpinModel, SpinChain
@@ -115,7 +116,9 @@ __all__ = [
     # from tenpy.models
     'Lattice', 'TrivialLattice', 'SimpleLattice', 'MultiSpeciesLattice', 'IrregularLattice',
     'HelicalLattice', 'Chain', 'Ladder', 'NLegLadder', 'Square', 'Triangular', 'Honeycomb',
-    'Kagome', 'get_lattice', 'TFIModel', 'TFIChain', 'XXZChain', 'XXZChain2', 'SpinModel',
+    'Kagome', 'get_lattice',
+    'Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'CouplingMPOModel',
+    'TFIModel', 'TFIChain', 'XXZChain', 'XXZChain2', 'SpinModel',
     'SpinChain', 'SpinChainNNN', 'SpinChainNNN2', 'FermionModel', 'FermionChain', 'tJModel',
     'tJChain', 'HofstadterBosons', 'HofstadterFermions', 'ClockModel', 'ClockChain',
     'BoseHubbardModel', 'BoseHubbardChain', 'FermiHubbardModel', 'FermiHubbardChain',
