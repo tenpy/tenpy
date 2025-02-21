@@ -1,1 +1,0 @@
-- Add the :class:`~tenpy.models.molecular.MolecularModel` class for quantum chemistry applications.
