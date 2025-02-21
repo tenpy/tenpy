@@ -8,6 +8,8 @@ from .params import Config
 from collections.abc import Mapping
 import os.path
 import warnings
+import logging
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
@@ -920,6 +922,20 @@ class BetaWarning(UserWarning):
     pass
 
 
+_consistency_compare_funcs = {
+    '<=': operator.le,
+    '<': operator.lt,
+    '>': operator.gt,
+    '>=': operator.ge,
+    '!=': operator.ne,
+    '==': operator.eq,
+    'abs()<=': lambda x,y: abs(x) <= y,
+    'abs()<': lambda x,y: abs(x) < y,
+    'abs()>': lambda x,y: abs(x) > y,
+    'abs()>=': lambda x,y: abs(x) >= y,
+}
+
+
 def consistency_check(value, options, threshold_key, threshold_default, msg, compare='<='):
     """Perform a consistency check, raising an error if it is violated.
 
@@ -973,21 +989,17 @@ def consistency_check(value, options, threshold_key, threshold_default, msg, com
     if threshold is None:
         warn_instead = True
         threshold = threshold_default
-    compare_func = {'<=': operator.le, '<': operator.lt, '>': operator.gt, '>=': operator.ge,
-                    '!=': operator.ne, '==': operator.eq}.get(compare, compare)
+    compare_func = _consistency_compare_funcs.get(compare, compare)
 
     try:
         check_passed = compare_func(value, threshold)
     except Exception as e:
-        msg = (f'During the consistency check for ``{threshold_key}``, performing the check '
-               f'caused a {type(e).__name__}. This is likely due to a bug. Please report it on '
-               f'github.com/tenpy/tenpy. ')
-        if warn_instead:
-            warnings.warn(msg, category=UserWarning, stacklevel=2)
-        else:
-            msg = msg + (f'As a workaround, try setting  ``{threshold_key}=None`` '
-                         f'in the {options.name} options.')
-            raise RuntimeError(msg) from e
+        # note: logger.exception adds traceback info
+        logger.exception("Error during consistency_check for ``%s``. This is likely due to a bug "
+                         "like incompatible types in the consistency check. "
+                         "Consider to report it on https://github.com/tenpy/tenpy/issues/. ",
+                         threshold_key)
+        check_passed = True
 
     if not check_passed:
         if warn_instead:

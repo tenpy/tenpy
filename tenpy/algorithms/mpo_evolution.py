@@ -86,7 +86,8 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         self._U_param = U_param
         logger.info("Calculate U for %s", U_param)
         consistency_check(dt, self.options, 'max_dt', 1.,
-                          'delta_t > ``max_delta_t`` is unreasonably large for trotterization.')
+                          'delta_t > ``max_delta_t`` is unreasonably large for trotterization.',
+                          compare='abs()<=')
         H_MPO = self.model.H_MPO
         if order == 1:
             U_MPO = H_MPO.make_U(dt * -1j, approximation=approximation)

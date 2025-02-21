@@ -332,6 +332,12 @@ def test_fixes_consistency_check_IrregularLattice():
     _ = tenpy.algorithms.dmrg.run(psi, model, dmrg_params)
 
 
+def test_failing_consistency_check():
+    # compare function fails due to complex not being comparable with <=
+    tools.misc.consistency_check(1.2 + 1.j, {}, 'a', 1., '<')
+    # this should raise a logger error and print the taceback there,
+    # but the program should continue
+
 if __name__ == "__main__":
     import tempfile
     from pathlib import Path

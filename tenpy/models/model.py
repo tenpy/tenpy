@@ -1287,7 +1287,7 @@ class CouplingModel(Model):
 
         The coupling `strength` may vary spatially if the given `strength` is a numpy array.
         The correct shape of this array is the `coupling_shape` returned by
-        :meth:`tenpy.models.lattice.possible_multi_couplings` and depends on the boundary
+        :meth:`tenpy.models.lattice.Lattice.possible_multi_couplings` and depends on the boundary
         conditions. The ``shift(...)`` depends on the `dx` entries of `ops`
         and is chosen such that the first entry ``strength[0, 0, ...]`` of `strength`
         is the prefactor for the first possible coupling
