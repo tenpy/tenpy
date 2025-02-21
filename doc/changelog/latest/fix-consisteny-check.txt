@@ -1,0 +1,1 @@
+- fix consistency check to work with imaginary time evolution in ExpMPOEvolution. More generally, continue program if consistency checks failed, and just log the error.
