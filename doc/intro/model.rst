@@ -15,26 +15,28 @@ with the following example code to implement an anisotropic Heisenberg model on 
 
         .. math ::
             H = J_x \sum_i (S^x_i S^x_{i+1} + S^y_i S^y_{i+1})
-                + J_z \sum_i S^z_i S^z_{i+1} - h \sum_i S^z_i
-
+                + J_z \sum_i S^z_i S^z_{i+1}
+                - h_x \sum_i S^z_i - h_z \sum_i S^z_i
         """
 
         def init_sites(self, model_params):
-                conserve = model_params.get('conserve', 'best')
-                if conserve == 'best':
-                    if model_params.get('Jx', 1) == 0:
-                        conserve = 'Sz'
-                    else:
-                        conserve = 'parity'
-                return SpinHalfSite(conserve=conserve)
+            conserve = model_params.get('conserve', 'best')
+            if conserve == 'best':
+                if model_params.get('hx', 0) == 0:
+                    conserve = 'Sz'
+                else:
+                    conserve = None
+            return SpinHalfSite(conserve=conserve)
 
         def init_terms(self, model_params):
             Jx = model_params.get('Jx', 1.)
             Jz = model_params.get('Jz', 1.)
-            h = model_params.get('h', 0.)
+            hx = model_params.get('hx', 0.)
+            hz = model_params.get('hz', 0.)
 
             for u in range(len(self.lat.unit_cell)):
-                self.add_onsite(-h, u, 'Sz')
+                self.add_onsite(-hx, u, 'Sx')
+                self.add_onsite(-hz, u, 'Sz')
 
             for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
                 self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)
@@ -51,7 +53,7 @@ For example, let us consider an anisotropic spin-1/2 Heisenberg model in a field
 
 .. math ::
 
-    H = J_x \sum_i (S^x_i S^x_{i+1} + S^y_i S^y_{i+1}) + J_z \sum_i S^z_i S^z_{i+1} - h \sum_i S^z_i
+    H = J_x \sum_i (S^x_i S^x_{i+1} + S^y_i S^y_{i+1}) + J_z \sum_i S^z_i S^z_{i+1} - h_x \sum_i S^x_i - h_z \sum_i S^z_i
 
 The main features that need to be defined for a model are
 
@@ -71,7 +73,7 @@ for more flexible alternatives see :doc:`/intro/model_details`.
 
 
 The first step is to identify what the **parameters** of your model are.
-In this case, we have the coupling constants :math:`J_x, J_z, h`, and parameters that specify
+In this case, we have the coupling constants :math:`J_x, J_z, h_x, h_z`, and parameters that specify
 the lattice geometry (discussed later). In the TeNPy ecosystem, these parameters are
 gathered into dictionary-like :class:`~tenpy.tools.params.Config` objects, and for the rest of this
 guide you can think of ``model_params`` as a dictionary of these parameters, e.g.
@@ -89,7 +91,8 @@ We start implementing our custom model by defining a class for it::
 
         .. math ::
             H = J_x \sum_i (S^x_i S^x_{i+1} + S^y_i S^y_{i+1})
-                + J_z \sum_i S^z_i S^z_{i+1} - h \sum_i S^z_i
+                + J_z \sum_i S^z_i S^z_{i+1}
+                - h_x \sum_i S^z_i - h_z \sum_i S^z_i
 
         """
         pass  # content will be added later
@@ -139,17 +142,17 @@ argument of the site.
 
 In many cases, the possible symmetries we may exploit depend on the
 values of the parameters, which is why they are an input to ``init_sites``.
-In our example, we can conserve :math:`S^z` if :math:`J = 0`, and only its parity otherwise.::
+In our example, we can conserve the total :math:`S^z` if :math:`h_x = 0`.
 
     class MyModel(CouplingMPOModel):
 
         def init_sites(self, model_params):
             conserve = model_params.get('conserve', 'best')
             if conserve == 'best':
-                if model_params.get('Jx', 1) == 0:
+                if model_params.get('hx', 0) == 0:
                     conserve = 'Sz'
                 else:
-                    conserve = 'parity'
+                    conserve = None
             return SpinHalfSite(conserve=conserve)
 
 
@@ -162,13 +165,13 @@ given the values of the coupling strengths.
 .. note ::
 
     The :class:`~tenpy.linalg.charges.LegCharge` of all involved sites need to have a common
-    :class:`~tenpy.linalg.np_conserved.ChargeInfo` in order to allow the contraction of tensors
+    :class:`~tenpy.linalg.charges.ChargeInfo` in order to allow the contraction of tensors
     acting on the various sites.
     This can be ensured with the function :func:`~tenpy.networks.site.set_common_charges`.
 
     An example where :func:`~tenpy.networks.site.set_common_charges` is needed would be a coupling
     of different types of sites, e.g., when a tight binding chain of fermions is coupled to some
-    local spin degrees of freedom. Another use case of this function would be a model with a $U(1)$
+    local spin degrees of freedom. Another use case of this function would be a model with a U(1)
     symmetry involving only half the sites, say :math:`\sum_{i=0}^{L/2} n_{2i}`.
 
 
@@ -268,15 +271,17 @@ For our example, we define the Hamiltonian by implementing::
         def init_terms(self, model_params):
             Jx = model_params.get('Jx', 1.)
             Jz = model_params.get('Jz', 1.)
-            h = model_params.get('h', 0.)
+            hx = model_params.get('hx', 0.)
+            hz = model_params.get('hz', 0.)
 
             for u in range(len(self.lat.unit_cell)):
-                self.add_onsite(-h, u, 'Sz')
+                self.add_onsite(-hx, u, 'Sx')
+                self.add_onsite(-hz, u, 'Sz')
 
             for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
                 self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)
 
-                # Sx and Sy violate parity conservation, but Sx.Sx and Sy.Sy do not.
+                # Sx and Sy violate Sz conservation.
                 # need to define them using Sp = Sx + i Sy, Sm = Sx - i Sy
                 # Sx.Sx + Sy.Sy = .5 * (Sp.Sm + Sm.Sp) = .5 * (Sp.Sm + hc)
                 self.add_coupling(.5 * Jx, u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
@@ -285,9 +290,13 @@ For our example, we define the Hamiltonian by implementing::
     If we did not care about charge conservation, we could have also done
     ``add_coupling(Jx, u1, 'Sx', u2, 'Sx', dx)`` and 
     ``add_coupling(Jx, u1, 'Sy', u2, 'Sy', dx)``.
-    This only works if we set ``conserve='None'``, as otherwise the site does not even
-    define ``'Sx'``.
+    This only works if we set ``conserve='None'`` or ``conserve='parity',
+    as otherwise the site does not even define ``'Sx'``. 
 
+    Also, note that that the on-site operators ``Sp=``:math:`S^+_i` and ``Sm=``:math:`S^-_i`
+    do not conserve the total :math:`S^z`, but you can still use them to define the combined
+    coupling :math:`S^+_i S^-_j` that *does* conserve :math:`S^z`.
+   
 
 At this point we are done defining our model, and have reproduced the result at the very top
 of the chapter. We should, however, make sure that we defined the model correctly.
@@ -296,7 +305,7 @@ of the chapter. We should, however, make sure that we defined the model correctl
 Verifying models
 ----------------
 Especially when you define custom models, we strongly recommend you triple-check if you correctly
-implemented the model you are interested in (i.e. have the correct couplings at between correct sites).
+implemented the model you are interested in (i.e. have the correct couplings between correct sites).
 This is a crucial step to make sure you are in fact simulating the model that you are thinking
 about and not some random other model with entirely different physics.
 
