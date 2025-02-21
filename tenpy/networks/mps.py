@@ -664,7 +664,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
 
             >>> a = psi.expectation_value_term([('Sx', 2), ('Sz', 4)])
             >>> b = psi.expectation_value_term([('Sz', 4), ('Sx', 2)])
-            >>> c = psi.expectation_value_multi_sites(['Sz', 'Id', 'Sx'], i0=2)
+            >>> c = psi.expectation_value_multi_sites(['Sx', 'Id', 'Sz'], i0=2)
             >>> assert a == b == c
         """
         # strategy: translate term into a list "ops" to be used for `expectation_value_multi_sites`
