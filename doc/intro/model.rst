@@ -142,7 +142,7 @@ argument of the site.
 
 In many cases, the possible symmetries we may exploit depend on the
 values of the parameters, which is why they are an input to ``init_sites``.
-In our example, we can conserve the total :math:`S^z` if :math:`h_x = 0`.
+In our example, we can conserve the total :math:`S^z` if :math:`h_x = 0`::
 
     class MyModel(CouplingMPOModel):
 
@@ -317,12 +317,12 @@ To verify that you have added the correct terms, initialize the model on a small
 set :math:`J_x=0` here for readability, but you should turn it on to verify the full model),
 e.g.::
 
-    model = MyModel({'lattice': 'Square', 'Lx': 2, 'Ly': 3, 'Jx': 0})
+    model = MyModel({'lattice': 'Square', 'Lx': 2, 'Ly': 3, 'Jx': 0, 'hz': 0.2})
 
 
-Now, print all couplings in the model to console::
+Now, print all couplings and onsite terms in the model to console::
 
-    print(model.all_coupling_terms().to_TermList())
+    print(model.all_coupling_terms().to_TermList() + model.all_onsite_terms().to_TermList())
 
 
 Which gives you the following output for our example::
@@ -335,7 +335,13 @@ Which gives you the following output for our example::
     1.00000 * Sz_2 Sz_5 +
     1.00000 * Sz_3 Sz_4 +
     1.00000 * Sz_3 Sz_5 +
-    1.00000 * Sz_4 Sz_5
+    1.00000 * Sz_4 Sz_5 +
+    -0.20000 * Sz_0 +
+    -0.20000 * Sz_1 +
+    -0.20000 * Sz_2 +
+    -0.20000 * Sz_3 +
+    -0.20000 * Sz_4 +
+    -0.20000 * Sz_5
 
 
 You may be surprised to get nine different couplings on this ``2 x 3`` square patch.
@@ -362,10 +368,12 @@ To visualize the site order of the lattice, you may run the following snippet::
     class MyModel(CouplingMPOModel):
         def init_sites(self, model_params):
             return SpinHalfSite()
-        def init_terms(self, model_params):
-            self.add_onsite(-1, 0, 'Sz')  # terms dont matter for this plot :: simplify
 
-    model = MyModel({'lattice': 'Square', 'Lx': 2, 'Ly': 3, 'Jx': 0})
+        def init_terms(self, model_params):
+            # note: terms dont matter for this plot, so we simplify here
+            self.add_onsite(-hz, 0, 'Sz')
+
+    model = MyModel({'lattice': 'Square', 'Lx': 2, 'Ly': 3})
     plt.figure(figsize=(5, 6))
     ax = plt.gca()
     model.lat.plot_coupling(ax)
