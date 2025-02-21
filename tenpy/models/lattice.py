@@ -572,7 +572,7 @@ class Lattice:
         ----------
         factor : int
             The new number of sites in the MPS unit cell will be increased from `N_sites` to
-            ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
+            ``factor*N_sites``. Since MPS unit cells are repeated in the `x`-direction
             in our convention, the lattice shape goes from
             ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
         """
