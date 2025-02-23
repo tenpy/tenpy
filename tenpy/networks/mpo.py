@@ -1744,7 +1744,7 @@ class MPOGraph:
         self.states = [set() for _ in range(self.L + 1)]
         self.graph = [{} for _ in range(self.L)]
         self._ordered_states = None
-        self._state_max_range = [{} for _ in range(self.L)]
+        self._state_max_range = [{} for _ in range(self.L+1)]
         self.test_sanity()
 
     @classmethod
@@ -1879,7 +1879,7 @@ class MPOGraph:
         rangeL = self._state_max_range[i].setdefault(keyL, 0)
         rangeR = self._state_max_range[i+1].setdefault(keyR, 0)
         self._state_max_range[i][keyL] = max(dist_j, rangeL)
-        self._state_max_range[i][keyR] = max(dist_j-1, rangeR)
+        self._state_max_range[i+1][keyR] = max(dist_j-1, rangeR)
 
     def add_string_left_to_right(self, i, j, key, opname='Id', check_op=True, skip_existing=True, dist_from_i=None):
         r"""Insert a bunch of edges for an 'operator string' into the graph.
@@ -1902,14 +1902,15 @@ class MPOGraph:
         skip_existing : bool
             Whether existing graph nodes should be skipped.
         dist_from_i: int
-            as in MPOGraph.add, distance to the rightmost operator of the term. If None, j is taken
+            Similar to MPOGraph.add: Distance to the rightmost operator of the term starting from i.
+            Defaults to None, where j-i is taken
         
         Returns
         -------
         key_i : tuple
             The `key` on the right of site i we connected to.
         """
-        dist_from_i = j if dist_from_i==None else dist_from_i
+        dist_from_i = j-i if dist_from_i==None else dist_from_i
         if j <= i:
             raise ValueError("j <= i not allowed")
         keyL = keyR = key
@@ -1945,14 +1946,15 @@ class MPOGraph:
         skip_existing : bool
             Whether existing graph nodes should be skipped.
         dist_from_i: int
-            as in MPOGraph.add, distance to the rightmost operator of the term. If None, j is taken
+            Similar to MPOGraph.add: Distance to the rightmost operator of the term starting from i.
+            Defaults to None, where j-i is taken
         
         Returns
         -------
         key_i : hashable
             The `key` on the right of site i we connected to.
         """
-        dist_from_i = j if dist_from_i==None else dist_from_i
+        dist_from_i = j-i if dist_from_i==None else dist_from_i
         if j <= i:
             raise ValueError("j <= i not allowed")
         keyL = keyR = key
@@ -2061,8 +2063,8 @@ class MPOGraph:
             set_zipped = set()
             for key in s:
                 set_zipped.add((key, dists[key]))
-            for i, key, dist in enumerate(sorted(set_zipped, key=_mpo_graph_state_order)):
-                d[key] = i
+            for i, key in enumerate(sorted(set_zipped, key=_mpo_graph_state_order)): # key = (key, dist)
+                d[key[0]] = i
             res.append(d)
 
     def _build_grids(self):

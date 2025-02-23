@@ -20,6 +20,122 @@ __all__ = [
     'order_combine_term'
 ]
 
+class TermTree:
+    def __init__(self, i, op_i, opname_i, orientation="left"):
+        self.parent = None
+        self.orientation=orientation # "left", "right"
+        self.i = i
+        self.op_i = op_i
+        self.opname_i = opname_i
+        self.max_range = None
+        self.childs = {} # pairs (i, op_i, opname_i) : TermTree | dict enables fast searching, don't need __eq__ and easy indexing of Nodes
+
+    def add_term(self, i, op_i, opname_i):
+        if (i, op_i, opname_i) not in self.childs:
+            new_child = TermTree(i, op_i, opname_i, orientation=self.orientation)
+            new_child.parent = self
+            self.childs[(i, op_i, opname_i)] = new_child
+        return self.childs[(i, op_i, opname_i)]
+
+    def _update_range_recursive(self, new_max_range):
+        assert self.orientation=="left"
+        if self.max_range==None or self.max_range<new_max_range:
+            self.max_range = new_max_range
+            if self.parent!=None:
+                self.parent._update_range_recursive(new_max_range+self.i-self.parent.i)
+
+    def add_connection(self, i, op_i, strength, max_range, connection=None):
+        if self.orientation=="left":
+            if (i, op_i, None) in self.childs:
+                existing = self.childs[(i, op_i, None)]
+                range_update = existing.update_range(max_range) # not needed, ``case 4`` not allowed?
+                if range_update:
+                    self._update_range_recursive(max_range+i-self.i)
+                return existing
+            else:
+                new_connection = Connection(i, op_i, strength, max_range)
+                new_connection.parentL = self
+                self.childs[(i, op_i, None)] = new_connection
+                self._update_range_recursive(max_range+i-self.i)
+                return new_connection
+        else: # right side, connection given from return of call for left tree
+            assert type(connection)==Connection
+            if (i, op_i, None) in self.childs:
+                assert self.childs[(i, op_i, None)] is connection # has to be the same object
+                connection.strength = connection.strength + strength # adjust strength
+            else:
+                connection.parentR = self
+                assert connection.max_range==self.get_max_range()+self.i-i
+                self.childs[(i, op_i, None)] = connection
+
+    def get_max_range(self):
+        if self.max_range!=None:
+            return self.max_range
+        # fallback, should not happen
+        else:
+            if self.orientation=="left":
+                self.max_range = max([self.childs[key].get_max_range()+key[0]-self.i for key in self.childs]) # sets max_range of childs as well
+                return self.max_range
+            else:
+                self.max_range = self.parent.get_max_range()+self.parent.i-self.i
+                return self.max_range
+
+    def add_to_graph(self, graph):
+        pass
+        # adds tree to graph (terms+strings) and sets keyL of the resulting connections in the process
+        # should be doable in recursive fashion by passing the label resulting from the previous string to the next node
+
+class Connection:
+    # leaves of the TermTree
+    def __init__(self, i, op_i, strength, max_range):
+        self.keyL = None
+        self.keyR = None
+        self.parentL = None # may be None
+        self.parentR = None # may be None
+        self.orientation="center"
+        self.i = i
+        self.op_i = op_i
+        self.strength = strength
+        self.opname_i = None # distinct from standard TermTree
+        self.max_range = max_range # must have max_range
+        self.childs = None # no childs
+
+    def update_range(self, new_range):
+        if self.max_range>new_range:
+            return False
+        self.max_range = new_range
+        return True
+    
+    def add_to_graph(self, graph):
+        # add
+        if self.parentL!=None:
+            assert self.keyL!=None # set by left tree
+        else:
+            self.keyL = "IdL"
+        # same for keyR
+        graph.add(self.i, self.keyL, self.keyR, self.op_i, self.strength)
+
+class BaseTerms(Hdf5Exportable):
+
+    def __init__(self):
+        self.connections = [] # list of Connection
+        # onsite terms via empty connection
+        self.left_terms = [] # list of TermNodes
+        self.right_terms = [] # list of TermNodes
+        # connection labels via going through all TermNodes and updating label_left/label_right as in MultiCouplingTerms
+        # exp_decaying terms separately, could also be done via connections and additional entries though
+
+    def add_onsite(self):
+        pass # add empty connection
+
+    def add_coupling(self):
+        pass # add left_term and coupling
+
+    def add_multi_coupling(self):
+        pass # add left_term, right_term and coupling
+
+    def add_exponentially_decaying(self):
+        pass # separate treatment similar to oringinal class
 
 class TermList(Hdf5Exportable):
     r"""A list of terms (=operator names and sites they act on) and associated strengths.
@@ -909,6 +1025,8 @@ class MultiCouplingTerms(CouplingTerms):
         self.terms_right = dict()
         # start the counter at 1 to distinguish site indices in `terms_left/right` from counters.
         self.connections = [None]
+        self._terms_maxrange = dict()
+        self._connections_maxrange = [None]
         self._max_range = 0
         self._connect_left = -1
         self._connect_right = self.L + 1
@@ -987,6 +1105,8 @@ class MultiCouplingTerms(CouplingTerms):
             assert False # can't happen, since switchLR <= ijkl[-1]
 
         d0L, d0R = self.terms_left, self.terms_right
+        #add max range for left terms
+        ops_opstr = self._terms_maxrange.get
         #add left terms
         for i, op, op_str in zip(ijkl, ops_ijkl, op_string):
             if i >= switchLR:
@@ -1003,10 +1123,10 @@ class MultiCouplingTerms(CouplingTerms):
             d0R = d1R.setdefault((op, op_str), dict())
         counters_right = d0R.setdefault(self._connect_right, [])
         new_connection = (switchLR, op_switch, shift, strength)
-        self._insert_connection(counters_left, counters_right, new_connection)
+        self._insert_connection(counters_left, counters_right, new_connection, ijkl[-1]-ijkl[0])
         self._max_range = max(ijkl[-1] - ijkl[0], self._max_range)
 
-    def _insert_connection(self, counters_left, counters_right, new_connection):
+    def _insert_connection(self, counters_left, counters_right, new_connection, max_range_term):
         # check whether we already got that exact same term before
         existing_counter = None
         for c in counters_left:
@@ -1017,12 +1137,14 @@ class MultiCouplingTerms(CouplingTerms):
             # if yes, just update strength of that term
             updated_strength = self.connections[existing_counter][3] + new_connection[3]
             self.connections[existing_counter] = new_connection[:3] + (updated_strength,)
+            self.connections_maxrange[existing_counter] = max(max_range_term, self.connections_maxrange[existing_counter])
         else:
             # otherwise append new entry to self.connections
             counter = len(self.connections)
             counters_left.append(counter)
             counters_right.append(counter)
             self.connections.append(new_connection)
+            self.connections_maxrange.append(max_range_term)
 
     def multi_coupling_term_handle_JW(self, strength, term, sites, op_string=None):
         """Helping function to call before :meth:`add_multi_coupling_term`.
@@ -1130,12 +1252,12 @@ class MultiCouplingTerms(CouplingTerms):
         assert self.L == graph.L
         keys_left = self._insert_to_graph(graph, True)
         keys_right = self._insert_to_graph(graph, False)
-        for keyL, keyR, connection in zip(keys_left, keys_right, self.connections):
+        for keyL, keyR, connection, maxrange in zip(keys_left, keys_right, self.connections, self.connections_maxrange):
             if connection is None:
                 assert keyL is None and keyR is None
                 continue
             switchLR, op_switch, shift, strength = connection
-            graph.add(switchLR, keyL, keyR, op_switch, strength) 
+            graph.add(switchLR, keyL, keyR, op_switch, strength, maxrange-switchLR) 
         if graph.max_range is not None:
             graph.max_range = max(graph.max_range, self._max_range)
 
@@ -1298,7 +1420,7 @@ class MultiCouplingTerms(CouplingTerms):
                 d1R = d0R.setdefault(i, dict())
                 d0R = d1R.setdefault((op, op_str), dict())
             counters_right = d0R.setdefault(self._connect_right, [])
-            self._insert_connection(counters_left, counters_right, c)
+            self._insert_connection(counters_left, counters_right, c)   ----
 
     def _test_terms(self, sites):
         self._test_terms_recursive(sites, self.terms_left, self._connect_left)
