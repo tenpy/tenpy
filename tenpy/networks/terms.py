@@ -1025,8 +1025,6 @@ class MultiCouplingTerms(CouplingTerms):
         self.terms_right = dict()
         # start the counter at 1 to distinguish site indices in `terms_left/right` from counters.
         self.connections = [None]
-        self._terms_maxrange = dict()
-        self._connections_maxrange = [None]
         self._max_range = 0
         self._connect_left = -1
         self._connect_right = self.L + 1
@@ -1105,8 +1103,6 @@ class MultiCouplingTerms(CouplingTerms):
             assert False # can't happen, since switchLR <= ijkl[-1]
 
         d0L, d0R = self.terms_left, self.terms_right
-        #add max range for left terms
-        ops_opstr = self._terms_maxrange.get
         #add left terms
         for i, op, op_str in zip(ijkl, ops_ijkl, op_string):
             if i >= switchLR:
@@ -1123,10 +1119,10 @@ class MultiCouplingTerms(CouplingTerms):
             d0R = d1R.setdefault((op, op_str), dict())
         counters_right = d0R.setdefault(self._connect_right, [])
         new_connection = (switchLR, op_switch, shift, strength)
-        self._insert_connection(counters_left, counters_right, new_connection, ijkl[-1]-ijkl[0])
+        self._insert_connection(counters_left, counters_right, new_connection)
         self._max_range = max(ijkl[-1] - ijkl[0], self._max_range)
 
-    def _insert_connection(self, counters_left, counters_right, new_connection, max_range_term):
+    def _insert_connection(self, counters_left, counters_right, new_connection):
         # check whether we already got that exact same term before
         existing_counter = None
         for c in counters_left:
@@ -1137,14 +1133,12 @@ class MultiCouplingTerms(CouplingTerms):
             # if yes, just update strength of that term
             updated_strength = self.connections[existing_counter][3] + new_connection[3]
             self.connections[existing_counter] = new_connection[:3] + (updated_strength,)
-            self.connections_maxrange[existing_counter] = max(max_range_term, self.connections_maxrange[existing_counter])
         else:
             # otherwise append new entry to self.connections
             counter = len(self.connections)
             counters_left.append(counter)
             counters_right.append(counter)
             self.connections.append(new_connection)
-            self.connections_maxrange.append(max_range_term)
 
     def multi_coupling_term_handle_JW(self, strength, term, sites, op_string=None):
         """Helping function to call before :meth:`add_multi_coupling_term`.
@@ -1252,12 +1246,12 @@ class MultiCouplingTerms(CouplingTerms):
         assert self.L == graph.L
         keys_left = self._insert_to_graph(graph, True)
         keys_right = self._insert_to_graph(graph, False)
-        for keyL, keyR, connection, maxrange in zip(keys_left, keys_right, self.connections, self.connections_maxrange):
+        for keyL, keyR, connection in zip(keys_left, keys_right, self.connections):
             if connection is None:
                 assert keyL is None and keyR is None
                 continue
             switchLR, op_switch, shift, strength = connection
-            graph.add(switchLR, keyL, keyR, op_switch, strength, maxrange-switchLR) 
+            graph.add(switchLR, keyL, keyR, op_switch, strength) 
         if graph.max_range is not None:
             graph.max_range = max(graph.max_range, self._max_range)
 
@@ -1273,10 +1267,10 @@ class MultiCouplingTerms(CouplingTerms):
                 for (op_i, op_string_ij), d2 in d1.items():
                     if from_left:
                         key_from_i = ("left", i, op_i, op_string_ij)
-                        graph.add(i, 'IdL', key_from_i, op_i, 1., skip_existing=True) 
+                        graph.add(i, 'IdL', key_from_i, op_i, 1., skip_existing=True)
                     else:
                         key_from_i = ("right", i, op_i, op_string_ij)
-                        graph.add(i, key_from_i, 'IdR', op_i, 1., skip_existing=True) 
+                        graph.add(i, key_from_i, 'IdR', op_i, 1., skip_existing=True)
                     self._insert_to_graph_rec(graph, all_keys, d2, i, op_string_ij, key_from_i, from_left)
         return all_keys
 
@@ -1288,22 +1282,22 @@ class MultiCouplingTerms(CouplingTerms):
                 for c in d3:
                     switchLR, _, shift, _ = self.connections[c]
                     if from_left:
-                        key_to_switch = graph.add_string_left_to_right(i, switchLR, key_from_i, op_string_ij) 
+                        key_to_switch = graph.add_string_left_to_right(i, switchLR, key_from_i, op_string_ij)
                     else:
-                        key_to_switch = graph.add_string_right_to_left(i, switchLR-shift, key_from_i, op_string_ij) 
+                        key_to_switch = graph.add_string_right_to_left(i, switchLR-shift, key_from_i, op_string_ij)
                     all_keys[c] = key_to_switch
             else:
                 if from_left:
-                    key_to_j = graph.add_string_left_to_right(i, j, key_from_i, op_string_ij) 
+                    key_to_j = graph.add_string_left_to_right(i, j, key_from_i, op_string_ij)
                 else:
-                    key_to_j = graph.add_string_right_to_left(i, j, key_from_i, op_string_ij) 
+                    key_to_j = graph.add_string_right_to_left(i, j, key_from_i, op_string_ij)
                 for (op_j, op_string_jk), d4 in d3.items():
                     if from_left:
                         key_from_j = key_to_j + (j, op_j, op_string_jk)
-                        graph.add(j, key_to_j, key_from_j, op_j, 1., skip_existing=True) 
+                        graph.add(j, key_to_j, key_from_j, op_j, 1., skip_existing=True)
                     else:
                         key_from_j = key_to_j + (j, op_j, op_string_jk)
-                        graph.add(j, key_from_j, key_to_j, op_j, 1., skip_existing=True) 
+                        graph.add(j, key_from_j, key_to_j, op_j, 1., skip_existing=True)
                     self._insert_to_graph_rec(graph, all_keys, d4, j, op_string_jk, key_from_j, from_left)
 
     def remove_zeros(self, tol_zero=1.e-15):
@@ -1420,7 +1414,7 @@ class MultiCouplingTerms(CouplingTerms):
                 d1R = d0R.setdefault(i, dict())
                 d0R = d1R.setdefault((op, op_str), dict())
             counters_right = d0R.setdefault(self._connect_right, [])
-            self._insert_connection(counters_left, counters_right, c)   ----
+            self._insert_connection(counters_left, counters_right, c)
 
     def _test_terms(self, sites):
         self._test_terms_recursive(sites, self.terms_left, self._connect_left)
