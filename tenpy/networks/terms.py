@@ -1251,7 +1251,7 @@ class MultiCouplingTerms(CouplingTerms):
                 assert keyL is None and keyR is None
                 continue
             switchLR, op_switch, shift, strength = connection
-            graph.add(switchLR, keyL, keyR, op_switch, strength) 
+            graph.add(switchLR, keyL, keyR, op_switch, strength)
         if graph.max_range is not None:
             graph.max_range = max(graph.max_range, self._max_range)
 
