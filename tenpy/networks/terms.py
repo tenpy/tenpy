@@ -22,6 +22,7 @@ __all__ = [
 
 class TermTree:
     def __init__(self, i, op_i, opname_i, orientation="left"):
+        # might need self.shift for right orientation
         self.parent = None
         self.orientation=orientation # "left", "right"
         self.i = i
@@ -80,7 +81,26 @@ class TermTree:
                 self.max_range = self.parent.get_max_range()+self.parent.i-self.i
                 return self.max_range
 
-    def add_to_graph(self, graph):
+    def add_to_graph_recursive(self, graph, label_in):
+        # label_in as returned by MPOGraph.insert_string_left_to_right and right_to_left
+        # root, only one not to have a parent, label_in has to be IdL or IdR depending on orientation
+        is_root = self.parent==None and label_in==("IdL" if self.orientation=="left" else "IdR")
+        label_ok = self.parent!=None and label_in[0]==self.orientation
+        if is_root:
+            assert not label_ok
+            label_out = (self.orientation, self.i, self.op_i, self.opname_i)
+        else:
+            assert not is_root
+            label_out = label_in + (self.i, self.op_i, self.opname_i)
+        # add operator
+        graph.add(self.i%graph.L, label_in, label_out, self.op_i, 1., self.max_range, skip_existing=True) 
+        for key in self.childs:
+            if self.orientation=="left":
+                # add identities
+                label_next = graph.add_string_left_to_right(self.i, key[0], label_out, self.opname_i)
+                self.childs[key].add_to_graph_recursive(graph, label_next)
+
+
         pass
         # adds tree to graph (terms+strings) and sets keyL of the resulting connections in the process
         # should be doable in recursive fashion by passing the label resulting from the previous string to the next node
@@ -88,6 +108,15 @@ class TermTree:
 class Connection:
     # leaves of the TermTree
     def __init__(self, i, op_i, strength, max_range):
+        """
+        Could handle exp_decaying terms as well, e.g. add
+        self.exp_decaying_param
+        self.sitesOuter
+        self.opLopR
+        self.lambda
+        
+        and adjust add_to_graph
+        """
         self.keyL = None
         self.keyR = None
         self.parentL = None # may be None
@@ -106,6 +135,15 @@ class Connection:
         self.max_range = new_range
         return True
     
+    def add_to_graph_recursive(self, graph, label_in):
+        # add_to_graph_recursive only sets labels for connections
+        # terminates add_to_graph_recursive of parents 
+        if label_in[0]=="left":
+            self.keyL = label_in
+        else:
+            assert label_in[0]=="right"
+            self.keyR = label_in
+
     def add_to_graph(self, graph):
         # add
         if self.parentL!=None:
@@ -118,6 +156,7 @@ class Connection:
 class BaseTerms(Hdf5Exportable):
 
     def __init__(self):
+        self.max_range = 0
         self.connections = [] # list of Connection
         # onsite terms via empty connection
         self.left_terms = [] # list of TermNodes
@@ -136,6 +175,36 @@ class BaseTerms(Hdf5Exportable):
 
     def add_exponentially_decaying(self):
         pass # separate treatment similar to oringinal class
+
+    def add_to_graph(self, graph):
+        pass
+
+    def to_from_hdf5(self):
+        pass
+
+    def handle_JW(self):
+        pass
+
+    def plot(self):
+        pass
+
+    def remove_zeros(self):
+        pass
+
+    def to_nn_bond_Arrays(self):
+        pass
+
+    def from_lattice_locations(self):
+        pass
+
+    def shift(self):
+        pass
+
+    def order_combine(self):
+        pass
+
+    def limits(self):
+
 
 class TermList(Hdf5Exportable):
     r"""A list of terms (=operator names and sites they act on) and associated strengths.
