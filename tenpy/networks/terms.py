@@ -1255,6 +1255,19 @@ class MultiCouplingTerms(CouplingTerms):
         if graph.max_range is not None:
             graph.max_range = max(graph.max_range, self._max_range)
 
+    def ___range_left_term_recursive(self, i0, d):
+        # d: {op_tuples: {j:}}
+        max_range = 0
+        for _, d2 in d.items(): # op_i, {i_next, {...}}
+            for j, d3 in d.items:
+                if j==self._connect_left:
+                    for c in d3: # counters
+                        if self.connection[c]!=None:
+                            max_range = max(max_range, self._connections_max_range[c]+self.connections[c][0]-i0)
+                else:
+                    max_range = max(max_range, self._range_left_term_recursive(j, d3)+j-i0)
+        return max_range
+    
     def _insert_to_graph(self, graph, from_left):
         all_keys = [None] * len(self.connections)
         d0 = self.terms_left if from_left else self.terms_right
