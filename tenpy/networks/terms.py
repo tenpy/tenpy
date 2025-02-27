@@ -21,15 +21,23 @@ __all__ = [
 ]
 
 class TermTree:
-    def __init__(self, i, op_i, opname_i, orientation="left"):
-        # might need self.shift for right orientation
+    def __init__(self, i, op_i, opname_i, orientation="left", shift=None):
         self.parent = None
         self.orientation=orientation # "left", "right"
         self.i = i
         self.op_i = op_i
         self.opname_i = opname_i
         self.max_range = None
+        self.shift = shift
         self.childs = {} # pairs (i, op_i, opname_i) : TermTree | dict enables fast searching, don't need __eq__ and easy indexing of Nodes
+        self.check_sanity()
+
+    def check_sanity(self):
+        assert self.orientation in ["left","right"]
+        if self.orientation=="left":
+            assert self.shift==None
+        else:
+            assert type(self.shift)==int
 
     def add_term(self, i, op_i, opname_i):
         if (i, op_i, opname_i) not in self.childs:
@@ -45,13 +53,11 @@ class TermTree:
             if self.parent!=None:
                 self.parent._update_range_recursive(new_max_range+self.i-self.parent.i)
 
-    def add_connection(self, i, op_i, strength, max_range, connection=None):
+    def add_connection(self, i, op_i, strength, max_range, shift=None, connection=None):
         if self.orientation=="left":
             if (i, op_i, None) in self.childs:
                 existing = self.childs[(i, op_i, None)]
-                range_update = existing.update_range(max_range) # not needed, ``case 4`` not allowed?
-                if range_update:
-                    self._update_range_recursive(max_range+i-self.i)
+                assert existing.max_range==max_range
                 return existing
             else:
                 new_connection = Connection(i, op_i, strength, max_range)
@@ -61,21 +67,22 @@ class TermTree:
                 return new_connection
         else: # right side, connection given from return of call for left tree
             assert type(connection)==Connection
-            if (i, op_i, None) in self.childs:
-                assert self.childs[(i, op_i, None)] is connection # has to be the same object
+            if (i, op_i, shift) in self.childs: # shift instead of opname on right side
+                assert self.childs[(i, op_i, shift)] is connection # has to be the same object
                 connection.strength = connection.strength + strength # adjust strength
             else:
                 connection.parentR = self
-                assert connection.max_range==self.get_max_range()+self.i-i
-                self.childs[(i, op_i, None)] = connection
+                assert connection.max_range==self.get_max_range()+self.i+self.shift-i
+                self.childs[(i, op_i, shift)] = connection
 
     def get_max_range(self):
         if self.max_range!=None:
             return self.max_range
-        # fallback, should not happen
         else:
             if self.orientation=="left":
-                self.max_range = max([self.childs[key].get_max_range()+key[0]-self.i for key in self.childs]) # sets max_range of childs as well
+                # fallback, should not happen
+                # implicitly recursive, sets max_range of childs as well
+                self.max_range = max([self.childs[key].get_max_range()+key[0]-self.i for key in self.childs])
                 return self.max_range
             else:
                 self.max_range = self.parent.get_max_range()+self.parent.i-self.i
@@ -93,17 +100,19 @@ class TermTree:
             assert not is_root
             label_out = label_in + (self.i, self.op_i, self.opname_i)
         # add operator
-        graph.add(self.i%graph.L, label_in, label_out, self.op_i, 1., self.max_range, skip_existing=True) 
+        graph.add(self.i, label_in, label_out, self.op_i, 1., self.max_range, skip_existing=True) 
         for key in self.childs:
             if self.orientation=="left":
                 # add identities
-                label_next = graph.add_string_left_to_right(self.i, key[0], label_out, self.opname_i)
+                label_next = graph.add_string_left_to_right(self.i, key[0], label_out, self.opname_i, self.max_range)
                 self.childs[key].add_to_graph_recursive(graph, label_next)
-
-
-        pass
+            else:
+                # add identities
+                # check max_range AND key[0] for connections due to shift
+                label_next = graph.add_string_right_to_left(self.i, key[0], label_out, self.opname_i, self.max_range)
+                self.childs[key].add_to_graph_recursive(graph, label_next)
         # adds tree to graph (terms+strings) and sets keyL of the resulting connections in the process
-        # should be doable in recursive fashion by passing the label resulting from the previous string to the next node
+
 
 class Connection:
     # leaves of the TermTree
@@ -121,19 +130,10 @@ class Connection:
         self.keyR = None
         self.parentL = None # may be None
         self.parentR = None # may be None
-        self.orientation="center"
         self.i = i
         self.op_i = op_i
         self.strength = strength
-        self.opname_i = None # distinct from standard TermTree
         self.max_range = max_range # must have max_range
-        self.childs = None # no childs
-
-    def update_range(self, new_range):
-        if self.max_range>new_range:
-            return False
-        self.max_range = new_range
-        return True
     
     def add_to_graph_recursive(self, graph, label_in):
         # add_to_graph_recursive only sets labels for connections
@@ -145,13 +145,20 @@ class Connection:
             self.keyR = label_in
 
     def add_to_graph(self, graph):
-        # add
         if self.parentL!=None:
             assert self.keyL!=None # set by left tree
+        elif self.keyL!=None: # exponential term
+            assert self.keyL==self.keyR
         else:
             self.keyL = "IdL"
-        # same for keyR
-        graph.add(self.i, self.keyL, self.keyR, self.op_i, self.strength)
+        if self.parentR!=None:
+            assert self.keyR!=None # set by left tree
+        elif self.keyR!=None: # exponential term
+            assert self.keyL==self.keyR
+        else:
+            self.keyL = "IdL"
+        graph.add(self.i, self.keyL, self.keyR, self.op_i, self.strength, self.max_range)
+
 
 class BaseTerms(Hdf5Exportable):
 
@@ -174,7 +181,7 @@ class BaseTerms(Hdf5Exportable):
         pass # add left_term, right_term and coupling
 
     def add_exponentially_decaying(self):
-        pass # separate treatment similar to oringinal class
+        pass # separate treatment similar to oringinal class or connection+entry terms
 
     def add_to_graph(self, graph):
         pass
@@ -204,6 +211,7 @@ class BaseTerms(Hdf5Exportable):
         pass
 
     def limits(self):
+        pass
 
 
 class TermList(Hdf5Exportable):
