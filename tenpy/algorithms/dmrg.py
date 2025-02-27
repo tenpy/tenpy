@@ -153,110 +153,9 @@ def run(psi, model, options, **kwargs):
 class Mixer(mps_common.Mixer):
     """Deprecated.
 
-<<<<<<< HEAD
-    Since DMRG performs only local updates of the state, it can get stuck in "local minima",
-    in particular if the Hamiltonian is long-range -- which is the case if one
-    maps a 2D system ("infinite cylinder") to 1D -- or if one wants to do single-site updates.
-    The idea of the mixer is to perturb the state with the terms of the Hamiltonian
-    which have contributions in both the "left" and "right" side of the system.
-    In that way, it adds fluctuation of the quantum numbers and non-zero contributions of the
-    long-range terms - leading to a significantly improved convergence of DMRG.
-
-    The strength of the perturbation is given by the `amplitude` of the mixer.
-    A good strategy is to choose an initially significant amplitude and let it decay until
-    the perturbation becomes completely irrelevant and the mixer gets disabled.
-
-    This original idea of the mixer was introduced in :cite:`white2005`, implemented as
-    :class:`DensityMatrixMixer`.
-    More recently, :cite:`hubig2015` discussed the mixer and provided an improved version
-    based on an svd, which turns out to give the same results up to numerical errors;
-    it's implemented as the :class:`SubspaceExpansion`.
-
-    Parameters
-    ----------
-    options : dict
-        Optional parameters as described in the following table.
-        see :cfg:config:`Mixer`
-    sweep_activated : int
-        The first sweep where the mixer was activated; `disable_after` is relative to that.
-
-    Options
-    -------
-    .. cfg:config :: Mixer
-
-        amplitude : float
-            Initial strength of the mixer. (Should be sufficiently smaller than 1.)
-        decay : float
-            To slowly turn off the mixer, we divide `amplitude` by `decay`
-            after each sweep. (Should be >= 1.)
-        disable_after : int
-            We disable the mixer completely after this number of sweeps.
-
-
-    Attributes
-    ----------
-    amplitude : float
-        Current amplitude for mixing. Singular values are perturbed on that order of magnitude.
-    decay : float
-        Factor by which `amplitude` is divided after each sweep.
-    disable_after : int
-        The number of sweeps after which the mixer should be disabled, relative to `disable_after`.
-        Note that DMRG might repeatedly activate the mixer if you gradually increase `chi` with
-        a :cfg:configoption`DMRGEngine.chi_list`.
-||||||| 3db87cb7
-    Since DMRG performs only local updates of the state, it can get stuck in "local minima",
-    in particular if the Hamiltonian is long-range -- which is the case if one
-    maps a 2D system ("infinite cylinder") to 1D -- or if one wants to do single-site updates.
-    The idea of the mixer is to perturb the state with the terms of the Hamiltonian
-    which have contributions in both the "left" and "right" side of the system.
-    In that way, it adds fluctuation of the quantum numbers and non-zero contributions of the
-    long-range terms - leading to a significantly improved convergence of DMRG.
-
-    The strength of the perturbation is given by the `amplitude` of the mixer.
-    A good strategy is to choose an initially significant amplitude and let it decay until
-    the perturbation becomes completely irrelevant and the mixer gets disabled.
-
-    This original idea of the mixer was introduced in :cite:`white2005`, implemented as
-    :class:`DensityMatrixMixer`.
-    More recently, :cite:`hubig2015` discussed the mixer and provided an improved version
-    based on an svd, which turns out to give the same results up to numerical errors;
-    it's implemented as the :class:`SubspaceExpansion`.
-
-    Parameters
-    ----------
-    options : dict
-        Optional parameters as described in the following table.
-        see :cfg:config:`Mixer`
-    sweep_activated : int
-        The first sweep where the mixer was activated; `disable_after` is relative to that.
-
-    Options
-    -------
-    .. cfg:config :: Mixer
-
-        amplitude : float
-            Initial strength of the mixer. (Should be sufficiently smaller than 1.)
-        decay : float
-            To slowly turn off the mixer, we divide `amplitude` by `decay`
-            after each sweep. (Should be >= 1.)
-        disable_after : int
-            We disable the mixer completely after this number of sweeps.
-
-    Attributes
-    ----------
-    amplitude : float
-        Current amplitude for mixing. Singular values are perturbed on that order of magnitude.
-    decay : float
-        Factor by which `amplitude` is divided after each sweep.
-    disable_after : int
-        The number of sweeps after which the mixer should be disabled, relative to `disable_after`.
-        Note that DMRG might repeatedly activate the mixer if you gradually increase `chi` with
-        a :cfg:configoption`DMRGEngine.chi_list`.
-=======
     .. deprecated :: 1.0.0
         Use :class:`~tenpy.algorithms.mps_common.Mixer` instead.
         Note the changed function names and signatures
->>>>>>> f5bb56e216b7f6e609db2b551538b3284630843d
     """
     deprecated = True # disable class in find_subclass()
     update_sites = 2
@@ -746,54 +645,14 @@ class DMRGEngine(IterativeSweeps):
         self.qramp_op = self.options.get('qramp_op', None)
         self.time0 = time.time()
 
-<<<<<<< HEAD
     def sweep(self, optimize=True, meas_E_trunc=False, use_ramp=True):
         """One 'sweep' of a the algorithm.
-||||||| 3db87cb7
-    def sweep(self, optimize=True, meas_E_trunc=False):
-        """One 'sweep' of a the algorithm.
-=======
-    def sweep(self, optimize=True, meas_E_trunc=False):
-        """One 'sweep' of the algorithm.
->>>>>>> f5bb56e216b7f6e609db2b551538b3284630843d
 
         Thin wrapper around :meth:`tenpy.algorithms.mps_common.Sweep.sweep` with one additional
         parameter `meas_E_trunc` specifying whether to measure truncation energies.
         """
         self._meas_E_trunc = meas_E_trunc
-<<<<<<< HEAD
-        if (self.options.get('chi_list_reactivates_mixer', True) and optimize
-                and self.chi_list is not None):
-            new_chi_max = self.chi_list.get(self.sweeps, None)
-            if new_chi_max is not None:
-                # growing the bond dimension with chi_list, so we should also reactivate the mixer
-                self.mixer_activate()
-        res = super().sweep(optimize, use_ramp)
-        if optimize:
-            # update mixer
-            if self.mixer is not None:
-                self.mixer = self.mixer.update_amplitude(self.sweeps)
-                if self.mixer is None:  # deactivated
-                    self.S_inv_cutoff = 1.e-15
-        return res
-||||||| 3db87cb7
-        if (self.options.get('chi_list_reactivates_mixer', True) and optimize
-                and self.chi_list is not None):
-            new_chi_max = self.chi_list.get(self.sweeps, None)
-            if new_chi_max is not None:
-                # growing the bond dimension with chi_list, so we should also reactivate the mixer
-                self.mixer_activate()
-        res = super().sweep(optimize)
-        if optimize:
-            # update mixer
-            if self.mixer is not None:
-                self.mixer = self.mixer.update_amplitude(self.sweeps)
-                if self.mixer is None:  # deactivated
-                    self.S_inv_cutoff = 1.e-15
-        return res
-=======
-        return super().sweep(optimize)
->>>>>>> f5bb56e216b7f6e609db2b551538b3284630843d
+        return super().sweep(optimize, use_ramp)
 
     def prepare_update(self):
         """Prepare `self` for calling :meth:`update_local` on sites ``i0 : i0+n_optimize``.
@@ -1072,53 +931,6 @@ class DMRGEngine(IterativeSweeps):
         axes.set_xlabel(xaxis)
         axes.set_ylabel(yaxis)
 
-<<<<<<< HEAD
-    def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `options['mixer']`.
-
-        .. cfg:configoptions :: DMRGEngine
-
-            mixer : str | class | bool
-                Chooses the :class:`Mixer` to be used.
-                A string stands for one of the mixers defined in this module,
-                a class is used as custom mixer.
-                Default (``None``) uses no mixer, ``True`` uses
-                :class:`DensityMatrixMixer` for the 2-site case and
-                :class:`SubspaceExpansion` for the 1-site case.
-                :class:`TwoSiteDMRGEngine` only supports two-site mixers,
-                but :class:`SingleSiteDMRGEngine` supports both single-site and two-site mixers.
-            mixer_params : dict
-                Mixer parameters as described in :cfg:config:`Mixer`.
-        """
-        default = True if isinstance(self, SingleSiteDMRGEngine) else None
-        Mixer_class = self.options.get('mixer', default)
-        if Mixer_class:
-            if Mixer_class is True:
-                Mixer_class = self.DefaultMixer
-            if isinstance(Mixer_class, str):
-                if Mixer_class == "Mixer":
-                    msg = 'Use `True` instead of "Mixer" for DMRG parameter "mixer"'
-                    warnings.warn(msg, FutureWarning)
-                    Mixer_class = self.DefaultMixer
-                else:
-                    Mixer_class = find_subclass(Mixer, Mixer_class)
-            mixer_params = self.options.subconfig('mixer_params')
-            self.mixer = Mixer_class(mixer_params, self.sweeps)
-            self.S_inv_cutoff = 1.e-8
-            logger.info("activate %s with initial amplitude %.1e", Mixer_class.__name__,
-                        self.mixer.amplitude)
-
-    def mixer_cleanup(self):
-        """Cleanup the effects of a mixer.
-
-        A :meth:`sweep` with an enabled :class:`Mixer` leaves the MPS `psi` with 2D arrays in `S`.
-        To recover the originial form, this function simply performs one sweep with disabled mixer.
-        """
-        if any([self.psi.get_SL(i).ndim > 1 for i in range(self.psi.L)]):
-            mixer = self.mixer
-            self.mixer = None  # disable the mixer
-            self.sweep(optimize=False, use_ramp=False)  # (discard return value)
-            self.mixer = mixer  # recover the original mixer
             
     def _qramp_ops(self, ops, i0):
         """parse the arguments of self.prepare_update_with_ramp() and prepare a 
@@ -1170,57 +982,6 @@ class DMRGEngine(IterativeSweeps):
             #print ("Leg labels for operator",j,":", next_op.get_leg_labels())
         return terms
 
-
-||||||| 3db87cb7
-    def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `options['mixer']`.
-
-        .. cfg:configoptions :: DMRGEngine
-
-            mixer : str | class | bool
-                Chooses the :class:`Mixer` to be used.
-                A string stands for one of the mixers defined in this module,
-                a class is used as custom mixer.
-                Default (``None``) uses no mixer, ``True`` uses
-                :class:`DensityMatrixMixer` for the 2-site case and
-                :class:`SubspaceExpansion` for the 1-site case.
-                :class:`TwoSiteDMRGEngine` only supports two-site mixers,
-                but :class:`SingleSiteDMRGEngine` supports both single-site and two-site mixers.
-            mixer_params : dict
-                Mixer parameters as described in :cfg:config:`Mixer`.
-        """
-        default = True if isinstance(self, SingleSiteDMRGEngine) else None
-        Mixer_class = self.options.get('mixer', default)
-        if Mixer_class:
-            if Mixer_class is True:
-                Mixer_class = self.DefaultMixer
-            if isinstance(Mixer_class, str):
-                if Mixer_class == "Mixer":
-                    msg = 'Use `True` instead of "Mixer" for DMRG parameter "mixer"'
-                    warnings.warn(msg, FutureWarning)
-                    Mixer_class = self.DefaultMixer
-                else:
-                    Mixer_class = find_subclass(Mixer, Mixer_class)
-            mixer_params = self.options.subconfig('mixer_params')
-            self.mixer = Mixer_class(mixer_params, self.sweeps)
-            self.S_inv_cutoff = 1.e-8
-            logger.info("activate %s with initial amplitude %.1e", Mixer_class.__name__,
-                        self.mixer.amplitude)
-
-    def mixer_cleanup(self):
-        """Cleanup the effects of a mixer.
-
-        A :meth:`sweep` with an enabled :class:`Mixer` leaves the MPS `psi` with 2D arrays in `S`.
-        To recover the originial form, this function simply performs one sweep with disabled mixer.
-        """
-        if any([self.psi.get_SL(i).ndim > 1 for i in range(self.psi.L)]):
-            mixer = self.mixer
-            self.mixer = None  # disable the mixer
-            self.sweep(optimize=False)  # (discard return value)
-            self.mixer = mixer  # recover the original mixer
-
-=======
->>>>>>> f5bb56e216b7f6e609db2b551538b3284630843d
 
 class TwoSiteDMRGEngine(DMRGEngine):
     """Engine for the two-site DMRG algorithm.

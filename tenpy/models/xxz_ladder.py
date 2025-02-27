@@ -53,13 +53,13 @@ class XXZLadderModel(CouplingMPOModel):
     
     def init_terms(self, model_params):
         #Interaction strengths.
-        J = model_params.get('J', 1., float) #"." forces float instead of int.
-        Jp = model_params.get('Jp', 0.5, float)
-        Delta = model_params.get('Delta', 1.0, float)
-        Deltap = model_params.get('Deltap', 1.0, float)
-        hx = model_params.get('hx', 0.0, float)
-        hy = model_params.get('hy', 0.0, float)
-        hz = model_params.get('hz', 0.0, float)
+        J = model_params.get('J', 1.)  #, float) #"." forces float instead of int.
+        Jp = model_params.get('Jp', 0.5)  #, float)
+        Delta = model_params.get('Delta', 1.0)  #, float)
+        Deltap = model_params.get('Deltap', 1.0)  #, float)
+        hx = model_params.get('hx', 0.0)  #, float)
+        hy = model_params.get('hy', 0.0)  #, float)
+        hz = model_params.get('hz', 0.0)  #, float)
         
         # Onsite terms: External magnetic field interaction.
         for alpha in range(2):
@@ -81,12 +81,16 @@ class XXZLadderModel(CouplingMPOModel):
             self.add_coupling(Delta*J, alpha, 'Sz', alpha, 'Sz', dx)
         
     def init_sites(self, model_params):
-        spin = SpinHalfSite(conserve=None) #Defines the type of site (spin-half).
+        conserve = model_params.get("conserve", None)  #, string)
+        sort_charge = model_params.get("sort_charge", True)  #, string)
+        spin = SpinHalfSite(conserve=conserve, sort_charge=sort_charge) #Defines the type of site (spin-half).
         return spin
     
     def init_lattice(self, model_params):
-        bc_MPS = model_params.get('bc_MPS', 'finite')
+        bc_MPS = model_params.get('bc_MPS', 'infinite')
+        bc = 'periodic' if bc_MPS == 'infinite' else 'open'
+        order=model_params.get('order', 'default')
         sites = self.init_sites(model_params)
         L = model_params.get('L', 1) #Length of the ladder
-        lat = Ladder(L, sites) #Define order and bc_MPS?:
+        lat = Ladder(L, sites, bc=bc, bc_MPS=bc_MPS, order=order) #Define order and bc_MPS?:
         return lat

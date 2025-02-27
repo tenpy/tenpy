@@ -1534,7 +1534,11 @@ class MPS(BaseMPSExpectationValue):
         kwargs.setdefault("bc", lat.bc_MPS)
         p_state = np.array(p_state, dtype=object)
         if p_state.ndim == len(lat.shape):  # == lat.dim + 1
-            p_state = to_array(p_state, shape=lat.shape, allow_incommensurate=allow_incommensurate)  # tile to lattice shape
+            try:
+                p_state = to_array(p_state, shape=lat.shape, allow_incommensurate=allow_incommensurate)  # tile to lattice shape
+            except:
+                logger.critical("Failure to convert array in mps.from_lat_product_state with the following inputs: p_state=%s with dimensions of %s, when tiling to lattice shape of lat.shape=%s!", p_state, p_state.shape, lat.shape, exc_info=True)
+                raise RuntimeError("Critical failure: inacceptible shape of initial state!")
             p_state_flat = p_state[tuple(lat.order.T)]  # "advanced" numpy indexing
         elif p_state.ndim == len(lat.shape) + 1:
             # extra dimension could be from purely 1D array entries
@@ -3627,7 +3631,7 @@ class MPS(BaseMPSExpectationValue):
         # find dominant left eigenvector
         norm, Gl = self._canonical_form_dominant_gram_matrix(i1, True, tol_xi, Gl)
         if abs(1. - norm) > 1.e-13:
-            logger.warning("Although we renormalized the TransferMatrix, "
+            loggerlogger.warning("Although we renormalized the TransferMatrix, "
                            "the largest eigenvalue is not 1")  # (this shouldn't happen)
         self._B[i1] /= np.sqrt(norm)  # correct norm again
         if not renormalize:
@@ -4514,6 +4518,8 @@ class MPS(BaseMPSExpectationValue):
         else:
             res.append("sites: " + " ".join([repr(s) for s in self.sites]))
             res.append("forms: " + " ".join([repr(f) for f in self.form]))
+        if logger.isEnabledFor(logging.DEBUG) and (all(x==1 for x in self.chi)):
+            res.append("initial product state has the tensors:\n" + " ".join(["tensor "+str(s)+": "+str(self.get_B(s)) for s in range(self.L)]))
         return "\n".join(res)
 
     def compress(self, options):
@@ -5832,8 +5838,56 @@ class InitialStateBuilder:
             p_state = self.options['product_state']
         self.check_filling(p_state)
         dtype = self.options.get('dtype', self.model_dtype)
+        lat = self.lattice
         allow_incommensurate = self.options.get('allow_incommensurate', False)
-        psi = MPS.from_lat_product_state(self.lattice, p_state, dtype=dtype,
+        psi = MPS.from_lat_product_state(lat, p_state, dtype=dtype, bc=lat.bc_MPS,
+                                         allow_incommensurate=allow_incommensurate)
+        return psi
+
+    def random_lat_product_state(self, density_num=1, density_den=2):
+        """Initialize from a lattice product state.
+
+        Options
+        -------
+        .. cfg:configoptions :: InitialStateBuilder
+
+        density_num : int
+             numerator for desired density
+        density_den : int
+             denominator for desired density
+
+        """
+        # helper function to ensure types match below
+        def ensure_tuple(x):
+            if isinstance(x, tuple):
+                return x
+            elif isinstance(x, list):  # If x is a list, convert to tuple
+                return tuple(x)
+            else:  # If x is a single element, wrap it in a tuple
+                return (x,)
+        logger.info("Using random_lat_product_state to generate initial state")
+        lat = self.lattice
+        sites = lat.mps_sites()
+        states = [key for key in sites[0].state_labels.keys()]
+        print("sites[0]=,",sites[0])
+        print("sites[0].dim=,",sites[0].dim)
+        print("states=,",states)
+        leg = sites[0].leg
+        logger.info("Local leg charge: %s",leg)
+        logger.info("Names of local states: %s",states)
+        dtype = self.options.get('dtype', self.model_dtype)
+        if (dtype is None):
+            logger.warning("model_dtype is set to None in InitialStateBuilder - overriding to np.float64 in random_lat_product_state")
+            dtype = np.float64
+        print("lat.N_sites=",lat.N_sites, "sites[0].leg.block_number=", sites[0].leg.block_number, " dtype=",dtype)
+        target_dims =tuple(lat.shape)+ensure_tuple(sites[0].leg.block_number)
+        print("target dimension of random amplitudes:",target_dims)
+        p_state = np.random.rand(*target_dims)  # a random product state
+        print("Generated p_state:",p_state)
+        allow_incommensurate=True
+        self.check_filling(p_state)
+        allow_incommensurate = self.options.get('allow_incommensurate', False)
+        psi = MPS.from_lat_product_state(self.lattice, p_state, dtype=dtype, bc=lat.bc_MPS,
                                          allow_incommensurate=allow_incommensurate)
         return psi
 

@@ -381,16 +381,11 @@ class Sweep(Algorithm):
         Parameters
         ----------
         optimize : bool, optional
-<<<<<<< HEAD
             Whether we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
         use_ramp : bool, optional
             Whether we insert any ramp operators to potentially change quantum numbers
             (If False, skip any operator insertions).
-||||||| 3db87cb7
-            Whether we actually optimize to find the ground state of the effective Hamiltonian.
-            (If False, just update the environments).
-=======
             Whether we actually optimize the state, e.g. to find the ground state of the effective
             Hamiltonian in case of a DMRG. (If False, just update the environments).
 
@@ -401,7 +396,6 @@ class Sweep(Algorithm):
             chi_list_reactivates_mixer : bool
                 If True, the mixer is reset/reactivated each time the bond dimension growths
                 due to :cfg:option:`Sweep.chi_list`.
->>>>>>> f5bb56e216b7f6e609db2b551538b3284630843d
 
         Returns
         -------
@@ -429,10 +423,9 @@ class Sweep(Algorithm):
             self.i0 = i0
             self.move_right = move_right
             self.update_LP_RP = update_LP_RP
-            logger.info(f"in sweep: i0 = {i0}")
-            #logger.info("next_qramp[0]={} , next_qramp[1]={}".format(next_qramp[0], next_qramp[1]))
             self._cache_optimize()
             logger.debug(f"in sweep: i0 ={i0}")
+            logger.debug("next_qramp[0]={} , next_qramp[1]={}".format(next_qramp[0], next_qramp[1]))
             # --------- the main work --------------
             if (next_qramp[0]==self.i0) and (next_qramp[1]==self.move_right):
                 logger.info("Inserting qramp operator at sweep %d with values: %r ", self.sweeps, next_qramp)
