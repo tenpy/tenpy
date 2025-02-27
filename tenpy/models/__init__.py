@@ -40,6 +40,7 @@ from . import tf_ising, xxz_chain, spins, spins_nnn
 from . import fermions_spinless, hubbard, tj_model, hofstadter, haldane
 from . import toric_code, aklt, mixed_xk, clock
 from . import toblerone_model
+from . import xxz_ladder
 from .lattice import *
 from .model import *
 from .tf_ising import *

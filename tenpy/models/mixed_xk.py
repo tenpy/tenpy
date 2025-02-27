@@ -75,7 +75,7 @@ from ..networks.terms import TermList
 from ..tools.misc import to_array, inverse_permutation, to_iterable
 from ..linalg import np_conserved as npc
 
-__all__ = ["MixedXKLattice", "MixedXKModel", "SpinlessMixedXKSquare", "HubbardMixedXKSquare"]
+__all__ = ["MixedXKLattice", "MixedXKModel", "SpinlessMixedXKSquare", "HubbardMixedXKSquare", "HofstadterMixedXKSquare"]
 
 
 class MixedXKLattice(Lattice):
@@ -767,6 +767,7 @@ class SpinlessMixedXKSquare(MixedXKModel):
                           n_q[-q][np.newaxis, np.newaxis, :, :])
         self.add_intra_ring_interaction(intra_interaction)
         self.add_inter_ring_interaction(inter_interaction, 1)
+        print ("All coupling terms added: ",self.all_coupling_terms().to_TermList())
 
 
 class HubbardMixedXKSquare(MixedXKModel):
@@ -774,6 +775,183 @@ class HubbardMixedXKSquare(MixedXKModel):
 
     Spinful fermions, no extra orbitals (`N_orb` = 2 for up and down), on a square lattice,
     nearest-neighbor hopping (`t`) + onsite interactions (`U`)
+    """
+    def init_lattice(self, model_params):
+        """ initialise lattice parameters for HubbardMixedXKSquare"""
+        N_orb = 2  # for spin up (l=0) and down (l=1)
+        chinfo = npc.ChargeInfo([1, 1], ["Charge", "Spin"])
+        charges = [[1, 1], [1, -1]]
+        return super().init_lattice(model_params, N_orb, chinfo, charges)
+
+    def init_terms(self, model_params):
+        """ initialise Hamiltonian terms for HubbardMixedXKSquare"""
+        # Read out parameters
+        t = model_params.get('t', 1.)
+        U = model_params.get('U', 1.)
+        xk_lat = self.lat
+        Ly = xk_lat.Ly
+        N_orb = xk_lat.N_orb
+
+        # hopping
+        intra_hopping = np.zeros((Ly, N_orb, Ly, N_orb), dtype=np.complex_)
+        inter_hopping = np.zeros((Ly, N_orb, Ly, N_orb))
+        cos_k = np.real(xk_lat.get_exp_ik(np.arange(Ly)))
+        for k in range(Ly):
+            for l in range(N_orb):  # diagonal in spin
+                intra_hopping[k, l, k, l] = -2. * t * cos_k[k]
+                inter_hopping[k, l, k, l] = -t
+        self.add_intra_ring_hopping(intra_hopping)
+        self.add_inter_ring_hopping(inter_hopping, dx=1)
+
+        # interaction
+        n_q = xk_lat.delta_q
+        intra_interaction = np.zeros((Ly, N_orb, Ly, N_orb, Ly, N_orb, Ly, N_orb))
+        for q in range(Ly):
+            intra_interaction[:,0, :, 0, :, 1, :, 1] += U / Ly * \
+                n_q[q][:, :, np.newaxis, np.newaxis] * n_q[-q][np.newaxis, np.newaxis, :, :]
+        self.add_intra_ring_interaction(intra_interaction)
+
+
+class HofstadterMixedXKSquare(MixedXKModel):
+    r"""Fermions on a square lattice with magnetic flux, in mixed x, ky representation 
+
+    Emulating the following Hamiltonian in a mixed x - momentum ky basis:
+
+    .. math ::
+        H = - \sum_{x, y} \mathtt{Jx} (e^{i \mathtt{phi}_{x,y} } c^\dagger_{x,y} c_{x+1,y} + h.c.)   \\
+            - \sum_{x, y} \mathtt{Jy} (e^{i \mathtt{phi}_{x,y} } c^\dagger_{x,y} c_{x,y+1} + h.c.)   \\
+            + \sum_{x, y} \mathtt{V} ( n_{x, y} n_{x, y + 1} + n_{x, y} n_{x + 1, y}   \\
+            - \sum_{x, y} \mathtt{mu} n_{x,y},
+
+    where :math:`e^{i \mathtt{phi}_{x,y} }` is a complex Aharonov-Bohm hopping for the vector potential
+    .. math::
+        A = B x e_y.
+
+    Parameters
+    ----------
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`HofstadterMixedXKSquare` below.
+
+    Options
+    -------
+    .. cfg:config :: HofstadterMixedXKSquare
+        :include: MixedXKModel
+
+        Nx, Ny : int
+            Number of the Magnetic unit cells in x- and y-direction.
+        mx : int
+            Size of the magnetic unit cell along x-directions (my=1 fixed for this class), in terms of lattice sites.
+        filling : tuple
+            Average number of fermions per site, defined as a fraction (numerator, denominator)
+            Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.FermionSite`.
+        Jx, Jy, mu, V : float
+            Hamiltonian parameter as defined above.
+        conserve : {'N' | 'parity' | None}
+            What quantum number to conserve.
+        flux_p : int
+            Numerator of magnetic flux density
+        flux_q : int
+            Denominator of magnetic flux density
+        phi_ext : float
+            External magnetic flux 'threaded' through the cylinder, in units of ``'2\pi'``
+
+    """
+    defaults = {
+        'conserve': 'N', # What is Conserved? N?
+        'fill_top': 1,
+        'fill_bot': 9,
+        'bc_MPS': 'infinite', #MPS boundary Condition
+        'bc_x': 'periodic',
+        'order': 'default',
+        'Ny': 3, #Number of magnetic unit cells in the y direction
+        'Nx': 1, #Number of magnetic unit cells in the x direction
+        'phi_ext': 0.0,
+        'mu': 0 ,
+        'V': 0 ,
+        'Jx': 1.0,
+        'Jy': 1.0,
+        'verbose': 1,
+        'flux_p': 1,
+        'flux_q': 3,
+        # 'var_u': 1,
+        'order': 'default',
+        'mx': 3
+	    }
+    identifier = ['bc_MPS', 'Lx', 'Ly', 'conserve' , 'V', 'mu', 
+                  'phi_ext', 'flux_p', 'flux_q']
+    def init_lattice(self, model_params):
+        """ initialise lattice parameters for HofstadterMixedXKSquare"""
+        N_orb = 1  # simplest case possible
+        chinfo = npc.ChargeInfo([1], ["Charge"])
+        charges = [[1]]
+        # initialise some parameters that affect lattice geometry
+        self.flux_p = np.asarray(model_params.get('flux_p', self.defaults['flux_p']))
+        self.flux_q = np.asarray(model_params.get('flux_q', self.defaults['flux_q']))
+
+        self.mx = model_params.get('mx', self.flux_q)
+        self.Lx = model_params.get('Nx', self.defaults['Nx'])*self.mx
+        Ly = model_params.get('Ny', self.defaults['Ny'])
+        model_params.update({'Lx': self.Lx, 'Ly': Ly})
+
+        return MixedXKModel.init_lattice(self, model_params, N_orb, chinfo, charges)
+
+    def init_terms(self, model_params):
+        """ initialise Hamiltonian terms for HofstadterMixedXKSquare"""
+        # Read out more parameters
+        Jx = model_params.get('Jx', self.defaults['Jx'])
+        Jy = model_params.get('Jy', self.defaults['Jy'])
+
+        V = model_params.get('V', self.defaults['V'])
+        phi = 2*np.pi*self.flux_p/self.flux_q
+        phi_ext = model_params.get('phi_ext', self.defaults['phi_ext'])
+        mu = np.asarray(model_params.get('mu', self.defaults['mu']))
+        V = np.asarray(model_params.get('V', self.defaults['V']))
+
+        xk_lat = self.lat
+        Lx = self.Lx
+        Ly = xk_lat.Ly
+        N_orb = xk_lat.N_orb
+        assert N_orb == 1
+        l = 0  # only 1 orbital
+
+        tmp_exp_iphi = np.exp(phi * np.arange(Lx))
+        tmp_exp_ik = np.exp(2.j * np.pi / Ly * (np.arange(Ly)+ phi_ext))
+        
+        # hopping
+        intra_hopping = np.zeros((Lx, Ly, N_orb, Ly, N_orb), dtype=complex)
+        cos_k = np.real(xk_lat.get_exp_ik(np.arange(Ly)))
+        for x in range(Lx):
+            for k in range(Ly):
+                intra_hopping[x, k, l, k, l] = -2. * Jy *  np.real(tmp_exp_ik[k]*tmp_exp_iphi[x])
+        inter_hopping = np.zeros((Ly, N_orb, Ly, N_orb))
+        for k in range(Ly):
+            inter_hopping[k, l, k, l] = -Jx
+        self.add_intra_ring_hopping(intra_hopping)
+        self.add_inter_ring_hopping(inter_hopping, dx=1)
+
+        # interaction
+        n_q = xk_lat.delta_q
+        intra_interaction = np.zeros((Ly, N_orb, Ly, N_orb, Ly, N_orb, Ly, N_orb))
+        inter_interaction = np.zeros((Ly, N_orb, Ly, N_orb, Ly, N_orb, Ly, N_orb))
+        for q in range(Ly):
+            # note: intra-ring interactions come with phase exp(i q) for momentum transfer q on first particle when hopping in +y direction, add the term hopping in opposite direction and one gets  a cosine factor
+            intra_interaction[:, 0, :, 0, :, 0, :, 0] += \
+                V / Ly * cos_k[q] * (n_q[q][:, :, np.newaxis, np.newaxis] *
+                                     n_q[-q][np.newaxis, np.newaxis, :, :])
+            # note: iter-ring hopping only account for momentum transfer - no extra phases as hopping has no y-component
+            inter_interaction[:, 0, :, 0, :, 0, :, 0] += \
+                V / Ly * (n_q[q][:, :, np.newaxis, np.newaxis] *
+                          n_q[-q][np.newaxis, np.newaxis, :, :])
+        self.add_intra_ring_interaction(intra_interaction)
+        self.add_inter_ring_interaction(inter_interaction, 1)
+
+
+class HofstadterFTI_MixedXKSquare(MixedXKModel):
+    """Example: Hofstadter fractional topological insulator mode on a square lattice in x-k-Basis.
+
+    Fermions with `pseudospin` index, no extra orbitals (`N_orb` = 2 for up and down), on a square lattice,
+    experiencing an axial magnetic field of flux density phi*2*pi (opposite flux for pseudospin species),
+    nearest-neighbor hopping along x- and y-directions (`Jx`, `Jy`) + onsite inter-layer sinteractions (`U`)
     """
     def init_lattice(self, model_params):
         N_orb = 2  # for spin up (l=0) and down (l=1)

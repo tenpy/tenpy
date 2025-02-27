@@ -127,7 +127,7 @@ class FermiHubbardModel(CouplingMPOModel):
         cons_Sz : {'Sz' | 'parity' | None}
             Whether spin is conserved,
             see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
-        t, U, mu : float | array
+        t, U, V, mu : float | array
             Couplings as defined for the Hamiltonian above. Note the signs!
         phi_ext : float
             For 2D lattices and periodic y boundary conditions only.

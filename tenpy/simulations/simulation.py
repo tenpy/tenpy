@@ -512,6 +512,7 @@ class Simulation:
             del self.results['resume_data']
         kwargs.setdefault('cache', self.cache)
         params = self.options.subconfig('algorithm_params')
+        self.logger.info("Algorithm parameters used: " + str(asConfig(params,'algorithm_params')))
         self.engine = AlgorithmClass(self.psi, self.model, params, **kwargs)
         self.engine.checkpoint.connect(self.save_at_checkpoint)
         con_checkpoint = list(self.options.get('connect_algorithm_checkpoint', []))
