@@ -136,7 +136,175 @@ class MPO:
         self.bc = bc
         self.max_range = max_range
         self.explicit_plus_hc = explicit_plus_hc
+        self._has_graph = False # more efficient contraction in MPO environments, reset to False using self._reset_graph
+        self._graph = None # [{(i,j):W[site][i,j] if W[site][i,j]!=0} for _ in range(len(self.sites))]
+        self._sparsity_ratio = 0. # number of filled W entries / total number of possible W entries
+        # for iterative environment initialization
+        self._ordering_checked = None # None for undefined, False if checked and not possible, True if present
+        self._outer_permutation = None # for iterative environment calculation, p[j] index of MPO w.r.t. j ordered
+        self._cycles = None # for iterative environment calculation, list of [i0, i1, i2, ..., iL+1] s.t. loop is W[0][i0,i1]*W[1][i1,i2]*..*W[L][iL,iL+1]
         self.test_sanity()
+
+    def _reset_graph(self):
+        # set proper defaults
+        # no need to carry graph if not valid
+        self._has_graph = False
+        self._graph = None
+        self._ordering_checked = None
+        self._outer_permutation = None
+        self._cycles = None
+        
+    def _make_graph(self, norm_tol=1e-12):
+        # build graph, no checks for loops etc.
+        if self._has_graph:
+            return
+        self._graph = [{} for _ in range(len(self.sites))]
+        for i in range(self.L):
+            W = self.get_W(i)
+            W.itranspose(['wL', 'wR', 'p', 'p*'])
+            chiL, chiR, _, _ = W.shape
+            for jL in range(chiL):
+                for jR in range(chiR):
+                    op = W[jL, jR]
+                    if npc.norm(op)>norm_tol:
+                        self._graph[i][(jL, jR)] = op
+        self._sparsity_ratio = self._compute_sparsity()
+        self._has_graph = True
+
+    def _compute_sparsity(self):
+        chis = self.chi
+        number_entries = sum([len(layer) for layer in self._graph])
+        total_W_size = sum([chis[j]*chis[j+1] for j in range(self.L)])
+        return number_entries/total_W_size
+    
+    def _order_graph(self):
+        # checks whether ordering the graph is possible and sets the corresponding attributes of the MPO
+        if self._graph==None:
+            warnings.warn("No graph present, calling _make_graph().")
+            self._make_graph()
+        if self._cycles_checked==False: # should not happen in practice
+            warnings.warn("Ordering the MPO was already tried and failed. If intentional, make sure that the MPO satisfies the requirements.")
+            return
+        elif self.bc=="finite": # should not happen in practice
+            warnings.warn("_order_graph() called for 'finite' MPO. This does not make sense.")
+            self._cycles_checked = False
+            return 
+        elif self.finite: # segment
+            try:
+                self._W[0].get_leg('wL').test_contractible(self._W[-1].get_leg('wR'))
+            except ValueError:
+                warnings.warn("_order_graph() called for 'segment' MPO with different left and right outer virtual leg. If intentional, ensure that outer virtual legs are contractible.")
+                self._cycles_checked = False
+                return
+        # attempting to order the graph makes sense
+        try:
+            cycle_params = self._get_cycles()
+            j_IdL, j_IdR, j_other_cycles, j_upper, j_lower = self._graph_to_blocks(cycle_params)
+            _, cycles, outer_connections = cycle_params
+            perm = [-1 for _ in range(self.chi[0])]
+            # IdL, IdR
+            perm[0] = j_IdL
+            perm[-1] = j_IdR
+            # cycles
+            offset = 1+len(j_upper)
+            for j, j_cycle in enumerate(j_other_cycles):
+                perm[offset+j] = j_cycle
+            # ordering for j_upper and j_lower. Works by iteratively removing all indices that do not couple to the block
+            def sort_block(block):
+                ordering = []
+                js_step = []
+                while block: # still indices left
+                    for j in block:
+                        if not outer_connections[j] & block: # no connections to block
+                            ordering.append(j)
+                            js_step.append(j)
+                    if len(js_step)==0: # means that every index in the block maps to at least one other index in the block -> illegal cycle
+                        raise ValueError("Index ordering failed: Illegal cycle A1 -> A2 -> ... -> A1 over multiple unit cells found. Increasing the unit cell might fix this problem.")
+                    for j in js_step:
+                        block.remove(j)
+                    js_step = []
+                return ordering            
+            # upper indices
+            j_upper_ordered = sort_block(j_upper)
+            for index, j in enumerate(j_upper_ordered):
+                perm[offset-1-index] = j
+            # lower indices
+            j_lower_ordered = sort_block(j_lower)
+            for index, j in enumerate(j_lower_ordered):
+                perm[-2-index] = j
+            # ordering was successful
+            self._ordering_checked = True
+            self._cycles = cycles
+            self._outer_permutation = perm
+        except ValueError as e:
+            # graph cannot be ordered
+            warnings.warn("Ordering the MPO failed: "+str(e))
+            self._ordering_checked = False 
+
+    def _get_cycles(self):        
+        j_cycles = []
+        cycles = []
+        outer_connections = []
+        for j_outer in range(self.chi[0]):
+            grid = [[-1 for _ in range(_chi)] for _chi in self.chi]
+            grid[0][j_outer] = j_outer
+            # forward
+            for j_site, layer in enumerate(self._graph):
+                js_connected = set(j for i,j in layer if i in grid[j_site])
+                for j_edge in js_connected:
+                    grid[j_site+1][j_edge] = j_edge
+            # connected indices
+            outer_connections.append([j for j in grid[-1] if j!=-1])
+            # loop present
+            if grid[-1][j_outer]==j_outer:
+                j_cycles.append(j_outer)
+                loop = [j_outer]
+                j_current = j_outer
+                # backward propagation
+                for j_right in range(self.L-1,-1,-1):
+                    js_backward = [i for i,j in self._graph[j_right] if j==j_current and i in grid[j_right]]
+                    if len(js_backward)!=1:
+                         # multiple loops might be valid but are not supported
+                        raise ValueError("Loop missing or multiple loops found for outer index {0}".format(j_outer))
+                    j_current = js_backward[0]
+                    loop.append(j_current)
+                cycles.append(reversed(loop))
+        return set(j_cycles), cycles, [set(x) for x in outer_connections]
+    
+    def _graph_to_blocks(self, loop_params):
+        j_cycles, _, outer_connections = loop_params
+        # check IdL, IdR valid
+        j_IdL, j_IdR = self.IdL[0], self.IdR[-1]
+        if j_IdL==None or j_IdR==None:
+            raise ValueError("IdL or IdR missing on outer bonds.") # not checked in test_sanity
+        if j_IdL not in j_cycles:
+            raise ValueError("Connection IdL -> IdL missing")
+        if j_IdR not in j_cycles:
+            raise ValueError("Connection IdR -> IdR missing")
+        for j, connection in enumerate(outer_connections):
+            if j!=j_IdL and j_IdL in connection:
+                raise ValueError("Outer index {0} -> IdL connection found ?!".format(j))
+            if j==j_IdR and len(connection)!=1:
+                raise ValueError("IdR connection to different index found ?!")
+        # check loops and indices
+        non_Id_cycles = set(j for j in j_cycles if j!=j_IdL and j!=j_IdR)
+        if not non_Id_cycles: # only loops are IdL, IdR
+            return j_IdL, j_IdR, set(), set(j for j in range(self.chi[0]) if j not in j_cycles), set()
+        j_upper = set()
+        j_lower = set()
+        for j, connection in enumerate(outer_connections):
+            if j not in j_cycles:
+                if connection & non_Id_cycles: # existing connection label_j -> some loop 
+                    j_upper.add(j)
+                for j_loop in non_Id_cycles:
+                    if j in outer_connections[j_loop]: # existing connection some_loop -> label_j
+                        j_lower.add(j)
+                        break
+                else: # not a lower index, add to j_upper by default if not already present
+                    j_upper.add(j)
+        if j_upper & j_lower:
+            raise ValueError("Indices I={0} found, with I -> loop1 and loop2 -> I, ".format(j_upper & j_lower))
+        return j_IdL, j_IdR, non_Id_cycles, j_upper, j_lower
 
     def copy(self):
         """Make a shallow copy of `self`."""
