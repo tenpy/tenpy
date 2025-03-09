@@ -182,19 +182,19 @@ class MPO:
         if self._graph==None:
             warnings.warn("No graph present, calling _make_graph().")
             self._make_graph()
-        if self._cycles_checked==False: # should not happen in practice
+        if self._ordering_checked==False: # should not happen in practice
             warnings.warn("Ordering the MPO was already tried and failed. If intentional, make sure that the MPO satisfies the requirements.")
             return
         elif self.bc=="finite": # should not happen in practice
             warnings.warn("_order_graph() called for 'finite' MPO. This does not make sense.")
-            self._cycles_checked = False
+            self._ordering_checked = False
             return 
         elif self.finite: # segment
             try:
                 self._W[0].get_leg('wL').test_contractible(self._W[-1].get_leg('wR'))
             except ValueError:
                 warnings.warn("_order_graph() called for 'segment' MPO with different left and right outer virtual leg. If intentional, ensure that outer virtual legs are contractible.")
-                self._cycles_checked = False
+                self._ordering_checked = False
                 return
         # attempting to order the graph makes sense
         try:
@@ -216,11 +216,11 @@ class MPO:
                 while block: # still indices left
                     for j in block:
                         if not outer_connections[j] & block: # no connections to block
-                            ordering.append(j)
                             js_step.append(j)
                     if len(js_step)==0: # means that every index in the block maps to at least one other index in the block -> illegal cycle
                         raise ValueError("Index ordering failed: Illegal cycle A1 -> A2 -> ... -> A1 over multiple unit cells found. Increasing the unit cell might fix this problem.")
-                    for j in js_step:
+                    for j in reversed(js_step): # reversed: 1,2,3, ordered as such and not 3,2,1 if possible
+                        ordering.append(j)
                         block.remove(j)
                     js_step = []
                 return ordering            
@@ -268,7 +268,7 @@ class MPO:
                         raise ValueError("Loop missing or multiple loops found for outer index {0}".format(j_outer))
                     j_current = js_backward[0]
                     loop.append(j_current)
-                cycles.append(reversed(loop))
+                cycles.append(list(reversed(loop)))
         return set(j_cycles), cycles, [set(x) for x in outer_connections]
     
     def _graph_to_blocks(self, loop_params):
@@ -565,6 +565,23 @@ class MPO:
                 W.get_leg('wR').test_contractible(W2.get_leg('wL'))
         if not (len(self.IdL) == len(self.IdR) == self.L + 1):
             raise ValueError("wrong len of `IdL`/`IdR`")
+        if self._has_graph:
+            if not len(self._graph) == self.L:
+                raise ValueError("wrong len of _graph")
+                # more checks e.g. check validity of indices, operators?
+        if self.bc=="finite":
+            if self._ordering_checked==True:
+                raise ValueError("outer virtual legs are trivial for finite MPS, ordering them is not supported")
+        elif self._ordering_checked==True:
+            if self.chi[0]!=self.chi[-1]:
+                raise ValueError("outer virtual legs ordered for MPO that is not periodic")
+            if not len(self._outer_permutation)==self.chi[0]:
+                raise ValueError("Different size of outer virtual leg and corresponding ordering")
+            if len(self._cycles)<2:
+                raise ValueError("Missing `IdL`/`IdR` cycle for periodic MPO")
+            if len(set(self._outer_permutation))!=len(self._outer_permutation):
+                raise ValueError("Invalid permutation of outer leg")
+        
 
     @property
     def L(self):
@@ -601,6 +618,7 @@ class MPO:
         """Set `W` at site `i`."""
         i = self._to_valid_index(i)
         self._W[i] = W
+        self._reset_graph()
 
     def get_IdL(self, i):
         """Return index of `IdL` at bond to the *left* of site `i`.
@@ -637,6 +655,10 @@ class MPO:
         self._W = factor * self._W
         self.IdL = factor * self.IdL[:-1] + [self.IdL[-1]]
         self.IdR = factor * self.IdR[:-1] + [self.IdR[-1]]
+        if self._has_graph:
+            self._graph = factor*self._graph
+            # self._sparsity_ratio stays the same
+        # can keep self._ordering_checked, outer_permutations and _cycles
         self.test_sanity()
 
     def group_sites(self, n=2, grouped_sites=None):
@@ -681,6 +703,7 @@ class MPO:
         self._W = Ws
         self.sites = grouped_sites
         self.grouped = self.grouped * n
+        self._reset_graph()
 
     def extract_segment(self, first, last):
         """Extract a segment from the MPO.
@@ -706,7 +729,7 @@ class MPO:
         IdL.append(self.IdL[last % L + 1])
         IdR = [self.IdR[i % L] for i in range(first, last + 1)]
         IdR.append(self.IdR[last % L + 1])
-        cp = self.__class__(sites, W, 'segment', IdL, IdR, self.max_range, self.explicit_plus_hc)
+        cp = self.__class__(sites, W, 'segment', IdL, IdR, self.max_range, self.explicit_plus_hc) # no graph
         cp.grouped = self.grouped
         return cp
 
@@ -739,6 +762,23 @@ class MPO:
             if IdR is not None:
                 IdR = IdR % chi[b]
                 self.IdR[b] = np.nonzero(p == IdR)[0][0]
+        if self._has_graph:
+            inv_perms = []
+            for perm in perms:
+                inv_perm = np.empty_like(perm)
+                inv_perm[perm] = np.arange(len(inv_perm), dtype=int)
+                inv_perms.append(inv_perm)
+            new_graph = [{} for _ in range(self.L)]
+            for j_site, layer in enumerate(self._graph):
+                for i,j in layer:
+                    new_graph[j_site][(inv_perms[j_site][i],inv_perms[j_site+1][j])] = self._graph[j_site][(i,j)]
+            self._graph = new_graph
+            if self._ordering_checked==True:
+                self._outer_permutation = [inv_perms[0][j] for j in self._outer_permutation]
+                perm_cycles = []
+                for cycle in self._cycles:
+                    perm_cycles.append([inv_perms[j_bond][j_cycle] for j_bond, j_cycle in enumerate(cycle)])
+                self._cycles = perm_cycles
         # done
 
     def make_U(self, dt, approximation='II'):
@@ -820,7 +860,7 @@ class MPO:
             IdLR_0 = IdL
         IdLR = [IdLR_0] + IdLR
 
-        return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf)
+        return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf) # no graph
 
     def make_U_II(self, dt):
         r"""Creates the :math:`U_II` propagator.
@@ -884,7 +924,7 @@ class MPO:
             # TODO: could sort by charges.
             U.append(W_II)
         Id = [0] * (self.L + 1)
-        return MPO(self.sites, U, self.bc, Id, Id, max_range=self.max_range)
+        return MPO(self.sites, U, self.bc, Id, Id, max_range=self.max_range) # no graph
 
     def expectation_value(self, psi, tol=1.e-10, max_range=100, init_env_data={}):
         """Calculate ``<psi|self|psi>/<psi|psi>`` (or density for infinite).
@@ -1063,6 +1103,9 @@ class MPO:
         if self.explicit_plus_hc:
             current_value = current_value + np.conj(current_value)
         return np.real_if_close(current_value / L)
+
+    def expectation_value_environment(self, psi, others):
+        raise NotImplementedError("Makes sense to implement once iterative environment algorithm is done")
 
     def variance(self, psi, exp_val=None):
         """Calculate ``<psi|self^2|psi> - <psi|self|psi>^2``.
@@ -1283,7 +1326,17 @@ class MPO:
             Ws[0].legs[0] = Ws[0].legs[0].flip_charges_qconj()
         else:
             Ws[0].legs[0] = wR.conj()
-        return MPO(self.sites, Ws, self.bc, self.IdL, self.IdR, self.max_range)
+        res = MPO(self.sites, Ws, self.bc, self.IdL, self.IdR, self.max_range)
+        # virtual bonds kept the same, only complex conjugation -> _graph/ordering stays valid
+        if self._has_graph:
+            res._has_graph = True
+            res._graph = self._graph
+            res._sparsity_ratio = self._sparsity_ratio
+        if self._ordering_checked!=None:
+            res._ordering_checked = self._ordering_checked
+            res._outer_permutation = self._outer_permutation
+            res._cycles = self._cycles
+        return res
 
     def is_hermitian(self, eps=1.e-10, max_range=None):
         """Check if `self` is a hermitian MPO.
@@ -1292,6 +1345,8 @@ class MPO:
         """
         if self.explicit_plus_hc:
             return True
+        # possible optimization:
+        # if self._has_graph, can also iterate through graph and check for all entries whether the operators are hermitian
         return self.is_equal(self.dagger(), eps, max_range)
 
     def is_equal(self, other, eps=1.e-10, max_range=None):
@@ -1316,6 +1371,7 @@ class MPO:
         equal : bool
             Whether `self` equals `other` to the desired precision.
         """
+        # offers a similar possibility as is_hermitian. If both have graph, check for equality of graphs
         if self.finite:
             max_i = self.L
         else:
@@ -1630,7 +1686,7 @@ class MPO:
             max_range = max(self.max_range, other.max_range)
         else:
             max_range = None
-        return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range, self.explicit_plus_hc)
+        return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range, self.explicit_plus_hc) # no graph
 
     def _get_block_projections(self, i):
         """projections onto (IdL, other, IdR) on bond `i` in range(0, L+1)"""
