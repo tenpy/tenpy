@@ -114,6 +114,29 @@ class MPO:
         The matrices of the MPO. Labels are ``'wL', 'wR', 'p', 'p*'``.
     _valid_bc : tuple of str
         Class attribute. Valid boundary conditions; the same as for an MPS.
+    _has_graph : bool
+        `True` if :attr:`_graph` is valid
+    _graph : None | list of {dict of {(int,int): :class:`~tenpy.linalg.np_conserved.Array`}}
+        Represents the graph structure of `self`.
+        `_graph[j_site][(i,j)] = op` where `op=self._W[j_site][i,j]` iff `npc.norm(op)>0`
+        Defaults to `None` if the graph is invalid or has not yet been built
+    _sparsity_ratio : float
+        Sparsity of the MPO computed as:
+        (number of ops in :attr:`_W` with norm>0)/(total number of entries in :attr:`_W`)
+        Defaults to `-1.` if undetermined
+    _ordering_checked : None | bool
+        Relevant only for iMPOs and segment MPOs with contractible outer virtual legs:
+        `self._W[0].get_leg("wL")`, `self._W[-1].get_leg("wR")`
+        If `True`, the outer virtual legs of `self` can be ordered such that the MPO is upper triangular
+         **Note:** This ordering is valid only with respect to the **whole unit cell**, not for internal `'wL'/'wR'` legs.
+    _outer_permutation : None | list of int
+        Ordering of the outer virtual legs such that `self` is upper triangular w.r.t. the whole unit cell. 
+        Follows the constraint `_outer_permutation[0] = self.IdL[0]`, `_outer_permutation[-1] = self.IdR[-1]`
+        Defaults to `None` if the ordering is not possible or has not yet been checked
+    _cycles : None | list of {list of int} 
+        Stores indices `[i0, i1, ..., iL = i0]` for each index of the outer virtual leg that connects to itself.
+        The cycle is `_W[0][i0, i1] * _W[1][i1, i2] * ... * _W[L-1][iL-1, iL]`
+        Defaults to None if :attr:`_outer_permutation` does not exist.
     """
 
     _valid_bc = _MPS._valid_bc  # same valid boundary conditions as an MPS.
@@ -136,25 +159,34 @@ class MPO:
         self.bc = bc
         self.max_range = max_range
         self.explicit_plus_hc = explicit_plus_hc
-        self._has_graph = False # more efficient contraction in MPO environments, reset to False using self._reset_graph
-        self._graph = None # [{(i,j):W[site][i,j] if W[site][i,j]!=0} for _ in range(len(self.sites))]
-        self._sparsity_ratio = 0. # number of filled W entries / total number of possible W entries
+        self._has_graph = False
+        self._graph = None
+        self._sparsity_ratio = -1.
         # for iterative environment initialization
-        self._ordering_checked = None # None for undefined, False if checked and not possible, True if present
-        self._outer_permutation = None # for iterative environment calculation, p[j] index of MPO w.r.t. j ordered
-        self._cycles = None # for iterative environment calculation, list of [i0, i1, i2, ..., iL+1] s.t. loop is W[0][i0,i1]*W[1][i1,i2]*..*W[L][iL,iL+1]
+        self._ordering_checked = None
+        self._outer_permutation = None
+        self._cycles = None
         self.test_sanity()
 
     def _reset_graph(self):
-        # set proper defaults
-        # no need to carry graph if not valid
+        # set proper defaults and avoid carrying graph if not valid
         self._has_graph = False
         self._graph = None
+        self._sparsity_ratio = -1.
         self._ordering_checked = None
         self._outer_permutation = None
         self._cycles = None
         
     def _make_graph(self, norm_tol=1e-12):
+        """ Construct :attr:`_graph`
+
+        This function in essence builds the MPOGraph represented by `self`.
+
+        Parameters
+        ----------
+        norm_tol : float
+            Entries in :attr:`_W` are considered zero if their norm is smaller than `norm_tol`.        
+        """
         # build graph, no checks for loops etc.
         if self._has_graph:
             return
@@ -168,24 +200,46 @@ class MPO:
                     op = W[jL, jR]
                     if npc.norm(op)>norm_tol:
                         self._graph[i][(jL, jR)] = op
-        self._sparsity_ratio = self._compute_sparsity()
+        self._compute_sparsity()
         self._has_graph = True
 
     def _compute_sparsity(self):
+        """ Compute :attr:`_sparsity_ratio`
+        
+        The sparsity ratio is defined as the number of nonzero operators in :attr:`_W`
+        divided by the total number of possible entries in :attr:`_W`.
+        """
         chis = self.chi
         number_entries = sum([len(layer) for layer in self._graph])
         total_W_size = sum([chis[j]*chis[j+1] for j in range(self.L)])
-        return number_entries/total_W_size
+        self._sparsity_ratio = number_entries/total_W_size
     
     def _order_graph(self):
-        # checks whether ordering the graph is possible and sets the corresponding attributes of the MPO
+        """ Find an ordering for :attr:`_graph` if possible
+
+        Checks whether `self` can be brought into upper triangular form
+        and updates :attr:`_ordering_checked`, :attr:`_outer_permutation`
+        and :attr:`_cycles` accordingly
+
+        .. note ::
+
+            - Attempting to do this makes only sense if the MPO is periodic.
+            The upper triangular form applies to **the whole unit cell**.
+            In particular, the MPO matrices :attr:`_W` are **not** ordered.
+            - Ordering the graph can fail for multiple reasons. Generally, this is not
+            critical and :attr:`_ordering_checked` should be set to `False`.
+            If an error occurs, a `ValueError` is raised and catched at the end,
+            resulting in a distinct warning. Functions that require the upper triangular form
+            should check this via :attr:`_ordering_checked`.
+        """
+        # check whether ordering the graph makes sense
         if self._graph==None:
             warnings.warn("No graph present, calling _make_graph().")
             self._make_graph()
-        if self._ordering_checked==False: # should not happen in practice
+        if self._ordering_checked==False:
             warnings.warn("Ordering the MPO was already tried and failed. If intentional, make sure that the MPO satisfies the requirements.")
             return
-        elif self.bc=="finite": # should not happen in practice
+        elif self.bc=="finite":
             warnings.warn("_order_graph() called for 'finite' MPO. This does not make sense.")
             self._ordering_checked = False
             return 
@@ -209,7 +263,8 @@ class MPO:
             offset = 1+len(j_upper)
             for j, j_cycle in enumerate(j_other_cycles):
                 perm[offset+j] = j_cycle
-            # ordering for j_upper and j_lower. Works by iteratively removing all indices that do not couple to the block
+            # order j_upper / j_lower.
+            # Done by iteratively removing all indices that do not couple to the block
             def sort_block(block):
                 ordering = []
                 js_step = []
@@ -217,14 +272,15 @@ class MPO:
                     for j in block:
                         if not outer_connections[j] & block: # no connections to block
                             js_step.append(j)
-                    if len(js_step)==0: # means that every index in the block maps to at least one other index in the block -> illegal cycle
+                    if len(js_step)==0: # Illegal cycle
                         raise ValueError("Index ordering failed: Illegal cycle A1 -> A2 -> ... -> A1 over multiple unit cells found. Increasing the unit cell might fix this problem.")
-                    for j in reversed(js_step): # reversed: 1,2,3, ordered as such and not 3,2,1 if possible
+                    # reversed: ensure that indices with same depth are ordered in ascending order
+                    for j in reversed(js_step): 
                         ordering.append(j)
                         block.remove(j)
                     js_step = []
                 return ordering            
-            # upper indices
+            # upper indices, ordered with low depth first
             j_upper_ordered = sort_block(j_upper)
             for index, j in enumerate(j_upper_ordered):
                 perm[offset-1-index] = j
@@ -241,7 +297,21 @@ class MPO:
             warnings.warn("Ordering the MPO failed: "+str(e))
             self._ordering_checked = False 
 
-    def _get_cycles(self):        
+    def _get_cycles(self):
+        """ Identify all indices of the outer virtual leg that connect to themselves
+        
+        Helper function for `self._order_graph()`
+
+        Returns
+        -------
+        j_cycles : set of int
+            Indices of the outer virtual leg that connect to themselves
+        cycles : list of {list of int}
+            The corresponding cycles as in :attr:`_cycles`.
+        outer_connections : list of {set of int}
+            One entry for each index of the outer leg,
+            containing a set of all indices it connects to.
+        """        
         j_cycles = []
         cycles = []
         outer_connections = []
@@ -272,6 +342,29 @@ class MPO:
         return set(j_cycles), cycles, [set(x) for x in outer_connections]
     
     def _graph_to_blocks(self, loop_params):
+        """ Sort the outer virtual leg into blocks
+
+        Helper function for `self._order_graph()`
+
+        Categorizes the indices of the outer virtual leg into blocks
+        `IdL`, `IdR`, other cycles, upper indices, lower indices
+        
+        Returns
+        -------
+        j_IdL : int
+            Index of `IdL`.
+        j_IdR : int
+            Index of `IdR`.
+        non_Id_cycles : set of int
+            Indices distinct from `IdL` and `IdR` with cycles.
+            Arise e.g. from exponentially decaying terms.
+        j_upper : set of int
+            All indices without cycles that `non_Id_cycles`
+            does not connect to.
+        j_lower : set of int
+            All indices without cycles that some index in
+            `non_Id_cycles` connects to.
+        """
         j_cycles, _, outer_connections = loop_params
         # check IdL, IdR valid
         j_IdL, j_IdR = self.IdL[0], self.IdR[-1]
@@ -346,6 +439,7 @@ class MPO:
         h5gr.attrs["explicit_plus_hc"] = self.explicit_plus_hc
         h5gr.attrs["L"] = self.L  # not needed for loading, but still useful metadata
         h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
+        # building the graph / ordering it takes <1s for reasonable MPOs, therefore not worth saving it 
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
@@ -467,7 +561,7 @@ class MPO:
         for i in range(L):
             W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i], ['wL', 'wR'])
             Ws.append(W)
-        return cls(sites, Ws, bc, IdL, IdR, max_range, explicit_plus_hc)
+        return cls(sites, Ws, bc, IdL, IdR, max_range, explicit_plus_hc) # no graph
 
     @classmethod
     def from_wavepacket(cls, sites, coeff, op, eps=1.e-15):
@@ -548,7 +642,7 @@ class MPO:
         # MPO to an MPS would need a non-trivial modification that is not captured when setting
         # IdL=0!
         IdR = [None] * L + [0]
-        return cls.from_grids(sites, grids, 'finite', IdL, IdR)
+        return cls.from_grids(sites, grids, 'finite', IdL, IdR) # no graph
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -568,10 +662,9 @@ class MPO:
         if self._has_graph:
             if not len(self._graph) == self.L:
                 raise ValueError("wrong len of _graph")
-                # more checks e.g. check validity of indices, operators?
         if self.bc=="finite":
             if self._ordering_checked==True:
-                raise ValueError("outer virtual legs are trivial for finite MPS, ordering them is not supported")
+                raise ValueError("outer virtual legs are trivial for finite MPS, ordering them makes no sense")
         elif self._ordering_checked==True:
             if self.chi[0]!=self.chi[-1]:
                 raise ValueError("outer virtual legs ordered for MPO that is not periodic")
@@ -762,7 +855,7 @@ class MPO:
             if IdR is not None:
                 IdR = IdR % chi[b]
                 self.IdR[b] = np.nonzero(p == IdR)[0][0]
-        if self._has_graph:
+        if self._has_graph: # makes sense to only permute the indices
             inv_perms = []
             for perm in perms:
                 inv_perm = np.empty_like(perm)
@@ -1326,17 +1419,9 @@ class MPO:
             Ws[0].legs[0] = Ws[0].legs[0].flip_charges_qconj()
         else:
             Ws[0].legs[0] = wR.conj()
-        res = MPO(self.sites, Ws, self.bc, self.IdL, self.IdR, self.max_range)
-        # virtual bonds kept the same, only complex conjugation -> _graph/ordering stays valid
-        if self._has_graph:
-            res._has_graph = True
-            res._graph = self._graph
-            res._sparsity_ratio = self._sparsity_ratio
-        if self._ordering_checked!=None:
-            res._ordering_checked = self._ordering_checked
-            res._outer_permutation = self._outer_permutation
-            res._cycles = self._cycles
-        return res
+        # can keep graph in principle and only conjugate the operators
+        # BUT: Its probably not worth the effort since building it is very fast
+        return MPO(self.sites, Ws, self.bc, self.IdL, self.IdR, self.max_range)
 
     def is_hermitian(self, eps=1.e-10, max_range=None):
         """Check if `self` is a hermitian MPO.
@@ -1345,8 +1430,6 @@ class MPO:
         """
         if self.explicit_plus_hc:
             return True
-        # possible optimization:
-        # if self._has_graph, can also iterate through graph and check for all entries whether the operators are hermitian
         return self.is_equal(self.dagger(), eps, max_range)
 
     def is_equal(self, other, eps=1.e-10, max_range=None):
@@ -1371,7 +1454,6 @@ class MPO:
         equal : bool
             Whether `self` equals `other` to the desired precision.
         """
-        # offers a similar possibility as is_hermitian. If both have graph, check for equality of graphs
         if self.finite:
             max_i = self.L
         else:
