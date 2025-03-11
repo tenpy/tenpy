@@ -1,4 +1,4 @@
-Sphinx >=8,<8.2.0
+Sphinx
 sphinx-rtd-theme
 sphinxcontrib-bibtex
 matplotlib
