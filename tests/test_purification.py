@@ -243,4 +243,21 @@ def test_purification_apply_2_site_op():
     # check if apply_local_op with a 2-site operator works for PurificationMPS
     model = XXZChain(dict(L=8))
     psi = purification_mps.PurificationMPS.from_infiniteT(sites=model.lat.mps_sites())
+
+    # apply to [p0, p1] using default behavior
     psi.apply_local_op(4, model.H_bond[4], unitary=False)
+
+    # apply to [p0, p1] explicitly
+    psi.apply_local_op(4, model.H_bond[4], unitary=False, axes=['p0', 'p1'])
+
+    # apply to ancilla legs [q0, q1]
+    p = psi._B[4].get_leg('p')
+    q = psi._B[4].get_leg('q')
+    op_q0_q1 = npc.Array.from_func(np.random.random, [q, q, q.conj(), q.conj()], qtotal=None,
+                                   shape_kw='size', labels=['q0', 'q1', 'q0*', 'q1*'])
+    psi.apply_local_op(4, op_q0_q1, unitary=False, axes=['q0', 'q1'])
+
+    # apply to [p0, q1] mixed
+    op_p0_q1 = npc.Array.from_func(np.random.random, [p, q, p.conj(), q.conj()], qtotal=None,
+                                   shape_kw='size', labels=['p0', 'q1', 'p0*', 'q1*'])
+    psi.apply_local_op(4, op_p0_q1, unitary=False, axes=['p0', 'q1'])

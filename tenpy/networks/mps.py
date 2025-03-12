@@ -4564,7 +4564,7 @@ class MPS(BaseMPSExpectationValue):
         return psi
 
     def apply_local_op(self, i, op, unitary=None, renormalize=False, cutoff=1.e-13,
-                       understood_infinite=False):
+                       understood_infinite=False, axes=None):
         r"""Apply a local (one or multi-site) operator to `self`. In place.
 
         Note that this destroys the canonical form if the local operator is non-unitary.
@@ -4579,9 +4579,11 @@ class MPS(BaseMPSExpectationValue):
         i : int
             (Left-most) index of the site(s) on which the operator should act.
         op : str | npc.Array
-            A physical operator acting on site `i`, with legs ``'p', 'p*'`` for a single-site
-            operator or with legs ``['p0', 'p1', ...], ['p0*', 'p1*', ...]`` for an operator
-            acting on `n`>=2 sites.
+            A physical operator acting on a single site `i`, or on ``n`` consecutive sites
+            ``range(i, i + n)``. Must have ``2 * n`` legs, i.e. one pair per site.
+            Labels must be the `axes` plus their stars, in any order, i.e. by default the labels
+            should be ``'p', 'p*'`` for a single-site operator or
+            ``['p0', 'p1', ...], ['p0*', 'p1*', ...]`` for an operator acting on `n`>=2 sites.
             Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
             :attr:`sites`.
         unitary : None | bool
@@ -4597,6 +4599,13 @@ class MPS(BaseMPSExpectationValue):
         understood_infinite : bool
             Raise a warning to make aware of :ref:`iMPSWarning`.
             Set ``understood_infinite=True`` to suppress the warning.
+        axes : None | (list of) str
+            A list of `n` leg labels that the operator acts on.
+            For every label ``a`` in `axes`, we assume that `op` has two corresponding legs,
+            ``a`` and ``a*``. We contract ``a*`` with the leg ``a`` of the MPS and ``a`` of the `op`
+            will be the new MPS leg of the result.
+            ``None`` defaults to ``['p']`` for single site (n=1), or ``['p0', 'p1', ... 'p{n-1}']``
+            for `n` > 1.
         """
         if not self.finite and not understood_infinite:
             warnings.warn("For infinite MPS, apply_local_op acts on *each* unit cell in parallel."
@@ -4619,11 +4628,23 @@ class MPS(BaseMPSExpectationValue):
             opname = op
             need_JW = False
         n = op.rank // 2  # same as int(rank/2)
-        if n == 1:
-            pstar, p = 'p*', 'p'
+
+        # handle labels
+        if axes is None:
+            if n == 1:
+                axes = ['p']
+            else:
+                axes = [f'p{j}' for j in range(n)]
         else:
-            p = self._get_p_labels(n, False)
-            pstar = self._get_p_labels(n, True)
+            axes = to_iterable(axes)
+            assert len(axes) == n
+        if any(label.endswith('*') for label in axes):
+            raise ValueError('axes should not contain dual labels (stars)')
+        p = axes
+        pstar = [f'{label}*' for label in axes]
+        if set(op._labels) != set(p + pstar):
+            raise ValueError(f'op has wrong labels. Expected {p + pstar}. Got {op._labels}')
+
         if unitary is None:
             op_op_dagger = npc.tensordot(op, op.conj(), axes=[pstar, p])
             if n > 1:
