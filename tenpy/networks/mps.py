@@ -2005,9 +2005,12 @@ class MPS(BaseMPSExpectationValue):
             The sites defining the local Hilbert space.
         psi : :class:`~tenpy.linalg.np_conserved.Array`
             The full wave function to be represented as an MPS.
-            Should have labels ``'p0', 'p1', ...,  'p{L-1}'``.
+            Should have labels ``'p0', 'p1', ...,  'p{L-1}'`` (in any order).
             Additionally, it may have (or must have for 'segment' `bc`) the legs ``'vL', 'vR'``,
             which are trivial for 'finite' `bc`.
+            For subclasses with multiple physical legs per site, we instead expect one set of labels
+            per site (e.g. ``'p0', 'q0', 'p1', 'q1', ...`` for
+            :class:`~tenpy.networks.purification_mps.PurificationMPS`).
         form  : ``'B' | 'A' | 'C' | 'G' | None``
             The canonical form of the resulting MPS, see module doc-string.
             ``None`` defaults to 'A' form on the first site and 'B' form on all following sites.
@@ -2044,24 +2047,47 @@ class MPS(BaseMPSExpectationValue):
             psi = psi.add_trivial_leg(len(psi.get_leg_labels()), label='vR', qconj=-1)
         elif bc == 'finite' and psi.get_leg('vR').ind_len != 1:
             raise ValueError("non-trivial left leg for 'finite' bc!")
-        labels = ['vL'] + ['p' + str(i) for i in range(L)] + ['vR']
-        psi.itranspose(labels)
+
+        # need to consider subclasses with multiple legs per site (e.g. purification)
+        legs_per_site = len(cls._p_label)
+        # p_labels: e.g. [['p0', 'q0'], ['p1', 'q1'], ...]
+        p_labels = [[f'{p}{i}' for p in cls._p_label] for i in range(L)]
+        # psi_labels: e.g. ['vL', 'p0', 'q0', 'p1', 'q1', ..., 'vR']
+        psi_labels = ['vL'] + [p_i for P in p_labels for p_i in P] + ['vR']
+        psi.itranspose(psi_labels)
+
+        # combine to one leg per site
+        if legs_per_site > 1:
+            psi = psi.combine_legs([[1 + site * legs_per_site + n for n in range(legs_per_site)]
+                                    for site in range(L)])
+            combined_P_labels = [npc.Array._combine_leg_labels(P) for P in p_labels]
+        else:
+            combined_P_labels = [P[0] for P in p_labels]
+        # now we have legs ``vL, P0, P1, ..., vR``, where e.g. P0==(p0.q0)
+        assert psi._labels == ['vL', *combined_P_labels, 'vR']
+
         # combine legs from left
         for i in range(0, L - 1):
             psi = psi.combine_legs([0, 1])  # combines the legs until `i`
-        # now psi has only three legs: ``'(((vL.p0).p1)...p{L-2})', 'p{L-1}', 'vR'``
+        # now psi has only three legs: ``'(((vL.P0).P1)...P{L-2})', 'P{L-1}', 'vR'``
         for i in range(L - 1, 0, -1):
             # split off B[i]
-            psi = psi.combine_legs([labels[i + 1], 'vR'])
+            psi = psi.combine_legs([combined_P_labels[i], 'vR'])
             psi, S, B = npc.svd(psi, inner_labels=['vR', 'vL'], cutoff=cutoff)
             S /= np.linalg.norm(S)  # normalize
             if i > 1:
                 psi.iscale_axis(S, 1)
-            B_list[i] = B.split_legs(1).replace_label(labels[i + 1], 'p')
+            B = B.split_legs(1)
+            if legs_per_site > 1:
+                B = B.split_legs(combined_P_labels[i])
+            B = B.replace_labels(p_labels[i], cls._p_label)
+            B_list[i] = B
             S_list[i] = S
             psi = psi.split_legs(0)
         # psi is now the first `B` in 'A' form
-        B_list[0] = psi.replace_label(labels[1], 'p')
+        if legs_per_site > 1:
+            psi = psi.split_legs(combined_P_labels[0])
+        B_list[0] = psi.replace_labels(p_labels[0], cls._p_label)
         B_form = ['A'] + ['B'] * (L - 1)
         if bc == 'finite':
             S_list[0] = S_list[-1] = np.ones([1], dtype=np.float64)
