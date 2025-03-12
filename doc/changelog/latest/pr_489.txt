@@ -1,0 +1,5 @@
+- Fix bugs in some methods of :class:`~tenpy.networks.purification_mps.PurificationMPS`, in particular
+  :meth:`~tenpy.networks.purification_mps.apply_local_op` for multi-site operators, as well as
+  :meth:`~tenpy.networks.purification_mps.from_full`. Before, they raised errors, since the implementations,
+  which are in the parent class :class:`~tenpy.networks.mps.MPS` did not consider the purification
+  case.
