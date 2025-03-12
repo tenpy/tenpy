@@ -45,9 +45,8 @@ def test_purification_mps():
             npt.assert_allclose(C, 0.5 * 0.5 * np.eye(L), atol=1.e-13)
 
 
-
 @pytest.mark.parametrize('conserve_ancilla', [False, True])
-def test_canoncial_purification(conserve_ancilla, L=6, charge_sector=0, eps=1.e-14):
+def test_canonical_purification(conserve_ancilla, L=6, charge_sector=0, eps=1.e-14):
     site = spin_half
     psi = purification_mps.PurificationMPS.from_infiniteT_canonical(
         [site] * L, [charge_sector], conserve_ancilla_charge=conserve_ancilla)
@@ -238,3 +237,27 @@ def gen_disentangler_psi_singlet_test(site_P=spin_half, L=6, max_range=4):
     print("P: ", np.round(psi0.mutinf_two_site(legs='p')[1] / np.log(2), 3))
     print("Q: ", np.round(mutinf_Q / np.log(2), 3))
     assert (np.all(mutinf_Q < 1.e-10))
+
+
+def test_purification_apply_2_site_op():
+    # check if apply_local_op with a 2-site operator works for PurificationMPS
+    model = XXZChain(dict(L=8))
+    psi = purification_mps.PurificationMPS.from_infiniteT(sites=model.lat.mps_sites())
+
+    # apply to [p0, p1] using default behavior
+    psi.apply_local_op(4, model.H_bond[4], unitary=False)
+
+    # apply to [p0, p1] explicitly
+    psi.apply_local_op(4, model.H_bond[4], unitary=False, axes=['p0', 'p1'])
+
+    # apply to ancilla legs [q0, q1]
+    p = psi._B[4].get_leg('p')
+    q = psi._B[4].get_leg('q')
+    op_q0_q1 = npc.Array.from_func(np.random.random, [q, q, q.conj(), q.conj()], qtotal=None,
+                                   shape_kw='size', labels=['q0', 'q1', 'q0*', 'q1*'])
+    psi.apply_local_op(4, op_q0_q1, unitary=False, axes=['q0', 'q1'])
+
+    # apply to [p0, q1] mixed
+    op_p0_q1 = npc.Array.from_func(np.random.random, [p, q, p.conj(), q.conj()], qtotal=None,
+                                   shape_kw='size', labels=['p0', 'q1', 'p0*', 'q1*'])
+    psi.apply_local_op(4, op_p0_q1, unitary=False, axes=['p0', 'q1'])
