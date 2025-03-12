@@ -237,3 +237,10 @@ def gen_disentangler_psi_singlet_test(site_P=spin_half, L=6, max_range=4):
     print("P: ", np.round(psi0.mutinf_two_site(legs='p')[1] / np.log(2), 3))
     print("Q: ", np.round(mutinf_Q / np.log(2), 3))
     assert (np.all(mutinf_Q < 1.e-10))
+
+
+def test_purification_apply_2_site_op():
+    # check if apply_local_op with a 2-site operator works for PurificationMPS
+    model = XXZChain(dict(L=8))
+    psi = purification_mps.PurificationMPS.from_infiniteT(sites=model.lat.mps_sites())
+    psi.apply_local_op(4, model.H_bond[4], unitary=False)
