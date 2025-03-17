@@ -2707,6 +2707,91 @@ class MPOEnvironment(BaseEnvironment):
                                    new_axes=[2, 1])
         return RHeff
 
+    def _contract_cL(self, cL, i, op):
+        """ contract cL=A-op-A*= """
+        cL = npc.tensordot(self.ket.get_B(i, form='A'), cL, axes=('vL', 'vR'))
+        cL = npc.tensordot(cL, op, axes=[self.ket._p_label, 'p*'])
+        axes = ('p' + ['vR*'], self.bra._get_p_label('*') + ['vL*'])
+        cL = npc.tensordot(cL, self.bra.get_B(i, form='A').conj(), axes=axes)
+        return cL
+    
+    def contract_cR(self, cR, i, op):
+        """ contract =B-op-B*=cR """
+        cR = npc.tensordot(self.ket.get_B(i, form='B'), cR, axes=('vR', 'vL'))
+        cR = npc.tensordot(cR, op, axes=[self.ket._p_label, 'p*'])
+        axes = ('p' + ['vL*'], self.bra._get_p_label('*') + ['vR*'])
+        cR = npc.tensordot(cR, self.bra.get_B(i, form='B').conj(), axes=axes)
+        return cR
+
+    def _init_grids(self, left_env=True):
+        # should probably work with nr_grids=nr_ones-1 if last index one
+        # only for use within setup_for_iterative, no self.H checks
+        L = self.L
+        # list (j_site) of {list (j_virtual) of {list (c, ingoing)}}
+        # cPartial, ingoing inds
+        grid = []
+        for chi in self.H.chi[1:]:
+            layer = [[None,set()] for _ in range(chi)]
+            grid.append(layer)
+        for j_site, layer in enumerate(self.H._graph()):
+            if left_env:
+                for i,j in layer:
+                    grid[j_site][j][1].add(i)
+            else:
+                for i,j in layer:
+                    grid[j_site][i][1].add(j)
+        return grid
+
+    def _setup_for_iterative(self):
+        assert self.ket is self.bra, "makes no sense with ket!=bra"
+        if not self.H._has_graph:
+            self.H._make_graph()
+        if self.H._ordering_checked==None:
+            self.H._order_graph()
+        if self.H._ordering_checked==False:
+            raise ValueError("Hamiltonian cannot be ordered.")
+        self._init_grids()
+
+    def _loop_structures(self, tol=1e-10):
+        ones = []
+        for loop in self.H._cycles:
+            norm = 1.
+            for j in range(self.L):
+                op = self.H._graph[j][(loop[j],loop[j+1])] # (i,j)
+                factor = npc.norm(op, ord=1)/op.shape[0] 
+                assert factor<1+tol, "Operator norm larger than one up to tol={2} on diagonal entry at index {0} of W[{1}]?".format(j, site, tol)
+                assert factor>0, "entry with negative norm"
+                if factor<tol:
+                    break # norm close to zero
+                # op == factor*id with factor>0
+                is_id = npc.norm(op-factor*npc.diag(1., op.get_leg("p")), ord=1)<tol
+                if not is_id:
+                    raise ValueError("Diagonal entry at index {0} of W[{1}] not close to identity up to tol={2}".format(j, site, tol))
+                norm *= factor
+            if abs(norm-1.)<tol:
+                ones.append(loop[0])
+        return ones
+
+    def _init_env_iterative(self, which='both'):
+        assert which=='LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
+        # prep
+        self._setup_for_iterative()
+        ones = self._loop_structures()
+        n_terms = len(ones) # number of nonzero diagonal entries
+        # can simply remove when outgoing is done
+        grids = {"LP":None,"RP":None}
+        if which!="RP": # add check to remove one
+            grids["LP"] = [self._init_grids() for _ in range(n_terms)]
+        if which!="LP":
+            grids["RP"] = [self._init_grids(False) for _ in range(n_terms)] 
+        # probably needed somewhere
+        leglabels = {"LP": ([self.H.get_W(0).get_leg('wL').conj(), self.ket.get_B(0).get_leg('vL').conj(),
+                            self.ket.get_B(0).get_leg('vL')], ['wR','vR','vR*']),
+                     "RP": ([self.H.get_W(self.L-1).get_leg('wR').conj(), self.ket.get_B(self.L-1).get_leg('vR').conj(),
+                             self.ket.get_B(self.L-1).get_leg('vR')], ['wL','vL','vL*'])}
+        envs = {}
+        epsilons = {} # energies PER UNIT CELL !!!
+        
     def _to_valid_index(self, i):
         """Make sure `i` is a valid index (depending on `finite`)."""
         if not self.finite:
