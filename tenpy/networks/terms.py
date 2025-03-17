@@ -1379,7 +1379,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
         ----------
         strength : float
             Overall prefactor.
-        lambda_ : float
+        lambda_ : float | 1D array
             Decay-rate
         op_i, op_j : string
             Names for the operators.
@@ -1425,6 +1425,8 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
         finite = (graph.bc == 'finite')
 
         for (strength, lambda_, op_i, op_j, subsites, op_string) in self.exp_decaying_terms:
+            if np.isscalar(lambda_) :
+                lambda_ = np.full(self.L, lambda_)
             while (key_nr, key) in all_states:
                 key_nr += 1
             label = (key_nr, key)
@@ -1437,18 +1439,18 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
             if not finite:
                 for i in range(self.L):
                     if in_subsites[i]:
-                        graph.add(i, 'IdL', label, op_i, lambda_)
-                        graph.add(i, label, label, op_string, lambda_)
+                        graph.add(i, 'IdL', label, op_i, lambda_[i])
+                        graph.add(i, label, label, op_string, lambda_[i])
                         graph.add(i, label, 'IdR', op_j, strength)
                     else:
                         graph.add(i, label, label, op_string, 1.)
             else:
                 # first subsite
-                graph.add(first_subsite, 'IdL', label, op_i, lambda_)
+                graph.add(first_subsite, 'IdL', label, op_i, lambda_[first_subsite])
                 for i in range(first_subsite + 1, last_subsite):
                     if in_subsites[i]:
-                        graph.add(i, 'IdL', label, op_i, lambda_)
-                        graph.add(i, label, label, op_string, lambda_)
+                        graph.add(i, 'IdL', label, op_i, lambda_[i])
+                        graph.add(i, label, label, op_string, lambda_[i])
                         graph.add(i, label, 'IdR', op_j, strength)
                     else:
                         graph.add(i, label, label, op_string, 1.)
@@ -1477,13 +1479,15 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
         L = self.L
         for term in self.exp_decaying_terms:
             strength, lambda_, op_i, op_j, subsites, op_string = term
+            if np.isscalar(lambda_) : 
+                lambda_ = np.full(self.L, lambda_)
             N = len(subsites)
             if bc == 'finite':
                 for i2, i in enumerate(subsites):
                     for d, j in enumerate(subsites[i2:]):
                         if d == 0:
                             continue
-                        pref = strength * lambda_**d
+                        pref = strength * lambda_[i]**d
                         if abs(pref) < cutoff:
                             break
                         terms.append([(op_i, i), (op_j, j)])
@@ -1493,7 +1497,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                     for d in range(1, 1000):
                         j2 = i2 + d
                         j = subsites[j2 % N] + (j2 // N) * L
-                        pref = strength * lambda_**d
+                        pref = strength * lambda_[i]**d
                         if abs(pref) < cutoff:
                             break
                         terms.append([(op_i, i), (op_j, j)])

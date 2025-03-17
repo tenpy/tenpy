@@ -342,6 +342,28 @@ def test_exp_decaying_terms():
     H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='infinite').build_MPO()
     assert H1.is_equal(H2, cutoff)
 
+def test_exp_non_uniform_decaying_terms():
+    L = 8
+    spin = site.Site(spin_half.leg)
+    spin.add_op("X", 2. * np.eye(2))
+    spin.add_op("Y", 3. * np.eye(2))
+    sites = [spin] * L
+    edt = ExponentiallyDecayingTerms(L)
+    p, l = 3., np.array([0.2,0.2,0.25,0.5, 0.5, 0.25, 0.2, 0.2])
+    edt.add_exponentially_decaying_coupling(p, l, 'X', 'Y', subsites=[0, 2, 4, 6])
+    edt._test_terms(sites)
+    ts = edt.to_TermList(bc='finite', cutoff=0.01)
+    ts_desired = [
+        [("X", 0), ("Y", 2)],
+        [("X", 0), ("Y", 4)],
+        [("X", 0), ("Y", 6)],
+        [("X", 2), ("Y", 4)],
+        [("X", 2), ("Y", 6)],
+        [("X", 4), ("Y", 6)],
+    ]
+    assert ts.terms == ts_desired
+    assert np.all(ts.strength == p * np.array([l[0], l[0]**2, l[0]**3, l[2], l[2]**2, l[4]]))
+    # TODO: More testing? Like previous test
 
 @pytest.mark.parametrize('bc', ['finite', 'infinite'])
 def test_mpo_to_term_list(bc):
