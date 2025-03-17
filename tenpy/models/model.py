@@ -1511,7 +1511,7 @@ class CouplingModel(Model):
         ----------
         strength : float
             Overall prefactor.
-        lambda_ : float
+        lambda_ : float | 1D array
             Decay-rate
         op_i, op_j : string
             Names for the operators.
