@@ -1389,6 +1389,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
         op_string : string
             The operator to be inserted between `A` and `B`; for Fermions this should be ``"JW"``.
         """
+        assert (np.isscalar(lambda_) or len(lambda_) == self.L)
         if subsites is None:
             subsites = np.arange(self.L)
         else:
