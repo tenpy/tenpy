@@ -342,6 +342,7 @@ def test_exp_decaying_terms():
     H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='infinite').build_MPO()
     assert H1.is_equal(H2, cutoff)
 
+# TODO: More testing? Like previous test?
 def test_exp_non_uniform_decaying_terms():
     L = 8
     spin = site.Site(spin_half.leg)
@@ -363,7 +364,6 @@ def test_exp_non_uniform_decaying_terms():
     ]
     assert ts.terms == ts_desired
     assert np.all(ts.strength == p * np.array([l[0], l[0]**2, l[0]**3, l[2], l[2]**2, l[4]]))
-    # TODO: More testing? Like previous test
 
 @pytest.mark.parametrize('bc', ['finite', 'infinite'])
 def test_mpo_to_term_list(bc):
