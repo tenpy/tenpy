@@ -1,0 +1,2 @@
+- Add config options to control what is conserved for the :class:`~tenpy.models.xxz_chain.XXZChain`
+  and :class:`~tenpy.models.pxp.PXPChain`.
