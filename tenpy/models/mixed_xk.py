@@ -355,16 +355,25 @@ class MixedXKModel(CouplingMPOModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
-    Parameters
-    ----------
-    xy_lattice : ``"Square"``
-        Chooses Real-space lattice geometry.
-        TODO: Currently, only "Square" is implemented.
-
     Attributes
     ----------
     real_space_lattice : TODO ???
         Real-space lattice geometry.
+
+    Options
+    -------
+    .. cfg:config :: MixedXKModel
+        :include: CouplingMPOModel
+
+        xy_lattice : 'Square'
+            The real-space lattice geometry. Currently, only "Square" is implemented.
+        Lx, Ly : int
+            Dimension of the (real-space) lattice.
+        ring_order : 1D array
+            The :attr:`~MixedXKLattice.ring_order` of the xk lattice. Length ``Ly*N_orb``
+        conserve_k : bool
+            If the y-momentum should be conserved.
+
     """
     def init_lattice(self, model_params, N_orb, chinfo, charges):
         """Initialize a MixedXKLattice for the given model parameters.
@@ -726,6 +735,14 @@ class SpinlessMixedXKSquare(MixedXKModel):
 
     Spinless Fermions with a single orbital (`N_orb` = 1) on a square lattice,
     nearest neighbor hopping (`t`) and nearest-neighbor interaction (`V`).
+
+    Options
+    -------
+    .. cfg:config :: SpinlessMixedXKSquare
+        :include: MixedXKModel
+
+        t, V : float | array
+            Couplings as defined for the Hamiltonian above.
     """
     def init_lattice(self, model_params):
         N_orb = 1  # simplest case possible
@@ -773,6 +790,14 @@ class HubbardMixedXKSquare(MixedXKModel):
 
     Spinful fermions, no extra orbitals (`N_orb` = 2 for up and down), on a square lattice,
     nearest-neighbor hopping (`t`) + onsite interactions (`U`)
+
+    Options
+    -------
+    .. cfg:config :: HubbardMixedXKSquare
+        :include: MixedXKModel
+
+        t, U : float | array
+            Couplings as defined for the Hamiltonian above.
     """
     def init_lattice(self, model_params):
         N_orb = 2  # for spin up (l=0) and down (l=1)
