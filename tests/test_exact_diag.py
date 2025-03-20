@@ -7,6 +7,7 @@ from functools import reduce
 import copy
 
 import tenpy.linalg.np_conserved as npc
+from tenpy.networks import MPS, SpinHalfSite
 from tenpy.models import TFIChain, XXZChain
 from tenpy.algorithms import exact_diag
 from tenpy.linalg.krylov_based import LanczosGroundState
@@ -78,6 +79,35 @@ def get_tfi_Hamiltonian(L, J, g, up_down_basis=True):
         ops[i] = ops[i + 1] = sx
         H_expect = H_expect - J * reduce(np.kron, ops)
     return H_expect
+
+
+@pytest.mark.parametrize('undo_sort_charge', [True, False])
+@pytest.mark.parametrize('conserve', ['best', 'None'])
+def test_get_full_wavefunction(undo_sort_charge, conserve, L=10):
+    # check with a singlet covering
+    # sign convention of singlet = (|up,down> - |down,up>) / sqrt(2)
+    assert L % 2 == 0
+    assert L % 4 == 2  # only for an odd number of singlets do we detect mixing up the basis order
+
+    # build wavefunction exactly
+    up_down_basis = undo_sort_charge or conserve == 'None'
+    singlet = np.zeros((2, 2))
+    if up_down_basis:
+        singlet[0, 1] = +1
+        singlet[1, 0] = -1
+    else:
+        singlet[1, 0] = +1
+        singlet[0, 1] = -1
+    singlet = np.reshape(singlet, -1) / np.sqrt(2)
+    expect = reduce(np.kron, [singlet] * (L // 2))
+
+    # use get_full_wavefunction
+    site = SpinHalfSite(conserve='Sz' if conserve == 'best' else conserve)
+    psi = MPS.from_singlets(site=site, L=L, pairs=[[i, i + 1] for i in range(0, L, 2)])
+    res = exact_diag.get_full_wavefunction(psi, undo_sort_charge=undo_sort_charge)
+
+    # compare
+    assert np.allclose(res, expect)
 
 
 @pytest.mark.parametrize('undo_sort_charge', [True, False])

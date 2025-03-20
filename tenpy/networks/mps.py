@@ -2542,6 +2542,11 @@ class MPS(BaseMPSExpectationValue):
             The n-site wave function with leg labels ``vL, p0, p1, .... p{n-1}, vR``.
             In Vidal's notation (with s=lambda, G=Gamma):
             ``theta = s**form_L G_i s G_{i+1} s ... G_{i+n-1} s**form_R``.
+
+        See Also
+        --------
+        :func:`~tenpy.algorithms.exact_diag.get_full_wavefunction`
+            Get the full wavefunction for a finite MPS, e.g. for debugging.
         """
         i = self._to_valid_index(i)
         for j in range(i, i + n):

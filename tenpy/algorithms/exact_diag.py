@@ -23,7 +23,8 @@ from ..networks.mps import MPS
 from ..models.model import CouplingModel
 from ..tools.misc import inverse_permutation
 
-__all__ = ['ExactDiag', 'get_numpy_Hamiltonian', 'get_scipy_sparse_Hamiltonian']
+__all__ = ['ExactDiag', 'get_full_wavefunction', 'get_numpy_Hamiltonian',
+           'get_scipy_sparse_Hamiltonian']
 
 
 class ExactDiag:
@@ -331,6 +332,39 @@ class ExactDiag:
             warnings.warn(msg, stacklevel=2)
             return True
         return False
+
+
+def get_full_wavefunction(psi: MPS, undo_sort_charge: bool = True):
+    """Get the full wavefunction of a finite MPS as a 1D numpy array.
+
+    Parameters
+    ----------
+    psi : :class:`~tenpy.networks.mps.MPS`
+        The input MPS. Must have ``psi.bc == 'finite'``.
+    undo_sort_charge : bool
+        If we should undo the basis permutation induced by
+        :meth:`~tenpy.networks.site.Site.sort_charge`.
+
+    Returns
+    -------
+    theta : 1D array
+        The wavefunction. Basis order is like for a Kronecker product :func:`numpy.kron` of the
+        local basis order, see `undo_sort_charge`.
+    """
+    if psi.bc != 'finite':
+        raise ValueError('psi must have finite boundary conditions')
+    if len(psi._p_label) != 1:
+        # hard-coding standard MPS with a single leg here.
+        raise NotImplementedError
+    p = psi._p_label[0]
+    theta = psi.get_theta(0, psi.L)
+    theta = theta.itranspose(['vL'] + [f'{p}{n}' for n in range(psi.L)] + ['vR'])
+    theta = theta.to_ndarray()
+    theta = np.squeeze(theta, (0, -1))  # squeeze vL, vR
+    if undo_sort_charge:
+        perms = [inverse_permutation(site.perm) for site in psi.sites]
+        theta = theta[np.ix_(*perms)]
+    return np.reshape(theta, -1)
 
 
 def get_numpy_Hamiltonian(model, from_mpo: bool = True, undo_sort_charge: bool = True):
