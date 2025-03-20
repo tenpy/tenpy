@@ -1,0 +1,2 @@
+- Add :func:`~tenpy.algorithms.exact_diag.get_scipy_sparse_Hamiltonian` and :func:`~tenpy.algorithms.exact_diag.get_numpy_Hamiltonian`
+  for exporting a Hamiltonian to a full matrix representation (sparse or dense matrix respectively).
