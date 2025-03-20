@@ -1,0 +1,4 @@
+- Improve implementation of optimized 4-th order Suzuki-Trotter decomposition for the
+  :class:`~tenpy.algorithms.tebd.TEBDEngine`. When evolving by multiple steps without stopping,
+  we can merge the last operator of one step with the first operator of the next step, as we already
+  do for the other orders 2 and 4.
