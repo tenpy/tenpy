@@ -47,7 +47,7 @@ def test_purification_mps():
 
 
 @pytest.mark.parametrize('conserve_ancilla', [False, True])
-def test_canoncial_purification(conserve_ancilla, L=6, charge_sector=0, eps=1.e-14):
+def test_canonical_purification(conserve_ancilla, L=6, charge_sector=0, eps=1.e-14):
     site = spin_half
     psi = purification_mps.PurificationMPS.from_infiniteT_canonical(
         [site] * L, [charge_sector], conserve_ancilla_charge=conserve_ancilla)
