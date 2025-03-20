@@ -4605,11 +4605,13 @@ class MPS(BaseMPSExpectationValue):
         i : int
             (Left-most) index of the site(s) on which the operator should act.
         op : str | npc.Array
-            A physical operator acting on site `i`, with legs ``'p', 'p*'`` for a single-site
-            operator or with legs ``['p0', 'p1', ...], ['p0*', 'p1*', ...]`` for an operator
-            acting on `n`>=2 sites.
-            Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
-            :attr:`sites`.
+            A physical operator acting on a single site `i`, or on ``n`` consecutive sites
+            ``range(i, i + n)``.  Strings (like ``'Id', 'Sz'``) are translated into single-site
+            operators defined by :attr:`sites`, in particular by ``sites[i]``.
+            The number of sites, and which leg of `op` acts on which leg of the MPS, are inferred
+            from the labels of `op`, see notes below. In most cases, the labels should be either
+            ``['p', 'p*']`` for a single-site operator or ``['p0', 'p1', ..., 'p0*', 'p1*', ...]``
+            (in any order) for a multi-site operator.
         unitary : None | bool
             Whether `op` is unitary, i.e., whether the canonical form is preserved (``True``)
             or whether we should call :meth:`canonical_form` (``False``).
@@ -4623,6 +4625,21 @@ class MPS(BaseMPSExpectationValue):
         understood_infinite : bool
             Raise a warning to make aware of :ref:`iMPSWarning`.
             Set ``understood_infinite=True`` to suppress the warning.
+
+        Notes
+        -----
+        We infer quite a bit of information about how exactly to apply the operator, just from
+        its labels. We require that the labels of `op` come in pairs ``l, l + '*'``, where ``l``
+        is one of the :attr:`_p_labels` of the class, optionally followed by an integer number.
+        E.g. for :class:`MPS` it must be either ``'p'`` or e.g. ``'p2'``, while for a
+        :class:`~tenpy.networks.purification.PurificationMPS`` it could additionally also be
+        ``'q'`` or e.g. ``'q2'``. We then contract the ``l + '*'`` leg of `op` with the ``l`` leg
+        of the local wavefunction (see :meth:`get_theta`), and the ``l`` leg of `op` remains as
+        a leg of the resulting MPS.
+        All the (non-starred) ``l`` labels must either end with a non-number character, and we
+        assume a single-site operator, or they must all end in an integer number. A label ending a
+        number ``m`` acts on site ``i + m``, e.g. ``'p0'`` acts on site `i`, and we infer the
+        number of sites ``n`` from the largest of these ``m``.
         """
         if not self.finite and not understood_infinite:
             warnings.warn("For infinite MPS, apply_local_op acts on *each* unit cell in parallel."
@@ -4645,35 +4662,56 @@ class MPS(BaseMPSExpectationValue):
         else:
             opname = op
             need_JW = False
-        n = op.rank // 2  # same as int(rank/2)
-        if n == 1:
-            pstar, p = 'p*', 'p'
+
+        # Infer n_sites and the labels to contract from op._labels
+        p = [l for l in op._labels if not l.endswith('*')]
+        pstar = [f'{l}*' for l in p]
+        if set(op._labels) != set(p + pstar):
+            raise ValueError('The labels of `op` must come in pairs ``l, l + "*"``.')
+        if p[0][-1].isdigit():
+            # need to consider edge case n_sites > 10, where multiple characters give the site index
+            site_idcs = []
+            for l in p:
+                num_non_digits = len(l.rstrip('0123456789'))
+                site_idx = l[num_non_digits:]
+                try:
+                    site_idx = int(site_idx)
+                except Exception:
+                    msg = 'The labels of `op` must either all end in numbers or none of them.'
+                    raise ValueError(msg) from None
+                site_idcs.append(site_idx)
+            n_sites = max(site_idcs) + 1
+            if n_sites == 1:
+                raise ValueError('For a single-site operator, omit the "0" at the end of labels.')
+        elif any(l[-1].isdigit() for l in p):
+            msg = 'The labels of `op` must either all end in numbers or none of them.'
+            raise ValueError(msg)
         else:
-            p = self._get_p_labels(n, False)
-            pstar = self._get_p_labels(n, True)
+            n_sites = 1
+
         if unitary is None:
             op_op_dagger = npc.tensordot(op, op.conj(), axes=[pstar, p])
-            if n > 1:
+            if n_sites > 1:
                 op_op_dagger = op_op_dagger.combine_legs([p, pstar], qconj=[+1, -1])
             unitary = npc.norm(op_op_dagger - npc.eye_like(op_op_dagger)) < cutoff
-        if n == 1:
-            opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
+        if n_sites == 1:
+            opB = npc.tensordot(op, self._B[i], axes=[pstar, p])
             self.set_B(i, opB, self.form[i])
             if opB.norm() < 1.e-12:
                 raise ValueError(f"Applying the operator {opname!s} on site {i:d} destroys state!")
         else:
-            th = self.get_theta(i, n)
+            th = self.get_theta(i, n_sites)
             th = npc.tensordot(op, th, axes=[pstar, p])
             if th.norm() < 1.e-12:
                 raise ValueError(f"Applying the operator {opname!s} on site {i:d} destroys state!")
             # use MPS.from_full to split the sites
-            split_th = self.from_full(self.sites[i:i + n], th, None, cutoff, renormalize,
-                                      'segment', (self.get_SL(i), self.get_SR(i + n - 1)))
+            split_th = self.from_full(self.sites[i:i + n_sites], th, None, cutoff, renormalize,
+                                      'segment', (self.get_SL(i), self.get_SR(i + n_sites - 1)))
             if not renormalize:
                 self.norm *= split_th.norm
-            for j in range(n):
+            for j in range(n_sites):
                 self.set_B(i + j, split_th._B[j], split_th.form[j])
-            for j in range(n - 1):
+            for j in range(n_sites - 1):
                 self.set_SR(i + j, split_th._S[j + 1])
         if not unitary:
             self.canonical_form(renormalize=renormalize)
