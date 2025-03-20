@@ -1,0 +1,5 @@
+- Fix :meth:`~tenpy.networks.purification_mps.PurificationMPS.from_full`,
+  for :class:`~tenpy.networks.purification_mps.PurificationMPS`, which is implemented
+  in the parent class :class:`~tenpy.networks.mps.MPS`. It did not consider that a purification
+  has more legs.
+- Similar for :meth:`~tenpy.networks.purification_mps.PurificationMPS.apply_local_op`
