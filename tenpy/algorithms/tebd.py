@@ -203,7 +203,8 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             b1 = 0.42652466131587616168
             a2 = -0.078111158921637922695
             b2 = -0.12039526945509726545
-            return [a1, b1, a2, b2, 0.5 - a1 - a2, 1. - 2 * (b1 + b2)]  # a1 b1 a2 b2 a3 b3
+            # a1 b1 a2 b2 a3 b3 2*a1
+            return [a1, b1, a2, b2, 0.5 - a1 - a2, 1. - 2 * (b1 + b2), 2 * a1]
         # else
         raise ValueError("Unknown order %r for Suzuki Trotter decomposition" % order)
 
@@ -264,9 +265,18 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             steps = steps + [a]
             return steps
         elif order == '4_opt':
-            # symmetric: a1 b1 a2 b2 a3 b3 a2 b2 a2 b1 a1
-            steps = [(0, odd), (1, even), (2, odd), (3, even), (4, odd),  (5, even),
-                     (4, odd), (3, even), (2, odd), (1, even), (0, odd)]  # yapf: disable
+            # U = [a1 b1 a2 b2 a3 b3 a3 b2 a2 b1 a1] * N
+            #   = [a1 b1 a2 b2 a3 b3 a3 b2 a2 b1] + [2*a1 b1 a2 b2 a3 b3 a3 b2 a2 b1] * (N-1) + [a1]
+            a1 = (0, odd)
+            b1 = (1, even)
+            a2 = (2, odd)
+            b2 = (3, even)
+            a3 = (4, odd)
+            b3 = (5, even)
+            a1_twice = (6, odd)
+            steps = [a1, b1, a2, b2, a3, b3, a3, b2, a2, b1]
+            steps = steps + [a1_twice, b1, a2, b2, a3, b3, a3, b2, a2, b1] * (N_steps - 1)
+            steps = steps + [a1]
             return steps * N_steps
         # else
         raise ValueError("Unknown order {0!r} for Suzuki Trotter decomposition".format(order))
