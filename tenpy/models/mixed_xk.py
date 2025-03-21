@@ -355,11 +355,6 @@ class MixedXKModel(CouplingMPOModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
-    Attributes
-    ----------
-    real_space_lattice : TODO ???
-        Real-space lattice geometry.
-
     Options
     -------
     .. cfg:config :: MixedXKModel
@@ -375,6 +370,7 @@ class MixedXKModel(CouplingMPOModel):
             If the y-momentum should be conserved.
 
     """
+
     def init_lattice(self, model_params, N_orb, chinfo, charges):
         """Initialize a MixedXKLattice for the given model parameters.
 
