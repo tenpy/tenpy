@@ -125,7 +125,8 @@ class MPO:
     _ordering_checked : None | bool
         Relevant only for iMPOs and segment MPOs with contractible outer virtual legs:
         `self._W[0].get_leg("wL")`, `self._W[-1].get_leg("wR")`
-        If `True`, the outer virtual legs of `self` can be ordered such that the MPO is upper triangular
+        If `True`, the outer virtual legs of `self` can be ordered such that the MPO is upper triangular.
+        Defaults to `None` if the ordering is unchecked and `False` if the MPO cannot be ordered.
          **Note:** This ordering is valid only with respect to the **whole unit cell**, not for internal `'wL'/'wR'` legs.
     _outer_permutation : None | list of int
         Ordering of the outer virtual legs such that `self` is upper triangular w.r.t. the whole unit cell. 
@@ -734,7 +735,9 @@ class MPO:
         self.IdR = factor * self.IdR[:-1] + [self.IdR[-1]]
         if self._has_graph:
             self._graph = factor*self._graph
-        # can keep self._ordering_checked, outer_permutations and _cycles
+        # can keep self._ordering_checked, outer_permutations
+        if self._ordering_checked==True:
+            self._cycles = [factor*cycle for cycle in self._cycles]
         self.test_sanity()
 
     def group_sites(self, n=2, grouped_sites=None):
@@ -1181,7 +1184,8 @@ class MPO:
         return np.real_if_close(current_value / L)
 
     def expectation_value_environment(self, psi, others):
-        raise NotImplementedError("Makes sense to implement once iterative environment algorithm is done")
+        # TODO: Might be worth implementing?
+        raise NotImplementedError("Can be implemented using the iterative environment initialization")
 
     def variance(self, psi, exp_val=None):
         """Calculate ``<psi|self^2|psi> - <psi|self|psi>^2``.
@@ -2691,7 +2695,11 @@ class MPOEnvironment(BaseEnvironment):
         return RHeff
 
     def _contract_cL(self, cL, i, op):
-        """ contract cL=A-op-A*= """
+        """ contract cL=A-op-A*=
+
+        Helper function for `self.init_LP_RP_iterative()`
+
+        """
         cL = npc.tensordot(self.ket.get_B(i, form='A'), cL, axes=('vL', 'vR'))
         cL = npc.tensordot(cL, op, axes=[self.ket._p_label, 'p*'])
         axes = ('p' + ['vR*'], self.bra._get_p_label('*') + ['vL*'])
@@ -2699,7 +2707,11 @@ class MPOEnvironment(BaseEnvironment):
         return cL
     
     def contract_cR(self, cR, i, op):
-        """ contract =B-op-B*=cR """
+        """ contract =B-op-B*=cR 
+        
+        Helper function for `self.init_LP_RP_iterative()`
+
+        """
         cR = npc.tensordot(self.ket.get_B(i, form='B'), cR, axes=('vR', 'vL'))
         cR = npc.tensordot(cR, op, axes=[self.ket._p_label, 'p*'])
         axes = ('p' + ['vL*'], self.bra._get_p_label('*') + ['vR*'])
@@ -2707,8 +2719,12 @@ class MPOEnvironment(BaseEnvironment):
         return cR
 
     def _setup_for_iterative(self):
-        """ Check that MPOEnvironment is suitable"""
-        assert self.ket is self.bra, "makes sense only for ket==bra"
+        """ Check (and setup) MPOEnvironment for iterative LP/RP initialization
+        
+        Helper function for `self.init_LP_RP_iterative()`
+
+        """
+        assert self.ket is self.bra, "makes sense only for ket = bra"
         if not self.H._has_graph:
             self.H._make_graph()
         if self.H._ordering_checked==None:
@@ -2717,14 +2733,22 @@ class MPOEnvironment(BaseEnvironment):
             raise ValueError("Hamiltonian cannot be ordered.")
 
     def _loop_structures(self, tol=1e-10):
+        """ Determine the cycles of `self.H` with norm 1
+        
+        Helper function for `self.init_LP_RP_iterative()`
+
+        .. note ::
+
+            - Cycles are only allowed to contain identities with positive prefactor at the moment.
+            - Can be generalized to allow arbitrary operators.
+        
+       """
         ones = []
         for loop in self.H._cycles:
             norm = 1.
             for j in range(self.L):
                 op = self.H._graph[j][(loop[j],loop[j+1])] # (i,j)
-                # check that op is Id up to prefactor (larger 0)
                 factor = npc.norm(op, ord=1)/op.shape[0] 
-                assert factor<1+tol, "Cycle contains operator with norm larger than one up to tol={0} at position W[{1}][{2},{3}]".format(tol, j, loop[j], loop[j+1])
                 if factor<tol:
                     norm=0.
                     break # norm close to zero
@@ -2733,19 +2757,36 @@ class MPOEnvironment(BaseEnvironment):
                 if not is_id:
                     raise ValueError("W[{0}][{1},{2}] != a*Id with a>0".format(j, loop[j], loop[j+1]))
                 norm *= factor
+            if norm>=1.+tol:
+                raise ValueError("self.H contains cycle with norm larger than one at outer index {0}".format(loop[0]))
             if abs(norm-1.)<tol:
                 ones.append(loop[0])
         return ones
 
     def _make_grid(self, name):
-        # should probably work with nr_grids=nr_ones-1 if last index one
-        # only for use within setup_for_iterative, no self.H checks
+        """ Helper function for `self.init_LP_RP_iterative()`
+
+        Constructs the grid used for efficient computation of "Ctot".
+
+        Parameters:
+        ----------
+        name : str
+            One of `init_LP`, `init_RP`. Determines the direction of the grid.
+
+        Returns
+        -------
+        grid : list of {list of {[None | :class:`~tenpy.linalg.np_conserved.Array`, set of int]}}
+            Contains partial contractions of `self`. `grid[j_site][j_virtual][0]` corresponds to the 
+            sum of all contractions of connections of `self.H._graph`at virtual index `j_virtual`
+            up to and including site `j_site` **without** summing up the connections
+            `self.H._graph[j_site][(i,j_virtual)]` for `i in grid[j_site][j_virtual][1]`
+            (the set of integers corresponds to the connections that still have to be summed) 
+        """
         L = self.L
-        # list (j_site) of {list (j_virtual) of {list (c, ingoing)}}
-        # cPartial, ingoing inds
         grid = []
         for chi in self.H.chi[1:]:
-            layer = [[None,set()] for _ in range(chi)]
+            # cPartial, ingoing inds - cPartial defaults to None
+            layer = [[None,set()] for _ in range(chi)] 
             grid.append(layer)
         for j_site, layer in enumerate(self.H._graph()):
             if name=='init_LP':
@@ -2757,6 +2798,12 @@ class MPOEnvironment(BaseEnvironment):
         return grid
 
     def _contract_grid(self, grid, init_node, name):
+        """ Helper function for `self.init_LP_RP_iterative()`
+
+        Carry out all possible contractions starting from the initial node
+        `init_node[0]` at the outer virtual index `init_node[1]`
+
+        """
         if name=='init_LP':
             self._contract_grid_left(grid, init_node)
         else:
@@ -2780,7 +2827,7 @@ class MPOEnvironment(BaseEnvironment):
                 # delete cL, not needed anymore & saves storage
                 if j_site!=0:
                     assert not grid[j_site-1][iL][1] # set with ingoing elements for ready node has to be empty
-                    del grid[j_site-1][iL][0] # changes structure of grid[j_site][i0] but we don't care since its not accessed any more
+                    del grid[j_site-1][iL][0] # won't be accessed anymore
             ready_nodes = finished_nodes    
 
     def _contract_grid_right(self, grid, init_node):
@@ -2801,54 +2848,53 @@ class MPOEnvironment(BaseEnvironment):
                 # delete cL, not needed anymore & saves storage
                 if j_site!=self.L-1:
                     assert not grid[j_site+1][jR][1] # set with ingoing elements for ready node has to be empty
-                    del grid[j_site-1][jR][0] # changes structure of grid[j_site][i0] but we don't care since its not accessed any more
+                    del grid[j_site-1][jR][0] # won't be accessed anymore
             ready_nodes = finished_nodes    
 
     def init_LP_RP_iterative(self, which='both'):
+        """
+
+        NEED DOC
+
+        """
         assert which=='LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
         # prep
         self._setup_for_iterative()
         ones = self._loop_structures()
         loops = {l[0]:l for l in self.H._cycles}
-        # IdL, IdR
+        # check that IdL, IdR are loops with norm one
         assert self.H._outer_permutation[0] in ones
         assert self.H._outer_permutation[-1] in ones
-        n_terms = len(ones) # number of nonzero diagonal entries
-        grids = {"LP":None,"RP":None}
-        # initialize necessary grids
-        if which!="RP":
-            grids["LP"] = [self._init_grids() for _ in range(n_terms)]
-        if which!="LP":
-            grids["RP"] = [self._init_grids(False) for _ in range(n_terms)] 
-        # probably needed somewhere
-        leglabels = {"LP": ([self.H.get_W(0).get_leg('wL').conj(), self.ket.get_B(0).get_leg('vL').conj(),
+        n_terms = len(ones)
+        # for reconstructing the final environments
+        leglabels = {"init_LP": ([self.H.get_W(0).get_leg('wL').conj(), self.ket.get_B(0).get_leg('vL').conj(),
                             self.ket.get_B(0).get_leg('vL')], ['wR','vR','vR*']),
-                     "RP": ([self.H.get_W(self.L-1).get_leg('wR').conj(), self.ket.get_B(self.L-1).get_leg('vR').conj(),
+                     "init_RP": ([self.H.get_W(self.L-1).get_leg('wR').conj(), self.ket.get_B(self.L-1).get_leg('vR').conj(),
                              self.ket.get_B(self.L-1).get_leg('vR')], ['wL','vL','vL*'])}
         envs = {}
         epsilons = {} # energies PER UNIT CELL !!!
 
-        for name in ['LP','RP'] if which=='both' else [which]:
+        for name in ['init_LP','init_RP'] if which=='both' else ['init_'+which]:
             envs[name] = [npc.Array(leglabels[name][0], dtype=self.dtype, labels=leglabels[name][1]) for _ in range(n_terms)]
             epsilons[name] = [1.]*n_terms # can always use epsilon[0]=1.
             grids = [self._make_grid(name) for _ in range(n_terms-1)]
             c0, rho = self._init_c0_rho(name, leglabels)
             # iteration
             m = 0
-            for j_outer in (self.H._outer_permutation if name=='LP' else reversed(self.H._outer_permutation)):
+            for j_outer in (self.H._outer_permutation if name=='init_LP' else reversed(self.H._outer_permutation)):
                 cs = []
                 if j_outer in ones: # first index is IdL, last IdR
-                    envs[name][m][j_outer] = c0 # need copy?
+                    envs[name][m][j_outer] = c0 # Identity, need copy?
                     cs.append(c0)
                     if m!=n_terms-1:
                         self._contract_grid(grids[m], (c0, j_outer), name)
                     if m!=0: # compute next epsilon
-                        Ctot = grids[m-1][-1][j_outer]
+                        Ctot = grids[m-1][-1][j_outer][0]
                         epsilons[name][m] = np.real(epsilons[m-1]/m*npc.inner(Ctot, rho)/npc.inner(c0, rho))
                     m += 1
                 offset = 1 if j_outer in ones else 0
                 for gamma in range(m-1-offset, -1, -1):
-                    Ctot = grids[gamma][-1][j_outer]
+                    Ctot = grids[gamma][-1][j_outer][0]
                     for j_cs, alpha in enumerate(range(gamma+1, m)):
                         Ctot -= epsilons[alpha]/epsilons[gamma]*comb(alpha, gamma)*cs[j_cs]
                     if j_outer in loops:
@@ -2858,10 +2904,12 @@ class MPOEnvironment(BaseEnvironment):
                     else:
                         cs.insert(0, Ctot)
                         envs[name][gamma][j_outer] = Ctot
+        
+        return envs, epsilons
 
     def _solve_cj(self, loop, name, b):
         """ auxiliary function for _init_LP_RP_iterative: Solves c_gamma^j (1-TWjj) = b_gmres """
-        form, transpose = ('A', True) if name=='LP' else ('B', False)
+        form, transpose = ('A', True) if name=='init_LP' else ('B', False)
         bra_N = [self.ket.get_B(i, form=form) for i in range(self.L)]
         ops = [self.H._graph[j][(loop[j],loop[j+1])] for j in range(self.L)]
         ket_M = [npc.tensordot(self.ket.get_B(j, form=form), ops[j]) for j in range(self.L)]
@@ -2871,7 +2919,7 @@ class MPOEnvironment(BaseEnvironment):
         solver = GMRES(A, x, b, options={}) # default atm
         x_sol, res, _, _ = solver.run()
         # fix legs
-        legs = ['vR','vR*'] if name=='LP' else ['vL','vL*']
+        legs = ['vR','vR*'] if name=='init_LP' else ['vL','vL*']
         x_sol.split_legs()
         x_sol.itranspose(legs)
         return -x_sol # cancel global minus
@@ -2879,16 +2927,9 @@ class MPOEnvironment(BaseEnvironment):
     def _init_c0_rho(self, name, leglabels):
         """ auxiliary function for _init_LP_RP_iterative: returns cj, rho where cj=id rho=SVs**2 """
         cj = npc.diag(1., leglabels[name][0][1], dtype=self.dtype, labels=leglabels[name][1][1:])
-        SVs = self.ket.get_SR(self.L-1)**2 if name=='LP' else self.ket.get_SL(0)**2
+        SVs = self.ket.get_SR(self.L-1)**2 if name=='init_LP' else self.ket.get_SL(0)**2
         rho = npc.diag(SVs, leglabels[name][0][1].conj(), labels=leglabels[name][1][-1:-3:-1])
         return cj, rho 
-
-
-    
-
-    
-        
-    
 
     def _to_valid_index(self, i):
         """Make sure `i` is a valid index (depending on `finite`)."""
