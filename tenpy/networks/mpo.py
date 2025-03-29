@@ -132,8 +132,8 @@ class MPO:
         Ordering of the outer virtual legs such that `self` is upper triangular w.r.t. the whole unit cell. 
         Follows the constraint `_outer_permutation[0] = self.IdL[0]`, `_outer_permutation[-1] = self.IdR[-1]`
         Defaults to `None` if the ordering is not possible or has not yet been checked
-    _cycles : None | list of {list of int} 
-        Stores indices `[i0, i1, ..., iL = i0]` for each index of the outer virtual leg that connects to itself.
+    _cycles : None | dict {int: list of int} 
+        Contains one entry `_cycles[i0] = [i0, i1, ..., iL = i0]` for each index `i0` of the outer virtual leg that connects to itself.
         The cycle is `_W[0][i0, i1] * _W[1][i1, i2] * ... * _W[L-1][iL-1, iL]`
         Defaults to None if :attr:`_outer_permutation` does not exist.
     """
@@ -275,7 +275,7 @@ class MPO:
                 perm[-2-index] = j
             # ordering was successful
             self._ordering_checked = True
-            self._cycles = cycles
+            self._cycles = {cycle[0]: cycle for cycle in cycles}
             self._outer_permutation = perm
         except ValueError as e:
             # graph cannot be ordered
@@ -737,7 +737,7 @@ class MPO:
             self._graph = factor*self._graph
         # can keep self._ordering_checked, outer_permutations
         if self._ordering_checked==True:
-            self._cycles = [factor*cycle for cycle in self._cycles]
+            self._cycles = {i0: factor*cycle for i0, cycle in self._cycles.items()}
         self.test_sanity()
 
     def group_sites(self, n=2, grouped_sites=None):
@@ -855,9 +855,9 @@ class MPO:
             if self._ordering_checked==True:
                 self._outer_permutation = [inv_perms[0][j] for j in self._outer_permutation]
                 perm_cycles = []
-                for cycle in self._cycles:
-                    perm_cycles.append([inv_perms[j_bond][j_cycle] for j_bond, j_cycle in enumerate(cycle)])
-                self._cycles = perm_cycles
+                for j_outer in self._cycles:
+                    perm_cycles.append([inv_perms[j_bond][j_cycle] for j_bond, j_cycle in enumerate(self._cycles[j_outer])])
+                self._cycles = {cycle[0]: cycle for cycle in perm_cycles}
         # done
 
     def make_U(self, dt, approximation='II'):
@@ -2695,26 +2695,24 @@ class MPOEnvironment(BaseEnvironment):
         return RHeff
 
     def _contract_cL(self, cL, i, op):
-        """ contract cL=A-op-A*=
+        """ contract cL=(A-op-A*)=
 
         Helper function for `self.init_LP_RP_iterative()`
-
         """
         cL = npc.tensordot(self.ket.get_B(i, form='A'), cL, axes=('vL', 'vR'))
         cL = npc.tensordot(cL, op, axes=[self.ket._p_label, 'p*'])
-        axes = ('p' + ['vR*'], self.bra._get_p_label('*') + ['vL*'])
+        axes = (['p', 'vR*'], self.bra._get_p_label('*') + ['vL*'])
         cL = npc.tensordot(cL, self.bra.get_B(i, form='A').conj(), axes=axes)
         return cL
     
-    def contract_cR(self, cR, i, op):
-        """ contract =B-op-B*=cR 
+    def _contract_cR(self, cR, i, op):
+        """ contract =(B-op-B*)=cR 
         
         Helper function for `self.init_LP_RP_iterative()`
-
         """
         cR = npc.tensordot(self.ket.get_B(i, form='B'), cR, axes=('vR', 'vL'))
         cR = npc.tensordot(cR, op, axes=[self.ket._p_label, 'p*'])
-        axes = ('p' + ['vL*'], self.bra._get_p_label('*') + ['vR*'])
+        axes = (['p', 'vL*'], self.bra._get_p_label('*') + ['vR*'])
         cR = npc.tensordot(cR, self.bra.get_B(i, form='B').conj(), axes=axes)
         return cR
 
@@ -2722,7 +2720,6 @@ class MPOEnvironment(BaseEnvironment):
         """ Check (and setup) MPOEnvironment for iterative LP/RP initialization
         
         Helper function for `self.init_LP_RP_iterative()`
-
         """
         assert self.ket is self.bra, "makes sense only for ket = bra"
         if not self.H._has_graph:
@@ -2741,10 +2738,9 @@ class MPOEnvironment(BaseEnvironment):
 
             - Cycles are only allowed to contain identities with positive prefactor at the moment.
             - Can be generalized to allow arbitrary operators.
-        
        """
         ones = []
-        for loop in self.H._cycles:
+        for j_outer, loop in self.H._cycles.items():
             norm = 1.
             for j in range(self.L):
                 op = self.H._graph[j][(loop[j],loop[j+1])] # (i,j)
@@ -2760,7 +2756,7 @@ class MPOEnvironment(BaseEnvironment):
             if norm>=1.+tol:
                 raise ValueError("self.H contains cycle with norm larger than one at outer index {0}".format(loop[0]))
             if abs(norm-1.)<tol:
-                ones.append(loop[0])
+                ones.append(j_outer)
         return ones
 
     def _make_grid(self, name):
@@ -2788,13 +2784,25 @@ class MPOEnvironment(BaseEnvironment):
             # cPartial, ingoing inds - cPartial defaults to None
             layer = [[None,set()] for _ in range(chi)] 
             grid.append(layer)
-        for j_site, layer in enumerate(self.H._graph()):
+        for j_site, layer in enumerate(self.H._graph):
             if name=='init_LP':
                 for i,j in layer:
                     grid[j_site][j][1].add(i)
             else:
                 for i,j in layer:
                     grid[j_site][i][1].add(j)
+        # remove initial part of IdR->IdR loop
+        IdR_loop = self.H._cycles[self.H._outer_permutation[-1]]
+        if name=='init_LP':
+            for j_site in range(self.L):
+                grid[j_site][IdR_loop[j_site+1]][1].remove(IdR_loop[j_site])
+                if grid[j_site][IdR_loop[j_site+1]][1]: # other index connects to loop, break
+                    break 
+        else:
+            for j_site in range(self.L-1,-1,-1):
+                grid[j_site][IdR_loop[j_site]][1].remove(IdR_loop[j_site+1])
+                if grid[j_site][IdR_loop[j_site]][1]: # other index connects to loop, break
+                    break 
         return grid
 
     def _contract_grid(self, grid, init_node, name):
@@ -2802,7 +2810,6 @@ class MPOEnvironment(BaseEnvironment):
 
         Carry out all possible contractions starting from the initial node
         `init_node[0]` at the outer virtual index `init_node[1]`
-
         """
         if name=='init_LP':
             self._contract_grid_left(grid, init_node)
@@ -2848,8 +2855,50 @@ class MPOEnvironment(BaseEnvironment):
                 # delete cL, not needed anymore & saves storage
                 if j_site!=self.L-1:
                     assert not grid[j_site+1][jR][1] # set with ingoing elements for ready node has to be empty
-                    del grid[j_site-1][jR][0] # won't be accessed anymore
+                    del grid[j_site+1][jR][0] # won't be accessed anymore
             ready_nodes = finished_nodes    
+
+    def _loop_contribution(self, grid, cycle, name):
+        if name=='init_LP':
+            return self._loop_contribution_left(grid, cycle)
+        else:
+            return self._loop_contribution_right(grid, cycle)
+
+    def _loop_contribution_left(self, grid, cycle):
+        j_start = 0
+        c_loop = None
+        for j_site in range(self.L):
+            assert len(grid[j_site][cycle[j_site+1]][1])==1 and cycle[j_site] in grid[j_site][cycle[j_site+1]][1]
+        for j_site in range(self.L):
+            if grid[j_site][cycle[j_site+1]][0]!=None:
+                c_loop = grid[j_site][cycle[j_site+1]][0]
+                j_start = j_site
+                break
+        assert c_loop!=None, "empty cycle?!"
+        # do contractions
+        for j_site in range(j_start+1, self.L):
+            c_loop = self._contract_cL(c_loop, j_site, self.H._graph[j_site][(cycle[j_site],cycle[j_site+1])])
+            if grid[j_site][cycle[j_site+1]][0]!=None:
+                c_loop += grid[j_site][cycle[j_site+1]][0]
+        return c_loop
+
+    def _loop_contribution_right(self, grid, cycle):
+        j_start = self.L-1
+        c_loop = None
+        for j_site in range(self.L-1,-1,-1):
+            assert len(grid[j_site][cycle[j_site]][1])==1 and cycle[j_site+1] in grid[j_site][cycle[j_site]][1]
+        for j_site in range(self.L-1,-1,-1):
+            if grid[j_site][cycle[j_site]][0]!=None:
+                c_loop = grid[j_site][cycle[j_site]][0]
+                j_start = j_site
+                break
+        assert c_loop!=None, "empty cycle?!"
+        # do contractions
+        for j_site in range(j_start-1,-1,-1):
+            c_loop = self._contract_cR(c_loop, j_site, self.H._graph[j_site][(cycle[j_site],cycle[j_site+1])])
+            if grid[j_site][cycle[j_site]][0]!=None:
+                c_loop += grid[j_site][cycle[j_site]][0]
+        return c_loop
 
     def init_LP_RP_iterative(self, which='both'):
         """
@@ -2861,7 +2910,6 @@ class MPOEnvironment(BaseEnvironment):
         # prep
         self._setup_for_iterative()
         ones = self._loop_structures()
-        loops = {l[0]:l for l in self.H._cycles}
         # check that IdL, IdR are loops with norm one
         assert self.H._outer_permutation[0] in ones
         assert self.H._outer_permutation[-1] in ones
@@ -2876,34 +2924,39 @@ class MPOEnvironment(BaseEnvironment):
 
         for name in ['init_LP','init_RP'] if which=='both' else ['init_'+which]:
             envs[name] = [npc.Array(leglabels[name][0], dtype=self.dtype, labels=leglabels[name][1]) for _ in range(n_terms)]
-            epsilons[name] = [1.]*n_terms # can always use epsilon[0]=1.
+            epsilons[name] = [1.]*n_terms # always have epsilon[0]=1.
             grids = [self._make_grid(name) for _ in range(n_terms-1)]
-            c0, rho = self._init_c0_rho(name, leglabels)
+            last_site = self.L-1 if name=='init_LP' else 0
             # iteration
             m = 0
             for j_outer in (self.H._outer_permutation if name=='init_LP' else reversed(self.H._outer_permutation)):
                 cs = []
                 if j_outer in ones: # first index is IdL, last IdR
-                    envs[name][m][j_outer] = c0 # Identity, need copy?
+                    c0, rho = self._init_c0_rho(name, leglabels)
+                    envs[name][m][j_outer] = c0
                     cs.append(c0)
                     if m!=n_terms-1:
                         self._contract_grid(grids[m], (c0, j_outer), name)
                     if m!=0: # compute next epsilon
-                        Ctot = grids[m-1][-1][j_outer][0]
-                        epsilons[name][m] = np.real(epsilons[m-1]/m*npc.inner(Ctot, rho)/npc.inner(c0, rho))
+                        Ctot = grids[m-1][last_site][j_outer][0].copy()
+                        Ctot += self._loop_contribution(grids[m-1], self.H._cycles[j_outer], name)
+                        epsilons[name][m] = np.real(epsilons[name][m-1]/m*npc.inner(Ctot, rho)/npc.inner(c0, rho))
                     m += 1
                 offset = 1 if j_outer in ones else 0
                 for gamma in range(m-1-offset, -1, -1):
-                    Ctot = grids[gamma][-1][j_outer][0]
+                    Ctot = grids[gamma][last_site][j_outer][0].copy()
                     for j_cs, alpha in enumerate(range(gamma+1, m)):
-                        Ctot -= epsilons[alpha]/epsilons[gamma]*comb(alpha, gamma)*cs[j_cs]
-                    if j_outer in loops:
-                        res = self._solve_cj(loops[j_outer], name, Ctot)
+                        Ctot -= epsilons[name][alpha]/epsilons[name][gamma]*comb(alpha, gamma)*cs[j_cs]
+                    if j_outer in self.H._cycles:
+                        Ctot += self._loop_contribution(grids[gamma], self.H._cycles[j_outer], name)
+                        res = self._solve_cj(self.H._cycles[j_outer], name, Ctot)
                         cs.insert(0, res)
                         envs[name][gamma][j_outer] = res
+                        self._contract_grid(grids[gamma], (res, j_outer), name)
                     else:
                         cs.insert(0, Ctot)
                         envs[name][gamma][j_outer] = Ctot
+                        self._contract_grid(grids[gamma], (Ctot, j_outer), name)
         
         return envs, epsilons
 
@@ -2912,7 +2965,8 @@ class MPOEnvironment(BaseEnvironment):
         form, transpose = ('A', True) if name=='init_LP' else ('B', False)
         bra_N = [self.ket.get_B(i, form=form) for i in range(self.L)]
         ops = [self.H._graph[j][(loop[j],loop[j+1])] for j in range(self.L)]
-        ket_M = [npc.tensordot(self.ket.get_B(j, form=form), ops[j]) for j in range(self.L)]
+        ket_M = [npc.tensordot(self.ket.get_B(j, form=form), ops[j],
+                              axes=[self.ket._p_label,self.ket._get_p_label('*')]) for j in range(self.L)]
         TWjj = TransferMatrix.from_Ns_Ms(bra_N, ket_M, transpose=transpose, charge_sector=None, p_label=self.ket._p_label)
         x = b.copy(deep=True) # initial guess
         A = ShiftNpcLinearOperator(TWjj, -1.) # global minus sign
