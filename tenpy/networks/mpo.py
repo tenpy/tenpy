@@ -2716,7 +2716,7 @@ class MPOEnvironment(BaseEnvironment):
         cR = npc.tensordot(cR, self.bra.get_B(i, form='B').conj(), axes=axes)
         return cR
 
-    def _setup_for_iterative(self):
+    def _setup_iterative(self):
         """ Check (and setup) MPOEnvironment for iterative LP/RP initialization
         
         Helper function for `self.init_LP_RP_iterative()`
@@ -2759,7 +2759,7 @@ class MPOEnvironment(BaseEnvironment):
                 ones.append(j_outer)
         return ones
 
-    def _make_grid(self, name):
+    def _make_grids(self, name, ones):
         """ Helper function for `self.init_LP_RP_iterative()`
 
         Constructs the grid used for efficient computation of "Ctot".
@@ -2771,50 +2771,80 @@ class MPOEnvironment(BaseEnvironment):
 
         Returns
         -------
-        grid : list of {list of {[None | :class:`~tenpy.linalg.np_conserved.Array`, set of int]}}
+        grid : list of {list of { [None | :class:`~tenpy.linalg.np_conserved.Array`, set of int] }}
             Contains partial contractions of `self`. `grid[j_site][j_virtual][0]` corresponds to the 
             sum of all contractions of connections of `self.H._graph`at virtual index `j_virtual`
             up to and including site `j_site` **without** summing up the connections
             `self.H._graph[j_site][(i,j_virtual)]` for `i in grid[j_site][j_virtual][1]`
-            (the set of integers corresponds to the connections that still have to be summed) 
+            I.e. the set of integers corresponds to the connections that still have to be summed. 
         """
-        L = self.L
-        grid = []
-        for chi in self.H.chi[1:]:
-            # cPartial, ingoing inds - cPartial defaults to None
-            layer = [[None,set()] for _ in range(chi)] 
-            grid.append(layer)
-        for j_site, layer in enumerate(self.H._graph):
-            if name=='init_LP':
+        js_loops = sorted([self.H._outer_permutation.index(j) for j in ones])
+        assert js_loops[0]==0 and js_loops[-1]==self.H.chi[-1]-1, "wrong remove inds"
+        if name=="init_LP":
+            return self._left_grids(js_loops)
+        else:
+            return self._right_grids(js_loops)
+
+    def _left_grids(self, js_loops):
+        grids = []
+        for j0_loop in js_loops:
+            grid = []
+            for chi in self.H.chi[1:]:
+                # cPartial, ingoing inds - cPartial defaults to None
+                layer = [[None,set()] for _ in range(chi)] 
+                grid.append(layer)
+            for j_site, layer in enumerate(self.H._graph):
                 for i,j in layer:
                     grid[j_site][j][1].add(i)
-            else:
+            # remove zero connections for higher grids
+            zero_nodes = self.H._outer_permutation[:j0_loop]
+            for j_site in range(self.L):
+                empty_nodes = []
+                for iL in zero_nodes:
+                    conns = [j for i,j in self.H._graph[j_site] if i==iL]
+                    for j in conns:
+                        grid[j_site][j][1].remove(iL)
+                        if not grid[j_site][j][1] and grid[j_site][j][0]==None: # all ingoing indices sum to zero
+                            empty_nodes.append(j)
+                zero_nodes = empty_nodes
+            grids.append(grid)
+        return grids
+
+    def _right_grids(self, js_loops):
+        grids = []
+        for j0_loop in reversed(js_loops):
+            grid = []
+            for chi in self.H.chi[1:]:
+                # cPartial, ingoing inds - cPartial defaults to None
+                layer = [[None,set()] for _ in range(chi)] 
+                grid.append(layer)
+            for j_site, layer in enumerate(self.H._graph):
                 for i,j in layer:
                     grid[j_site][i][1].add(j)
-        # remove initial part of IdR->IdR loop
-        IdR_loop = self.H._cycles[self.H._outer_permutation[-1]]
-        if name=='init_LP':
-            for j_site in range(self.L):
-                grid[j_site][IdR_loop[j_site+1]][1].remove(IdR_loop[j_site])
-                if grid[j_site][IdR_loop[j_site+1]][1]: # other index connects to loop, break
-                    break 
-        else:
+            # remove zero connections for higher grids
+            zero_nodes = self.H._outer_permutation[j0_loop+1:]
             for j_site in range(self.L-1,-1,-1):
-                grid[j_site][IdR_loop[j_site]][1].remove(IdR_loop[j_site+1])
-                if grid[j_site][IdR_loop[j_site]][1]: # other index connects to loop, break
-                    break 
-        return grid
+                empty_nodes = []
+                for jR in zero_nodes:
+                    conns = [i for i,j in self.H._graph[j_site] if j==jR]
+                    for i in conns:
+                        grid[j_site][i][1].remove(jR)
+                        if not grid[j_site][i][1] and grid[j_site][i][0]==None: # all ingoing indices sum to zero
+                            empty_nodes.append(i)
+                zero_nodes = empty_nodes
+            grids.append(grid)
+        return grids
 
-    def _contract_grid(self, grid, init_node, name):
+    def _contract_grid(self, grid, c0_outer, j_outer, name):
         """ Helper function for `self.init_LP_RP_iterative()`
 
         Carry out all possible contractions starting from the initial node
-        `init_node[0]` at the outer virtual index `init_node[1]`
+        `c0_outer` at the outer virtual index `j_outer`
         """
         if name=='init_LP':
-            self._contract_grid_left(grid, init_node)
+            self._contract_grid_left(grid, [c0_outer, j_outer])
         else:
-            self._contract_grid_right(grid, init_node)
+            self._contract_grid_right(grid, [c0_outer, j_outer])
 
     def _contract_grid_left(self, grid, init_node):
         ready_nodes = [init_node]
@@ -2833,9 +2863,10 @@ class MPOEnvironment(BaseEnvironment):
                        finished_nodes.append((grid[j_site][j][0],j))
                 # delete cL, not needed anymore & saves storage
                 if j_site!=0:
-                    assert not grid[j_site-1][iL][1] # set with ingoing elements for ready node has to be empty
-                    del grid[j_site-1][iL][0] # won't be accessed anymore
-            ready_nodes = finished_nodes    
+                    # double check that set with ingoing elements for ready node is empty
+                    assert not grid[j_site-1][iL][1] 
+                    del grid[j_site-1][iL][0]
+            ready_nodes = finished_nodes      
 
     def _contract_grid_right(self, grid, init_node):
         ready_nodes = [init_node]
@@ -2854,17 +2885,18 @@ class MPOEnvironment(BaseEnvironment):
                        finished_nodes.append((grid[j_site][i][0],i))
                 # delete cL, not needed anymore & saves storage
                 if j_site!=self.L-1:
-                    assert not grid[j_site+1][jR][1] # set with ingoing elements for ready node has to be empty
+                    # double check that set with ingoing elements for ready node is empty
+                    assert not grid[j_site+1][jR][1]
                     del grid[j_site+1][jR][0] # won't be accessed anymore
             ready_nodes = finished_nodes    
 
-    def _loop_contribution(self, grid, cycle, name):
+    def _ctot_loop(self, grid, cycle, name):
         if name=='init_LP':
-            return self._loop_contribution_left(grid, cycle)
+            return self._ctot_loop_left(grid, cycle)
         else:
-            return self._loop_contribution_right(grid, cycle)
+            return self._ctot_loop_right(grid, cycle)
 
-    def _loop_contribution_left(self, grid, cycle):
+    def _ctot_loop_left(self, grid, cycle):
         j_start = 0
         c_loop = None
         for j_site in range(self.L):
@@ -2882,7 +2914,7 @@ class MPOEnvironment(BaseEnvironment):
                 c_loop += grid[j_site][cycle[j_site+1]][0]
         return c_loop
 
-    def _loop_contribution_right(self, grid, cycle):
+    def _ctot_loop_right(self, grid, cycle):
         j_start = self.L-1
         c_loop = None
         for j_site in range(self.L-1,-1,-1):
@@ -2908,9 +2940,9 @@ class MPOEnvironment(BaseEnvironment):
         """
         assert which=='LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
         # prep
-        self._setup_for_iterative()
+        self._setup_iterative()
         ones = self._loop_structures()
-        # check that IdL, IdR are loops with norm one
+        # double check that IdL, IdR are recognized as loops with norm one
         assert self.H._outer_permutation[0] in ones
         assert self.H._outer_permutation[-1] in ones
         n_terms = len(ones)
@@ -2925,38 +2957,40 @@ class MPOEnvironment(BaseEnvironment):
         for name in ['init_LP','init_RP'] if which=='both' else ['init_'+which]:
             envs[name] = [npc.Array(leglabels[name][0], dtype=self.dtype, labels=leglabels[name][1]) for _ in range(n_terms)]
             epsilons[name] = [1.]*n_terms # always have epsilon[0]=1.
-            grids = [self._make_grid(name) for _ in range(n_terms-1)]
+            grids = self._make_grids(name, ones)
             last_site = self.L-1 if name=='init_LP' else 0
+            c0_base, rho = self._init_c0_rho(name, leglabels)
             # iteration
             m = 0
             for j_outer in (self.H._outer_permutation if name=='init_LP' else reversed(self.H._outer_permutation)):
                 cs = []
                 if j_outer in ones: # first index is IdL, last IdR
-                    c0, rho = self._init_c0_rho(name, leglabels)
+                    c0 = c0_base.copy()
                     envs[name][m][j_outer] = c0
                     cs.append(c0)
                     if m!=n_terms-1:
-                        self._contract_grid(grids[m], (c0, j_outer), name)
+                        self._contract_grid(grids[m], c0, j_outer, name)
                     if m!=0: # compute next epsilon
-                        Ctot = grids[m-1][last_site][j_outer][0].copy()
-                        Ctot += self._loop_contribution(grids[m-1], self.H._cycles[j_outer], name)
+                        Ctot = self._ctot_loop(grids[m-1], self.H._cycles[j_outer], name)
                         epsilons[name][m] = np.real(epsilons[name][m-1]/m*npc.inner(Ctot, rho)/npc.inner(c0, rho))
                     m += 1
                 offset = 1 if j_outer in ones else 0
                 for gamma in range(m-1-offset, -1, -1):
-                    Ctot = grids[gamma][last_site][j_outer][0].copy()
+                    if j_outer in self.H._cycles:
+                        Ctot = self._ctot_loop(grids[gamma], self.H._cycles[j_outer], name)
+                    else:
+                        Ctot = grids[gamma][last_site][j_outer][0]
                     for j_cs, alpha in enumerate(range(gamma+1, m)):
                         Ctot -= epsilons[name][alpha]/epsilons[name][gamma]*comb(alpha, gamma)*cs[j_cs]
                     if j_outer in self.H._cycles:
-                        Ctot += self._loop_contribution(grids[gamma], self.H._cycles[j_outer], name)
                         res = self._solve_cj(self.H._cycles[j_outer], name, Ctot)
                         cs.insert(0, res)
                         envs[name][gamma][j_outer] = res
-                        self._contract_grid(grids[gamma], (res, j_outer), name)
+                        self._contract_grid(grids[gamma], res, j_outer, name)
                     else:
                         cs.insert(0, Ctot)
                         envs[name][gamma][j_outer] = Ctot
-                        self._contract_grid(grids[gamma], (Ctot, j_outer), name)
+                        self._contract_grid(grids[gamma], Ctot, j_outer, name)
         
         return envs, epsilons
 
