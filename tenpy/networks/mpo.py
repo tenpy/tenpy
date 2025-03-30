@@ -2721,13 +2721,13 @@ class MPOEnvironment(BaseEnvironment):
         
         Helper function for `self.init_LP_RP_iterative()`
         """
-        assert self.ket is self.bra, "makes sense only for ket = bra"
+        assert self.ket is self.bra, "Iterative environment initialization failed: Requires ket = bra"
         if not self.H._has_graph:
             self.H._make_graph()
         if self.H._ordering_checked==None:
             self.H._order_graph()
         if self.H._ordering_checked==False:
-            raise ValueError("Hamiltonian cannot be ordered.")
+            raise ValueError("Iterative environment initialization failed: Hamiltonian cannot be ordered.")
 
     def _loop_structures(self, tol=1e-10):
         """ Determine the cycles of `self.H` with norm 1
@@ -2762,24 +2762,29 @@ class MPOEnvironment(BaseEnvironment):
     def _make_grids(self, name, ones):
         """ Helper function for `self.init_LP_RP_iterative()`
 
-        Constructs the grid used for efficient computation of "Ctot".
+        Constructs a grid of the graph used for efficient computation of "Ctot".
 
         Parameters:
         ----------
         name : str
             One of `init_LP`, `init_RP`. Determines the direction of the grid.
+        ones : list of int
+            Outer virtual indices with cycles of norm one
 
+        A grid has the form: list of {list of { [None | :class:`~tenpy.linalg.np_conserved.Array`, set of int] }}
+            Contains partial contractions of `self`. For a 'init_LP' grid, the structure is:
+            `grid[j_site][j_virtual][0]` corresponds to the sum of all contractions of connections
+            of `self.H._graph`at virtual index `j_virtual` right of site `j_site`,
+            **without** summing `self.H._graph[j_site][(i,j_virtual)]` for `i in grid[j_site][j_virtual][1]`
+            I.e. the set of integers corresponds to the connections that still have to be summed.
+            
         Returns
         -------
-        grid : list of {list of { [None | :class:`~tenpy.linalg.np_conserved.Array`, set of int] }}
-            Contains partial contractions of `self`. `grid[j_site][j_virtual][0]` corresponds to the 
-            sum of all contractions of connections of `self.H._graph`at virtual index `j_virtual`
-            up to and including site `j_site` **without** summing up the connections
-            `self.H._graph[j_site][(i,j_virtual)]` for `i in grid[j_site][j_virtual][1]`
-            I.e. the set of integers corresponds to the connections that still have to be summed. 
+        grids : list of grid
+            Returns `len(ones)-1` `grid`. In each grid, connections that sum to zero are removed as well
         """
         js_loops = sorted([self.H._outer_permutation.index(j) for j in ones])
-        assert js_loops[0]==0 and js_loops[-1]==self.H.chi[-1]-1, "wrong remove inds"
+        assert js_loops[0]==0 and js_loops[-1]==self.H.chi[-1]-1 # double check, should not trigger
         if name=="init_LP":
             return self._left_grids(js_loops)
         else:
@@ -2787,7 +2792,7 @@ class MPOEnvironment(BaseEnvironment):
 
     def _left_grids(self, js_loops):
         grids = []
-        for j0_loop in js_loops:
+        for j0_loop in js_loops[:-1]:
             grid = []
             for chi in self.H.chi[1:]:
                 # cPartial, ingoing inds - cPartial defaults to None
@@ -2812,9 +2817,9 @@ class MPOEnvironment(BaseEnvironment):
 
     def _right_grids(self, js_loops):
         grids = []
-        for j0_loop in reversed(js_loops):
+        for j0_loop in reversed(js_loops[1:]):
             grid = []
-            for chi in self.H.chi[1:]:
+            for chi in self.H.chi[:-1]:
                 # cPartial, ingoing inds - cPartial defaults to None
                 layer = [[None,set()] for _ in range(chi)] 
                 grid.append(layer)
@@ -2891,6 +2896,10 @@ class MPOEnvironment(BaseEnvironment):
             ready_nodes = finished_nodes    
 
     def _ctot_loop(self, grid, cycle, name):
+        """Helper function for `self.init_LP_RP_iterative()`
+
+        Compute Ctot for for indices with cycles
+        """
         if name=='init_LP':
             return self._ctot_loop_left(grid, cycle)
         else:
@@ -2900,13 +2909,15 @@ class MPOEnvironment(BaseEnvironment):
         j_start = 0
         c_loop = None
         for j_site in range(self.L):
+            # double check, should not trigger
             assert len(grid[j_site][cycle[j_site+1]][1])==1 and cycle[j_site] in grid[j_site][cycle[j_site+1]][1]
         for j_site in range(self.L):
             if grid[j_site][cycle[j_site+1]][0]!=None:
                 c_loop = grid[j_site][cycle[j_site+1]][0]
                 j_start = j_site
                 break
-        assert c_loop!=None, "empty cycle?!"
+        # can in principle happen and is not accounted for before
+        assert c_loop!=None, "Hamiltonian contains cycle that does not connect to other indices"
         # do contractions
         for j_site in range(j_start+1, self.L):
             c_loop = self._contract_cL(c_loop, j_site, self.H._graph[j_site][(cycle[j_site],cycle[j_site+1])])
@@ -2918,13 +2929,14 @@ class MPOEnvironment(BaseEnvironment):
         j_start = self.L-1
         c_loop = None
         for j_site in range(self.L-1,-1,-1):
+            # double check, should not trigger
             assert len(grid[j_site][cycle[j_site]][1])==1 and cycle[j_site+1] in grid[j_site][cycle[j_site]][1]
         for j_site in range(self.L-1,-1,-1):
             if grid[j_site][cycle[j_site]][0]!=None:
                 c_loop = grid[j_site][cycle[j_site]][0]
                 j_start = j_site
                 break
-        assert c_loop!=None, "empty cycle?!"
+        assert c_loop!=None, "Hamiltonian contains cycle that does not connect to other indices"
         # do contractions
         for j_site in range(j_start-1,-1,-1):
             c_loop = self._contract_cR(c_loop, j_site, self.H._graph[j_site][(cycle[j_site],cycle[j_site+1])])
@@ -2959,7 +2971,9 @@ class MPOEnvironment(BaseEnvironment):
             epsilons[name] = [1.]*n_terms # always have epsilon[0]=1.
             grids = self._make_grids(name, ones)
             last_site = self.L-1 if name=='init_LP' else 0
-            c0_base, rho = self._init_c0_rho(name, leglabels)
+            c0_base = npc.diag(1., leglabels[name][0][1], dtype=self.dtype, labels=leglabels[name][1][1:])
+            _SVs = self.ket.get_SR(self.L-1)**2 if name=='init_LP' else self.ket.get_SL(0)**2
+            rho = npc.diag(_SVs, leglabels[name][0][1].conj(), labels=leglabels[name][1][-1:-3:-1])
             # iteration
             m = 0
             for j_outer in (self.H._outer_permutation if name=='init_LP' else reversed(self.H._outer_permutation)):
@@ -2995,29 +3009,24 @@ class MPOEnvironment(BaseEnvironment):
         return envs, epsilons
 
     def _solve_cj(self, loop, name, b):
-        """ auxiliary function for _init_LP_RP_iterative: Solves c_gamma^j (1-TWjj) = b_gmres """
+        """ auxiliary function for _init_LP_RP_iterative: Solves c_gamma^j (1-TWjj) = b"""
+        # TWjj setup
         form, transpose = ('A', True) if name=='init_LP' else ('B', False)
         bra_N = [self.ket.get_B(i, form=form) for i in range(self.L)]
         ops = [self.H._graph[j][(loop[j],loop[j+1])] for j in range(self.L)]
         ket_M = [npc.tensordot(self.ket.get_B(j, form=form), ops[j],
                               axes=[self.ket._p_label,self.ket._get_p_label('*')]) for j in range(self.L)]
         TWjj = TransferMatrix.from_Ns_Ms(bra_N, ket_M, transpose=transpose, charge_sector=None, p_label=self.ket._p_label)
+        # GMRES solver
         x = b.copy(deep=True) # initial guess
-        A = ShiftNpcLinearOperator(TWjj, -1.) # global minus sign
-        solver = GMRES(A, x, b, options={}) # default atm
+        A = ShiftNpcLinearOperator(TWjj, -1.)
+        solver = GMRES(A, x, b, options={}) # TODO: adjust options!
         x_sol, res, _, _ = solver.run()
         # fix legs
         legs = ['vR','vR*'] if name=='init_LP' else ['vL','vL*']
         x_sol.split_legs()
         x_sol.itranspose(legs)
-        return -x_sol # cancel global minus
-    
-    def _init_c0_rho(self, name, leglabels):
-        """ auxiliary function for _init_LP_RP_iterative: returns cj, rho where cj=id rho=SVs**2 """
-        cj = npc.diag(1., leglabels[name][0][1], dtype=self.dtype, labels=leglabels[name][1][1:])
-        SVs = self.ket.get_SR(self.L-1)**2 if name=='init_LP' else self.ket.get_SL(0)**2
-        rho = npc.diag(SVs, leglabels[name][0][1].conj(), labels=leglabels[name][1][-1:-3:-1])
-        return cj, rho 
+        return -x_sol # cancel global minus sign
 
     def _to_valid_index(self, i):
         """Make sure `i` is a valid index (depending on `finite`)."""
