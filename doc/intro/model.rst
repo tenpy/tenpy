@@ -399,6 +399,12 @@ or
 ``MyModel({'lattice': 'Square', 'Lx': 2, 'Ly': 3, 'Jx': 0, 'bc_x': 'periodic'})``.
 See :doc:`/intro/lattices` regarding boundary conditions.
 
+You can also use :func:`~tenpy.algorithms.exact_diag.get_numpy_Hamiltonian` to see if the Hamiltonian
+is what you expect it to be.
+You will need to choose a relatively small system for the full Hamiltonian to fit into RAM.
+This is strongly recommended if you defined your own operators, as e.g. the
+:class:`~tenpy.models.pxp.PXPChain` does.
+
 
 Contribute your model?
 ----------------------
