@@ -940,7 +940,8 @@ class CouplingModel(Model):
         u : int
             Picks a :class:`~tenpy.model.lattice.Site` ``lat.unit_cell[u]`` out of the unit cell.
         opname : str
-            valid operator name of an onsite operator in ``lat.unit_cell[u]``.
+            valid operator name of an onsite operator in ``lat.unit_cell[u]``,
+            see :meth:`~tenpy.networks.site.Site.get_op`.
         category : str
             Descriptive name used as key for :attr:`onsite_terms`. Defaults to `opname`.
         plus_hc : bool
@@ -986,7 +987,7 @@ class CouplingModel(Model):
             The MPS index of the site on which the operator acts.
             We require ``0 <= i < L``.
         op : str
-            Name of the involved operator.
+            Name of the involved operator, see :meth:`~tenpy.networks.site.Site.get_op`.
         category : str
             Descriptive name used as key for :attr:`onsite_terms`. Defaults to `op`.
         plus_hc : bool
@@ -1055,11 +1056,13 @@ class CouplingModel(Model):
         u1 : int
             Picks the site ``lat.unit_cell[u1]`` for OP1.
         op1 : str
-            Valid operator name of an onsite operator in ``lat.unit_cell[u1]`` for OP1.
+            Valid operator name of an onsite operator in ``lat.unit_cell[u1]`` for OP1,
+            see :meth:`~tenpy.networks.site.Site.get_op`.
         u2 : int
             Picks the site ``lat.unit_cell[u2]`` for OP2.
         op2 : str
-            Valid operator name of an onsite operator in ``lat.unit_cell[u2]`` for OP2.
+            Valid operator name of an onsite operator in ``lat.unit_cell[u2]`` for OP2,
+            see :meth:`~tenpy.networks.site.Site.get_op`.
         dx : iterable of int
             Translation vector (of the unit cell) between OP1 and OP2.
             For a 1D lattice, a single int is also fine.
@@ -1230,7 +1233,7 @@ class CouplingModel(Model):
             We require ``0 <= i < N_sites``  and ``i < j``, i.e., `op_i` acts "left" of `op_j`.
             If j >= N_sites, it indicates couplings between unit cells of an infinite MPS.
         op1, op2 : str
-            Names of the involved operators.
+            Names of the involved operators, see :meth:`~tenpy.networks.site.Site.get_op`.
         op_string : str
             The operator to be inserted between `i` and `j`.
         category : str
@@ -1302,7 +1305,7 @@ class CouplingModel(Model):
             Prefactor of the coupling. May vary spatially, and is tiled to the required shape.
         ops : list of ``(opname, dx, u)``
             Each tuple determines one operator of the coupling, see the description above.
-            `opname` (str) is the name of the operator,
+            `opname` (str) is the name of the operator (see :meth:`~tenpy.networks.site.Site.get_op`),
             `dx` (list of length `lat.dim`) is a translation vector, and
             `u` (int) is the index of `lat.unit_cell` on which the operator acts.
             The first entry of `ops` corresponds to :math:`OP_0` and acts last in the physical
@@ -1447,7 +1450,8 @@ class CouplingModel(Model):
             that ``0 <= i < N_sites``.
             Indices >= N_sites indicate couplings between different unit cells of an infinite MPS.
         ops_ijkl : list of str
-            Names of the involved operators on sites `i, j, k, ...`.
+            Names of the involved operators on sites `i, j, k, ...`,
+            see :meth:`~tenpy.networks.site.Site.get_op`.
         op_string : list of str
             Names of the operator to be inserted between the operators,
             e.g., op_string[0] is inserted between `i` and `j`.
@@ -1514,7 +1518,7 @@ class CouplingModel(Model):
         lambda_ : float
             Decay-rate
         op_i, op_j : string
-            Names for the operators.
+            Names for the operators, see :meth:`~tenpy.networks.site.Site.get_op`.
         subsites : None | 1D array
             Selects a subset of sites within the MPS unit cell on which the operators act.
             Needs to be sorted. ``None`` selects all sites.

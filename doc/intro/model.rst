@@ -261,6 +261,12 @@ which make this easy. Let us summarize them here:
 
 See also :meth:`~tenpy.models.model.CouplingModel.add_exponentially_decaying_coupling`
 
+.. note ::
+    Instead of a single operator name like ``'Sx'``, you can put multiple operator names
+    separated by whitespace to represent the product of these operators.
+    For example, ``self.add_onsite(-2.j * (-hz), u, 'Sx Sy')`` is equivalent to (but worse than)
+    to ``self.add_onsite(-hz, u, 'Sz')``.
+
 For our example, we define the Hamiltonian by implementing::
 
     class MyModel(CouplingMPOModel):
