@@ -737,7 +737,7 @@ class MPO:
             self._graph = factor*self._graph
         # can keep self._ordering_checked, outer_permutations
         if self._ordering_checked==True:
-            self._cycles = {i0: factor*cycle for i0, cycle in self._cycles.items()}
+            self._cycles = {i0: factor*cycle[:-1]+[cycle[-1]] for i0, cycle in self._cycles.items()}
         self.test_sanity()
 
     def group_sites(self, n=2, grouped_sites=None):
@@ -2721,7 +2721,7 @@ class MPOEnvironment(BaseEnvironment):
         
         Helper function for `self.init_LP_RP_iterative()`
         """
-        assert self.ket is self.bra, "Iterative environment initialization failed: Requires ket = bra"
+        assert self.ket is self.bra, "Iterative environment initialization failed: Requires ket=bra"
         if not self.H._has_graph:
             self.H._make_graph()
         if self.H._ordering_checked==None:
@@ -2737,7 +2737,7 @@ class MPOEnvironment(BaseEnvironment):
         .. note ::
 
             - Cycles are only allowed to contain identities with positive prefactor at the moment.
-            - Can be generalized to allow arbitrary operators.
+            - Can be generalized to allow arbitrary operators. Requires GMRES for dominant eigenvectors in that case
        """
         ones = []
         for j_outer, loop in self.H._cycles.items():
@@ -2944,20 +2944,25 @@ class MPOEnvironment(BaseEnvironment):
                 c_loop += grid[j_site][cycle[j_site]][0]
         return c_loop
 
-    def init_LP_RP_iterative(self, which='both'):
+    def init_LP_RP_iterative(self, which='both', gmres_options=None):
         """
 
         NEED DOC
 
         """
         assert which=='LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
-        # prep
         self._setup_iterative()
         ones = self._loop_structures()
         # double check that IdL, IdR are recognized as loops with norm one
         assert self.H._outer_permutation[0] in ones
         assert self.H._outer_permutation[-1] in ones
         n_terms = len(ones)
+        # gmres defaults, N_min=0 for states close to product states
+        if gmres_options==None:
+            gmres_options = {'N_min':0,'res':1e-10}
+        else:
+            gmres_options['N_min'] = gmres_options.get('N_min',0)
+            gmres_options['res'] = gmres_options.get('res',1e-10)
         # for reconstructing the final environments
         leglabels = {"init_LP": ([self.H.get_W(0).get_leg('wL').conj(), self.ket.get_B(0).get_leg('vL').conj(),
                             self.ket.get_B(0).get_leg('vL')], ['wR','vR','vR*']),
@@ -2965,7 +2970,7 @@ class MPOEnvironment(BaseEnvironment):
                              self.ket.get_B(self.L-1).get_leg('vR')], ['wL','vL','vL*'])}
         envs = {}
         epsilons = {} # energies PER UNIT CELL !!!
-
+        # main work
         for name in ['init_LP','init_RP'] if which=='both' else ['init_'+which]:
             envs[name] = [npc.Array(leglabels[name][0], dtype=self.dtype, labels=leglabels[name][1]) for _ in range(n_terms)]
             epsilons[name] = [1.]*n_terms # always have epsilon[0]=1.
@@ -2997,7 +3002,7 @@ class MPOEnvironment(BaseEnvironment):
                     for j_cs, alpha in enumerate(range(gamma+1, m)):
                         Ctot -= epsilons[name][alpha]/epsilons[name][gamma]*comb(alpha, gamma)*cs[j_cs]
                     if j_outer in self.H._cycles:
-                        res = self._solve_cj(self.H._cycles[j_outer], name, Ctot)
+                        res = self._solve_cj(self.H._cycles[j_outer], name, Ctot, gmres_options)
                         cs.insert(0, res)
                         envs[name][gamma][j_outer] = res
                         self._contract_grid(grids[gamma], res, j_outer, name)
@@ -3005,11 +3010,16 @@ class MPOEnvironment(BaseEnvironment):
                         cs.insert(0, Ctot)
                         envs[name][gamma][j_outer] = Ctot
                         self._contract_grid(grids[gamma], Ctot, j_outer, name)
-        
+        # energies per site
+        for env_name in epsilons:
+            epsilons[env_name] = [eps/self.L for eps in epsilons[env_name]]
         return envs, epsilons
 
-    def _solve_cj(self, loop, name, b):
+    def _solve_cj(self, loop, name, b, options):
         """ auxiliary function for _init_LP_RP_iterative: Solves c_gamma^j (1-TWjj) = b"""
+        if npc.norm(b)==0.:
+            # assume rank(A)=A.dim s.t. ker(A)=vec(0)
+            return npc.zeros(b.legs, dtype=b.dtype, qtotal=b.qtotal, labels=b._labels)
         # TWjj setup
         form, transpose = ('A', True) if name=='init_LP' else ('B', False)
         bra_N = [self.ket.get_B(i, form=form) for i in range(self.L)]
@@ -3018,10 +3028,11 @@ class MPOEnvironment(BaseEnvironment):
                               axes=[self.ket._p_label,self.ket._get_p_label('*')]) for j in range(self.L)]
         TWjj = TransferMatrix.from_Ns_Ms(bra_N, ket_M, transpose=transpose, charge_sector=None, p_label=self.ket._p_label)
         # GMRES solver
-        x = b.copy(deep=True) # initial guess
         A = ShiftNpcLinearOperator(TWjj, -1.)
-        solver = GMRES(A, x, b, options={}) # TODO: adjust options!
+        solver = GMRES(A, b, b, options=options) # makes internal copy
         x_sol, res, _, _ = solver.run()
+        if res>options['res']:
+            warnings.warn("GMRES converged within {0} in environment initialization, requested was {1}.".format(res, options['res']))
         # fix legs
         legs = ['vR','vR*'] if name=='init_LP' else ['vL','vL*']
         x_sol.split_legs()
