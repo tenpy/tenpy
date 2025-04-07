@@ -2945,10 +2945,44 @@ class MPOEnvironment(BaseEnvironment):
         return c_loop
 
     def init_LP_RP_iterative(self, which='both', gmres_options=None):
-        """
+        """ Construct initial environments for periodic MPO environments.
 
-        NEED DOC
+        For a periodic :class:`MPOEnvironment`, `LP[0]` and `RP[self.L-1]` correspond
+        to the contraction of infinite half chains. For example:
 
+            |               - - - - - > - - - - 'vR*'               
+            |              |              |
+            |   LP[0] = LP[-\infty]->- T_H**n - 'wR' (index `j`)
+            |              |              |
+            |               - - - - - > - - - - 'vR'
+                                     
+        where T_H has the structure of a corresponding :class:`MPOTransferMatrix`
+        and the limit :math:`n \to \infty` has to be taken.
+        If the MPO `self.H` is upper triangular up to permutations,
+        these environments can be calculated iteratively [Phien2012].
+
+        The resulting environments decompose into contributions proportional
+        to different powers of `n` in the sense that 
+
+            |   LP[0] = e_0 * n**0 * LP[0][0] + e_1 * n**1 LP[0][1]+...
+
+        and the maximum power is the number of "loops" with norm one (minus one).
+        
+        Parameters
+        ----------
+        which : {'LP', 'RP', 'both'}
+            Specifies which environments to compute.
+        gmres_options : dict
+            Further optional parameters passed to `tenpy.linalg.krylov_based.GMRES`.
+        
+        Returns
+        -------
+        envs : dict of list
+            Environments `LP[0]`/`RP[self.L-1]` grouped by powers of `n`.
+            envs['init_LP'/'init_RP'][j] = `LP[0][j]`/`RP[self.L-1][j]`
+        epsilons : dict of list
+            Corresponding energies `e_j` **per site**
+            espilons['init_LP'/'init_RP'][j] = e_j
         """
         assert which=='LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
         self._setup_iterative()
