@@ -343,40 +343,75 @@ def test_exp_decaying_terms():
     assert H1.is_equal(H2, cutoff)
 
 
-def test_exp_non_uniform_decaying_terms():
+@pytest.mark.parametrize('bc', ['finite', 'infinite'])
+def test_exp_non_uniform_decaying_terms(bc):
     L = 8
+    subsite_step = 2
+    subsites = np.arange(0, L, subsite_step)
+    cutoff = 1e-2
     spin = site.Site(spin_half.leg)
     spin.add_op("X", 2. * np.eye(2))
     spin.add_op("Y", 3. * np.eye(2))
     sites = [spin] * L
+
     edt = ExponentiallyDecayingTerms(L)
     p = 3.
     l = 1. / (1 + np.arange(L))
-    edt.add_exponentially_decaying_coupling(p, l, 'X', 'Y', subsites=[0, 2, 4, 6])
-
+    edt.add_exponentially_decaying_coupling(p, l, 'X', 'Y', subsites=subsites)
     edt._test_terms(sites)
 
     # check if ExponentiallyDecayingTerms.to_TermList and ExponentiallyDecayingTerms.add_to_graph
     # yield the same MPO
-    ts = edt.to_TermList(bc='finite', cutoff=0.01)
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite').build_MPO()
-    G = mpo.MPOGraph(sites, bc='finite')
+    ts = edt.to_TermList(bc=bc, cutoff=cutoff)
+    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc=bc).build_MPO()
+    G = mpo.MPOGraph(sites, bc=bc)
     edt.add_to_graph(G)
     G.test_sanity()
     G.add_missing_IdL_IdR()
     H2 = G.build_MPO()
-    assert H1.is_equal(H2)
+    assert H1.is_equal(H2, eps=1e-10 if bc == 'finite' else cutoff)
 
-    ts_desired = [
-        [("X", 0), ("Y", 2)],
-        [("X", 0), ("Y", 4)],
-        [("X", 0), ("Y", 6)],
-        [("X", 2), ("Y", 4)],
-        [("X", 2), ("Y", 6)],
-        [("X", 4), ("Y", 6)],
-    ]
+    # check term list
+    ts_desired = []
+    strength_desired = []
+    for n, i in enumerate(subsites):
+        for m in range(n + 1, 1000):
+            j = subsites[m % len(subsites)] + (m // len(subsites)) * L
+            subsite_idcs = np.arange(n, m) % len(subsites)
+            strength = p * np.prod(l[subsites[subsite_idcs]])
+            if bc == 'finite' and m >= len(subsites):
+                break
+            if bc == 'infinite' and strength < cutoff:
+                break
+            ts_desired.append([('X', i), ('Y', j)])
+            strength_desired.append(strength)
+    # check if we build the desired objects correctly: check vs hardcoded result
+    if bc == 'finite':
+        assert ts_desired == [
+            [("X", 0), ("Y", 2)],
+            [("X", 0), ("Y", 4)],
+            [("X", 0), ("Y", 6)],
+            [("X", 2), ("Y", 4)],
+            [("X", 2), ("Y", 6)],
+            [("X", 4), ("Y", 6)],
+        ]
+        decay_factors = [l[0], l[0] * l[2], l[0] * l[2] * l[4], l[2], l[2] * l[4], l[4]]
+        assert strength_desired == [p * d for d in decay_factors]
+    else:
+        for (opi, i), (opj, j) in ts_desired:
+            assert opi == 'X'
+            assert opj == 'Y'
+            assert j > i
+            assert (j - i) % subsite_step == 0
+            assert i in subsites
+        assert ts_desired[:3] == [[("X", 0), ("Y", 2)], [("X", 0), ("Y", 4)], [("X", 0), ("Y", 6)]]
+        i = ts_desired.index([('X', 2), ('Y', 4)])
+        assert ts_desired[i:i+3] == [[('X', 2), ('Y', 4)], [('X', 2), ('Y', 6)], [('X', 2), ('Y', 8)]]
+        i = ts_desired.index([('X', 4), ('Y', 6)])
+        assert ts_desired[i:i+3] == [[('X', 4), ('Y', 6)], [('X', 4), ('Y', 8)], [('X', 4), ('Y', 10)]]
+    # check term list
     assert ts.terms == ts_desired
-    assert np.all(ts.strength == p * np.array([l[0], l[0] * l[2], l[0] * l[2] * l[4], l[2], l[2] * l[4], l[4]]))
+    assert np.all(ts.strength == np.array(strength_desired))
 
 
 @pytest.mark.parametrize('bc', ['finite', 'infinite'])
