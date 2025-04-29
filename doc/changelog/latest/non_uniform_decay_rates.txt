@@ -1,3 +1,0 @@
-Changed
-^^^^^^^
-- `ExponentiallyDecayingCouplingTerms` now accepts a 1D array of size `L` for the decay rate `lambda_`.  (:issue: `176`).
