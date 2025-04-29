@@ -1372,6 +1372,11 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
         .. math ::
             strength sum_{i < j} lambda^{|i-j|} A_{subsites[i]} B_{subsites[j]}
 
+        or, for non-uniform `lambda_`, this becomes
+
+        .. math ::
+            strength sum_{i < j} ( prod_{n=i}^{j} lambda[n] ) A_{subsites[i]} B_{subsites[j]}
+
         Where the operator `A` is given by `op_i`, and `B` is given by `op_j`.
         Note that the sum over i,j is long-range, for infinite systems beyond the MPS unit cell.
 
