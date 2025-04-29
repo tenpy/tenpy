@@ -376,7 +376,8 @@ def test_exp_non_uniform_decaying_terms():
         [("X", 4), ("Y", 6)],
     ]
     assert ts.terms == ts_desired
-    assert np.all(ts.strength == p * np.array([l[0], l[0]**2, l[0]**3, l[2], l[2]**2, l[4]]))
+    assert np.all(ts.strength == p * np.array([l[0], l[0] * l[2], l[0] * l[2] * l[4], l[2], l[2] * l[4], l[4]]))
+
 
 @pytest.mark.parametrize('bc', ['finite', 'infinite'])
 def test_mpo_to_term_list(bc):

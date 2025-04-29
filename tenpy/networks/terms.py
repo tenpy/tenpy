@@ -1488,7 +1488,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                     for d, j in enumerate(subsites[i2:]):
                         if d == 0:
                             continue
-                        pref = strength * lambda_[i]**d
+                        pref = strength * np.prod(lambda_[subsites[i2:i2 + d]])
                         if abs(pref) < cutoff:
                             break
                         terms.append([(op_i, i), (op_j, j)])
@@ -1498,7 +1498,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                     for d in range(1, 1000):
                         j2 = i2 + d
                         j = subsites[j2 % N] + (j2 // N) * L
-                        pref = strength * lambda_[i]**d
+                        pref = strength * np.prod(lambda_[subsites[np.arange(i2, i2 + d) % N]])
                         if abs(pref) < cutoff:
                             break
                         terms.append([(op_i, i), (op_j, j)])
