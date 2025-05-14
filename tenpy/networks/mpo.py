@@ -3013,6 +3013,9 @@ class MPOEnvironment(BaseEnvironment):
             c0_base = npc.diag(1., leglabels[name][0][1], dtype=self.dtype, labels=leglabels[name][1][1:])
             _SVs = self.ket.get_SR(self.L-1)**2 if name=='init_LP' else self.ket.get_SL(0)**2
             rho = npc.diag(_SVs, leglabels[name][0][1].conj(), labels=leglabels[name][1][-1:-3:-1])
+            if npc.norm(TransferMatrix(self.bra, self.ket, transpose=True if name=='init_LP' else False,
+                                       form='A' if name=='init_LP' else 'B').matvec(c0_base)-c0_base)>1e-9:
+                warnings.warn("identity not dominant eigenvector of TransferMatrix up to tol=1e-9!")
             # iteration
             m = 0
             for j_outer in (self.H._outer_permutation if name=='init_LP' else reversed(self.H._outer_permutation)):
@@ -3036,7 +3039,7 @@ class MPOEnvironment(BaseEnvironment):
                     for j_cs, alpha in enumerate(range(gamma+1, m)):
                         Ctot -= epsilons[name][alpha]/epsilons[name][gamma]*comb(alpha, gamma)*cs[j_cs]
                     if j_outer in self.H._cycles:
-                        res = self._solve_cj(self.H._cycles[j_outer], name, Ctot, gmres_options)
+                        res = self._solve_cj(self.H._cycles[j_outer], name, Ctot, j_outer in ones, gmres_options)
                         cs.insert(0, res)
                         envs[name][gamma][j_outer] = res
                         self._contract_grid(grids[gamma], res, j_outer, name)
@@ -3049,16 +3052,30 @@ class MPOEnvironment(BaseEnvironment):
             epsilons[env_name] = [eps/self.L for eps in epsilons[env_name]]
         return envs, epsilons
 
-    def _solve_cj(self, loop, name, b, options):
+    def _c0_rho(self, name):
+        form = 'A' if name=='init_LP' else 'B'
+        c_left = TransferMatrix(self.bra, self.ket, transpose=True, form=form).eigenvectors()[1][0]
+        c_left = c_left.split_legs()
+        c_right = TransferMatrix(self.bra, self.ket, transpose=False, form=form).eigenvectors()[1][0]
+        c_right = c_right.split_legs()
+        if name=='init_LP':
+            return c_left, c_right
+        return c_right, c_left
+
+    def _solve_cj(self, loop, name, b, norm_one, options):
         """ auxiliary function for _init_LP_RP_iterative: Solves c_gamma^j (1-TWjj) = b"""
         if npc.norm(b)==0.:
-            # assume rank(A)=A.dim s.t. ker(A)=vec(0)
+            # Theoretically A has not full rank if Wjj=id, as then Id(1-TWjj)=0
+            # In practice this is not the case exactly, thus ker(A)={0}
             return npc.zeros(b.legs, dtype=b.dtype, qtotal=b.qtotal, labels=b._labels)
-        # TWjj setup
+        # TWjj
         form, transpose = ('A', True) if name=='init_LP' else ('B', False)
         bra_N = [self.ket.get_B(i, form=form) for i in range(self.L)]
-        ops = [self.H._graph[j][(loop[j],loop[j+1])] for j in range(self.L)]
-        ket_M = [npc.tensordot(self.ket.get_B(j, form=form), ops[j],
+        if norm_one:
+            ket_M = [self.ket.get_B(i, form=form) for i in range(self.L)]
+        else:
+            ops = [self.H._graph[j][(loop[j],loop[j+1])] for j in range(self.L)]
+            ket_M = [npc.tensordot(self.ket.get_B(j, form=form), ops[j],
                               axes=[self.ket._p_label,self.ket._get_p_label('*')]) for j in range(self.L)]
         TWjj = TransferMatrix.from_Ns_Ms(bra_N, ket_M, transpose=transpose, charge_sector=None, p_label=self.ket._p_label)
         # GMRES solver
