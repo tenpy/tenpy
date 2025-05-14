@@ -277,7 +277,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             steps = [a1, b1, a2, b2, a3, b3, a3, b2, a2, b1]
             steps = steps + [a1_twice, b1, a2, b2, a3, b3, a3, b2, a2, b1] * (N_steps - 1)
             steps = steps + [a1]
-            return steps * N_steps
+            return steps
         # else
         raise ValueError("Unknown order {0!r} for Suzuki Trotter decomposition".format(order))
 
