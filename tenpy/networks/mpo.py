@@ -3016,6 +3016,11 @@ class MPOEnvironment(BaseEnvironment):
             if npc.norm(TransferMatrix(self.bra, self.ket, transpose=True if name=='init_LP' else False,
                                        form='A' if name=='init_LP' else 'B').matvec(c0_base)-c0_base)>1e-9:
                 warnings.warn("identity not dominant eigenvector of TransferMatrix up to tol=1e-9!")
+                c0_tm, rho_tm = self._c0_rho(name)
+                rho_tm._labels = leglabels[name][1][-1:-3:-1]
+                c0_tm /= npc.inner(c0_tm, rho_tm) # rho should have norm 1
+                c0_base = c0_tm
+                rho_base = rho_tm
             # iteration
             m = 0
             for j_outer in (self.H._outer_permutation if name=='init_LP' else reversed(self.H._outer_permutation)):
