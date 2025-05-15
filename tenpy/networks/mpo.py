@@ -2729,7 +2729,7 @@ class MPOEnvironment(BaseEnvironment):
         if self.H._ordering_checked==False:
             raise ValueError("Iterative environment initialization failed: Hamiltonian cannot be ordered.")
 
-    def _loop_structures(self, tol=1e-10):
+    def _loop_structures(self, tol=1e-12):
         """ Determine the cycles of `self.H` with norm 1
         
         Helper function for `self.init_LP_RP_iterative()`
@@ -2737,7 +2737,7 @@ class MPOEnvironment(BaseEnvironment):
         .. note ::
 
             - Cycles are only allowed to contain identities with positive prefactor at the moment.
-            - Can be generalized to allow arbitrary operators. Requires GMRES for dominant eigenvectors in that case
+            - Can be generalized to allow arbitrary operators. Requires adjusting self._c0_rho
        """
         ones = []
         for j_outer, loop in self.H._cycles.items():
@@ -2784,7 +2784,11 @@ class MPOEnvironment(BaseEnvironment):
             Returns `len(ones)-1` `grid`. In each grid, connections that sum to zero are removed as well
         """
         js_loops = sorted([self.H._outer_permutation.index(j) for j in ones])
-        assert js_loops[0]==0 and js_loops[-1]==self.H.chi[-1]-1 # double check, should not trigger
+        # double check, should not trigger:
+        # check that IdL, IdR are recognized as loops with norm one and at correct positions
+        assert js_loops[0]==0 and js_loops[-1]==self.H.chi[-1]-1
+        assert self.H._outer_permutation[0] in ones
+        assert self.H._outer_permutation[-1] in ones
         if name=="init_LP":
             return self._left_grids(js_loops)
         else:
@@ -2898,7 +2902,7 @@ class MPOEnvironment(BaseEnvironment):
     def _ctot_loop(self, grid, cycle, name):
         """Helper function for `self.init_LP_RP_iterative()`
 
-        Compute Ctot for for indices with cycles
+        Compute Ctot for indices with cycles
         """
         if name=='init_LP':
             return self._ctot_loop_left(grid, cycle)
@@ -2944,7 +2948,7 @@ class MPOEnvironment(BaseEnvironment):
                 c_loop += grid[j_site][cycle[j_site]][0]
         return c_loop
 
-    def init_LP_RP_iterative(self, which='both', gmres_options=None):
+    def init_LP_RP_iterative(self, which='both', tol_c0=1e-9, gmres_options=None):
         """ Construct initial environments for periodic MPO environments.
 
         For a periodic :class:`MPOEnvironment`, `LP[0]` and `RP[self.L-1]` correspond
@@ -2987,40 +2991,33 @@ class MPOEnvironment(BaseEnvironment):
         assert which=='LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
         self._setup_iterative()
         ones = self._loop_structures()
-        # double check that IdL, IdR are recognized as loops with norm one
-        assert self.H._outer_permutation[0] in ones
-        assert self.H._outer_permutation[-1] in ones
         n_terms = len(ones)
-        # gmres defaults, N_min=0 for states close to product states
+        # gmres defaults, set N_min=0 for states close to product states
         if gmres_options==None:
             gmres_options = {'N_min':0,'res':1e-10}
         else:
             gmres_options['N_min'] = gmres_options.get('N_min',0)
             gmres_options['res'] = gmres_options.get('res',1e-10)
-        # for reconstructing the final environments
-        leglabels = {"init_LP": ([self.H.get_W(0).get_leg('wL').conj(), self.ket.get_B(0).get_leg('vL').conj(),
+        legs_labels = {"init_LP": ([self.H.get_W(0).get_leg('wL').conj(), self.ket.get_B(0).get_leg('vL').conj(),
                             self.ket.get_B(0).get_leg('vL')], ['wR','vR','vR*']),
-                     "init_RP": ([self.H.get_W(self.L-1).get_leg('wR').conj(), self.ket.get_B(self.L-1).get_leg('vR').conj(),
+                       "init_RP": ([self.H.get_W(self.L-1).get_leg('wR').conj(), self.ket.get_B(self.L-1).get_leg('vR').conj(),
                              self.ket.get_B(self.L-1).get_leg('vR')], ['wL','vL','vL*'])}
         envs = {}
         epsilons = {} # energies PER UNIT CELL !!!
         # main work
         for name in ['init_LP','init_RP'] if which=='both' else ['init_'+which]:
-            envs[name] = [npc.Array(leglabels[name][0], dtype=self.dtype, labels=leglabels[name][1]) for _ in range(n_terms)]
-            epsilons[name] = [1.]*n_terms # always have epsilon[0]=1.
+            envs[name] = [npc.Array(legs_labels[name][0], dtype=self.dtype, labels=legs_labels[name][1]) for _ in range(n_terms)]
+            epsilons[name] = [1.]*n_terms # always define epsilon[0]=1.
             grids = self._make_grids(name, ones)
             last_site = self.L-1 if name=='init_LP' else 0
-            c0_base = npc.diag(1., leglabels[name][0][1], dtype=self.dtype, labels=leglabels[name][1][1:])
-            _SVs = self.ket.get_SR(self.L-1)**2 if name=='init_LP' else self.ket.get_SL(0)**2
-            rho = npc.diag(_SVs, leglabels[name][0][1].conj(), labels=leglabels[name][1][-1:-3:-1])
-            if npc.norm(TransferMatrix(self.bra, self.ket, transpose=True if name=='init_LP' else False,
-                                       form='A' if name=='init_LP' else 'B').matvec(c0_base)-c0_base)>1e-9:
-                warnings.warn("identity not dominant eigenvector of TransferMatrix up to tol=1e-9!")
-                c0_tm, rho_tm = self._c0_rho(name)
-                rho_tm._labels = leglabels[name][1][-1:-3:-1]
-                c0_tm /= npc.inner(c0_tm, rho_tm) # rho should have norm 1
-                c0_base = c0_tm
-                rho_base = rho_tm
+            
+            # c0, s.t. c0*TW_00 = c0
+            # normalization requires npc.inner(c0,rho) = 1 with rho = TW_00*rho the associated density
+            # analytically W_00 = id => c0 = id, rho= SR[L-1]**2
+            # numerically this can be unstable! (Affects MPOTransferMatrix.find_init_LP_RP as well)
+            # For consistent generalization, compute c0, rho as dominant left/right eigvec of TW_00, and c0 -> c0/npc.inner(c0,rho) 
+            c0_base, rho = self._c0_rho(name, legs_labels, tol_c0)
+            
             # iteration
             m = 0
             for j_outer in (self.H._outer_permutation if name=='init_LP' else reversed(self.H._outer_permutation)):
@@ -3057,14 +3054,32 @@ class MPOEnvironment(BaseEnvironment):
             epsilons[env_name] = [eps/self.L for eps in epsilons[env_name]]
         return envs, epsilons
 
-    def _c0_rho(self, name):
+    def _c0_rho(self, name, legs_labels, tol_c0=1e-9):
+        c0 = npc.diag(1., legs_labels[name][0][1], dtype=self.dtype, labels=legs_labels[name][1][1:])
+        # _SVs = self.ket.get_SL(0)**2
+        # rho = npc.diag(_SVs, legs_labels[name][0][1].conj(), labels=legs_labels[name][1][-1:-3:-1])
+        if npc.norm(TransferMatrix(self.bra, self.ket, transpose=True if name=='init_LP' else False,
+                                    form='A' if name=='init_LP' else 'B').matvec(c0)-c0)<tol_c0:
+            _SVs = self.ket.get_SR(self.L-1)**2 if name=='init_LP' else self.ket.get_SL(0)**2
+            rho = npc.diag(_SVs, legs_labels[name][0][1].conj(), labels=legs_labels[name][1][-1:-3:-1])
+            return c0, rho
+        warnings.warn("Identity not dominant eigenvector of MPSTransferMatrix up to tol={:.1e}." \
+                      " Computing partial MPOEnvironments explicitly".format(tol_c0))
         form = 'A' if name=='init_LP' else 'B'
         c_left = TransferMatrix(self.bra, self.ket, transpose=True, form=form).eigenvectors()[1][0]
         c_left = c_left.split_legs()
         c_right = TransferMatrix(self.bra, self.ket, transpose=False, form=form).eigenvectors()[1][0]
         c_right = c_right.split_legs()
         if name=='init_LP':
+            if npc.trace(c_right)<0.:
+                c_right *= -1.
+            c_right._labels = legs_labels[name][1][-1:-3:-1]
+            c_left /= npc.inner(c_left, c_right)
             return c_left, c_right
+        if npc.trace(c_left)<0:
+            c_left *= -1.
+        c_left._labels = legs_labels[name][1][-1:-3:-1]
+        c_right /= npc.inner(c_left, c_right)
         return c_right, c_left
 
     def _solve_cj(self, loop, name, b, norm_one, options):
