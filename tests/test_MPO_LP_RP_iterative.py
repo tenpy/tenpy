@@ -2,13 +2,10 @@
    and method `init_LP_RP_iterative` in :class:`tenpy.netoworks.mpo.MPOEnvironment`."""
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
-
 from tenpy.linalg import np_conserved as npc
 from tenpy.algorithms.dmrg import TwoSiteDMRGEngine as dmrg_eng
 
 from tenpy.models.tf_ising import TFIChain
-from tenpy.models.xxz_chain import XXZChain
 from tenpy.models.lattice import Square
 from tenpy.models.model import CouplingModel, MPOModel
 # networks
@@ -126,6 +123,8 @@ for j_H, H in enumerate(Hs):
             e2.set_LP(0, env2['init_LP'][0],0)
             LP_prelast = e2.get_LP(e2.L-1,False)
             LP = e2._contract_LP(e2.L-1,LP_prelast)
+            for _e in [LP]+env2['init_LP']:
+                _e.itranspose(['wR*','vR','vR*'])
             LP_diff = LP-E_iter2['init_LP'][1]*e2.L*env2['init_LP'][1]-E_iter2['init_LP'][2]*e2.L*env2['init_LP'][2]-env2['init_LP'][0]
             assert (npc.norm(LP_diff))<1e-8, H_names[j_H]+"Left environment of H**2 is not an eigenvector"
 
