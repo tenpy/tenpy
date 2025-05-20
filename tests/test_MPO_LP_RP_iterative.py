@@ -124,7 +124,7 @@ for j_H, H in enumerate(Hs):
             LP_prelast = e2.get_LP(e2.L-1,False)
             LP = e2._contract_LP(e2.L-1,LP_prelast)
             for _e in [LP]+env2['init_LP']:
-                _e.itranspose(['wR*','vR','vR*'])
+                _e.itranspose(['wR','vR','vR*'])
             LP_diff = LP-E_iter2['init_LP'][1]*e2.L*env2['init_LP'][1]-E_iter2['init_LP'][2]*e2.L*env2['init_LP'][2]-env2['init_LP'][0]
             assert (npc.norm(LP_diff))<1e-8, H_names[j_H]+"Left environment of H**2 is not an eigenvector"
 
