@@ -3045,7 +3045,10 @@ class MPOEnvironment(BaseEnvironment):
                         self._contract_grid(grids[gamma], res, j_outer, name)
                     else:
                         cs.insert(0, Ctot)
-                        envs[name][gamma][j_outer] = Ctot
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore")
+                            # ignore complex warning when self.dtype=float since GMRES internally uses complex
+                            envs[name][gamma][j_outer] = Ctot
                         self._contract_grid(grids[gamma], Ctot, j_outer, name)
         # energies per site
         for env_name in epsilons:
