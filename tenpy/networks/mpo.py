@@ -2943,12 +2943,12 @@ class MPOEnvironment(BaseEnvironment):
             |               - - - - - > - - - - 'vR'
                                      
         where T_H has the structure of a corresponding :class:`MPOTransferMatrix`
-        and the limit :math:`n \to \infty` has to be taken. 
+        and the limit :math:`n → \infty` has to be taken. 
         Here, we implement the construction scheme from [Phien2012] 
-        for an MPO `self.H` that is upper triangular up to permutations.
+        for an MPO :attr:`self.H` that is upper triangular up to permutations.
 
-        In general, the environments `LP[0]`/`RP[self.L-1]` aquire an extensive
-        contribution when the MPO `self.H` represents an extensive observable. 
+        In general, the environments `LP[0]` and `RP[self.L-1]` aquire an extensive
+        contribution when the MPO represents an extensive observable. 
         To manage these contributions, the environments are decomposed into 
         terms proportional to different powers of `n`::
 
@@ -2956,10 +2956,10 @@ class MPOEnvironment(BaseEnvironment):
 
         The number of terms needed is given by the number of "loops"
         (see :attr:`MPO._cycles`) with norm one. For example, if `self.H` is a 
-        physical Hamiltonian, `e_1` corresponds to the energy per site of `self.ket`.      
+        physical Hamiltonian, `e_1` corresponds to the energy per site of :attr:`self.ket`.      
         
         .. warning ::
-            When computing higher powers of observables, ensure that `self.H`
+            When computing higher powers of observables, ensure that :attr:`self.H`
             includes **all** terms, even those reducing to identities. 
             Otherwise, the environments will not converge.
 
@@ -2969,19 +2969,18 @@ class MPOEnvironment(BaseEnvironment):
             Specifies which environments to compute.
         tol_c0 : float
             Tolerance for explicitly computing the dominant left and right eigenvectors
-            of the `MPSTransferMatrix` associated with `self.ket`, if numerical errors
+            of the :class:`MPSTransferMatrix` associated with :attr:`self.ket`, if numerical errors
             affect the MPS canonical form.
         gmres_options : dict
-            Further optional parameters passed to `tenpy.linalg.krylov_based.GMRES`.
+            Further optional parameters passed to :class:`tenpy.linalg.krylov_based.GMRES`.
         
         Returns
         -------
         envs : dict of list
-            Environments `LP[0]`/`RP[self.L-1]` grouped by powers of `n`.
-            envs['init_LP'/'init_RP'][j] = `LP[0][j]`/`RP[self.L-1][j]`
+            Environments grouped by powers of `n`.
+            envs['init_LP'][j]=`LP[0][j]` and envs['init_RP'][j]=`RP[self.L-1][j]`
         epsilons : dict of list
             Corresponding energies `e_j` **per site**
-            espilons['init_LP'/'init_RP'][j] = e_j
         """
         assert which=='LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
         self._setup_iterative()
