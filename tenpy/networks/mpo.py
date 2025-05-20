@@ -2934,7 +2934,7 @@ class MPOEnvironment(BaseEnvironment):
         """ Construct initial environments for periodic MPO environments.
 
         For a periodic :class:`MPOEnvironment`, `LP[0]` and `RP[self.L-1]` correspond
-        to the contraction of infinite half chains. For example:
+        to the contraction of infinite half chains::
 
             |               - - - - - > - - - - 'vR*'               
             |              |              |
@@ -2943,17 +2943,26 @@ class MPOEnvironment(BaseEnvironment):
             |               - - - - - > - - - - 'vR'
                                      
         where T_H has the structure of a corresponding :class:`MPOTransferMatrix`
-        and the limit :math:`n \to \infty` has to be taken.
-        If the MPO `self.H` is upper triangular up to permutations,
-        these environments can be calculated iteratively [Phien2012] - as implemented here.
+        and the limit :math:`n \to \infty` has to be taken. 
+        Here, we implement the construction scheme from [Phien2012] 
+        for an MPO `self.H` that is upper triangular up to permutations.
 
-        The resulting environments decompose into contributions proportional
-        to different powers of `n` in the sense that 
+        In general, the environments `LP[0]`/`RP[self.L-1]` aquire an extensive
+        contribution when the MPO `self.H` represents an extensive observable. 
+        To manage these contributions, the environments are decomposed into 
+        terms proportional to different powers of `n`::
 
             |   LP[0] = e_0 * n**0 * LP[0][0] + e_1 * n**1 LP[0][1]+...
 
-        and the maximum power is the number of "loops" with norm one (minus one).
+        The number of terms needed is given by the number of "loops"
+        (see :attr:`MPO._cycles`) with norm one. For example, if `self.H` is a 
+        physical Hamiltonian, `e_1` corresponds to the energy per site of `self.ket`.      
         
+        .. warning ::
+            When computing higher powers of observables, ensure that `self.H`
+            includes **all** terms, even those reducing to identities. 
+            Otherwise, the environments will not converge.
+
         Parameters
         ----------
         which : {'LP', 'RP', 'both'}
@@ -3029,7 +3038,10 @@ class MPOEnvironment(BaseEnvironment):
                     if j_outer in self.H._cycles:
                         res = self._solve_cj(self.H._cycles[j_outer], name, Ctot, j_outer in ones, gmres_options)
                         cs.insert(0, res)
-                        envs[name][gamma][j_outer] = res
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore")
+                            # ignore complex warning when self.dtype=float since GMRES internally uses complex
+                            envs[name][gamma][j_outer] = res 
                         self._contract_grid(grids[gamma], res, j_outer, name)
                     else:
                         cs.insert(0, Ctot)
@@ -3092,7 +3104,7 @@ class MPOEnvironment(BaseEnvironment):
         solver = GMRES(A, b, b, options=options) # makes internal copy
         x_sol, res, _, _ = solver.run()
         if res>options['res']:
-            warnings.warn("GMRES converged within {0} in environment initialization, requested was {1}.".format(res, options['res']))
+            warnings.warn("GMRES converged within tol={0} in environment initialization, requested was tol={1}.".format(res, options['res']))
         # fix legs
         legs = ['vR','vR*'] if name=='init_LP' else ['vL','vL*']
         x_sol.split_legs()
