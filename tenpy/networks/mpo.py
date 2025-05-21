@@ -446,6 +446,9 @@ class MPO:
         obj.bc = hdf5_loader.load(subpath + "boundary_condition")
         obj.max_range = hdf5_loader.load(subpath + "max_range")
         obj.explicit_plus_hc = h5gr.attrs.get("explicit_plus_hc", False)
+        obj._graph = None
+        obj._outer_permutation = None
+        obj._cycles = None
         obj.test_sanity()
         return obj
 
