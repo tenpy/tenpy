@@ -3001,34 +3001,53 @@ class MPOEnvironment(BaseEnvironment):
                              self.ket.get_B(self.L-1).get_leg('vR')], ['wL','vL','vL*'])}
         envs = {}
         epsilons = {} # energies PER UNIT CELL !!!
-        # main work
+        
+        # NOTE: main work starts here
         for name in ['init_LP','init_RP'] if which=='both' else ['init_'+which]:
             envs[name] = [npc.Array(legs_labels[name][0], dtype=self.dtype, labels=legs_labels[name][1]) for _ in range(n_terms)]
             epsilons[name] = [1.]*n_terms # always define epsilon[0]=1.
             grids = self._make_grids(name, ones)
             last_site = self.L-1 if name=='init_LP' else 0
             
-            # c0, s.t. c0*TW_00 = c0
-            # normalization requires npc.inner(c0,rho) = 1 with rho = TW_00*rho the associated density
-            # analytically W_00 = id => c0 = id, rho= SR[L-1]**2
-            # numerically this can be unstable! (Affects MPOTransferMatrix.find_init_LP_RP as well)
-            # For consistent generalization, compute c0, rho as dominant left/right eigvec of TW_00, and c0 -> c0/npc.inner(c0,rho) 
+            # dominant eigenvector c0 = c0*TW_00 
+            # c0=Id analytically, can be unstable <- fixed by checking explicitly
+            # normalized via npc.inner(c0,rho) = 1 with rho = TW_00*rho the associated density
             c0_base, rho = self._c0_rho(name, legs_labels, tol_c0)
             
-            # iteration
             m = 0
             for j_outer in (self.H._outer_permutation if name=='init_LP' else reversed(self.H._outer_permutation)):
                 cs = []
+                eps_temp = []
+                # NOTE: contributions ~ c0
                 if j_outer in ones: # first index is IdL, last IdR
                     c0 = c0_base.copy()
+                    if m!=0: # compute next epsilon
+                        Ctot = self._ctot_loop(grids[m-1], self.H._cycles[j_outer], name)
+                        next_eps = np.real(npc.inner(Ctot, rho)/m)
+                        epsilons[name][m] = next_eps
+                        eps_temp.insert(0, next_eps)
+                        c0 *= next_eps
                     envs[name][m][j_outer] = c0
                     cs.append(c0)
                     if m!=n_terms-1:
                         self._contract_grid(grids[m], c0, j_outer, name)
-                    if m!=0: # compute next epsilon
-                        Ctot = self._ctot_loop(grids[m-1], self.H._cycles[j_outer], name)
-                        epsilons[name][m] = np.real(epsilons[name][m-1]/m*npc.inner(Ctot, rho)/npc.inner(c0, rho))
+                    # compute c0 contributions for lower envs and adjust epsilons
+                    for gamma in range(m-1,0,-1):
+                        Ctot_gamma = self._ctot_loop(grids[gamma-1], self.H._cycles[j_outer], name)
+                        eps_gamma = np.real(npc.inner(Ctot_gamma, rho))
+                        for j_eps, alpha in enumerate(range(gamma+1,m+1)):
+                            # print("eps_temp j_eps:",eps_temp[j_eps],comb(alpha,gamma-1))
+                            eps_gamma -= eps_temp[j_eps]*comb(alpha,gamma-1)
+                        eps_gamma /= gamma
+                        eps_temp.insert(0,eps_gamma)
+                        print("eps gamma:",eps_gamma)
+                        print("eps gamma/alpha:",eps_gamma/eps_temp[-1],cs[-1][0,0])
+                        print("env before gamma norm:",npc.norm(envs[name][gamma][j_outer]))
+                        # add to environment afterwards
+                        print("env gamma rho overlap",npc.inner(envs[name][gamma][j_outer],rho),gamma)
+                        # epsilons[name][gamma] += eps_gamma # unsure about this one     
                     m += 1
+                # NOTE: contributions ⊥ c0
                 offset = 1 if j_outer in ones else 0
                 for gamma in range(m-1-offset, -1, -1):
                     if j_outer in self.H._cycles:
@@ -3036,9 +3055,11 @@ class MPOEnvironment(BaseEnvironment):
                     else:
                         Ctot = grids[gamma][last_site][j_outer][0]
                     for j_cs, alpha in enumerate(range(gamma+1, m)):
-                        Ctot -= epsilons[name][alpha]/epsilons[name][gamma]*comb(alpha, gamma)*cs[j_cs]
+                        Ctot -= comb(alpha, gamma)*cs[j_cs]
                     if j_outer in self.H._cycles:
-                        res = self._solve_cj(self.H._cycles[j_outer], name, Ctot, j_outer in ones, gmres_options)
+                        res = self._solve_cj(self.H._cycles[j_outer], name, Ctot, offset, gmres_options)
+                        if offset==1 and gamma!=0:
+                            res += (eps_temp[gamma-1]/eps_temp[-1])*cs[-1]
                         cs.insert(0, res)
                         with warnings.catch_warnings():
                             warnings.simplefilter("ignore")
@@ -3054,10 +3075,10 @@ class MPOEnvironment(BaseEnvironment):
                         self._contract_grid(grids[gamma], Ctot, j_outer, name)
         # energies per site
         for env_name in epsilons:
-            epsilons[env_name] = [eps/self.L for eps in epsilons[env_name]]
+            epsilons[env_name] = [eps/self.L**j for j, eps in enumerate(epsilons[env_name])]
         return envs, epsilons
 
-    def _c0_rho(self, name, legs_labels, tol_c0=1e-9):
+    def _c0_rho(self, name, legs_labels, tol_c0):
         """ Used in `self.init_LP_RP_iterative()`
         
         Determine dominant left and right eigenvectors of the `MPSTransferMatrix`
@@ -3068,9 +3089,10 @@ class MPOEnvironment(BaseEnvironment):
                                     form='A' if name=='init_LP' else 'B').matvec(c0)-c0)<tol_c0:
             _SVs = self.ket.get_SR(self.L-1)**2 if name=='init_LP' else self.ket.get_SL(0)**2
             rho = npc.diag(_SVs, legs_labels[name][0][1].conj(), labels=legs_labels[name][1][-1:-3:-1])
+            # NOTE: iMPS should always be normalized s.t. npc.inner(c0,rho)=1
             return c0, rho
         warnings.warn("Identity not dominant eigenvector of MPSTransferMatrix up to tol={:.1e}." \
-                      " Computing partial MPOEnvironments explicitly".format(tol_c0))
+                      " Computing explicitly...".format(tol_c0))
         form = 'A' if name=='init_LP' else 'B'
         c_left = TransferMatrix(self.bra, self.ket, transpose=True, form=form).eigenvectors()[1][0]
         c_left = c_left.split_legs()
@@ -3078,11 +3100,11 @@ class MPOEnvironment(BaseEnvironment):
         c_right = c_right.split_legs()
         if name=='init_LP':
             if npc.trace(c_right)<0.:
-                c_right *= -1.
+                c_right *= -1. # fix possible negative sign
             c_right._labels = legs_labels[name][1][-1:-3:-1]
-            c_left /= npc.inner(c_left, c_right)
+            c_left /= npc.inner(c_left, c_right) # normalization
             return c_left, c_right
-        if npc.trace(c_left)<0:
+        if npc.trace(c_left)<0: # init_RP
             c_left *= -1.
         c_left._labels = legs_labels[name][1][-1:-3:-1]
         c_right /= npc.inner(c_left, c_right)
@@ -3097,7 +3119,7 @@ class MPOEnvironment(BaseEnvironment):
         # TWjj
         form, transpose = ('A', True) if name=='init_LP' else ('B', False)
         bra_N = [self.ket.get_B(i, form=form) for i in range(self.L)]
-        if norm_one:
+        if norm_one==1:
             ket_M = [self.ket.get_B(i, form=form) for i in range(self.L)]
         else:
             ops = [self.H._graph[j][(loop[j],loop[j+1])] for j in range(self.L)]
