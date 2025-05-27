@@ -3040,12 +3040,8 @@ class MPOEnvironment(BaseEnvironment):
                             eps_gamma -= eps_temp[j_eps]*comb(alpha,gamma-1)
                         eps_gamma /= gamma
                         eps_temp.insert(0,eps_gamma)
-                        print("eps gamma:",eps_gamma)
-                        print("eps gamma/alpha:",eps_gamma/eps_temp[-1],cs[-1][0,0])
-                        print("env before gamma norm:",npc.norm(envs[name][gamma][j_outer]))
                         # add to environment afterwards
-                        print("env gamma rho overlap",npc.inner(envs[name][gamma][j_outer],rho),gamma)
-                        # epsilons[name][gamma] += eps_gamma # unsure about this one     
+                        epsilons[name][gamma] = eps_gamma # unsure about this one     
                     m += 1
                 # NOTE: contributions ⊥ c0
                 offset = 1 if j_outer in ones else 0
