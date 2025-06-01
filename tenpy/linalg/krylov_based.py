@@ -223,6 +223,8 @@ class GMRES():
         self.H = npc.Array.from_ndarray_trivial(np.zeros((self.N_max+1, self.N_max))*1.j)
 
     def run(self):
+        if self.total_error[0][0]<self.res:
+            return self.x, self.total_error[0][0], self.total_error, self.total_iters
         for _ in range(self.restart):
             converged=False
             for k in range(0,self.N_max):
@@ -254,7 +256,8 @@ class GMRES():
             self.H[i,k] = npc.inner(q, self.qs[i], axes='range', do_conj=True)
             q.iadd_prefactor_other(-self.H[i,k], self.qs[i])
         self.H[k+1,k] = npc.norm(q)
-        q.iscale_prefactor(1./self.H[k+1,k])
+        if self.H[k+1,k]>0: # avoid warning if norm(q)==0, error=0 in that case
+            q.iscale_prefactor(1./self.H[k+1,k])
         self.qs.append(q)
 
     def apply_givens_rotation(self, k):
