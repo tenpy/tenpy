@@ -73,7 +73,7 @@ cycle_indices = [[0,2],None,[0,2,4]]
 
 # ----- TEST FUNCTIONS -----
 
-def test_graph(H, name):
+def helper_test_graph(H, name):
     # check that graph is a 1 to 1 mapping of H
     chis = H.chi
     for j, W in enumerate(H._W):
@@ -85,7 +85,7 @@ def test_graph(H, name):
                 else:
                     assert npc.norm(op-H._graph[j][(jL,jR)])<1e-12, name+": _graph[{0}][({1},{2})] wrong".format(j, jL, jR)
 
-def test_init_env(psi, E, H, name):
+def helper_test_init_env(psi, E, H, name):
     env_base, E_base, _ = MPOTransferMatrix.find_init_LP_RP(H, psi, 0, psi.L-1, calc_E=True)
     env = MPOEnvironment(psi, H, psi)
     init_env, _, E_iter = env.init_LP_RP_iterative(calc_E=True, which="both")
@@ -95,7 +95,7 @@ def test_init_env(psi, E, H, name):
     assert npc.norm(env_base["init_RP"]-init_env["init_RP"])<1e-8, name+": RP_iterative not converged"
     assert abs(E_iter[0]-E_base[0])<1e-11 and abs(E_iter[1]-E_base[1])<1e-11, name+": Energies of iterative environment intialization don't match"
     
-def test_H_square(psi, H1, H2, name, state):
+def helper_test_H_square(psi, H1, H2, name, state):
     e_iter1 = MPOEnvironment(psi, H1, psi)
     e_iter2 = MPOEnvironment(psi, H2, psi)
     _, env1 = e_iter1.init_LP_RP_iterative(which="both")
@@ -158,7 +158,7 @@ def test_H_square(psi, H1, H2, name, state):
     LP_diff = LP-env2['init_LP'][1]-env2['init_LP'][2]-env2['init_LP'][0]
     assert (npc.norm(LP_diff))<1e-8, name+"Left environment of H**2 is not the correct eigenvector"
 
-def test_enlarge_unit_cell(H, name):
+def helper_test_enlarge_unit_cell(H, name):
     H.enlarge_mps_unit_cell(2)
     chis = H.chi
     for j, W in enumerate(H._W):
@@ -170,7 +170,7 @@ def test_enlarge_unit_cell(H, name):
                 else:
                     assert npc.norm(op-H._graph[j][(jL,jR)])<1e-12, name+": _graph[{0}][({1},{2})] wrong after enlarge_unit_cell()".format(j, jL, jR)
 
-def test_grid(psi, H, name):
+def helper_test_grid(psi, H, name):
     # ----- Test Grid from MPOEnvironments -----
     env = MPOEnvironment(psi, H, psi)
     # TransferMatrix environments with one unit cell contracted 
@@ -212,24 +212,24 @@ for j_H, H in enumerate(Hs):
             H._order_graph()
         
         # check that graph is a 1 to 1 mapping of H
-        test_graph(H, H_names[j_H])
+        helper_test_graph(H, H_names[j_H])
         
         # test contract grid for TFI model
         if j_H==0 and sort_charges==0:
-            test_grid(states[j_H], H, H_names[j_H])
+            helper_test_grid(states[j_H], H, H_names[j_H])
         
         # environment checks
         if sort_charges!=2 and j_H<2:
-            test_init_env(states[j_H], energies[j_H], H, H_names[j_H])
+            helper_test_init_env(states[j_H], energies[j_H], H, H_names[j_H])
         
         # H^2 test
         if sort_charges==0 and j_H==0:
-            test_H_square(states[2], H, Hs[2], H_names[2],"up")
-            test_H_square(states[0], H, Hs[2], H_names[2],"gs")
+            helper_test_H_square(states[2], H, Hs[2], H_names[2],"up")
+            helper_test_H_square(states[0], H, Hs[2], H_names[2],"gs")
 
         # enlarge unit cell
         if sort_charges==2 and j_H<2:
-            test_enlarge_unit_cell(H, H_names[j_H])
+            helper_test_enlarge_unit_cell(H, H_names[j_H])
 
         # ---- Additional checks on graph -----        
         assert len(H._cycles)==N_cycles[j_H], H_names[j_H]+": wrong number of cycles"

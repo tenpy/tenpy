@@ -2902,7 +2902,7 @@ class MPOEnvironment(BaseEnvironment):
         
         Returns
         -------
-        init_env_data : (dict)
+        init_env_data : dict
             Dictionary with `init_LP` and `init_RP` in the same format as 
             :meth:`MPOTransferMatrix.find_init_LP_RP`.
         envs : dict of list
