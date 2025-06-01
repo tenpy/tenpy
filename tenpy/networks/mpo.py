@@ -2706,33 +2706,19 @@ class MPOEnvironment(BaseEnvironment):
         cR = npc.tensordot(cR, self.bra.get_B(i, form='B').conj(), axes=axes)
         return cR
 
-    def _setup_iterative(self):
-        """ Check (and setup) MPOEnvironment for iterative LP/RP initialization
-        
-        Used in `self.init_LP_RP_iterative()`
-        """
-        assert self.ket is self.bra, "Iterative environment initialization not possible: Requires ket=bra"
-        if self.H._graph==None:
-            self.H._make_graph()
-        if self.H._outer_permutation==None:
-            self.H._order_graph()
-        if self.H._outer_permutation==False:
-            raise ValueError("Iterative environment initialization failed: Hamiltonian cannot be ordered.")
-
     def _loop_structures(self, tol=1e-12):
         """ Determine the cycles of `self.H` with norm 1
         
         Used in `self.init_LP_RP_iterative()`
 
         .. note ::
-
             - Cycles are only allowed to contain identities with positive prefactor at the moment.
             - Can be generalized to allow arbitrary operators. Requires adjusting self._c0_rho
        """
         ones = []
         for j_outer, loop in self.H._cycles.items():
             norm = 1.
-            for j in range(self.L):
+            for j in range(self.H.L):
                 op = self.H._graph[j][(loop[j],loop[j+1])] # (i,j)
                 factor = npc.norm(op, ord=1)/op.shape[0] 
                 if factor<tol:
@@ -2749,99 +2735,86 @@ class MPOEnvironment(BaseEnvironment):
                 ones.append(j_outer)
         return ones
 
-    def _make_grids(self, name, ones):
-        """ Helper function for `self.init_LP_RP_iterative()`
+    def _left_grid(self, remove=[]):
+        """ Construct a grid representing partial contractions of `self` as graph.
+         
+        We can view contractions of an MPOEnvironment as graph with the same
+        structure as the underlying MPOGraph: For example,
+        `LP[i+1]['wR'=k] = \sum_j LP[i]['wR'=j]*(B*[i]*W[j,k]*B[i])`
+        corresponds to summing the links W[j,k] between layer (i,i+1)
+        given by the MPS sites.
 
-        Constructs a grid of the graph used for efficient computation of "Ctot".
+        Contracting the MPOEnvironment in this way is usually slower than the naive 
+        way, but can be beneficial in some cases (e.g. in `self.init_LP_RP_iterative).
+        
+        We represent a grid as:
+            list of {list of { [None | :class:`~tenpy.linalg.np_conserved.Array`, set of int] }}
+            - `grid[j_site][j_virtual][0]` contains the partial contractions (including site j_site)
+            - `grid[j_site][j_virtual][1]` contains the remaining ingoing indices not yet summed
 
         Parameters:
         ----------
-        name : str
-            One of `init_LP`, `init_RP`. Determines the direction of the grid.
-        ones : list of int
-            Outer virtual indices with cycles of norm one
-
-        A grid has the form: list of {list of { [None | :class:`~tenpy.linalg.np_conserved.Array`, set of int] }}
-            Contains partial contractions of `self`. For a 'init_LP' grid, the structure is:
-            `grid[j_site][j_virtual][0]` corresponds to the sum of all contractions of connections
-            of `self.H._graph`at virtual index `j_virtual` right of site `j_site`,
-            **without** summing `self.H._graph[j_site][(i,j_virtual)]` for `i in grid[j_site][j_virtual][1]`
-            I.e. the set of integers corresponds to the connections that still have to be summed.
+        remove : list of int
+            Remove edges from left nodes `LP[0]['wR'=j]=0 for j in remove` that are zero.        
             
         Returns
         -------
-        grids : list of grid
-            Returns `len(ones)-1` `grid`. In each grid, connections that sum to zero are removed as well
+        grid : list of {list of { [None | :class:`~tenpy.linalg.np_conserved.Array`, set of int] }}
+            As described above
         """
-        js_loops = sorted([self.H._outer_permutation.index(j) for j in ones])
-        if name=="init_LP":
-            return self._left_grids(js_loops)
-        else:
-            return self._right_grids(js_loops)
-
-    def _left_grids(self, js_loops):
-        grids = []
-        for j0_loop in js_loops[:-1]:
-            grid = []
-            for chi in self.H.chi[1:]:
-                # cPartial, ingoing inds - cPartial defaults to None
-                layer = [[None,set()] for _ in range(chi)] 
-                grid.append(layer)
-            for j_site, layer in enumerate(self.H._graph):
-                for i,j in layer:
-                    grid[j_site][j][1].add(i)
-            # remove zero connections for higher grids
-            zero_nodes = self.H._outer_permutation[:j0_loop]
+        grid = []
+        for chi in self.H.chi[1:]:
+            # cPartial, ingoing inds - cPartial initialized as None
+            layer = [[None,set()] for _ in range(chi)] 
+            grid.append(layer)
+        for j_site, layer in enumerate(self.H._graph):
+            for i,j in layer:
+                grid[j_site][j][1].add(i)
+        # remove connections of left nodes that are 0
+        if len(remove)>0:
+            zero_nodes = remove
             for j_site in range(self.L):
                 empty_nodes = []
                 for iL in zero_nodes:
                     conns = [j for i,j in self.H._graph[j_site] if i==iL]
                     for j in conns:
                         grid[j_site][j][1].remove(iL)
-                        if not grid[j_site][j][1] and grid[j_site][j][0]==None: # all ingoing indices sum to zero
+                        if not grid[j_site][j][1]: # ingoing indices sum to zero
                             empty_nodes.append(j)
                 zero_nodes = empty_nodes
-            grids.append(grid)
-        return grids
+        return grid
 
-    def _right_grids(self, js_loops):
-        grids = []
-        for j0_loop in reversed(js_loops[1:]):
-            grid = []
-            for chi in self.H.chi[:-1]:
-                # cPartial, ingoing inds - cPartial defaults to None
-                layer = [[None,set()] for _ in range(chi)] 
-                grid.append(layer)
-            for j_site, layer in enumerate(self.H._graph):
-                for i,j in layer:
-                    grid[j_site][i][1].add(j)
-            # remove zero connections for higher grids
-            zero_nodes = self.H._outer_permutation[j0_loop+1:]
+    def _right_grid(self, remove=[]):
+        """ Same as left grid, but starting from `RP[self.L-1]`.
+
+        Note: Layers are always indexed from the left, meaning
+            right_grid[j] <-> `RP[j-1]`
+        """
+        grid = []
+        for chi in self.H.chi[:-1]:
+            layer = [[None,set()] for _ in range(chi)] 
+            grid.append(layer)
+        for j_site, layer in enumerate(self.H._graph):
+            for i,j in layer:
+                grid[j_site][i][1].add(j)
+        if len(remove)>0:
+            zero_nodes = remove
             for j_site in range(self.L-1,-1,-1):
                 empty_nodes = []
                 for jR in zero_nodes:
                     conns = [i for i,j in self.H._graph[j_site] if j==jR]
                     for i in conns:
                         grid[j_site][i][1].remove(jR)
-                        if not grid[j_site][i][1] and grid[j_site][i][0]==None: # all ingoing indices sum to zero
+                        if not grid[j_site][i][1]: # all ingoing indices sum to zero
                             empty_nodes.append(i)
                 zero_nodes = empty_nodes
-            grids.append(grid)
-        return grids
+        return grid
 
-    def _contract_grid(self, grid, c0_outer, j_outer, name):
-        """ Used in `self.init_LP_RP_iterative()`
-
-        Carry out all possible contractions starting from the initial node
-        `c0_outer` at the outer virtual index `j_outer`
+    def _contract_left_grid(self, grid, c0_outer, j_outer):
+        """ Carry out all possible contractions starting from the initial node
+            `c0_outer` at the outer virtual index `j_outer`
         """
-        if name=='init_LP':
-            self._contract_grid_left(grid, [c0_outer, j_outer])
-        else:
-            self._contract_grid_right(grid, [c0_outer, j_outer])
-
-    def _contract_grid_left(self, grid, init_node):
-        ready_nodes = [init_node]
+        ready_nodes = [[c0_outer, j_outer]]
         for j_site in range(self.L):
             finished_nodes = []
             for cL, iL in ready_nodes:
@@ -2862,8 +2835,8 @@ class MPOEnvironment(BaseEnvironment):
                     del grid[j_site-1][iL][0]
             ready_nodes = finished_nodes      
 
-    def _contract_grid_right(self, grid, init_node):
-        ready_nodes = [init_node]
+    def _contract_right_grid(self, grid, c0_outer, j_outer):
+        ready_nodes = [[c0_outer, j_outer]]
         for j_site in range(self.L-1,-1,-1):
             finished_nodes = []
             for cR, jR in ready_nodes:
@@ -2877,15 +2850,183 @@ class MPOEnvironment(BaseEnvironment):
                     grid[j_site][i][1].remove(jR)
                     if not grid[j_site][i][1]: # all ingoing indices summed up
                        finished_nodes.append((grid[j_site][i][0],i))
-                # delete cL, not needed anymore & saves storage
+                # delete cR, not needed anymore & saves storage
                 if j_site!=self.L-1:
                     # double check that set with ingoing elements for ready node is empty
                     assert not grid[j_site+1][jR][1]
                     del grid[j_site+1][jR][0] # won't be accessed anymore
             ready_nodes = finished_nodes    
 
+    def init_LP_RP_iterative(self, which='both', calc_E=False, tol_c0=1e-10, gmres_options=None):
+        """ Construct initial environments for periodic MPO environments.
+
+        For a periodic :class:`MPOEnvironment`, `LP[0]` and `RP[self.L-1]` correspond
+        to the contraction of infinite half chains::
+
+            |               - - - - - > - - - - 'vR*'               
+            |              |              |
+            |   LP[0] = LP[-\infty]->- T_H**n - 'wR' (index `j`)
+            |              |              |
+            |               - - - - - > - - - - 'vR'
+                                     
+        where T_H has the structure of a corresponding :class:`MPOTransferMatrix`
+        and the limit :math:`n → \infty` has to be taken. 
+        Here, we implement the construction scheme from [Phien2012] 
+        for an MPO :attr:`self.H` that is upper triangular up to permutations.
+
+        In general, the environments `LP[0]` and `RP[self.L-1]` aquire an extensive
+        contribution when the MPO represents an extensive observable. 
+        To manage these contributions, the environments are decomposed into 
+        terms proportional to different powers of `n`::
+
+            |   LP[0] = e_0 * n**0 * LP[0][0] + e_1 * n**1 LP[0][1]+...
+
+        The number of terms needed is given by the number of "loops"
+        (see :attr:`MPO._cycles`) with norm one. For example, if `self.H` is a 
+        physical Hamiltonian, `e_1` corresponds to the energy per site of :attr:`self.ket`.      
+        
+        Parameters
+        ----------
+        which : {'LP', 'RP', 'both'}
+            Specifies which environments to compute.
+        tol_c0 : float
+            Tolerance for explicitly computing the dominant left and right eigenvectors
+            of the :class:`MPSTransferMatrix` associated with :attr:`self.ket`, if numerical errors
+            affect the MPS canonical form.
+        calc_E : bool
+            Whether to return the energy. Only permitted when the expectation value scales 
+            at most linearly with system size. For higher-order scaling,
+            expectation values must be computed via explicit contractions.
+        gmres_options : dict
+            Further optional parameters passed to :class:`tenpy.linalg.krylov_based.GMRES`.
+        
+        Returns
+        -------
+        init_env_data : (dict)
+            Dictionary with `init_LP` and `init_RP` in the same format as 
+            :meth:`MPOTransferMatrix.find_init_LP_RP`.
+        envs : dict of list
+            All environments grouped by powers of `n`.
+            envs['init_LP'][j]=`LP[0][j]` and envs['init_RP'][j]=`RP[self.L-1][j]`
+        E : float
+            Energy per site, only returned if `calc_E` is True.
+        """
+        # check self
+        assert self.ket is self.bra, "Iterative environment initialization not possible: Requires ket=bra"
+        if self.H._graph==None:
+            self.H._make_graph()
+        if self.H._outer_permutation==None:
+            self.H._order_graph()
+        if self.H._outer_permutation==False:
+            raise ValueError("Iterative environment initialization failed: Hamiltonian cannot be ordered.")
+        assert which=='LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
+        ones = self._loop_structures()
+        n_terms = len(ones)
+        # gmres defaults, set N_min=0 for states close to product states
+        if gmres_options==None:
+            gmres_options = {'N_min':0,'res':1e-11}
+        else:
+            gmres_options['N_min'] = gmres_options.get('N_min',0)
+            gmres_options['res'] = gmres_options.get('res',1e-11)
+        legs_labels = {"init_LP": ([self.H.get_W(0).get_leg('wL').conj(), self.ket.get_B(0).get_leg('vL').conj(),
+                            self.ket.get_B(0).get_leg('vL')], ['wR','vR','vR*']),
+                       "init_RP": ([self.H.get_W(self.L-1).get_leg('wR').conj(), self.ket.get_B(self.L-1).get_leg('vR').conj(),
+                             self.ket.get_B(self.L-1).get_leg('vR')], ['wL','vL','vL*'])}
+        envs = {}
+        # for standard MPOEnvironments, invalid for higher powers
+        Es = [1.,1.] # PER UNIT CELL !!!
+        
+        # NOTE: main work starts here
+        for name in ['init_LP','init_RP'] if which=='both' else ['init_'+which]:
+            envs[name] = [npc.Array(legs_labels[name][0], dtype=self.dtype, labels=legs_labels[name][1]) for _ in range(n_terms)]
+            grids = self._make_grids(name, ones)
+            last_site = self.L-1 if name=='init_LP' else 0
+            
+            # dominant eigenvector c0 = c0*TW_00 
+            # c0=Id analytically, can be unstable <- fixed by checking explicitly
+            # normalized via npc.inner(c0,rho) = 1 with rho = TW_00*rho the associated density
+            c0_base, rho = self._c0_rho(name, legs_labels, tol_c0)
+            
+            m = 0
+            for j_outer in (self.H._outer_permutation if name=='init_LP' else reversed(self.H._outer_permutation)):
+                cs = []
+                eps_temp = []
+                # NOTE: contributions ~ c0
+                if j_outer in ones: # first index is IdL, last IdR
+                    c0 = c0_base.copy()
+                    if m!=0: # compute next epsilon
+                        Ctot = self._ctot_loop(grids[m-1], self.H._cycles[j_outer], name)
+                        next_eps = np.real(npc.inner(Ctot, rho)/m)
+                        if m==1:
+                            index = 0 if name=='init_LP' else 1
+                            Es[index] = next_eps
+                        eps_temp.insert(0, next_eps)
+                        c0 *= next_eps
+                    envs[name][m][j_outer] = c0
+                    cs.append(c0)
+                    if m!=n_terms-1:
+                        self._contract_grid(grids[m], c0, j_outer, name)
+                    # compute c0 contributions for lower envs and adjust epsilons
+                    for gamma in range(m-1,0,-1):
+                        Ctot_gamma = self._ctot_loop(grids[gamma-1], self.H._cycles[j_outer], name)
+                        eps_gamma = np.real(npc.inner(Ctot_gamma, rho))
+                        for j_eps, alpha in enumerate(range(gamma+1,m+1)):
+                            # print("eps_temp j_eps:",eps_temp[j_eps],comb(alpha,gamma-1))
+                            eps_gamma -= eps_temp[j_eps]*comb(alpha,gamma-1)
+                        eps_gamma /= gamma
+                        eps_temp.insert(0,eps_gamma)
+                        # add to environment afterwards
+                    m += 1
+                # NOTE: perpendicular contributions
+                offset = 1 if j_outer in ones else 0
+                for gamma in range(m-1-offset, -1, -1):
+                    if j_outer in self.H._cycles:
+                        Ctot = self._ctot_loop(grids[gamma], self.H._cycles[j_outer], name)
+                    else:
+                        Ctot = grids[gamma][last_site][j_outer][0]
+                    for j_cs, alpha in enumerate(range(gamma+1, m)):
+                        Ctot -= comb(alpha, gamma)*cs[j_cs]
+                    if j_outer in self.H._cycles:
+                        res = self._solve_cj(self.H._cycles[j_outer], name, Ctot, offset, gmres_options)
+                        if offset==1 and gamma!=0:
+                            res += (eps_temp[gamma-1]/eps_temp[-1])*cs[-1]
+                        cs.insert(0, res)
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore")
+                            # ignore complex warning when self.dtype=float since GMRES internally uses complex
+                            envs[name][gamma][j_outer] = res 
+                        self._contract_grid(grids[gamma], res, j_outer, name)
+                    else:
+                        cs.insert(0, Ctot)
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore")
+                            # ignore complex warning when self.dtype=float since GMRES internally uses complex
+                            envs[name][gamma][j_outer] = Ctot
+                        self._contract_grid(grids[gamma], Ctot, j_outer, name)
+        if calc_E and n_terms==2 and which=='both':
+            return {k:envs[k][0] for k in envs.keys()}, envs, [E/self.L for E in Es]
+        return {k:envs[k][0] for k in envs.keys()}, envs
+
+    def _make_grids(self, name, ones):
+        """ For `self.init_LP_RP_iterative()`"""
+        js_loops = sorted([self.H._outer_permutation.index(j) for j in ones])
+        if name=="init_LP":
+            gs = [self._left_grid(self.H._outer_permutation[:j0])
+                  for j0 in js_loops[:-1]]
+        else:
+            gs = [self._right_grid(self.H._outer_permutation[j0+1:])
+                  for j0 in reversed(js_loops[1:])]
+        return gs
+
+    def _contract_grid(self, grid, c0_outer, j_outer, name):
+        """ For `self.init_LP_RP_iterative()`"""
+        if name=='init_LP':
+            self._contract_left_grid(grid, c0_outer, j_outer)
+        else:
+            self._contract_right_grid(grid, c0_outer, j_outer)
+
     def _ctot_loop(self, grid, cycle, name):
-        """Used in `self.init_LP_RP_iterative()`
+        """For `self.init_LP_RP_iterative()`
 
         Compute Ctot for indices with cycles
         """
@@ -2933,152 +3074,11 @@ class MPOEnvironment(BaseEnvironment):
                 c_loop += grid[j_site][cycle[j_site]][0]
         return c_loop
 
-    def init_LP_RP_iterative(self, which='both', tol_c0=1e-10, gmres_options=None):
-        """ Construct initial environments for periodic MPO environments.
-
-        For a periodic :class:`MPOEnvironment`, `LP[0]` and `RP[self.L-1]` correspond
-        to the contraction of infinite half chains::
-
-            |               - - - - - > - - - - 'vR*'               
-            |              |              |
-            |   LP[0] = LP[-\infty]->- T_H**n - 'wR' (index `j`)
-            |              |              |
-            |               - - - - - > - - - - 'vR'
-                                     
-        where T_H has the structure of a corresponding :class:`MPOTransferMatrix`
-        and the limit :math:`n → \infty` has to be taken. 
-        Here, we implement the construction scheme from [Phien2012] 
-        for an MPO :attr:`self.H` that is upper triangular up to permutations.
-
-        In general, the environments `LP[0]` and `RP[self.L-1]` aquire an extensive
-        contribution when the MPO represents an extensive observable. 
-        To manage these contributions, the environments are decomposed into 
-        terms proportional to different powers of `n`::
-
-            |   LP[0] = e_0 * n**0 * LP[0][0] + e_1 * n**1 LP[0][1]+...
-
-        The number of terms needed is given by the number of "loops"
-        (see :attr:`MPO._cycles`) with norm one. For example, if `self.H` is a 
-        physical Hamiltonian, `e_1` corresponds to the energy per site of :attr:`self.ket`.      
-        
-        .. warning ::
-            When computing higher powers of observables, ensure that :attr:`self.H`
-            includes **all** terms, even those reducing to identities. 
-            Otherwise, the environments will not converge.
-
-        Parameters
-        ----------
-        which : {'LP', 'RP', 'both'}
-            Specifies which environments to compute.
-        tol_c0 : float
-            Tolerance for explicitly computing the dominant left and right eigenvectors
-            of the :class:`MPSTransferMatrix` associated with :attr:`self.ket`, if numerical errors
-            affect the MPS canonical form.
-        gmres_options : dict
-            Further optional parameters passed to :class:`tenpy.linalg.krylov_based.GMRES`.
-        
-        Returns
-        -------
-        envs : dict of list
-            Environments grouped by powers of `n`.
-            envs['init_LP'][j]=`LP[0][j]` and envs['init_RP'][j]=`RP[self.L-1][j]`
-        epsilons : dict of list
-            Corresponding energies `e_j` **per site**
-        """
-        assert which=='LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
-        self._setup_iterative()
-        ones = self._loop_structures()
-        n_terms = len(ones)
-        # gmres defaults, set N_min=0 for states close to product states
-        if gmres_options==None:
-            gmres_options = {'N_min':0,'res':1e-11}
-        else:
-            gmres_options['N_min'] = gmres_options.get('N_min',0)
-            gmres_options['res'] = gmres_options.get('res',1e-11)
-        legs_labels = {"init_LP": ([self.H.get_W(0).get_leg('wL').conj(), self.ket.get_B(0).get_leg('vL').conj(),
-                            self.ket.get_B(0).get_leg('vL')], ['wR','vR','vR*']),
-                       "init_RP": ([self.H.get_W(self.L-1).get_leg('wR').conj(), self.ket.get_B(self.L-1).get_leg('vR').conj(),
-                             self.ket.get_B(self.L-1).get_leg('vR')], ['wL','vL','vL*'])}
-        envs = {}
-        epsilons = {} # energies PER UNIT CELL !!!
-        
-        # NOTE: main work starts here
-        for name in ['init_LP','init_RP'] if which=='both' else ['init_'+which]:
-            envs[name] = [npc.Array(legs_labels[name][0], dtype=self.dtype, labels=legs_labels[name][1]) for _ in range(n_terms)]
-            epsilons[name] = [1.]*n_terms # always define epsilon[0]=1.
-            grids = self._make_grids(name, ones)
-            last_site = self.L-1 if name=='init_LP' else 0
-            
-            # dominant eigenvector c0 = c0*TW_00 
-            # c0=Id analytically, can be unstable <- fixed by checking explicitly
-            # normalized via npc.inner(c0,rho) = 1 with rho = TW_00*rho the associated density
-            c0_base, rho = self._c0_rho(name, legs_labels, tol_c0)
-            
-            m = 0
-            for j_outer in (self.H._outer_permutation if name=='init_LP' else reversed(self.H._outer_permutation)):
-                cs = []
-                eps_temp = []
-                # NOTE: contributions ~ c0
-                if j_outer in ones: # first index is IdL, last IdR
-                    c0 = c0_base.copy()
-                    if m!=0: # compute next epsilon
-                        Ctot = self._ctot_loop(grids[m-1], self.H._cycles[j_outer], name)
-                        next_eps = np.real(npc.inner(Ctot, rho)/m)
-                        epsilons[name][m] = next_eps
-                        eps_temp.insert(0, next_eps)
-                        c0 *= next_eps
-                    envs[name][m][j_outer] = c0
-                    cs.append(c0)
-                    if m!=n_terms-1:
-                        self._contract_grid(grids[m], c0, j_outer, name)
-                    # compute c0 contributions for lower envs and adjust epsilons
-                    for gamma in range(m-1,0,-1):
-                        Ctot_gamma = self._ctot_loop(grids[gamma-1], self.H._cycles[j_outer], name)
-                        eps_gamma = np.real(npc.inner(Ctot_gamma, rho))
-                        for j_eps, alpha in enumerate(range(gamma+1,m+1)):
-                            # print("eps_temp j_eps:",eps_temp[j_eps],comb(alpha,gamma-1))
-                            eps_gamma -= eps_temp[j_eps]*comb(alpha,gamma-1)
-                        eps_gamma /= gamma
-                        eps_temp.insert(0,eps_gamma)
-                        # add to environment afterwards
-                        epsilons[name][gamma] = eps_gamma # unsure about this one     
-                    m += 1
-                # NOTE: contributions ⊥ c0
-                offset = 1 if j_outer in ones else 0
-                for gamma in range(m-1-offset, -1, -1):
-                    if j_outer in self.H._cycles:
-                        Ctot = self._ctot_loop(grids[gamma], self.H._cycles[j_outer], name)
-                    else:
-                        Ctot = grids[gamma][last_site][j_outer][0]
-                    for j_cs, alpha in enumerate(range(gamma+1, m)):
-                        Ctot -= comb(alpha, gamma)*cs[j_cs]
-                    if j_outer in self.H._cycles:
-                        res = self._solve_cj(self.H._cycles[j_outer], name, Ctot, offset, gmres_options)
-                        if offset==1 and gamma!=0:
-                            res += (eps_temp[gamma-1]/eps_temp[-1])*cs[-1]
-                        cs.insert(0, res)
-                        with warnings.catch_warnings():
-                            warnings.simplefilter("ignore")
-                            # ignore complex warning when self.dtype=float since GMRES internally uses complex
-                            envs[name][gamma][j_outer] = res 
-                        self._contract_grid(grids[gamma], res, j_outer, name)
-                    else:
-                        cs.insert(0, Ctot)
-                        with warnings.catch_warnings():
-                            warnings.simplefilter("ignore")
-                            # ignore complex warning when self.dtype=float since GMRES internally uses complex
-                            envs[name][gamma][j_outer] = Ctot
-                        self._contract_grid(grids[gamma], Ctot, j_outer, name)
-        # energies per site
-        for env_name in epsilons:
-            epsilons[env_name] = [eps/self.L**j for j, eps in enumerate(epsilons[env_name])]
-        return envs, epsilons
-
     def _c0_rho(self, name, legs_labels, tol_c0):
-        """ Used in `self.init_LP_RP_iterative()`
+        """ For `self.init_LP_RP_iterative()`
         
         Determine dominant left and right eigenvectors of the `MPSTransferMatrix`
-        associated with `self.ket`
+        associated with `self.ket`.
         """
         c0 = npc.diag(1., legs_labels[name][0][1], dtype=self.dtype, labels=legs_labels[name][1][1:])
         if npc.norm(TransferMatrix(self.bra, self.ket, transpose=True if name=='init_LP' else False,
@@ -3107,7 +3107,7 @@ class MPOEnvironment(BaseEnvironment):
         return c_right, c_left
 
     def _solve_cj(self, loop, name, b, norm_one, options):
-        """ Used in `self._init_LP_RP_iterative()`: Solves c_gamma^j (1-TWjj) = b """
+        """ For `self._init_LP_RP_iterative()`: Solves c_gamma^j (1-TWjj) = b """
         if npc.norm(b)==0.:
             # Theoretically A has not full rank if Wjj=id, as then Id(1-TWjj)=0
             # In practice this is not the case exactly, thus ker(A)={0}
@@ -3115,7 +3115,7 @@ class MPOEnvironment(BaseEnvironment):
         # TWjj
         form, transpose = ('A', True) if name=='init_LP' else ('B', False)
         bra_N = [self.ket.get_B(i, form=form) for i in range(self.L)]
-        if norm_one==1:
+        if norm_one==1: # skip Id contractions
             ket_M = [self.ket.get_B(i, form=form) for i in range(self.L)]
         else:
             ops = [self.H._graph[j][(loop[j],loop[j+1])] for j in range(self.L)]
