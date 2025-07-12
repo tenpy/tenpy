@@ -41,7 +41,7 @@ import warnings
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
-from ..networks.mpo import MPOEnvironment, MPOEnvironmentBuilder
+from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS
 from ..networks.uniform_mps import UniformMPS
 from ..linalg.sparse import SumNpcLinearOperator
@@ -262,8 +262,7 @@ class VUMPSEngine(IterativeSweeps):
         # logger.info(f"VUMPS finished after {self.sweeps} sweeps, max chi={max(self.psi.chi)}")
 
         # # psi.norm_test() is sometimes > 1.e-10 for paramagnetic TFI. More VUMPS (>10) fixes this even though the energy is already saturated for 10 sweeps.
-        # _env_init = MPOEnvironmentBuilder(self.model.H_MPO, self.psi)
-        # self.guess_init_env_data, _, Es = _env_init.init_LP_RP_iterative('both', calc_E=True)
+        # self.guess_init_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(self.model.H_MPO, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data)
         # self.tangent_projector_test(self.guess_init_env_data)
         # return (Es[0] + Es[1])/2, self.psi.to_MPS(check_overlap=check_overlap)
 
@@ -353,14 +352,11 @@ class VUMPSEngine(IterativeSweeps):
                 "norm_tol=%.2e: norm_err=%.2e", norm_tol, norm_err)
             E = self.sweep_stats['E'][-1]
         else:
-            # self.guess_init_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(
-            #     self.model.H_MPO,
-            #     self.psi,
-            #     calc_E=True,
-            #     guess_init_env_data=self.guess_init_env_data)
-            # changed to:
-            _env_init = MPOEnvironmentBuilder(self.model.H_MPO, self.psi)
-            self.guess_init_env_data, _, Es = _env_init.init_LP_RP_iterative('both', calc_E=True)
+            self.guess_init_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(
+                self.model.H_MPO,
+                self.psi,
+                calc_E=True,
+                guess_init_env_data=self.guess_init_env_data)
             self.tangent_projector_test(self.guess_init_env_data)
             E = (Es[0] + Es[1]) / 2
 
@@ -455,12 +451,9 @@ class VUMPSEngine(IterativeSweeps):
         psi = self.psi
 
         self.update_env(**{})  # Call this here to update the env guess due to diagonal changes.
-        # boundary_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(
-        #     H, self.psi, calc_E=True,
-        #     guess_init_env_data=self.guess_init_env_data)  # E is already the energy density.
-        # changed to:
-        _env_init = MPOEnvironmentBuilder(H, self.psi)
-        boundary_env_data, _, Es = _env_init.init_LP_RP_iterative('both', calc_E=True)
+        boundary_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(
+            H, self.psi, calc_E=True,
+            guess_init_env_data=self.guess_init_env_data)  # E is already the energy density.
         self.env = MPOEnvironment(psi, H, psi, **boundary_env_data)
         self.transfer_matrix_energy = Es
 

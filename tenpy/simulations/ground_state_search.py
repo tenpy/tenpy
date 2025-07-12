@@ -164,11 +164,8 @@ class PlaneWaveExcitations(GroundStateSearch):
             self.logger.info("converge environments with MPOTransferMatrix")
             guess_init_env_data = resume_data.get('init_env_data', None)
             H = self.model.H_MPO
-            # env_data = MPOTransferMatrix.find_init_LP_RP(H, self.psi, 0, None,
-            #                                              guess_init_env_data)
-            # changed to:
-            _env_init = MPOEnvironmentBuilder(H, self.psi)
-            env_data, _ = _env_init.init_LP_RP_iterative('both')
+            env_data = MPOTransferMatrix.find_init_LP_RP(H, self.psi, 0, None,
+                                                         guess_init_env_data)
             write_back = self.options.get('write_back_converged_ground_state_environments', False, bool)
         self.init_env_data = env_data
 
