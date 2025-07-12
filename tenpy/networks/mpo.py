@@ -59,7 +59,7 @@ from ..tools.params import asConfig
 from ..linalg.krylov_based import GMRES
 
 __all__ = [
-    'MPO', 'make_W_II', 'MPOGraph', 'MPOEnvironment', 'MPOTransferMatrix', 'grid_insert_ops'
+    'MPO', 'make_W_II', 'MPOGraph', 'MPOEnvironment', 'MPOEnvironmentBuilder', 'MPOTransferMatrix', 'grid_insert_ops'
 ]
 
 
@@ -2423,7 +2423,7 @@ class MPOEnvironment(BaseEnvironment):
           environment from the given `init_LP` and `init_RP` or new trivial environments built
           with :meth:`init_LP` / :meth:`init_RP`.
         - If `start_env_sites` is None, and :attr:`bra` is :attr:`ket`,
-          get `init_LP` and `init_RP` with :meth:`MPOTransferMatrix.find_init_LP_RP`.
+          get `init_LP` and `init_RP` with :meth:`MPOEnvironmentBuilder.init_LP_RP_iterative`.
 
         Parameters
         ----------
@@ -2443,7 +2443,8 @@ class MPOEnvironment(BaseEnvironment):
                 warnings.warn("call psi.canonical_form() to regenerate MPO environments from psi"
                               f" with current norm error {norm_err:.2e}")
                 self.ket.canonical_form()
-            env_data = MPOTransferMatrix.find_init_LP_RP(self.H, self.ket, 0, self.L - 1)
+            _env_init = MPOEnvironmentBuilder(self.H, self.ket)
+            env_data, _ = _env_init.init_LP_RP_iterative('both')
             init_LP = env_data['init_LP']
             init_RP = env_data['init_RP']
             start_env_sites = 0

@@ -2383,7 +2383,7 @@ class VariationalApplyMPO(VariationalCompression):
         if start_env_sites is not None:
             init_env_data['start_env_sites'] = start_env_sites
         # note: we need explicit `start_env_sites` since `bra` != `ket`, so we can't converge
-        # with MPOTransferMatrix.find_init_LP_RP
+        # with MPOEnvironmentBuilder
         self.env = MPOEnvironment(self.psi, U_MPO, old_psi, **init_env_data)
         self.reset_stats()
 

@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 from ..linalg import np_conserved as npc
 from ..linalg.charges import LegPipe
 from ..networks.momentum_mps import MomentumMPS
-from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
+from ..networks.mpo import MPOEnvironment, MPOEnvironmentBuilder
 from ..linalg.krylov_based import GMRES, LanczosGroundState, Arnoldi
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, BoostNpcLinearOperator
 from ..algorithms.algorithm import Algorithm
@@ -209,8 +209,11 @@ class PlaneWaveExcitationEngine(Algorithm):
         self.VLs = [construct_orthogonal(self.ALs[i]) for i in range(self.L)]
 
         # Get left and right generalized eigenvalues
-        self.boundary_env_data, self.energy_density, _ = MPOTransferMatrix.find_init_LP_RP(
-            self.H, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data)
+        # self.boundary_env_data, self.energy_density, _ = MPOTransferMatrix.find_init_LP_RP(
+        #     self.H, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data)
+        # changed to:
+        _env_init = MPOEnvironmentBuilder(self.H, self.psi)
+        self.boundary_env_data, _, self.energy_density, = _env_init.init_LP_RP_iterative('both', calc_E=True)
         self.energy_density = np.mean(self.energy_density)
         self.LW = self.boundary_env_data['init_LP']
         self.RW = self.boundary_env_data['init_RP']
@@ -754,8 +757,11 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         self.VLs = [construct_orthogonal(self.ALs[i]) for i in range(self.L)]
 
         # Get left and right generalized eigenvalues
-        self.boundary_env_data, self.energy_density, _ = MPOTransferMatrix.find_init_LP_RP(
-            self.H, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data)
+        # elf.boundary_env_data, self.energy_density, _ = MPOTransferMatrix.find_init_LP_RP(
+        #     self.H, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data)
+        # changed to:
+        _env_init = MPOEnvironmentBuilder(self.H, self.psi)
+        self.boundary_env_data, _, self.energy_density, = _env_init.init_LP_RP_iterative('both', calc_E=True)
         self.energy_density = np.mean(self.energy_density)
         self.LW = self.boundary_env_data['init_LP']
         self.RW = self.boundary_env_data['init_RP']

@@ -8,7 +8,7 @@ from . import simulation
 from ..tools import hdf5_io, string
 from .simulation import *  # noqa F403
 from ..linalg import np_conserved as npc
-from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
+from ..networks.mpo import MPOEnvironment, MPOEnvironmentBuilder, MPOTransferMatrix
 from ..networks.mps import MPS, InitialStateBuilder
 from ..networks.uniform_mps import UniformMPS
 from ..algorithms.mps_common import ZeroSiteH
@@ -164,8 +164,11 @@ class PlaneWaveExcitations(GroundStateSearch):
             self.logger.info("converge environments with MPOTransferMatrix")
             guess_init_env_data = resume_data.get('init_env_data', None)
             H = self.model.H_MPO
-            env_data = MPOTransferMatrix.find_init_LP_RP(H, self.psi, 0, None,
-                                                         guess_init_env_data)
+            # env_data = MPOTransferMatrix.find_init_LP_RP(H, self.psi, 0, None,
+            #                                              guess_init_env_data)
+            # changed to:
+            _env_init = MPOEnvironmentBuilder(H, self.psi)
+            env_data, _ = _env_init.init_LP_RP_iterative('both')
             write_back = self.options.get('write_back_converged_ground_state_environments', False, bool)
         self.init_env_data = env_data
 
@@ -451,8 +454,13 @@ class OrthogonalExcitations(GroundStateSearch):
             self.logger.info("converge environments with MPOTransferMatrix")
             guess_init_env_data = resume_data.get('init_env_data', None)
             H = model_inf.H_MPO
-            env_data = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf, first, last,
-                                                         guess_init_env_data)
+            # env_data = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf, first, last,
+            #                                              guess_init_env_data)
+            # Now uses MPOEnvironmentBuilder to initialize LP[0], RP[L-1]
+            _env_init = MPOEnvironment(psi0_inf, H, psi0_inf)
+            env_data = {'init_LP':_env_init.get_LP(first, store=False),
+                        'init_RP':_env_init.get_RP(last, store=False),
+                        'age_LP':0, 'age_RP':0}
         self.init_env_data = env_data
         self.ground_state_infinite = psi0_inf
         self.ground_state = psi0_inf.extract_segment(first, last)
