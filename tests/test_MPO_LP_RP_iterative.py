@@ -11,7 +11,7 @@ from tenpy.models.model import CouplingModel, MPOModel
 # networks
 from tenpy.networks.site import SpinHalfSite as shs
 from tenpy.networks.mps import MPS
-from tenpy.networks.mpo import MPO, MPOEnvironment, MPOTransferMatrix
+from tenpy.networks.mpo import MPO, MPOEnvironment, MPOTransferMatrix, MPOEnvironmentBuilder
 
 # model setup
 Lx, Ly = 4, 3
@@ -87,7 +87,7 @@ def helper_test_graph(H, name):
 
 def helper_test_init_env(psi, E, H, name):
     env_base, E_base, _ = MPOTransferMatrix.find_init_LP_RP(H, psi, 0, psi.L-1, calc_E=True)
-    env = MPOEnvironment(psi, H, psi)
+    env = MPOEnvironmentBuilder(H, psi)
     init_env, _, E_iter = env.init_LP_RP_iterative(calc_E=True, which="both")
     env_base["init_RP"].itranspose(["wL","vL","vL*"])
     env_base["init_LP"].itranspose(["wR","vR","vR*"])
@@ -96,8 +96,9 @@ def helper_test_init_env(psi, E, H, name):
     assert abs(E_iter[0]-E_base[0])<1e-11 and abs(E_iter[1]-E_base[1])<1e-11, name+": Energies of iterative environment intialization don't match"
     
 def helper_test_H_square(psi, H1, H2, name, state):
-    e_iter1 = MPOEnvironment(psi, H1, psi)
-    e_iter2 = MPOEnvironment(psi, H2, psi)
+    e_iter1 = MPOEnvironmentBuilder(H1, psi)
+    e_iter2 = MPOEnvironmentBuilder(H2, psi)
+    ee_iter2 = MPOEnvironment(psi, H2, psi)
     _, env1 = e_iter1.init_LP_RP_iterative(which="both")
     _, env2 = e_iter2.init_LP_RP_iterative(which="both")
     # compute variance from 0-site Heff and test values along the way
@@ -148,11 +149,11 @@ def helper_test_H_square(psi, H1, H2, name, state):
         assert abs(v1)<1e-12, name+": variance obtained from environements wrong (part ~n==1) for state: "+state
         assert abs(v2)<1e-12, name+": variance obtained from environements wrong (part ~n==2) for state: "+state
     # check left eigenvector explicitly
-    for j in range(1,e_iter2.L):
-        e_iter2.del_LP(j)
-    e_iter2.set_LP(0, env2['init_LP'][0],0)
-    LP_prelast = e_iter2.get_LP(e_iter2.L-1,False)
-    LP = e_iter2._contract_LP(e_iter2.L-1,LP_prelast)
+    for j in range(1,ee_iter2.L):
+        ee_iter2.del_LP(j)
+    ee_iter2.set_LP(0, env2['init_LP'][0],0)
+    LP_prelast = ee_iter2.get_LP(ee_iter2.L-1,False)
+    LP = ee_iter2._contract_LP(ee_iter2.L-1,LP_prelast)
     for _e in [LP]+env2['init_LP']:
         _e.itranspose(['wR','vR','vR*'])
     LP_diff = LP-env2['init_LP'][1]-env2['init_LP'][2]-env2['init_LP'][0]
@@ -171,8 +172,9 @@ def helper_test_enlarge_unit_cell(H, name):
                     assert npc.norm(op-H._graph[j][(jL,jR)])<1e-12, name+": _graph[{0}][({1},{2})] wrong after enlarge_unit_cell()".format(j, jL, jR)
 
 def helper_test_grid(psi, H, name):
-    # ----- Test Grid from MPOEnvironments -----
+    # ----- Test Grid from MPOEnvironmentBuilder -----
     env = MPOEnvironment(psi, H, psi)
+    env2 = MPOEnvironmentBuilder(H, psi)
     # TransferMatrix environments with one unit cell contracted 
     LP_base = env.get_LP(0)
     RP_base = env.get_RP(3)
@@ -185,15 +187,15 @@ def helper_test_grid(psi, H, name):
     LP_last.itranspose(["wR","vR","vR*"])
     RP_last.itranspose(["wL","vL","vL*"])
     # check grids by contracting LP via grids
-    grid_L = env._left_grid()
+    grid_L = env2._left_grid()
     for j in range(3):
-        env._contract_left_grid(grid_L, LP_base[j], j)
+        env2._contract_left_grid(grid_L, LP_base[j], j)
     for j in range(3):
         assert npc.norm(LP_last[j]-grid_L[3][j][0])<1e-12, name+": left grid contraction does not agree with expected LP" 
     # RP
-    grid_R = env._right_grid()
+    grid_R = env2._right_grid()
     for j in range(3):
-        env._contract_right_grid(grid_R, RP_base[j], j)
+        env2._contract_right_grid(grid_R, RP_base[j], j)
     for j in range(3):
         assert npc.norm(grid_R[0][j][0]-RP_last[j])<1e-12, name+": left grid contraction does not agree with expected LP" 
 
