@@ -2684,33 +2684,104 @@ class MPOEnvironment(BaseEnvironment):
                                    new_axes=[2, 1])
         return RHeff
 
-    def _contract_cL(self, cL, i, op):
-        """ contract cL=(A-op-A*)=
+    def _to_valid_index(self, i):
+        """Make sure `i` is a valid index (depending on `finite`)."""
+        if not self.finite:
+            return i % self.L
+        if i < 0:
+            i += self.L
+        if i >= self.L or i < 0:
+            raise KeyError("i = {0:d} out of bounds for finite MPS".format(i))
+        return i
 
-        Used in `self.init_LP_RP_iterative()`
-        """
+class MPOEnvironmentBuilder:
+    """ Construct boundary environments for periodic MPOEnvironments.
+
+        This class implement the construction scheme from [Phien2012] to construct
+        `LP[0]` and `RP[self.L-1]` for a periodic :class:`MPOEnvironment`. These
+        correspond to the contraction of infinite half chains::
+
+            |             - - > - - - - - 'vR*'               
+            |            |          |
+            |   LP[0] = E[0] ->- T_H**n - 'wR' (index `j`)
+            |            |          |
+            |             - - > - - - - - 'vR'
+                                     
+        where T_H has the structure of a corresponding :class:`MPOTransferMatrix`
+        and the limit :math:`n → \infty` has to be taken. The above equation does
+        generally not converge to a fixpoint due to the extensive energy contribution
+        of the Hamiltonian.
+        
+        However, for an MPO `H` that is upper triangular up to permutations,
+        `LP[0]` can be constructed iteratively in index `j`, since
+        
+        `E[n+1][:,j,:] = \sum_{i<=j} E[n][:,i,:]T_H[:,i,:][:,j,:]`
+
+        does only depend on indices `i<=j`. Except for the last environment
+        `E[n][:,j=H.chi[0]-1,:]`, these equations converge to a fixpoint
+
+        `E[n][:,j,:] -> c0_j`
+
+        On the last virtual MPO index, a geometric series
+
+        `E[n+1][:,j=D-1,:] = \sum_{k=0,...,n-1} T_H[:,j,:][:,j,:]**k (C)`
+
+        has to be solved due to the identity on the diagonal `T_H[:,j,:][:,j,:]`.
+        This series has the identity and density matrix as eigenvector pair with
+        eigenvalue 1, causing the series to diverge. To avoid this,
+
+        `E[n+1][:,j=D-1,:] = c0_j + epsilon * n * Id`
+
+        can be decomposed into a constant term and an extensive contribution. The
+        latter captures the energy per site of the environment.
+
+        Here, we also generalize the scheme to higher powers of MPOs, where
+        the environment more generally is decomposed into terms proportional
+        to different powers of `n`::
+
+            |   LP[0] = e_0 * n**0 * LP[0][0] + e_1 * n**1 LP[0][1]+...
+
+        The largest needed `n` is given by the number of identities on the diagonal
+        if the MPO. """
+
+    def __init__(self, H, psi):
+        self.H = H
+        self.ket = psi
+        self.L = psi.L
+        self.dtype = np.result_type(self.ket.dtype, self.H.dtype)
+        self._p_label = self.ket._p_label
+        self.test_sanity()
+        # MPS tensors as needed by transfer matrices during init_LP_RP
+        self._Ms = None
+        self._Ns = None
+
+    def test_sanity(self):
+        """Sanity check, raises ValueErrors, if something is wrong."""
+        assert (self.ket.bc == self.H.bc == 'infinite')
+        # check that the physical legs are contractable
+        assert (self.L == self.ket.L == self.H.L)
+        for H_s, k_s in zip(self.H.sites, self.ket.sites):
+            k_s.leg.test_equal(H_s.leg)
+    
+    def _contract_cL(self, cL, i, op):
+        """ partial contraction cL=(A-op-A*)= """
         cL = npc.tensordot(self.ket.get_B(i, form='A'), cL, axes=('vL', 'vR'))
         cL = npc.tensordot(cL, op, axes=[self.ket._p_label, 'p*'])
-        axes = (['p', 'vR*'], self.bra._get_p_label('*') + ['vL*'])
-        cL = npc.tensordot(cL, self.bra.get_B(i, form='A').conj(), axes=axes)
+        axes = (['p', 'vR*'], self.ket._get_p_label('*') + ['vL*'])
+        cL = npc.tensordot(cL, self.ket.get_B(i, form='A').conj(), axes=axes)
         return cL
     
     def _contract_cR(self, cR, i, op):
-        """ contract =(B-op-B*)=cR 
-        
-        Used in `self.init_LP_RP_iterative()`
-        """
+        """ contract =(B-op-B*)=cR """
         cR = npc.tensordot(self.ket.get_B(i, form='B'), cR, axes=('vR', 'vL'))
         cR = npc.tensordot(cR, op, axes=[self.ket._p_label, 'p*'])
-        axes = (['p', 'vL*'], self.bra._get_p_label('*') + ['vR*'])
-        cR = npc.tensordot(cR, self.bra.get_B(i, form='B').conj(), axes=axes)
+        axes = (['p', 'vL*'], self.ket._get_p_label('*') + ['vR*'])
+        cR = npc.tensordot(cR, self.ket.get_B(i, form='B').conj(), axes=axes)
         return cR
 
-    def _loop_structures(self, tol=1e-12):
+    def _determine_cycles(self, tol=1e-12):
         """ Determine the cycles of `self.H` with norm 1
         
-        Used in `self.init_LP_RP_iterative()`
-
         .. note ::
             - Cycles are only allowed to contain identities with positive prefactor at the moment.
             - Can be generalized to allow arbitrary operators. Requires adjusting self._c0_rho
@@ -2721,7 +2792,7 @@ class MPOEnvironment(BaseEnvironment):
             for j in range(self.H.L):
                 op = self.H._graph[j][(loop[j],loop[j+1])] # (i,j)
                 factor = npc.norm(op, ord=1)/op.shape[0] 
-                if factor<tol:
+                if norm*factor<tol:
                     norm=0.
                     break # norm close to zero
                 # op == factor*id with factor>0
@@ -2738,14 +2809,14 @@ class MPOEnvironment(BaseEnvironment):
     def _left_grid(self, remove=[]):
         """ Construct a grid representing partial contractions of `self` as graph.
          
-        We can view contractions of an MPOEnvironment as graph with the same
+        We can view contractions of an :class:`MPOEnvironment` as graph with the same
         structure as the underlying MPOGraph: For example,
         `LP[i+1]['wR'=k] = \sum_j LP[i]['wR'=j]*(B*[i]*W[j,k]*B[i])`
         corresponds to summing the links W[j,k] between layer (i,i+1)
         given by the MPS sites.
 
         Contracting the MPOEnvironment in this way is usually slower than the naive 
-        way, but can be beneficial in some cases (e.g. in `self.init_LP_RP_iterative).
+        way, but is beneficial for :meth:`init_LP_RP_iterative`.
         
         We represent a grid as:
             list of {list of { [None | :class:`~tenpy.linalg.np_conserved.Array`, set of int] }}
@@ -2809,7 +2880,7 @@ class MPOEnvironment(BaseEnvironment):
                             empty_nodes.append(i)
                 zero_nodes = empty_nodes
         return grid
-
+    
     def _contract_left_grid(self, grid, c0_outer, j_outer):
         """ Carry out all possible contractions starting from the initial node
             `c0_outer` at the outer virtual index `j_outer`
@@ -2858,33 +2929,10 @@ class MPOEnvironment(BaseEnvironment):
             ready_nodes = finished_nodes    
 
     def init_LP_RP_iterative(self, which='both', calc_E=False, tol_c0=1e-10, gmres_options=None):
-        """ Construct initial environments for periodic MPO environments.
+        """ Construct boundary environments for periodic MPO environments.
 
-        For a periodic :class:`MPOEnvironment`, `LP[0]` and `RP[self.L-1]` correspond
-        to the contraction of infinite half chains::
+            See class docstring for an explanation.
 
-            |               - - - - - > - - - - 'vR*'               
-            |              |              |
-            |   LP[0] = LP[-\infty]->- T_H**n - 'wR' (index `j`)
-            |              |              |
-            |               - - - - - > - - - - 'vR'
-                                     
-        where T_H has the structure of a corresponding :class:`MPOTransferMatrix`
-        and the limit :math:`n → \infty` has to be taken. 
-        Here, we implement the construction scheme from [Phien2012] 
-        for an MPO :attr:`self.H` that is upper triangular up to permutations.
-
-        In general, the environments `LP[0]` and `RP[self.L-1]` aquire an extensive
-        contribution when the MPO represents an extensive observable. 
-        To manage these contributions, the environments are decomposed into 
-        terms proportional to different powers of `n`::
-
-            |   LP[0] = e_0 * n**0 * LP[0][0] + e_1 * n**1 LP[0][1]+...
-
-        The number of terms needed is given by the number of "loops"
-        (see :attr:`MPO._cycles`) with norm one. For example, if `self.H` is a 
-        physical Hamiltonian, `e_1` corresponds to the energy per site of :attr:`self.ket`.      
-        
         Parameters
         ----------
         which : {'LP', 'RP', 'both'}
@@ -2911,8 +2959,6 @@ class MPOEnvironment(BaseEnvironment):
         E : float
             Energy per site, only returned if `calc_E` is True.
         """
-        # check self
-        assert self.ket is self.bra, "Iterative environment initialization not possible: Requires ket=bra"
         if self.H._graph==None:
             self.H._make_graph()
         if self.H._outer_permutation==None:
@@ -2920,7 +2966,7 @@ class MPOEnvironment(BaseEnvironment):
         if self.H._outer_permutation==False:
             raise ValueError("Iterative environment initialization failed: Hamiltonian cannot be ordered.")
         assert which=='LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
-        ones = self._loop_structures()
+        ones = self._determine_cycles()
         n_terms = len(ones)
         # gmres defaults, set N_min=0 for states close to product states
         if gmres_options==None:
@@ -2934,16 +2980,20 @@ class MPOEnvironment(BaseEnvironment):
                              self.ket.get_B(self.L-1).get_leg('vR')], ['wL','vL','vL*'])}
         envs = {}
         # for standard MPOEnvironments, invalid for higher powers
-        Es = [1.,1.] # PER UNIT CELL !!!
+        Es = [1.,1.] # per unit cell
         
         # NOTE: main work starts here
         for name in ['init_LP','init_RP'] if which=='both' else ['init_'+which]:
+            # Ms, Ns as needed for TransferMatrix
+            form = 'A' if name=='init_LP' else 'B'
+            self._Ms = [self.ket.get_B(i, form=form) for i in range(self.L)]
+            self._Ns = [self.ket.get_B(i, form=form).conj() for i in range(self.L)]
             envs[name] = [npc.Array(legs_labels[name][0], dtype=self.dtype, labels=legs_labels[name][1]) for _ in range(n_terms)]
             grids = self._make_grids(name, ones)
             last_site = self.L-1 if name=='init_LP' else 0
             
-            # dominant eigenvector c0 = c0*TW_00 
-            # c0=Id analytically, can be unstable <- fixed by checking explicitly
+            # dominant eigenvector c0 = c0*TW_00, analytical prediction c0=Id 
+            # Unstable w.r.t. canonical form of the MPS <- fixed by checking explicitly
             # normalized via npc.inner(c0,rho) = 1 with rho = TW_00*rho the associated density
             c0_base, rho = self._c0_rho(name, legs_labels, tol_c0)
             
@@ -3008,7 +3058,7 @@ class MPOEnvironment(BaseEnvironment):
         return {k:envs[k][0] for k in envs.keys()}, envs
 
     def _make_grids(self, name, ones):
-        """ For `self.init_LP_RP_iterative()`"""
+        """ Initialize grids for `self.init_LP_RP_iterative()`"""
         js_loops = sorted([self.H._outer_permutation.index(j) for j in ones])
         if name=="init_LP":
             gs = [self._left_grid(self.H._outer_permutation[:j0])
@@ -3080,31 +3130,33 @@ class MPOEnvironment(BaseEnvironment):
         Determine dominant left and right eigenvectors of the `MPSTransferMatrix`
         associated with `self.ket`.
         """
+        # Identity
         c0 = npc.diag(1., legs_labels[name][0][1], dtype=self.dtype, labels=legs_labels[name][1][1:])
-        if npc.norm(TransferMatrix(self.bra, self.ket, transpose=True if name=='init_LP' else False,
-                                    form='A' if name=='init_LP' else 'B').matvec(c0)-c0)<tol_c0:
+        _TM = TransferMatrix.from_Ns_Ms(self._Ns, self._Ms, transpose=True if name=='init_LP' else False,
+                                        charge_sector=None, p_label=self._p_label, conjugate_Ns=False)
+        if npc.norm(_TM.matvec(c0)-c0)<tol_c0:
             _SVs = self.ket.get_SR(self.L-1)**2 if name=='init_LP' else self.ket.get_SL(0)**2
             rho = npc.diag(_SVs, legs_labels[name][0][1].conj(), labels=legs_labels[name][1][-1:-3:-1])
             # NOTE: iMPS should always be normalized s.t. npc.inner(c0,rho)=1
             return c0, rho
         warnings.warn("Identity not dominant eigenvector of MPSTransferMatrix up to tol={:.1e}." \
                       " Computing explicitly...".format(tol_c0))
-        form = 'A' if name=='init_LP' else 'B'
-        c_left = TransferMatrix(self.bra, self.ket, transpose=True, form=form).eigenvectors()[1][0]
-        c_left = c_left.split_legs()
-        c_right = TransferMatrix(self.bra, self.ket, transpose=False, form=form).eigenvectors()[1][0]
-        c_right = c_right.split_legs()
+        c0 = _TM.eigenvectors()[1][0]
+        c0 = c0.split_legs()
+        c1 = TransferMatrix.from_Ns_Ms(self._Ns, self._Ms, transpose=False if name=='init_LP' else True,
+                                        charge_sector=None, p_label=self._p_label, conjugate_Ns=False).eigenvectors()[1][0]
+        c1 = c1.split_legs()
         if name=='init_LP':
-            if npc.trace(c_right)<0.:
-                c_right *= -1. # fix possible negative sign
-            c_right._labels = legs_labels[name][1][-1:-3:-1]
-            c_left /= npc.inner(c_left, c_right) # normalization
-            return c_left, c_right
-        if npc.trace(c_left)<0: # init_RP
-            c_left *= -1.
-        c_left._labels = legs_labels[name][1][-1:-3:-1]
-        c_right /= npc.inner(c_left, c_right)
-        return c_right, c_left
+            if npc.trace(c1)<0.:
+                c1 *= -1. # fix possible negative sign
+            c1._labels = legs_labels[name][1][-1:-3:-1]
+            c0 /= npc.inner(c0, c1) # normalization
+            return c0, c1
+        if npc.trace(c1)<0: # init_RP
+            c1 *= -1.
+        c1._labels = legs_labels[name][1][-1:-3:-1]
+        c0 /= npc.inner(c1, c0)
+        return c0, c1
 
     def _solve_cj(self, loop, name, b, norm_one, options):
         """ For `self._init_LP_RP_iterative()`: Solves c_gamma^j (1-TWjj) = b """
@@ -3113,15 +3165,15 @@ class MPOEnvironment(BaseEnvironment):
             # In practice this is not the case exactly, thus ker(A)={0}
             return npc.zeros(b.legs, dtype=b.dtype, qtotal=b.qtotal, labels=b._labels)
         # TWjj
-        form, transpose = ('A', True) if name=='init_LP' else ('B', False)
-        bra_N = [self.ket.get_B(i, form=form) for i in range(self.L)]
+        transpose = True if name=='init_LP' else False
         if norm_one==1: # skip Id contractions
-            ket_M = [self.ket.get_B(i, form=form) for i in range(self.L)]
+            ket_M = self._Ms
         else:
             ops = [self.H._graph[j][(loop[j],loop[j+1])] for j in range(self.L)]
-            ket_M = [npc.tensordot(self.ket.get_B(j, form=form), ops[j],
+            ket_M = [npc.tensordot(self._Ms[j], ops[j],
                               axes=[self.ket._p_label,self.ket._get_p_label('*')]) for j in range(self.L)]
-        TWjj = TransferMatrix.from_Ns_Ms(bra_N, ket_M, transpose=transpose, charge_sector=None, p_label=self.ket._p_label)
+        TWjj = TransferMatrix.from_Ns_Ms(self._Ns, ket_M, transpose=transpose, charge_sector=None, p_label=self.ket._p_label,
+                                         conjugate_Ns=False)
         # GMRES solver
         A = ShiftNpcLinearOperator(TWjj, -1.)
         solver = GMRES(A, b, b, options=options) # makes internal copy
@@ -3133,16 +3185,6 @@ class MPOEnvironment(BaseEnvironment):
         x_sol.split_legs()
         x_sol.itranspose(legs)
         return -x_sol # cancel global minus sign
-
-    def _to_valid_index(self, i):
-        """Make sure `i` is a valid index (depending on `finite`)."""
-        if not self.finite:
-            return i % self.L
-        if i < 0:
-            i += self.L
-        if i >= self.L or i < 0:
-            raise KeyError("i = {0:d} out of bounds for finite MPS".format(i))
-        return i
 
 
 class MPOTransferMatrix(NpcLinearOperator):
