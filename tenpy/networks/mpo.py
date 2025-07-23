@@ -1871,7 +1871,7 @@ class MPOGraph:
 
         Parameters
         ----------
-        Ws_qtotal : None | (list of) charges
+        Ws_qtotal : None | (list of) charges 
             The `qtotal` for each of the Ws to be generated, default (``None``) means 0 charge.
             A single qtotal holds for each site.
 

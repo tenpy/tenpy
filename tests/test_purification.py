@@ -47,7 +47,7 @@ def test_purification_mps():
 
 
 @pytest.mark.parametrize('conserve_ancilla', [False, True])
-def test_canoncial_purification(conserve_ancilla, L=6, charge_sector=0, eps=1.e-14):
+def test_canonical_purification(conserve_ancilla, L=6, charge_sector=0, eps=1.e-14):
     site = spin_half
     psi = purification_mps.PurificationMPS.from_infiniteT_canonical(
         [site] * L, [charge_sector], conserve_ancilla_charge=conserve_ancilla)
@@ -238,3 +238,36 @@ def gen_disentangler_psi_singlet_test(site_P=spin_half, L=6, max_range=4):
     print("P: ", np.round(psi0.mutinf_two_site(legs='p')[1] / np.log(2), 3))
     print("Q: ", np.round(mutinf_Q / np.log(2), 3))
     assert (np.all(mutinf_Q < 1.e-10))
+
+
+@pytest.mark.parametrize('n_sites', [1, 2, 3])
+@pytest.mark.parametrize('act_on_p, act_on_q', [(True, False), (False, True), (True, True)])
+def test_purification_apply_local_op(n_sites, act_on_p, act_on_q):
+    i = 2
+    model = XXZChain(dict(L=8))
+    psi_inf = purification_mps.PurificationMPS.from_infiniteT(sites=model.lat.mps_sites())
+    psi = psi_inf.copy()
+
+    op_legs = []
+    op_labels = []
+    for j in range(n_sites):
+        if act_on_p:
+            op_legs.append(psi._B[i + j].get_leg('p'))
+            op_labels.append('p' if n_sites == 1 else f'p{j}')
+        if act_on_q:
+            op_legs.append(psi._B[i + j].get_leg('q'))
+            op_labels.append('q' if n_sites == 1 else f'q{j}')
+    print(f'{op_labels=}')
+    op = npc.Array.from_func(np.random.random, op_legs + [l.conj() for l in op_legs], qtotal=None,
+                             shape_kw='size', labels=op_labels + [f'{l}*' for l in op_labels])
+    psi.apply_local_op(i, op, unitary=False)
+
+    if act_on_p and act_on_q:
+        pass  # TODO could compare to tracing p{n} with q{n}
+    else:
+        # if op acts on either q or p legs but not both, we find that
+        # <psi_inf|op|psi_inf> to Tr(op), up to normalization -> can check that
+        res = psi.overlap(psi_inf)
+        norm = 2 ** n_sites
+        expect = npc.trace(op.combine_legs([op_labels, [f'{l}*' for l in op_labels]])) / norm
+        assert np.allclose(res, expect)

@@ -246,15 +246,15 @@ nbsphinx_prolog = r"""
 
 .. raw :: html
 
-{% if env.doc2path(env.docname, base=False)[:9] == "notebooks" %}
-{% set docname = env.doc2path(env.docname, base=False)[10:] %}
+{% if env.doc2path(env.docname, base=False).__str__()[:9] == "notebooks" %}
+{% set docname = env.doc2path(env.docname, base=False).__str__()[10:] %}
     <div class="admonition note">
       This page was generated from
       <a class="reference external" href="https://github.com/tenpy/tenpy_notebooks/blob/main/{{ docname|e }}">{{ docname|e }}</a>
       (<a class="reference external" href="https://github.com/tenpy/tenpy_notebooks/raw/main/{{ docname|e }}" download="{{docname | e}}">download</a>).
     </div>
-{% elif env.doc2path(env.docname, base=False)[:8] == "toycodes"  %}
-{% set docname = env.doc2path(env.docname, base=False)[9:] %}
+{% elif env.doc2path(env.docname, base=False).__str__()[:8] == "toycodes"  %}
+{% set docname = env.doc2path(env.docname, base=False).__str__()[9:] %}
     <div class="admonition note">
       This page was generated from
       <a class="reference external" href="https://github.com/tenpy/tenpy_toycodes/blob/main/{{ docname|e }}">{{ docname|e }}</a>

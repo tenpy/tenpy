@@ -26,6 +26,16 @@ class PXPChain(CouplingMPOModel):
     The model arises from the strong-interaction limit of Rydberg atom chains in the seminal
     experiment of :doi:`10.1038/nature24622`, which found long oscillations now attributed to
     quantum many-body scars in the PXP model.
+
+    Options
+    -------
+    .. cfg:config :: PXPChain
+        :include: CouplingMPOModel
+
+        conserve : 'best' | 'parity' | None
+            What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
+        J, J_boundary : float | array
+            Couplings as defined for the Hamiltonian above.
     """
 
     default_lattice = Chain
@@ -33,7 +43,11 @@ class PXPChain(CouplingMPOModel):
     # otherwise more P's need to be added
 
     def init_sites(self, model_params):
-        s = SpinHalfSite(conserve=None)
+        conserve = model_params.get('conserve', 'best', None)
+        if conserve == 'best':
+            conserve = 'parity'
+        assert conserve != 'Sz'
+        s = SpinHalfSite(conserve=conserve)
         s.add_op('X', s.get_op('Sigmax'), hc='X') # X is already defined under other name
         # but P is not, so we add it (as projector onto the state 0, i.e. the up spin).
         s.add_op('P', np.array([[1., 0.], [0., 0.]]), hc='P', permute_dense=True)
