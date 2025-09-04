@@ -681,15 +681,27 @@ class QRBasedTEBDEngine(TEBDEngine):
         old_B_L = self.psi.get_B(i0, 'B')
         old_B_R = self.psi.get_B(i1, 'B')
 
+        compute_err = self.options.get('compute_err', True, bool)
         _, S, B_R, form, trunc_err, renormalize = decompose_theta_qr_based(
             old_qtotal_L=old_B_L.qtotal, old_qtotal_R=old_B_R.qtotal, old_bond_leg=old_B_R.get_leg('vL'),
             theta=theta, move_right=False,
             expand=expand, min_block_increase=self.options.get('cbe_min_block_increase', 1, int),
             use_eig_based_svd=self.options.get('use_eig_based_svd', False, bool),
             trunc_params=self.trunc_params,
-            compute_err=self.options.get('compute_err', True, bool),
+            compute_err=compute_err,
             return_both_T=False,
         )
+        if compute_err:
+            chi_max = self.trunc_params.get('chi_max', None)
+            chi_current = len(S)
+            if trunc_err.eps > 1e-16 and chi_max is not None and chi_current < chi_max:
+                msg = ('QRBased decomposition resulted in large truncation error even though the bond '
+                    'dimension is not maxed out yet. Try increasing the expansion rate, e.g. '
+                    'via the `cbe_expand_0` and `cbe_min_block_increase` options for the engine. '
+                    'You probably should compare to a "regular" (non QR-based) engine and see how '
+                    'fast the bond dimension needs to grow for your scenario. '
+                    'See https://github.com/tenpy/tenpy/pull/513 .')
+                warnings.warn(msg, stacklevel=2)
         assert form[1] == 'B'
 
         B_L = npc.tensordot(C.combine_legs(('p1', 'vR'), pipes=theta.legs[1]),

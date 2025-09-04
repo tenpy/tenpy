@@ -4,6 +4,7 @@
 import numpy.testing as npt
 import tenpy.linalg.np_conserved as npc
 import numpy as np
+
 from tenpy.networks.mps import MPS
 from tenpy.models.spins import SpinChain
 import tenpy.algorithms.tebd as tebd
@@ -60,11 +61,11 @@ def test_tebd(bc_MPS, which_engine, compute_err, use_eig_based_svd, g=0.5):
     if which_engine == 'standard':
         engine = tebd.TEBDEngine(psi, M, tebd_param)
     elif which_engine == 'qr':
-        tebd_param.update(
-            compute_err=compute_err,
-            cbe_expand=0.1,
-            cbe_expand_0=0.2,
-        )
+        tebd_param.update(compute_err=compute_err)
+        if bc_MPS == 'finite':
+            tebd_param.update(cbe_expand_0=0.2)
+        else:
+            tebd_param.update(cbe_expand_0=0.5, cbe_min_block_increase=4)
         engine = tebd.QRBasedTEBDEngine(psi, M, tebd_param)
     else:
         raise RuntimeError
