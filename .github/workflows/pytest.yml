@@ -24,10 +24,10 @@ jobs:
       # make pytest output in color
       PY_COLORS: 1
     strategy:
-      max-parallel: 6
+      max-parallel: 5
       matrix:
-        # Note: python 3.12 is covered by code_coverage.yml
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+        # Note: python 3.13 is covered by code_coverage.yml
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
     - name: Checkout
