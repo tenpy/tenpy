@@ -360,4 +360,12 @@ def test_reciprocal_basis_and_BZ(name):
     # check that the BZ can be created
     assert lat.BZ
     # check that correct coordinates are returned
-    assert np.allclose(lat.BZ.vertices, lat.BZ.order_vertices(vertices))
+    if lat.dim == 2 and np.any(np.arctan2(vertices[:, 1], vertices[:, 0]) == 0):
+        # there is a vertex at angle 0. numerically it may end up at angle ``2 * pi - eps``
+        expect = lat.BZ.order_vertices(vertices)
+        matches = np.allclose(lat.BZ.vertices, expect)
+        # check if it matches when rolling the vertex at angle 0 to the very back of the list
+        matches_rolled = np.allclose(lat.BZ.vertices, np.roll(expect, -1, axis=0))
+        assert matches or matches_rolled
+    else:
+        assert np.allclose(lat.BZ.vertices, lat.BZ.order_vertices(vertices))
