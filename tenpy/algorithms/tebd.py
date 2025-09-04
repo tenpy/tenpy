@@ -610,6 +610,14 @@ class QRBasedTEBDEngine(TEBDEngine):
 
     As introduced in :arxiv:`2212.09782`.
 
+    .. warning ::
+        The QR-based decomposition imposes a heuristically chosen upper limit on bond dimension
+        growth. For dynamics with rapid entanglement growth, this "expansion rate" needs to be
+        chosen large enough. We issue a warning if we detect that it is too low, but if you
+        know that entanglement grows rapidly, have a look at
+        the :cfg:option:`QRBasedTEBDEngine.cbe_expand_0` and compare bond dimension growth
+        to a regular :class:`TEBDEngine`, at least for the first few Trotter steps.
+
     .. todo ::
         To use `use_eig_based_svd == True`, which makes sense on GPU only, we need to implement
         the `_eig_based_svd` for "non-square" matrices.
