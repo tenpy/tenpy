@@ -463,7 +463,7 @@ class Lattice:
         boundary_conditions : list of str
             List of ``"open"`` or ``"periodic"``, one entry for each direction of the lattice.
         """
-        global bc_choices
+        global bc_choices  # noqa: F824
         bc_choices_reverse = dict([(v, k) for (k, v) in bc_choices.items()])
         bc = [bc_choices_reverse[bc] for bc in self.bc]
         if self.bc_shift is not None:
@@ -475,7 +475,7 @@ class Lattice:
 
     @boundary_conditions.setter
     def boundary_conditions(self, bc):
-        global bc_choices
+        global bc_choices  # noqa: F824
         if bc in list(bc_choices.keys()):
             bc = [bc_choices[bc]] * self.dim
             self.bc_shift = None
