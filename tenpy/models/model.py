@@ -1499,6 +1499,7 @@ class CouplingModel(Model):
                                             op_i,
                                             op_j,
                                             subsites=None,
+                                            subsites_start=None,
                                             op_string=None,
                                             plus_hc=False):
         r"""Add an exponentially decaying long-range coupling.
@@ -1522,6 +1523,11 @@ class CouplingModel(Model):
         subsites : None | 1D array
             Selects a subset of sites within the MPS unit cell on which the operators act.
             Needs to be sorted. ``None`` selects all sites.
+        subsites_start : None | 1D array
+            When STARTING an exponentially decaying coupling, which sites do we start terms?
+            The starting site is coupled to all other sites (of larger index) in `subsites`.
+            `subsites_start` does not need to be the same as `subsites`.
+            Needs to be sorted. ``None`` selects `subsites`.
         op_string : None | str
             The operator to be inserted between `A` and `B`;
             If ``None``, this function checks whether a fermionic ``"JW"`` string is needed for the
@@ -1560,6 +1566,12 @@ class CouplingModel(Model):
                 plus_hc = False  # explicitly add the h.c. later; don't do it here.
             else:
                 strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
+
+        # For backwards compatability; if subsites_start is not set, we use the same set to begin
+        # and end exponentially decaying terms
+        if subsites_start is None:
+            subsites_start = subsites
+
         if subsites is None:
             site0 = self.lat.unit_cell[0]
         else:
@@ -1575,12 +1587,12 @@ class CouplingModel(Model):
             else:
                 op_string = 'Id'
         self.exp_decaying_terms.add_exponentially_decaying_coupling(strength, lambda_, op_i, op_j,
-                                                                    subsites, op_string)
+                                                                    subsites, subsites_start, op_string)
         if plus_hc:
             hc_op_i = site0.get_hc_op_name(op_i)
             hc_op_j = site0.get_hc_op_name(op_j)
             self.exp_decaying_terms.add_exponentially_decaying_coupling(
-                np.conj(strength), np.conj(lambda_), hc_op_i, hc_op_j, subsites, op_string)
+                np.conj(strength), np.conj(lambda_), hc_op_i, hc_op_j, subsites, subsites_start, op_string)
 
     def calc_H_bond(self, tol_zero=1.e-15):
         """calculate `H_bond` from :attr:`coupling_terms` and :attr:`onsite_terms`.
