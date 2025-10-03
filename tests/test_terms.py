@@ -582,7 +582,6 @@ def test_exp_non_uniform_decaying_terms_subsites_start(bc):
             [("X", 3), ("Y", 6)],
             [("X", 5), ("Y", 6)],
         ]
-        #decay_factors = [l[0], l[0] * l[2], l[0] * l[2] * l[4], l[2], l[2] * l[4], l[4]]
         decay_factors = [l[1], l[1] * l[2], l[1] * l[2] * l[4], l[3], l[3] * l[4], l[5]]
         assert strength_desired == [p * d for d in decay_factors]
     else:
@@ -600,6 +599,7 @@ def test_exp_non_uniform_decaying_terms_subsites_start(bc):
     # check term list
     assert ts.terms == ts_desired
     assert np.all(ts.strength == np.array(strength_desired))
+
 
 @pytest.mark.parametrize('bc', ['finite', 'infinite'])
 def test_mpo_to_term_list(bc):

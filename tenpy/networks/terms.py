@@ -1344,12 +1344,12 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
     Suppose we want long-range (LR) couplings between all sites on a strip of width Ly. The 
     `subsites` parameters allows us to implement LR couplings along each leg of the strip. We want
     LR couplings between sites that have both vertical and horizontal offset according to the
-    Euclidean distance. To do this, we use `subsites_start` to do this. For each site in
+    Euclidean distance. To do this, we use `subsites_start`. For each site in
     `subsites_start`, we couple to all sites to the right of `subsites`. In our example, the sites
     in one leg can be coupled to all sites with larger index in another leg.
 
     .. math ::
-        strength sum_{subsites_start[i] < subsites[j]} lambda^{|j-min(subsites>subsites_start[i])|} A_{subsites_start[i]} B_{subsites[j]}
+        strength sum_{subsites_start[i] < subsites[j]} lambda^{|j-argmin(subsites>subsites_start[i])|} A_{subsites_start[i]} B_{subsites[j]}
 
     Parameters
     ----------
@@ -1378,35 +1378,28 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                                             subsites=None,
                                             subsites_start=None,
                                             op_string='Id'):
-        """Add an exponentially decaying long-range coupling.
+        r"""Add an exponentially decaying long-range coupling.
 
         .. math ::
-            strength sum_{i < j} lambda^{|i-j|} A_{subsites[i]} B_{subsites[j]}
-
-        or, for non-uniform `lambda_`, this becomes
-
-        .. math ::
-            strength sum_{i < j} ( prod_{n=i}^{j} lambda[n] ) A_{subsites[i]} B_{subsites[j]}
+            strength \sum_{i} \sum_{j > i} \lambda^{|i-j|} A_i B_j
 
         Where the operator `A` is given by `op_i`, and `B` is given by `op_j`.
         Note that the sum over i,j is long-range, for infinite systems beyond the MPS unit cell.
+
+        They can be generalized in several ways, see `lambda_`, `subsites`, `subsites_start`, as
+        well as the notes below.
 
         Parameters
         ----------
         strength : float
             Overall prefactor.
         lambda_ : float | 1D array
-            Decay-rate
+            Decay-rate. Either a single number, applied uniformly or a sequence of length :attr:`L`.
         op_i, op_j : string
             Names for the operators.
-        subsites : None | 1D array
-            Selects a subset of sites within the MPS unit cell on which the operators act.
-            Needs to be sorted. ``None`` selects all sites.
-        subsites_start : None | 1D array
-            When STARTING an exponentially decaying coupling, which sites do we start terms?
-            The starting site is coupled to all other sites (of larger index) in `subsites`.
-            `subsites_start` does not need to be the same as `subsites`.
-            Needs to be sorted. ``None`` selects `subsites`.
+        subsites, subsites_start : 1D array, optional
+            Selects a subset of sites within the MPS unit cell on which the operators act. See docs
+            in :class:`~tenpy.models.model.CouplingModel.add_exponentially_decaying_coupling`.
         op_string : string
             The operator to be inserted between `A` and `B`; for Fermions this should be ``"JW"``.
         """
