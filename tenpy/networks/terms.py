@@ -1364,11 +1364,19 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
         Each tuple ``(strength, opname_i, opname_j, lambda, subsites, subsites_start, opname_string)`` represents
         one of the terms as described above; see :meth:`add_exponentially_decaying_coupling` for
         more details.
+    centered_terms : list of tuples
+        Each tuple ``(strength, opname_i, opname_j, lambda_, subsites, opname_string)`` represents
+        one of the centered terms as described in :meth:`add_centered_exponentially_decaying_term`.
     """
     def __init__(self, L):
         assert L > 0
         self.L = L
         self.exp_decaying_terms = []
+        self.centered_terms = []
+
+    @property
+    def is_empty(self):
+        return len(self.exp_decaying_terms) == 0 and len(self.centered_terms) == 0
 
     def add_exponentially_decaying_coupling(self,
                                             strength,
@@ -1423,6 +1431,29 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
             assert subsites_start[-1] < self.L
 
         self.exp_decaying_terms.append((strength, lambda_, op_i, op_j, subsites, subsites_start, op_string))
+
+    def add_centered_exponentially_decaying_term(self, strength, lambda_, op_i, op_j, i,
+                                                 subsites=None, op_string='Id'):
+        """Add exponentially decaying terms centered around a single site.
+
+        See :meth:`~tenpy.models.model.CouplingModel.add_centered_exponentially_decaying_term` for
+        details.
+        """
+        assert -self.L <= i < self.L
+        if i < 0:
+            i = i + self.L
+        assert (np.isscalar(lambda_) or len(lambda_) == self.L)
+        if subsites is None:
+            subsites = np.arange(self.L)
+        else:
+            subsites = np.array(subsites)
+            if len(subsites) > 1 and np.any(subsites[1:] < subsites[:-1]):
+                raise ValueError("subsites needs to be sorted; choose a different MPS ordering!")
+            assert subsites[0] >= 0
+            assert subsites[-1] < self.L
+            assert i in subsites
+
+        self.centered_terms.append((strength, lambda_, op_i, op_j, i, subsites, op_string))
 
     def add_to_graph(self, graph, key="exp-decay"):
         """Add terms from :attr:`onsite_terms` to an MPOGraph.
@@ -1495,9 +1526,47 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                         if not in_subsites[i]:
                             graph.add(i, label, label, op_string, 1.)
                     graph.add(last_subsite, label, 'IdR', op_j, strength)
+
+        for strength, lambda_, op_i, op_j, i, subsites, op_string in self.centered_terms:
+            assert finite
+            if np.isscalar(lambda_) :
+                lambda_ = np.full(self.L, lambda_)
+            while (key_nr, key) in all_states:
+                key_nr += 1
+            label = (key_nr, key)
+            all_states.add(label)
+            in_subsites = np.zeros(self.L, dtype=np.bool_)
+            in_subsites[subsites] = True
+            first_subsite = subsites[0]
+            last_subsite = subsites[-1]
+            assert first_subsite >= 0
+            assert last_subsite < self.L
+
+            # terms with j < i
+            if i != first_subsite:  # otherwise there are no j < i
+                graph.add(first_subsite, 'IdL', label, op_j, strength)  # open op_j
+                for j in range(first_subsite + 1, i):
+                    if in_subsites[j]:
+                        graph.add(j, 'IdL', label, op_j, strength)  # open op_j
+                        graph.add(j, label, label, op_string, lambda_[j])  # continue op_j with lambda * op_string
+                    else:
+                        graph.add(j, label, label, op_string, 1.)
+                graph.add(i, label, 'IdR', op_i, lambda_[i])
+
+            # terms with j > i
+            if i != last_subsite:  # otherwise there are no j > i
+                graph.add(i, 'IdL', label, op_i, lambda_[i])  # open op_i
+                for j in range(i + 1, last_subsite):
+                    if in_subsites[j]:
+                        graph.add(j, label, label, op_string, lambda_[j])  # continue op_i with lambda * op_string
+                        graph.add(j, label, 'IdR', op_j, strength)  # close op_i with op_j
+                    else:
+                        graph.add(j, label, label, op_string, 1.)  # continue op_i with op_string
+                graph.add(last_subsite, label, 'IdR', op_j, strength)  # close op_i with op_j
+
         if graph.max_range is not None:
             graph.max_range = np.inf
-            
+
     def to_TermList(self, cutoff=0.01, bc="finite"):
         """Convert self into a :class:`TermList`.
 
@@ -1558,6 +1627,24 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
 
             else:
                 raise ValueError("unknown boundary conditions: " + repr(bc))
+
+        for strength, lambda_, op_i, op_j, i, subsites, op_string in self.centered_terms:
+            if np.isscalar(lambda_) :
+                lambda_ = np.full(self.L, lambda_)
+            assert bc == 'finite'
+            for j in subsites:
+                if j == i:
+                    continue
+                if j < i:
+                    prefactor_sites = subsites[(subsites > j) & (subsites <= i)]
+                else:
+                    prefactor_sites = subsites[(subsites >= i) & (subsites < j)]
+                pref = strength * np.prod(lambda_[prefactor_sites])
+                if abs(pref) < cutoff:
+                    continue
+                terms.append([(op_i, i), (op_j, j)])  # by definition, op_j acts first.
+                strengths.append(pref)
+
         return TermList(terms, strengths)
 
     def __iadd__(self, other):
@@ -1566,6 +1653,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
         if other.L != self.L:
             raise ValueError("incompatible lengths")
         self.exp_decaying_terms += other.exp_decaying_terms
+        self.centered_terms += other.centered_terms
         return self
 
     def max_range(self):
@@ -1587,4 +1675,15 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
             for j in subsites:
                 if not sites[j].valid_opname(op_j):
                     raise ValueError("Operator {op!r} not in site {i:d}".format(op=op_j, i=j))
+
+        for strength, lambda_, op_i, op_j, i, subsites, op_string in self.centered_terms:
+            if not sites[i].valid_opname(op_i):
+                raise ValueError(f'Operator {op_i=} not in site {i}')
+            for j in subsites:
+                if j == i:
+                    continue
+                if not sites[j].valid_opname(op_j):
+                    raise ValueError(f'Operator {op_j=} not in site {j}')
+                if not sites[j].valid_opname(op_string):
+                    raise ValueError(f'Operator {op_string=} not in site {j}')
         # done

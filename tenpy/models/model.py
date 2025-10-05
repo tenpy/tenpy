@@ -1605,6 +1605,11 @@ class CouplingModel(Model):
             >>> for pr, la in zip(pref, lam):
             ...     self.add_exponentially_decaying_coupling(pr, la, 'N', 'N')
 
+        See Also
+        --------
+        add_exponentially_decaying_centered_terms
+            Similar terms, but with fixed :math:`i` instead over summing over :math:`i`.
+
         """
         if self.explicit_plus_hc:
             if plus_hc:
@@ -1643,6 +1648,121 @@ class CouplingModel(Model):
             self.exp_decaying_terms.add_exponentially_decaying_coupling(
                 np.conj(strength), np.conj(lambda_), hc_op_i, hc_op_j, subsites, subsites_start, op_string)
 
+    def add_exponentially_decaying_centered_terms(self, strength, lambda_, op_i, op_j, i,
+                                                  subsites=None, op_string=None, plus_hc=False):
+        r"""Add exponentially decaying terms centered around a single site. Only for finite systems.
+
+        .. math ::
+            \mathtt{strength} \sum_{j \neq i} \lambda^{|i - j|} A_i B_j
+
+        where the operator :math:`A` is given by `op_i`, and :math:`B` is given by `op_j`.
+
+        This can be generalized in several ways, see `lambda_`, `subsites`, and the notes below.
+
+        This is similar to :meth:`add_exponentially_decaying_coupling`; the key difference is that
+        here we do *not* sum over :math:`i` and we include terms where ``j < i``.
+
+        Parameters
+        ----------
+        strength : float
+            Overall prefactor.
+        lambda_ : float | 1D array
+            Decay-rate. Either a single number, applied uniformly or a sequence of length :attr:`L`.
+            See notes below for the definition of non-uniform decay rate.
+        op_i, op_j : string
+            Names for the operators, see :meth:`~tenpy.networks.site.Site.get_op`.
+        i : int
+            The "central" site, where the `op_i` is fixed.
+        subsites : 1D array, optional
+            Selects a subset of sites within the MPS unit cell on which the operators act.
+            Must be sorted. By default (``None``), acts on all sites. See notes below.
+        op_string : None | str
+            The operator to be inserted between `A` and `B`;
+            If ``None``, this function checks whether a fermionic ``"JW"`` string is needed for the
+            given operators; which operator acts first depends on `operator_order`!
+        operator_order : 'j_first' | 'left_first'
+            Controls the operator order, i.e. if `op_i` or `op_j` act first.
+            This only matters for fermionic operators with ``op_string=None``.
+        plus_hc : bool
+            If `True`, the hermitian conjugate of the term is added automatically.
+
+        Notes
+        -----
+        The general form of the added terms, with non-uniform `lambda_` and non-trivial `subsites`
+        is
+
+        .. math ::
+            \mathtt{strength} \sum_{j \in \mathtt{subsites}, j \neq i} \Lambda_{i, j} A_i B_j
+
+        where the prefactor is
+
+        .. math ::
+            \Lambda_{i, j} = \begin{cases}
+                \prod_{n \in S, j < n <= i} \lambda_n  &  \text{if } j < i
+                \\
+                \prod_{n \in S, i <= n < j} \lambda_n  &  \text{if } j > i
+            \end{cases}
+
+        i.e.~we pick up factors `\lambda_n` only from the subsites, and in particular always
+        *including* site :math:`i` and *excluding* site :math:`j`.
+
+        See Also
+        --------
+        add_exponentially_decaying_coupling
+            Similar couplings, including a sum over :math:`i`.
+        """
+        if self.explicit_plus_hc:
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
+
+        if self.lat.bc_MPS != 'finite':
+            raise ValueError('Single exponentially decaying term requires a finite system.')
+
+        L = self.lat.N_sites
+        if not -L <= i < L:
+            raise ValueError(f'Site index {i=} out of bounds for length {L}')
+        if i < 0:
+            i = i + L
+
+        mps_sites = self.lat.mps_sites()
+        site_i = mps_sites[i]
+        if subsites is None:
+            example_site_j = self.lat.unit_cell[0]
+        else:
+            if i not in subsites:
+                raise ValueError('i must be one of the subsites.')
+            example_site_j = mps_sites[subsites[0]]
+
+        if op_string is None:
+            need_JW_i = site_i.op_needs_JW(op_i)
+            need_JW_j = example_site_j.op_needs_JW(op_j)
+            if need_JW_i != need_JW_j:
+                raise ValueError("only one of the operators need JW string!")
+            if need_JW_i:
+                # TODO (JU) this is quite annyoing to deal with, so I will leave it until somebody
+                #           actually needs to use it...
+                # for a nice symmetric (under spatial inversion) definition, we want op_j to
+                # sometimes act left of op_i and sometimes right, but op_j always acts first.
+                # Thus, for the terms with i < j, we would need to modify ``op_i -> op_i * JW``
+                # and if i > j we would need ``op_j -> JW * op_j``
+                # -> cant just update op_i here, like we do in add_exponentially_decaying_coupling,
+                #    would need to adjust them later, in ExponentiallyDecayingCoupling.add_to_graph
+                raise NotImplementedError
+            else:
+                op_string = 'Id'
+
+        self.exp_decaying_terms.add_centered_exponentially_decaying_term(
+            strength, lambda_, op_i, op_j, i, subsites, op_string
+        )
+        if plus_hc:
+            hc_op_i = site_i.get_hc_op_name(op_i)
+            hc_op_j = example_site_j.get_hc_op_name(op_j)
+            self.exp_decaying_terms.add_exponadd_centered_exponentially_decaying_termentially_decaying_term(
+                np.conj(strength), np.conj(lambda_), hc_op_i, hc_op_j, i, subsites, op_string
+            )
+
     def calc_H_bond(self, tol_zero=1.e-15):
         """calculate `H_bond` from :attr:`coupling_terms` and :attr:`onsite_terms`.
 
@@ -1661,7 +1781,7 @@ class CouplingModel(Model):
         ------
         ValueError : if the Hamiltonian contains longer-range terms.
         """
-        if len(self.exp_decaying_terms.exp_decaying_terms):
+        if not self.exp_decaying_terms.is_empty:
             raise ValueError("Can't `calc_H_bond` with non-empty `exp_decaying_terms`.")
 
         sites = self.lat.mps_sites()
