@@ -1392,6 +1392,9 @@ class MPO:
         assert N <= self.L
         if not set(sites).issubset(set(list(range(self.L)))):
             raise ValueError(f'The sites {sites} are not strictly contained in {{1, ..., {self.L-1}}}.')
+        if sorted(sites) != [*range(min(sites), max(sites) + 1)]:
+            # test fails for non-contiguous sites. not sure why
+            raise NotImplementedError
 
         t_beta = beta**(1/N)
         t_alpha = alpha / N

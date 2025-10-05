@@ -251,6 +251,35 @@ def test_MPO_addition():
         assert H12.is_equal(H12_sum)
 
 
+@pytest.mark.parametrize('sites', [None, [0], [1], [0, 1, 2, 3], [2, 3], [3, 2]])
+def test_MPO_add_identity(sites, alpha=.7, beta=.42):
+    s = spin_half
+
+    ot = OnsiteTerms(4)
+    ct = CouplingTerms(4)
+    ct.add_coupling_term(2., 2, 3, 'Sm', 'Sp')
+    ct.add_coupling_term(2., 2, 3, 'Sp', 'Sm')
+    ct.add_coupling_term(2., 1, 2, 'Sz', 'Sz')
+    ot.add_onsite_term(3., 1, 'Sz')
+    H1 = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'finite').build_MPO()
+
+    if sites is None:
+        H2 = H1.add_identity(alpha=alpha, beta=beta)
+    else:
+        H2 = H1.add_identity(alpha=alpha, beta=beta, sites=sites)
+
+    ot_expect = OnsiteTerms(4)
+    ct_expect = CouplingTerms(4)
+    ct_expect.add_coupling_term(beta * 2., 2, 3, 'Sm', 'Sp')
+    ct_expect.add_coupling_term(beta * 2., 2, 3, 'Sp', 'Sm')
+    ct_expect.add_coupling_term(beta * 2., 1, 2, 'Sz', 'Sz')
+    ot_expect.add_onsite_term(beta * 3., 1, 'Sz')
+    ot_expect.add_onsite_term(alpha, 1, 'Id')
+    H2_expect = mpo.MPOGraph.from_terms((ot_expect, ct_expect), [s] * 4, 'finite').build_MPO()
+
+    assert H2.is_equal(H2_expect)
+
+
 def test_MPO_expectation_value(tol=1.e-15):
     s = spin_half
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='infinite')
