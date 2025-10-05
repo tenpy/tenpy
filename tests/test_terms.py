@@ -601,6 +601,61 @@ def test_exp_non_uniform_decaying_terms_subsites_start(bc):
     assert np.all(ts.strength == np.array(strength_desired))
 
 
+@pytest.mark.parametrize('i', [0, 3, -1])
+@pytest.mark.parametrize('subsites', [None, np.array([0, 3, 4, 6, 7])])
+@pytest.mark.parametrize('uniform', [True, False])
+def test_exponentially_decaying_centered_terms(i, subsites, uniform):
+    L = 8
+    spin = site.Site(spin_half.leg)
+    spin.add_op("X", 2. * np.eye(2))
+    spin.add_op("Y", 3. * np.eye(2))
+    sites = [spin] * L
+
+    edt = ExponentiallyDecayingTerms(L)
+    p = 3.
+    if uniform:
+        l_arg = .5
+        l_compare = np.full((L,), l_arg)
+    else:
+        l_arg = l_compare = 1. / (1 + np.arange(L))
+    edt.add_centered_exponentially_decaying_term(p, l_arg, 'X', 'Y', i, subsites=subsites)
+    edt._test_terms(sites)
+
+    # check if ExponentiallyDecayingTerms.to_TermList and ExponentiallyDecayingTerms.add_to_graph
+    # yield the same MPO
+    ts = edt.to_TermList(bc='finite', cutoff=1e-6)
+    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite').build_MPO()
+    G = mpo.MPOGraph(sites, bc='finite')
+    edt.add_to_graph(G)
+    G.test_sanity()
+    G.add_missing_IdL_IdR()
+    H2 = G.build_MPO()
+    assert H1.is_equal(H2, eps=1e-10)
+
+    # check term list
+    if i < 0:
+        i = i + L
+    if subsites is None:
+        ts_desired = [[('Y', j), ('X', i)] for j in range(i)] \
+            + [[('X', i), ('Y', j)] for j in range(i + 1, L)]
+        strength_desired = [p * np.prod(l_compare[j + 1:i + 1]) for j in range(i)] \
+            + [p * np.prod(l_compare[i:j]) for j in range(i + 1, L)]
+    else:
+        ts_desired = [[('Y', j), ('X', i)] for j in subsites if j < i] \
+            + [[('X', i), ('Y', j)] for j in subsites if j > i]
+        strength_desired = []
+        for j in subsites:
+            if j == i:
+                continue
+            if j < i:
+                which_sites = subsites[(j < subsites) & (subsites <= i)]
+            else:
+                which_sites = subsites[(i <= subsites) & (subsites < j)]
+            strength_desired.append(p * np.prod(l_compare[which_sites]))
+    assert ts.terms == ts_desired
+    assert np.array_equal(ts.strength, strength_desired)
+
+
 @pytest.mark.parametrize('bc', ['finite', 'infinite'])
 def test_mpo_to_term_list(bc):
     # Addresses PR 477 / 479
