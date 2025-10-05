@@ -5992,6 +5992,30 @@ class BaseEnvironment(metaclass=ABCMeta):
         """Contract RP with the tensors on site `i` to form ``self.get_RP(i-1)``"""
         ...
 
+    def _update_gauge_LP(self, i, U, update_bra, update_ket):
+        """Update LP[i] following the MPS gauge ``A[i-1] A[i] -> (A[i-1] U) (Udagger A[i])``."""
+        assert update_bra or update_ket
+        if not self.has_LP(i):
+            return
+        LP = self.get_LP(i)
+        if update_ket:
+            LP = npc.tensordot(LP, U, axes=['vR', 'vL'])
+        if update_bra:
+            LP = npc.tensordot(U.conj(), LP, axes=['vL*', 'vR*'])
+        self.set_LP(i, LP, self.get_LP_age(i))
+
+    def _update_gauge_RP(self, i, V, update_bra, update_ket):
+        """Update RP[i] following the MPS gauge ``B[i] B[i+1] -> (B[i] Vdagger) (V B[i+1])``."""
+        assert update_bra or update_ket
+        if not self.has_RP(i):
+            return
+        RP = self.get_RP(i)
+        if update_ket:
+            RP = npc.tensordot(V, RP, axes=['vR', 'vL'])
+        if update_bra:
+            RP = npc.tensordot(RP, V.conj(), axes=['vL*', 'vR*'])
+        self.set_RP(i, RP, self.get_RP_age(i))
+
 
 class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
     """Class storing partial contractions between two different MPS and providing expectation values.
@@ -6073,30 +6097,6 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         RP = self.get_RP(i, store=True)
         C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vL, vL*)
         return C
-
-    def _update_gauge_LP(self, i, U, update_bra, update_ket):
-        """Update LP[i] following the MPS gauge ``A[i-1] A[i] -> (A[i-1] U) (Udagger A[i])``."""
-        assert update_bra or update_ket
-        if not self.has_LP(i):
-            return
-        LP = self.get_LP(i)
-        if update_ket:
-            LP = npc.tensordot(LP, U, axes=['vR', 'vL'])
-        if update_bra:
-            LP = npc.tensordot(U.conj(), LP, axes=['vL*', 'vR*'])
-        self.set_LP(i, LP, self.get_LP_age(i))
-
-    def _update_gauge_RP(self, i, V, update_bra, update_ket):
-        """Update RP[i] following the MPS gauge ``B[i] B[i+1] -> (B[i] Vdagger) (V B[i+1])``."""
-        assert update_bra or update_ket
-        if not self.has_RP(i):
-            return
-        RP = self.get_RP(i)
-        if update_ket:
-            RP = npc.tensordot(V, RP, axes=['vR', 'vL'])
-        if update_bra:
-            RP = npc.tensordot(RP, V.conj(), axes=['vL*', 'vR*'])
-        self.set_RP(i, RP, self.get_RP_age(i))
 
 
 class TransferMatrix(sparse.NpcLinearOperator):
