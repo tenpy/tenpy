@@ -1,0 +1,1 @@
+- Fixed a bug (see :issue:`446` ) where segment DMRG failed.
