@@ -1612,30 +1612,34 @@ class CouplingModel(Model):
             else:
                 strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
 
+        if subsites is None:
+            example_site_j = self.lat.unit_cell[0]
+        else:
+            example_site_j = self.lat.mps_sites()[subsites[0]]
+
         # For backwards compatibility; if subsites_start is not set, we use the same set to begin
         # and end exponentially decaying terms
         if subsites_start is None:
             subsites_start = subsites
-
-        if subsites is None:
-            site0 = self.lat.unit_cell[0]
+            example_site_i = example_site_j
         else:
-            site0 = self.lat.mps_sites()[subsites[0]]
+            example_site_i = self.lat.mps_sites()[subsites_start[0]]
+
         if op_string is None:
-            need_JW_i = site0.op_needs_JW(op_i)
-            need_JW_j = site0.op_needs_JW(op_j)
+            need_JW_i = example_site_i.op_needs_JW(op_i)
+            need_JW_j = example_site_j.op_needs_JW(op_j)
             if need_JW_i != need_JW_j:
                 raise ValueError("only one of the operators need JW string!")
             if need_JW_i:
                 op_string = 'JW'
-                op_i = site0.multiply_op_names([op_i, 'JW'])
+                op_i = example_site_i.multiply_op_names([op_i, 'JW'])
             else:
                 op_string = 'Id'
         self.exp_decaying_terms.add_exponentially_decaying_coupling(strength, lambda_, op_i, op_j,
                                                                     subsites, subsites_start, op_string)
         if plus_hc:
-            hc_op_i = site0.get_hc_op_name(op_i)
-            hc_op_j = site0.get_hc_op_name(op_j)
+            hc_op_i = example_site_i.get_hc_op_name(op_i)
+            hc_op_j = example_site_j.get_hc_op_name(op_j)
             self.exp_decaying_terms.add_exponentially_decaying_coupling(
                 np.conj(strength), np.conj(lambda_), hc_op_i, hc_op_j, subsites, subsites_start, op_string)
 
