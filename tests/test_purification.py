@@ -271,3 +271,34 @@ def test_purification_apply_local_op(n_sites, act_on_p, act_on_q):
         norm = 2 ** n_sites
         expect = npc.trace(op.combine_legs([op_labels, [f'{l}*' for l in op_labels]])) / norm
         assert np.allclose(res, expect)
+
+
+@pytest.mark.parametrize('n_sites', [2, 3, 5])
+@pytest.mark.parametrize('conserve', [None, 'parity', 'Sz'])
+def test_purification_from_density_matrix(n_sites, conserve):
+    s = site.SpinHalfSite(conserve=conserve)
+    p_labels = [f'p{i}' for i in range(n_sites)]
+    p_conj_labels = [f'p{i}*' for i in range(n_sites)]
+    q_labels = [f'q{i}' for i in range(n_sites)]
+    q_conj_labels = [f'q{i}*' for i in range(n_sites)]
+    p_legs = [s.leg] * n_sites
+    # create a random density matrix (hermitian, non-negative)
+    A = npc.Array.from_func(np.random.random, p_legs + [l.conj() for l in p_legs], qtotal=None,
+                            shape_kw='size', labels=p_labels + p_conj_labels)
+    # make hermitian
+    A_hc = A.conj().itranspose(p_labels + p_conj_labels)
+    A = (A + A_hc).combine_legs([p_labels, p_conj_labels])
+    # make positive
+    D, U = npc.eigh(A)
+    U_D = U.scale_axis(np.abs(D), axis=-1)
+    rho = npc.tensordot(U_D, U.conj(), axes=[1, 1]).split_legs()
+    tr_rho = np.sum(np.abs(D))
+
+    psi = purification_mps.PurificationMPS.from_density_matrix(sites=[s] * n_sites, rho=rho)
+    psi.test_sanity()
+
+    theta = psi.get_theta(0, n_sites)
+    res = npc.tensordot(theta, theta.conj(), (['vL', 'vR', *q_labels], ['vL*', 'vR*', *q_conj_labels]))
+    tr_res = npc.trace(res.combine_legs([p_labels, p_conj_labels]))
+    assert abs(tr_res - 1) < 1e-10
+    assert npc.norm(res - rho / tr_rho) < 1e-10
