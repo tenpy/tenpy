@@ -1355,22 +1355,10 @@ class MPO:
     def add_identity(self, alpha, beta, sites=[0]):
         r"""returns new MPO :math:`alpha Id + beta * O`.
 
-        This could be used to make a simple (non-unitary) first-order approximation to
+        This can e.g. be used to make a simple (non-unitary) first-order approximation to
         the time evolution unitary :math:`e^{-i t H} \approx 1 - i t H`.
 
-        This function only works for finite MPOs for now, as we simply modify the first
-        tensor. So if you extract a segment from the new operator, you will only get the
-        segment of the original operator. This is a special case of `__add__`, as we don't
-        need an MPO for Id to start and the final MPO has the same bond dimension as the
-        original.
-
-        Additionally, there is significant freedom in how we incorporate the linear
-        combination into the MPO structure. One naive choice is to only modify the first tensor.
-
-        The first tensor (ignoring the second wL entry since it's unnecessary).
-        [1 C D] -> [beta*1 beta*C alpha*1+beta*D]
-
-        Another choice is to modify `N` tensors specified by the input argument `sites`.
+        This function only works for finite MPOs for now.
 
         Parameters
         ----------
@@ -1380,11 +1368,22 @@ class MPO:
             Coefficient for existing MPO
         sites : list
             List of MPO indices of which tensors to modify
-            
+
         Returns
         -------
         mpo : :class:`~tenpy.networks.mpo.MPO`
             MPO representing the operator :math:`\alpha * 1 + \beta O`
+
+        Notes
+        -----
+        There is significant freedom in how we incorporate the linear
+        combination into the MPO structure. One naive choice is to only modify the first tensor.
+
+        The first tensor (ignoring the second wL entry since it's unnecessary)::
+
+            [1 C D] -> [beta*1 beta*C alpha*1+beta*D]
+
+        Another choice is to modify `N` tensors specified by the input argument `sites`.
         """
         if self.bc != 'finite':
             raise NotImplementedError("MPO.add_identity only works for finite MPO.")
@@ -1393,7 +1392,7 @@ class MPO:
         assert N <= self.L
         if not set(sites).issubset(set(list(range(self.L)))):
             raise ValueError(f'The sites {sites} are not strictly contained in {{1, ..., {self.L-1}}}.')
-        
+
         t_beta = beta**(1/N)
         t_alpha = alpha / N
         gamma = lambda k: 1 if k != 0 else beta
@@ -1404,7 +1403,6 @@ class MPO:
             else:
                 return 1., 0., 1., 1., counter
 
-        dtype = np.result_type(beta, np.result_type(alpha, self.dtype))
         IdL = self.IdL
         IdR = self.IdR
 
@@ -1425,7 +1423,7 @@ class MPO:
             # Get coefficients depending on if site k in sites and if so
             # what number site in sites it is.
             b, a, g, d, counter = params_in_sites(k, counter)
-            
+
             # First Row - only this is modified
             dW[0,0] = d*Id_npc
             for i in range(0, DR-2):
@@ -1439,7 +1437,7 @@ class MPO:
             #Bottom Rows
             dW[-1,-1] = g*Id_npc
             U.append(dW)
-            
+
         assert counter == N
         IdL = [0] * (self.L + 1) # I guess we have enforced that the MPO look upper block triangular without any permutations
         IdR = [-1] * (self.L + 1)
