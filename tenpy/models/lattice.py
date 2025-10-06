@@ -16,7 +16,7 @@ Further, an overview with plots of the predefined models is given in
 :doc:`/notebooks/90_overview_predefined_lattices`
 
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 from scipy.spatial import ConvexHull, Voronoi
@@ -463,7 +463,7 @@ class Lattice:
         boundary_conditions : list of str
             List of ``"open"`` or ``"periodic"``, one entry for each direction of the lattice.
         """
-        global bc_choices
+        global bc_choices  # noqa: F824
         bc_choices_reverse = dict([(v, k) for (k, v) in bc_choices.items()])
         bc = [bc_choices_reverse[bc] for bc in self.bc]
         if self.bc_shift is not None:
@@ -475,7 +475,7 @@ class Lattice:
 
     @boundary_conditions.setter
     def boundary_conditions(self, bc):
-        global bc_choices
+        global bc_choices  # noqa: F824
         if bc in list(bc_choices.keys()):
             bc = [bc_choices[bc]] * self.dim
             self.bc_shift = None
@@ -572,7 +572,7 @@ class Lattice:
         ----------
         factor : int
             The new number of sites in the MPS unit cell will be increased from `N_sites` to
-            ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
+            ``factor*N_sites``. Since MPS unit cells are repeated in the `x`-direction
             in our convention, the lattice shape goes from
             ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
         """

@@ -1,5 +1,5 @@
 """A collection of tests to check the functionality of `tenpy.dmrg`"""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import tenpy.linalg.np_conserved as npc
 from tenpy.models.tf_ising import TFIChain

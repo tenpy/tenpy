@@ -34,7 +34,7 @@ We store these indices in `IdL` and `IdR` (if there are such indices).
 Similar as for the MPS, a bond index ``i`` is *left* of site `i`,
 i.e. between sites ``i-1`` and ``i``.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 from scipy.linalg import expm
@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator
+from ..linalg.truncation import TruncationError, svd_theta
 from .site import group_sites
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
@@ -54,7 +55,6 @@ from .terms import TermList
 from ..tools.misc import to_iterable, add_with_None_0
 from ..tools.math import lcm
 from ..tools.params import asConfig
-from ..algorithms.truncation import TruncationError, svd_theta
 
 __all__ = [
     'MPO', 'make_W_II', 'MPOGraph', 'MPOEnvironment', 'MPOTransferMatrix', 'grid_insert_ops'
@@ -335,7 +335,7 @@ class MPO:
             import numpy as np
 
         .. doctest :: from_wavepacket
-        
+
             >>> L, k0, x0, sigma, = 50, np.pi/8., 10., 5.
             >>> x = np.arange(L)
             >>> coeff = np.exp(-1.j * k0 * x) * np.exp(- 0.5 * (x - x0)**2 / sigma**2)
@@ -348,7 +348,7 @@ class MPO:
         Indeed, we can apply this to a (vacuum) MPS and get the correct state:
 
         .. doctest :: from_wavepacket
-        
+
             >>> psi = MPS.from_product_state([site] * L, ['empty'] * L)
             >>> wp.apply(psi, dict(compression_method='SVD'))
             TruncationError()
@@ -1049,8 +1049,8 @@ class MPO:
                 continue
             partial_L[self.get_IdL(i)] = [([], 1.)]
             if self.finite:
-                max_range = min(max_range, L - i)
-            for k in range(max_range):
+                max_range = min(max_range, L - i - 1)
+            for k in range(max_range + 1):
                 j = i + k
                 IdL = self.get_IdL(j)
                 IdR = self.get_IdR(j)
@@ -1408,7 +1408,7 @@ class MPO:
         """
         if self.explicit_plus_hc != other.explicit_plus_hc:
             raise ValueError('Can not add MPOs with different explicit_plus_hc flags')
-        
+
         L = self.L
         assert self.bc == other.bc
         assert other.L == L
@@ -1871,7 +1871,7 @@ class MPOGraph:
 
         Parameters
         ----------
-        Ws_qtotal : None | (list of) charges
+        Ws_qtotal : None | (list of) charges 
             The `qtotal` for each of the Ws to be generated, default (``None``) means 0 charge.
             A single qtotal holds for each site.
 

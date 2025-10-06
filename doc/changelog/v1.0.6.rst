@@ -1,0 +1,36 @@
+[v1.0.6] - 2025-04-29
+=====================
+
+Release Notes
+-------------
+Minor changes and fixes.
+
+Changelog
+---------
+
+Backwards incompatible changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- nothing yet
+
+Added
+^^^^^
+- Add config options to control what is conserved for the :class:`~tenpy.models.xxz_chain.XXZChain`
+  and :class:`~tenpy.models.pxp.PXPChain`.
+- Add :func:`~tenpy.algorithms.exact_diag.get_scipy_sparse_Hamiltonian` and :func:`~tenpy.algorithms.exact_diag.get_numpy_Hamiltonian`
+  for exporting a Hamiltonian to a full matrix representation (sparse or dense matrix respectively).
+- Improve implementation of optimized 4-th order Suzuki-Trotter decomposition for the
+  :class:`~tenpy.algorithms.tebd.TEBDEngine`. When evolving by multiple steps without stopping,
+  we can merge the last operator of one step with the first operator of the next step, as we already
+  do for the other orders 2 and 4.
+
+Changed
+^^^^^^^
+- `ExponentiallyDecayingCouplingTerms` now accepts a 1D array of size `L` for the decay rate `lambda_`.  (:issue: `176`).
+
+Fixed
+^^^^^
+- Fix :meth:`~tenpy.networks.purification_mps.PurificationMPS.from_full`,
+  for :class:`~tenpy.networks.purification_mps.PurificationMPS`, which is implemented
+  in the parent class :class:`~tenpy.networks.mps.MPS`. It did not consider that a purification
+  has more legs.
+- Similar for :meth:`~tenpy.networks.purification_mps.PurificationMPS.apply_local_op`

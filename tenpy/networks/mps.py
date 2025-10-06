@@ -143,7 +143,7 @@ After applying such an evolution operator, you indeed stay in the form of a tran
 iMPS, so this is the form *assumed* when calling MPO :meth:`~tenpy.networks.mpo.MPO.apply` on an
 MPS.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from abc import ABCMeta, abstractmethod
 import numpy as np
@@ -158,14 +158,13 @@ logger = logging.getLogger(__name__)
 from ..linalg import np_conserved as npc
 from ..linalg import sparse
 from ..linalg.krylov_based import Arnoldi
+from ..linalg.truncation import TruncationError, svd_theta, _machine_prec_trunc_par
 from .site import group_sites
 from ..tools.misc import argsort, to_iterable, to_array, get_recursive, inverse_permutation
 from ..tools.math import lcm, entropy
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
 from ..tools import hdf5_io
-from ..algorithms.truncation import TruncationError, svd_theta, _machine_prec_trunc_par
-from ..algorithms.tebd import RandomUnitaryEvolution
 
 __all__ = ['BaseMPSExpectationValue', 'MPS', 'BaseEnvironment', 'MPSEnvironment', 'TransferMatrix',
            'InitialStateBuilder', 'build_initial_state']
@@ -665,7 +664,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
 
             >>> a = psi.expectation_value_term([('Sx', 2), ('Sz', 4)])
             >>> b = psi.expectation_value_term([('Sz', 4), ('Sx', 2)])
-            >>> c = psi.expectation_value_multi_sites(['Sz', 'Id', 'Sx'], i0=2)
+            >>> c = psi.expectation_value_multi_sites(['Sx', 'Id', 'Sz'], i0=2)
             >>> assert a == b == c
         """
         # strategy: translate term into a list "ops" to be used for `expectation_value_multi_sites`
@@ -1802,12 +1801,14 @@ class MPS(BaseMPSExpectationValue):
         chargeL : charges
             Leg charges at bond 0, which are purely conventional.
         """
+        from ..algorithms.tebd import RandomUnitaryEvolution  # local import: avoid circular import
+
         if bc == 'segment':
             msg = "MPS.from_random_unitary_evolution not implemented for segment BC."
             raise NotImplementedError(msg)
         psi = MPS.from_product_state(sites, p_state, bc, dtype, permute, form, chargeL)
-        tebd_options = dict(N_steps = 10, trunc_params={'chi_max': chi})
-        eng = RandomUnitaryEvolution(psi, tebd_options)
+        tebd_params = dict(N_steps = 10, trunc_params={'chi_max': chi})
+        eng = RandomUnitaryEvolution(psi, tebd_params)
         _max_iter = 1000
         for _ in range(_max_iter):
             if psi.finite and (max(psi.chi) >= chi):
@@ -2004,9 +2005,12 @@ class MPS(BaseMPSExpectationValue):
             The sites defining the local Hilbert space.
         psi : :class:`~tenpy.linalg.np_conserved.Array`
             The full wave function to be represented as an MPS.
-            Should have labels ``'p0', 'p1', ...,  'p{L-1}'``.
+            Should have labels ``'p0', 'p1', ...,  'p{L-1}'`` (in any order).
             Additionally, it may have (or must have for 'segment' `bc`) the legs ``'vL', 'vR'``,
             which are trivial for 'finite' `bc`.
+            For subclasses with multiple physical legs per site, we instead expect one set of labels
+            per site (e.g. ``'p0', 'q0', 'p1', 'q1', ...`` for
+            :class:`~tenpy.networks.purification_mps.PurificationMPS`).
         form  : ``'B' | 'A' | 'C' | 'G' | None``
             The canonical form of the resulting MPS, see module doc-string.
             ``None`` defaults to 'A' form on the first site and 'B' form on all following sites.
@@ -2043,24 +2047,47 @@ class MPS(BaseMPSExpectationValue):
             psi = psi.add_trivial_leg(len(psi.get_leg_labels()), label='vR', qconj=-1)
         elif bc == 'finite' and psi.get_leg('vR').ind_len != 1:
             raise ValueError("non-trivial left leg for 'finite' bc!")
-        labels = ['vL'] + ['p' + str(i) for i in range(L)] + ['vR']
-        psi.itranspose(labels)
+
+        # need to consider subclasses with multiple legs per site (e.g. purification)
+        legs_per_site = len(cls._p_label)
+        # p_labels: e.g. [['p0', 'q0'], ['p1', 'q1'], ...]
+        p_labels = [[f'{p}{i}' for p in cls._p_label] for i in range(L)]
+        # psi_labels: e.g. ['vL', 'p0', 'q0', 'p1', 'q1', ..., 'vR']
+        psi_labels = ['vL'] + [p_i for P in p_labels for p_i in P] + ['vR']
+        psi.itranspose(psi_labels)
+
+        # combine to one leg per site
+        if legs_per_site > 1:
+            psi = psi.combine_legs([[1 + site * legs_per_site + n for n in range(legs_per_site)]
+                                    for site in range(L)])
+            combined_P_labels = [npc.Array._combine_leg_labels(P) for P in p_labels]
+        else:
+            combined_P_labels = [P[0] for P in p_labels]
+        # now we have legs ``vL, P0, P1, ..., vR``, where e.g. P0==(p0.q0)
+        assert psi._labels == ['vL', *combined_P_labels, 'vR']
+
         # combine legs from left
         for i in range(0, L - 1):
             psi = psi.combine_legs([0, 1])  # combines the legs until `i`
-        # now psi has only three legs: ``'(((vL.p0).p1)...p{L-2})', 'p{L-1}', 'vR'``
+        # now psi has only three legs: ``'(((vL.P0).P1)...P{L-2})', 'P{L-1}', 'vR'``
         for i in range(L - 1, 0, -1):
             # split off B[i]
-            psi = psi.combine_legs([labels[i + 1], 'vR'])
+            psi = psi.combine_legs([combined_P_labels[i], 'vR'])
             psi, S, B = npc.svd(psi, inner_labels=['vR', 'vL'], cutoff=cutoff)
             S /= np.linalg.norm(S)  # normalize
             if i > 1:
                 psi.iscale_axis(S, 1)
-            B_list[i] = B.split_legs(1).replace_label(labels[i + 1], 'p')
+            B = B.split_legs(1)
+            if legs_per_site > 1:
+                B = B.split_legs(combined_P_labels[i])
+            B = B.replace_labels(p_labels[i], cls._p_label)
+            B_list[i] = B
             S_list[i] = S
             psi = psi.split_legs(0)
         # psi is now the first `B` in 'A' form
-        B_list[0] = psi.replace_label(labels[1], 'p')
+        if legs_per_site > 1:
+            psi = psi.split_legs(combined_P_labels[0])
+        B_list[0] = psi.replace_labels(p_labels[0], cls._p_label)
         B_form = ['A'] + ['B'] * (L - 1)
         if bc == 'finite':
             S_list[0] = S_list[-1] = np.ones([1], dtype=np.float64)
@@ -2262,6 +2289,92 @@ class MPS(BaseMPSExpectationValue):
         SVs[0] = SVs[-1]
         return cls(sites, Bs, SVs, bc=bc, form='B')
 
+    @classmethod
+    def project_onto_charge_sector(cls, sites, p_state_list, charge_sector, dtype=float, **kwargs):
+        """Generates an MPS from a product state list which is projected onto a given charge sector.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the local Hilbert space. The sites should conserve *some* charge,
+            otherwise projecting onto a charge sector is meaningless.
+        p_state_list : list | np.ndarray
+            list defining the product state out of which to project
+        charge_sector : tuple of int
+            The charge sector corresponding to the conserved charge of the ``sites``
+        dtype : type
+
+        Returns
+        -------
+        projected_MPS : :class:`~tenpy.networks.mps.MPS`
+        """
+        charge_tree = cls.get_charge_tree_for_given_charge_sector(sites, charge_sector)
+        return cls._project_onto_sector_from_charge_tree(sites, p_state_list, charge_tree, dtype, **kwargs)
+
+    @classmethod
+    def _project_onto_sector_from_charge_tree(cls, sites, p_state_list, charge_tree, dtype=float, **kwargs):
+        """Select entries in a product state that are in a charge tree.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the local Hilbert space. The sites should conserve *some* charge,
+            otherwise projecting onto a charge sector is meaningless.
+        p_state_list : list | np.ndarray
+            list defining the product state out of which to project
+        charge_tree : list
+            a list containing a set of possible charges at each site
+        dtype : type
+            The data type of the ``B``-tensors, defaults to float
+        Returns
+        -------
+        projected_state : :class:`~tenpy.networks.mps.MPS`
+        """
+        p_state_list = np.array(p_state_list)  # convert (possible list) to ndarray for indexing
+        # check chiinfo
+        chinfo = sites[0].leg.chinfo
+        assert all(s.leg.chinfo == chinfo for s in sites), "Charge Info for all sites must be identical"
+
+        # init tensors and schmidt values
+        Bs = []
+        Ss = [np.ones(1, dtype=np.float64)]
+
+        # go through connections from left to right in the charge_tree
+        for i, (Q_L, Q_R) in enumerate(zip(charge_tree, charge_tree[1:])):
+            # dictionary holding indices of charges
+            Q_R_idx_map = dict((charge, i) for i, charge in enumerate(Q_R))
+
+            if i == 0:  # initial right leg for first charge
+                leg_R = npc.LegCharge.from_qflat(chinfo, np.array(list(Q_L)), qconj=-1)
+
+            # set legs
+            leg_L = leg_R.conj()
+            leg_R = npc.LegCharge.from_qflat(chinfo, np.array(list(Q_R)), qconj=-1)
+            # physical leg
+            leg_p = sites[i].leg
+            Q_p = leg_p.to_qflat()  # array of charges of physical leg
+
+            B = npc.zeros([leg_L, leg_R, leg_p],
+                          dtype=dtype,
+                          labels=['vL', 'vR', 'p'])
+
+            for j in range(leg_p.ind_len):  # iterate through possible charges of physical leg
+                value = p_state_list[i, - (j + 1)]  # go through values reversed
+                Q_p_j = Q_p[j]
+                for vL, Q_v_L in enumerate(np.array(list(Q_L))):
+                    Q_v_R = tuple(chinfo.make_valid(Q_v_L + Q_p_j))
+                    vR = Q_R_idx_map.get(Q_v_R, None)  # get index corresponding to vR
+                    if vR is not None:
+                        B[vL, vR, j] = value  # add an entry in the tensor
+
+            Bs.append(B)
+            # ignore S values as they will be obtained below from :meth:`MPS.canonical_form_finite`
+            Ss.append(np.ones(B.shape[1], np.float64))
+
+        projected_state = cls(sites, Bs, Ss, **kwargs)
+        projected_state.canonical_form_finite()  # calculate S values and normalize
+        return projected_state
+
     @property
     def L(self):
         """Number of physical sites; for an iMPS the len of the MPS unit cell."""
@@ -2455,6 +2568,11 @@ class MPS(BaseMPSExpectationValue):
             The n-site wave function with leg labels ``vL, p0, p1, .... p{n-1}, vR``.
             In Vidal's notation (with s=lambda, G=Gamma):
             ``theta = s**form_L G_i s G_{i+1} s ... G_{i+n-1} s**form_R``.
+
+        See Also
+        --------
+        :func:`~tenpy.algorithms.exact_diag.get_full_wavefunction`
+            Get the full wavefunction for a finite MPS, e.g. for debugging.
         """
         i = self._to_valid_index(i)
         for j in range(i, i + n):
@@ -3487,6 +3605,72 @@ class MPS(BaseMPSExpectationValue):
         charges, ps = self.probability_per_charge(bond)
         return np.sum(ps[:, np.newaxis] * (charges - charges_mean[np.newaxis, :])**2, axis=0)
 
+    @staticmethod
+    def get_charge_tree_for_given_charge_sector(sites: list, charge_sector: tuple):
+        r"""Construct the charge-tree for a given charge sector.
+
+        This is a tree of possible charges for each site s.t. the MPS lies in the given ``charge_sector``.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the local Hilbert space. The sites should conserve *some* charge,
+            otherwise projecting onto a charge sector is meaningless.
+        charge_sector : tuple of int
+            The charge sector corresponding to the conserved charge of the ``sites``
+
+        Returns
+        -------
+        charge_tree : list of dict of tuples
+            A tree of possible charges (at the sites) for the desired ``charge_sector``.
+            I.e. consider the state :math:`\ket{++}`. The desired charge tree for the sector ``(0,)``
+            is ``[{(0,)}, {(1,), (-1,)}, {(0,)}]``.
+        """
+        L = len(sites)
+        assert L > 0, "sites must contain a :class:`Site` with conserved charges"
+        # check that all have same chiinfo
+        chinfo = sites[0].leg.chinfo
+        assert all(s.leg.chinfo == chinfo for s in sites), "Charge Info for all sites must be identical"
+
+        charge_sector_left = chinfo.make_valid(None)  # zero charges
+        charge_sector_right = chinfo.make_valid(charge_sector)
+        assert charge_sector_right.ndim == 1
+
+        # create a "charge-tree" from the right (starting at the desired charge sector)
+        Q_from_right = [None] * L + [set([tuple(charge_sector_right)])]  # all bonds 0, ... L
+
+        for i in reversed(range(L)):  # loop from right to left over all sites
+            Q_R = np.array(list(Q_from_right[i + 1]))  # the dictionary of charges (Q_R) to the right of site i
+            Q_L = set()
+            # loop over possible/allowed changes of charges:
+            for Q_p in sites[i].leg.charges:  # i.e. site.leg.charges=[[-1], [1]] for a SpinHalfSite
+                # add all "combinations of charges" -> Q_p[np.newaxis] to use broadcasting; store results in a set
+                Q_L_add = chinfo.make_valid(Q_R - Q_p[np.newaxis])  # from right to left in the tree we must subtract
+                Q_L_add = set([tuple(q) for q in Q_L_add])
+                Q_L = Q_L.union(Q_L_add)
+            Q_from_right[i] = Q_L
+
+        if tuple(charge_sector_left) not in Q_from_right[0]:
+            raise ValueError("can't get desired charge sector {charge_sector!r} "
+                             "for the given charges on physical sites!")
+
+        # create a "charge-tree" from the left (starting with no charges), similar logic to above
+        Q_from_left = [set([tuple(charge_sector_left)])] + [None] * L
+        for i in range(L):
+            Q_L = np.array(list(Q_from_left[i]))
+            Q_R = set()
+            for Q_p in sites[i].leg.charges:
+                Q_R_add = chinfo.make_valid(Q_L + Q_p[np.newaxis])  # from left to right in the tree we must add
+                Q_R_add = set([tuple(q) for q in Q_R_add])
+                Q_R = Q_R.union(Q_R_add)
+
+            # only keep entries in the left tree that can also be reached from the right
+            Q_from_left[i + 1] = Q_R.intersection(Q_from_right[i + 1])
+
+        assert Q_from_left[-1] == Q_from_right[-1], "Left `charge_sector` doesn't meet the one on the right"
+        # Q_from_left is already the intersection of the full tree from the left and from the right, hence return it
+        return Q_from_left
+
     def mutinf_two_site(self, max_range=None, n=1):
         """Calculate the two-site mutual information :math:`I(i:j)`.
 
@@ -4426,11 +4610,13 @@ class MPS(BaseMPSExpectationValue):
         i : int
             (Left-most) index of the site(s) on which the operator should act.
         op : str | npc.Array
-            A physical operator acting on site `i`, with legs ``'p', 'p*'`` for a single-site
-            operator or with legs ``['p0', 'p1', ...], ['p0*', 'p1*', ...]`` for an operator
-            acting on `n`>=2 sites.
-            Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
-            :attr:`sites`.
+            A physical operator acting on a single site `i`, or on ``n`` consecutive sites
+            ``range(i, i + n)``.  Strings (like ``'Id', 'Sz'``) are translated into single-site
+            operators defined by :attr:`sites`, in particular by ``sites[i]``.
+            The number of sites, and which leg of `op` acts on which leg of the MPS, are inferred
+            from the labels of `op`, see notes below. In most cases, the labels should be either
+            ``['p', 'p*']`` for a single-site operator or ``['p0', 'p1', ..., 'p0*', 'p1*', ...]``
+            (in any order) for a multi-site operator.
         unitary : None | bool
             Whether `op` is unitary, i.e., whether the canonical form is preserved (``True``)
             or whether we should call :meth:`canonical_form` (``False``).
@@ -4444,6 +4630,21 @@ class MPS(BaseMPSExpectationValue):
         understood_infinite : bool
             Raise a warning to make aware of :ref:`iMPSWarning`.
             Set ``understood_infinite=True`` to suppress the warning.
+
+        Notes
+        -----
+        We infer quite a bit of information about how exactly to apply the operator, just from
+        its labels. We require that the labels of `op` come in pairs ``l, l + '*'``, where ``l``
+        is one of the :attr:`_p_labels` of the class, optionally followed by an integer number.
+        E.g. for :class:`MPS` it must be either ``'p'`` or e.g. ``'p2'``, while for a
+        :class:`~tenpy.networks.purification.PurificationMPS`` it could additionally also be
+        ``'q'`` or e.g. ``'q2'``. We then contract the ``l + '*'`` leg of `op` with the ``l`` leg
+        of the local wavefunction (see :meth:`get_theta`), and the ``l`` leg of `op` remains as
+        a leg of the resulting MPS.
+        All the (non-starred) ``l`` labels must either end with a non-number character, and we
+        assume a single-site operator, or they must all end in an integer number. A label ending a
+        number ``m`` acts on site ``i + m``, e.g. ``'p0'`` acts on site `i`, and we infer the
+        number of sites ``n`` from the largest of these ``m``.
         """
         if not self.finite and not understood_infinite:
             warnings.warn("For infinite MPS, apply_local_op acts on *each* unit cell in parallel."
@@ -4457,7 +4658,8 @@ class MPS(BaseMPSExpectationValue):
                     raise ValueError("open JW string ending in each unit cell"
                                      "breaks translation invariance!")
                 try:
-                    JW_sign = self.apply_JW_string_left_of_virt_leg(self._B[i], 'vL', i)
+                    _ = self.apply_JW_string_left_of_virt_leg(self._B[i], 'vL', i)
+                    # modifies self._B[i] in-place
                 except ValueError as e:
                     raise ValueError(f"Would need JW string for operator {op!r}, "
                                      "but can't extract JW signs from the charges") from e
@@ -4465,35 +4667,56 @@ class MPS(BaseMPSExpectationValue):
         else:
             opname = op
             need_JW = False
-        n = op.rank // 2  # same as int(rank/2)
-        if n == 1:
-            pstar, p = 'p*', 'p'
+
+        # Infer n_sites and the labels to contract from op._labels
+        p = [l for l in op._labels if not l.endswith('*')]
+        pstar = [f'{l}*' for l in p]
+        if set(op._labels) != set(p + pstar):
+            raise ValueError('The labels of `op` must come in pairs ``l, l + "*"``.')
+        if p[0][-1].isdigit():
+            # need to consider edge case n_sites > 10, where multiple characters give the site index
+            site_idcs = []
+            for l in p:
+                num_non_digits = len(l.rstrip('0123456789'))
+                site_idx = l[num_non_digits:]
+                try:
+                    site_idx = int(site_idx)
+                except Exception:
+                    msg = 'The labels of `op` must either all end in numbers or none of them.'
+                    raise ValueError(msg) from None
+                site_idcs.append(site_idx)
+            n_sites = max(site_idcs) + 1
+            if n_sites == 1:
+                raise ValueError('For a single-site operator, omit the "0" at the end of labels.')
+        elif any(l[-1].isdigit() for l in p):
+            msg = 'The labels of `op` must either all end in numbers or none of them.'
+            raise ValueError(msg)
         else:
-            p = self._get_p_labels(n, False)
-            pstar = self._get_p_labels(n, True)
+            n_sites = 1
+
         if unitary is None:
             op_op_dagger = npc.tensordot(op, op.conj(), axes=[pstar, p])
-            if n > 1:
+            if n_sites > 1:
                 op_op_dagger = op_op_dagger.combine_legs([p, pstar], qconj=[+1, -1])
             unitary = npc.norm(op_op_dagger - npc.eye_like(op_op_dagger)) < cutoff
-        if n == 1:
-            opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
+        if n_sites == 1:
+            opB = npc.tensordot(op, self._B[i], axes=[pstar, p])
             self.set_B(i, opB, self.form[i])
             if opB.norm() < 1.e-12:
                 raise ValueError(f"Applying the operator {opname!s} on site {i:d} destroys state!")
         else:
-            th = self.get_theta(i, n)
+            th = self.get_theta(i, n_sites)
             th = npc.tensordot(op, th, axes=[pstar, p])
             if th.norm() < 1.e-12:
                 raise ValueError(f"Applying the operator {opname!s} on site {i:d} destroys state!")
             # use MPS.from_full to split the sites
-            split_th = self.from_full(self.sites[i:i + n], th, None, cutoff, renormalize,
-                                      'segment', (self.get_SL(i), self.get_SR(i + n - 1)))
+            split_th = self.from_full(self.sites[i:i + n_sites], th, None, cutoff, renormalize,
+                                      'segment', (self.get_SL(i), self.get_SR(i + n_sites - 1)))
             if not renormalize:
                 self.norm *= split_th.norm
-            for j in range(n):
+            for j in range(n_sites):
                 self.set_B(i + j, split_th._B[j], split_th.form[j])
-            for j in range(n - 1):
+            for j in range(n_sites - 1):
                 self.set_SR(i + j, split_th._S[j + 1])
         if not unitary:
             self.canonical_form(renormalize=renormalize)
@@ -4613,7 +4836,7 @@ class MPS(BaseMPSExpectationValue):
         canonicalize : bool
             Wether to call `psi.canonical_from in the end. Defaults to ``not close_1``.
         """
-        from ..algorithms.tebd import RandomUnitaryEvolution
+        from ..algorithms.tebd import RandomUnitaryEvolution  # local import: avoid circular import
         if randomize_params is None:
             randomize_params = {}
         if close_1:
@@ -5769,6 +5992,30 @@ class BaseEnvironment(metaclass=ABCMeta):
         """Contract RP with the tensors on site `i` to form ``self.get_RP(i-1)``"""
         ...
 
+    def _update_gauge_LP(self, i, U, update_bra, update_ket):
+        """Update LP[i] following the MPS gauge ``A[i-1] A[i] -> (A[i-1] U) (Udagger A[i])``."""
+        assert update_bra or update_ket
+        if not self.has_LP(i):
+            return
+        LP = self.get_LP(i)
+        if update_ket:
+            LP = npc.tensordot(LP, U, axes=['vR', 'vL'])
+        if update_bra:
+            LP = npc.tensordot(U.conj(), LP, axes=['vL*', 'vR*'])
+        self.set_LP(i, LP, self.get_LP_age(i))
+
+    def _update_gauge_RP(self, i, V, update_bra, update_ket):
+        """Update RP[i] following the MPS gauge ``B[i] B[i+1] -> (B[i] Vdagger) (V B[i+1])``."""
+        assert update_bra or update_ket
+        if not self.has_RP(i):
+            return
+        RP = self.get_RP(i)
+        if update_ket:
+            RP = npc.tensordot(V, RP, axes=['vR', 'vL'])
+        if update_bra:
+            RP = npc.tensordot(RP, V.conj(), axes=['vL*', 'vR*'])
+        self.set_RP(i, RP, self.get_RP_age(i))
+
 
 class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
     """Class storing partial contractions between two different MPS and providing expectation values.
@@ -5850,30 +6097,6 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         RP = self.get_RP(i, store=True)
         C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vL, vL*)
         return C
-
-    def _update_gauge_LP(self, i, U, update_bra, update_ket):
-        """Update LP[i] following the MPS gauge ``A[i-1] A[i] -> (A[i-1] U) (Udagger A[i])``."""
-        assert update_bra or update_ket
-        if not self.has_LP(i):
-            return
-        LP = self.get_LP(i)
-        if update_ket:
-            LP = npc.tensordot(LP, U, axes=['vR', 'vL'])
-        if update_bra:
-            LP = npc.tensordot(U.conj(), LP, axes=['vL*', 'vR*'])
-        self.set_LP(i, LP, self.get_LP_age(i))
-
-    def _update_gauge_RP(self, i, V, update_bra, update_ket):
-        """Update RP[i] following the MPS gauge ``B[i] B[i+1] -> (B[i] Vdagger) (V B[i+1])``."""
-        assert update_bra or update_ket
-        if not self.has_RP(i):
-            return
-        RP = self.get_RP(i)
-        if update_ket:
-            RP = npc.tensordot(V, RP, axes=['vR', 'vL'])
-        if update_bra:
-            RP = npc.tensordot(RP, V.conj(), axes=['vL*', 'vR*'])
-        self.set_RP(i, RP, self.get_RP_age(i))
 
 
 class TransferMatrix(sparse.NpcLinearOperator):
@@ -6295,6 +6518,40 @@ class InitialStateBuilder:
         dtype = self.options.get('dtype', self.model_dtype)
         lat = self.lattice
         psi = MPS.from_product_state(lat.mps_sites(), p_state, bc=lat.bc_MPS, dtype=dtype)
+        return psi
+
+    def mps_state_in_charge_sector(self, charge_sector=None, p_state=None):
+        """Initialize a state on a lattice already in a desired charge sector.
+
+        See :meth:`MPS.project_onto_charge_sector` for details.
+
+        Options
+        -------
+        .. cfg:configoptions :: InitialStateBuilder
+
+            charge_sector : tuple of int
+                The `charge_sector` passed on to :meth:`MPS.project_onto_charge_sector`.
+                Depending on the number of sites in a lattice, only specific charge
+                sectors can be reached.
+            product_state : list | np.ndarray
+                Optional. A `product_state` as in :meth:`mps_product_state`.
+
+        """
+        if charge_sector is None:
+            charge_sector = self.options['charge_sector']
+        # yaml does not support lists, so in case a single charge is specified by an int, convert it
+        charge_sector = to_iterable(charge_sector)
+        dtype = self.options.get('dtype', self.model_dtype)
+        lat = self.lattice
+        sites = lat.mps_sites()
+        if p_state is None:
+            p_state = self.options.get('product_state', None)  # only optional
+        if p_state is None:
+            p_state = np.ones((lat.N_sites, sites[0].leg.block_number))  # equal superposition product state
+        self.check_filling(p_state)
+        # sites must all be the same, however an error would be raised anyways in :meth:`project_onto_charge_sector`
+        psi = MPS.project_onto_charge_sector(sites, p_state,
+                                             charge_sector=charge_sector, dtype=dtype, bc=lat.bc_MPS)
         return psi
 
     def desired_bond_dimension(self, chi=None):

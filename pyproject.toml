@@ -8,7 +8,6 @@ dynamic = ["version"]
 description = "Simulation of quantum many-body systems with tensor networks in Python"
 readme = {file = "README.rst", content-type = "text/x-rst"}
 requires-python = ">=3.8"
-license = {text = "GPLv3"}
 authors = [
     {name = "TeNPy Developer Team"},
 ]
@@ -21,7 +20,7 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "License :: OSI Approved :: Apache Software License",
     "Natural Language :: English",
     "Programming Language :: C",
     "Programming Language :: Python",

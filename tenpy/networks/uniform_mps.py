@@ -20,7 +20,7 @@ The functions in the class are mostly trivial copies of the functions from MPS t
 account for the additional type of tensor structure.
 
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import logging

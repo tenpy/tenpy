@@ -197,7 +197,7 @@ Most simulation classes have only a few :attr:`~tenpy.simulations.Simulation.def
 add more with the :cfg:option:`Simulation.connect_measurements` parameters. Each measurement is simply a function that is
 called whenever the simulation wants to measure, e.g. with the initial state, at the end of the simulation, and for time
 evolutions also during the evolution. The default measurement functions are defined in
-the module :mod:`tenpy.simulations.measurement`; :func:`~tenpy.simulations.measurement.measurement_index` documents what
+the module :mod:`tenpy.simulations.measurement`; :func:`~tenpy.simulations.measurement.m_measurement_index` documents what
 arguments a measurement function should have. 
 In the simplest case, you just specify the module and function name, but you can also add more arguments, as the
 following example shows.

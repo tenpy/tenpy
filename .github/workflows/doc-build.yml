@@ -31,8 +31,6 @@ jobs:
       uses: conda-incubator/setup-miniconda@v3
       with:
         auto-update-conda: true
-        miniforge-variant: Mambaforge
-        use-mamba: true
         activate-environment: tenpydoc
         environment-file: doc/environment.yml
         python-version: 3.11

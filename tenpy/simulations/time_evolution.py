@@ -1,6 +1,6 @@
 """Simulations for (real) time evolution, time dependent correlation
 functions and spectral functions."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import warnings
@@ -39,6 +39,8 @@ class RealTimeEvolution(Simulation):
     default_algorithm = 'TEBDEngine'
     default_measurements = Simulation.default_measurements + [
         ('tenpy.simulations.measurement', 'm_evolved_time'),
+        ('simulation_method', 'wrap eps_error'),
+        ('simulation_method', 'wrap ov_error')
     ]
 
     def __init__(self, options, **kwargs):
@@ -54,9 +56,9 @@ class RealTimeEvolution(Simulation):
         while True:
             if np.real(self.engine.evolved_time) >= self.final_time:
                 break
-            self.logger.info("evolve to time %.2f, max chi=%d", self.engine.evolved_time.real,
-                             max(self.psi.chi))
-            self.engine.run()
+
+            self.engine.run()  # already logs time, chi_max, S, deltaS (through .run() of TimeEvolutionAlgorithm)
+            self.logger.info(f"total {self.engine.trunc_err} (only from truncation of Schmidt values)")
             # for time-dependent H (TimeDependentExpMPOEvolution) the engine can re-init the model;
             # use it for the measurements....
             self.model = self.engine.model
@@ -82,6 +84,39 @@ class RealTimeEvolution(Simulation):
         We already performed a set of measurements after the evolution in :meth:`run_algorithm`.
         """
         pass
+
+    def eps_error(self):
+        """Accumulated eps error since the start of the time-evolution.
+
+        To get the eps error induced at each loop of ``'N_steps'`` in the time evolution,
+        a finite difference scheme could be used as the eps errors get simply
+        added i.e., ``np.diff(eps_error)``.
+        Utility measurement method similar to :meth:`walltime`, but appended to
+        ``default_measurements`` of this simulation class.
+
+        .. warning ::
+
+            This is only the sum of the discarded Schmidt values and does not take into
+            account e.g., errors induced by time discretization. See :mod:`~tenpy.algorithms.truncation`.
+
+        Returns
+        -------
+        eps : float
+            Accumulated eps error (sum of the discarded Schmidt values) since the start of the time-evolution.
+        """
+        return self.engine.trunc_err.eps
+
+    def ov_error(self):
+        """Total ov error of the time-evolution.
+
+        Similar to :meth:`eps_error`, but for the overlap (which gets multiplied at each step).
+
+        Returns
+        -------
+        ov : float
+            Total ov error since the start of the time-evolution.
+        """
+        return self.engine.trunc_err.ov
 
 
 class TimeDependentCorrelation(RealTimeEvolution):

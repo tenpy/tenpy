@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 #
 import sys
 import os
@@ -191,7 +191,7 @@ def stitch_changelog_latest():
         '\n',
         '\n',
     ]
-    
+
     for fn in os.listdir(folder):
         fn = os.path.join(folder, fn)
         if not fn.endswith('.txt'):
@@ -199,8 +199,8 @@ def stitch_changelog_latest():
         with open(fn, 'r') as f:
             lines = f.readlines()
         contents.extend(lines)
-        contents.append('\n')  # empty line between files
-    
+        contents.append('\n\n')  # at least one empty line between (even if no \n at file end)
+
     with open(outfile, 'w') as f:
         f.writelines(contents)
     # done
@@ -246,15 +246,15 @@ nbsphinx_prolog = r"""
 
 .. raw :: html
 
-{% if env.doc2path(env.docname, base=False)[:9] == "notebooks" %}
-{% set docname = env.doc2path(env.docname, base=False)[10:] %}
+{% if env.doc2path(env.docname, base=False).__str__()[:9] == "notebooks" %}
+{% set docname = env.doc2path(env.docname, base=False).__str__()[10:] %}
     <div class="admonition note">
       This page was generated from
       <a class="reference external" href="https://github.com/tenpy/tenpy_notebooks/blob/main/{{ docname|e }}">{{ docname|e }}</a>
       (<a class="reference external" href="https://github.com/tenpy/tenpy_notebooks/raw/main/{{ docname|e }}" download="{{docname | e}}">download</a>).
     </div>
-{% elif env.doc2path(env.docname, base=False)[:8] == "toycodes"  %}
-{% set docname = env.doc2path(env.docname, base=False)[9:] %}
+{% elif env.doc2path(env.docname, base=False).__str__()[:8] == "toycodes"  %}
+{% set docname = env.doc2path(env.docname, base=False).__str__()[9:] %}
     <div class="admonition note">
       This page was generated from
       <a class="reference external" href="https://github.com/tenpy/tenpy_toycodes/blob/main/{{ docname|e }}">{{ docname|e }}</a>
@@ -386,7 +386,10 @@ cfg_options_always_include = ["Config"]
 
 # -- sphinxcontrib.bibtex -------------------------------------------------
 
-bibtex_bibfiles = ['literature.bib', 'papers_using_tenpy.bib']
+bibtex_bibfiles = ['literature.bib', 'papers_using_tenpy.bib', 'theses.bib']
+# note: these bib files are exported from the Zotero library
+# https://www.zotero.org/groups/2569413/tenpy/library
+# with the `betterbibtex` add-on, sorting by bibtex key (can be changed in addon settings).
 
 from pybtex.style.formatting.unsrt import Style as UnsrtStyle
 from pybtex.style.labels import BaseLabelStyle

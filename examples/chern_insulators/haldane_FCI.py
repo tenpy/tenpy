@@ -6,7 +6,7 @@ Based on Eq.1 of [Grushin2015]_ with:
 - 1/2 filling of the lowest band (i.e. 1/4 total filling)
 """
 
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import warnings

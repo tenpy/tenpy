@@ -1,8 +1,0 @@
-- Added :class:`~tenpy.algorithms.mps_common.QRBasedVariationalApplyMPO`.
-- The following functions, which are used both by :class:`~tenpy.algorithms.tebd.QRBasedTEBDEngine`
-  and by the new :class:`~tenpy.algorithms.mps_common.QRBasedVariationalApplyMPO` have been moved
-  from :mod:`tenpy.algorithms.tebd` to :mod:`tenpy.algorithms.truncation`, have been changed
-  substantially in parameters, behavior and return values;
-  The old ``_qr_based_decomposition``, which is renamed to
-  :func:`tenpy.algorithms.truncation.decompose_theta_qr_based`, as well as the private helper
-  functions ``_qr_tebd_cbe_Y0`` and ``_eig_based_svd``.

@@ -2,7 +2,7 @@
 
 .. todo ::     Make this a nice toycode! For the test, use some pre-defined values.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from scipy.linalg import expm
 import numpy as np

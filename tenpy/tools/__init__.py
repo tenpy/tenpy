@@ -23,10 +23,10 @@ Common to all tools is that they are not just useful for a single algorithm but 
     spectral_function_tools
     prediction
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from . import (events, fit, hdf5_io, math, misc, params, process, string, optimization, cache,
-               thread)
+               thread, spectral_function_tools, prediction, docs)
 from .events import *
 from .fit import *
 from .hdf5_io import *
@@ -42,22 +42,9 @@ from .spectral_function_tools import *
 from .prediction import *
 
 __all__ = [
-    'events',
-    'fit',
-    'hdf5_io',
-    'math',
-    'misc',
-    'params',
-    'process',
-    'string',
-    'optimization',
-    'cache',
-    'thread',
-    'spectral_function_tools',
-    'prediction',
     *events.__all__,
     *fit.__all__,
-    *hdf5_io.__all__,
+    *[n for n in hdf5_io.__all__ if n.upper() != n],
     *math.__all__,
     *misc.__all__,
     *params.__all__,

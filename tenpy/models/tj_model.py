@@ -1,5 +1,5 @@
 """tJ model"""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from .model import CouplingMPOModel, NearestNeighborModel
 from .lattice import Chain
@@ -46,6 +46,7 @@ class tJModel(CouplingMPOModel):
             see :class:`~tenpy.networks.site.SpinHalfHoleSite` for details.
         t, J: float | array
             Couplings as defined for the Hamiltonian above. Note the signs!
+            Defaults to ``t=J=1``
     """
 
     def init_sites(self, model_params):

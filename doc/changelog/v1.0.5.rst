@@ -1,0 +1,30 @@
+[v1.0.5] - 2025-02-21
+=====================
+
+Release Notes
+-------------
+A few minor addition and bugfixes.
+
+Changelog
+---------
+
+Added
+^^^^^
+- The :class:`~tenpy.models.pxp.PXPChain`, a model describing Rydberg physics.
+- The :class:`~tenpy.models.molecular.MolecularModel` class for quantum chemistry applications.
+
+Changed
+^^^^^^^
+- The consistency checks are now more robust towards errors. If performing the check itself
+  causes an error (e.g. because of wrong types or missing attributes), we handle the exception
+  and emit only a warning
+
+Fixed
+^^^^^
+- Fixed a bug in :meth:`tenpy.networks.mpo.MPO.to_TermList`. A one-off error when handling
+  the ``max_range`` parameter caused some long range terms to be missing.
+- Fixed a bug in the comparison of :class:`~tenpy.linalg.charges.LegCharge`s, see :issue:`470`.
+- Fixed multiple bugs in the consistency checks: We had bugs for ExpMPOEvolution with imaginary time
+  and for DMRG with the IrregularLattice.
+
+

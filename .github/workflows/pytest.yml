@@ -26,8 +26,8 @@ jobs:
     strategy:
       max-parallel: 5
       matrix:
-        # Note: python 3.12 is covered by code_coverage.yml
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        # Note: python 3.13 is covered by code_coverage.yml
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
     - name: Checkout
@@ -49,6 +49,10 @@ jobs:
       run: |
         python -m build .
         python -m pip install ".[io, test, extra]"
+    
+    - name: Show tenpy config
+      run: |
+        python -c "import tenpy; tenpy.show_config()"
     
     - name: Run pytest
       # configuration in pyproject.toml

@@ -2,7 +2,7 @@
 
 .. todo ::     add further terms (e.g. c^dagger c^dagger + h.c.) to the Hamiltonian.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 
 from .model import CouplingMPOModel, NearestNeighborModel
@@ -46,6 +46,7 @@ class FermionModel(CouplingMPOModel):
             For ``'best'``, we check the parameters what can be preserved.
         J, V, mu : float | array
             Hopping, interaction and chemical potential as defined for the Hamiltonian above.
+            Defaults to ``J=V=1`` and ``mu=0``.
         phi_ext : float
             For 2D lattices and periodic y boundary conditions only.
             External magnetic flux 'threaded' through the cylinder.

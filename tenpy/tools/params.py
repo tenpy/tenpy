@@ -2,7 +2,7 @@
 
 See the doc-string of :class:`Config` for details.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import warnings
 import numpy

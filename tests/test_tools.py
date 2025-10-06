@@ -1,5 +1,5 @@
 """A collection of tests for tenpy.tools submodules."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import numpy.testing as npt
@@ -305,7 +305,38 @@ def test_convert_memory_units():
 
 def test_setup_logging():
     tenpy.tools.misc.setup_logging(to_stdout="INFO", skip_setup=False)
-    
+
+
+def test_fixes_consistency_check_IrregularLattice():
+    # tests if the bug reported at https://tenpy.johannes-hauschild.de/viewtopic.php?t=757 is fixed.
+
+    class SpinModel_triangular_finite(tenpy.models.CouplingMPOModel):
+        def init_sites(self, model_params):
+            return tenpy.SpinHalfSite(conserve=None, sort_charge=True)
+
+        def init_terms(self, model_params):
+            self.add_onsite(-1, 0, 'Sz')
+
+        def init_lattice(self, model_params):
+            regular_lat = tenpy.Triangular(5, 5, self.init_sites(model_params))
+            return tenpy.IrregularLattice(regular_lat, remove=[(0, 0, 0)])
+
+    model = SpinModel_triangular_finite({})
+
+    ad_hoc_fix = False
+    if ad_hoc_fix:
+        model.lat.N_sites_per_ring = 1
+
+    psi = tenpy.MPS.from_lat_product_state(model.lat, [[['up']]])
+    dmrg_params = dict(max_sweeps=2)
+    _ = tenpy.algorithms.dmrg.run(psi, model, dmrg_params)
+
+
+def test_failing_consistency_check():
+    # compare function fails due to complex not being comparable with <=
+    tools.misc.consistency_check(1.2 + 1.j, {}, 'a', 1., '<')
+    # this should raise a logger error and print the taceback there,
+    # but the program should continue
 
 if __name__ == "__main__":
     import tempfile

@@ -1,8 +1,9 @@
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
+from tenpy.models.hofstadter import HofstadterBosons, HofstadterFermions
+from test_model import check_general_model
+import pytest
 import itertools
 import math
-
-import pytest
 from test_model import check_general_model
 
 from tenpy.algorithms import exact_diag

@@ -8,7 +8,7 @@ For production, you should probably use the
 :class:`~tenpy.simulations.GroundStateSearch.OrthogonalExcitations` class,
 but this example might be helpful to see the general idea.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 

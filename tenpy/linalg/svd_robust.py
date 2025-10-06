@@ -21,7 +21,7 @@ The idea is that you just import the `svd` from this module and use it as replac
 >>> from tenpy.linalg.svd_robust import svd
 >>> U, S, VT = svd([[1., 1.], [0., 1.]])
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import scipy

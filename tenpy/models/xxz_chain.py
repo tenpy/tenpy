@@ -3,7 +3,7 @@
 The XXZ chain is contained in the more general :class:`~tenpy.models.spins.SpinChain`; the idea of
 this module is more to serve as a pedagogical example for a model.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from .lattice import Site, Chain
 from .model import CouplingModel, NearestNeighborModel, MPOModel, CouplingMPOModel
@@ -39,8 +39,11 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
 
         L : int
             Length of the chain.
+        conserve : 'parity' | None
+            What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
         Jxx, Jz, hz : float | array
             Coupling as defined for the Hamiltonian above.
+            Defaults to ``Jxx=Jz=1`` without field ``hz=0``.
         bc_MPS : {'finite' | 'infinite'}
             MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
         sort_charge : bool
@@ -55,12 +58,20 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         Jz = model_params.get('Jz', 1., 'real_or_array')
         hz = model_params.get('hz', 0., 'real_or_array')
         bc_MPS = model_params.get('bc_MPS', 'finite', str)
+        conserve = model_params.get('conserve', 'best', str)
+        if conserve == 'best':
+            conserve = 'Sz'
         sort_charge = model_params.get('sort_charge', True, bool)
         # 1-3):
         USE_PREDEFINED_SITE = False
         if not USE_PREDEFINED_SITE:
             # 1) charges of the physical leg. The only time that we actually define charges!
-            leg = npc.LegCharge.from_qflat(npc.ChargeInfo([1], ['2*Sz']), [1, -1])
+            if conserve == 'Sz':
+                leg = npc.LegCharge.from_qflat(npc.ChargeInfo([1], ['2*Sz']), [1, -1])
+            elif conserve == 'parity':
+                leg = npc.LegCharge.from_qflat(npc.ChargeInfo([2], ['parity_Sz']), [1, 0])
+            else:
+                leg = npc.LegCharge.from_trivial(2)
             # 2) onsite operators
             Sp = [[0., 1.], [0., 0.]]
             Sm = [[0., 0.], [1., 0.]]
@@ -71,7 +82,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         else:
             # there is a site for spin-1/2 defined in TeNPy, so just we can just use it
             # replacing steps 1-3)
-            site = SpinHalfSite(conserve='Sz', sort_charge=sort_charge)
+            site = SpinHalfSite(conserve=conserve, sort_charge=sort_charge)
         # 4) lattice
         bc = 'open' if bc_MPS == 'finite' else 'periodic'
         lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
@@ -106,7 +117,10 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
 
     def init_sites(self, model_params):
         sort_charge = model_params.get('sort_charge', True, bool)
-        return SpinHalfSite(conserve='Sz', sort_charge=sort_charge)  # use predefined Site
+        conserve = model_params.get('conserve', 'best', str)
+        if conserve == 'best':
+            conserve = 'Sz'
+        return SpinHalfSite(conserve=conserve, sort_charge=sort_charge)  # use predefined Site
 
     def init_terms(self, model_params):
         # read out parameters

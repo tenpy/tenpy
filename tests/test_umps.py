@@ -1,5 +1,5 @@
 """A collection of tests for :module:`tenpy.networks.uniform_mps`."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 from tenpy.networks import mps, site, uniform_mps

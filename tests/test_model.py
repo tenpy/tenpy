@@ -1,5 +1,5 @@
 """A collection of tests for (classes in) :mod:`tenpy.models.model`."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import itertools
 

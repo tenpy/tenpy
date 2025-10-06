@@ -1,6 +1,6 @@
 """Algorithms for using Purification."""
 
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import logging
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 from ..linalg import np_conserved as npc
 from . import tebd
 from .mps_common import VariationalApplyMPO, TwoSiteH
-from .truncation import svd_theta, TruncationError
+from ..linalg.truncation import svd_theta, TruncationError
 from .disentangler import get_disentangler
 
 __all__ = ['PurificationTwoSiteU', 'PurificationApplyMPO', 'PurificationTEBD', 'PurificationTEBD2']
