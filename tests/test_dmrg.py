@@ -2,8 +2,11 @@
 # Copyright (C) TeNPy Developers, Apache license
 
 import tenpy.linalg.np_conserved as npc
+from tenpy.models.model import CouplingModel, MPOModel
+from tenpy.networks.site import SpinHalfSite
 from tenpy.models.tf_ising import TFIChain
 from tenpy.models.spins import SpinChain
+from tenpy.models.lattice import Chain
 from tenpy.algorithms import dmrg, dmrg_parallel
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.networks import mps
@@ -332,8 +335,26 @@ def test_dmrg_mixer_cleanup(L, bc_MPS):
         assert np.allclose(engine.psi.expectation_value(op), old_psi.expectation_value(op))
 
 
-def test_segment_dmrg():
-    model = TFIChain(dict(J=1, g=1.5, L=2, bc_MPS='infinite'))
+class _TransverseClusterModel(CouplingModel, MPOModel):
+    def __init__(self, model_params):
+        L = model_params.get('L', 2)
+        B = model_params.get('B', 0)
+        bc_MPS = model_params.get('bc_MPS', 'infinite')
+        site = SpinHalfSite(conserve=None)
+        lat = Chain(L, site, bc='periodic', bc_MPS=bc_MPS)
+        CouplingModel.__init__(self, lat)
+        self.add_onsite(-B, 0, 'Sigmax')
+        self.add_multi_coupling(-1, [('Sigmaz', -1, 0), ('Sigmax', 0, 0), ('Sigmaz', 1, 0)])
+        MPOModel.__init__(self, lat, self.calc_H_MPO())
+
+
+@pytest.mark.parametrize('model', ['tfi', 'cluster'])
+def test_segment_dmrg(model):
+    if model == 'tfi':
+        model = TFIChain(dict(J=1, g=1.5, L=2, bc_MPS='infinite'))
+    elif model == 'cluster':
+        # model from https://tenpy.johannes-hauschild.de/viewtopic.php?t=691
+        model = _TransverseClusterModel({})
 
     # first dmrg run for *infinite* lattice
     psi0_infinite = mps.MPS.from_lat_product_state(model.lat, [['up']])
