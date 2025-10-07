@@ -330,3 +330,35 @@ def test_dmrg_mixer_cleanup(L, bc_MPS):
     print(f'Check that expectation values have not changed...')
     for op in ['Sx', 'Sz']:
         assert np.allclose(engine.psi.expectation_value(op), old_psi.expectation_value(op))
+
+
+def test_segment_dmrg():
+    model = TFIChain(dict(J=1, g=1.5, L=2, bc_MPS='infinite'))
+
+    # first dmrg run for *infinite* lattice
+    psi0_infinite = mps.MPS.from_lat_product_state(model.lat, [['up']])
+    trunc_params = dict(chi_max=100, svd_min=1e-10)
+    dmrg_params = dict(mixer=True, max_E_err=1e-10, trunc_params=trunc_params)
+    eng0 = dmrg.TwoSiteDMRGEngine(psi0_infinite, model, dmrg_params)
+    eng0.run()
+
+    model_segment = model.extract_segment(enlarge=10)
+    psi0_segment = psi0_infinite.extract_segment(*model_segment.lat.segment_first_last)
+    init_env_data = eng0.env.get_initialization_data(*model_segment.lat.segment_first_last)
+
+    psi1_segment = psi0_segment.copy()
+    psi1_segment.perturb()
+    eng1 = dmrg.TwoSiteDMRGEngine(psi1_segment, model_segment, dmrg_params,
+                                 resume_data={'init_env_data': init_env_data})
+    eng1.run()
+
+    assert np.allclose(psi1_segment.entanglement_entropy(),
+                       np.mean(psi0_infinite.entanglement_entropy()))
+    assert np.allclose(psi0_infinite.expectation_value('Sz', [0]),
+                       psi1_segment.expectation_value('Sz', [0]))
+    assert np.allclose(psi0_infinite.expectation_value('Sx', [0]),
+                       psi1_segment.expectation_value('Sx', [0]))
+
+    with pytest.warns():
+        eng0.options.warn_unused()
+        eng1.options.warn_unused()
