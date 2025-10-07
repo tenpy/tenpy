@@ -624,8 +624,9 @@ class DMRGEngine(IterativeSweeps):
             psi.set_B(j, A_new, form='A')
 
             old_UL, old_VR = psi.segment_boundaries
-            new_UL = npc.tensordot(old_UL, U, axes=['vR', 'vL'])
-            psi.segment_boundaries = (new_UL, old_VR)
+            if old_UL is not None:
+                new_UL = npc.tensordot(old_UL, U, axes=['vR', 'vL'])
+                psi.segment_boundaries = (new_UL, old_VR)
 
             for env in self._all_envs:
                 update_ket = env.ket is psi
@@ -648,8 +649,9 @@ class DMRGEngine(IterativeSweeps):
             psi.set_B(j, B_new, form='B')
 
             old_UL, old_VR = psi.segment_boundaries
-            new_VR = npc.tensordot(V, old_VR, axes=['vR', 'vL'])
-            psi.segment_boundaries = (old_UL, new_VR)
+            if old_VR is not None:
+                new_VR = npc.tensordot(V, old_VR, axes=['vR', 'vL'])
+                psi.segment_boundaries = (old_UL, new_VR)
 
             for env in self._all_envs:
                 update_ket = env.ket is psi

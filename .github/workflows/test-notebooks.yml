@@ -46,9 +46,7 @@ jobs:
     - name: Run pytest on notebooks
       # Note: we exclude the dmrg mixer notebook 12, since it runs very long.
       # Note: unlike in the codebase, we ignore warnings (``-W ignore`` flag)
-      # TODO: Excluding 14 temporarily, until it is debugged.
       run: |
         pytest --nbmake notebooks \
           --ignore=notebooks/12_dmrg_mixer.ipynb \
-          --ignore=notebooks/14_segment_half_infinite.ipynb \
           -W ignore
