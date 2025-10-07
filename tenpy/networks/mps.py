@@ -5610,16 +5610,26 @@ class BaseEnvironment(metaclass=ABCMeta):
                 vR_ket = self.ket.get_B(self.L - 1 + start_env_sites, 'B').get_leg('vR')
                 vR_bra = self.bra.get_B(self.L - 1 + start_env_sites, 'B').get_leg('vR')
         if init_LP is not None:
-            compatible = (init_LP.get_leg('vR') == vL_ket.conj()
-                          and init_LP.get_leg('vR*') == vL_bra)
-            if not compatible:
-                warnings.warn("dropping `init_LP` with incompatible MPS legs")
+            incompatible_legs = []
+            if init_LP.get_leg('vR') != vL_ket.conj():
+                incompatible_legs.append('vR')
+            if init_LP.get_leg('vR*') != vL_bra:
+                incompatible_legs.append('vR*')
+            if incompatible_legs:
+                msg = (f'dropping `init_LP` with incompatible virtual legs: '
+                       f'{", ".join(incompatible_legs)}')
+                warnings.warn(msg, stacklevel=2)
                 init_LP = None
         if init_RP is not None:
-            compatible = (init_RP.get_leg('vL') == vR_ket.conj()
-                          and init_RP.get_leg('vL*') == vR_bra)
-            if not compatible:
-                warnings.warn("dropping `init_RP` with incompatible MPS legs")
+            incompatible_legs = []
+            if init_RP.get_leg('vL') != vR_ket.conj():
+                incompatible_legs.append('vL')
+            if init_RP.get_leg('vL*') != vR_bra:
+                incompatible_legs.append('vL*')
+            if incompatible_legs:
+                msg = (f'dropping `init_RP` with incompatible virtual legs: '
+                       f'{", ".join(incompatible_legs)}')
+                warnings.warn(msg, stacklevel=2)
                 init_RP = None
         return init_LP, init_RP
 
