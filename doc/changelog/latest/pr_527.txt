@@ -1,0 +1,4 @@
+- Fixed a bug in the :class:`~tenpy.models.hofstadter` models, where the symmetric gauge was not
+  implemented correctly and yielded a different physical model. Removed the config options for
+  controlling the magnetic unit cell size, since in all well-configured cases they had no effect.
+  See :pull`527` for details.
