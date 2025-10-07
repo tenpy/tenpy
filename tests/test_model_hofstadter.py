@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 
 
-@pytest.mark.slow
 def test_HofstadterBosons():
     model_pars = {
         'Lx': 3,
@@ -28,7 +27,6 @@ def test_HofstadterBosons():
     check_general_model(HofstadterBosons, model_pars, {'bc_MPS': ['finite', 'infinite']})
 
 
-@pytest.mark.slow
 def test_HofstadterFermions():
     model_pars = {'Lx': 3, 'Ly': 3, 'phi': (1, 3), 'conserve': 'N', 'v': 0.456, 'mu': 0.123}
     check_general_model(HofstadterFermions, model_pars, {
