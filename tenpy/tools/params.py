@@ -382,7 +382,7 @@ class Config(MutableMapping):
             msg = "Deprecated option in {name!r}: {old!r} renamed to {new!r}"
             msg = msg.format(name=self.name, old=old_key, new=new_key)
             if extra_msg:
-                msg = '\n'.join(msg, extra_msg)
+                msg = f'{msg}\n{extra_msg}'
             warnings.warn(msg, FutureWarning, stacklevel=3)
             self.options[new_key] = self.options[old_key]
             self.unused.discard(old_key)
