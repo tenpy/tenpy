@@ -1,5 +1,5 @@
 # Copyright (C) TeNPy Developers, Apache license
-from tenpy.models.hofstadter import HofstadterBosons, HofstadterFermions
+from tenpy.models.hofstadter import HofstadterBosons, HofstadterFermions, hopping_phases
 from tenpy.algorithms.exact_diag import ExactDiag
 from test_model import check_general_model
 import numpy as np
@@ -21,9 +21,7 @@ def test_HofstadterBosons():
         'gauge': ['landau_x', 'landau_y'],
     })
     model_pars['gauge'] = 'symmetric'
-    model_pars['Lx'] = model_pars['Ly'] = 2
-    model_pars['mx'] = model_pars['my'] = 2
-    model_pars['phi'] = (1, 4)
+    model_pars['Lx'] = model_pars['Ly'] = 6
     check_general_model(HofstadterBosons, model_pars, {'bc_MPS': ['finite', 'infinite']})
 
 
@@ -34,9 +32,7 @@ def test_HofstadterFermions():
         'gauge': ['landau_x', 'landau_y'],
     })
     model_pars['gauge'] = 'symmetric'
-    model_pars['Lx'] = model_pars['Ly'] = 4
-    model_pars['phi'] = (1, 4)
-    model_pars['mx'] = model_pars['my'] = 2
+    model_pars['Lx'] = model_pars['Ly'] = 6
     check_general_model(HofstadterFermions, model_pars, {'bc_MPS': ['finite', 'infinite']})
 
 
@@ -59,6 +55,14 @@ _HofstadterFermions_spectra = {
 @pytest.mark.parametrize('gauge', ['landau_x', 'landau_y', 'symmetric'])
 def test_ED_spectrum_HofstadterFermions(bc_x, bc_y, gauge):
     model_params = dict(v=1, Lx=3, Ly=3, bc_x=bc_x, bc_y=bc_y, conserve='N', gauge=gauge)
+
+    if gauge == 'symmetric' and 'periodic' in [bc_x, bc_y]:
+        # smallest non-trivial system where symmetric gauge is commensurate is 4x4.
+        # but then ED is too slow for a quick test...
+        with pytest.raises(ValueError, match='incommensurate'):
+            _ = HofstadterFermions(model_params)
+        return
+
     model = HofstadterFermions(model_params)
     engine = ExactDiag(model)
     engine.build_full_H_from_mpo()
@@ -87,6 +91,14 @@ _HofstadterBosons_spectra = {
 @pytest.mark.parametrize('gauge', ['landau_x', 'landau_y', 'symmetric'])
 def test_ED_spectrum_HofstadterBosons(bc_x, bc_y, gauge):
     model_params = dict(U=1, Lx=3, Ly=3, bc_x=bc_x, bc_y=bc_y, conserve='N', Nmax=1, gauge=gauge)
+
+    if gauge == 'symmetric' and 'periodic' in [bc_x, bc_y]:
+        # smallest non-trivial system where symmetric gauge is commensurate is 4x4.
+        # but then ED is too slow for a quick test...
+        with pytest.raises(ValueError, match='incommensurate'):
+            _ = HofstadterBosons(model_params)
+        return
+
     model = HofstadterBosons(model_params)
     engine = ExactDiag(model)
     engine.build_full_H_from_mpo()
@@ -94,3 +106,62 @@ def test_ED_spectrum_HofstadterBosons(bc_x, bc_y, gauge):
     low_energy_spectrum = np.sort(engine.E)[:10]
     expect = _HofstadterBosons_spectra[bc_x, bc_y]
     assert np.allclose(low_energy_spectrum, expect)
+
+
+@pytest.mark.parametrize('lx, ly, p, q, commensurate_gauges',
+                         [(6, 6, 1, 3, 'all'),  # A
+                          (18, 18, 4, 9, 'all'),  # B
+                          (2, 5, 4, 9, None),  # C
+                          (2, 9, 4, 9, 'landau_y'),  # D
+                          ], ids='ABCD')
+@pytest.mark.parametrize('pbc_x', [True, False])
+@pytest.mark.parametrize('pbc_y', [True, False])
+@pytest.mark.parametrize('gauge', [None, 'landau_x', 'landau_y', 'symmetric'])
+def test_hopping_phases(lx, ly, p, q, commensurate_gauges, pbc_x, pbc_y, gauge):
+    if commensurate_gauges is None:
+        should_fail = True
+        if not pbc_x and gauge in ['landau_x', None]:
+            should_fail = False
+        if not pbc_y and gauge in ['landau_y', None]:
+            should_fail = False
+        if not pbc_x and not pbc_y:
+            should_fail = False
+    elif commensurate_gauges == 'all':
+        should_fail = False
+    elif commensurate_gauges == 'landau_y':
+        if gauge in ['landau_y', None]:
+            should_fail = False
+        elif gauge == 'landau_x':
+            should_fail = pbc_x
+        elif gauge == 'symmetric':
+            should_fail = pbc_x or pbc_y
+
+    if should_fail:
+        match = 'None of the supported gauge choices' if gauge is None else 'incommensurate'
+        with pytest.raises(ValueError, match=match):
+            _ = hopping_phases(p=p, q=q, Lx=lx, Ly=ly, pbc_x=pbc_x, pbc_y=pbc_y, gauge=gauge)
+        return
+
+    phases_x, phases_y = hopping_phases(
+        p=p, q=q, Lx=lx, Ly=ly, pbc_x=pbc_x, pbc_y=pbc_y, gauge=gauge
+    )
+
+    # correct shape?
+    assert phases_x.shape == (lx if pbc_x else lx - 1, ly)
+    assert phases_y.shape == (lx, ly if pbc_y else ly - 1)
+
+    # are phase factors?
+    assert np.allclose(np.abs(phases_x), 1)
+    assert np.allclose(np.abs(phases_y), 1)
+
+    # check enclosed phase on every plaquette
+    expect_plaquette_phase = np.exp(2.j * np.pi * p / q)
+    plaquettes_x_range = range(lx) if pbc_x else range(lx - 1)
+    plaquettes_y_range = range(ly) if pbc_y  else range(ly - 1)
+    for x in plaquettes_x_range:
+        for y in plaquettes_y_range:
+            phase = phases_x[x, y]
+            phase *= phases_y[(x + 1) % lx, y]
+            phase *= np.conj(phases_x[x, (y + 1) % ly])
+            phase *= np.conj(phases_y[x, y])
+            assert np.allclose(phase, expect_plaquette_phase)
