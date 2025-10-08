@@ -807,8 +807,10 @@ class Lattice:
             return A
         # choose the appropriate index arrays
         if u is None:
+            assert A.shape[axes[0]] == self.N_sites, 'Invalid shape'
             idx = self._mps2lat_vals_idx
         else:
+            assert A.shape[axes[0]] == self.N_cells, 'Invalid shape'
             idx = self._mps2lat_vals_idx_fix_u[u]
         return np.take(A, idx, axis=axes[0])
 
