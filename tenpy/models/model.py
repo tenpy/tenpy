@@ -1645,8 +1645,11 @@ class CouplingModel(Model):
         if plus_hc:
             hc_op_i = example_site_i.get_hc_op_name(op_i)
             hc_op_j = example_site_j.get_hc_op_name(op_j)
+            hc_opstr = example_site_j.get_hc_op_name(op_string)
             self.exp_decaying_terms.add_exponentially_decaying_coupling(
-                np.conj(strength), np.conj(lambda_), hc_op_i, hc_op_j, subsites, subsites_start, op_string)
+                np.conj(strength), np.conj(lambda_), hc_op_i, hc_op_j, subsites, subsites_start,
+                hc_opstr
+            )
 
     def add_exponentially_decaying_centered_terms(self, strength, lambda_, op_i, op_j, i,
                                                   subsites=None, op_string=None, plus_hc=False):
