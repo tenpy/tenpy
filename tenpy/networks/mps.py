@@ -6204,7 +6204,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
 
         self._init_from_Ns_Ms(bra_N, ket_M, transpose, charge_sector, ket._p_label, not ket.finite)
 
-    def _init_from_Ns_Ms(self, bra_N, ket_M, transpose, charge_sector, p_label, infinite=True):
+    def _init_from_Ns_Ms(self, bra_N, ket_M, transpose, charge_sector, p_label, infinite=True, conjugate_Ns=True):
         """Initialize directly from N and M.
 
         bra_N and ket_M are *not* reversed for transpose=False, i.e. ordered left to right.
@@ -6218,15 +6218,23 @@ class TransferMatrix(sparse.NpcLinearOperator):
             label = '(vL.vL*)'  # what we act on
             label_split = ['vL', 'vL*']
             M = self._ket_M = [B.itranspose(['vL'] + p + ['vR']) for B in reversed(ket_M)]
-            N = self._bra_N = [
-                B.conj().itranspose(pstar + ['vR*', 'vL*']) for B in reversed(bra_N)
-            ]
+            if conjugate_Ns:
+                N = self._bra_N = [
+                    B.conj().itranspose(pstar + ['vR*', 'vL*']) for B in reversed(bra_N)
+                ]
+            else:
+                N = self._bra_N = [
+                    B.itranspose(pstar + ['vR*', 'vL*']) for B in reversed(bra_N)
+                ]
             pipe = npc.LegPipe([M[0].get_leg('vR'), N[0].get_leg('vR*')], qconj=-1).conj()
         else:  # left to right
             label = '(vR*.vR)'  # mathematically more natural
             label_split = ['vR*', 'vR']
             M = self._ket_M = [B.itranspose(['vL'] + p + ['vR']) for B in ket_M]
-            N = self._bra_N = [B.conj().itranspose(['vR*', 'vL*'] + pstar) for B in bra_N]
+            if conjugate_Ns:
+                N = self._bra_N = [B.conj().itranspose(['vR*', 'vL*'] + pstar) for B in bra_N]
+            else:
+                N = self._bra_N = [B.itranspose(['vR*', 'vL*'] + pstar) for B in bra_N]
             pipe = npc.LegPipe([N[0].get_leg('vL*'), M[0].get_leg('vL')], qconj=+1).conj()
         dtype = np.promote_types(M[0].dtype, N[0].dtype)
         self.pipe = pipe
@@ -6250,7 +6258,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
                              "by a factor of " + str(enlarge_factors))
 
     @classmethod
-    def from_Ns_Ms(cls, bra_N, ket_M, transpose=False, charge_sector=0, p_label=['p']):
+    def from_Ns_Ms(cls, bra_N, ket_M, transpose=False, charge_sector=0, p_label=['p'], conjugate_Ns=True):
         """Initialize a TransferMatrix directly from the MPS tensors.
 
         Parameters
@@ -6266,10 +6274,12 @@ class TransferMatrix(sparse.NpcLinearOperator):
             Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in charge sector 0.
         p_label : list of str
             Physical label(s) of the tensors.
+        conjugate_Ns : bool
+            If False, assumes that bra_N is already complex conjugated.
         """
         self = cls.__new__(cls)
         self.shift_bra = self.shift_ket = 0
-        self._init_from_Ns_Ms(bra_N, ket_M, transpose, charge_sector, p_label)
+        self._init_from_Ns_Ms(bra_N, ket_M, transpose, charge_sector, p_label, conjugate_Ns=conjugate_Ns)
         return self
 
     @property
