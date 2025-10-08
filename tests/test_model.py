@@ -388,6 +388,7 @@ def test_model_plus_hc(L=6):
     assert len(record) > 0
     for w in record:
         assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
+
     t = np.random.random(L - 1)
     with pytest.warns(UserWarning) as record:
         m1.add_coupling(t, 0, 'Sp', 0, 'Sm', 1)
@@ -397,12 +398,34 @@ def test_model_plus_hc(L=6):
     assert len(record) > 0
     for w in record:
         assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
+
+    # add_coupling with a non-hermitian op-string
+    t = np.random.random(L - 1)
+    with pytest.warns(UserWarning) as record:
+        m1.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, op_string='Sp')
+        m1.add_coupling(t, 0, 'Sp', 0, 'Sm', -1, op_string='Sm')
+        m2.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, op_string='Sp', plus_hc=True)
+        m3.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, op_string='Sp', plus_hc=True)
+    assert len(record) > 0
+    for w in record:
+        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
+
     t2 = np.random.random(L - 1)
     with pytest.warns(UserWarning) as record:
         m1.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)])
         m1.add_multi_coupling(t2, [('Sz', [0], 0), ('Sp', [0], 0), ('Sm', [+1], 0)])
         m2.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
         m3.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
+    assert len(record) > 0
+    for w in record:
+        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
+
+    t2 = np.random.random(L - 1)
+    with pytest.warns(UserWarning) as record:
+        m1.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], op_string='Sp')
+        m1.add_multi_coupling(t2, [('Sz', [0], 0), ('Sp', [0], 0), ('Sm', [+1], 0)], op_string='Sm')
+        m2.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], op_string='Sp', plus_hc=True)
+        m3.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], op_string='Sp', plus_hc=True)
     assert len(record) > 0
     for w in record:
         assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
@@ -460,6 +483,17 @@ def test_model_plus_hc(L=6):
         m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sm', 'Sz')
         m2.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', plus_hc=True)
         m3.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', plus_hc=True)
+    assert len(record) > 0
+    for w in record:
+        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
+
+    compare(m1, m2, m3, use_bonds=False)
+
+    with pytest.warns(UserWarning) as record:
+        m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', op_string='Sm')
+        m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sm', 'Sz', op_string='Sp')
+        m2.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', op_string='Sm', plus_hc=True)
+        m3.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', op_string='Sm', plus_hc=True)
     assert len(record) > 0
     for w in record:
         assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
