@@ -8,11 +8,14 @@ logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from . import tebd
-from .mps_common import VariationalApplyMPO, TwoSiteH
+from .mps_common import VariationalApplyMPO, TwoSiteH, OneSiteH
 from ..linalg.truncation import svd_theta, TruncationError
+from ..linalg.krylov_based import LanczosEvolution
 from .disentangler import get_disentangler
+from .tdvp import TwoSiteTDVPEngine
 
-__all__ = ['PurificationTwoSiteU', 'PurificationApplyMPO', 'PurificationTEBD', 'PurificationTEBD2']
+
+__all__ = ['PurificationTwoSiteU', 'PurificationOneSiteU', 'PurificationTwoSiteTDVPEngine', 'PurificationApplyMPO', 'PurificationTEBD', 'PurificationTEBD2']
 
 
 class PurificationTwoSiteU(TwoSiteH):
@@ -31,6 +34,84 @@ class PurificationTwoSiteU(TwoSiteH):
         super().combine_Heff()  # almost correct
         self.acts_on = ['(vL.p0)', 'q0', 'q1', '(p1.vR)']  # overwrites class attribute!
 
+
+class PurificationOneSiteU(OneSiteH):
+    """Variant of `OneSiteH` suitable for purification.
+
+    The MPO gets only applied to the physical leg `p0`; the ancilla leg `q0`, of
+    `theta` is ignored.
+    """
+    length = 1
+    acts_on = ['vL', 'p0', 'q0', 'vR']
+
+    # initialization, matvec, combine_theta and adjoint derived from `TwoSiteH` work.
+    # to_matrix() should in general multiply with identity on q0/q1; but it isn't used anyways.
+
+    def combine_Heff(self):
+        super().combine_Heff()  # almost correct
+        if self.move_right:
+            self.acts_on = ['(vL.p0)', 'q0', 'vR']  # overwrites class attribute!
+        else:
+            self.acts_on = ['vL', 'q0', '(p0.vR)']  # overwrites class attribute!
+
+class PurificationTwoSiteTDVPEngine(TwoSiteTDVPEngine):
+    """Variant of `TwoSiteTDVPEngine` suitable for purification.
+
+    We overwrite the `update_local` methods to handle the ancilla `q` leg.
+    """
+    EffectiveH = PurificationTwoSiteU
+
+    def update_local(self, theta, **kwargs):
+        i0 = self.i0
+        L = self.psi.L
+
+        dt = -0.5j * self.dt
+        if i0 == L - 2:
+            dt = 2. * dt  # instead of updating the last pair of sites twice, we double the time
+        # update two-site wavefunction
+        theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_params).run(dt)
+        if npc.norm(theta.unary_blockwise(np.imag)) < self.imaginary_cutoff: # Remove small imaginary part
+            # Needed for Lindblad evolution in Hermitian basis where density matrix / operator must be real
+            theta.iunary_blockwise(np.real)
+        if self.combine:
+            theta.itranspose(['(vL.p0.q0)', '(p1.q1.vR)'])  # shouldn't do anything
+        else:
+            theta = theta.combine_legs([['vL', 'p0', 'q0'], ['p1', 'q1', 'vR']], new_axes=[0, 1], qconj=[+1, -1])
+        qtotal_i0 = self.psi.get_B(i0, form=None).qtotal
+        U, S, VH, err, renormalize = svd_theta(theta,
+                                     self.trunc_params,
+                                     qtotal_LR=[qtotal_i0, None],
+                                     inner_labels=['vR', 'vL'])
+        self.psi.norm *= renormalize
+
+        B0 = U.split_legs(['(vL.p0.q0)']).replace_labels(['p0', 'q0'], ['p', 'q'])
+        B1 = VH.split_legs(['(p1.q1.vR)']).replace_labels(['p1', 'q1'], ['p', 'q'])
+
+        self.psi.set_B(i0, B0, form='A')  # left-canonical
+        self.psi.set_B(i0 + 1, B1, form='B')  # right-canonical
+        self.psi.set_SR(i0, S)
+        update_data = {'err': err, 'N': N, 'U': U, 'VH': VH}
+        # earlier update of environments, since they are needed for the one_site_update()
+        super().update_env(**update_data)  # new environments, e.g. LP[i0+1] on right move.
+
+        if self.move_right:
+            # note that i0 == L-2 is left-moving
+            self.one_site_update(i0 + 1, 0.5j * self.dt)
+        elif (self.move_right is False):
+            self.one_site_update(i0, 0.5j * self.dt)
+        # for the last update of the sweep, where move_right is None, there is no one_site_update
+
+        return update_data
+
+    def one_site_update(self, i, dt):
+        H1 = PurificationOneSiteU(self.env, i, combine=False)
+        theta = self.psi.get_theta(i, n=1, cutoff=self.S_inv_cutoff)
+        theta = H1.combine_theta(theta)
+        theta, _ = LanczosEvolution(H1, theta, self.lanczos_params).run(dt)
+        if npc.norm(theta.unary_blockwise(np.imag)) < self.imaginary_cutoff: # Remove small imaginary part
+            # Needed for Lindblad evolution in Hermitian basis where density matrix / operator must be real
+            theta.iunary_blockwise(np.real)
+        self.psi.set_B(i, theta.replace_labels(['p0', 'q0'], ['p', 'q']), form='Th')
 
 class PurificationApplyMPO(VariationalApplyMPO):
     """Variant of `VariationalApplyMPO` suitable for purification."""
