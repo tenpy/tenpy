@@ -1140,7 +1140,7 @@ class MPO:
             Precision threshold what counts as zero.
         max_range : None | int
             Ignored for finite MPS; for finite MPS we consider only the terms contained in the
-            sites with indices ``range(self.L + max_range)``.
+            sites with indices ``range(self.L + 2 * max_range)``.
             None defaults to :attr:`max_range` (or :attr:`L` in case this is infinite or None).
 
         Returns
@@ -1149,32 +1149,18 @@ class MPO:
             Whether `self` equals `other` to the desired precision.
         """
         if self.finite:
-            max_i = self.L
+            num_sites = self.L
+        elif max_range is not None and max_range < np.inf:
+            num_sites = self.L + 2 * max_range
+        elif self.max_range is not None and self.max_range < np.inf:
+            num_sites = self.L + 2 * self.max_range
         else:
-            if max_range is None:
-                if self.max_range is None or self.max_range == np.inf:
-                    max_range = self.L
-                else:
-                    max_range = self.max_range
-            max_i = self.L + max_range
-
-        def overlap(A, B):
-            """<A|B> on sites 0 to max_i."""
-            wA = A.get_W(0).take_slice([A.get_IdL(0)], ['wL']).conj()
-            wB = B.get_W(0).take_slice([B.get_IdL(0)], ['wL'])
-            trAdB = npc.tensordot(wA, wB, axes=[['p*', 'p'], ['p', 'p*']])  # wR* wR
-            i = 0
-            for i in range(1, max_i):
-                trAdB = npc.tensordot(trAdB, A.get_W(i).conj(), axes=['wR*', 'wL*'])
-                trAdB = npc.tensordot(trAdB,
-                                      B.get_W(i),
-                                      axes=[['wR', 'p*', 'p'], ['wL', 'p', 'p*']])
-            trAdB = trAdB.itranspose(['wR*', 'wR'])[A.get_IdR(i), B.get_IdR(i)]
-            return trAdB
-
-        self_other = 2. * np.real(overlap(other, self))
-        norms = overlap(self, self) + overlap(other, other)
-        return abs(norms - self_other) < eps * abs(norms)
+            num_sites = self.L + 2 * self.L
+        ov = self.overlap(other, understood_infinite=True, num_sites=num_sites)
+        s_norm = self.overlap(self, understood_infinite=True, num_sites=num_sites)
+        o_norm = other.overlap(other, understood_infinite=True, num_sites=num_sites)
+        dist = abs(s_norm - 2 * np.real(ov) + o_norm)
+        return dist < eps * abs(s_norm + o_norm)
 
     def apply(self, psi, options):
         """Apply `self` to an MPS `psi` and compress `psi` in place.
@@ -1365,6 +1351,117 @@ class MPO:
                 psi.set_B(i, U, 'A')
 
         return trunc_err
+
+    def overlap(self, other, understood_infinite: bool = False, num_sites: int = None):
+        """Overlap between two MPOs.
+
+        For finite MPOs, this is the Frobenius inner product::
+
+            <self|other> = Tr[hconj(self) @ other]
+
+        For inifinite MPOs, the TD limit of that overlap is always either 0, 1 or infinite,
+        i.e. it is not helpful. Instead we choose a finite section of the infinite overlap diagram
+        and project onto ``IdL`` on the left and ``IdR`` on the right. This means we effectively
+        compute the overlap between those contributions to the MPOs that act trivially outside
+        the finite section. The main motivation is a distance measure in :meth:`is_equal`.
+
+        Parameters
+        ----------
+        other : MPO
+            The other operator. Must have the same :attr:`finite`, and if finite the same :attr:`L`.
+        understood_infinite : bool
+            For infinite MPOs, the overlap has an unusual definition, see above.
+            Set this flag to confirm you undertand this and supress the warning.
+        num_sites : int
+            Ignored for finite MPOs. For infinite MPOs, the number of sites that we contract.
+            We project onto IdL on site ``0``, contract tensors from ``range(num_sites)``, and
+            then project onto IdR. By default, we use ``L + 2 * max_range`` of whichever MPO has the
+            larger value, where we substitute ``L`` for an unknown or infinite ``max_range``.
+        """
+        if self.finite and other.finite:
+            assert self.L == other.L
+            num_sites = self.L
+        elif not self.finite and not other.finite:
+            if num_sites is None:
+                self_max_range = self.max_range
+                if self_max_range is None or self_max_range == np.inf:
+                    self_max_range = self.L
+                other_max_range = other.max_range
+                if other_max_range is None or other_max_range == np.inf:
+                    other_max_range = other.L
+                num_sites = max(self.L + 2 * self_max_range, other.L + 2 * other.max_range)
+            assert num_sites >= self.L
+            if not understood_infinite:
+                msg = ('The overlap between infinte MPOs has an unusual definition. Make sure '
+                       'you understand it, then set `understood_infinite=True` to supress '
+                       'this warning.')
+                warnings.warn(msg, stacklevel=2)
+        else:
+            raise ValueError('cant take overlap between finite and infinite MPO')
+
+        if self.explicit_plus_hc and other.explicit_plus_hc:
+            # <A|B> = Tr[hc(A) B] = conj(Tr[hc(B) A]) = conj(Tr[A hc(B)]) = conj(<hc(A)|hc(B)>)
+            # <A + hc(A) | B + hc(B)> = <A|B> + <hc(A)|B> + <A|hc(B)> + <hc(A)|hc(B)>
+            #                         = <A|B> + <hc(A)|B> + conj(<hc(A)|B>) + conj(<A|B>)
+            #                         = 2 Re[ <A|B> + <hc(A)|B> ]
+            A_B = self._overlap_no_hc(other, num_sites=num_sites)
+            hcA_B = self._overlap_no_hc(other, num_sites=num_sites, hconj_self=True)
+            ov = 2 * np.real(A_B + hcA_B)
+
+        elif self.explicit_plus_hc:
+            A_B = self._overlap_no_hc(other, num_sites=num_sites)
+            hcA_B = self._overlap_no_hc(other, num_sites=num_sites, hconj_self=True)
+            ov = A_B + hcA_B
+
+        elif other.explicit_plus_hc:
+            # <A|B + hc(B)> = <A|B> + <A|hc(B)> = <A|B> + conj(<hc(A)|B>)
+            A_B = self._overlap_no_hc(other, num_sites=num_sites)
+            hcA_B = self._overlap_no_hc(other, num_sites=num_sites, hconj_self=True)
+            ov = A_B + np.conj(hcA_B)
+
+        else:
+            ov = self._overlap_no_hc(other, num_sites=num_sites)
+
+        return ov
+
+    def _overlap_no_hc(self, other, num_sites: int, hconj_self: bool = False):
+        """Internal version of :meth:`overlap` that ignores :attr:`explicit_plus_hc`.
+
+        This computes the overlap for the MPO given by the tensors, ignoring any explicit hc.
+        If ``hconj_self``, we use the hc of self instead, i.e. compute
+        ``<hc(self)|other> = Tr[self @ other]``.
+        """
+        wA = self.get_W(0).take_slice([self.get_IdL(0)], ['wL'])
+        wB = other.get_W(0).take_slice([other.get_IdL(0)], ['wL'])
+
+        if hconj_self:
+            wA = wA.replace_label('wR', 'wR*')
+        else:
+            wA = wA.conj()
+        res = npc.tensordot(wA, wB, axes=[['p*', 'p'], ['p', 'p*']])  # wR* wR
+
+        for i in range(1, num_sites):
+            if hconj_self:
+                wA = self.get_W(i).replace_labels(['wL', 'wR'], ['wL*', 'wR*'])
+            else:
+                wA = self.get_W(i).conj()
+            wB = other.get_W(i)
+            res = npc.tensordot(res, wA, axes=['wR*', 'wL*'])
+            res = npc.tensordot(res, wB, axes=[['wR', 'p*', 'p'], ['wL', 'p', 'p*']])
+
+        IdR_idcs = (self.get_IdR(num_sites - 1), other.get_IdR(num_sites - 1))
+        res = res.itranspose(['wR*', 'wR'])[IdR_idcs]
+        return res
+
+    def distance(self, other, understood_infinite: bool = False, num_sites: int = None):
+        """The Frobenius distance induced by the inner product :meth:`overlap`."""
+        ov = self.overlap(other, understood_infinite=understood_infinite, num_sites=num_sites)
+        s_norm = self.overlap(self, understood_infinite=understood_infinite, num_sites=num_sites)
+        o_norm = other.overlap(other, understood_infinite=understood_infinite, num_sites=num_sites)
+        dist = s_norm - 2 * np.real(ov) + o_norm
+        if dist < -1e-14 * (s_norm + o_norm):
+            raise RuntimeError('Negative distance encountered.')
+        return abs(dist)
 
     def _to_valid_index(self, i, bond=False):
         """Make sure `i` is a valid index (depending on `self.bc`)."""
