@@ -1352,8 +1352,8 @@ class MPO:
 
         return trunc_err
 
-    def add_identity(self, alpha, beta, sites=[0]):
-        r"""returns new MPO :math:`alpha Id + beta * O`.
+    def plus_identity(self, alpha, beta, sites=[0]):
+        r"""Compute a new MPO :math:`alpha * 1 + beta * \mathtt{self}`.
 
         This can e.g. be used to make a simple (non-unitary) first-order approximation to
         the time evolution unitary :math:`e^{-i t H} \approx 1 - i t H`.
@@ -1387,6 +1387,8 @@ class MPO:
         """
         if self.bc != 'finite':
             raise NotImplementedError("MPO.add_identity only works for finite MPO.")
+        if self.explicit_plus_hc:
+            raise NotImplementedError
 
         N = len(sites)
         assert N <= self.L
@@ -1396,15 +1398,8 @@ class MPO:
             # test fails for non-contiguous sites. not sure why
             raise NotImplementedError
 
-        t_beta = beta**(1/N)
+        t_beta = beta ** (1 / N)
         t_alpha = alpha / N
-        gamma = lambda k: 1 if k != 0 else beta
-        delta = lambda k: 1 if k != N-1 else beta
-        def params_in_sites(k, counter):
-            if k in sites:
-                return t_beta, t_alpha, gamma(counter), delta(counter), counter + 1
-            else:
-                return 1., 0., 1., 1., counter
 
         IdL = self.IdL
         IdR = self.IdR
@@ -1425,26 +1420,36 @@ class MPO:
 
             # Get coefficients depending on if site k in sites and if so
             # what number site in sites it is.
-            b, a, g, d, counter = params_in_sites(k, counter)
+            if k in sites:
+                b = t_beta
+                a = t_alpha
+                g = 1 if counter != 0 else beta
+                d = 1 if counter != N - 1 else beta
+                counter = counter + 1
+            else:
+                b = g = d = 1.
+                a = 0.
 
             # First Row - only this is modified
-            dW[0,0] = d*Id_npc
-            for i in range(0, DR-2):
-                dW[0,i+1] = b**(counter)*C_npc[0,i]
-            dW[0,-1] = (b**N)*D_npc + a*Id_npc
+            dW[0, 0] = d*Id_npc
+            for i in range(0, DR - 2):
+                dW[0, i+1] = b ** (counter) * C_npc[0, i]
+            dW[0, -1] = (b ** N) * D_npc + a * Id_npc
             # Middle Rows
-            for i in range(0, DL-2):
-                for j in range(0, DR-2):
-                    dW[i+1,j+1] = b*A_npc[i,j]
-                dW[i+1, -1] = b**(N-counter+1)*B_npc[i,0]
+            for i in range(0, DL - 2):
+                for j in range(0, DR - 2):
+                    dW[i + 1, j + 1] = b * A_npc[i, j]
+                dW[i + 1, -1] = b ** (N - counter + 1) * B_npc[i, 0]
             #Bottom Rows
-            dW[-1,-1] = g*Id_npc
+            dW[-1, -1] = g * Id_npc
             U.append(dW)
 
         assert counter == N
-        IdL = [0] * (self.L + 1) # I guess we have enforced that the MPO look upper block triangular without any permutations
+        # Sajant: We have enforced that the MPO look upper block triangular without any permutations
+        IdL = [0] * (self.L + 1)
         IdR = [-1] * (self.L + 1)
-        return MPO.from_grids(self.sites, U, self.bc, IdL, IdR, max_range=self.max_range, explicit_plus_hc=self.explicit_plus_hc)
+        return MPO.from_grids(self.sites, U, self.bc, IdL, IdR, max_range=self.max_range,
+                              explicit_plus_hc=self.explicit_plus_hc)
 
     def overlap(self, other, understood_infinite: bool = False, num_sites: int = None):
         """Overlap between two MPOs.

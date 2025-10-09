@@ -252,7 +252,7 @@ def test_MPO_addition():
 
 
 @pytest.mark.parametrize('sites', [None, [0], [1], [0, 1, 2, 3], [2, 3], [3, 2]])
-def test_MPO_add_identity(sites, alpha=.7, beta=.42):
+def test_MPO_plus_identity(sites, alpha=.7, beta=.42):
     s = spin_half
 
     ot = OnsiteTerms(4)
@@ -264,9 +264,9 @@ def test_MPO_add_identity(sites, alpha=.7, beta=.42):
     H1 = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'finite').build_MPO()
 
     if sites is None:
-        H2 = H1.add_identity(alpha=alpha, beta=beta)
+        H2 = H1.plus_identity(alpha=alpha, beta=beta)
     else:
-        H2 = H1.add_identity(alpha=alpha, beta=beta, sites=sites)
+        H2 = H1.plus_identity(alpha=alpha, beta=beta, sites=sites)
 
     ot_expect = OnsiteTerms(4)
     ct_expect = CouplingTerms(4)
