@@ -7,7 +7,7 @@ from tenpy.models import model, lattice
 from tenpy.models.xxz_chain import XXZChain
 import tenpy.networks.site
 import tenpy.linalg.np_conserved as npc
-from tenpy.algorithms.exact_diag import ExactDiag
+from tenpy.algorithms.exact_diag import ExactDiag, get_numpy_Hamiltonian
 import numpy as np
 import numpy.testing as npt
 import pytest
@@ -739,3 +739,45 @@ def test_disordered_lattice_model(bc, J=2.):
             idx = terms.terms.index([(op, mps_j), (op, mps_i)])
         assert abs(terms.strength[idx] - J/dist) < 1.e-14
 
+
+def test_fixes_511(L=6, t=1.234, tp=2.54):
+    # https://github.com/tenpy/tenpy/issues/511
+
+    class TTprimeSpinfulChain(model.CouplingMPOModel):
+        """Spin-1/2 fermions on a 1D chain with NN hopping t and NNN hopping t'."""
+        def init_sites(self, p):
+            # conserve total N and Sz; degenerate spin DOF
+            return tenpy.networks.site.SpinHalfFermionSite(cons_N=None, cons_Sz=None)
+
+        # CouplingMPOModel already defaults to a Chain lattice with length p['L'].
+
+        def init_terms(self, p):
+            t  = float(p.get("t", 1.0))       # NN hopping
+            tp = float(p.get("tp", 0.0))      # NNN hopping
+            mu = float(p.get("mu", 0.0))      # chemical potential
+            U  = float(p.get("U", 0.0))       # onsite Hubbard U (optional)
+
+            # onsite: -mu * (n_up + n_down) + U * n_up n_down
+            self.add_onsite(-mu, 0, "Ntot")
+            if abs(U) > 0:
+                self.add_onsite(U, 0, "NuNd")
+
+            # NN hopping: -t * (c†_{iσ} c_{i+1,σ} + h.c.)
+            for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+                self.add_coupling(-t,  u1, "Cdu", u2, "Cu", dx, plus_hc=True)  # spin ↑
+                self.add_coupling(-t,  u1, "Cdd", u2, "Cd", dx, plus_hc=True)  # spin ↓
+
+            # NNN hopping: -t' * (c†_{iσ} c_{i+2,σ} + h.c.)
+            for u1, u2, dx in self.lat.pairs['next_nearest_neighbors']:
+                self.add_coupling(-tp, u1, "Cdu", u2, "Cu", dx, plus_hc=True)
+                self.add_coupling(-tp, u1, "Cdd", u2, "Cd", dx, plus_hc=True)
+
+    m_NN = TTprimeSpinfulChain(dict(L=L, t=t, tp=0, mu=0, bc_MPS='finite'))
+    m_NNN = TTprimeSpinfulChain(dict(L=L, t=0, tp=tp, mu=0, bc_MPS='finite'))
+    m_full = TTprimeSpinfulChain(dict(L=L, t=t, tp=tp, mu=0, bc_MPS='finite'))
+
+    H_NN = get_numpy_Hamiltonian(m_NN)
+    H_NNN = get_numpy_Hamiltonian(m_NNN)
+    H_full = get_numpy_Hamiltonian(m_full)
+
+    assert np.allclose(H_full, H_NN + H_NNN)
