@@ -1458,7 +1458,7 @@ class MPO:
 
             <self|other> = Tr[hconj(self) @ other]
 
-        For inifinite MPOs, the TD limit of that overlap is always either 0, 1 or infinite,
+        For infinite MPOs, the TD limit of that overlap is always either 0, 1 or infinite,
         i.e. it is not helpful. Instead we choose a finite section of the infinite overlap diagram
         and project onto ``IdL`` on the left and ``IdR`` on the right. This means we effectively
         compute the overlap between those contributions to the MPOs that act trivially outside
@@ -1470,7 +1470,7 @@ class MPO:
             The other operator. Must have the same :attr:`finite`, and if finite the same :attr:`L`.
         understood_infinite : bool
             For infinite MPOs, the overlap has an unusual definition, see above.
-            Set this flag to confirm you undertand this and supress the warning.
+            Set this flag to confirm you understand this and suppress the warning.
         num_sites : int
             Ignored for finite MPOs. For infinite MPOs, the number of sites that we contract.
             We project onto IdL on site ``0``, contract tensors from ``range(num_sites)``, and
@@ -1491,8 +1491,8 @@ class MPO:
                 num_sites = max(self.L + 2 * self_max_range, other.L + 2 * other.max_range)
             assert num_sites >= self.L
             if not understood_infinite:
-                msg = ('The overlap between infinte MPOs has an unusual definition. Make sure '
-                       'you understand it, then set `understood_infinite=True` to supress '
+                msg = ('The overlap between infinite MPOs has an unusual definition. Make sure '
+                       'you understand it, then set `understood_infinite=True` to suppress '
                        'this warning.')
                 warnings.warn(msg, stacklevel=2)
         else:
