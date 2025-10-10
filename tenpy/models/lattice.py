@@ -460,8 +460,10 @@ class Lattice:
 
         Returns
         -------
-        boundary_conditions : list of str
-            List of ``"open"`` or ``"periodic"``, one entry for each direction of the lattice.
+        boundary_conditions : list of {str | int}
+            List of ``"open"`` or ``"periodic"`` or integer, one entry for each direction of the
+            lattice. An integer means periodic boundary condition with a shift given by that number,
+            see :attr:`bc_shift`.
         """
         global bc_choices  # noqa: F824
         bc_choices_reverse = dict([(v, k) for (k, v) in bc_choices.items()])
