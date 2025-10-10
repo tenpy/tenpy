@@ -302,6 +302,129 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
     assert npc.norm(W1_new - W1_ex) == 0.  # coupling constants: no rounding errors
 
 
+@pytest.mark.parametrize('use_fermions', [False, True], ids=['spins', 'fermions'])
+@pytest.mark.parametrize('add_hc', [False, 'manually', 'flag'], ids=['no_hc', 'manual_hc', 'plus_hc'])
+@pytest.mark.parametrize('bc', ['finite', 'infinite'])
+def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc, L=6):
+    """test add_exponentially_decaying coupling by comparing with manual couplings"""
+    if use_fermions:
+        s = tenpy.networks.site.FermionSite(None)
+        op_i = 'Cd'
+        op_j = 'C'
+        anti_commute_sign = -1
+    else:
+        s = tenpy.networks.site.SpinHalfSite(None)
+        op_i = 'Sp'
+        op_j = 'Sm'
+        anti_commute_sign = +1
+
+    lat = lattice.Chain(L=L, site=s, bc=['open' if bc == 'finite' else 'periodic'], bc_MPS=bc)
+    m_exp = model.CouplingModel(lat)
+    m_manual = model.CouplingModel(lat)
+
+    print('standard case: no subsites')
+    a = 3. + 0.42j
+    l = 0.2
+    m_exp.add_exponentially_decaying_coupling(a, l, op_i, op_j, plus_hc=(add_hc == 'flag'))
+    if add_hc == 'manually':
+        # interface does not allow us to change the order of operators, so we need to manually
+        # include the sign for anti-commuting them
+        m_exp.add_exponentially_decaying_coupling(
+            anti_commute_sign * np.conj(a), np.conj(l), s.hc_ops[op_i], s.hc_ops[op_j],
+            plus_hc=(add_hc == 'flag')
+        )
+    max_range = L if bc == 'finite' else int(np.ceil(np.log(1e-10) / np.log(l)))
+    for k in range(1, max_range):
+        m_manual.add_coupling(a * (l ** k), 0, op_i, 0, op_j, dx=k, plus_hc=add_hc is not False)
+    assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
+
+    print('non-uniform decay')
+    m_exp = model.CouplingModel(lat)
+    m_manual = model.CouplingModel(lat)
+    a = 3. + 0.42j
+    l = np.random.uniform(.01, .2, size=L)
+    m_exp.add_exponentially_decaying_coupling(a, l, op_i, op_j, plus_hc=(add_hc == 'flag'))
+    if add_hc == 'manually':
+        # interface does not allow us to change the order of operators, so we need to manually
+        # include the sign for anti-commuting them
+        m_exp.add_exponentially_decaying_coupling(
+            anti_commute_sign * np.conj(a), np.conj(l), s.hc_ops[op_i], s.hc_ops[op_j]
+        )
+    # use the max_range from before. since l <= .2, this can only decay faster
+    for k in range(1, max_range):
+        strength = a
+        for j in range(k):
+            if bc == 'finite':
+                strength = strength * l[j:-k+j]
+            else:
+                strength = strength * np.roll(l, -j)
+        if np.all(strength < 1e-10):
+            continue
+        m_manual.add_coupling(strength, 0, op_i, 0, op_j, dx=k, plus_hc=add_hc is not False)
+    assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
+
+    print('with subsites')
+    m_exp = model.CouplingModel(lat)
+    m_manual = model.CouplingModel(lat)
+    a = 3. + 0.42j
+    l = np.random.uniform(.01, .2, size=L)
+    subsites = [1, 3, 5]
+    m_exp.add_exponentially_decaying_coupling(a, l, op_i, op_j, subsites, plus_hc=(add_hc == 'flag'))
+    if add_hc == 'manually':
+        # interface does not allow us to change the order of operators, so we need to manually
+        # include the sign for anti-commuting them
+        m_exp.add_exponentially_decaying_coupling(
+            anti_commute_sign * np.conj(a), np.conj(l), s.hc_ops[op_i], s.hc_ops[op_j],
+            subsites
+        )
+    # use the max_range from before. since l <= .2, this can only decay faster
+    # except now we interpret it as a distance *within* subsites
+    for n_i, i in enumerate(subsites):
+        for k in range(1, max_range):
+            n_j = n_i + k
+            if bc == 'finite' and n_j >= len(subsites):
+                continue
+            j = subsites[n_j % len(subsites)] + L * (n_j // len(subsites))
+            strength = a
+            for m in range(n_i, n_j):
+                strength *= l[subsites[m % len(subsites)]]
+            m_manual.add_coupling_term(strength, i, j, op_i, op_j, plus_hc=add_hc is not False,
+                                       op_string='JW' if use_fermions else 'Id')
+    assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
+
+    print('with subsites and subsites_start')
+    m_exp = model.CouplingModel(lat)
+    m_manual = model.CouplingModel(lat)
+    a = 3. + 0.42j
+    l = np.random.uniform(.01, .2, size=L)
+    subsites_start = [0, 2]
+    subsites = [1, 3, 5]
+    m_exp.add_exponentially_decaying_coupling(
+        a, l, op_i, op_j, subsites, subsites_start=subsites_start, plus_hc=(add_hc == 'flag')
+    )
+    if add_hc == 'manually':
+        # interface does not allow us to change the order of operators, so we need to manually
+        # include the sign for anti-commuting them
+        m_exp.add_exponentially_decaying_coupling(
+            anti_commute_sign * np.conj(a), np.conj(l), s.hc_ops[op_i], s.hc_ops[op_j],
+            subsites, subsites_start=subsites_start
+        )
+    # use the max_range from before. since l <= .2, this can only decay faster
+    # except now we interpret it as a distance *within* subsites
+    for n_i, i in enumerate(subsites_start):
+        min_n_j = min(n_j for n_j, j in enumerate(subsites) if j > i)
+        for n_j in range(min_n_j, min_n_j + max_range):
+            if bc == 'finite' and n_j >= len(subsites):
+                continue
+            j = subsites[n_j % len(subsites)] + L * (n_j // len(subsites))
+            strength = a * l[i]
+            for m in range(min_n_j, n_j):
+                strength *= l[subsites[m % len(subsites)]]
+            m_manual.add_coupling_term(strength, i, j, op_i, op_j, plus_hc=add_hc is not False,
+                                       op_string='JW' if use_fermions else 'Id')
+    assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
+
+
 class MyMod(model.CouplingMPOModel, model.NearestNeighborModel):
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
