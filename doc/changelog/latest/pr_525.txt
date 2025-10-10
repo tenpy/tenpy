@@ -1,1 +1,1 @@
-- Add :meth:`~tenpy.networks.mpo.MPO.add_identity` for MPO.
+- Add :meth:`~tenpy.networks.mpo.MPO.plus_identity` for MPO.
