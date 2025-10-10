@@ -236,7 +236,7 @@ class MixedXKLattice(Lattice):
                 site.change_charge(leg, perm_flat)
                 u = k * N_orb + l  # self.get_u(k, l), but we don't have `self` yet.
                 unit_cell[u] = site
-        return cls(N_rings, Ly, N_orb, unit_cell, **kwargs)
+        return cls(N_rings, Ly, N_orb, unit_cell, ring_order=ring_order, **kwargs)
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
         """Export `self` into a HDF5 file.
