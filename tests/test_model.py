@@ -373,132 +373,187 @@ def test_model_H_conversion(L=6):
     assert npc.norm(H0 - full_H_bond) < 1.e-14  # round off errors on order of 1.e-15
 
 
-def test_model_plus_hc(L=6):
-    params = dict(x=0.5, y=0.25, L=L, bc_MPS='finite', conserve=None)
-    m1 = MyMod(params)
-    m2 = MyMod(params)
-    params['explicit_plus_hc'] = True
-    m3 = MyMod(params)
-    nu = np.random.random(L)
-    with pytest.warns(UserWarning) as record:
-        m1.add_onsite(nu, 0, 'Sp')
-        m1.add_onsite(nu, 0, 'Sm')
-        m2.add_onsite(nu, 0, 'Sp', plus_hc=True)
-        m3.add_onsite(nu, 0, 'Sp', plus_hc=True)
-    assert len(record) > 0
-    for w in record:
-        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
+def compare_models_plus_hc(m_manual: model.CouplingModel,
+                           m_plus_hc: model.CouplingModel,
+                           m_explicit: model.CouplingModel,
+                           expect_non_hermitian_mpo: bool = False  # if MPO without hc is non-hermitian
+                           ):
+    # helper for test_model_plus_hc; check if the models are equivalent
+    for m in [m_manual, m_plus_hc, m_explicit]:
+        m.H_MPO = m.calc_H_MPO()
 
-    t = np.random.random(L - 1)
-    with pytest.warns(UserWarning) as record:
-        m1.add_coupling(t, 0, 'Sp', 0, 'Sm', 1)
-        m1.add_coupling(t, 0, 'Sp', 0, 'Sm', -1)
-        m2.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
-        m3.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
-    assert len(record) > 0
-    for w in record:
-        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
+    assert m_manual.H_MPO.is_hermitian(), 'm_manual not hermitian'
+    assert m_plus_hc.H_MPO.is_hermitian(), 'm_plus_hc not hermitian'
+    assert m_explicit.H_MPO.is_hermitian(), 'm_explicit not hermitian'
 
-    # add_coupling with a non-hermitian op-string
-    t = np.random.random(L - 1)
-    with pytest.warns(UserWarning) as record:
-        m1.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, op_string='Sp')
-        m1.add_coupling(t, 0, 'Sp', 0, 'Sm', -1, op_string='Sm')
-        m2.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, op_string='Sp', plus_hc=True)
-        m3.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, op_string='Sp', plus_hc=True)
-    assert len(record) > 0
-    for w in record:
-        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
+    # for m_explicit, look at the "bare" MPO, without its hc
+    m_explicit_bare_MPO = m_explicit.H_MPO.copy()
+    m_explicit_bare_MPO.explicit_plus_hc = False  # now this is an MPO without the +hc part
+    if expect_non_hermitian_mpo:
+        assert not m_explicit_bare_MPO.is_hermitian()
 
+    if expect_non_hermitian_mpo and m_explicit.H_MPO.chi[3] > 2:
+        # check for smaller MPO bond dimension
+        assert m_explicit.H_MPO.chi[3] < m_plus_hc.H_MPO.chi[3]
+
+    assert m_plus_hc.H_MPO.is_equal(m_manual.H_MPO)
+    assert m_explicit.H_MPO.is_equal(m_manual.H_MPO)
+
+
+@pytest.mark.parametrize('which_site, which_ops, op_string',
+                         [('spin', 'Sp-Sm', None),
+                          ('fermion', 'Cd-C', None),
+                          ('spin-fermion', 'Sp-Sm', None),
+                          ('spin-fermion', 'Cd-C', None)])
+def test_model_plus_hc(which_site, which_ops, op_string, L=6):
+    """Same as `test_model_plus_hc`, but uses fermions and default JW behavior"""
+    if which_site == 'spin':
+        lat = lattice.Chain(L=L, site=tenpy.networks.site.SpinHalfSite(None))
+    elif which_site == 'fermion':
+        lat = lattice.Chain(L=L, site=tenpy.networks.site.FermionSite(None))
+    elif which_site == 'spin-fermion':
+        lat = lattice.Chain(L=L, site=tenpy.networks.site.SpinHalfFermionSite(None, None))
+    else:
+        raise ValueError
+
+    if which_ops == 'Sp-Sm':
+        hconj_map = dict(Sp='Sm', Sm='Sp', Sz='Sz')
+        onsite_op = 'Sp'
+        Sp = 'Sp'
+        Sm = 'Sm'
+        Sz = 'Sz'
+        exp_A = 'Sp'
+        exp_B = 'Sz'
+    elif which_ops == 'Cd-C' and which_site == 'spin-fermion':
+        hconj_map = dict(dN='dN', Cdu='Cu', Cd='Cdd', Ntot='Ntot', Cu='Cdu', Cdd='Cd')
+        onsite_op = 'dN'
+        Sp = 'Cdu'
+        Sm = 'Cd'
+        Sz = 'Ntot'
+        exp_A = 'Cdu'
+        exp_B = 'Cu'
+    elif which_ops == 'Cd-C' and which_site == 'fermion':
+        hconj_map = dict(dN='dN', Cd='C', C='Cd', N='N')
+        onsite_op = 'dN'
+        Sp = 'Cd'
+        Sm = 'C'
+        Sz = 'N'
+        exp_A = 'Cd'
+        exp_B = 'C'
+    else:
+        raise ValueError
+
+    if op_string is None:
+        op_str_kw = {}  # TODO use, more cases
+    else:
+        raise ValueError
+
+    m_manual = model.CouplingModel(lat)
+    m_plus_hc = model.CouplingModel(lat)
+    m_explicit = model.CouplingModel(lat, explicit_plus_hc=True)
+
+    print('onsite')
+    hx = np.random.random(L)
+    m_manual.add_onsite(hx, 0, onsite_op)
+    m_manual.add_onsite(hx, 0, hconj_map[onsite_op])
+    m_plus_hc.add_onsite(hx, 0, onsite_op, plus_hc=True)
+    m_explicit.add_onsite(hx, 0, onsite_op, plus_hc=True)
+    compare_models_plus_hc(m_manual, m_plus_hc, m_explicit,
+                           expect_non_hermitian_mpo=(which_ops != 'Cd-C'))
+
+    print('coupling')
+    t = np.random.random(L - 1) + 1.j * np.random.random(L - 1)
+    m_manual.add_coupling(t, 0, Sp, 0, Sm, 1)
+    m_manual.add_coupling(np.conj(t), 0, hconj_map[Sm], 0, hconj_map[Sp], -1)
+    m_plus_hc.add_coupling(t, 0, Sp, 0, Sm, 1, plus_hc=True)
+    m_explicit.add_coupling(t, 0, Sp, 0, Sm, 1, plus_hc=True)
+    compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
+
+    print('multi coupling (2-site)')
     t2 = np.random.random(L - 1)
-    with pytest.warns(UserWarning) as record:
-        m1.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)])
-        m1.add_multi_coupling(t2, [('Sz', [0], 0), ('Sp', [0], 0), ('Sm', [+1], 0)])
-        m2.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
-        m3.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
-    assert len(record) > 0
-    for w in record:
-        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
+    ops = [(Sp, [+1], 0), (Sm, [0], 0), (Sz, [0], 0)]
+    ops_hc = [(hconj_map[Sz], [0], 0), (hconj_map[Sm], [0], 0), (hconj_map[Sp], [+1], 0)]
+    m_manual.add_multi_coupling(t2, ops)
+    m_manual.add_multi_coupling(t2, ops_hc)
+    m_plus_hc.add_multi_coupling(t2, ops, plus_hc=True)
+    m_explicit.add_multi_coupling(t2, ops, plus_hc=True)
+    compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
-    t2 = np.random.random(L - 1)
-    with pytest.warns(UserWarning) as record:
-        m1.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], op_string='Sp')
-        m1.add_multi_coupling(t2, [('Sz', [0], 0), ('Sp', [0], 0), ('Sm', [+1], 0)], op_string='Sm')
-        m2.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], op_string='Sp', plus_hc=True)
-        m3.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], op_string='Sp', plus_hc=True)
-    assert len(record) > 0
-    for w in record:
-        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
+    print('multi coupling (3-site)')
+    t3 = np.random.random(L - 2)
+    ops = [(Sp, [+2], 0), (Sm, [+1], 0), (Sz, [0], 0)]
+    ops_hc = [(hconj_map[Sz], [0], 0), (hconj_map[Sm], [+1], 0), (hconj_map[Sp], [+2], 0)]
+    m_manual.add_multi_coupling(t3, ops)
+    m_manual.add_multi_coupling(t3, ops_hc)
+    m_plus_hc.add_multi_coupling(t3, ops, plus_hc=True)
+    m_explicit.add_multi_coupling(t3, ops, plus_hc=True)
+    compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
-    def compare(m1, m2, m3, use_bonds=True):
-        for m in [m1, m2, m3]:
-            # added extra terms: need to re-calculate H_bond and H_MPO
-            if use_bonds:
-                m.H_bond = m.calc_H_bond()
-            m.H_MPO = m.calc_H_MPO()
-        assert m1.H_MPO.is_hermitian()
-        assert m2.H_MPO.is_hermitian()
-        m3_explicit_MPO = m3.H_MPO.copy()
-        m3_explicit_MPO.explicit_plus_hc = False  # now this is an MPO without the +hc part
-        assert not m3_explicit_MPO.is_hermitian()
-        assert m3.H_MPO.is_hermitian()
-        assert m3.H_MPO.chi[3] < m2.H_MPO.chi[3]   # check for smaller MPO bond dimension
-        ED1 = ExactDiag(m1)
-        ED2 = ExactDiag(m2)
-        ED3 = ExactDiag(m3)
-        if use_bonds:
-            for ED in [ED1, ED2, ED3]:
-                ED.build_full_H_from_bonds()
-            assert ED1.full_H == ED2.full_H
-            assert ED1.full_H == ED3.full_H
-        for ED in [ED1, ED2, ED3]:
-            ED.full_H = None
-            ED.build_full_H_from_mpo()
-        assert ED1.full_H == ED2.full_H
-        assert ED1.full_H == ED3.full_H
+    if which_ops != 'Cd-C':
+        a = -1.5j
+        print('1-body local term')
+        m_manual.add_local_term(a, [(Sp, [1, 0])])
+        m_manual.add_local_term(np.conj(a), [(hconj_map[Sp], [1, 0])])
+        m_plus_hc.add_local_term(a, [(Sp, [1, 0])], plus_hc=True)
+        m_explicit.add_local_term(a, [(Sp, [1, 0])], plus_hc=True)
+        compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
-    compare(m1, m2, m3, use_bonds=True)
+    print('2-body local term')
+    b = 2.5
+    m_manual.add_local_term(b, [(Sp, [0, 0]), (Sm, [2, 0])])
+    m_manual.add_local_term(np.conj(b), [(hconj_map[Sm], [2, 0]), (hconj_map[Sp], [0, 0])])
+    m_plus_hc.add_local_term(b, [(Sp, [0, 0]), (Sm, [2, 0])], plus_hc=True)
+    m_explicit.add_local_term(b, [(Sp, [0, 0]), (Sm, [2, 0])], plus_hc=True)
+    compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
-    with pytest.warns(UserWarning) as record:
-        m1.add_local_term(-1.5j, [('Sp', [1, 0])])
-        m1.add_local_term(+1.5j, [('Sm', [1, 0])])
-        m2.add_local_term(-1.5j, [('Sp', [1, 0])], plus_hc=True)
-        m3.add_local_term(-1.5j, [('Sp', [1, 0])], plus_hc=True)
-        m1.add_local_term(-0.5j, [('Sp', [0, 0]), ('Sm', [2, 0])])
-        m1.add_local_term(+0.5j, [('Sp', [2, 0]), ('Sm', [0, 0])])
-        m2.add_local_term(-0.5j, [('Sp', [0, 0]), ('Sm', [2, 0])], plus_hc=True)
-        m3.add_local_term(-0.5j, [('Sp', [0, 0]), ('Sm', [2, 0])], plus_hc=True)
-        m1.add_local_term(2.5, [('Sp', [4, 0]), ('Sz', [3, 0]), ('Sm', [5, 0])])
-        m1.add_local_term(2.5, [('Sm', [4, 0]), ('Sz', [3, 0]), ('Sp', [5, 0])])
-        m2.add_local_term(2.5, [('Sp', [4, 0]), ('Sz', [3, 0]), ('Sm', [5, 0])], plus_hc=True)
-        m3.add_local_term(2.5, [('Sp', [4, 0]), ('Sz', [3, 0]), ('Sm', [5, 0])], plus_hc=True)
-    assert len(record) > 0
-    for w in record:
-        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
+    print('3-body local term')
+    c = .5j
+    m_manual.add_local_term(c, [(Sp, [4, 0]), (Sz, [3, 0]), (Sm, [5, 0])])
+    m_manual.add_local_term(np.conj(c), [(hconj_map[Sm], [5, 0]), (hconj_map[Sz], [3, 0]), (hconj_map[Sp], [4, 0])])
+    m_plus_hc.add_local_term(c, [(Sp, [4, 0]), (Sz, [3, 0]), (Sm, [5, 0])], plus_hc=True)
+    m_explicit.add_local_term(c, [(Sp, [4, 0]), (Sz, [3, 0]), (Sm, [5, 0])], plus_hc=True)
+    compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
-    compare(m1, m2, m3, use_bonds=False)
+    print('exponentially decaying coupling')
+    d = .25
+    l = .2
+    hc_coeff = np.conj(d)
+    if which_ops == 'Cd-C':
+        # the interface doesnt allow us to control the order of the two operators, so we need
+        # to take care of the anti-commutation manually...
+        hc_coeff = -hc_coeff
+    m_manual.add_exponentially_decaying_coupling(d, l, exp_A, exp_B)
+    m_manual.add_exponentially_decaying_coupling(hc_coeff, np.conj(l), hconj_map[exp_A], hconj_map[exp_B])
+    m_plus_hc.add_exponentially_decaying_coupling(d, l, exp_A, exp_B, plus_hc=True)
+    m_explicit.add_exponentially_decaying_coupling(d, l, exp_A, exp_B, plus_hc=True)
+    compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
-    with pytest.warns(UserWarning) as record:
-        m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz')
-        m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sm', 'Sz')
-        m2.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', plus_hc=True)
-        m3.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', plus_hc=True)
-    assert len(record) > 0
-    for w in record:
-        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
+    print('exponentially decaying coupling with subsites')
+    subsite_kwargs = dict(subsites=[1, 3, 5], subsites_start=[0, 2])
+    e = 3 + 0.42j
+    hc_coeff = np.conj(e)
+    if which_ops == 'Cd-C':
+        # the interface doesnt allow us to control the order of the two operators, so we need
+        # to take care of the anti-commutation manually...
+        hc_coeff = -hc_coeff
+    m_manual.add_exponentially_decaying_coupling(e, l, exp_A, exp_B, **subsite_kwargs)
+    m_manual.add_exponentially_decaying_coupling(hc_coeff, l, hconj_map[exp_A], hconj_map[exp_B], **subsite_kwargs)
+    m_plus_hc.add_exponentially_decaying_coupling(e, l, exp_A, exp_B, **subsite_kwargs, plus_hc=True)
+    m_explicit.add_exponentially_decaying_coupling(e, l, exp_A, exp_B, **subsite_kwargs, plus_hc=True)
+    compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
-    compare(m1, m2, m3, use_bonds=False)
-
-    with pytest.warns(UserWarning) as record:
-        m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', op_string='Sm')
-        m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sm', 'Sz', op_string='Sp')
-        m2.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', op_string='Sm', plus_hc=True)
-        m3.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', op_string='Sm', plus_hc=True)
-    assert len(record) > 0
-    for w in record:
-        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
-
-    compare(m1, m2, m3, use_bonds=False)
+    print('exponentially decaying centered terms')
+    subsites = [1, 3, 5]
+    f = .42j
+    if which_ops == 'Cd-C':
+        with pytest.raises(NotImplementedError):
+            m_manual.add_exponentially_decaying_centered_terms(f, l, exp_A, exp_B, 3, subsites=subsites)
+    else:
+        m_manual.add_exponentially_decaying_centered_terms(f, l, exp_A, exp_B, 3, subsites=subsites)
+        m_manual.add_exponentially_decaying_centered_terms(np.conj(f), l, hconj_map[exp_A], hconj_map[exp_B], 3, subsites=subsites)
+        m_plus_hc.add_exponentially_decaying_centered_terms(f, l, exp_A, exp_B, 3, subsites=subsites, plus_hc=True)
+        m_explicit.add_exponentially_decaying_centered_terms(f, l, exp_A, exp_B, 3, subsites=subsites, plus_hc=True)
+        compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
 
 class DisorderedLatticeModel(model.CouplingMPOModel):
