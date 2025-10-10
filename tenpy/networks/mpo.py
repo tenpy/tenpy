@@ -655,7 +655,7 @@ class MPO:
         return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf)
 
     def make_U_II(self, dt):
-        r"""Creates the :math:`U_II` propagator.
+        r"""Creates the :math:`U_{II}` propagator.
 
         Parameters
         ----------
@@ -1352,6 +1352,105 @@ class MPO:
 
         return trunc_err
 
+    def plus_identity(self, alpha, beta, sites=[0]):
+        r"""Compute a new MPO :math:`alpha * 1 + beta * \mathtt{self}`.
+
+        This can e.g. be used to make a simple (non-unitary) first-order approximation to
+        the time evolution unitary :math:`e^{-i t H} \approx 1 - i t H`.
+
+        This function only works for finite MPOs for now.
+
+        Parameters
+        ----------
+        alpha : float|complex
+            Coefficient for identity
+        beta : float|complex
+            Coefficient for existing MPO
+        sites : list
+            List of MPO indices of which tensors to modify
+
+        Returns
+        -------
+        mpo : :class:`~tenpy.networks.mpo.MPO`
+            MPO representing the operator :math:`\alpha * 1 + \beta O`
+
+        Notes
+        -----
+        There is significant freedom in how we incorporate the linear
+        combination into the MPO structure. One naive choice is to only modify the first tensor.
+
+        The first tensor (ignoring the second wL entry since it's unnecessary)::
+
+            [1 C D] -> [beta*1 beta*C alpha*1+beta*D]
+
+        Another choice is to modify `N` tensors specified by the input argument `sites`.
+        """
+        if self.bc != 'finite':
+            raise NotImplementedError("MPO.add_identity only works for finite MPO.")
+        if self.explicit_plus_hc:
+            raise NotImplementedError
+
+        N = len(sites)
+        assert N <= self.L
+        if not set(sites).issubset(set(list(range(self.L)))):
+            raise ValueError(f'The sites {sites} are not strictly contained in {{1, ..., {self.L-1}}}.')
+        if sorted(sites) != [*range(min(sites), max(sites) + 1)]:
+            # test fails for non-contiguous sites. not sure why
+            raise NotImplementedError
+
+        t_beta = beta ** (1 / N)
+        t_alpha = alpha / N
+
+        IdL = self.IdL
+        IdR = self.IdR
+
+        chinfo = self.chinfo
+        trivial = chinfo.make_valid()
+        U = []
+        counter = 0
+        for k in range(0, self.L):
+            labels = ['wL', 'wR', 'p', 'p*']
+            W = self.get_W(k).itranspose(labels)
+            assert np.all(W.qtotal == trivial)
+            DL, DR, d, d = W.shape
+
+            A_npc, B_npc, C_npc, D_npc = _partition_W(W, IdL[k], IdR[k], IdL[k+1], IdR[k+1])
+            Id_npc = npc.eye_like(D_npc, labels=['p', 'p*'])
+            dW = np.empty((DL, DR), dtype=object)
+
+            # Get coefficients depending on if site k in sites and if so
+            # what number site in sites it is.
+            if k in sites:
+                b = t_beta
+                a = t_alpha
+                g = 1 if counter != 0 else beta
+                d = 1 if counter != N - 1 else beta
+                counter = counter + 1
+            else:
+                b = g = d = 1.
+                a = 0.
+
+            # First Row - only this is modified
+            dW[0, 0] = d*Id_npc
+            for i in range(0, DR - 2):
+                dW[0, i+1] = b ** (counter) * C_npc[0, i]
+            dW[0, -1] = (b ** N) * D_npc + a * Id_npc
+            # Middle Rows
+            for i in range(0, DL - 2):
+                for j in range(0, DR - 2):
+                    dW[i + 1, j + 1] = b * A_npc[i, j]
+                dW[i + 1, -1] = b ** (N - counter + 1) * B_npc[i, 0]
+            #Bottom Rows
+            dW[-1, -1] = g * Id_npc
+            U.append(dW)
+
+        assert counter == N
+        # Sajant: We have enforced that the MPO look upper block triangular without any permutations
+        IdL = [0] * (self.L + 1)
+        IdR = [-1] * (self.L + 1)
+        return MPO.from_grids(self.sites, U, self.bc, IdL, IdR, max_range=self.max_range,
+                              explicit_plus_hc=self.explicit_plus_hc)
+
     def overlap(self, other, understood_infinite: bool = False, num_sites: int = None):
         """Overlap between two MPOs.
 
@@ -1359,7 +1458,7 @@ class MPO:
 
             <self|other> = Tr[hconj(self) @ other]
 
-        For inifinite MPOs, the TD limit of that overlap is always either 0, 1 or infinite,
+        For infinite MPOs, the TD limit of that overlap is always either 0, 1 or infinite,
         i.e. it is not helpful. Instead we choose a finite section of the infinite overlap diagram
         and project onto ``IdL`` on the left and ``IdR`` on the right. This means we effectively
         compute the overlap between those contributions to the MPOs that act trivially outside
@@ -1371,7 +1470,7 @@ class MPO:
             The other operator. Must have the same :attr:`finite`, and if finite the same :attr:`L`.
         understood_infinite : bool
             For infinite MPOs, the overlap has an unusual definition, see above.
-            Set this flag to confirm you undertand this and supress the warning.
+            Set this flag to confirm you understand this and suppress the warning.
         num_sites : int
             Ignored for finite MPOs. For infinite MPOs, the number of sites that we contract.
             We project onto IdL on site ``0``, contract tensors from ``range(num_sites)``, and
@@ -1392,8 +1491,8 @@ class MPO:
                 num_sites = max(self.L + 2 * self_max_range, other.L + 2 * other.max_range)
             assert num_sites >= self.L
             if not understood_infinite:
-                msg = ('The overlap between infinte MPOs has an unusual definition. Make sure '
-                       'you understand it, then set `understood_infinite=True` to supress '
+                msg = ('The overlap between infinite MPOs has an unusual definition. Make sure '
+                       'you understand it, then set `understood_infinite=True` to suppress '
                        'this warning.')
                 warnings.warn(msg, stacklevel=2)
         else:
@@ -2962,3 +3061,31 @@ def _mpo_graph_state_order(key):
         # fallback: compare strings
         return (0, key)
     return (0, str(key))
+
+def _partition_W(W, IdL_L, IdR_L, IdL_R, IdR_R):
+    """Split MPO into blocks with respect to standard upper triangular form.
+
+    1 C D
+    0 A B
+    0 0 1
+
+    """
+    DL, DR, d, d = W.shape
+    proj_L = np.ones(DL, dtype=np.bool_)
+    proj_L[IdL_L] = False
+    proj_L[IdR_L] = False
+    proj_R = np.ones(DR, dtype=np.bool_)
+    proj_R[IdL_R] = False
+    proj_R[IdR_R] = False
+
+    #Extract (A, B, C, D)
+    D_npc = W.copy()
+    D_npc.iproject([IdL_L, IdR_R], ['wL','wR'])
+    D_npc = D_npc.squeeze() # remove dummy wL, wR legs
+    C_npc = W.copy()
+    C_npc.iproject([IdL_L, proj_R], ['wL','wR'])
+    B_npc = W.copy()
+    B_npc.iproject([proj_L, IdR_R], ['wL','wR'])
+    A_npc = W.copy()
+    A_npc.iproject([proj_L, proj_R], ['wL','wR'])
+    return A_npc, B_npc, C_npc, D_npc
