@@ -890,3 +890,37 @@ def test_pickle():
     b2flat = b2.to_ndarray()
     npt.assert_array_equal(aflat, a2flat)
     npt.assert_array_equal(bflat, b2flat)
+
+
+def test_fixes_468():
+    # See https://github.com/tenpy/tenpy/issues/468
+
+    chinfo = npc.ChargeInfo([1], ["q"])
+    leg_p = npc.LegCharge.from_qflat(chinfo, [[0], [1]])
+    leg_v = npc.LegCharge.from_qdict(chinfo, {0: slice(0,3), 1: slice(3,6), 2: slice(6,9)})
+
+    # this could be done via npc.Array.from_func(np.random.normal), but we keep the exact code
+    # from the bug report
+    B = npc.zeros([leg_v, leg_v.conj(), leg_p], labels=["vL", "vR", "p"])
+    for qL in range(3):
+        for qp in range(2):
+            qR = qL+qp
+            if qR < 3:
+                B[3*qL:3*(qL+1), 3*qR:3*(qR+1), qp] = np.random.normal(size=(3,3))
+
+    # SVD, fusion on left
+    B_fused = B.combine_legs(["vL", "p"])
+    U, S, V = npc.svd(B_fused, qtotal_LR=[B.qtotal, None], inner_labels=["vR", "vL"])
+    U2 = U.split_legs(0)
+
+    B_reconstructed_fused = npc.tensordot(U.scale_axis(S, 'vR'), V, ('vR', 'vL'))
+    assert npc.norm(B_reconstructed_fused - B_fused) < 1e-14
+
+    B_reconstructed_split = npc.tensordot(U2.scale_axis(S, 'vR'), V, ('vR', 'vL'))
+    assert npc.norm(B_reconstructed_split - B.transpose(['vL', 'p', 'vR'])) < 1e-14
+
+    # permutation induced by sorting the pipe by charge (worked out on paper)
+    perm = [0, 3, 1, 4, 2, 5, 6, 9, 7, 10, 8, 11, 12, 15, 13, 16, 14, 17]
+    U_np = U.to_ndarray()[perm, :]
+    U2_np = U2.to_ndarray().reshape(18, 9)
+    npt.assert_allclose(U_np, U2_np)
