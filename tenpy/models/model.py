@@ -1511,6 +1511,12 @@ class CouplingModel(Model):
         Note that the sum over :math:`i, j` is long-range, for infinite systems going beyond the MPS
         unit cell.
 
+        .. note ::
+            The operator :math:`B_j`, given by `op_j` always acts first (relevant only for fermions)
+            and to manually add the explicit dagger, you would need to include a sign if the
+            operators anti-commute, e.g. for :math:`A_i B_j = c^\dagger_i c_j`.
+            In practice, you should use `plus_hc`.
+
         This can be generalized in several ways, see `lambda_`, `subsites`, `subsites_start`, as
         well as the notes below.
 
@@ -1544,7 +1550,7 @@ class CouplingModel(Model):
         -----
         The simple form in the main docstring can be generalized in several ways.
 
-        First, we can have a non-uniform decay rate `lambda_`, which modies the added terms to
+        First, we can have a non-uniform decay rate `lambda_`, which modifies the added terms to
 
         .. math ::
             \mathtt{strength} \sum_{i} \sum_{j > i} ( \prod_{i <= n < j} \lambda_n ) A_i B_j
@@ -1762,7 +1768,7 @@ class CouplingModel(Model):
         if plus_hc:
             hc_op_i = site_i.get_hc_op_name(op_i)
             hc_op_j = example_site_j.get_hc_op_name(op_j)
-            self.exp_decaying_terms.add_exponadd_centered_exponentially_decaying_termentially_decaying_term(
+            self.exp_decaying_terms.add_centered_exponentially_decaying_term(
                 np.conj(strength), np.conj(lambda_), hc_op_i, hc_op_j, i, subsites, op_string
             )
 
