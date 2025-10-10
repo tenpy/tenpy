@@ -890,3 +890,55 @@ def test_pickle():
     b2flat = b2.to_ndarray()
     npt.assert_array_equal(aflat, a2flat)
     npt.assert_array_equal(bflat, b2flat)
+
+
+def test_fixes_468():
+    # See https://github.com/tenpy/tenpy/issues/468
+
+    chinfo = npc.ChargeInfo([1], ["q"])
+    leg_p = npc.LegCharge.from_qflat(chinfo, [[0], [1]])
+    leg_v = npc.LegCharge.from_qdict(chinfo, {0: slice(0,3), 1: slice(3,6), 2: slice(6,9)})
+
+    B = npc.zeros([leg_v, leg_v.conj(), leg_p], labels=["vL", "vR", "p"])
+    for qL in range(3):
+        for qp in range(2):
+            qR = qL+qp
+            if qR < 3:
+                B[3*qL:3*(qL+1), 3*qR:3*(qR+1), qp] = np.random.normal(size=(3,3))
+
+    # SVD, fusion on right
+    U, S, V = npc.svd(
+                B.combine_legs(["vR", "p"], qconj=-1),
+                qtotal_LR=[None, B.qtotal],
+                inner_labels=["vR", "vL"],
+            )
+
+    V = V.split_legs(1)
+    E = npc.tensordot(V, V.conj(), [['vR','p'],['vR*','p*']])
+    print('Fusing vR and p')
+    print('Singular value overlaps after splitting')
+    print(E.to_ndarray())
+
+    # SVD, fusion on left
+    print('Fusing vL and p')
+    U, S, V = npc.svd(
+                B.combine_legs(["vL", "p"]),
+                qtotal_LR=[B.qtotal, None],
+                inner_labels=["vR", "vL"],
+            )
+    E = npc.tensordot(U, U.conj(), ['(vL.p)', '(vL*.p*)'])
+    print('Singular value overlaps')
+    print('Before splitting:')
+    print(E.to_ndarray()) # so far so good...
+
+    U2 = U.split_legs(0)
+    E = npc.tensordot(U2, U2.conj(), [['vL','p'],['vL*','p*']])
+    print('After splitting')
+    print(E.to_ndarray())
+
+    print('(0,0,0) block')
+    print('Before splitting:')
+    print(U._data[0])
+    print('After splitting:')
+    print(U2._data[0])
+    assert np.allclose(U._data[0], U2._data[0])  # FIXME not sure this is even expected...?
