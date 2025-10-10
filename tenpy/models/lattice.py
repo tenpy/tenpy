@@ -227,6 +227,33 @@ class Lattice:
         if self.position_disorder is not None:
             assert self.position_disorder.shape == self.shape + (self.basis.shape[-1], )
 
+    @classmethod
+    def from_model_params(cls, model_params, sites):
+        """Initialize by reading sizes, boundary conditions etc from `model_params`.
+
+        Mainly used during :meth:`tenpy.models.model.CouplingMPOModel.init_lattice`.
+        """
+        bc_MPS = model_params.get('bc_MPS', 'finite', str)
+        bc_x = 'open' if bc_MPS == 'finite' else 'periodic'
+        bc_x = model_params.get('bc_x', bc_x, str)
+        order = model_params.get('order', 'default', str)
+        if bc_MPS != 'finite' and bc_x == 'open':
+            raise ValueError("You need to use 'periodic' `bc_x` for infinite/segment systems!")
+        if cls.dim == 1:
+            L = model_params.get('L', 2, int)
+            return cls(L, sites, order=order, bc=bc_x, bc_MPS=bc_MPS)
+        if cls.dim == 2:
+            Lx = model_params.get('Lx', 1, int)
+            Ly = model_params.get('Ly', 4, int)
+            bc_y = model_params.get('bc_y', 'cylinder', str)
+            assert bc_y in ['cylinder', 'ladder', 'open', 'periodic']
+            if bc_y == 'cylinder':
+                bc_y = 'periodic'
+            elif bc_y == 'ladder':
+                bc_y = 'open'
+            return cls(Lx, Ly, sites, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
+        raise NotImplementedError(f'Subclass {cls.__name__} should overwrite this')
+
     def copy(self):
         """Shallow copy of `self`."""
         return copy.copy(self)
@@ -2627,6 +2654,14 @@ class NLegLadder(Lattice):
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `pairs` are set accordingly.
         Defined pairs are ``'rung_NN', 'leg_NN', 'diagonal', 'nearest_neighbors'``.
+
+    Options
+    -------
+    .. cfg:configoptions :: CouplingMPOModel
+
+        N_ladder_legs : int
+            Number of legs for a NLegLadder lattice (ignored for other lattices). Default ``3``.
+
     """
     dim = 1  #: the dimension of the lattice
 
@@ -2646,6 +2681,22 @@ class NLegLadder(Lattice):
         kwargs['pairs'].setdefault('nearest_neighbors', rung_NN + leg_NN)
         kwargs['pairs'].setdefault('diagonal', diag)
         Lattice.__init__(self, [L], sites, **kwargs)
+
+    @classmethod
+    def from_model_params(cls, model_params, sites):
+        """Initialize by reading sizes, boundary conditions etc from `model_params`.
+
+        Mainly used during :meth:`tenpy.models.model.CouplingMPOModel.init_lattice`.
+        """
+        bc_MPS = model_params.get('bc_MPS', 'finite', str)
+        bc_x = 'open' if bc_MPS == 'finite' else 'periodic'
+        bc_x = model_params.get('bc_x', bc_x, str)
+        order = model_params.get('order', 'default', str)
+        if bc_MPS != 'finite' and bc_x == 'open':
+            raise ValueError("You need to use 'periodic' `bc_x` for infinite/segment systems!")
+        L = model_params.get('L', 2, int)
+        N = model_params.get('N_ladder_legs', 3, int)
+        return cls(L, N=N, sites=sites, order=order, bc=bc_x, bc_MPS=bc_MPS)
 
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.

@@ -2123,8 +2123,6 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         elif not isinstance(lat, Lattice):
             raise ValueError("invalid type for model_params['lattice'], got " + repr(lat))
         if lat is None:  # only provided LatticeClass
-            bc_MPS = model_params.get('bc_MPS', 'finite', str)
-            order = model_params.get('order', 'default', str)
             sites = self.init_sites(model_params)
             if isinstance(sites, tuple) and sites[0] is not None and \
                     not isinstance(sites[0], Site):
@@ -2132,28 +2130,12 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 sites = None
             else:
                 species_sites = None
-            bc_x = 'open' if bc_MPS == 'finite' else 'periodic'
-            bc_x = model_params.get('bc_x', bc_x, str)
-            if bc_MPS != 'finite' and bc_x == 'open':
-                raise ValueError("You need to use 'periodic' `bc_x` for infinite/segment systems!")
-            if LatticeClass.dim == 1:  # 1D lattice
-                L = model_params.get('L', 2, int)
-                # 4) lattice
-                lat = LatticeClass(L, sites, order=order, bc=bc_x, bc_MPS=bc_MPS)
-            elif LatticeClass.dim == 2:  # 2D lattice
-                Lx = model_params.get('Lx', 1, int)
-                Ly = model_params.get('Ly', 4, int)
-                bc_y = model_params.get('bc_y', 'cylinder', str)
-                assert bc_y in ['cylinder', 'ladder', 'open', 'periodic']
-                if bc_y == 'cylinder':
-                    bc_y = 'periodic'
-                elif bc_y == 'ladder':
-                    bc_y = 'open'
-                lat = LatticeClass(Lx, Ly, sites, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
-            else:
-                raise ValueError("Can't auto-determine parameters for the lattice. "
-                                 "Overwrite the `init_lattice` in your model!")
-
+            try:
+                lat = LatticeClass.from_model_params(model_params=model_params, sites=sites)
+            except Exception as e:
+                msg = ('Failed to initialize the lattice from model_params. Original error above. '
+                       'Consider overriding init_lattice for your model?')
+                raise ValueError(msg) from e
             # possibly modify/generalize the already initialized lattice
             if species_sites is not None:
                 lat = MultiSpeciesLattice(lat, species_sites, species_names)
