@@ -642,6 +642,334 @@ class Sweep(Algorithm):
         self.eff_H = None  # free references to environments held by eff_H
         # done
 
+    def expand_bond(self):
+        """Controlled bond expansion at the current site.
+
+        Depending on the sweep direction, we either expand the bond between
+        Th(i0-1)--B(i0) or A(i0)--Th(i0+1), according to the truncated
+        complement corresponding to the discarded image space of the isometry.
+
+        We closely follow the "skrewd selection" algorithm developed in [1, 2, 3], 
+        where for the left moving sweep the implementation corresponds to Fig.2 in [2],
+        and for the right moving sweep to the mirrored version.
+
+        ------------------------------
+        [1] arXiv:2207.13161 (Formalism)
+        [2] arXiv:2207.14712 (DMRG)
+        [3] arXiv:2208.10972 (TDVP)
+        """
+
+        # the rate of bond-dimension growth
+        alpha = self.options.get('alpha', 0.1)
+
+        # tresholds for intermediate truncations
+        eps_prime = self.options.get('eps_prime', 1e-4)
+        eps_tilde = self.options.get('eps_tilde', 1e-6)
+
+        # numerical cutoff for the singular values
+        cutoff = self.options.get('cutoff', 1e-14)
+
+        if self.move_right:
+            iL, iR = self.i0, self.i0+1
+            C = self.psi.get_B(iL, form='Th')  # A * Gamma
+            B = self.psi.get_B(iR, form='B')
+
+            # construct complement
+            B_tr = self._construct_truncated_complement_right(alpha, eps_prime, eps_tilde, cutoff)
+            if B_tr is None:
+                return
+
+            # extend B and Theta
+            B_ex = npc.grid_concat([B, B_tr], axes=['vL'])
+            BB_ex = npc.tensordot(B, B_ex.conj(), axes=(['p', 'vR'], ['p*', 'vR*']))
+            C_ex = npc.tensordot(C, BB_ex, axes=(['vR'], ['vL']))
+            C_ex = C_ex.replace_label('vL*', 'vR')
+            # bunch extended leg (probably unnecessary)
+            _, B_ex = B_ex.sort_legcharge(sort=False, bunch=True)
+            _, C_ex = C_ex.sort_legcharge(sort=False, bunch=True)
+
+            # update tensors and effective Hamiltonians
+            self.psi.set_B(iL, C_ex, form='Th')
+            self.psi.set_B(iR, B_ex, form='B')
+            # Note we do not set the singular values! Hence, the tensors are
+            # only accessible in the respective forms, but this is all what we need for
+            # the next update. The singular value should be set by the
+            # algorithm (DMRG, TDVP etc.) afterwards. The effective Hamiltonians 
+            # are expanded by updating the environments accordingly.
+            self.env.del_RP(iL)
+            self.env.get_RP(iL, store=True)
+        else:
+            iL, iR = self.i0-1, self.i0
+            A = self.psi.get_B(iL, form='A')
+            C = self.psi.get_B(iR, form='Th')  # Gamma * B
+
+            # construct complement
+            A_tr = self._construct_truncated_complement_left(alpha, eps_prime, eps_tilde, cutoff)
+            if A_tr is None:
+                return
+
+            # extend A and Theta
+            A_ex = npc.grid_concat([A, A_tr], axes=['vR'])
+            AA_ex = npc.tensordot(A, A_ex.conj(), axes=(['vL', 'p'], ['vL*', 'p*']))
+            C_ex = npc.tensordot(AA_ex, C, axes=(['vR'], ['vL']))
+            C_ex.ireplace_label('vR*', 'vL')
+            # bunch extended leg (probably unnecessary)
+            _, A_ex = A_ex.sort_legcharge(sort=False, bunch=True)
+            _, C_ex = C_ex.sort_legcharge(sort=False, bunch=True)
+
+            # update tensors and effective Hamiltonians
+            self.psi.set_B(iL, A_ex, form='A')
+            self.psi.set_B(iR, C_ex, form='Th')
+            self.env.del_LP(iR)
+            self.env.get_LP(iR, store=True)
+
+    def _construct_truncated_complement_right(self, alpha, eps_prime, eps_tilde, cutoff=1e-14):
+        """Construct truncated complement at the current site when moving left
+        to right."""
+
+        assert self.move_right
+        assert self.i0 < (self.psi.L - 1)
+
+        # define a config to not spam the logger to much
+        if not hasattr(self, 'interm_trunc_params'):
+            self.interm_trunc_params = asConfig(dict(chi_max=1), 'intermediate_truncation')
+
+        # left -> right: expand bond between i0 and i0+1
+        iL, iR = self.i0, self.i0+1
+
+        # --- PREPARE ---
+
+        # stuff we need
+        A = self.psi.get_B(iL, form='A')
+        S = self.psi.get_SR(iL)
+        B = self.psi.get_B(iR, form='B')
+
+        LP0 = self.env.get_LP(iL)
+        RP0 = self.env.get_RP(iR)
+
+        wL = self.env.H.get_W(iL)
+        wR = self.env.H.get_W(iR)
+
+        # the left part.
+        LP0 = npc.tensordot(LP0, A, axes=(['vR'], ['vL']))
+        LP0 = npc.tensordot(LP0, wL, axes=(['wR', 'p'], ['wL', 'p*']))
+        # Note: we do NOT include the Gamma here! I do not really understand
+        # why, but if we include the singular values according to Fig.2 in [2],
+        # TDVP does not produce the correct results.
+
+        # add projector to obtain complement as 1-P
+        LP1 = npc.tensordot(LP0, A.conj(), axes=(['vR*', 'p'], ['vL*', 'p*']))
+        LP1 = npc.tensordot(LP1, A, axes=(['vR*'], ['vR']))
+        LP1 = LP1.transpose(['vL', 'vR', 'wR', 'p'])
+
+        # becomes left outer leg
+        LP0 = LP0.replace_label('vR*', 'vL')
+
+        LP = LP0 - LP1
+        LP2 = LP.copy()
+
+        # the right part
+        RP0 = npc.tensordot(B, RP0, axes=(['vR'], ['vL']))
+        RP0 = npc.tensordot(wR, RP0, axes=(['wR', 'p*'], ['wL', 'p']))
+
+        # add projector to obtain complement as 1-P
+        RP1 = npc.tensordot(B.conj(), RP0, axes=(['vR*', 'p*'], ['vL*', 'p']))
+        RP1 = npc.tensordot(B, RP1, axes=(['vL'], ['vL*']))
+        RP1 = RP1.transpose(['wL', 'p', 'vL', 'vR'])
+
+        # becomes right outer leg
+        RP0 = RP0.replace_label('vL*', 'vR')
+
+        RP = RP0 - RP1
+        RP2 = RP.copy()
+
+        # --- PRE-SELECTION ---
+
+        # reshape and SVD the pink part
+        LP = LP.combine_legs([['vL', 'p', 'wR']], qconj=+1)
+        LP = LP.transpose(['(vL.p.wR)', 'vR'])
+        U, S, VH = npc.svd(LP, inner_labels=['vR', 'vL'], qtotal_LR=[None, RP.qtotal])
+
+        # absorb the S into the VH
+        VH = VH.scale_axis(S, axis='vL')
+
+        # absorb the SVH into the right side
+        RP = npc.tensordot(VH, RP, axes=(['vR'], ['vL']))
+
+        # if this has norm zero the SVD will fail. This means that the maximal
+        # bond dimension is exhausted. We do not expand the bond in this case.
+        if npc.norm(RP) < 1e-12:
+            return None
+
+        # reshape and SVD the blue part
+        chi1 = max(1, RP.get_leg('vL').ind_len // RP.get_leg('wL').ind_len)
+        RP = RP.combine_legs([['vR', 'p', 'wL']], qconj=-1)
+        self.interm_trunc_params.update(chi_max=chi1, svd_min=eps_prime)
+        U, S, VH, err, norm = svd_theta(RP, self.interm_trunc_params, inner_labels=['vR', 'vL'] , qtotal_LR=[None, RP.qtotal])
+
+        # absorb the s' into the vH'
+        VH = VH.scale_axis(S, axis='vL')
+
+        # change direction of w leg
+        VH = VH.split_legs().combine_legs([['vL', 'wL'], ['p', 'vR']], qconj=[+1, -1])
+
+        # SVD the red part
+        U, S, VH = npc.svd(VH, cutoff=cutoff, inner_labels=['vR', 'vL'], qtotal_LR=[None, VH.qtotal])
+        B_pr = VH.split_legs()
+
+        # --- FINAL SELECTION ---
+
+        # get correct left and right part
+        LP = LP2
+        RP = npc.tensordot(B_pr.conj(), RP0, axes=(['vR*', 'p*'], ['vR', 'p']))
+
+        # contract it
+        W = npc.tensordot(LP, RP, axes=(['vR', 'wR'], ['vL', 'wL']))
+        W = W.replace_label('vL*', 'vR')
+
+        # reshape and SVD the orange part
+        W = W.combine_legs([['vL', 'p']])
+        chi_expand = max(2, int(np.ceil(alpha * self.psi.chi[iL])))
+        # handle the boundaries appropriately, i.e. do not expand above the
+        # maximally possible bond dimension.
+        if self.psi.bc == 'finite':
+            L, d = self.psi.L, self.psi.dim[iL]
+            chi_max_finite = min(d**(iL+1), d**(L-iL-1))
+            chi_expand = int(min(chi_max_finite - self.psi.chi[iL], chi_expand))
+            if chi_expand <= 0:
+                return None
+        self.interm_trunc_params.update(chi_max=chi_expand, svd_min=eps_tilde, degeneracy_tol=cutoff)
+        U, S, VH, err, norm = svd_theta(W, self.interm_trunc_params, inner_labels=['vR', 'vL'], qtotal_LR=[None, W.qtotal])
+
+        # get truncated complement
+        B_tr = npc.tensordot(VH, B_pr, axes=(['vR'], ['vL']))
+
+        # check orthogonality of the truncated complement. 
+        ortho_err = npc.norm(npc.tensordot(B.conj(), B_pr, axes=(['vR*', 'p*'], ['vR', 'p'])))
+        if ortho_err > 1e-8:
+            logger.warn(f"Truncated complement not othogonal B^t B_pr (i={self.i0}) = {ortho_err:.2e}")
+        return B_tr
+
+    def _construct_truncated_complement_left(self, alpha, eps_prime, eps_tilde, cutoff=1e-14):
+        """Construct truncated complement at the current site when moving right
+        to left."""
+
+        assert not self.move_right
+        assert self.i0 > 0
+
+        # define a config to not spam the logger to much
+        if not hasattr(self, 'interm_trunc_params'):
+            self.interm_trunc_params = asConfig(dict(chi_max=1), 'intermediate_truncation')
+
+        # right -> left: expand bond between i0-1 and i0
+        iL, iR = self.i0-1, self.i0
+
+        # --- PREPARE ---
+
+        # stuff we need
+        A = self.psi.get_B(iL, form='A')
+        S = self.psi.get_SR(iL)
+        B = self.psi.get_B(iR, form='B')
+
+        LP0 = self.env.get_LP(iL)
+        RP0 = self.env.get_RP(iR)
+
+        wL = self.env.H.get_W(iL)
+        wR = self.env.H.get_W(iR)
+
+        # the left part
+        LP0 = npc.tensordot(LP0, A, axes=(['vR'], ['vL']))
+        LP0 = npc.tensordot(LP0, wL, axes=(['wR', 'p'], ['wL', 'p*']))
+
+        # add projector to obtain complement as 1-P
+        LP1 = npc.tensordot(LP0, A.conj(), axes=(['vR*', 'p'], ['vL*', 'p*']))
+        LP1 = npc.tensordot(LP1, A, axes=(['vR*'], ['vR']))
+        LP1 = LP1.transpose(['vL', 'vR', 'wR', 'p'])
+
+        # becomes left outer leg
+        LP0 = LP0.replace_label('vR*', 'vL')
+
+        LP = LP0 - LP1
+        LP2 = LP.copy()
+
+        # the right part (again without the singular values!)
+        RP0 = npc.tensordot(B, RP0, axes=(['vR'], ['vL']))
+        RP0 = npc.tensordot(wR, RP0, axes=(['wR', 'p*'], ['wL', 'p']))
+
+        # add projector to obtain complement as 1-P
+        RP1 = npc.tensordot(B.conj(), RP0, axes=(['vR*', 'p*'], ['vL*', 'p']))
+        RP1 = npc.tensordot(B, RP1, axes=(['vL'], ['vL*']))
+        RP1 = RP1.transpose(['wL', 'p', 'vL', 'vR'])
+
+        # becomes right outer leg
+        RP0 = RP0.replace_label('vL*', 'vR')
+
+        RP = RP0 - RP1
+        RP2 = RP.copy()
+
+        # --- PRE-SELECTION ---
+
+        # reshape and SVD the pink part (Note: this could be a QR!?)
+        RP = RP.combine_legs([['wL', 'p', 'vR']])
+        RP.itranspose(['vL', '(wL.p.vR)'])
+        U, S, VH = npc.svd(RP, inner_labels=['vR', 'vL'], qtotal_LR=[RP.qtotal, None])
+
+        # absorb the S into the U
+        U = U.scale_axis(S, axis='vR')
+
+        # absorb the US into the left side
+        LP = npc.tensordot(LP, U, axes=(['vR'], ['vL']))
+
+        # if this has norm zero the SVD will fail
+        if npc.norm(LP) < 1e-12:
+            return None
+
+        # reshape and SVD the blue part
+        chi1 = max(1, LP.get_leg('vR').ind_len // LP.get_leg('wR').ind_len)
+        LP = LP.combine_legs([['vL', 'wR', 'p']])
+        self.interm_trunc_params.update(chi_max=chi1, svd_min=eps_prime, degeneracy_tol=cutoff)
+        U, S, VH, err, norm = svd_theta(LP, self.interm_trunc_params, inner_labels=['vR', 'vL'], qtotal_LR=[LP.qtotal, None])
+
+        # absorb the s' into the u'
+        U = U.scale_axis(S, axis='vR')
+
+        # change direction of w leg
+        U = U.split_legs().combine_legs([['vL', 'p'], ['vR', 'wR']], qconj=[+1, -1])
+
+        # SVD the red part (somehow this cutoff is important)
+        U, S, VH = npc.svd(U, cutoff=cutoff, inner_labels=['vR', 'vL'], qtotal_LR=[U.qtotal, None])
+        A_pr = U.split_legs()
+
+        # --- FINAL SELECTION ---
+
+        # get correct left and right part
+        LP = npc.tensordot(LP0, A_pr.conj(), axes=(['vL', 'p'], ['vL*', 'p*']))
+        RP = RP2
+
+        # contract it
+        W = npc.tensordot(LP, RP, axes=(['vR', 'wR'], ['vL', 'wL']))
+        W = W.replace_label('vR*', 'vL')
+
+        # reshape and SVD the orange part
+        W = W.combine_legs([['p', 'vR']])
+        chi_expand = max(1, int(np.ceil(alpha*self.psi.chi[iL])))  # truncated SVD
+        if self.psi.bc == 'finite':
+            L, d = self.psi.L, self.psi.dim[iL] 
+            chi_max_finite = min(d**(iL+1), d**(L-iL-1))
+            chi_expand = int(min(chi_max_finite - self.psi.chi[iL], chi_expand))
+            if chi_expand <= 0:
+                return None
+        self.interm_trunc_params.update(chi_max=chi_expand, svd_min=eps_tilde)
+        U, S, VH, err, norm = svd_theta(W, self.interm_trunc_params, inner_labels=['vR', 'vL'], qtotal_LR=[W.qtotal, None])
+
+        # get truncated complement
+        A_tr = npc.tensordot(A_pr, U, axes=(['vR'], ['vL']))
+
+        ortho_err = npc.norm(npc.tensordot(A.conj(), A_tr, axes=(['vL*', 'p*'], ['vL', 'p'])))
+        if ortho_err > 1e-8:
+            logger.warn(f"Truncated complement not othogonal A^t A_pr (i={self.i0}) = {ortho_err:.2e}")
+        return A_tr
+
     def mixer_activate(self):
         """Set `self.mixer` to the class specified by `options['mixer']`.
 
