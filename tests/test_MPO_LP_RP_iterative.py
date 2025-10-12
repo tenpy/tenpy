@@ -13,8 +13,6 @@ from tenpy.networks.site import SpinHalfSite as shs
 from tenpy.networks.mps import MPS
 from tenpy.networks.mpo import MPO, MPOEnvironment, MPOTransferMatrix, MPOEnvironmentBuilder
 
-__all__ = ["test_init_LP_RP_iterative"]
-
 # ----- SETUP -----
 
 # model setup

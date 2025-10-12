@@ -2622,11 +2622,11 @@ class MPOEnvironment(BaseEnvironment):
         - If `start_env_sites` is None, and :attr:`bra` is :attr:`ket`,
           get `init_LP` and `init_RP` using one of two methods:
 
-            "TM": :meth:`MPOEnvironmentBuilder.init_LP_RP_iterative`
+            'iter': :meth:`MPOEnvironmentBuilder.init_LP_RP_iterative`
                 - Recommended for general use
-            "iter": :meth:`MPOTransferMatrix.find_init_LP_RP`
+            'TM': :meth:`MPOTransferMatrix.find_init_LP_RP`
                 - Used if 1) cannot be applied
-                - Faster for small bond dimension
+                - Faster for small bond dimension (chi < 150)
 
         Parameters
         ----------
@@ -2638,11 +2638,11 @@ class MPOEnvironment(BaseEnvironment):
         start_env_sites : int | None
             Number of sites over which to converge the environment for infinite systems.
             See above.
-        force_init_method : None | "iter" | "TM"
-            Force method "TM" or "iter" as described above for **infinite** MPS.
+        force_init_method : {None, 'iter', 'TM'}
+            Force method 'TM' or 'iter' as described above for **infinite** MPS.
         gmres_options : dict
             Further optional parameters for :class:`tenpy.linalg.krylov_based.GMRES`.
-            Only relevant for **infinite** MPS if method "iter" is used to get `init_LP`/`init_RP`.
+            Only relevant for **infinite** MPS if method 'iter' is used to get `init_LP`/`init_RP`.
         """
         if not self.finite  and (init_LP is None or init_RP is None) and \
                 start_env_sites is None and self.bra is self.ket:
@@ -2917,7 +2917,7 @@ class MPOEnvironmentBuilder:
     """ Construct boundary environments for periodic MPOEnvironments.
 
         This class implement the construction scheme from [Phien2012] to construct
-        `LP[0]` and `RP[self.L-1]` for a periodic :class:`MPOEnvironment`
+        `LP[0]` and `RP[self.L-1]` for a periodic :class:`MPOEnvironment`::
 
             |             - - > - - - - - 'vR*'               
             |            |          |
@@ -2932,20 +2932,22 @@ class MPOEnvironmentBuilder:
         extensive energy contribution of the Hamiltonian.
         
         However, for an MPO `H` that is upper triangular up to permutations,
-        `LP[0]` can be constructed iteratively in index `j`
+        `LP[0]` can be constructed iteratively in index `j`::
         
-        `E[n+1][:,j,:] = \sum_{i<=j} E[n][:,i,:]T_H[:,i,:][:,j,:]`
+            |   `E[n+1][:,j,:] = \sum_{i<=j} E[n][:,i,:]T_H[:,i,:][:,j,:]`
 
-        with E[n][:,j=IdL,:]=Id.
+        with::
+    
+            |   E[n][:,j=IdL,:]=Id.
 
-        The last environment E[n][:,j=IdR,:] requires solving the geometric series
+        The last environment E[n][:,j=IdR,:] requires solving the geometric series::
 
-        `E[n+1][:,j=D-1,:] = \sum_{k=0,...,n-1} T_H[:,j,:][:,j,:]**k (C)`
+            |   `E[n+1][:,j=D-1,:] = \sum_{k=0,...,n-1} T_H[:,j,:][:,j,:]**k (C)`
 
         which is singular due to the identity and density matrix as eigenvector
-        pair with eigenvalue 1. To avoid this,
+        pair with eigenvalue 1. To avoid this,::
 
-        `E[n+1][:,j=D-1,:] = c0_j + epsilon * n * Id`
+            |   `E[n+1][:,j=D-1,:] = c0_j + epsilon * n * Id`
 
         can be decomposed into a constant term and an extensive contribution. The
         latter captures the energy per site of the environment.
