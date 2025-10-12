@@ -2625,7 +2625,7 @@ class MPOEnvironment(BaseEnvironment):
             'iter': :meth:`MPOEnvironmentBuilder.init_LP_RP_iterative`
                 - Recommended for general use
             'TM': :meth:`MPOTransferMatrix.find_init_LP_RP`
-                - Used if 1) cannot be applied
+                - In case 'iter' cannot be applied
                 - Faster for small bond dimension (chi < 150)
 
         Parameters
