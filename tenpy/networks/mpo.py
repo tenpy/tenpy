@@ -344,9 +344,9 @@ class MPO:
         # check IdL, IdR valid
         j_IdL, j_IdR = self.IdL[0], self.IdR[-1]
         if j_IdL < 0:
-            j_IdL = self.chi[0]-j_IdL
+            j_IdL = self.chi[0] + j_IdL
         if j_IdR < 0:
-            j_IdR = self.chi[-1]-j_IdR
+            j_IdR = self.chi[-1] + j_IdR
         if (j_IdL is not None) and (j_IdL not in j_cycles):
             raise ValueError("Connection IdL -> IdL missing")
         if (j_IdR is not None) and (j_IdR not in j_cycles):
@@ -2607,7 +2607,7 @@ class MPOEnvironment(BaseEnvironment):
                               init_RP=None,
                               age_LP=0,
                               age_RP=0,
-                              start_env_sites=None, force_init_method="iter"):
+                              start_env_sites=None, force_init_method="iter", gmres_options=None):
         """(Re)initialize first LP and last RP from the given data.
 
         If `init_LP` and `init_RP` are not given, we try to find sensible initial values.
@@ -2639,6 +2639,9 @@ class MPOEnvironment(BaseEnvironment):
             See above.
         force_init_method : None | "iter" | "TM"
             Force method "TM" or "iter" as described above for **infinite** MPS.
+        gmres_options : dict
+            Further optional parameters for :class:`tenpy.linalg.krylov_based.GMRES`.
+            Only relevant for **infinite** MPS if method "iter" is used to get `init_LP`/`init_RP`.
         """
         if not self.finite  and (init_LP is None or init_RP is None) and \
                 start_env_sites is None and self.bra is self.ket:
@@ -2655,7 +2658,7 @@ class MPOEnvironment(BaseEnvironment):
                     use_method = "iter"
             if use_method == "iter":
                 _env_init = MPOEnvironmentBuilder(self.H, self.ket)
-                env_data, _ = _env_init.init_LP_RP_iterative('both')
+                env_data, _ = _env_init.init_LP_RP_iterative('both', gmres_options=gmres_options)
             else:
                 assert use_method == "TM", "Invalid method for init_LP_RP_infinite."
                 env_data = MPOTransferMatrix.find_init_LP_RP(self.H, self.ket, 0, self.L - 1)
@@ -2922,24 +2925,24 @@ class MPOEnvironmentBuilder:
             |             - - > - - - - - 'vR'
                                      
         where T_H has the structure of a corresponding :class:`MPOTransferMatrix`
-        and the limit :math:`n → \infty` has to be taken. The above equation does
-        generally not converge to a fixpoint due to the extensive energy contribution
-        of the Hamiltonian.
+        and the limit :math:`n → \infty` has to be taken.
+        
+        The above equation does generally not converge to a fixpoint due to the
+        extensive energy contribution of the Hamiltonian.
         
         However, for an MPO `H` that is upper triangular up to permutations,
         `LP[0]` can be constructed iteratively in index `j`
         
         `E[n+1][:,j,:] = \sum_{i<=j} E[n][:,i,:]T_H[:,i,:][:,j,:]`
 
-        with E[n][:,j=IdL,:]=Id .
-        
+        with E[n][:,j=IdL,:]=Id.
+
         The last environment E[n][:,j=IdR,:] requires solving the geometric series
 
         `E[n+1][:,j=D-1,:] = \sum_{k=0,...,n-1} T_H[:,j,:][:,j,:]**k (C)`
 
-        due to the identity on the diagonal of `T_H`. 
-        This series has the identity and density matrix as eigenvector pair with
-        eigenvalue 1, causing the series to diverge. To avoid this,
+        which is singular due to the identity and density matrix as eigenvector
+        pair with eigenvalue 1. To avoid this,
 
         `E[n+1][:,j=D-1,:] = c0_j + epsilon * n * Id`
 
@@ -3172,7 +3175,7 @@ class MPOEnvironmentBuilder:
         E : float
             Energy per site, only returned if `calc_E` is True.
         """
-        if not _mpo_check_for_iter_LP_RP_infinite(self.H):
+        if _mpo_check_for_iter_LP_RP_infinite(self.H) == False:
             raise ValueError("Iterative environment initialization failed: Hamiltonian cannot be ordered.")
         assert which=='LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
         ones = self._determine_cycles()
@@ -3866,6 +3869,7 @@ def _mpo_graph_state_order(key):
         return (0, key)
     return (0, str(key))
 
+
 def _mpo_check_for_iter_LP_RP_infinite(mpo):
     """ Check that :meth:`MPOEnvironmentBuilder.init_LP_RP_iterative` works for an MPO
 
@@ -3876,6 +3880,8 @@ def _mpo_check_for_iter_LP_RP_infinite(mpo):
     if mpo._outer_permutation is None:
         mpo._order_graph()
     return mpo._outer_permutation
+
+
 def _partition_W(W, IdL_L, IdR_L, IdL_R, IdR_R):
     """Split MPO into blocks with respect to standard upper triangular form.
 
