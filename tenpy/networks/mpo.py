@@ -343,6 +343,10 @@ class MPO:
         outer_connections, j_cycles, _ = graph_connections
         # check IdL, IdR valid
         j_IdL, j_IdR = self.IdL[0], self.IdR[-1]
+        if j_IdL < 0:
+            j_IdL = self.chi[0]-j_IdL
+        if j_IdR < 0:
+            j_IdR = self.chi[-1]-j_IdR
         if (j_IdL is not None) and (j_IdL not in j_cycles):
             raise ValueError("Connection IdL -> IdL missing")
         if (j_IdR is not None) and (j_IdR not in j_cycles):
@@ -2617,9 +2621,9 @@ class MPOEnvironment(BaseEnvironment):
           with :meth:`init_LP` / :meth:`init_RP`.
         - If `start_env_sites` is None, and :attr:`bra` is :attr:`ket`,
           get `init_LP` and `init_RP` using one of two methods:
-            "TM" :meth:`MPOEnvironmentBuilder.init_LP_RP_iterative`
+            "TM": :meth:`MPOEnvironmentBuilder.init_LP_RP_iterative`
                     - Recommended for general use
-            "iter" :meth:`MPOTransferMatrix.find_init_LP_RP`
+            "iter": :meth:`MPOTransferMatrix.find_init_LP_RP`
                     - Used if 1) cannot be applied
                     - Faster for small bond dimension
 
@@ -2909,8 +2913,7 @@ class MPOEnvironmentBuilder:
     """ Construct boundary environments for periodic MPOEnvironments.
 
         This class implement the construction scheme from [Phien2012] to construct
-        `LP[0]` and `RP[self.L-1]` for a periodic :class:`MPOEnvironment`. These
-        correspond to the contraction of infinite half chains::
+        `LP[0]` and `RP[self.L-1]` for a periodic :class:`MPOEnvironment`
 
             |             - - > - - - - - 'vR*'               
             |            |          |
@@ -2924,20 +2927,17 @@ class MPOEnvironmentBuilder:
         of the Hamiltonian.
         
         However, for an MPO `H` that is upper triangular up to permutations,
-        `LP[0]` can be constructed iteratively in index `j`, since
+        `LP[0]` can be constructed iteratively in index `j`
         
         `E[n+1][:,j,:] = \sum_{i<=j} E[n][:,i,:]T_H[:,i,:][:,j,:]`
 
-        does only depend on indices `i<=j`. Except for the last environment
-        `E[n][:,j=H.chi[0]-1,:]`, these equations converge to a fixpoint
-
-        `E[n][:,j,:] -> c0_j`
-
-        On the last virtual MPO index, a geometric series
+        with E[n][:,j=IdL,:]=Id .
+        
+        The last environment E[n][:,j=IdR,:] requires solving the geometric series
 
         `E[n+1][:,j=D-1,:] = \sum_{k=0,...,n-1} T_H[:,j,:][:,j,:]**k (C)`
 
-        has to be solved due to the identity on the diagonal `T_H[:,j,:][:,j,:]`.
+        due to the identity on the diagonal of `T_H`. 
         This series has the identity and density matrix as eigenvector pair with
         eigenvalue 1, causing the series to diverge. To avoid this,
 
@@ -3151,7 +3151,7 @@ class MPOEnvironmentBuilder:
         tol_c0 : float | None
             Tolerance for explicitly computing the dominant left and right eigenvectors
             of the :class:`MPSTransferMatrix` associated with :attr:`self.ket`, if numerical errors
-            affect the MPS canonical form. Ignored if None
+            affect the MPS canonical form. Ignored if `None`
         calc_E : bool
             Whether to return the energy. Only permitted when the expectation value scales 
             at most linearly with system size. For higher-order scaling,
