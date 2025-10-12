@@ -261,6 +261,12 @@ which make this easy. Let us summarize them here:
 
 See also :meth:`~tenpy.models.model.CouplingModel.add_exponentially_decaying_coupling`
 
+.. note ::
+    Instead of a single operator name like ``'Sx'``, you can put multiple operator names
+    separated by whitespace to represent the product of these operators.
+    For example, ``self.add_onsite(-2.j * (-hz), u, 'Sx Sy')`` is equivalent to (but worse than)
+    to ``self.add_onsite(-hz, u, 'Sz')``.
+
 For our example, we define the Hamiltonian by implementing::
 
     class MyModel(CouplingMPOModel):
@@ -392,6 +398,12 @@ Try playing around with different boundary conditions, e.g.
 or
 ``MyModel({'lattice': 'Square', 'Lx': 2, 'Ly': 3, 'Jx': 0, 'bc_x': 'periodic'})``.
 See :doc:`/intro/lattices` regarding boundary conditions.
+
+You can also use :func:`~tenpy.algorithms.exact_diag.get_numpy_Hamiltonian` to see if the Hamiltonian
+is what you expect it to be.
+You will need to choose a relatively small system for the full Hamiltonian to fit into RAM.
+This is strongly recommended if you defined your own operators, as e.g. the
+:class:`~tenpy.models.pxp.PXPChain` does.
 
 
 Contribute your model?

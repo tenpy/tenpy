@@ -624,8 +624,9 @@ class DMRGEngine(IterativeSweeps):
             psi.set_B(j, A_new, form='A')
 
             old_UL, old_VR = psi.segment_boundaries
-            new_UL = npc.tensordot(old_UL, U, axes=['vR', 'vL'])
-            psi.segment_boundaries = (new_UL, old_VR)
+            if old_UL is not None:
+                new_UL = npc.tensordot(old_UL, U, axes=['vR', 'vL'])
+                psi.segment_boundaries = (new_UL, old_VR)
 
             for env in self._all_envs:
                 update_ket = env.ket is psi
@@ -648,8 +649,9 @@ class DMRGEngine(IterativeSweeps):
             psi.set_B(j, B_new, form='B')
 
             old_UL, old_VR = psi.segment_boundaries
-            new_VR = npc.tensordot(V, old_VR, axes=['vR', 'vL'])
-            psi.segment_boundaries = (old_UL, new_VR)
+            if old_VR is not None:
+                new_VR = npc.tensordot(V, old_VR, axes=['vR', 'vL'])
+                psi.segment_boundaries = (old_UL, new_VR)
 
             for env in self._all_envs:
                 update_ket = env.ket is psi
@@ -1117,7 +1119,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
     def mixer_activate(self):
         super().mixer_activate()
-        if not self.mixer.can_decompose_1site:
+        if not (self.mixer is None) and not self.mixer.can_decompose_1site:
             msg = (f'Using {self.mixer.__class__.__name__} with single-site DMRG is inefficient. '
                    f'The resulting algorithm has two-site costs!')
             warnings.warn(msg)

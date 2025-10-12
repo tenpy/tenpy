@@ -460,10 +460,12 @@ class Lattice:
 
         Returns
         -------
-        boundary_conditions : list of str
-            List of ``"open"`` or ``"periodic"``, one entry for each direction of the lattice.
+        boundary_conditions : list of {str | int}
+            List of ``"open"`` or ``"periodic"`` or integer, one entry for each direction of the
+            lattice. An integer means periodic boundary condition with a shift given by that number,
+            see :attr:`bc_shift`.
         """
-        global bc_choices
+        global bc_choices  # noqa: F824
         bc_choices_reverse = dict([(v, k) for (k, v) in bc_choices.items()])
         bc = [bc_choices_reverse[bc] for bc in self.bc]
         if self.bc_shift is not None:
@@ -475,7 +477,7 @@ class Lattice:
 
     @boundary_conditions.setter
     def boundary_conditions(self, bc):
-        global bc_choices
+        global bc_choices  # noqa: F824
         if bc in list(bc_choices.keys()):
             bc = [bc_choices[bc]] * self.dim
             self.bc_shift = None
@@ -807,8 +809,10 @@ class Lattice:
             return A
         # choose the appropriate index arrays
         if u is None:
+            assert A.shape[axes[0]] == self.N_sites, 'Invalid shape'
             idx = self._mps2lat_vals_idx
         else:
+            assert A.shape[axes[0]] == self.N_cells, 'Invalid shape'
             idx = self._mps2lat_vals_idx_fix_u[u]
         return np.take(A, idx, axis=axes[0])
 

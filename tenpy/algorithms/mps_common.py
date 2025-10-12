@@ -375,6 +375,15 @@ class Sweep(Algorithm):
                 self.trunc_params['chi_max'] = new_chi_max
                 if self.options.get('chi_list_reactivates_mixer', True, bool):
                     self.mixer_activate()
+        if not optimize and self.chi_list is not None:
+            # If chi_list is used, no chi_max is set.
+            # When doing env sweeps, we need to make sure chi_max is set otherwise it defaults to 100
+            # We set it to the current max chi
+            chi_max = self.trunc_params.get('chi_max', None, int)
+            if chi_max is None:
+                chi_max = int(np.max(self.psi.chi))
+                logger.info("Setting chi_max for env sweeps=%d", chi_max)
+                self.trunc_params['chi_max'] = chi_max
 
         # the actual sweep
         for i0, move_right, update_LP_RP in schedule:

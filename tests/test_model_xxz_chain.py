@@ -1,6 +1,7 @@
 """test of :class:`tenpy.models.XXZChain`."""
 # Copyright (C) TeNPy Developers, Apache license
 
+import pytest
 import numpy as np
 import numpy.testing as npt
 import pprint
@@ -10,8 +11,9 @@ from tenpy.models.xxz_chain import XXZChain, XXZChain2
 from test_model import check_general_model
 
 
-def test_XXZChain():
-    pars = dict(L=4, Jxx=1., Jz=1., hz=0., bc_MPS='finite', sort_charge=True)
+@pytest.mark.parametrize('conserve', ['Sz', 'parity', 'None'])
+def test_XXZChain(conserve):
+    pars = dict(L=4, Jxx=1., Jz=1., hz=0., bc_MPS='finite', sort_charge=True, conserve=conserve)
     chain = XXZChain(pars)
     chain.test_sanity()
     for Hb in chain.H_bond[1:]:  # check bond eigenvalues
@@ -50,15 +52,18 @@ def test_XXZChain():
     chain.test_sanity()
 
 
-def test_XXZChain_general(tol=1.e-14):
-    check_general_model(XXZChain, dict(L=4, Jxx=1., hz=0., bc_MPS='finite', sort_charge=True), {
-        'Jz': [0., 1., 2.],
-        'hz': [0., 0.2]
-    })
-    check_general_model(XXZChain2, dict(L=4, Jxx=1., hz=0., bc_MPS='finite', sort_charge=True), {
-        'Jz': [0., 1., 2.],
-        'hz': [0., 0.2]
-    })
+@pytest.mark.parametrize('conserve', ['Sz', 'parity', 'None'])
+def test_XXZChain_general(conserve, tol=1.e-14):
+    check_general_model(
+        XXZChain,
+        dict(L=4, Jxx=1., hz=0., bc_MPS='finite', sort_charge=True, conserve=conserve),
+        dict(Jz=[0., 1., 2.], hz=[0., 0.2])
+    )
+    check_general_model(
+        XXZChain2,
+        dict(L=4, Jxx=1., hz=0., bc_MPS='finite', sort_charge=True, conserve=conserve),
+        dict(Jz=[0., 1., 2.], hz=[0., 0.2])
+    )
     model_param = dict(L=3, Jxx=1., Jz=1.5, hz=0.25, bc_MPS='finite', sort_charge=True)
     m1 = XXZChain(model_param)
     m2 = XXZChain2(model_param)

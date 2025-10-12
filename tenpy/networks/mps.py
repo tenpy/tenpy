@@ -2005,9 +2005,12 @@ class MPS(BaseMPSExpectationValue):
             The sites defining the local Hilbert space.
         psi : :class:`~tenpy.linalg.np_conserved.Array`
             The full wave function to be represented as an MPS.
-            Should have labels ``'p0', 'p1', ...,  'p{L-1}'``.
+            Should have labels ``'p0', 'p1', ...,  'p{L-1}'`` (in any order).
             Additionally, it may have (or must have for 'segment' `bc`) the legs ``'vL', 'vR'``,
             which are trivial for 'finite' `bc`.
+            For subclasses with multiple physical legs per site, we instead expect one set of labels
+            per site (e.g. ``'p0', 'q0', 'p1', 'q1', ...`` for
+            :class:`~tenpy.networks.purification_mps.PurificationMPS`).
         form  : ``'B' | 'A' | 'C' | 'G' | None``
             The canonical form of the resulting MPS, see module doc-string.
             ``None`` defaults to 'A' form on the first site and 'B' form on all following sites.
@@ -2044,24 +2047,47 @@ class MPS(BaseMPSExpectationValue):
             psi = psi.add_trivial_leg(len(psi.get_leg_labels()), label='vR', qconj=-1)
         elif bc == 'finite' and psi.get_leg('vR').ind_len != 1:
             raise ValueError("non-trivial left leg for 'finite' bc!")
-        labels = ['vL'] + ['p' + str(i) for i in range(L)] + ['vR']
-        psi.itranspose(labels)
+
+        # need to consider subclasses with multiple legs per site (e.g. purification)
+        legs_per_site = len(cls._p_label)
+        # p_labels: e.g. [['p0', 'q0'], ['p1', 'q1'], ...]
+        p_labels = [[f'{p}{i}' for p in cls._p_label] for i in range(L)]
+        # psi_labels: e.g. ['vL', 'p0', 'q0', 'p1', 'q1', ..., 'vR']
+        psi_labels = ['vL'] + [p_i for P in p_labels for p_i in P] + ['vR']
+        psi.itranspose(psi_labels)
+
+        # combine to one leg per site
+        if legs_per_site > 1:
+            psi = psi.combine_legs([[1 + site * legs_per_site + n for n in range(legs_per_site)]
+                                    for site in range(L)])
+            combined_P_labels = [npc.Array._combine_leg_labels(P) for P in p_labels]
+        else:
+            combined_P_labels = [P[0] for P in p_labels]
+        # now we have legs ``vL, P0, P1, ..., vR``, where e.g. P0==(p0.q0)
+        assert psi._labels == ['vL', *combined_P_labels, 'vR']
+
         # combine legs from left
         for i in range(0, L - 1):
             psi = psi.combine_legs([0, 1])  # combines the legs until `i`
-        # now psi has only three legs: ``'(((vL.p0).p1)...p{L-2})', 'p{L-1}', 'vR'``
+        # now psi has only three legs: ``'(((vL.P0).P1)...P{L-2})', 'P{L-1}', 'vR'``
         for i in range(L - 1, 0, -1):
             # split off B[i]
-            psi = psi.combine_legs([labels[i + 1], 'vR'])
+            psi = psi.combine_legs([combined_P_labels[i], 'vR'])
             psi, S, B = npc.svd(psi, inner_labels=['vR', 'vL'], cutoff=cutoff)
             S /= np.linalg.norm(S)  # normalize
             if i > 1:
                 psi.iscale_axis(S, 1)
-            B_list[i] = B.split_legs(1).replace_label(labels[i + 1], 'p')
+            B = B.split_legs(1)
+            if legs_per_site > 1:
+                B = B.split_legs(combined_P_labels[i])
+            B = B.replace_labels(p_labels[i], cls._p_label)
+            B_list[i] = B
             S_list[i] = S
             psi = psi.split_legs(0)
         # psi is now the first `B` in 'A' form
-        B_list[0] = psi.replace_label(labels[1], 'p')
+        if legs_per_site > 1:
+            psi = psi.split_legs(combined_P_labels[0])
+        B_list[0] = psi.replace_labels(p_labels[0], cls._p_label)
         B_form = ['A'] + ['B'] * (L - 1)
         if bc == 'finite':
             S_list[0] = S_list[-1] = np.ones([1], dtype=np.float64)
@@ -2542,6 +2568,11 @@ class MPS(BaseMPSExpectationValue):
             The n-site wave function with leg labels ``vL, p0, p1, .... p{n-1}, vR``.
             In Vidal's notation (with s=lambda, G=Gamma):
             ``theta = s**form_L G_i s G_{i+1} s ... G_{i+n-1} s**form_R``.
+
+        See Also
+        --------
+        :func:`~tenpy.algorithms.exact_diag.get_full_wavefunction`
+            Get the full wavefunction for a finite MPS, e.g. for debugging.
         """
         i = self._to_valid_index(i)
         for j in range(i, i + n):
@@ -4579,11 +4610,13 @@ class MPS(BaseMPSExpectationValue):
         i : int
             (Left-most) index of the site(s) on which the operator should act.
         op : str | npc.Array
-            A physical operator acting on site `i`, with legs ``'p', 'p*'`` for a single-site
-            operator or with legs ``['p0', 'p1', ...], ['p0*', 'p1*', ...]`` for an operator
-            acting on `n`>=2 sites.
-            Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
-            :attr:`sites`.
+            A physical operator acting on a single site `i`, or on ``n`` consecutive sites
+            ``range(i, i + n)``.  Strings (like ``'Id', 'Sz'``) are translated into single-site
+            operators defined by :attr:`sites`, in particular by ``sites[i]``.
+            The number of sites, and which leg of `op` acts on which leg of the MPS, are inferred
+            from the labels of `op`, see notes below. In most cases, the labels should be either
+            ``['p', 'p*']`` for a single-site operator or ``['p0', 'p1', ..., 'p0*', 'p1*', ...]``
+            (in any order) for a multi-site operator.
         unitary : None | bool
             Whether `op` is unitary, i.e., whether the canonical form is preserved (``True``)
             or whether we should call :meth:`canonical_form` (``False``).
@@ -4597,6 +4630,21 @@ class MPS(BaseMPSExpectationValue):
         understood_infinite : bool
             Raise a warning to make aware of :ref:`iMPSWarning`.
             Set ``understood_infinite=True`` to suppress the warning.
+
+        Notes
+        -----
+        We infer quite a bit of information about how exactly to apply the operator, just from
+        its labels. We require that the labels of `op` come in pairs ``l, l + '*'``, where ``l``
+        is one of the :attr:`_p_labels` of the class, optionally followed by an integer number.
+        E.g. for :class:`MPS` it must be either ``'p'`` or e.g. ``'p2'``, while for a
+        :class:`~tenpy.networks.purification.PurificationMPS`` it could additionally also be
+        ``'q'`` or e.g. ``'q2'``. We then contract the ``l + '*'`` leg of `op` with the ``l`` leg
+        of the local wavefunction (see :meth:`get_theta`), and the ``l`` leg of `op` remains as
+        a leg of the resulting MPS.
+        All the (non-starred) ``l`` labels must either end with a non-number character, and we
+        assume a single-site operator, or they must all end in an integer number. A label ending a
+        number ``m`` acts on site ``i + m``, e.g. ``'p0'`` acts on site `i`, and we infer the
+        number of sites ``n`` from the largest of these ``m``.
         """
         if not self.finite and not understood_infinite:
             warnings.warn("For infinite MPS, apply_local_op acts on *each* unit cell in parallel."
@@ -4610,7 +4658,8 @@ class MPS(BaseMPSExpectationValue):
                     raise ValueError("open JW string ending in each unit cell"
                                      "breaks translation invariance!")
                 try:
-                    JW_sign = self.apply_JW_string_left_of_virt_leg(self._B[i], 'vL', i)
+                    _ = self.apply_JW_string_left_of_virt_leg(self._B[i], 'vL', i)
+                    # modifies self._B[i] in-place
                 except ValueError as e:
                     raise ValueError(f"Would need JW string for operator {op!r}, "
                                      "but can't extract JW signs from the charges") from e
@@ -4618,35 +4667,56 @@ class MPS(BaseMPSExpectationValue):
         else:
             opname = op
             need_JW = False
-        n = op.rank // 2  # same as int(rank/2)
-        if n == 1:
-            pstar, p = 'p*', 'p'
+
+        # Infer n_sites and the labels to contract from op._labels
+        p = [l for l in op._labels if not l.endswith('*')]
+        pstar = [f'{l}*' for l in p]
+        if set(op._labels) != set(p + pstar):
+            raise ValueError('The labels of `op` must come in pairs ``l, l + "*"``.')
+        if p[0][-1].isdigit():
+            # need to consider edge case n_sites > 10, where multiple characters give the site index
+            site_idcs = []
+            for l in p:
+                num_non_digits = len(l.rstrip('0123456789'))
+                site_idx = l[num_non_digits:]
+                try:
+                    site_idx = int(site_idx)
+                except Exception:
+                    msg = 'The labels of `op` must either all end in numbers or none of them.'
+                    raise ValueError(msg) from None
+                site_idcs.append(site_idx)
+            n_sites = max(site_idcs) + 1
+            if n_sites == 1:
+                raise ValueError('For a single-site operator, omit the "0" at the end of labels.')
+        elif any(l[-1].isdigit() for l in p):
+            msg = 'The labels of `op` must either all end in numbers or none of them.'
+            raise ValueError(msg)
         else:
-            p = self._get_p_labels(n, False)
-            pstar = self._get_p_labels(n, True)
+            n_sites = 1
+
         if unitary is None:
             op_op_dagger = npc.tensordot(op, op.conj(), axes=[pstar, p])
-            if n > 1:
+            if n_sites > 1:
                 op_op_dagger = op_op_dagger.combine_legs([p, pstar], qconj=[+1, -1])
             unitary = npc.norm(op_op_dagger - npc.eye_like(op_op_dagger)) < cutoff
-        if n == 1:
-            opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
+        if n_sites == 1:
+            opB = npc.tensordot(op, self._B[i], axes=[pstar, p])
             self.set_B(i, opB, self.form[i])
             if opB.norm() < 1.e-12:
                 raise ValueError(f"Applying the operator {opname!s} on site {i:d} destroys state!")
         else:
-            th = self.get_theta(i, n)
+            th = self.get_theta(i, n_sites)
             th = npc.tensordot(op, th, axes=[pstar, p])
             if th.norm() < 1.e-12:
                 raise ValueError(f"Applying the operator {opname!s} on site {i:d} destroys state!")
             # use MPS.from_full to split the sites
-            split_th = self.from_full(self.sites[i:i + n], th, None, cutoff, renormalize,
-                                      'segment', (self.get_SL(i), self.get_SR(i + n - 1)))
+            split_th = self.from_full(self.sites[i:i + n_sites], th, None, cutoff, renormalize,
+                                      'segment', (self.get_SL(i), self.get_SR(i + n_sites - 1)))
             if not renormalize:
                 self.norm *= split_th.norm
-            for j in range(n):
+            for j in range(n_sites):
                 self.set_B(i + j, split_th._B[j], split_th.form[j])
-            for j in range(n - 1):
+            for j in range(n_sites - 1):
                 self.set_SR(i + j, split_th._S[j + 1])
         if not unitary:
             self.canonical_form(renormalize=renormalize)
@@ -5540,16 +5610,26 @@ class BaseEnvironment(metaclass=ABCMeta):
                 vR_ket = self.ket.get_B(self.L - 1 + start_env_sites, 'B').get_leg('vR')
                 vR_bra = self.bra.get_B(self.L - 1 + start_env_sites, 'B').get_leg('vR')
         if init_LP is not None:
-            compatible = (init_LP.get_leg('vR') == vL_ket.conj()
-                          and init_LP.get_leg('vR*') == vL_bra)
-            if not compatible:
-                warnings.warn("dropping `init_LP` with incompatible MPS legs")
+            incompatible_legs = []
+            if init_LP.get_leg('vR') != vL_ket.conj():
+                incompatible_legs.append('vR')
+            if init_LP.get_leg('vR*') != vL_bra:
+                incompatible_legs.append('vR*')
+            if incompatible_legs:
+                msg = (f'dropping `init_LP` with incompatible virtual legs: '
+                       f'{", ".join(incompatible_legs)}')
+                warnings.warn(msg, stacklevel=2)
                 init_LP = None
         if init_RP is not None:
-            compatible = (init_RP.get_leg('vL') == vR_ket.conj()
-                          and init_RP.get_leg('vL*') == vR_bra)
-            if not compatible:
-                warnings.warn("dropping `init_RP` with incompatible MPS legs")
+            incompatible_legs = []
+            if init_RP.get_leg('vL') != vR_ket.conj():
+                incompatible_legs.append('vL')
+            if init_RP.get_leg('vL*') != vR_bra:
+                incompatible_legs.append('vL*')
+            if incompatible_legs:
+                msg = (f'dropping `init_RP` with incompatible virtual legs: '
+                       f'{", ".join(incompatible_legs)}')
+                warnings.warn(msg, stacklevel=2)
                 init_RP = None
         return init_LP, init_RP
 
@@ -5922,6 +6002,30 @@ class BaseEnvironment(metaclass=ABCMeta):
         """Contract RP with the tensors on site `i` to form ``self.get_RP(i-1)``"""
         ...
 
+    def _update_gauge_LP(self, i, U, update_bra, update_ket):
+        """Update LP[i] following the MPS gauge ``A[i-1] A[i] -> (A[i-1] U) (Udagger A[i])``."""
+        assert update_bra or update_ket
+        if not self.has_LP(i):
+            return
+        LP = self.get_LP(i)
+        if update_ket:
+            LP = npc.tensordot(LP, U, axes=['vR', 'vL'])
+        if update_bra:
+            LP = npc.tensordot(U.conj(), LP, axes=['vL*', 'vR*'])
+        self.set_LP(i, LP, self.get_LP_age(i))
+
+    def _update_gauge_RP(self, i, V, update_bra, update_ket):
+        """Update RP[i] following the MPS gauge ``B[i] B[i+1] -> (B[i] Vdagger) (V B[i+1])``."""
+        assert update_bra or update_ket
+        if not self.has_RP(i):
+            return
+        RP = self.get_RP(i)
+        if update_ket:
+            RP = npc.tensordot(V, RP, axes=['vR', 'vL'])
+        if update_bra:
+            RP = npc.tensordot(RP, V.conj(), axes=['vL*', 'vR*'])
+        self.set_RP(i, RP, self.get_RP_age(i))
+
 
 class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
     """Class storing partial contractions between two different MPS and providing expectation values.
@@ -6003,30 +6107,6 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         RP = self.get_RP(i, store=True)
         C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vL, vL*)
         return C
-
-    def _update_gauge_LP(self, i, U, update_bra, update_ket):
-        """Update LP[i] following the MPS gauge ``A[i-1] A[i] -> (A[i-1] U) (Udagger A[i])``."""
-        assert update_bra or update_ket
-        if not self.has_LP(i):
-            return
-        LP = self.get_LP(i)
-        if update_ket:
-            LP = npc.tensordot(LP, U, axes=['vR', 'vL'])
-        if update_bra:
-            LP = npc.tensordot(U.conj(), LP, axes=['vL*', 'vR*'])
-        self.set_LP(i, LP, self.get_LP_age(i))
-
-    def _update_gauge_RP(self, i, V, update_bra, update_ket):
-        """Update RP[i] following the MPS gauge ``B[i] B[i+1] -> (B[i] Vdagger) (V B[i+1])``."""
-        assert update_bra or update_ket
-        if not self.has_RP(i):
-            return
-        RP = self.get_RP(i)
-        if update_ket:
-            RP = npc.tensordot(V, RP, axes=['vR', 'vL'])
-        if update_bra:
-            RP = npc.tensordot(RP, V.conj(), axes=['vL*', 'vR*'])
-        self.set_RP(i, RP, self.get_RP_age(i))
 
 
 class TransferMatrix(sparse.NpcLinearOperator):

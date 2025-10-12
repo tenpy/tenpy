@@ -161,6 +161,53 @@ class PurificationMPS(MPS):
         super().test_sanity()
 
     @classmethod
+    def from_density_matrix(cls, sites, rho, form=None, cutoff=1e-16, normalize=True):
+        r"""Construct a purification from a single tensor `rho` of the density matrix.
+
+        Given the mixed state :math:`\rho`, we diagonalize it :math:`\rho = U D U^\dagger`,
+        and define :math:`\psi = \sum_{ijk} U_{ik} \sqrt{D_k} \bar{U}_{jk} |i>_{phys} |j>_{anc}`.
+        This is one of many possible purifications of :math:`rho`, and is valid since
+        :math:`Tr_{anc} |\psi><\psi| = \rho`.
+        We then construct a purification MPS of :math:`\psi` using :meth:`from_full`.
+
+        Boundary conditions are always finite.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the physical local Hilbert spaces.
+        rho : :class:`~tenpy.linalg.np_conserved.Array`
+            The full density matrix.
+            Should have labels ``'p0', 'p0*', 'p1', 'p1*, ...,  'p{L-1}', 'p{L-1}*`` (in any order).
+            Is assumed to be hermitian and positive semi-definite.
+        form  : ``'B' | 'A' | 'C' | 'G' | None``
+            The canonical form of the resulting MPS, see module doc-string.
+            ``None`` defaults to 'A' form on the first site and 'B' form on all following sites.
+        cutoff : float
+            Cutoff of singular values used in the SVDs.
+        normalize : bool
+            Whether the resulting MPS should have 'norm' 1.
+        """
+        L = len(sites)
+        rho = rho.combine_legs([[f'p{i}' for i in range(L)], [f'p{i}*' for i in range(L)]])  # [P, P*]
+        D, U = npc.eigh(rho)  # D[eig] , U[P, eig]
+
+        # fix negative eigenvalues
+        if np.any(D < -1e-12):
+            raise ValueError('Density matrix is not positive.')
+        D[D < 0] = 0
+
+        # [P, eig] * [eig] @ [P*, eig*] -> [P, P*]
+        psi = npc.tensordot(U.scale_axis(np.sqrt(D), axis=-1), U.conj(), (1, 1))
+
+        # [P, P*] -> [p0, p1, ..., p0*, p1*, ...]
+        psi = psi.split_legs()
+        # [p0, p1, ..., p0*, p1*, ...] -> [p0, p1, ..., q0, q1, ...]
+        psi.ireplace_labels([f'p{i}*' for i in range(L)], [f'q{i}' for i in range(L)])
+        return cls.from_full(sites, psi, form=form, cutoff=cutoff, normalize=normalize,
+                             bc='finite', outer_S=None)
+
+    @classmethod
     def from_infiniteT(cls, sites, bc='finite', form='B', dtype=np.float64):
         """Initial state corresponding to grand-canonical infinite-temperature ensemble.
 
