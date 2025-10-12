@@ -2,3 +2,18 @@ Implements graph structure computation within the MPO class and adds suppoert fo
 
 Main work: Implements the scheme from [Phien2012] for iterative initialization of init_LP / init_RP for periodic MPOEnvironments within the new class MPOEnvironmentBuilder.
 The scheme is implemented in a generalized form and can handle MPOs representing arbitrary powers of extensive observables as long as diagonal entries restrict to factor*Identity.
+
+Notes:
+    1) Currently, only simple loops are allowed in the MPOGraph. E.g. a loop that branches off, such as Outer[j] -> A1 -> Outer[j] AND Outer[j] -> A2 -> Outer[j] is not treated.
+       Adjusting this is in principle possible, but requires quite some modifications
+    2) Currently, only identities are allowed on the loops. Adjusting this is pretty straight forward, but negatively impacts performance since MPOEnvironmentBuilder._c0_rho()
+       has to be adjusted.
+
+GENERAL NOTES:
+    a) MPOTransferMatrix.find_init_LP_RP is UNSTABLE for canonical_form_infinite1
+      Errors form half machine precision are much larger than anticipated -> checked via ||(LP[0]*T) - e0*n*Id||
+    b) MPOEnvironmentBuilder.init_LP_RP_iterative allows to set tolerance tol_c0 over which eigenvectors are computed explicitly
+        -> This fixes problem a) but the resulting environment is not in canonical form!
+        -> Currently ignored, but can be adjusted by setting tol_c0 in MPOEnvironment.init_first_LP_last_RP
+    c) MPOTransferMatrix.find_init_LP_RP is found throughout tenpy, this should probably be adjusted where it makes sense
+    d) Possibly adjust docstring of MPOEnvironment.init_LP -> method should be implemented now

@@ -343,9 +343,9 @@ class MPO:
         outer_connections, j_cycles, _ = graph_connections
         # check IdL, IdR valid
         j_IdL, j_IdR = self.IdL[0], self.IdR[-1]
-        if j_IdL < 0:
+        if (j_IdL is not None) and (j_IdL < 0):
             j_IdL = self.chi[0] + j_IdL
-        if j_IdR < 0:
+        if (j_IdR is not None) and (j_IdR < 0):
             j_IdR = self.chi[-1] + j_IdR
         if (j_IdL is not None) and (j_IdL not in j_cycles):
             raise ValueError("Connection IdL -> IdL missing")
@@ -2956,7 +2956,7 @@ class MPOEnvironmentBuilder:
             |   LP[0] = e_0 * n**0 * LP[0][0] + e_1 * n**1 LP[0][1]+...
 
         The largest needed `n` is given by the number of identities on the diagonal
-        if the MPO. """
+        of the MPO. """
 
     def __init__(self, H, psi):
         self.H = H
@@ -3246,6 +3246,8 @@ class MPOEnvironmentBuilder:
                         Ctot = self._ctot_loop(grids[gamma], self.H._cycles[j_outer], name)
                     else:
                         Ctot = grids[gamma][last_site][j_outer][0]
+                        if Ctot is None: # nothing to sum up
+                            Ctot = npc.zeros(legs_labels[name][0][1:], dtype=self.dtype, labels=legs_labels[name][1][1:])
                     for j_cs, alpha in enumerate(range(gamma+1, m)):
                         Ctot -= comb(alpha, gamma)*cs[j_cs]
                     if j_outer in self.H._cycles:
@@ -3353,6 +3355,7 @@ class MPOEnvironmentBuilder:
             S = self.ket.get_SR(self.L-1) if name=='init_LP' else self.ket.get_SL(0)
             if isinstance(S, npc.Array):
                 rho = npc.tensordot(S, S.conj(), axes=['vR', 'vR*'] if name=="init_LP" else ['vL','vL*'])
+                rho.iset_leg_labels(legs_labels[name][1][1:])
             else:
                 rho = npc.diag(S**2, legs_labels[name][0][1].conj(), labels=legs_labels[name][1][-1:-3:-1])
             return c0, rho
@@ -3363,6 +3366,7 @@ class MPOEnvironmentBuilder:
             S = self.ket.get_SR(self.L-1)**2 if name=='init_LP' else self.ket.get_SL(0)**2
             if isinstance(S, npc.Array):
                 rho = npc.tensordot(S, S.conj(), axes=['vR', 'vR*'] if name=="init_LP" else ['vL','vL*'])
+                rho.iset_leg_labels(legs_labels[name][1][1:])
             else:
                 rho = npc.diag(S**2, legs_labels[name][0][1].conj(), labels=legs_labels[name][1][-1:-3:-1])
             # NOTE: iMPS should always be normalized s.t. npc.inner(c0,rho)=1
@@ -3389,8 +3393,9 @@ class MPOEnvironmentBuilder:
     def _solve_cj(self, loop, name, b, norm_one, options):
         """ For `self._init_LP_RP_iterative()`: Solves c_gamma^j (1-TWjj) = b """
         if npc.norm(b)==0.:
-            # Theoretically A has not full rank if Wjj=id, as then Id(1-TWjj)=0
-            # In practice this is not the case exactly, thus ker(A)={0}
+            # A has not full rank if Wjj=id, as Id(1-TWjj)=0
+            # Contributions in the kernel are already subtracted though 
+            # we can thus assume norm(b)==0 => x=npc.zeros()
             return npc.zeros(b.legs, dtype=b.dtype, qtotal=b.qtotal, labels=b._labels)
         # TWjj
         transpose = True if name=='init_LP' else False
