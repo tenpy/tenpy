@@ -2621,11 +2621,12 @@ class MPOEnvironment(BaseEnvironment):
           with :meth:`init_LP` / :meth:`init_RP`.
         - If `start_env_sites` is None, and :attr:`bra` is :attr:`ket`,
           get `init_LP` and `init_RP` using one of two methods:
+
             "TM": :meth:`MPOEnvironmentBuilder.init_LP_RP_iterative`
-                    - Recommended for general use
+                - Recommended for general use
             "iter": :meth:`MPOTransferMatrix.find_init_LP_RP`
-                    - Used if 1) cannot be applied
-                    - Faster for small bond dimension
+                - Used if 1) cannot be applied
+                - Faster for small bond dimension
 
         Parameters
         ----------

@@ -13,6 +13,10 @@ from tenpy.networks.site import SpinHalfSite as shs
 from tenpy.networks.mps import MPS
 from tenpy.networks.mpo import MPO, MPOEnvironment, MPOTransferMatrix, MPOEnvironmentBuilder
 
+__all__ = ["test_init_LP_RP_iterative"]
+
+# ----- SETUP -----
+
 # model setup
 Lx, Ly = 4, 3
 m_tfi = TFIChain({"conserve":"parity","g":1.5, "J":1., "L":Lx, "bc_MPS":"infinite"})
@@ -202,52 +206,54 @@ def helper_test_grid(psi, H, name):
 
 
 # ----- RUN TESTS -----
-for j_H, H in enumerate(Hs):
-    # check with and without sorted legcharges
-    for sort_charges in [0,1,2]:
-        if sort_charges==1:
-            tperms = H.sort_legcharges()
-        if sort_charges==2:
-            H._reset_graph()
-        if sort_charges!=1:
-            H._make_graph() # implicit itranspose of W matrices for tests later
-            H._order_graph()
-        
-        # check that graph is a 1 to 1 mapping of H
-        helper_test_graph(H, H_names[j_H])
-        
-        # test contract grid for TFI model
-        if j_H==0 and sort_charges==0:
-            helper_test_grid(states[j_H], H, H_names[j_H])
-        
-        # environment checks
-        if sort_charges!=2 and j_H<2:
-            helper_test_init_env(states[j_H], energies[j_H], H, H_names[j_H])
-        
-        # H^2 test
-        if sort_charges==0 and j_H==0:
-            helper_test_H_square(states[2], H, Hs[2], H_names[2],"up")
-            helper_test_H_square(states[0], H, Hs[2], H_names[2],"gs")
 
-        # enlarge unit cell
-        if sort_charges==2 and j_H<2:
-            helper_test_enlarge_unit_cell(H, H_names[j_H])
+def test_init_LP_RP_iterative():
+    for j_H, H in enumerate(Hs):
+        # check with and without sorted legcharges
+        for sort_charges in [0,1,2]:
+            if sort_charges==1:
+                tperms = H.sort_legcharges()
+            if sort_charges==2:
+                H._reset_graph()
+            if sort_charges!=1:
+                H._make_graph() # implicit itranspose of W matrices for tests later
+                H._order_graph()
+            
+            # check that graph is a 1 to 1 mapping of H
+            helper_test_graph(H, H_names[j_H])
+            
+            # test contract grid for TFI model
+            if j_H==0 and sort_charges==0:
+                helper_test_grid(states[j_H], H, H_names[j_H])
+            
+            # environment checks
+            if sort_charges!=2 and j_H<2:
+                helper_test_init_env(states[j_H], energies[j_H], H, H_names[j_H])
+            
+            # H^2 test
+            if sort_charges==0 and j_H==0:
+                helper_test_H_square(states[2], H, Hs[2], H_names[2],"up")
+                helper_test_H_square(states[0], H, Hs[2], H_names[2],"gs")
 
-        # ---- Additional checks on graph -----        
-        assert len(H._cycles)==N_cycles[j_H], H_names[j_H]+": wrong number of cycles"
-        # outer permutation
-        assert H._outer_permutation[0]==H.IdL[0], H_names[j_H]+": wrong IdL index in _outer_permutation"
-        assert H._outer_permutation[-1]==H.IdR[-1], H_names[j_H]+": wrong IdR index in _outer_permutation"
-        # IdL, IdR cycle
-        for val1, val2 in zip(H._cycles[H.IdL[0]],H.IdL):
-            assert val1==val2, H_names[j_H]+": H.IdL different from H._cycles[H.IdL[0]]"
-        for val1, val2 in zip(H._cycles[H.IdR[-1]],H.IdR):
-            assert val1==val2, H_names[j_H]+": H.IdR different from H._cycles[H.IdR[-1]]"
-        # cycles
-        for i0 in H._cycles:
-                c = H._cycles[i0]
-                assert len(c)==H.L+1, H_names[j_H]+": wrong cycle length"
-                assert c[0]==c[-1], H_names[j_H]+": invalid cycle encountered"                
-        if sort_charges==0 and j_H!=1: # explicit cycle check
-            for j_cycle in cycle_indices[j_H]:
-                assert H._cycles[j_cycle]==[j_cycle]*(H.L+1), H_names[j_H]+": _cycles[{0}] not as expected".format(j_cycle)      
+            # enlarge unit cell
+            if sort_charges==2 and j_H<2:
+                helper_test_enlarge_unit_cell(H, H_names[j_H])
+
+            # ---- Additional checks on graph -----        
+            assert len(H._cycles)==N_cycles[j_H], H_names[j_H]+": wrong number of cycles"
+            # outer permutation
+            assert H._outer_permutation[0]==H.IdL[0], H_names[j_H]+": wrong IdL index in _outer_permutation"
+            assert H._outer_permutation[-1]==H.IdR[-1], H_names[j_H]+": wrong IdR index in _outer_permutation"
+            # IdL, IdR cycle
+            for val1, val2 in zip(H._cycles[H.IdL[0]],H.IdL):
+                assert val1==val2, H_names[j_H]+": H.IdL different from H._cycles[H.IdL[0]]"
+            for val1, val2 in zip(H._cycles[H.IdR[-1]],H.IdR):
+                assert val1==val2, H_names[j_H]+": H.IdR different from H._cycles[H.IdR[-1]]"
+            # cycles
+            for i0 in H._cycles:
+                    c = H._cycles[i0]
+                    assert len(c)==H.L+1, H_names[j_H]+": wrong cycle length"
+                    assert c[0]==c[-1], H_names[j_H]+": invalid cycle encountered"                
+            if sort_charges==0 and j_H!=1: # explicit cycle check
+                for j_cycle in cycle_indices[j_H]:
+                    assert H._cycles[j_cycle]==[j_cycle]*(H.L+1), H_names[j_H]+": _cycles[{0}] not as expected".format(j_cycle)      
