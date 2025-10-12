@@ -200,23 +200,23 @@ class MPO:
             - Attempting to do this makes only sense if the MPO is periodic.
             The upper triangular form applies to **the whole unit cell**.
             In particular, the MPO matrices :attr:`_W` are **not** ordered.
-            - Ordering the graph can fail for multiple reasons. In itself, this is not
+            - Ordering the graph can fail for multiple reasons. This is generally not
             critical and :attr:`_outer_permutation` should be set to `False`.
-            If an error occurs, a `ValueError` is raised and catched at the end,
-            resulting in a distinct warning. Functions that require the upper triangular form
+            If an error occurs, we raise a `ValueError`, catch it at the end and
+            prompt a distinct warning. Functions that require the upper triangular form
             should check the status via :attr:`_outer_permutation`.
         """
         # check whether ordering the graph makes sense
-        if self._graph==None:
-            self._make_graph()
         if self._outer_permutation==False:
             warnings.warn("Ordering the MPO was already tried and failed. If intentional, make sure that the MPO satisfies the requirements.")
             return
-        elif self.bc=="finite":
+        if self.bc=="finite":
             warnings.warn("_order_graph() called for 'finite' MPO. This does not make sense.")
             self._outer_permutation = False
             return 
-        elif self.finite: # segment
+        if self._graph==None:
+            self._make_graph()
+        if self.finite: # segment
             try:
                 self._W[0].get_leg('wL').test_contractible(self._W[-1].get_leg('wR'))
             except ValueError:
@@ -225,42 +225,41 @@ class MPO:
                 return
         # attempting to order the graph makes sense
         try:
-            cycle_params = self._get_cycles()
-            j_IdL, j_IdR, j_other_cycles, j_upper, j_lower = self._graph_to_blocks(cycle_params)
-            _, cycles, outer_connections = cycle_params
+            cycle_params = self._graph_connections()
+            j_IdL, j_IdR, j_other_cycles, j_upper, j_lower = self._sort_connections(cycle_params)
+            outer_connections, _, cycles = cycle_params
             perm = [-1 for _ in range(self.chi[0])]
+            offsets = [len(j_upper), -1]
             # IdL, IdR
-            perm[0] = j_IdL
-            perm[-1] = j_IdR
+            if j_IdL is not None:
+                perm[0] = j_IdL
+                offsets[0] += 1
+            if j_IdR is not None:
+                perm[-1] = j_IdR
+                offsets[1] = -2
             # cycles
-            offset = 1+len(j_upper)
             for j, j_cycle in enumerate(j_other_cycles):
-                perm[offset+j] = j_cycle
-            # order j_upper / j_lower.
-            # Done by iteratively removing all indices that do not couple to the block
+                perm[offsets[0]+j] = j_cycle
+            # order j_upper / j_lower by iteratively removing all indices that do not couple to the block
             def sort_block(block):
                 ordering = []
-                js_step = []
                 while block: # still indices left
-                    for j in block:
-                        if not outer_connections[j] & block: # no connections to block
-                            js_step.append(j)
+                    js_step = [j for j in block if not outer_connections[j] & block]
                     if len(js_step)==0: # Illegal cycle
                         raise ValueError("Index ordering failed: Illegal cycle A1 -> A2 -> ... -> A1 over multiple unit cells found. Increasing the unit cell might fix this problem.")
-                    # reversed: ensure that indices with same depth are ordered in ascending order
+                    # reverse: order indices with same depth in ascending order
                     for j in reversed(js_step): 
                         ordering.append(j)
                         block.remove(j)
-                    js_step = []
                 return ordering            
-            # upper indices, ordered with low depth first
+            # upper indices
             j_upper_ordered = sort_block(j_upper)
             for index, j in enumerate(j_upper_ordered):
-                perm[offset-1-index] = j
+                perm[offsets[0]-1-index] = j
             # lower indices
             j_lower_ordered = sort_block(j_lower)
             for index, j in enumerate(j_lower_ordered):
-                perm[-2-index] = j
+                perm[offsets[1]-index] = j
             # ordering was successful
             self._cycles = {cycle[0]: cycle for cycle in cycles}
             self._outer_permutation = perm
@@ -269,20 +268,21 @@ class MPO:
             warnings.warn("Ordering the MPO failed: "+str(e))
             self._outer_permutation = False 
 
-    def _get_cycles(self):
-        """ Identify all indices of the outer virtual leg that connect to themselves
+    def _graph_connections(self):
+        """ Determine all connections of the outer virtual leg
+            outer_leg[i] -> {outer_leg[j] | i,j connected by MPO graph}
         
         Helper function for `self._order_graph()`
 
         Returns
         -------
+        outer_connections : list of {set of int}
+            One entry for each index of the outer leg,
+            containing a set of all indices it connects to.
         j_cycles : set of int
             Indices of the outer virtual leg that connect to themselves
         cycles : list of {list of int}
             The corresponding cycles as in :attr:`_cycles`.
-        outer_connections : list of {set of int}
-            One entry for each index of the outer leg,
-            containing a set of all indices it connects to.
         """        
         j_cycles = []
         cycles = []
@@ -306,70 +306,69 @@ class MPO:
                 for j_right in range(self.L-1,-1,-1):
                     js_backward = [i for i,j in self._graph[j_right] if j==j_current and i in grid[j_right]]
                     if len(js_backward)!=1:
-                         # multiple loops might be valid but are not supported
+                        # only simple paths supported
+                        # NOTE: Paths with multiple branches that reconnect can work in principle,
+                        #       but are not supported by MPOEnvironmentBuilder
                         raise ValueError("Loop missing or multiple loops found for outer index {0}".format(j_outer))
                     j_current = js_backward[0]
                     loop.append(j_current)
                 cycles.append(list(reversed(loop)))
-        return set(j_cycles), cycles, [set(x) for x in outer_connections]
+        return [set(x) for x in outer_connections], set(j_cycles), cycles
     
-    def _graph_to_blocks(self, loop_params):
+    def _sort_connections(self, graph_connections):
         """ Sort the outer virtual leg into blocks
 
         Helper function for `self._order_graph()`
 
-        Categorizes the indices of the outer virtual leg into blocks
-        `IdL`, `IdR`, other cycles, upper indices, lower indices
+        Categorize the indices of the outer virtual leg into:
+            1) `IdL` 
+            2) `IdR`
+            3) other cycles -> indices with cycles distinct from `IdL` and `IdR`
+            4) upper indices -> indices without connections FROM other cycles
+            5) lower indices -> indices that other cycles connects to
         
         Returns
         -------
-        j_IdL : int
-            Index of `IdL`.
-        j_IdR : int
-            Index of `IdR`.
-        non_Id_cycles : set of int
-            Indices distinct from `IdL` and `IdR` with cycles.
-            Arise e.g. from exponentially decaying terms.
+        j_IdL : int | None
+            `IdL`
+        j_IdR : int | None
+            `IdR`
+        other_cycles : set of int
+            other cycles
         j_upper : set of int
-            All indices without cycles that `non_Id_cycles`
-            does not connect to.
+            upper indices
         j_lower : set of int
-            All indices without cycles that some index in
-            `non_Id_cycles` connects to.
+            lower indices
         """
-        j_cycles, _, outer_connections = loop_params
+        outer_connections, j_cycles, _ = graph_connections
         # check IdL, IdR valid
         j_IdL, j_IdR = self.IdL[0], self.IdR[-1]
-        if j_IdL==None or j_IdR==None:
-            raise ValueError("IdL or IdR missing on outer bonds.") # not checked in test_sanity
-        if j_IdL not in j_cycles:
+        if (j_IdL is not None) and (j_IdL not in j_cycles):
             raise ValueError("Connection IdL -> IdL missing")
-        if j_IdR not in j_cycles:
+        if (j_IdR is not None) and (j_IdR not in j_cycles):
             raise ValueError("Connection IdR -> IdR missing")
         for j, connection in enumerate(outer_connections):
             if j!=j_IdL and j_IdL in connection:
                 raise ValueError("Outer index {0} -> IdL connection found ?!".format(j))
-            if j==j_IdR and len(connection)!=1:
-                raise ValueError("IdR connection to different index found ?!")
+        if (j_IdR is not None) and (len(outer_connections[j_IdR])!=1):
+            raise ValueError("IdR connects to different index ?!")
         # check loops and indices
-        non_Id_cycles = set(j for j in j_cycles if j!=j_IdL and j!=j_IdR)
-        if not non_Id_cycles: # only loops are IdL, IdR
+        other_cycles = set(j for j in j_cycles if j!=j_IdL and j!=j_IdR)
+        if not other_cycles: # only loops are IdL, IdR
             return j_IdL, j_IdR, set(), set(j for j in range(self.chi[0]) if j not in j_cycles), set()
         j_upper = set()
         j_lower = set()
+        other_cycle_connections = set().union(*(outer_connections[j_loop] for j_loop in other_cycles))
         for j, connection in enumerate(outer_connections):
             if j not in j_cycles:
-                if connection & non_Id_cycles: # existing connection label_j -> some loop 
+                if j in other_cycle_connections: # existing connection some_loop -> label_j
+                    j_lower.add(j)
+                    if connection & other_cycles: # existing connection label_j -> some loop 
+                        raise ValueError("Connection I -> loop1 and loop2 -> I found for Index I={0}".format(j))
+                
+                else: # Default: add to j_upper if not a lower index
                     j_upper.add(j)
-                for j_loop in non_Id_cycles:
-                    if j in outer_connections[j_loop]: # existing connection some_loop -> label_j
-                        j_lower.add(j)
-                        break
-                else: # not a lower index, add to j_upper by default if not already present
-                    j_upper.add(j)
-        if j_upper & j_lower:
-            raise ValueError("Indices I={0} found, with I -> loop1 and loop2 -> I, ".format(j_upper & j_lower))
-        return j_IdL, j_IdR, non_Id_cycles, j_upper, j_lower
+        return j_IdL, j_IdR, other_cycles, j_upper, j_lower
 
     def copy(self):
         """Make a shallow copy of `self`."""
@@ -638,15 +637,13 @@ class MPO:
             if not len(self._graph) == self.L:
                 raise ValueError("wrong len of _graph")
         if self.bc=="finite":
-            if self._outer_permutation not in [None, True]:
+            if self._outer_permutation not in [None, False]:
                 raise ValueError("outer virtual legs are trivial for finite MPS, ordering them makes no sense")
         elif type(self._outer_permutation)==list:
             if self.chi[0]!=self.chi[-1]:
                 raise ValueError("outer virtual legs ordered for MPO that is not periodic")
             if not len(self._outer_permutation)==self.chi[0]:
                 raise ValueError("Different size of outer virtual leg and corresponding ordering")
-            if len(self._cycles)<2:
-                raise ValueError("Missing `IdL`/`IdR` cycle for periodic MPO")
             if len(set(self._outer_permutation))!=len(self._outer_permutation):
                 raise ValueError("Invalid permutation of outer leg")
         
@@ -1175,7 +1172,7 @@ class MPO:
 
     def _expectation_value_environment(self, psi, *args):
         # TODO: Might be worth implementing?
-        raise NotImplementedError("Can be implemented using the iterative environment initialization")
+        raise NotImplementedError("Could be implemented using MPOEnvironmentBuilder")
 
     def variance(self, psi, exp_val=None):
         """Calculate ``<psi|self^2|psi> - <psi|self|psi>^2``.
@@ -2410,20 +2407,25 @@ class MPOEnvironment(BaseEnvironment):
                               init_RP=None,
                               age_LP=0,
                               age_RP=0,
-                              start_env_sites=None):
+                              start_env_sites=None, force_init_method="iter"):
         """(Re)initialize first LP and last RP from the given data.
 
         If `init_LP` and `init_RP` are not given, we try to find sensible initial values.
         Dummy environments can by built with :meth:`init_LP` and :meth:`init_RP`, especially
         for **finite** MPS.
 
-        For **infinite** MPS, we try to converge the environments with one of two methods:
+        For **infinite** MPS, we try to converge the environments with one of three methods:
 
         - If `start_env_sites` is given as an integer, contract that many sites into the
           environment from the given `init_LP` and `init_RP` or new trivial environments built
           with :meth:`init_LP` / :meth:`init_RP`.
         - If `start_env_sites` is None, and :attr:`bra` is :attr:`ket`,
-          get `init_LP` and `init_RP` with :meth:`MPOEnvironmentBuilder.init_LP_RP_iterative`.
+          get `init_LP` and `init_RP` using one of two methods:
+            "TM" :meth:`MPOEnvironmentBuilder.init_LP_RP_iterative`
+                    - Recommended for general use
+            "iter" :meth:`MPOTransferMatrix.find_init_LP_RP`
+                    - Used if 1) cannot be applied
+                    - Faster for small bond dimension
 
         Parameters
         ----------
@@ -2435,6 +2437,8 @@ class MPOEnvironment(BaseEnvironment):
         start_env_sites : int | None
             Number of sites over which to converge the environment for infinite systems.
             See above.
+        force_init_method : None | "iter" | "TM"
+            Force method "TM" or "iter" as described above for **infinite** MPS.
         """
         if not self.finite  and (init_LP is None or init_RP is None) and \
                 start_env_sites is None and self.bra is self.ket:
@@ -2443,8 +2447,18 @@ class MPOEnvironment(BaseEnvironment):
                 warnings.warn("call psi.canonical_form() to regenerate MPO environments from psi"
                               f" with current norm error {norm_err:.2e}")
                 self.ket.canonical_form()
-            _env_init = MPOEnvironmentBuilder(self.H, self.ket)
-            env_data, _ = _env_init.init_LP_RP_iterative('both')
+            use_method = force_init_method
+            if use_method is None:
+                if (max(self.ket.chi) <= 150) or (not _mpo_check_for_iter_LP_RP_infinite(self.H)):
+                    use_method = "TM"
+                else:
+                    use_method = "iter"
+            if use_method == "iter":
+                _env_init = MPOEnvironmentBuilder(self.H, self.ket)
+                env_data, _ = _env_init.init_LP_RP_iterative('both')
+            else:
+                assert use_method == "TM", "Invalid method for init_LP_RP_infinite."
+                env_data = MPOTransferMatrix.find_init_LP_RP(self.H, self.ket, 0, self.L - 1)
             init_LP = env_data['init_LP']
             init_RP = env_data['init_RP']
             start_env_sites = 0
@@ -2803,7 +2817,7 @@ class MPOEnvironmentBuilder:
                 norm *= factor
             if norm>=1.+tol:
                 raise ValueError("self.H contains cycle with norm larger than one at outer index {0}".format(loop[0]))
-            if abs(norm-1.)<tol:
+            if abs(norm-1.)<1e-13:
                 ones.append(j_outer)
         return ones
 
@@ -2929,7 +2943,7 @@ class MPOEnvironmentBuilder:
                     del grid[j_site+1][jR][0] # won't be accessed anymore
             ready_nodes = finished_nodes    
 
-    def init_LP_RP_iterative(self, which='both', calc_E=False, tol_c0=1e-10, gmres_options=None):
+    def init_LP_RP_iterative(self, which='both', calc_E=False, tol_c0=None, gmres_options=None, tol_id=1e-12):
         """ Construct boundary environments for periodic MPO environments.
 
             See class docstring for an explanation.
@@ -2938,16 +2952,18 @@ class MPOEnvironmentBuilder:
         ----------
         which : {'LP', 'RP', 'both'}
             Specifies which environments to compute.
-        tol_c0 : float
+        tol_c0 : float | None
             Tolerance for explicitly computing the dominant left and right eigenvectors
             of the :class:`MPSTransferMatrix` associated with :attr:`self.ket`, if numerical errors
-            affect the MPS canonical form.
+            affect the MPS canonical form. Ignored if None
         calc_E : bool
             Whether to return the energy. Only permitted when the expectation value scales 
             at most linearly with system size. For higher-order scaling,
             expectation values must be computed via explicit contractions.
         gmres_options : dict
             Further optional parameters passed to :class:`tenpy.linalg.krylov_based.GMRES`.
+        tol_id : float
+            Cycles with smaller norm are discarded.
         
         Returns
         -------
@@ -2960,11 +2976,7 @@ class MPOEnvironmentBuilder:
         E : float
             Energy per site, only returned if `calc_E` is True.
         """
-        if self.H._graph==None:
-            self.H._make_graph()
-        if self.H._outer_permutation==None:
-            self.H._order_graph()
-        if self.H._outer_permutation==False:
+        if not _mpo_check_for_iter_LP_RP_infinite(self.H):
             raise ValueError("Iterative environment initialization failed: Hamiltonian cannot be ordered.")
         assert which=='LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
         ones = self._determine_cycles()
@@ -2980,7 +2992,7 @@ class MPOEnvironmentBuilder:
                        "init_RP": ([self.H.get_W(self.L-1).get_leg('wR').conj(), self.ket.get_B(self.L-1).get_leg('vR').conj(),
                              self.ket.get_B(self.L-1).get_leg('vR')], ['wL','vL','vL*'])}
         envs = {}
-        # for standard MPOEnvironments, invalid for higher powers
+        # only for MPOEnvironments of extensive Hamiltonians, i.e. len(n_terms)==2
         Es = [1.,1.] # per unit cell
         
         # NOTE: main work starts here
@@ -3003,19 +3015,19 @@ class MPOEnvironmentBuilder:
                 cs = []
                 eps_temp = []
                 # NOTE: contributions ~ c0
-                if j_outer in ones: # first index is IdL, last IdR
+                if j_outer in ones:
                     c0 = c0_base.copy()
                     if m!=0: # compute next epsilon
                         Ctot = self._ctot_loop(grids[m-1], self.H._cycles[j_outer], name)
                         next_eps = np.real(npc.inner(Ctot, rho)/m)
                         if m==1:
                             index = 0 if name=='init_LP' else 1
-                            Es[index] = next_eps
+                            Es[index] = next_eps # only meaningful if len(ones)==2
                         eps_temp.insert(0, next_eps)
                         c0 *= next_eps
                     envs[name][m][j_outer] = c0
                     cs.append(c0)
-                    if m!=n_terms-1:
+                    if m < len(grids):
                         self._contract_grid(grids[m], c0, j_outer, name)
                     # compute c0 contributions for lower envs and adjust epsilons
                     for gamma in range(m-1,0,-1):
@@ -3028,7 +3040,7 @@ class MPOEnvironmentBuilder:
                         eps_temp.insert(0,eps_gamma)
                         # add to environment afterwards
                     m += 1
-                # NOTE: perpendicular contributions
+                # NOTE: contributions orthogonal to c0
                 offset = 1 if j_outer in ones else 0
                 for gamma in range(m-1-offset, -1, -1):
                     if j_outer in self.H._cycles:
@@ -3064,9 +3076,14 @@ class MPOEnvironmentBuilder:
         if name=="init_LP":
             gs = [self._left_grid(self.H._outer_permutation[:j0])
                   for j0 in js_loops[:-1]]
+            # last norm 1 cycle not on last index
+            if self.H._outer_permutation[-1] not in ones:
+                gs += [self._left_grid(self.H._outer_permutation[:js_loops[-1]])]
         else:
             gs = [self._right_grid(self.H._outer_permutation[j0+1:])
                   for j0 in reversed(js_loops[1:])]
+            if self.H._outer_permutation[0] not in ones:
+                gs += [self._right_grid(self.H._outer_permutation[js_loops[0]+1:])]
         return gs
 
     def _contract_grid(self, grid, c0_outer, j_outer, name):
@@ -3133,11 +3150,22 @@ class MPOEnvironmentBuilder:
         """
         # Identity
         c0 = npc.diag(1., legs_labels[name][0][1], dtype=self.dtype, labels=legs_labels[name][1][1:])
+        if tol_c0 is None: # ignore canonical form errors
+            S = self.ket.get_SR(self.L-1) if name=='init_LP' else self.ket.get_SL(0)
+            if isinstance(S, npc.Array):
+                rho = npc.tensordot(S, S.conj(), axes=['vR', 'vR*'] if name=="init_LP" else ['vL','vL*'])
+            else:
+                rho = npc.diag(S**2, legs_labels[name][0][1].conj(), labels=legs_labels[name][1][-1:-3:-1])
+            return c0, rho
+        # Compute dominant eigenvector pair if needed
         _TM = TransferMatrix.from_Ns_Ms(self._Ns, self._Ms, transpose=True if name=='init_LP' else False,
                                         charge_sector=None, p_label=self._p_label, conjugate_Ns=False)
         if npc.norm(_TM.matvec(c0)-c0)<tol_c0:
-            _SVs = self.ket.get_SR(self.L-1)**2 if name=='init_LP' else self.ket.get_SL(0)**2
-            rho = npc.diag(_SVs, legs_labels[name][0][1].conj(), labels=legs_labels[name][1][-1:-3:-1])
+            S = self.ket.get_SR(self.L-1)**2 if name=='init_LP' else self.ket.get_SL(0)**2
+            if isinstance(S, npc.Array):
+                rho = npc.tensordot(S, S.conj(), axes=['vR', 'vR*'] if name=="init_LP" else ['vL','vL*'])
+            else:
+                rho = npc.diag(S**2, legs_labels[name][0][1].conj(), labels=legs_labels[name][1][-1:-3:-1])
             # NOTE: iMPS should always be normalized s.t. npc.inner(c0,rho)=1
             return c0, rho
         warnings.warn("Identity not dominant eigenvector of MPSTransferMatrix up to tol={:.1e}." \
@@ -3641,3 +3669,14 @@ def _mpo_graph_state_order(key):
         # fallback: compare strings
         return (0, key)
     return (0, str(key))
+
+def _mpo_check_for_iter_LP_RP_infinite(mpo):
+    """ Check that :meth:`MPOEnvironmentBuilder.init_LP_RP_iterative` works for an MPO
+
+    Initializes the respective attributes on the fly if needed
+    """
+    if mpo._graph is None:
+        mpo._make_graph()
+    if mpo._outer_permutation is None:
+        mpo._order_graph()
+    return mpo._outer_permutation

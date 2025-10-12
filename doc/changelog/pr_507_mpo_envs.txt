@@ -1,0 +1,4 @@
+Implements graph structure computation within the MPO class and adds suppoert for infinite MPO to compute the permutation of the outer legs, for which the MPO is upper triangular over one unit cell.
+
+Main work: Implements the scheme from [Phien2012] for iterative initialization of init_LP / init_RP for periodic MPOEnvironments within the new class MPOEnvironmentBuilder.
+The scheme is implemented in a generalized form and can handle MPOs representing arbitrary powers of extensive observables as long as diagonal entries restrict to factor*Identity.
