@@ -6735,6 +6735,8 @@ class InitialStateBuilder:
         -------
         .. cfg:configoptions :: InitialStateBuilder
 
+            randomize_close_1 : bool
+                Whether to randomize/perturb with unitaries close to the identity.
             randomized_from_method : str
                 Selects another method to initialize the starting state to be randomized,
                 e.g., ``'lat_product_state'`` for :meth:`lat_product_state`.
