@@ -28,6 +28,10 @@ jobs:
       matrix:
         # Note: python 3.13 is covered by code_coverage.yml
         python-version: ["3.9", "3.10", "3.11", "3.12"]
+        compiled: [True]
+        include:
+          - python-version: "3.13"
+            compiled: False
 
     steps:
     - name: Checkout
@@ -44,7 +48,12 @@ jobs:
         python -m pip install --upgrade setuptools build
         python -m pip install --upgrade pytest
     
-    - name: Build and install tenpy
+    - name: Build tenpy
+      if: ${{ matrix.compiled }}
+      run: |
+        python -m build .
+    
+    - name: Install tenpy
       # also installs extra dependencies defined in pyproject.toml
       run: |
         python -m build .
