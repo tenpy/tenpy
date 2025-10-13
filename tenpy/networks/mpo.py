@@ -3173,7 +3173,7 @@ class MPOEnvironmentBuilder:
         tol_c0 : float | None
             Tolerance for explicitly computing the dominant left and right eigenvectors
             of the :class:`MPSTransferMatrix` associated with :attr:`self.ket`, if numerical errors
-            affect the MPS canonical form. Ignored if `None`
+            affect the MPS canonical form. Ignored if `None`. In this case uses `c0=Id`.
         calc_E : bool
             Whether to return the energy. Only permitted when the expectation value scales 
             at most linearly with system size. For higher-order scaling,
