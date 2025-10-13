@@ -2706,7 +2706,7 @@ class MPOEnvironment(BaseEnvironment):
     def init_LP(self, i, start_env_sites=0):
         r"""Build an initial left part ``LP``.
 
-        For `start_env_sites` > 0, make the assumptions that `bra` is the same as `ket`
+        For `start_env_sites` > 0, assume that `bra` is the same as `ket`
         and in canonical form, and that H is a Hamiltonian with the following block-form
         (up to a permutation of MPO indices; this is the case for any model defined in TeNPy),
 
@@ -2717,19 +2717,26 @@ class MPOEnvironment(BaseEnvironment):
                                 0 & 0 & 1  \end{pmatrix}
 
         Given that, we can converge the environment even in the thermodynamic limit:
-        ``LP[IdL, :, :]`` just contains the energy for the left part of the Hamiltonian,
-        contributing just a constant we can ignore (since we only look at relative energies)
-        ``LP[IdR, :, :] = eye(:, :)`` is just the MPS environment.
-        The remaining part is the harder one: we need to converge $C + CA + CAA + CAAA + ... $
-        sandwiched between the MPS. However, H often has finite range,
-        which makes `A` nil-potent, such that we only need to contract the environment a few times
-        from the left.
+        ``LP[IdR, :, :]`` contains the extensive energy contribution for the left part of
+        the Hamiltonian, which we can ignore (since we only look at relative energies)
+        ``LP[IdL, :, :] = eye(:, :)`` is just the MPS environment.
 
-        .. todo ::
-            Right now, for infinite/long range it just limits the number of iterations.
-            In general, we could calculate the exact $X = C + CA + CAA +...$ with the
-            geometric series by solving the set of linear equation $ X(1-A) = C$ for X,
-            (and analogously $(1-A)X = B$ for the right environment `RP`).
+        For the remaining part we need to converge $C + CA + CAA + CAAA + ... $ sandwiched
+        between the MPS. If H has finite range, `A` is nil-potent, and it is sufficient
+        to contract the environment a few times from the left.
+
+        For infinite/long range interactions it just limits the number of iterations.
+        In this case, the exact environment can still be obtained  by solving the 
+        geometric series.
+
+        .. note ::
+
+            For `start_env_sites` > 0, this function provides a fast approximation of 
+            the environment. In general, we recommend using
+            :meth:`MPOEnvironmentBuilder.init_LP_RP_iterative` which solves the geometric
+            series exactly.
+
+        
 
         Parameters
         ----------
@@ -2959,7 +2966,16 @@ class MPOEnvironmentBuilder:
             |   LP[0] = e_0 * n**0 * LP[0][0] + e_1 * n**1 LP[0][1]+...
 
         The largest needed `n` is given by the number of identities on the diagonal
-        of the MPO. """
+        of the MPO. 
+        
+        .. todo ::
+
+            - Currently, we only allow simple loops. E.g. a double loop
+              Outer[j] -> A1 -> Outer[j] AND Outer[j] -> A2 -> Outer[j] is not allowed.
+              This can in principle be adjusted by grouping nodes of the graph.
+            - Currently, we assume identities along the loops. In principle, we can allow 
+              arbitrary operators if we compute the dominant eigenvectors explicitly.
+        """
 
     def __init__(self, H, psi):
         self.H = H
@@ -3665,6 +3681,12 @@ class MPOTransferMatrix(NpcLinearOperator):
                         _subtraction_gauge='rho',
                         **kwargs):
         """Find the initial LP and RP.
+
+        .. note ::
+
+            - In most cases :meth:`MPOEnvironmentBuilder.init_LP_RP_iterative` will provide
+              better performance. Additionally, it allows to compute  :attr:`_subtraction_gauge`
+              explicitly, therefore being stable against errors in the MPS canonical form.
 
         Parameters
         ----------
