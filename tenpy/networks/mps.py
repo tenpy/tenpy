@@ -5561,7 +5561,7 @@ class BaseEnvironment(metaclass=ABCMeta):
         Parameters
         ----------
         init_LP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
-            Initial very left part ``LP``. If ``None``, build one with :meth`init_LP`.
+            Initial very left part ``LP``. If ``None``, build one with :meth:`init_LP`.
         init_RP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
             Initial very right part ``RP``. If ``None``, build one with :meth:`init_RP`.
         age_LP : int
