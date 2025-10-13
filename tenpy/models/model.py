@@ -584,8 +584,6 @@ class NearestNeighborModel(Model):
             d_L, d_R = sites[j].dim, sites[i].dim  # dimension of local hilbert space:
             Id_L, Id_R = sites[j].Id, sites[i].Id
             if i == 0:  # i==0 and j==(-1 % L)==L-1
-                print(npc.norm(Hb))
-                print(bc)
                 assert bc == 'infinite'  # otherwise, (Hb is None) should have triggered
                 if not Id_L.chinfo.trivial_shift:
                     Id_L = Id_L.apply_charge_mapping(

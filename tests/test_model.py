@@ -525,32 +525,6 @@ def test_model_H_conversion_dipolar(L=6):
     assert npc.norm(H0 - H2) < 1e-13
 
 
-def test_model_H_conversion_dipolar(L=6):
-    model_params = dict(L=L, S=1, J3=1., J4=.5, bc_MPS='finite', sort_charge=True)
-
-    # build full hamiltonian from MPO, assume that to be correct
-    m = DipolarSpinChain(model_params)
-    m.group_sites(3)
-    ED = ExactDiag(m)
-    ED.build_full_H_from_mpo()
-    H0 = ED.full_H
-
-    # convert H_MPO -> H_bond (calc_H_bond_from_MPO called by from_MPOModel)
-    m_nn = model.NearestNeighborModel.from_MPOModel(m)
-    ED = ExactDiag(m_nn)
-    ED.build_full_H_from_bonds()
-    H1 = ED.full_H
-    
-    # convert H_bond -> H_MPO
-    m_nn.H_MPO = m_nn.calc_H_MPO_from_bond()
-    ED.full_H = None
-    ED.build_full_H_from_mpo()
-    H2 = ED.full_H
-
-    assert npc.norm(H0 - H1) < 1e-13
-    assert npc.norm(H0 - H2) < 1e-13
-
-
 def compare_models_plus_hc(m_manual: model.CouplingModel,
                            m_plus_hc: model.CouplingModel,
                            m_explicit: model.CouplingModel,

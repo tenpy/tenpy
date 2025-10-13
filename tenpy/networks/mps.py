@@ -603,7 +603,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         # theta can be any form A / B / theta
         leg = theta.get_leg(virt_leg_index)
         charges = leg.to_qflat() #  note: sign doesn't matter since -x % 2 == x % 2
-        JW_signs = self.sites[self._to_valid_index(i)].charge_to_JW_signs(charges)
+        JW_signs = self.get_site(i).charge_to_JW_signs(charges)
         theta.iscale_axis(JW_signs, virt_leg_index)
 
     def expectation_value_multi_sites(self, operators, i0):
@@ -935,55 +935,6 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         if has_extra_JW:
             raise ValueError("Odd number of operators which need a Jordan Wigner string")
         return self.expectation_value_multi_sites(ops, i_min)
-
-    def expectation_value_terms_sum(self, term_list):
-        """Calculate expectation values for a bunch of terms and sum them up.
-
-        This is equivalent to the following expression::
-
-            sum([self.expectation_value_term(term)*strength for term, strength in term_list])
-
-        However, for efficiency, the term_list is converted to an MPO and the expectation value
-        of the MPO is evaluated.
-
-         .. warning ::
-
-             This function works only for finite bra and ket and does not include normalization factors.
-
-        Parameters
-        ----------
-        term_list : :class:`~tenpy.networks.terms.TermList`
-            The terms and prefactors (`strength`) to be summed up.
-
-        Returns
-        -------
-        terms_sum : (complex) float
-            Equivalent to the expression
-            ``sum([self.expectation_value_term(term)*strength for term, strength in term_list])``.
-        _mpo :
-            Intermediate results: the generated MPO.
-            For a finite MPS, ``terms_sum = _mpo.expectation_value(self)``, for an infinite MPS
-            ``terms_sum = _mpo.expectation_value(self) * self.L``
-
-        See also
-        --------
-        expectation_value_term : evaluates a single `term`.
-        tenpy.networks.mpo.MPO.expectation_value : expectation value density of an MPO.
-        """
-        # this implementation assumes that bra and ket are different. the implementation in MPS
-        # overrides this.
-        from . import mpo
-        if not self.finite:
-            raise ValueError("MPO expectation values only works for a finite MPSEnvironment")
-        # conversion
-        ot, ct = term_list.to_OnsiteTerms_CouplingTerms(self.sites)
-        bc = 'finite' if self.finite else 'infinite'
-        mpo_graph = mpo.MPOGraph.from_terms((ot, ct), self.sites, bc, unit_cell_width=self.unit_cell_width)
-        mpo_ = mpo_graph.build_MPO()
-
-        env = mpo.MPOEnvironment(self.bra, mpo_, self.ket)
-        terms_sum = env.full_contraction(0)  # handles explicit_plus_hc
-        return np.real_if_close(terms_sum), mpo_
 
     def term_correlation_function_right(self,
                                         term_L,
@@ -2032,150 +1983,6 @@ class MPS(BaseMPSExpectationValue):
             Bs.append(B)
         SVs = [[1.]] * (L + 1)
         return cls.from_Bflat(sites, Bs, SVs, bc, dtype, False, form, legL, unit_cell_width)
-
-    @classmethod
-    def from_random_unitary_evolution(cls,
-                                      sites,
-                                      chi,
-                                      p_state,
-                                      bc='finite',
-                                      dtype=np.float64,
-                                      permute=True,
-                                      form='B',
-                                      chargeL=None):
-        """Construct a matrix product state by evolving a product state with random unitaries.
-
-        Parameters
-        ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
-            The sites defining the local Hilbert space.
-        chi : int
-            The target bond dimension. For finite systems, we evolve until the *maximum* bond
-            dimension reaches this value. For infinite systems, we evolve until *all* bond
-            dimensions have reached this value.
-        p_state : list of {int | str | 1D array}
-            Defines the product state to start from; one entry for each `site` of the MPS.
-            An entry of `str` type is translated to an `int` with the help of
-            :meth:`~tenpy.networks.site.Site.state_labels`.
-            An entry of `int` type represents the physical index of the state to be used.
-            An entry which is a 1D array defines the complete wavefunction on that site; this
-            allows to make a (local) superposition.
-        bc : {'infinite', 'finite', 'segment'}
-            MPS boundary conditions. See docstring of :class:`MPS`.
-        dtype : type or string
-            The data type of the array entries.
-        permute : bool
-            The :class:`~tenpy.networks.Site` might permute the local basis states if charge
-            conservation gets enabled.
-            If `permute` is True (default), we permute the given `p_state` locally according to
-            each site's :attr:`~tenpy.networks.Site.perm`.
-            The `p_state` entries should then always be given as if `conserve=None` in the Site.
-        form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
-            Defines the canonical form. See module doc-string.
-            A single choice holds for all of the entries.
-        chargeL : charges
-            Leg charges at bond 0, which are purely conventional.
-        """
-        from ..algorithms.tebd import RandomUnitaryEvolution  # local import: avoid circular import
-
-        if bc == 'segment':
-            msg = "MPS.from_random_unitary_evolution not implemented for segment BC."
-            raise NotImplementedError(msg)
-        psi = MPS.from_product_state(sites, p_state, bc, dtype, permute, form, chargeL)
-        tebd_params = dict(N_steps = 10, trunc_params={'chi_max': chi})
-        eng = RandomUnitaryEvolution(psi, tebd_params)
-        _max_iter = 1000
-        for _ in range(_max_iter):
-            if psi.finite and (max(psi.chi) >= chi):
-                break
-            if (not psi.finite) and (min(psi.chi) >= chi):
-                break
-            eng.run()
-        else:  # no break ocurred
-            warnings.warn(f'Did not reach desired chi after {_max_iter} iterations of random '
-                          f'unitary evolution. Is chi too large for the given system?',
-                          stacklevel=2)
-        logger.info("Generated MPS of bond dimension %r via random evolution.", list(psi.chi))
-        psi.canonical_form()
-        return psi
-
-    @classmethod
-    def from_desired_bond_dimension(cls,
-                                    sites,
-                                    chis,
-                                    bc='finite',
-                                    dtype=np.float64,
-                                    permute=True,
-                                    chargeL=None):
-        """Construct a matrix product state with given bond dimensions from random matrices (no charge conservation).
-
-        Parameters
-        ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
-            The sites defining the local Hilbert space.
-        chis : (list of) {int}
-            Desired bond dimensions. For a single int, the same bond dimension is used on every bond.
-        bc : {'infinite', 'finite'}
-            MPS boundary conditions. See docstring of :class:`MPS`. For 'finite' chi is capped to the maximum possible at each bond.
-        dtype : type or string
-            The data type of the array entries.
-        permute : bool
-            The :class:`~tenpy.networks.Site` might permute the local basis states if charge
-            conservation gets enabled.
-            If `permute` is True (default), we permute the given `p_state` locally according to
-            each site's :attr:`~tenpy.networks.Site.perm`.
-            The `p_state` entries should then always be given as if `conserve=None` in the Site.
-        chargeL : charges
-            Leg charges at bond 0, which are purely conventional.
-
-        Returns
-        -------
-        mps : :class:`MPS`
-            An MPS with the desired bond dimension.
-        """
-        sites = list(sites)
-        L = len(sites)
-        # TODO: what happens if we have charge conservation?
-        assert sites[0].leg.chinfo.qnumber == 0, "does not work with conserved charges"
-        if bc == 'finite':
-            if isinstance(chis, int):
-                chi_uniform = chis
-                chis = [chi_uniform] * (L-1)
-            assert len(chis) == L-1, "wrong length of chi list"
-            chis.append(1)
-            SVs = [np.ones(1)]
-            Q, _ = np.linalg.qr(np.random.rand(sites[0].dim, chis[0]))
-            Bflat = [Q.reshape(sites[0].dim, 1, Q.shape[1])] # TODO: this only does real entries
-            for i in range(1, L-1):
-                B_vR = Bflat[-1].shape[2]
-                SV = np.random.rand(B_vR)
-                SVs.append(SV/np.linalg.norm(SV))
-                Q, _ = np.linalg.qr(np.random.rand(sites[i].dim*B_vR, chis[i]))
-                Bflat.append(Q.reshape(sites[i].dim, B_vR, Q.shape[1]))
-            B_vR = Bflat[-1].shape[2]
-            SV = np.random.rand(B_vR)
-            SVs.append(SV/np.linalg.norm(SV))
-            Bflat.append(np.random.rand(sites[-1].dim*chis[L-2]).reshape(sites[-1].dim, B_vR, 1))
-            SVs = [np.ones(1)]
-        elif bc == 'infinite':
-            if isinstance(chis, int):
-                chi_uniform = chis
-                chis = [chi_uniform] * L
-            assert len(chis) == L, "wrong length of chi list"
-            Bflat = []
-            SVs = []
-            for i in range(L):
-                SV = np.random.rand(chis[i])
-                SVs.append(SV/np.linalg.norm(SV))
-                Q, _ = np.linalg.qr(np.random.rand(sites[i].dim*chis[i], chis[(i+1)%L]))
-                Bflat.append(Q.reshape(sites[i].dim, chis[i], chis[(i+1)%L]))
-            SVs.append(SVs[0])
-        else:
-            raise NotImplementedError("MPS.from_desired_bond_dimension not implemented for segment BC.")
-        psi = MPS.from_Bflat(sites, Bflat, bc=bc, dtype=dtype, permute=permute, form=None, legL=chargeL)
-        psi.canonical_form()
-        logger.info("Generated MPS of bond dimension %r from random matrices.", list(psi.chi))
-        return psi
 
     @classmethod
     def from_random_unitary_evolution(cls,
@@ -5183,13 +4990,6 @@ class MPS(BaseMPSExpectationValue):
             opname = op
             need_JW = False
 
-        n = op.rank // 2  # same as int(rank/2)
-        if n == 1:
-            pstar, p = 'p*', 'p'
-        else:
-            p = self._get_p_labels(n, False)
-            pstar = self._get_p_labels(n, True)
-
         # Infer n_sites and the labels to contract from op._labels
         p = [l for l in op._labels if not l.endswith('*')]
         pstar = [f'{l}*' for l in p]
@@ -5235,7 +5035,7 @@ class MPS(BaseMPSExpectationValue):
             sites = [self.get_site(j) for j in range(i, i + n_sites)]
             split_th = self.from_full(sites, th, None, cutoff, renormalize,
                                       'segment', (self.get_SL(i), self.get_SR(i + n_sites - 1)),
-                                      unit_cell_width=n  # dummy value, this MPS is not exposed.
+                                      unit_cell_width=n_sites  # dummy value, this MPS is not exposed.
                                       )
             if not renormalize:
                 self.norm *= split_th.norm
@@ -6569,7 +6369,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
 
         Returns
         -------
-        terms_sum : list of (complex) float
+        terms_sum : (complex) float
             Equivalent to the expression
             ``sum([self.expectation_value_term(term)*strength for term, strength in term_list])``.
         _mpo :
@@ -6582,9 +6382,9 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         expectation_value_term : evaluates a single `term`.
         tenpy.networks.mpo.MPO.expectation_value : expectation value density of an MPO.
         """
+        # this implementation assumes that bra and ket are different. the implementation in MPS
+        # overrides this.
         from . import mpo
-
-        L = self.L
         if not self.finite:
             raise ValueError("MPO expectation values only works for a finite MPSEnvironment")
         # conversion

@@ -67,7 +67,8 @@ class MPO(MPSGeometry):
     ----------
     Ws : list of :class:`~tenpy.linalg.np_conserved.Array`
         The matrices of the MPO. Should have labels ``wL, wR, p, p*``.
-        Finite boundary conditions require ``Ws[0].get_leg('wL').ind_len = 1``.
+        Finite boundary conditions require ``Ws[0].get_leg('wL').ind_len == 1``, and similarly
+        ``Ws[-1].get_leg('wR').ind_len == 1``
     IdL : (iterable of) {int | None}
         Indices on the bonds, which correspond to 'only identities to the left'.
         A single entry holds for all bonds.

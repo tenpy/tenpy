@@ -8,7 +8,7 @@ import tenpy.networks.mps as mps
 import numpy as np
 
 
-def test_predict_ram_TEBD():
+def test_bosonic_model_TEBD():
     """Test with a bosonic chain."""
     L = 15
     model = mods.hubbard.BoseHubbardChain({"conserve":None, "U":1, "t":1, "bc_MPS": "finite", "L": L, "n_max": 4})
@@ -28,7 +28,7 @@ def test_predict_ram_TEBD():
             "TEBD RAM did not match expectation (expected: %f, gotten:%f)" % (exact, estimate)
 
 
-def test_predict_ram_DMRG():
+def test_bosonic_model_DMRG():
     """Test with a bosonic chain."""
     L = 15
     model = mods.hubbard.BoseHubbardChain({"conserve":None, "U":1, "t":1, "bc_MPS": "finite", "L": L, "n_max": 4})
