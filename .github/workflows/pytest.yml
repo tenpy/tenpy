@@ -27,10 +27,10 @@ jobs:
       max-parallel: 5
       matrix:
         # Note: python 3.13 is covered by code_coverage.yml
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
         compiled: [True]
         include:
-          - python-version: "3.13"
+          - python-version: "3.14"
             compiled: False
 
     steps:
