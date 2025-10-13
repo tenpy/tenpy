@@ -1181,8 +1181,6 @@ class ExcitationInitialState(InitialStateBuilder):
         randomize_params : dict-like
             Parameters for the random unitary evolution used to perturb the state a little bit
             in :meth:`~tenpy.networks.mps.MPS.perturb`.
-        randomize_close_1 : bool
-            Whether to randomize/perturb with unitaries close to the identity.
         use_highest_excitation : bool
             If True, start from  the last state in :attr:`orthogonal_to` and perturb it.
             If False, use the ground state (=the first entry of :attr:`orthogonal_to` and
