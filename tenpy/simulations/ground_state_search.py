@@ -783,6 +783,9 @@ class TopologicalExcitations(OrthogonalExcitations):
                 simulation in the future with the same `ground_state_filename`.
                 (However, it is not faster when the simulations run at the same time; instead it
                 might even lead to errors!)
+            gauge : { 'rho' | 'trace' }
+                How the additive part of the generalized eigenvector is subtracted out for the
+                :class:`~tenpy.networks.mpo.MPOTransferMatrix`, see its docs for details.
 
         Parameters
         ----------
