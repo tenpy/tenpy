@@ -1,0 +1,17 @@
+- Added support for symmetries, where the charges explicitly depend on position, see :ref:`shift_symmetry`.
+- Added a new base class :class:`~tenpy.networks.mps.MPSGeometry` that abstracts common properties
+  and methods of tensor networks with the linear geometry of e.g. MPS. The MPO class, as well as
+  Environments also subclass from :class:`~tenpy.networks.mps.MPSGeometry`.
+  Most notably, a new attribute :attr:`~tenpy.networks.mps.MPSGeometry.unit_cell_width` was introduced.
+  It is also an argument to the ``__init__`` and most classmethods of MPS, MPO, etc.
+  For backwards-compatibility, it is optional for now, with a default value that assumes a Chain
+  lattice.
+- For infinite MPS (:class:`~tenpy.networks.mps.MPS` with ``bc='infinite'``), we now only store
+  ``L`` singular values instead of ``L + 1`` in the :attr:`~tenpy.networks.mps.MPS._S` attribute.
+  The ``_S[L]`` entry always was equal to ``_S[0]`` anyway. With the incorporation of shift-symmetry,
+  i.e. symmetries that depend on spatial position, we need to distinguish the concept of
+  the singular values to the right of the last site from the singular values left of the first site,
+  since they differ by a spatial translation.
+  Singular values should only be accessed via the methods :meth:`~tenpy.networks.mps.MPS.get_SL`,
+  :meth:`~tenpy.networks.mps.MPS.get_SR`, :meth:`~tenpy.networks.mps.MPS.set_SL`,
+  and :meth:`~tenpy.networks.mps.MPS.set_SR` which account for these spatial translations.
