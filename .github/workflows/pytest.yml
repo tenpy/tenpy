@@ -60,12 +60,10 @@ jobs:
         python -m pip install ".[io, test, extra]"
     
     - name: Show tenpy config
+      working-directory: ..
       run: |
         python -c "import tenpy; tenpy.show_config()"
     
     - name: Run pytest
-      # configuration in pyproject.toml
-      # Note: This runs in the repo root directory, which contains the uncompiled tenpy package.
-      #       To use the version we just installed, it is important to run `pytest`
-      #       instead of `python -m pytest`.
+      working-directory: tests
       run: pytest
