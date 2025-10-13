@@ -1,4 +1,4 @@
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 import numpy as np
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.models import spins

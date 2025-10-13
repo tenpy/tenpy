@@ -1,5 +1,5 @@
 """A collection of tests for tenpy.models.lattice."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from tenpy.models import lattice
 import tenpy.linalg.np_conserved as npc
@@ -322,3 +322,50 @@ def test_index_conversion():
         expect_sz2 = np.sum(state2**2 * np.array([1., -1]), axis=-1)
         npt.assert_array_almost_equal_nulp(sz2_lat, expect_sz2, 100)
     # doen
+
+
+@pytest.mark.parametrize('name', ['Chain', 'Ladder', 'Square', 'Triangular', 'Honeycomb', 'Kagome'])
+def test_reciprocal_basis_and_BZ(name):
+    cls = getattr(lattice, name)
+    if name in ['Chain', 'Ladder']:  # (quasi-) 1D
+        lat = cls(2, None)
+    elif name in ['Square', 'Triangular', 'Honeycomb', 'Kagome']:  # 2D
+        lat = cls(2, 2, None)
+    else:
+        raise NotImplementedError
+
+    if name in ['Chain', 'Ladder']:
+        vertices = np.array([-np.pi, np.pi])
+    elif name == 'Square':
+        vertices = np.array([[np.pi, np.pi], [-np.pi, np.pi], [-np.pi, -np.pi], [np.pi, -np.pi]])
+    elif name in ['Triangular', 'Honeycomb', 'Kagome']:
+        vertices = np.array([[1, 1/np.sqrt(3)], [0, 2/np.sqrt(3)], [-1, 1/np.sqrt(3)],
+                             [-1, -1/np.sqrt(3)], [0, -2/np.sqrt(3)], [1, -1/np.sqrt(3)]])
+        vertices = vertices * 2 * np.pi / np.sqrt(3)
+        if name == 'Kagome':
+            vertices = np.rot90(vertices).T / 2  # (since the length of the basis vectors = 2)
+    else:
+        raise NotImplementedError
+
+    basis = lat.basis
+    recip_basis = lat.reciprocal_basis
+    # test a_i * b_j = 2*pi if i = j
+    for a, b in zip(basis, recip_basis):
+        assert np.allclose(a @ b, 2 * np.pi)
+    # test a_i * b_j = 0 if i != j
+    if lat.dim > 1:
+        for a, b in zip(np.roll(basis, 1, axis=0), recip_basis):
+            assert np.allclose(a @ b, 0)
+
+    # check that the BZ can be created
+    assert lat.BZ
+    # check that correct coordinates are returned
+    if lat.dim == 2 and np.any(np.arctan2(vertices[:, 1], vertices[:, 0]) == 0):
+        # there is a vertex at angle 0. numerically it may end up at angle ``2 * pi - eps``
+        expect = lat.BZ.order_vertices(vertices)
+        matches = np.allclose(lat.BZ.vertices, expect)
+        # check if it matches when rolling the vertex at angle 0 to the very back of the list
+        matches_rolled = np.allclose(lat.BZ.vertices, np.roll(expect, -1, axis=0))
+        assert matches or matches_rolled
+    else:
+        assert np.allclose(lat.BZ.vertices, lat.BZ.order_vertices(vertices))

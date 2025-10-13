@@ -2,22 +2,21 @@ name: tenpydoc
 channels:
   - conda-forge
 dependencies:
-  - python>=3.6
-  - numpy>=1.13
-  - scipy>=0.18
+  - python>=3.8
+  - numpy
+  - scipy
   - cython>=0.29
   - bottleneck
   - pip
-  - setuptools>=30.3.0
+  - setuptools>=68.0.0
   - h5py
   - pyyaml
-  - sphinx=6.2.1
+  - sphinx
   - sphinx_rtd_theme
-  - sphinxcontrib-bibtex
+  - sphinxcontrib-bibtex!=2.6
   - matplotlib
   - ipykernel
   - nbsphinx
   - graphviz
   - pandoc
   - sphinx-copybutton
-  - sphinxcontrib-bibtex!=2.6

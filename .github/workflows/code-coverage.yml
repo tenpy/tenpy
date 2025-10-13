@@ -10,11 +10,11 @@ on:
   push:
     branches:
       - main
-  # PRs
-  pull_request:
 
 jobs:
   build:
+    if: github.event.pull_request.draft == false
+    
     runs-on: ubuntu-latest
     env:
       # make pytest output in color
@@ -27,7 +27,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: "3.12"
+        python-version: "3.13"
     
     - name: Install dependencies
       run: |
@@ -37,9 +37,10 @@ jobs:
         python -m pip install --upgrade coverage
     
     - name: Build and install tenpy
+      # also installs extra dependencies defined in pyproject.toml
       run: |
         python -m build .
-        python -m pip install .
+        python -m pip install ".[io, test, extra]"
     
     - name: Run pytest with coverage
       # pytest configuration in pyproject.toml
@@ -48,7 +49,7 @@ jobs:
       #       instead of `python -m coverage`.
       run: |
         coverage run -m pytest .
-        coverage report -m --skip-covered
+        coverage report -m --skip-covered --sort=miss
         coverage json
       # Note: to get a nicely rendered html page, you can run the following on your local machine:
       #         python -m coverage run -m pytest

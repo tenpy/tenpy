@@ -2,10 +2,12 @@
 
 See the doc-string of :class:`Config` for details.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import warnings
+import numpy
 import numpy as np
+import numbers
 from collections.abc import MutableMapping
 import pprint
 import os
@@ -14,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 from .hdf5_io import ATTR_FORMAT
 
-__all__ = ["Config", "asConfig", "get_parameter", "unused_parameters"]
+__all__ = ["Config", "asConfig", "load_yaml_with_py_eval"]
 
 
 class Config(MutableMapping):
@@ -53,13 +55,6 @@ class Config(MutableMapping):
         self.options = config
         self.unused = set(config.keys())
         self.name = name
-
-    @property
-    def verbose(self):
-        warnings.warn(
-            "verbose is deprecated, we're using logging now! \n"
-            "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
-        return self.options.get('verbose', 1.)
 
     def copy(self, share_unused=True):
         """Make a *shallow* copy, as for a dictionary.
@@ -101,6 +96,8 @@ class Config(MutableMapping):
     def from_yaml(cls, filename, name=None):
         """Load a `Config` instance from a YAML file containing the :attr:`options`.
 
+        The yaml file can have additional ``!py_eval`` tags, see :func:`load_yaml_with_py_eval`.
+
         .. warning ::
             Like pickle, it is not safe to load a yaml file from an untrusted source! A malicious
             file can call any Python function and should thus be treated with extreme caution.
@@ -120,9 +117,7 @@ class Config(MutableMapping):
         """
         if name is None:
             name = os.path.basename(filename)
-        import yaml
-        with open(filename, 'r') as stream:
-            config = yaml.safe_load(stream)
+        config = load_yaml_with_py_eval(filename)
         return cls(config, name)
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
@@ -233,7 +228,7 @@ class Config(MutableMapping):
             if len(unused) > 1:
                 msg = "unused options for config {name!s}:\n{keys!s}"
             else:
-                msg = "unused option {keys!s} for config {name!s}\n"
+                msg = "unused option {keys!s} for config {name!s}"
             warnings.warn(msg.format(keys=sorted(unused), name=self.name))
             self.unused.clear()  # don't warn twice about the same parameters
         if recursive:
@@ -244,7 +239,7 @@ class Config(MutableMapping):
     def keys(self):
         return self.options.keys()
 
-    def get(self, key, default):
+    def get(self, key, default, expect_type=None):
         """Find the value of `key`; really more like `setdefault` of a :class:`dict`.
 
         If no value is set, return `default` and set the value of `key` to `default` internally.
@@ -255,7 +250,18 @@ class Config(MutableMapping):
             Key for the option being read out.
         default :
             Default value for the parameter.
+        expect_type : str | (sequence of) type
+            If given, we check if the returned value is an instance of *any* of the given types.
+            If it is not, we issue a ``UserWarning``.
+            As an exception, the value ``None`` is always allowed and never triggers a warning.
+            The following string short-hands are accepted as well::
 
+                'real': ``numbers.Real``
+                'complex': ``numbers.Complex``
+                'array': ``[list, numpy.ndarray]``
+                'real_or_array`: ``[numbers.Real, list, numpy.ndarray]``
+                'complex_or_array`: ``[numbers.Complex, list, numpy.ndarray]``
+        
         Returns
         -------
         val :
@@ -265,6 +271,39 @@ class Config(MutableMapping):
         val = self.options.setdefault(key, default)  # get & set default if not existent
         self.log(key, "reading", use_default)
         self.unused.discard(key)  # (does nothing if key not in set)
+        if (expect_type is not None) and (val is not None):  # (val is None) => nothing to check
+            # convert to sequence
+            if expect_type == 'real':
+                expect_type = [numbers.Real]
+            if expect_type == 'complex':
+                expect_type = [numbers.Complex]
+            if expect_type == 'array':
+                expect_type = [list, np.ndarray]
+            if expect_type == 'real_or_array':
+                expect_type = [numbers.Real, list, np.ndarray]
+            if expect_type == 'complex_or_array':
+                expect_type = [numbers.Complex, list, np.ndarray]
+            try:
+                iter(expect_type)
+            except TypeError:
+                expect_type = [expect_type]
+            else:
+                expect_type = list(expect_type)
+            assert len(expect_type) > 0, 'Expected at least one type'
+            type_ok = False
+            for t in expect_type:
+                if not isinstance(t, type):
+                    raise ValueError(f'Not a type: {t}')
+                if isinstance(val, t):
+                    type_ok = True
+                    break
+            if not type_ok:
+                if len(expect_type) == 1:
+                    expected = f'Expected {expect_type[0]}'
+                else:
+                    expected = f'Expected one of {", ".join(t.__name__ for t in expect_type)}'
+                msg = f'Invalid type for key "{key}". {expected}. Got {type(val).__name__}.'
+                warnings.warn(msg, stacklevel=2)
         return val
 
     def silent_get(self, key, default):
@@ -343,11 +382,24 @@ class Config(MutableMapping):
             msg = "Deprecated option in {name!r}: {old!r} renamed to {new!r}"
             msg = msg.format(name=self.name, old=old_key, new=new_key)
             if extra_msg:
-                msg = '\n'.join(msg, extra_msg)
+                msg = f'{msg}\n{extra_msg}'
             warnings.warn(msg, FutureWarning, stacklevel=3)
             self.options[new_key] = self.options[old_key]
             self.unused.discard(old_key)
             self.unused.add(new_key)
+
+    def deprecated_ignore(self, *old_keys: str, extra_msg=""):
+        """Issue a warning if an old, deprecated key is encountered that will be ignored.
+
+        This makes it more readable than having the standard unused warning at the end.
+        """
+        for key in old_keys:
+            if key in self.options.keys():
+                msg = f'Deprecated option {key!r} in {self.name!r} was ignored.'
+                if extra_msg:
+                    msg = f'{msg}\n{extra_msg}'
+                warnings.warn(msg, stacklevel=3)
+                self.unused.discard(key)  # have already warned now -> consider it "used"
 
     def any_nonzero(self, keys, log_msg=None):
         """Check for any non-zero or non-equal entries in some parameters.
@@ -432,143 +484,91 @@ def asConfig(config, name):
     return Config(config, name)
 
 
-def get_parameter(params, key, default, descr, asarray=False):
-    """Read out a parameter from the dictionary and/or provide default values.
 
-    .. deprecated :: 0.6.0
-        Use the :class:`Config` instead.
-
-    This function provides a similar functionality as ``params.get(key, default)``.
-    *Unlike* `dict.get` this function writes the default value into the dictionary
-    (i.e. in other words it's more similar to ``params.setdefault(key, default)``).
-
-    This allows the user to save the modified dictionary as meta-data, which gives a
-    concrete record of the actually used parameters and simplifies reproducing the results
-    and restarting simulations.
-
-    Moreover, a special entry with the key ``'verbose'`` *in* the `params`
-    can trigger this function to also print the used value.
-    A higher `verbose` level implies more output.
-    If `verbose` >= 100, it is printed every time it's used.
-    If `verbose` >= 2., its printed for the first time time its used.
-    and for `verbose` >= 1, non-default values are printed the first time they are used.
-    otherwise only for the first use.
-
-    Internally, whether a parameter was used is saved in the set ``params['_used_param']``.
-    This is used in :func:`unused_parameters` to print a warning if the key wasn't used
-    at the end of the algorithm, to detect mis-spelled parameters.
-
-    Parameters
-    ----------
-    params : dict
-        A dictionary of the parameters as provided by the user.
-        If `key` is not a valid key, ``params[key]`` is set to `default`.
-    key : string
-        The key for the parameter which should be read out from the dictionary.
-    default :
-        The default value for the parameter.
-    descr : str
-        A short description for verbose output, like 'TEBD', 'XXZ_model', 'truncation'.
-    asarray : bool
-        If True, convert the result to a numpy array with ``np.asarray(...)`` before returning.
-
-    Returns
-    -------
-    value :
-        ``params[key]`` if the key is in params, otherwise `default`.
-        Converted to a numpy array, if `asarray`.
-
-    Examples
-    --------
-    In the algorithm
-    :class:`~tenpy.algorithms.tebd.TEBDEngine` gets a dictionary of parameters.
-    Beside doing other stuff, it calls :meth:`tenpy.models.model.NearestNeighborModel.calc_U_bond`
-    with the dictionary as argument, which looks similar like:
-
-    >>> from tenpy.tools.params import get_parameter
-    >>> def model_calc_U(params):
-    ...    dt = get_parameter(params, 'dt', 0.01, 'TEBD')
-    ...    order = get_parameter(params, 'order', 1, 'TEBD')
-    ...    print("calc U with dt =", dt, "and order =", order )
-    ...    # ... calculate exp(-i * dt* H) ....
-
-    Then, when you call it without any parameters, it just uses the default value:
-
-    >>> model_calc_U(dict())
-    calc U with dt = 0.01 and order = 1
-
-    Of course you can also provide the parameter to use a non-default value:
-
-    >>> model_calc_U(dict(dt=0.02))
-    calc U with dt = 0.02 and order = 1
+def _yaml_eval_constructor(loader, node):
+    """Yaml constructor to support `!py_eval` tag in yaml files."""
+    cmd = loader.construct_scalar(node)
+    if not isinstance(cmd, str):
+        raise ValueError("expect string argument to `!py_eval`")
+    try:
+        res = eval(cmd, loader.eval_context)
+    except:
+        print("\nError while yaml parsing the following !py_eval command:\n", cmd, "\n")
+        raise
+    return res
 
 
-    Increasing the special keyword ``'verbose'`` generally prints more:
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
-    >>> model_calc_U(dict(dt=0.02, verbose=1))
-    parameter 'dt'=0.02 for TEBD
-    calc U with dt = 0.02 and order = 1
-    >>> model_calc_U(dict(dt=0.02, verbose=2))
-    parameter 'dt'=0.02 for TEBD
-    parameter 'order'=1 (default) for TEBD
-    calc U with dt = 0.02 and order = 1
-    """
-    msg = ("Old-style parameter dictionaries are deprecated in favor of `Config` class objects. "
-           "Use `Config` methods to read out parameters. "
-           "In particular, inside models just use `model_params.get(key, default)`.")
-    warnings.warn(msg, category=FutureWarning, stacklevel=2)
-    if isinstance(params, Config):
-        return params.get(key, default)
-    use_default = key not in params
-    val = params.setdefault(key, default)  # get the value; set default if not existent
-    used = params.setdefault('_used_param', set())
-    verbose = params.get('verbose', 0)
-    new_key = key not in used
-    if verbose >= 100 or (new_key and verbose >= (2. if use_default else 1.)):
-        defaultstring = "(default) " if use_default else ""
-        print("parameter {key!r}={val!r} {defaultstring}for {descr!s}".format(
-            descr=descr, key=key, val=val, defaultstring=defaultstring))
-    used.add(key)  # (does nothing if already present)
-    if asarray:
-        val = np.asarray(val)
-    return val
+if yaml is None:
+    _YamlLoaderWithPyEval = None
+else:
+    class _YamlLoaderWithPyEval(yaml.FullLoader):
+        eval_context = {}
+
+    yaml.add_constructor("!py_eval", _yaml_eval_constructor, Loader=_YamlLoaderWithPyEval)
 
 
-def unused_parameters(params, warn=None):
-    """Returns a set of the parameters which have not been read out with `get_parameters`.
+def load_yaml_with_py_eval(filename=None, yaml_content=None, context={'np': numpy}):
+    """Load a yaml file with support for an additional `!py_eval` tag.
 
-    This function might be useful to check for typos in the parameter keys.
+    When defining yaml parameter files, it's sometimes convenient to just have python snippets
+    in there, e.g. to get fractions of pi or expand last lists.
 
-    .. deprecated :: 0.6.0
-        Use the :class:`Config` instead.
+    This function loads a yaml file supporting such (short) python snippets
+    that get evaluated by python's ``eval(snippet)``.
+
+    It expects one string of python code following the ``!py_eval`` tag.
+    The most reliable method to pass the python code is to use a literal
+    string in yaml, as shown in the example below.
+
+    .. code :: yaml
+
+        a: !py_eval |
+            2**np.arange(6, 10)
+        b: !py_eval |
+            [10, 15] + list(range(20, 31, 2)) + [35, 40]
+        c: !py_eval "2*np.pi * 0.3"
+
+    Note that a subsequent ``yaml.dump()`` might contain ugly parts if you construct
+    generic python objects, e.g., a numpy array scalar like ``np.arange(10)[0]``.
+    If you want to avoid this, you can explicitly convert back to lists before.
+
+
+    .. warning ::
+
+        Like pickle, it is not safe to load a yaml file from an untrusted source! A malicious
+        file can call any Python function and should thus be treated with extreme caution.
 
     Parameters
     ----------
-    params : dict
-        A dictionary of parameters which was given to (functions using) :func:`get_parameter`
-    warn : None | str
-        If given, print a warning "unused parameter for {warn!s}: {unused_keys!s}".
+    filename : str | None
+        Filename of the file to load.
+    yaml_content : str | None
+        Alternatively to filename directly the content of the yaml file.
+        Pass either `filename` or `yaml_content`.
+    context : dict
+        The context of ``globals()`` passed to `eval`.
 
     Returns
     -------
-    unused_keys : set
-        The set of keys of the params which was not used
+    config :
+        Data (typically nested dictionary) as defined in the yaml file.
+
     """
-    msg = ("Old-style parameter dictionaries are deprecated in favor of `Config` class objects. "
-           "Using `unused_parameters` to warn about non-used parameters is no longer necessary; "
-           "this is now done during garbage collection.")
-    warnings.warn(msg, category=FutureWarning, stacklevel=2)
-    if isinstance(params, Config):
-        return params.unused
-    used = params.get('_used_param', set())
-    unused = set(params.keys()) - used
-    unused.discard('_used_param')
-    unused.discard('verbose')
-    if warn is not None:
-        if len(unused) > 0:
-            if len(unused) > 1:
-                msg = "unused parameters for {descr!s}:\n{keys!s}"
-            else:
-                msg = "unused parameter {keys!s} for {descr!s}\n"
-            warnings.warn(msg.format(keys=sorted(unused), descr=warn))
-    return unused
+    if _YamlLoaderWithPyEval is None:
+        raise RuntimeError('Could not import yaml. Consider installing the pyyaml package.')
+
+    _YamlLoaderWithPyEval.eval_context = context
+
+    if filename is not None:
+        with open(filename, 'r') as stream:
+            config = yaml.load(stream, Loader=_YamlLoaderWithPyEval)
+    elif yaml_content is not None:
+        config = yaml.load(yaml_content, Loader=_YamlLoaderWithPyEval)
+    else:
+        raise ValueError("pass either filename or yaml_content!")
+    return config

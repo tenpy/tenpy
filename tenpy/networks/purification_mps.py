@@ -116,16 +116,14 @@ see :cite:`hauschild2018`.
     Moreover, we don't split the physical and auxiliary space into separate sites, which makes
     TEBD as costly as :math:`O(d^6 \chi^3)`.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import copy
 import numpy as np
-import itertools
 
 from .mps import MPS
 from ..linalg import np_conserved as npc
 from ..tools.math import entropy
-from ..tools.misc import lexsort
 
 __all__ = ['PurificationMPS', 'convert_model_purification_canonical_conserve_ancilla_charge']
 
@@ -161,6 +159,100 @@ class PurificationMPS(MPS):
             if not set(['vL', 'vR', 'p', 'q']) <= set(B.get_leg_labels()):
                 raise ValueError("B has wrong labels " + repr(B.get_leg_labels()))
         super().test_sanity()
+
+    @classmethod
+    def from_density_matrix(cls, sites, rho, form=None, cutoff=1e-16, normalize=True):
+        r"""Construct a purification from a single tensor `rho` of the density matrix.
+
+        Given the mixed state :math:`\rho`, we diagonalize it :math:`\rho = U D U^\dagger`,
+        and define :math:`\psi = \sum_{ijk} U_{ik} \sqrt{D_k} \bar{U}_{jk} |i>_{phys} |j>_{anc}`.
+        This is one of many possible purifications of :math:`rho`, and is valid since
+        :math:`Tr_{anc} |\psi><\psi| = \rho`.
+        We then construct a purification MPS of :math:`\psi` using :meth:`from_full`.
+
+        Boundary conditions are always finite.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the physical local Hilbert spaces.
+        rho : :class:`~tenpy.linalg.np_conserved.Array`
+            The full density matrix.
+            Should have labels ``'p0', 'p0*', 'p1', 'p1*, ...,  'p{L-1}', 'p{L-1}*`` (in any order).
+            Is assumed to be hermitian and positive semi-definite.
+        form  : ``'B' | 'A' | 'C' | 'G' | None``
+            The canonical form of the resulting MPS, see module doc-string.
+            ``None`` defaults to 'A' form on the first site and 'B' form on all following sites.
+        cutoff : float
+            Cutoff of singular values used in the SVDs.
+        normalize : bool
+            Whether the resulting MPS should have 'norm' 1.
+        """
+        L = len(sites)
+        rho = rho.combine_legs([[f'p{i}' for i in range(L)], [f'p{i}*' for i in range(L)]])  # [P, P*]
+        D, U = npc.eigh(rho)  # D[eig] , U[P, eig]
+
+        # fix negative eigenvalues
+        if np.any(D < -1e-12):
+            raise ValueError('Density matrix is not positive.')
+        D[D < 0] = 0
+
+        # [P, eig] * [eig] @ [P*, eig*] -> [P, P*]
+        psi = npc.tensordot(U.scale_axis(np.sqrt(D), axis=-1), U.conj(), (1, 1))
+
+        # [P, P*] -> [p0, p1, ..., p0*, p1*, ...]
+        psi = psi.split_legs()
+        # [p0, p1, ..., p0*, p1*, ...] -> [p0, p1, ..., q0, q1, ...]
+        psi.ireplace_labels([f'p{i}*' for i in range(L)], [f'q{i}' for i in range(L)])
+        return cls.from_full(sites, psi, form=form, cutoff=cutoff, normalize=normalize,
+                             bc='finite', outer_S=None)
+
+    @classmethod
+    def from_density_matrix(cls, sites, rho, form=None, cutoff=1e-16, normalize=True):
+        r"""Construct a purification from a single tensor `rho` of the density matrix.
+
+        Given the mixed state :math:`\rho`, we diagonalize it :math:`\rho = U D U^\dagger`,
+        and define :math:`\psi = \sum_{ijk} U_{ik} \sqrt{D_k} \bar{U}_{jk} |i>_{phys} |j>_{anc}`.
+        This is one of many possible purifications of :math:`rho`, and is valid since
+        :math:`Tr_{anc} |\psi><\psi| = \rho`.
+        We then construct a purification MPS of :math:`\psi` using :meth:`from_full`.
+
+        Boundary conditions are always finite.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the physical local Hilbert spaces.
+        rho : :class:`~tenpy.linalg.np_conserved.Array`
+            The full density matrix.
+            Should have labels ``'p0', 'p0*', 'p1', 'p1*, ...,  'p{L-1}', 'p{L-1}*`` (in any order).
+            Is assumed to be hermitian and positive semi-definite.
+        form  : ``'B' | 'A' | 'C' | 'G' | None``
+            The canonical form of the resulting MPS, see module doc-string.
+            ``None`` defaults to 'A' form on the first site and 'B' form on all following sites.
+        cutoff : float
+            Cutoff of singular values used in the SVDs.
+        normalize : bool
+            Whether the resulting MPS should have 'norm' 1.
+        """
+        L = len(sites)
+        rho = rho.combine_legs([[f'p{i}' for i in range(L)], [f'p{i}*' for i in range(L)]])  # [P, P*]
+        D, U = npc.eigh(rho)  # D[eig] , U[P, eig]
+
+        # fix negative eigenvalues
+        if np.any(D < -1e-12):
+            raise ValueError('Density matrix is not positive.')
+        D[D < 0] = 0
+
+        # [P, eig] * [eig] @ [P*, eig*] -> [P, P*]
+        psi = npc.tensordot(U.scale_axis(np.sqrt(D), axis=-1), U.conj(), (1, 1))
+
+        # [P, P*] -> [p0, p1, ..., p0*, p1*, ...]
+        psi = psi.split_legs()
+        # [p0, p1, ..., p0*, p1*, ...] -> [p0, p1, ..., q0, q1, ...]
+        psi.ireplace_labels([f'p{i}*' for i in range(L)], [f'q{i}' for i in range(L)])
+        return cls.from_full(sites, psi, form=form, cutoff=cutoff, normalize=normalize,
+                             bc='finite', outer_S=None)
 
     @classmethod
     def from_infiniteT(cls, sites, bc='finite', form='B', dtype=np.float64, unit_cell_width=None):
@@ -239,39 +331,13 @@ class PurificationMPS(MPS):
         L = len(sites)
         assert L > 0
         chinfo = sites[0].leg.chinfo
-        for s in sites:
-            assert s.leg.chinfo == chinfo
-        charge_sector_left = chinfo.make_valid(None)  # zero charges
-        charge_sector_right = chinfo.make_valid(charge_sector)
-        assert charge_sector_right.ndim == 1
-        # get bounds for the maximal and minimal charge values at each bond
-        Q_from_right = [None] * L + [set([tuple(charge_sector_right)])]  # all bonds 0, ... L
-        for i in reversed(range(L)):
-            Q_R = np.array(list(Q_from_right[i+1]))
-            # find new charges possible on left of site i, coming from the right
-            Q_L = set()
-            for Q_p in sites[i].leg.charges:
-                Q_L_add = chinfo.make_valid(Q_R - Q_p[np.newaxis, :])
-                Q_L_add = set([tuple(q) for q in Q_L_add])
-                Q_L = Q_L.union(Q_L_add)
-            Q_from_right[i] = Q_L
-        if tuple(charge_sector_left) not in Q_from_right[0]:
-            raise ValueError("can't get desired charge sector {charge_sector!r} "
-                             "for the given charges on physical sites!")
-        Q_from_left = [set([tuple(charge_sector_left)])] + [None] * L
+        assert all(s.leg.chinfo == chinfo for s in sites), "Charge Info for all sites must be identical"
+        # get a 'charge_tree', (list of sets with possible charges for each site, including 0 to the left)
+        charge_tree = cls.get_charge_tree_for_given_charge_sector(sites, charge_sector)
+        # get charges from charge_tree in correct array form
         Q_L_arrays = []
-        for i in range(L):
-            Q_L = np.array(list(Q_from_left[i]))
-            Q_L = Q_L[lexsort(Q_L.T), :]
-            Q_L_arrays.append(Q_L)
-            Q_R = set()
-            for Q_p in sites[i].leg.charges:
-                Q_R_add = chinfo.make_valid(Q_L + Q_p[:, np.newaxis])
-                Q_R_add = set([tuple(q) for q in Q_R_add])
-                Q_R = Q_R.union(Q_R_add)
-            Q_from_left[i+1] = Q_R.intersection(Q_from_right[i+1])
-        assert Q_from_left[-1] == Q_from_right[-1]  # should match charge_sector on the right
-        Q_L_arrays.append(chinfo.make_valid(charge_sector_right[np.newaxis, :]))
+        for possible_charges_L in charge_tree:
+            Q_L_arrays.append(np.array(list(possible_charges_L)))
 
         # now we can define the tensors following section VI.C) of [barthel2016]_:
         # B[vL, vR, p, q] = delta_{p,q} delta_{Q(p) + Q(vL), Q(vR)}
@@ -464,11 +530,152 @@ class PurificationMPS(MPS):
     def swap_sites(self, i, swapOP='auto', trunc_par={}):
         raise NotImplementedError()
 
+    def sample_measurements(self,
+                            sample_q,
+                            first_site=0,
+                            last_site=None,
+                            ops=None,
+                            rng=None,
+                            norm_tol=1.e-12,
+                            complex_amplitude=True):
+        """Sample measurement results in the computational basis.
+
+        See :meth:`tenpy.networks.mps.MPS.sample_measurements` for documentation of the function.
+        The only functional difference between these two functions is that we must now deal with
+        the ancilla leg on each site. There are two options, specified by `sample_q`:
+
+        1. Sample both the p and q leg on each site; at the end, forget about the outcomes for the
+        q leg to sample from the distribution just on the physical legs. The probability we return
+        is the joint probability of both p and q outcomes. We don't care about in which basis we
+        sample the q legs, and additionally we do not return the q outcomes to the user.
+
+        2. Leave the ancilla leg behind on each site. Then we sample directly from the distribution
+        on p legs, but this is more expensive. The total cost of sampling is now O(chi^3) rather
+        than O(chi^2). The returned probability is just that of the p outcomes, so this is physical.
+
+        Below we list the differences in the parameters and return values from the MPS function.
+
+        Parameters
+        ----------
+        sample_q : bool
+             Do we sample the q leg (True) or leave it behind (False)?
+        first_site, last_site, ops, rng, norm_tol :
+            Same as in :meth:`tenpy.networks.mps.MPS.sample_measurements`.
+        complex_amplitude : bool
+            Do we return the complex amplitude (``True``) of the sampled bit string or the
+            probability (``False``), which is the ``abs(amplitude) ** 2``.
+            Only ``False`` is supported for :class:`PurificationMPS`.
+
+        Returns
+        -------
+        sigmas : list of int | list of float
+            On each site the index of the local basis that was measured for the PHYSICAL site only,
+            as specified in the corresponding :class:`~tenpy.networks.site.Site` in :attr:`sites`.
+            Note that this can change depending on whether/what charges you conserve!
+            Explicitly specifying the measurement operator will avoid that issue.
+            We DO NOT return any measurement outcomes/indices for the ancilla leg, even if they
+            are explicitly sampled. This is because to get expectation values of the density matrix,
+            one should trace over (i.e. forget the outcome of) the ancilla legs.
+        probability : float
+            If `sample_q` == False, the probability ``trace(|psi><psi|sigmas...><sigmas...|)``,
+            i.e. the probability of measuring ``|sigmas...>`` on the physical legs.
+            If `sample_q` == True, we return the probability of measuring a particular configuration
+            on both physical and ancilla legs, even though we don't return the ancilla configuration.
+            Hence, the returned probability isn't really meaningful.
+        """
+        if complex_amplitude:
+            raise ValueError("Sampling a purification MPS only retuns the probability of the sampled string; rerun with 'complex_amplitude=False'.")
+
+        if last_site is None:
+            last_site = self.L - 1
+        if rng is None:
+            rng = np.random.default_rng()
+        sigmas = []
+        total_probability = 1.
+        theta = self.get_theta(first_site, n=1).replace_labels(['p0', 'q0'], ['p', 'q'])
+        for i in range(first_site, last_site + 1):
+            # theta = wave function in basis vL [sigmas...] p q vR
+            # where the `sigmas` are already fixed to the measurement results
+            i0 = self._to_valid_index(i)
+            site = self.sites[i0]
+            if ops is not None:
+                op_name = ops[(i - first_site) % len(ops)]
+                op = site.get_op(op_name).transpose(['p', 'p*'])
+                if npc.norm(op - op.conj().transpose()) > 1.e-13:
+                    raise ValueError(f"measurement operator {op_name!r} not hermitian")
+                W, V = npc.eigh(op)
+                theta = npc.tensordot(V.conj(), theta, axes=['p*', 'p']).replace_label('eig*', 'p')
+            else:
+                W = np.arange(site.dim)
+            # perform a projective measurement:
+            # trace out rest except site `i`
+            if not sample_q:
+                rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']]) # physical RDM on site i
+                # probabilities p(sigma) = <sigma|rho|sigma>
+                rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
+                if abs(np.sum(rho_diag) - 1.) > norm_tol:
+                    raise ValueError("not normalized to `norm_tol`")
+                rho_diag /= np.sum(rho_diag)
+                sigma = rng.choice(site.dim, p=rho_diag)  # randomly select index from probabilities
+                sigmas.append(W[sigma]) # return eigenvalue if an op was specified
+                theta = theta.take_slice(sigma, 'p')  # project to sigma in theta; now has legs vL (trivial), q, vR
+                probability = rho_diag[sigma] # this is probability of seeing sigma conditioned on previous results.
+                # rho_diag[sigma] which should be the same as the norm of theta squared
+                # assert np.isclose(probability, npc.tensordot(theta.conj(), theta, axes=(['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q'])))
+                total_probability *= probability    # probability of p outcome
+            else:
+                W2 = np.arange(site.dim)    # outcomes for q leg
+                # Sample p
+                rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']]) # physical RDM on site i
+                # probabilities p(sigma) = <sigma|rho|sigma>
+                rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
+                if abs(np.sum(rho_diag) - 1.) > norm_tol:
+                    raise ValueError("not normalized to `norm_tol`")
+                rho_diag /= np.sum(rho_diag)
+                sigma_1 = rng.choice(site.dim, p=rho_diag)  # randomly select index from probabilities
+                probability = rho_diag[sigma_1] # rho_diag[sigma_1] is probability of p outcome, conditioned on all previous outcomes
+                # So by Bayes' rule, we now have the joint probability of all sampled outcomes.
+                theta = theta.take_slice([sigma_1], ['p'])  # project to sigma in theta; now has legs vL (trivial), vR
+
+                # Sample q
+                rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*'], ['vL', 'vR']]) # physical RDM on site i
+                # probabilities p(sigma) = <sigma|rho|sigma>
+                rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
+                # rho_diag will nothave trace = 1 since we didn't normalize theta after slicing.
+                rho_diag /= np.sum(rho_diag)
+                sigma_2 = rng.choice(site.dim, p=rho_diag)  # randomly select index from probabilities
+                probability *= rho_diag[sigma_2] # probabilty of all outcomes seen so far.
+                theta = theta.take_slice([sigma_2], ['q'])  # project to sigma in theta; now has legs vL (trivial), vR
+
+                sigmas.append(W[sigma_1]) # For ancilla, we do not return the sampled index W[sigma_2] since the outcome
+                # is in an arbitrary basis.
+                # rho_diag[sigma] which should be the same as the norm of theta squared
+                # assert np.isclose(probability, npc.tensordot(theta.conj(), theta, axes=(['vL*', 'vR*'], ['vL', 'vR'])))
+                total_probability *= probability    # probability of q outcome
+
+            if i != last_site:
+                # Move orthogonality center to the next site
+                theta = theta / npc.norm(theta) # renormalize
+                B = self.get_B(i + 1)
+                if sample_q:
+                    theta = npc.tensordot(theta, B, axes=['vR', 'vL'])
+                else:
+                    Q, R = npc.qr(theta.combine_legs(['vL', 'q']),
+                                  inner_labels=['vR', 'vL'],
+                                  pos_diag_R=True,
+                                  )
+                    theta = npc.tensordot(R, B, axes=['vR', 'vL'])
+                # B is right-canonical -> theta still normalized
+            elif self.bc == 'finite' and first_site == 0 and last_site == self.L - 1 and sample_q:
+                assert theta.shape == (1,1) # This contains the phase; but we don't want this since
+                # we are returning the probability, not the weight.
+        return sigmas, total_probability
+
     def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
         """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
         # compared to MPS._corr_up_diag just perform additional contractions of the 'q'
-        op1 = self.get_op(ops1, i)
-        opstr1 = self.get_op(opstr, i)
+        op1, _ = self.get_op(ops1, i)
+        opstr1, _ = self.get_op(opstr, i)
         if opstr1 is not None:
             axes = ['p*', 'p'] if apply_opstr_first else ['p', 'p*']
             op1 = npc.tensordot(op1, opstr1, axes=axes)
@@ -482,14 +689,15 @@ class PurificationMPS(MPS):
             B = self.get_B(r, form='B')
             C = npc.tensordot(C, B, axes=['vR', 'vL'])
             if r == js[-1]:
-                Cij = npc.tensordot(self.get_op(ops2, r), C, axes=['p*', 'p'])
+                op2, _ = self.get_op(ops2, r)
+                Cij = npc.tensordot(op2, C, axes=['p*', 'p'])
                 Cij = npc.inner(B.conj(),
                                 Cij,
                                 axes=[['vL*', 'p*', 'q*', 'vR*'], ['vR*', 'p', 'q', 'vR']])
                 res.append(Cij)
                 js.pop()
             if len(js) > 0:
-                op = self.get_op(opstr, r)
+                op, _ = self.get_op(opstr, r)
                 if op is not None:
                     C = npc.tensordot(op, C, axes=['p*', 'p'])
                 C = npc.tensordot(B.conj(), C, axes=[['vL*', 'p*', 'q*'], ['vR*', 'p', 'q']])

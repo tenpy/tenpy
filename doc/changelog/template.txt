@@ -1,5 +1,6 @@
-[latest]
-========
+[v1.X.Y] - 2024-MM-DD
+=====================
+TODO adjust version and date above
 
 Release Notes
 -------------

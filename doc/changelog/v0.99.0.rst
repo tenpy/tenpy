@@ -1,0 +1,67 @@
+[v0.99.0] - 2024-03-19
+======================
+
+Release Notes
+-------------
+The v0.99 release is the Backwards-compatible version of the :mod:`v1.0 release</changelog/v1.0.0>` release.
+It has all of the same features, but should raise informative warnings for those features
+that are not compatible with v1.0.
+
+The most notable changes since v0.11 are the addition of VUMPS (variational uniform MPS)
+algorithms and simulation classes for dynamics and spectral functions.
+
+Changelog
+---------
+
+Added
+^^^^^
+- :pull:`266` combining several new features
+
+  * Variational Uniform MPS (VUMPS) algorithm :class:`~tenpy.algorithms.vumps.SingleSiteVUMPSEngine` 
+    and :class:`~tenpy.algorithms.vumps.TwoSiteVUMPSEngine` for the optimization of the new MPS subclass 
+    :class:`~tenpy.networks.mps.UniformMPS`, 
+  * the :class:`~tenpy.networks.mps.MomentumMPS` for the quasi-particle excitation ansatz,
+    which can be optimized by :class:`~tenpy.algorithms.plane_wave_excitation.PlaneWaveExcitationEngine`
+  * MPS initialization methods :meth:`~tenpy.networks.mps.MPS.from_random_unitary_evolution` and 
+    :meth:`~tenpy.networks.mps.MPS.from_desired_bond_dimension`
+  * Overhaul of simulation :class:`~tenpy.simulations.ground_state.OrthogonalExcitations` and generalization to new
+    :class:`~tenpy.simulations.ground_state.TopologicalExcitations`,
+    with enhanced handling of segment boundary conditions, e.g. MPS :meth:`~tenpy.networks.mps.MPS.extract_enlarged_segment`.
+  * :class:`~tenpy.linalg.krylov_based.GMRES`
+  * :func:`~tenpy.linalg.np_conserved.polar` decomposition (based on SVD).
+  * :class:`~tenpy.linalg.sparse.BoostNpcLinearOperator` that can boost (i.e. add constants) to a linear operator,
+    providing an alternative to the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`
+
+- Added consistency checks, see :func:`~tenpy.tools.misc.consistency_check`, as well as
+
+  * :cfg:option:`Algorithm.max_N_sites_per_ring`
+  * :cfg:option:`TimeEvolutionAlgorithm.max_trunc_err`
+  * :cfg:option:`IterativeSweeps.max_trunc_err`
+  * :cfg:option:`ExpMPOEvolution.max_dt`
+  * :cfg:option:`TEBDEngine.max_delta_t`
+
+- Added class :class:`~tenpy.models.lattice.SimpleBZ` for the Brillouin zone of a Lattice and convenience functions for
+  plotting it.
+- Add simulation classes 
+  :class:`~tenpy.simulations.time_evolution.SpectralSimulation`,
+  :class:`~tenpy.simulations.time_evolution.TimeDependentCorrelation`,
+  :class:`~tenpy.simulations.time_evolution.TimeDependentCorrelationEvolveBraKet`,
+  :class:`~tenpy.simulations.time_evolution.SpectralSimulationEvolveBraKet`.
+- Add module :mod:`tenpy.simulations.post_processing` with a :class:`~tenpy.simulations.post_processing.DataLoader` class,
+  which can be used at the end of a simulation (or in a separate script) to calculate additional results from measurement data or plot something.
+- Functions to perform a linear prediction in :mod:`tenpy.tools.prediction`.
+- Functions for fourier transform and plotting of spectral functions in :mod:`tenpy.tools.spectral_function_tools`.
+
+
+Changed
+^^^^^^^
+- safeguard measurements with try-except.
+
+Fixed
+^^^^^
+- MPO methods :meth:`~tenpy.networks.mpo.MPO.dagger`, :meth:`~tenpy.networks.mpo.MPO.is_hermitian`,
+  and :meth:`~tenpy.networks.mpo.MPO.__add__` now respect
+  the :attr:`:~tenpy.networks.mpo.MPO.explicit_plus_hc` flag.
+- Handle Jordan wigner strings better, see :pull:`355`. This includes a new way to add JW signs on a virtual MPS leg 
+  via the site's :meth:`~tenpy.networks.site.Site.charge_to_JW_signs`
+

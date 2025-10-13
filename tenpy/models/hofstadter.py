@@ -4,122 +4,159 @@
     Long term: implement different lattices.
     Long term: implement variable hopping strengths Jx, Jy.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
-import warnings
 
 from .lattice import Square
 from ..networks.site import BosonSite, FermionSite
-from .model import CouplingModel, MPOModel, CouplingMPOModel
+from .model import CouplingMPOModel
 
-__all__ = ['HofstadterBosons', 'HofstadterFermions', 'gauge_hopping']
+__all__ = ['HofstadterBosons', 'HofstadterFermions', 'gauge_hopping', 'hopping_phases']
 
 
-def gauge_hopping(model_params):
-    r"""Compute hopping amplitudes for the Hofstadter models based on a gauge choice.
+def hopping_phases(p: int, q: int, Lx: int, Ly: int, pbc_x: bool, pbc_y: bool, gauge):
+    r"""Calculate the complex hopping phases for Hofstadter models.
 
-    In the Hofstadter model, the magnetic field enters as an Aharonov-Bohm phase.
-    This phase is dependent on a choice of gauge, which simultaneously defines a
-    'magnetic unit cell' (MUC).
+    To achieve a uniform magnetic flux density per plaquette of ``phi = p / q``, we use
+    complex hopping phases :math:`e^{2 \pi i a_x(x, y)}` for hopping to the left,
+    from ``(x + 1, y)`` to ``(x, y)`` and :math:`e^{2 \pi i a_y(x, y)}` for hopping down from
+    ``(x, y + 1)`` to ``(x, y)``. For hopping in the opposite directions on a given bond, we get
+    the conjugate prefactor, i.e. the negative phase.
 
-    The magnetic unit cell is the smallest set of lattice plaquettes that
-    encloses an integer number of flux quanta. It can be user-defined by setting
-    mx and my, but for common gauge choices is computed based on the flux
-    density.
+    The phase picked up when hopping around a plaquette clockwise (i.e. in mathematically negative
+    orientation, matching the negative charge of the electron), must add up to the flux density.
+    Let us add up the phases for a hopping loop, starting at the bottom left of a plaquette,
+    at ``(x, y)`` and going up, right, down, left. We then must have
 
-    The gauge choices are:
-        * 'landau_x': Landau gauge along the x-axis. The magnetic unit cell will
-          have shape :math`(\mathtt{mx}, 1)`. For flux densities :math:`p/q`, `mx` will default to q.
-          Example: at a flux density :math:`1/3`, the magnetic unit cell will have shape
-          :math:`(3,1)`, so it encloses exactly 1 flux quantum.
-        * 'landau_y': Landau gauge along the y-axis. The magnetic unit cell will
-          have shape :math`(1, \mathtt{my})`. For flux densities :math`p/q`, `my` will default to q.
-          Example: at a flux density :math:`3/7`, the magnetic unit cell will have shape
-          :math:`(1,7)`, so it encloses exactly 3 flux quanta.
-        * 'symmetric': symmetric gauge. The magnetic unit cell will have shape
-          :math:`(\mathtt{mx}, \mathtt{my})`, with :math:`mx = my`. For flux densities :math:`p/q`,
-          `mx` and `my` will default to :math:`q`
-          Example: at a flux density 4/9, the magnetic unit cell will have shape
-          (9,9).
+    .. math ::
+        - a_y(x, y) - a_x(x, y + 1) + a_y(x + 1, y) + a_x(x, y) = phi
 
-    .. todo :
-        Add periodic gauge (generalization of symmetric with mx, my unequal).
+    There are many gauge choices that achieve this. We support the following choices::
+
+        ===========  ===============  ==============  ====================
+        gauge        a_x(x, y)        a_y(x, y)       magnetic unit cell
+        ===========  ===============  ==============  ====================
+        landau_x     0                phi * x         (q, 1)
+        -----------  ---------------  --------------  --------------------
+        landau_y     -phi * y         0               (1, q)
+        -----------  ---------------  --------------  --------------------
+        symmetric    -.5 * phi * y    .5 * phi * x    (2 * q, 2 * q)
+        ===========  ===============  ==============  ====================
+
+    .. warning ::
+        Note how the size of the  "magnetic unit cell" after which the phase factors repeat
+        (s.t. the :math:`a_i` repeat modulo :math:`2\pi`) depends on the gauge choice.
+        In any direction with periodic boundaries, we need this unit cell of hopping phases to
+        commensurately tile the lattice unit cell. This also guarantees that the plaquettes that
+        cross the periodic boundary have the correct flux. For directions with open boundaries,
+        this technical aspect of commensuration is not relevant, and we can write down the model
+        for any system size.
 
     Parameters
     ----------
-    gauge : 'landau_x' | 'landau_y' | 'symmetric'
-        Choice of the gauge, see table above.
-    mx, my : int | None
-        Dimensions of the magnetic unit cell in terms of lattice sites.
-        ``None`` defaults to the minimal choice compatible with `gauge` and `phi_pq`.
-    Jx, Jy: float
-        'Bare' hopping amplitudes (without phase).
-        Without any flux we have ``hop_x = -Jx`` and ``hop_y = -Jy``.
-    phi_pq : tuple (int, int)
-        Magnetic flux as a fraction p/q, defined as (p, q)
+    p, q : int
+        Specifies the flux per plaquette as a fraction ``phi = p / q``
+    lx, ly : int
+        System size (for finite systems) or unit cell size (for infinite systems)
+    pbc_x, pbc_y : int
+        If the boundary conditions in the particular direction are periodic, else open.
+    gauge : 'landau_x' | 'landau_y' | 'symmetric' | None
+        Choices for the gauge, see table above. If ``None``, we try them in order and use the first
+        that is commensurate with all periodic boundaries.
 
     Returns
     -------
-    hop_x, hop_y : float | array
-        Hopping amplitudes to be used as prefactors for :math:`c^\dagger_{x,y} c_{x+1,y}` (`hop_x`)
-        and :math:`c^\dagger_{x,y} c_{x,y+1}` (`hop_x`), respectively, with the necessary phases
-        for the gauge.
+    phases_x, phases_y : 2D array
+        Complexes phases :math:`\mathtt{phases_j[x, y]} = e^{2 \pi i a_j(x, y)}``.
+        Shape matches the bonds of the orientation in the given system, i.e. ``(lx, ly)`` or
+        reduced by one at open boundaries.
     """
-    # The hopping amplitudes depend on position -> use an array for couplings.
-    # If the array is smaller than the actual number of couplings,
-    # it is 'tiled', i.e. repeated periodically, see also tenpy.tools.to_array().
-    # If no magnetic unit cell size is defined, minimal size will be used.
-    gauge = model_params.get('gauge', 'landau_x')
-    mx = model_params.get('mx', None)
-    my = model_params.get('my', None)
-    Jx = model_params.get('Jx', 1.)
-    Jy = model_params.get('Jy', 1.)
-    phi_p, phi_q = model_params.get('phi', (1, 3))
-    phi = 2 * np.pi * phi_p / phi_q
+    assert isinstance(p, int) and p != 0, f'Expected non-zero integer. Got {p=}'
+    assert isinstance(q, int) and q > 0, f'Expected positive integer. Got {q=}'
+    phi = p / q
+    # reduce the fraction p / q
+    gcd = int(np.gcd(p, q))
+    p = p // gcd
+    q = q // gcd
+
+    if gauge is None:
+        # try the supported gauge choices in order
+        errs = []
+        for g in ['landau_x', 'landau_y', 'symmetric', 'periodic']:
+            try:
+                return hopping_phases(p=p, q=q, Lx=Lx, Ly=Ly, pbc_x=pbc_x, pbc_y=pbc_y, gauge=g)
+            except ValueError as e:
+                errs.append(e)
+        raise ValueError('None of the supported gauge choices could be applied. '
+                         'Error message for the default gauge choice above. ') from errs[0]
+
+    num_bonds_x = Lx if pbc_x else Lx - 1
+    num_bonds_y = Ly if pbc_y else Ly - 1
 
     if gauge == 'landau_x':
-        # hopping in x-direction: uniform
-        # hopping in y-direction: depends on x, shape (mx, 1)
-        # can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
-        if mx is None:
-            mx = phi_q
-        hop_x = -Jx
-        hop_y = -Jy * np.exp(1.j * phi * np.arange(mx)[:, np.newaxis])  # has shape (mx, 1)
+        mx, my = (q, 1)
+        phase_x = np.ones((num_bonds_x, Ly), complex)
+        phase_y = np.tile(np.exp(2.j * np.pi * phi * np.arange(Lx))[:, None],
+                          [1, num_bonds_y])
     elif gauge == 'landau_y':
-        # hopping in x-direction: depends on y, shape (1, my)
-        # hopping in y-direction: uniform
-        # can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
-        if my is None:
-            my = phi_q
-        hop_y = -Jy
-        hop_x = -Jx * np.exp(-1.j * phi * np.arange(my)[np.newaxis, :])  # has shape (1, my)
+        mx, my = (1, q)
+        phase_x = np.tile(np.exp(-2.j * np.pi * phi * np.arange(Ly))[None, :],
+                          [num_bonds_x, 1])
+        phase_y = np.ones((Lx, num_bonds_y), complex)
     elif gauge == 'symmetric':
-        # hopping in x-direction: depends on y, shape (mx, my)
-        # hopping in y-direction: depends on x, shape (mx, my)
-        if mx is None or my is None:
-            mx = my = phi_q
-        hop_x = -Jx * np.exp(-1.j * (phi / 2) * np.arange(my)[np.newaxis, :])  # shape (1, my)
-        hop_y = -Jy * np.exp(1.j * (phi / 2) * np.arange(mx)[:, np.newaxis])  # shape (mx, 1)
+        mx, my = (2 * q, 2 * q)
+        phase_x = np.tile(np.exp(-1.j * np.pi * phi * np.arange(Ly))[None, :],
+                          [num_bonds_x, 1])
+        phase_y = np.tile(np.exp(1.j * np.pi * phi * np.arange(Lx))[:, None],
+                          [1, num_bonds_y])
     else:
-        raise ValueError("Undefined gauge " + repr(gauge))
-    return hop_x, hop_y
+        raise ValueError(f'Invalid gauge : "{gauge}"')
+
+    # check commensuration with unit cell along any pbc direction
+    if pbc_x and Lx % mx != 0:
+        msg = (f'Magnetic unit cell is incommensurate with lattice unit cell in x-direction. '
+               f'Expected `Lx` to be a multiple of ``{mx}``.')
+        raise ValueError(msg)
+    if pbc_y and Ly % my != 0:
+        msg = (f'Magnetic unit cell is incommensurate with lattice unit cell in y-direction. '
+               f'Expected `Ly` to be a multiple of ``{my}``.')
+        raise ValueError(msg)
+
+    # sanity check for the periodicity of the phases
+    if pbc_x:
+        assert np.allclose(np.roll(phase_x, mx, axis=0), phase_x)
+        assert np.allclose(np.roll(phase_y, mx, axis=0), phase_y)
+    else:
+        assert np.allclose(phase_x[mx:, :], phase_x[:-mx, :])
+        assert np.allclose(phase_y[mx:, :], phase_y[:-mx, :])
+    if pbc_y:
+        assert np.allclose(np.roll(phase_x, my, axis=1), phase_x)
+        assert np.allclose(np.roll(phase_y, my, axis=1), phase_y)
+    else:
+        assert np.allclose(phase_x[:, my:], phase_x[:, :-my])
+        assert np.allclose(phase_y[:, my:], phase_y[:, :-my])
+
+    return phase_x, phase_y
 
 
 class HofstadterFermions(CouplingMPOModel):
-    r"""Fermions on a square lattice with magnetic flux.
+    r"""Fermions on a square lattice with uniform magnetic flux.
 
     For now, the Hamiltonian reads:
 
     .. math ::
-        H = - \sum_{x, y} \mathtt{Jx} (e^{i \mathtt{phi}_{x,y} } c^\dagger_{x,y} c_{x+1,y} + h.c.)   \\
-            - \sum_{x, y} \mathtt{Jy} (e^{i \mathtt{phi}_{x,y} } c^\dagger_{x,y} c_{x,y+1} + h.c.)   \\
+        H = - \sum_{x, y} \mathtt{Jx} (e^{2 \pi i a_x(x, y)} c^\dagger_{x,y} c_{x+1,y} + h.c.)   \\
+            - \sum_{x, y} \mathtt{Jy} (e^{2 \pi i a_y(x, y)} c^\dagger_{x,y} c_{x,y+1} + h.c.)   \\
             + \sum_{x, y} \mathtt{v} ( n_{x, y} n_{x, y + 1} + n_{x, y} n_{x + 1, y}   \\
             - \sum_{x, y} \mathtt{mu} n_{x,y},
 
-    where :math:`e^{i \mathtt{phi}_{x,y} }` is a complex Aharonov-Bohm hopping
-    phase, depending on lattice coordinates and gauge choice (see
-    :func:`tenpy.models.hofstadter.gauge_hopping`).
+    where :math:`e^{2 \pi i a_{x/y}(x, y)` is an Aharonov-Bohm hopping phase, that gives a uniform
+    flux density per plaquette. The concrete form of the phases depends on the gauge choice,
+    see :func:`~tenpy.models.hofstadter.hopping_phases`.
+
+    All parameters are collected in a single dictionary `model_params`, which
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
     ----------
@@ -133,43 +170,56 @@ class HofstadterFermions(CouplingMPOModel):
 
         Lx, Ly : int
             Length of the lattice in x- and y-direction.
-        mx, my : int
-            Size of the magnetic unit cell along x and y directions, in terms of lattice sites.
         filling : tuple
-            Average number of fermions per site, defined as a fraction (numerator, denominator)
+            Average number of fermions per site, defined as a fraction ``(numerator, denominator)``
             Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.FermionSite`.
+            Default ``(1, 8)``, i.e. one particle per eight sites.
         Jx, Jy, mu, v : float
-            Hamiltonian parameter as defined above.
+            Hamiltonian parameter as defined above. Defaults are ``Jx = Jy = 1``, ``mu = v = 0``.
         conserve : {'N' | 'parity' | None}
             What quantum number to conserve.
         phi : tuple
-            Magnetic flux density, defined as a fraction ``(numerator, denominator)``
+            Magnetic flux per plaquette, defined as a fraction ``(numerator, denominator)``.
+            Default ``(1, 3)``, i.e. one flux quantum per three plaquettes.
         phi_ext : float
             External magnetic flux 'threaded' through the cylinder. Hopping amplitudes for bonds
             'across' the periodic boundary are modified such that particles hopping around the
             circumference of the cylinder acquire a phase ``2 pi phi_ext``.
         gauge : 'landau_x' | 'landau_y' | 'symmetric'
-            Choice of the gauge used for the magnetic field. This changes the
-            magnetic unit cell. See :func:`gauge_hopping` for details.
+            Choice of the gauge used for the magnetic field. This affects the size and shape of
+            the magnetic unit cell (the unit cell for the hopping phases), which in turn restricts
+            the allowed MPS unit cell sizes. See :func:`hopping_phases` for details.
 
     """
     default_lattice = Square
     force_default_lattice = True
 
     def init_sites(self, model_params):
-        conserve = model_params.get('conserve', 'N')
+        conserve = model_params.get('conserve', 'N', str)
         filling = model_params.get('filling', (1, 8))
         filling = filling[0] / filling[1]
         site = FermionSite(conserve=conserve, filling=filling)
         return site
 
     def init_terms(self, model_params):
-        Lx = self.lat.shape[0]
-        Ly = self.lat.shape[1]
-        phi_ext = model_params.get('phi_ext', 0.)
-        mu = np.asarray(model_params.get('mu', 0.))
-        v = np.asarray(model_params.get('v', 0))
-        hop_x, hop_y = gauge_hopping(model_params)
+        phi_ext = model_params.get('phi_ext', 0., 'real')
+        mu = np.asarray(model_params.get('mu', 0., 'real_or_array'))
+        v = np.asarray(model_params.get('v', 0, 'real_or_array'))
+        p, q = model_params.get('phi', (1, 3))
+        gauge = model_params.get('gauge', None)
+        Jx = model_params.get('Jx', 1., 'real')
+        Jy = model_params.get('Jy', 1., 'real')
+        model_params.deprecated_ignore('mx', 'my',
+                                       extra_msg='This option did not affect the behavior anyway.')
+
+        phases_x, phases_y = hopping_phases(
+            p, q,
+            Lx=self.lat.shape[0], Ly=self.lat.shape[1],
+            pbc_x=not self.lat.bc[0], pbc_y=not self.lat.bc[1],
+            gauge=gauge
+        )
+        hop_x = -Jx * phases_x
+        hop_y = -Jy * phases_y
 
         # 6) add terms of the Hamiltonian
         self.add_onsite(-mu, 0, 'N')
@@ -185,18 +235,18 @@ class HofstadterFermions(CouplingMPOModel):
 
 
 class HofstadterBosons(CouplingMPOModel):
-    r"""Bosons on a square lattice with magnetic flux.
+    r"""Bosons on a square lattice with uniform magnetic flux.
 
     For now, the Hamiltonian reads:
 
     .. math ::
-        H = - \sum_{x, y} \mathtt{Jx} (e^{i \mathtt{phi}_{x,y} } a^\dagger_{x+1,y} a_{x,y} + h.c.)   \\
-            - \sum_{x, y} \mathtt{Jy} (e^{i \mathtt{phi}_{x,y} } a^\dagger_{x,y+1} a_{x,y} + h.c.)   \\
+        H = - \sum_{x, y} \mathtt{Jx} (e^{2 \pi i a_x(x, y)} a^\dagger_{x+1,y} a_{x,y} + h.c.)   \\
+            - \sum_{x, y} \mathtt{Jy} (e^{2 \pi i a_y(x, y)} a^\dagger_{x,y+1} a_{x,y} + h.c.)   \\
             + \sum_{x, y} \frac{\mathtt{U}}{2} n_{x,y} (n_{x,y} - 1) - \mathtt{mu} n_{x,y}
 
-    where :math:`e^{i \mathtt{phi}_{x,y} }` is a complex Aharonov-Bohm hopping
-    phase, depending on lattice coordinates and gauge choice (see
-    :func:`tenpy.models.hofstadter.gauge_hopping`).
+    where :math:`e^{2 \pi i a_{x/y}(x, y)` is an Aharonov-Bohm hopping phase, that gives a uniform
+    flux density per plaquette. The concrete form of the phases depends on the gauge choice,
+    see :func:`~tenpy.models.hofstadter.hopping_phases`.
 
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
@@ -213,43 +263,58 @@ class HofstadterBosons(CouplingMPOModel):
 
         Lx, Ly : int
             Length of the lattice in x- and y-direction.
-        mx, my : int
-            Size of the magnetic unit cell along x and y, in terms of lattice sites.
         Nmax : int
-            Maximum number of bosons per site.
+            Maximum number of bosons per site. Default ``3``.
         filling : tuple
-            Average number of fermions per site, defined as a fraction (numerator, denominator)
+            Average number of bosons per site, defined as a fraction ``(numerator, denominator)``
             Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.BosonSite`.
+            Default ``(1, 8)``, i.e. one particle per eight sites.
         Jx, Jy, mu, U : float
-            Hamiltonian parameter as defined above.
+            Hamiltonian parameter as defined above. Defaults are ``Jx = Jy = 1``, ``mu = U = 0``.
         conserve : {'N' | 'parity' | None}
             What quantum number to conserve.
         phi : tuple
-            Magnetic flux density, defined as a fraction (numerator, denominator)
+            Magnetic flux per plaquette, defined as a fraction ``(numerator, denominator)``.
+            Default ``(1, 3)``, i.e. one flux quantum per three plaquettes.
         phi_ext : float
-            External magnetic flux 'threaded' through the cylinder.
+            External magnetic flux 'threaded' through the cylinder. Hopping amplitudes for bonds
+            'across' the periodic boundary are modified such that particles hopping around the
+            circumference of the cylinder acquire a phase ``2 pi phi_ext``.
         gauge : 'landau_x' | 'landau_y' | 'symmetric'
-            Choice of the gauge used for the magnetic field. This changes the
-            magnetic unit cell.
+            Choice of the gauge used for the magnetic field. This affects the size and shape of
+            the magnetic unit cell (the unit cell for the hopping phases), which in turn restricts
+            the allowed MPS unit cell sizes. See :func:`hopping_phases` for details.
     """
     default_lattice = Square
     force_default_lattice = True
 
     def init_sites(self, model_params):
-        Nmax = model_params.get('Nmax', 3)
-        conserve = model_params.get('conserve', 'N')
+        Nmax = model_params.get('Nmax', 3, int)
+        conserve = model_params.get('conserve', 'N', str)
         filling = model_params.get('filling', (1, 8))
         filling = filling[0] / filling[1]
         site = BosonSite(Nmax=Nmax, conserve=conserve, filling=filling)
         return site
 
     def init_terms(self, model_params):
-        Lx = self.lat.shape[0]
-        Ly = self.lat.shape[1]
-        phi_ext = model_params.get('phi_ext', 0.)
-        mu = np.asarray(model_params.get('mu', 0.))
-        U = np.asarray(model_params.get('U', 0))
-        hop_x, hop_y = gauge_hopping(model_params)
+        phi_ext = model_params.get('phi_ext', 0., 'real')
+        mu = np.asarray(model_params.get('mu', 0., 'real_or_array'))
+        U = np.asarray(model_params.get('U', 0, 'real_or_array'))
+        p, q = model_params.get('phi', (1, 3))
+        Jx = model_params.get('Jx', 1., 'real')
+        Jy = model_params.get('Jy', 1., 'real')
+        gauge = model_params.get('gauge', None)
+        model_params.deprecated_ignore('mx', 'my',
+                                       extra_msg='This option did not affect the behavior anyway.')
+
+        phases_x, phases_y = hopping_phases(
+            p, q,
+            Lx=self.lat.shape[0], Ly=self.lat.shape[1],
+            pbc_x=not self.lat.bc[0], pbc_y=not self.lat.bc[1],
+            gauge=gauge
+        )
+        hop_x = -Jx * phases_x
+        hop_y = -Jy * phases_y
 
         # 6) add terms of the Hamiltonian
         self.add_onsite(U / 2, 0, 'NN')
@@ -261,3 +326,7 @@ class HofstadterBosons(CouplingMPOModel):
         hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, [0, 2 * np.pi * phi_ext])
         self.add_coupling(hop_y, 0, 'Bd', 0, 'B', dy)
         self.add_coupling(np.conj(hop_y), 0, 'Bd', 0, 'B', -dy)  # h.c.
+
+
+def gauge_hopping(*a, **kw):
+    raise RuntimeError('Deprecated. Use ``hopping_phases`` instead.')

@@ -3,17 +3,14 @@
 We construct a MPO model for a spin 1/2 Heisenberg chain with an infinite number of
 2-sites interactions, with strength that decays exponentially with the distance between the sites.
 
-Because of the infinite number of couplings it is not possible to construct the MPO from a
-coupling model. However the tensors that form the MPO have a surprisingly simple
-form (see the grid below).
+This can also be achieved via :meth:`~tenpy.models.model.CouplingModel.add_exponentially_decaying_coupling`.
 
 We run the iDMRG algorithm to find the ground state and energy density of the
 system in the thermodynamic limit.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
-import tenpy.linalg.np_conserved as npc
 
 from tenpy.networks.mpo import MPO
 from tenpy.networks.mps import MPS
@@ -44,13 +41,12 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
         Length of the chain.
     Jxx, Jz, hz, xi: float
         Coupling parameters as defined for the Hamiltonian above.
-    bc_MPS : {'finite' | 'infinte'}
+    bc_MPS : {'finite' | 'infinite'}
         MPS boundary conditions.
     conserve : 'Sz' | 'parity' | None
         What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
-    sort_charge : bool | None
-        Whether to sort by charges of physical legs.
-        See change comment in :class:`~tenpy.networks.site.Site`.
+    sort_charge : bool
+        Whether to sort by charges of physical legs. `True` by default.
     """
     def __init__(self, model_params):
         # model parameters
@@ -61,7 +57,7 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
         Jz = model_params.get('Jz', 1.5)
         hz = model_params.get('hz', 0.)
         conserve = model_params.get('conserve', 'Sz')
-        sort_charge = model_params.get('sort_charge', None)
+        sort_charge = model_params.get('sort_charge', True)
         if xi == 0.:
             g = 0.
         elif xi == np.inf:

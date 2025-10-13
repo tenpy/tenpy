@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 set -e
 DIR="$(dirname ${BASH_SOURCE[0]})"
 

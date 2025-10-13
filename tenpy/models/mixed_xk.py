@@ -62,11 +62,10 @@ The Jordan-Wigner strings follow the *final* DMRG snake.
     exclusion principle implies a possibly large occupation on single k modes, i.e., hard-core
     bosons in x-y-space don't map to hard-core bosons in x-k-space!
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import itertools as it
-import warnings
 
 from .lattice import Lattice
 from .model import CouplingMPOModel
@@ -237,7 +236,7 @@ class MixedXKLattice(Lattice):
                 site.change_charge(leg, perm_flat)
                 u = k * N_orb + l  # self.get_u(k, l), but we don't have `self` yet.
                 unit_cell[u] = site
-        return cls(N_rings, Ly, N_orb, unit_cell, **kwargs)
+        return cls(N_rings, Ly, N_orb, unit_cell, ring_order=ring_order, **kwargs)
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
         """Export `self` into a HDF5 file.
@@ -356,17 +355,29 @@ class MixedXKModel(CouplingMPOModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
-    Parameters
-    ----------
-    xy_lattice : ``"Square"``
-        Chooses Real-space lattice geometry.
-        TODO: Currently, only "Square" is implemented.
+    Options
+    -------
+    .. cfg:config :: MixedXKModel
+        :include: CouplingMPOModel
+
+        xy_lattice : 'Square'
+            The real-space lattice geometry. Currently, only "Square" is implemented.
+        Lx, Ly : int
+            Dimension of the (real-space) lattice.
+        ring_order : 1D array
+            The :attr:`~MixedXKLattice.ring_order` of the xk lattice. Length ``Ly*N_orb``
+        conserve_k : bool
+            If the y-momentum should be conserved.
 
     Attributes
     ----------
-    real_space_lattice : TODO ???
-        Real-space lattice geometry.
+    real_space_lattice : :class:`~tenpy.models.lattice.Lattice`
+        The original real-space geometry.
+        The :attr:`lat` of the model, which is used for calculation is a :class:`MixedXKLattice`
+        resulting from this real-space lattice.
+
     """
+
     def init_lattice(self, model_params, N_orb, chinfo, charges):
         """Initialize a MixedXKLattice for the given model parameters.
 
@@ -386,11 +397,11 @@ class MixedXKModel(CouplingMPOModel):
         if xy_lattice != "Square":
             raise NotImplementedError("Can't choose other than Square for now")
         self.real_space_lattice = xy_lattice
-        N_rings = model_params.get('Lx', 1)
-        Ly = model_params.get('Ly', 2)
+        N_rings = model_params.get('Lx', 1, int)
+        Ly = model_params.get('Ly', 2, int)
         ring_order = model_params.get('ring_order', None)
-        conserve_k = model_params.get('conserve_k', True)
-        bc_MPS = model_params.get('bc_MPS', 'infinite')
+        conserve_k = model_params.get('conserve_k', True, bool)
+        bc_MPS = model_params.get('bc_MPS', 'infinite', str)
         bc = 'periodic' if bc_MPS == 'infinite' else 'open'
         lat = MixedXKLattice.from_charges_of_orbitals(N_rings,
                                                       Ly,
@@ -727,6 +738,14 @@ class SpinlessMixedXKSquare(MixedXKModel):
 
     Spinless Fermions with a single orbital (`N_orb` = 1) on a square lattice,
     nearest neighbor hopping (`t`) and nearest-neighbor interaction (`V`).
+
+    Options
+    -------
+    .. cfg:config :: SpinlessMixedXKSquare
+        :include: MixedXKModel
+
+        t, V : float | array
+            Couplings as defined for the Hamiltonian above.
     """
     def init_lattice(self, model_params):
         N_orb = 1  # simplest case possible
@@ -736,8 +755,8 @@ class SpinlessMixedXKSquare(MixedXKModel):
 
     def init_terms(self, model_params):
         # Read out parameters
-        t = model_params.get('t', 1.)
-        V = model_params.get('V', 1.)
+        t = model_params.get('t', 1., 'real_or_array')
+        V = model_params.get('V', 1., 'real_or_array')
         xk_lat = self.lat
         Ly = xk_lat.Ly
         N_orb = xk_lat.N_orb
@@ -774,6 +793,14 @@ class HubbardMixedXKSquare(MixedXKModel):
 
     Spinful fermions, no extra orbitals (`N_orb` = 2 for up and down), on a square lattice,
     nearest-neighbor hopping (`t`) + onsite interactions (`U`)
+
+    Options
+    -------
+    .. cfg:config :: HubbardMixedXKSquare
+        :include: MixedXKModel
+
+        t, U : float | array
+            Couplings as defined for the Hamiltonian above.
     """
     def init_lattice(self, model_params):
         N_orb = 2  # for spin up (l=0) and down (l=1)
@@ -783,14 +810,14 @@ class HubbardMixedXKSquare(MixedXKModel):
 
     def init_terms(self, model_params):
         # Read out parameters
-        t = model_params.get('t', 1.)
-        U = model_params.get('U', 1.)
+        t = model_params.get('t', 1., 'real_or_array')
+        U = model_params.get('U', 1., 'real_or_array')
         xk_lat = self.lat
         Ly = xk_lat.Ly
         N_orb = xk_lat.N_orb
 
         # hopping
-        intra_hopping = np.zeros((Ly, N_orb, Ly, N_orb), dtype=np.complex_)
+        intra_hopping = np.zeros((Ly, N_orb, Ly, N_orb), dtype=complex)
         inter_hopping = np.zeros((Ly, N_orb, Ly, N_orb))
         cos_k = np.real(xk_lat.get_exp_ik(np.arange(Ly)))
         for k in range(Ly):

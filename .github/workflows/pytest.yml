@@ -12,9 +12,12 @@ on:
       - main
   # PRs
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
 
 jobs:
   build:
+    if: github.event.pull_request.draft == false
 
     runs-on: ubuntu-latest
     env:
@@ -23,8 +26,12 @@ jobs:
     strategy:
       max-parallel: 5
       matrix:
-        # Note: python 3.12 is covered by code_coverage.yml
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+        # Note: python 3.13 is covered by code_coverage.yml
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        compiled: [True]
+        include:
+          - python-version: "3.13"
+            compiled: False
 
     steps:
     - name: Checkout
@@ -41,14 +48,22 @@ jobs:
         python -m pip install --upgrade setuptools build
         python -m pip install --upgrade pytest
     
-    - name: Build and install tenpy
+    - name: Build tenpy
+      if: ${{ matrix.compiled }}
       run: |
         python -m build .
-        python -m pip install .
+    
+    - name: Install tenpy
+      # also installs extra dependencies defined in pyproject.toml
+      run: |
+        python -m build .
+        python -m pip install ".[io, test, extra]"
+    
+    - name: Show tenpy config
+      working-directory: ..
+      run: |
+        python -c "import tenpy; tenpy.show_config()"
     
     - name: Run pytest
-      # configuration in pyproject.toml
-      # Note: This runs in the repo root directory, which contains the uncompiled tenpy package.
-      #       To use the version we just installed, it is important to run `pytest`
-      #       instead of `python -m pytest`.
+      working-directory: tests
       run: pytest

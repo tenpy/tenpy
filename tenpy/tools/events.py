@@ -1,14 +1,13 @@
 """Event handler.
 
-The :class:`EventHandler` is basically just holds a list of functions
+The :class:`EventHandler` just holds a list of functions
 which can get called once a certain "event" happens.
 Examples are given in the class doc-string.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from collections import namedtuple
 import warnings
-import functools
 
 from .hdf5_io import find_global
 

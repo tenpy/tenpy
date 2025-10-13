@@ -14,7 +14,9 @@ In fact, any simulation can be run from the command line, given only a parameter
    # or alternatively, if tenpy is installed correctly:
    tenpy-run parameters.yml
 
-Of course, you need to specify somewhere what type of simulation you want to run. Often, one of the predefined ones like
+   # equivalent to calling `tenpy.console_main("parameters.yml")` from within python
+
+You need to specify somewhere what type of simulation you want to run. Often, one of the predefined ones like
 the :class:`~tenpy.simulations.ground_state_search.GroundStateSearch` for running DMRG or
 :class:`~tenpy.simulations.time_evolution.RealTimeEvolution` for running e.g. TEBD or TDVP will suffice.
 The :class:`~tenpy.simulations.simulation.Simulation` class can be specified with the `simulation_class` option in the yaml file, or directly as a command line
@@ -25,10 +27,21 @@ For more details, see :func:`tenpy.console_main` for the command-line interface.
 Of course, you can also directly run the simulation from inside python, the command line call is essentially just a wrapper around the :func:`tenpy.run_simulation` python interface::
 
     import tenpy
-    import yaml
 
-    simulation_params = yaml.load("parameters.yml")
+    simulation_params = tenpy.load_yaml_with_py_eval("parameters.yml")
     # instead of using yaml, you can also define a usual python dictionary
+    tenpy.run_simulation(**simulation_params)
+
+Or as a single line::
+
+    tenpy.console_main("parameters.yml")
+
+To have self-contained jupyter notebook examples, the following pattern might be useful::
+
+    simulation_params = tenpy.load_yaml_with_py_eval(yaml_content="""
+    SimulationClass: GroundStateSearch
+    ...
+    """)
     tenpy.run_simulation(**simulation_params)
 
 
@@ -80,14 +93,15 @@ To get the full set of used options, it can be convenient to simply run the algo
 (for debugging parameters to allow a very quick run) and look at the ``results['simulation_parameters']``
 returned by the simulation (or saved to file):
 
-.. code-block :: yaml
+.. code-block :: python
 
     import tenpy
     from pprint import pprint
     import yaml
 
-    with open('parameters.yml', 'r') as f:
-        simulation_parameters = yaml.safe_load(f)
+    with open('parameters.yml', 'r') as stream:
+        simulation_parameters = tenpy.load_yaml_with_py_eval(stream)
+    # alternative: simulation_parameters = tenpy.load_yaml_with_py_eval('parameters.yml')
     results = tenpy.run_simulation(simulation_parameters)
     pprint(results['simulation_parameters'])
 
@@ -183,7 +197,7 @@ Most simulation classes have only a few :attr:`~tenpy.simulations.Simulation.def
 add more with the :cfg:option:`Simulation.connect_measurements` parameters. Each measurement is simply a function that is
 called whenever the simulation wants to measure, e.g. with the initial state, at the end of the simulation, and for time
 evolutions also during the evolution. The default measurement functions are defined in
-the module :mod:`tenpy.simulations.measurement`; :func:`~tenpy.simulations.measurement.measurement_index` documents what
+the module :mod:`tenpy.simulations.measurement`; :func:`~tenpy.simulations.measurement.m_measurement_index` documents what
 arguments a measurement function should have. 
 In the simplest case, you just specify the module and function name, but you can also add more arguments, as the
 following example shows.

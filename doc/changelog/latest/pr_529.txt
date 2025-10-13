@@ -1,0 +1,1 @@
+- Fixed a typo in segment DMRG that resulted in an exception.

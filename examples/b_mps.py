@@ -12,7 +12,7 @@ This example includes the following steps:
 Note that this example performs the same steps as `a_np_conserved.py`,
 but makes use of other predefined classes except npc.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np
@@ -22,7 +22,7 @@ from tenpy.networks.site import SpinHalfSite
 from tenpy.models.lattice import Chain
 from tenpy.networks.mps import MPS
 from tenpy.networks.mpo import MPO, MPOEnvironment
-from tenpy.algorithms.truncation import svd_theta
+from tenpy.linalg.truncation import svd_theta
 
 # model parameters
 Jxx, Jz = 1., 1.

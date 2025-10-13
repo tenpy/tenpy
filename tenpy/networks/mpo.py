@@ -34,12 +34,11 @@ We store these indices in `IdL` and `IdR` (if there are such indices).
 Similar as for the MPS, a bond index ``i`` is *left* of site `i`,
 i.e. between sites ``i-1`` and ``i``.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 from scipy.linalg import expm
 import warnings
-import sys
 import copy
 import logging
 
@@ -47,14 +46,14 @@ logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator
-from .site import group_sites, Site
+from ..linalg.truncation import TruncationError, svd_theta
+from .site import group_sites
 from ..tools.string import vert_join
 from .mps import BaseEnvironment, MPSGeometry
-from .terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
-from ..tools.misc import add_with_None_0, inverse_permutation
+from .terms import TermList
+from ..tools.misc import to_iterable, add_with_None_0, inverse_permutation
 from ..tools.math import lcm
 from ..tools.params import asConfig
-from ..algorithms.truncation import TruncationError, svd_theta
 
 __all__ = [
     'MPO', 'make_W_II', 'MPOGraph', 'MPOEnvironment', 'MPOTransferMatrix', 'grid_insert_ops'
@@ -332,7 +331,7 @@ class MPO(MPSGeometry):
             import numpy as np
 
         .. doctest :: from_wavepacket
-        
+
             >>> L, k0, x0, sigma, = 50, np.pi/8., 10., 5.
             >>> x = np.arange(L)
             >>> coeff = np.exp(-1.j * k0 * x) * np.exp(- 0.5 * (x - x0)**2 / sigma**2)
@@ -345,13 +344,13 @@ class MPO(MPSGeometry):
         Indeed, we can apply this to a (vacuum) MPS and get the correct state:
 
         .. doctest :: from_wavepacket
-        
+
             >>> psi = MPS.from_product_state([site] * L, ['empty'] * L, unit_cell_width=L)
             >>> wp.apply(psi, dict(compression_method='SVD'))
             TruncationError()
             >>> C = psi.correlation_function('Cd', 'C')
             >>> C_expected = np.conj(coeff)[:, np.newaxis] * coeff[np.newaxis, :]
-            >>> np.max(np.abs(C - C_expected) ) < 1.e-10
+            >>> bool(np.max(np.abs(C - C_expected) ) < 1.e-10)
             True
         """
         coeff = np.asarray(coeff)
@@ -638,7 +637,7 @@ class MPO(MPSGeometry):
         return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf, mps_unit_cell_width=self.unit_cell_width)
 
     def make_U_II(self, dt):
-        r"""Creates the :math:`U_II` propagator.
+        r"""Creates the :math:`U_{II}` propagator.
 
         Parameters
         ----------
@@ -930,8 +929,159 @@ class MPO(MPSGeometry):
         contr = npc.trace(contr, 'vR', 'vR*')
         return np.real_if_close(contr - exp_val**2)
 
+    def prefactor(self, i, ops):
+        """Get prefactor for a given string of operators in self.
+
+        Parameters
+        ----------
+        i : int
+            First site with non-identity operator.
+        ops : list of str
+            String of operators for which the prefactor is to be determined;
+            the first entry is the name for the operator acting on site `i`,
+            second entry on site `i` + 1, etc.
+
+        Returns
+        -------
+        prefactor : float
+            The prefactor obtained from ``trace(dagger(ops), H) / norm``,
+            where ``norm = trace(dagger(ops), ops)``
+        """
+        ops = to_iterable(ops)
+        IdL = self.get_IdL(i)
+        IdR_final = self.get_IdR(i + len(ops) - 1)
+        if IdL is None or IdR_final is None:
+            return 0.
+        contr = None
+        for k, opname in enumerate(ops):
+            j = i + k
+            W = self.get_W(j)
+            if contr is None:
+                contr = W.take_slice(IdL, 'wL')
+            else:
+                proj = np.ones(contr.shape[0])
+                IdL = self.get_IdL(j)
+                IdR = self.get_IdR(j-1)
+                if IdL is not None:
+                    proj[IdL] = 0.
+                if IdR is not None:
+                    proj[IdR] = 0.
+                contr.iscale_axis(proj, 0)
+                contr = npc.tensordot(contr, W, axes=['wR', 'wL'])
+            site = self.sites[j % len(self.sites)]
+            op = site.get_op(opname)
+            op_norm = npc.tensordot(op.conj(), op, axes=[['p', 'p*'], ['p*', 'p']])
+            contr = npc.tensordot(op.conj(), contr, axes=[['p', 'p*'], ['p*', 'p']]) / op_norm
+        contr = contr[IdR_final]
+        return contr
+
+    def to_TermList(self, op_basis,
+                    start=None,
+                    max_range=None,
+                    cutoff=1.e-12,
+                    ignore=['Id', 'JW']):
+        """Obtain a `TermList` represented by self.
+
+        This function is meant for debugging MPOs to make sure they have the terms one expects.
+        Be aware of pitfalls with operator orthonormality, e.g. for fermions
+        ``N = 0.5 * (Id + JW)`` might not appear as you expect due to `ignore`.
+
+
+        Parameters
+        ----------
+        op_basis : (list of) list of str
+            Local basis of operators in which to represent all terms of `self`,
+            e.g. ``['Id', 'Sx', 'Sy', 'Sz']`` for spin-1/2 or ``['Id', 'JW', 'C', 'Cd']`` for
+            fermions. Should be orthogonal with respect to the operator product
+            ``<A|B> = tr(A^dagger B)``.
+        start : (list of) int
+            Extract terms starting on that/these sites, going to the right, i.e. the left-most
+            index within each term is in `start`.
+            If ``None``, take all terms starting in ``range(L)``, i.e. one MPS unit cell for
+            infinite systems.
+        cutoff : float
+            Drop terms with prefactors (roughly) smaller than that.
+            Strictly speaking, it might also drop larger terms if the term has larger weight on
+            the right (in the MPO) than on the left.
+        ignore : list of str
+            Filter terms to not contain these operator names when they're not the left/rightmost
+            operators in a term.
+
+        Returns
+        -------
+        term_list : :class:`~tenpy.networks.terms.TermList`
+            The terms in `self` with left-most index in `start`.
+        """
+        if start is not None:
+            start = to_iterable(start)
+        else:
+            start = range(self.L)
+        L = self.L
+        if max_range is None:
+            max_range = 5 * L
+            if self.max_range is not None:
+                max_range = min(max_range, self.max_range)
+        if isinstance(op_basis[0], str):
+            op_basis = [op_basis]
+        all_terms = []
+        all_prefs = []
+        for i in start:
+            partial_L = [None] * self.get_W(i).get_leg('wL').ind_len
+            if self.get_IdL(i) is None:
+                continue
+            partial_L[self.get_IdL(i)] = [([], 1.)]
+            if self.finite:
+                max_range = min(max_range, L - i - 1)
+            for k in range(max_range + 1):
+                j = i + k
+                IdL = self.get_IdL(j)
+                IdR = self.get_IdR(j)
+                if IdR is None:
+                    IdR = -1  # not equal to positive index
+                site_j = self.sites[j % L]
+                W = self.get_W(j)
+                W = W.transpose(['wL', 'wR', 'p', 'p*'])
+                op_basis_j = op_basis[j % len(op_basis)]
+                partial_R = [None] * W.get_leg('wR').ind_len
+                if k > 0 and IdL is not None:
+                    partial_L[IdL] = None # drop terms not starting at `start`
+                for opname in op_basis_j:
+                    op = site_j.get_op(opname)
+                    op_dagger = op.conj().transpose()
+                    op_norm = npc.tensordot(op, op_dagger, axes=[['p', 'p*'], ['p*', 'p']])
+                    op_W = npc.tensordot(W, op_dagger, axes=[['p', 'p*'], ['p*', 'p']])
+                    op_W = op_W.to_ndarray() / op_norm
+                    op_W[np.abs(op_W) < cutoff] = 0.
+                    for x, y in zip(*np.nonzero(op_W)):
+                        if partial_L[x] is None:
+                            continue
+                        pref_j = op_W[x,y]
+                        if y == IdR:
+                            # finish terms
+                            for (term, pref) in partial_L[x]:
+                                if abs(pref * pref_j) < cutoff:
+                                    continue
+                                all_terms.append(term + [(opname, j)])
+                                all_prefs.append(pref * pref_j)
+                        else:
+                            if partial_R[y] is None:
+                                partial_R[y] = []
+                            new_partial = partial_R[y]
+                            if k > 0 and opname in ignore:
+                                for (term, pref) in partial_L[x]:
+                                    new_partial.append((term, pref * pref_j))
+                            else:
+                                for (term, pref) in partial_L[x]:
+                                    new_partial.append((term + [(opname, j)], pref * pref_j))
+                partial_L = partial_R
+                if all(t is None for t in partial_L):
+                    break
+        return TermList(all_terms, all_prefs)
+
     def dagger(self):
         """Return hermitian conjugate copy of self."""
+        if self.explicit_plus_hc:
+            return self.copy()
         # complex conjugate and transpose everything
         Ws = [w.conj().itranspose(['wL*', 'wR*', 'p', 'p*']) for w in self._W]
         # and now revert conjugation of the wL/wR legs
@@ -954,6 +1104,8 @@ class MPO(MPSGeometry):
 
         Shorthand for ``self.is_equal(self.dagger(), eps, max_range)``.
         """
+        if self.explicit_plus_hc:
+            return True
         return self.is_equal(self.dagger(), eps, max_range)
 
     def is_equal(self, other, eps=1.e-10, max_range=None):
@@ -970,7 +1122,7 @@ class MPO(MPSGeometry):
             Precision threshold what counts as zero.
         max_range : None | int
             Ignored for finite MPS; for finite MPS we consider only the terms contained in the
-            sites with indices ``range(self.L + max_range)``.
+            sites with indices ``range(self.L + 2 * max_range)``.
             None defaults to :attr:`max_range` (or :attr:`L` in case this is infinite or None).
 
         Returns
@@ -979,32 +1131,18 @@ class MPO(MPSGeometry):
             Whether `self` equals `other` to the desired precision.
         """
         if self.finite:
-            max_i = self.L
+            num_sites = self.L
+        elif max_range is not None and max_range < np.inf:
+            num_sites = self.L + 2 * max_range
+        elif self.max_range is not None and self.max_range < np.inf:
+            num_sites = self.L + 2 * self.max_range
         else:
-            if max_range is None:
-                if self.max_range is None or self.max_range == np.inf:
-                    max_range = self.L
-                else:
-                    max_range = self.max_range
-            max_i = self.L + max_range
-
-        def overlap(A, B):
-            """<A|B> on sites 0 to max_i."""
-            wA = A.get_W(0).take_slice([A.get_IdL(0)], ['wL']).conj()
-            wB = B.get_W(0).take_slice([B.get_IdL(0)], ['wL'])
-            trAdB = npc.tensordot(wA, wB, axes=[['p*', 'p'], ['p', 'p*']])  # wR* wR
-            i = 0
-            for i in range(1, max_i):
-                trAdB = npc.tensordot(trAdB, A.get_W(i).conj(), axes=['wR*', 'wL*'])
-                trAdB = npc.tensordot(trAdB,
-                                      B.get_W(i),
-                                      axes=[['wR', 'p*', 'p'], ['wL', 'p', 'p*']])
-            trAdB = trAdB.itranspose(['wR*', 'wR'])[A.get_IdR(i), B.get_IdR(i)]
-            return trAdB
-
-        self_other = 2. * np.real(overlap(other, self))
-        norms = overlap(self, self) + overlap(other, other)
-        return abs(norms - self_other) < eps * abs(norms)
+            num_sites = self.L + 2 * self.L
+        ov = self.overlap(other, understood_infinite=True, num_sites=num_sites)
+        s_norm = self.overlap(self, understood_infinite=True, num_sites=num_sites)
+        o_norm = other.overlap(other, understood_infinite=True, num_sites=num_sites)
+        dist = abs(s_norm - 2 * np.real(ov) + o_norm)
+        return dist < eps * abs(s_norm + o_norm)
 
     def apply(self, psi, options):
         """Apply `self` to an MPS `psi` and compress `psi` in place.
@@ -1045,6 +1183,10 @@ class MPO(MPSGeometry):
         elif method == 'zip_up':
             trunc_err = self.apply_zipup(psi, options)
             return trunc_err + psi.compress_svd(trunc_params)
+        elif method == 'variationalQR':
+            from ..algorithms.mps_common import QRBasedVariationalApplyMPO
+            return QRBasedVariationalApplyMPO(psi, self, options).run()
+
         # TODO: zipup method infinite?
         raise ValueError("Unknown compression method: " + repr(method))
 
@@ -1150,8 +1292,8 @@ class MPO(MPSGeometry):
                 reduces cut for Schmidt values to `trunc_weight * svd_min`
         """
         options = asConfig(options, "zip_up")
-        m_temp = options.get('m_temp', 2)
-        trunc_weight = options.get('trunc_weight', 1.)
+        m_temp = options.get('m_temp', 2, int)
+        trunc_weight = options.get('trunc_weight', 1., 'real')
         trunc_params = options.subconfig('trunc_params')
         relax_trunc = trunc_params.copy()  # relaxed truncation criteria
         relax_trunc['chi_max'] *= m_temp
@@ -1204,34 +1346,215 @@ class MPO(MPSGeometry):
 
         return trunc_err
 
-    def get_grouped_mpo(self, blocklen):
-        """group each `blocklen` subsequent tensors and  return result as a new MPO.
+    def plus_identity(self, alpha, beta, sites=[0]):
+        r"""Compute a new MPO :math:`alpha * 1 + beta * \mathtt{self}`.
 
-        .. deprecated :: 0.5.0
-            Make a copy and use :meth:`group_sites` instead.
+        This can e.g. be used to make a simple (non-unitary) first-order approximation to
+        the time evolution unitary :math:`e^{-i t H} \approx 1 - i t H`.
+
+        This function only works for finite MPOs for now.
+
+        Parameters
+        ----------
+        alpha : float|complex
+            Coefficient for identity
+        beta : float|complex
+            Coefficient for existing MPO
+        sites : list
+            List of MPO indices of which tensors to modify
+
+        Returns
+        -------
+        mpo : :class:`~tenpy.networks.mpo.MPO`
+            MPO representing the operator :math:`\alpha * 1 + \beta O`
+
+        Notes
+        -----
+        There is significant freedom in how we incorporate the linear
+        combination into the MPO structure. One naive choice is to only modify the first tensor.
+
+        The first tensor (ignoring the second wL entry since it's unnecessary)::
+
+            [1 C D] -> [beta*1 beta*C alpha*1+beta*D]
+
+        Another choice is to modify `N` tensors specified by the input argument `sites`.
         """
-        msg = "Use functions from `tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead"
-        warnings.warn(msg, FutureWarning, 2)
-        from copy import deepcopy
-        groupedMPO = deepcopy(self)
-        groupedMPO.group_sites(n=blocklen)
-        return (groupedMPO)
+        if self.bc != 'finite':
+            raise NotImplementedError("MPO.add_identity only works for finite MPO.")
+        if self.explicit_plus_hc:
+            raise NotImplementedError
 
-    def get_full_hamiltonian(self, maxsize=1e6):
-        """extract the full Hamiltonian as a ``d**L``x``d**L`` matrix.
+        N = len(sites)
+        assert N <= self.L
+        if not set(sites).issubset(set(list(range(self.L)))):
+            raise ValueError(f'The sites {sites} are not strictly contained in {{1, ..., {self.L-1}}}.')
+        if sorted(sites) != [*range(min(sites), max(sites) + 1)]:
+            # test fails for non-contiguous sites. not sure why
+            raise NotImplementedError
 
-        .. deprecated :: 0.5.0
-            Use :meth:`tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead.
+        t_beta = beta ** (1 / N)
+        t_alpha = alpha / N
+
+        IdL = self.IdL
+        IdR = self.IdR
+
+        chinfo = self.chinfo
+        trivial = chinfo.make_valid()
+        U = []
+        counter = 0
+        for k in range(0, self.L):
+            labels = ['wL', 'wR', 'p', 'p*']
+            W = self.get_W(k).itranspose(labels)
+            assert np.all(W.qtotal == trivial)
+            DL, DR, d, d = W.shape
+
+            A_npc, B_npc, C_npc, D_npc = _partition_W(W, IdL[k], IdR[k], IdL[k+1], IdR[k+1])
+            Id_npc = npc.eye_like(D_npc, labels=['p', 'p*'])
+            dW = np.empty((DL, DR), dtype=object)
+
+            # Get coefficients depending on if site k in sites and if so
+            # what number site in sites it is.
+            if k in sites:
+                b = t_beta
+                a = t_alpha
+                g = 1 if counter != 0 else beta
+                d = 1 if counter != N - 1 else beta
+                counter = counter + 1
+            else:
+                b = g = d = 1.
+                a = 0.
+
+            # First Row - only this is modified
+            dW[0, 0] = d*Id_npc
+            for i in range(0, DR - 2):
+                dW[0, i+1] = b ** (counter) * C_npc[0, i]
+            dW[0, -1] = (b ** N) * D_npc + a * Id_npc
+            # Middle Rows
+            for i in range(0, DL - 2):
+                for j in range(0, DR - 2):
+                    dW[i + 1, j + 1] = b * A_npc[i, j]
+                dW[i + 1, -1] = b ** (N - counter + 1) * B_npc[i, 0]
+            #Bottom Rows
+            dW[-1, -1] = g * Id_npc
+            U.append(dW)
+
+        assert counter == N
+        # Sajant: We have enforced that the MPO look upper block triangular without any permutations
+        IdL = [0] * (self.L + 1)
+        IdR = [-1] * (self.L + 1)
+        return MPO.from_grids(self.sites, U, self.bc, IdL, IdR, max_range=self.max_range,
+                              explicit_plus_hc=self.explicit_plus_hc)
+
+    def overlap(self, other, understood_infinite: bool = False, num_sites: int = None):
+        """Overlap between two MPOs.
+
+        For finite MPOs, this is the Frobenius inner product::
+
+            <self|other> = Tr[hconj(self) @ other]
+
+        For infinite MPOs, the TD limit of that overlap is always either 0, 1 or infinite,
+        i.e. it is not helpful. Instead we choose a finite section of the infinite overlap diagram
+        and project onto ``IdL`` on the left and ``IdR`` on the right. This means we effectively
+        compute the overlap between those contributions to the MPOs that act trivially outside
+        the finite section. The main motivation is a distance measure in :meth:`is_equal`.
+
+        Parameters
+        ----------
+        other : MPO
+            The other operator. Must have the same :attr:`finite`, and if finite the same :attr:`L`.
+        understood_infinite : bool
+            For infinite MPOs, the overlap has an unusual definition, see above.
+            Set this flag to confirm you understand this and suppress the warning.
+        num_sites : int
+            Ignored for finite MPOs. For infinite MPOs, the number of sites that we contract.
+            We project onto IdL on site ``0``, contract tensors from ``range(num_sites)``, and
+            then project onto IdR. By default, we use ``L + 2 * max_range`` of whichever MPO has the
+            larger value, where we substitute ``L`` for an unknown or infinite ``max_range``.
         """
-        msg = "Use functions from `tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead"
-        warnings.warn(msg, FutureWarning, 2)
-        if (self.dim[0]**(2 * self.L) > maxsize):
-            print('Matrix dimension exceeds maxsize')
-            return np.zeros(1)
-        singlesitempo = self.get_grouped_mpo(self.L)
-        # Note: the trace works only for 'finite' boundary conditions
-        # where the legs are trivial - otherwise it would give 0 or even raise an error!
-        return npc.trace(singlesitempo.get_W(0), axes=[['wL'], ['wR']])
+        if self.finite and other.finite:
+            assert self.L == other.L
+            num_sites = self.L
+        elif not self.finite and not other.finite:
+            if num_sites is None:
+                self_max_range = self.max_range
+                if self_max_range is None or self_max_range == np.inf:
+                    self_max_range = self.L
+                other_max_range = other.max_range
+                if other_max_range is None or other_max_range == np.inf:
+                    other_max_range = other.L
+                num_sites = max(self.L + 2 * self_max_range, other.L + 2 * other.max_range)
+            assert num_sites >= self.L
+            if not understood_infinite:
+                msg = ('The overlap between infinite MPOs has an unusual definition. Make sure '
+                       'you understand it, then set `understood_infinite=True` to suppress '
+                       'this warning.')
+                warnings.warn(msg, stacklevel=2)
+        else:
+            raise ValueError('cant take overlap between finite and infinite MPO')
+
+        if self.explicit_plus_hc and other.explicit_plus_hc:
+            # <A|B> = Tr[hc(A) B] = conj(Tr[hc(B) A]) = conj(Tr[A hc(B)]) = conj(<hc(A)|hc(B)>)
+            # <A + hc(A) | B + hc(B)> = <A|B> + <hc(A)|B> + <A|hc(B)> + <hc(A)|hc(B)>
+            #                         = <A|B> + <hc(A)|B> + conj(<hc(A)|B>) + conj(<A|B>)
+            #                         = 2 Re[ <A|B> + <hc(A)|B> ]
+            A_B = self._overlap_no_hc(other, num_sites=num_sites)
+            hcA_B = self._overlap_no_hc(other, num_sites=num_sites, hconj_self=True)
+            ov = 2 * np.real(A_B + hcA_B)
+
+        elif self.explicit_plus_hc:
+            A_B = self._overlap_no_hc(other, num_sites=num_sites)
+            hcA_B = self._overlap_no_hc(other, num_sites=num_sites, hconj_self=True)
+            ov = A_B + hcA_B
+
+        elif other.explicit_plus_hc:
+            # <A|B + hc(B)> = <A|B> + <A|hc(B)> = <A|B> + conj(<hc(A)|B>)
+            A_B = self._overlap_no_hc(other, num_sites=num_sites)
+            hcA_B = self._overlap_no_hc(other, num_sites=num_sites, hconj_self=True)
+            ov = A_B + np.conj(hcA_B)
+
+        else:
+            ov = self._overlap_no_hc(other, num_sites=num_sites)
+
+        return ov
+
+    def _overlap_no_hc(self, other, num_sites: int, hconj_self: bool = False):
+        """Internal version of :meth:`overlap` that ignores :attr:`explicit_plus_hc`.
+
+        This computes the overlap for the MPO given by the tensors, ignoring any explicit hc.
+        If ``hconj_self``, we use the hc of self instead, i.e. compute
+        ``<hc(self)|other> = Tr[self @ other]``.
+        """
+        wA = self.get_W(0).take_slice([self.get_IdL(0)], ['wL'])
+        wB = other.get_W(0).take_slice([other.get_IdL(0)], ['wL'])
+
+        if hconj_self:
+            wA = wA.replace_label('wR', 'wR*')
+        else:
+            wA = wA.conj()
+        res = npc.tensordot(wA, wB, axes=[['p*', 'p'], ['p', 'p*']])  # wR* wR
+
+        for i in range(1, num_sites):
+            if hconj_self:
+                wA = self.get_W(i).replace_labels(['wL', 'wR'], ['wL*', 'wR*'])
+            else:
+                wA = self.get_W(i).conj()
+            wB = other.get_W(i)
+            res = npc.tensordot(res, wA, axes=['wR*', 'wL*'])
+            res = npc.tensordot(res, wB, axes=[['wR', 'p*', 'p'], ['wL', 'p', 'p*']])
+
+        IdR_idcs = (self.get_IdR(num_sites - 1), other.get_IdR(num_sites - 1))
+        res = res.itranspose(['wR*', 'wR'])[IdR_idcs]
+        return res
+
+    def distance(self, other, understood_infinite: bool = False, num_sites: int = None):
+        """The Frobenius distance induced by the inner product :meth:`overlap`."""
+        ov = self.overlap(other, understood_infinite=understood_infinite, num_sites=num_sites)
+        s_norm = self.overlap(self, understood_infinite=understood_infinite, num_sites=num_sites)
+        o_norm = other.overlap(other, understood_infinite=understood_infinite, num_sites=num_sites)
+        dist = s_norm - 2 * np.real(ov) + o_norm
+        if dist < -1e-14 * (s_norm + o_norm):
+            raise RuntimeError('Negative distance encountered.')
+        return abs(dist)
 
     def _to_valid_index(self, i, bond=False):
         """Make sure `i` is a valid index of a site.
@@ -1289,6 +1612,9 @@ class MPO(MPSGeometry):
         sum_mpo : :class:`MPO`
             The sum `self + other`.
         """
+        if self.explicit_plus_hc != other.explicit_plus_hc:
+            raise ValueError('Can not add MPOs with different explicit_plus_hc flags')
+
         L = self.L
         assert self.bc == other.bc
         assert self.unit_cell_width == other.unit_cell_width
@@ -1343,7 +1669,8 @@ class MPO(MPSGeometry):
             max_range = max(self.max_range, other.max_range)
         else:
             max_range = None
-        return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range, mps_unit_cell_width=self.unit_cell_width)
+        return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range, self.explicit_plus_hc,
+                   mps_unit_cell_width=self.unit_cell_width)
 
     def _get_block_projections(self, i):
         """projections onto (IdL, other, IdR) on bond `i` in range(0, L+1)"""
@@ -1539,10 +1866,10 @@ class MPOGraph(MPSGeometry):
         from_term_list :
             equivalent for representation by :class:`~tenpy.networks.terms.TermList`.
         """
-        max_range = max([t.max_range() for t in terms])
-        graph = cls(sites, bc, max_range, unit_cell_width=unit_cell_width)
+        graph = cls(sites, bc, 0, unit_cell_width=unit_cell_width)
         for term in terms:
             term.add_to_graph(graph)
+            # add_to_graph increases `max_range` as necessary
         graph.add_missing_IdL_IdR(insert_all_id)
         return graph
 
@@ -1744,7 +2071,7 @@ class MPOGraph(MPSGeometry):
 
         Parameters
         ----------
-        Ws_qtotal : None | (list of) charges
+        Ws_qtotal : None | (list of) charges 
             The `qtotal` for each of the Ws to be generated, default (``None``) means 0 charge.
             A single qtotal holds for each site.
         unit_cell_width : int
@@ -1983,7 +2310,7 @@ class MPOEnvironment(BaseEnvironment):
     **init_env_data :
         Further keyword arguments with initialization data, as returned by
         :meth:`get_initialization_data`.
-        See :meth:`initialize_first_LP_last_RP` for details on these parameters.
+        See :meth:`init_first_LP_last_RP` for details on these parameters.
 
     Attributes
     ----------
@@ -2029,6 +2356,11 @@ class MPOEnvironment(BaseEnvironment):
         """
         if not self.finite  and (init_LP is None or init_RP is None) and \
                 start_env_sites is None and self.bra is self.ket:
+            norm_err = np.linalg.norm(self.ket.norm_test())
+            if norm_err > 1.e-10:
+                warnings.warn("call psi.canonical_form() to regenerate MPO environments from psi"
+                              f" with current norm error {norm_err:.2e}")
+                self.ket.canonical_form()
             env_data = MPOTransferMatrix.find_init_LP_RP(self.H, self.ket, 0, self.L - 1)
             init_LP = env_data['init_LP']
             init_RP = env_data['init_RP']
@@ -2315,8 +2647,7 @@ class MPOTransferMatrix(NpcLinearOperator):
     unit_cell_width : int
         See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
     """
-
-    def __init__(self, H, psi, transpose=False, guess=None):
+    def __init__(self, H, psi, transpose=False, guess=None, _subtraction_gauge='rho'):
         if psi.finite or H.bc != 'infinite':
             raise ValueError("Only makes sense for infinite MPS")
         self.L = L = lcm(H.L, psi.L)
@@ -2334,67 +2665,90 @@ class MPOTransferMatrix(NpcLinearOperator):
         self.unit_cell_width = H.unit_cell_width * (L // H.L)
         if self.IdL is None or self.IdR is None:
             raise ValueError("MPO needs to have structure with IdL/IdR")
-        S2 = psi.get_SL(0)**2
+        S = psi.get_SL(0)
         if not transpose:  # right to left
             wR = H.get_W(self.L - 1).get_leg('wR')
             wL = wR.conj()
+            vR = psi.get_B(psi.L-1, 'B').get_leg('vR')
+            if isinstance(S, npc.Array):
+                rho = npc.tensordot(S, S.conj(), axes=['vL', 'vL*'])
+            else:
+                S2 = S**2
+                rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
+
             self.acts_on = ['vL', 'wL', 'vL*']  # vec: vL wL vL*
+
             for i in reversed(range(self.L)):
                 # optimize: transpose arrays to mostly avoid it in matvec
                 B = psi.get_B(i, 'B').astype(dtype, False)
                 self._M.append(B.transpose(['vL', 'p', 'vR']))
                 self._W.append(H.get_W(i).transpose(['p*', 'wR', 'p', 'wL']).astype(dtype, False))
                 self._M_conj.append(B.conj().itranspose(['vR*', 'p*', 'vL*']))
-            vR = self._M[0].get_leg('vR')
-            self._chi0 = vR.ind_len
+
+            #vR = self._M[0].get_leg('vR')
+            self._chi0 = chi0 = vR.ind_len
             eye_R = npc.diag(1., vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
             self._E_shift = eye_R.add_leg(wL, self.IdL, axis=1, label='wL')  # vL wL vL*
+            self._proj_trace = self._E_shift.conj().iset_leg_labels(['vR', 'wR', 'vR*']) / chi0
             self._proj_norm = eye_R.add_leg(wL, self.IdR, axis=1, label='wL').conj()  # vL* wL* vL
-            rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
             self._proj_rho = rho.add_leg(wR, self.IdL, axis=1, label='wR')  # vR wR vR*
-            if guess is not None:
-                try:
-                    guess.get_leg('wL').test_equal(wL)
-                    guess.get_leg('vL').test_contractible(vR)
-                    guess.get_leg('vL*').test_equal(vR)
-                except ValueError:
-                    logger.warning("dropping guess for MPOTransferMatrix with incompatible legs")
-                    guess = None
-            if guess is None:
-                guess = eye_R.add_leg(wL, self.IdR, axis=1, label='wL')  # vL wL vL*
-                # no need to _project: E = 0
-            else:
-                guess = guess.transpose(['vL', 'wL', 'vL*'])  # copy!
-                self._project(guess)
         else:  # left to right
             wL = H.get_W(0).get_leg('wL')
             wR = wL.conj()
+            vL = psi.get_B(0, 'A').get_leg('vL')
+            if isinstance(S, npc.Array):
+                rho = npc.tensordot(S.conj(), S, axes=['vR*', 'vR'])
+            else:
+                S2 = S**2
+                rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
+
             self.acts_on = ['vR*', 'wR', 'vR']  # labels of the vec
+
             for i in range(self.L):
                 A = psi.get_B(i, 'A').astype(dtype, False)
                 self._M.append(A.transpose(['vL', 'p', 'vR']))
                 self._W.append(H.get_W(i).transpose(['wR', 'p', 'wL', 'p*']).astype(dtype, False))
                 self._M_conj.append(A.conj().itranspose(['vR*', 'p*', 'vL*']))
-            vL = self._M[0].get_leg('vL')
-            self._chi0 = vL.ind_len
+
+            #vL = self._M[0].get_leg('vL')
+            self._chi0 = chi0 = vL.ind_len
             eye_L = npc.diag(1., vL, dtype=dtype, labels=['vR*', 'vR'])
             self._E_shift = eye_L.add_leg(wR, self.IdR, axis=1, label='wR')  # vR* wR vR
+            self._proj_trace = self._E_shift.conj().iset_leg_labels(['vL*', 'wL', 'vL']) / chi0
             self._proj_norm = eye_L.add_leg(wR, self.IdL, axis=1, label='wR').conj()  # vR wR* vR*
-            rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
             self._proj_rho = rho.add_leg(wL, self.IdR, axis=1, label='wL')  # vL* wL vL
-            if guess is not None:
-                try:
+        if _subtraction_gauge == 'trace':
+            self._proj_subtr = self._proj_trace
+        elif _subtraction_gauge == 'rho':
+            self._proj_subtr = self._proj_rho
+        else:
+            raise ValueError(f"unknown _subtraction_gauge={_subtraction_gauge!r}")
+        # check guess for correctness
+        if guess is not None:
+            try:
+                if not transpose:
+                    guess.get_leg('wL').test_equal(wL)
+                    guess.get_leg('vL').test_contractible(vR)
+                    guess.get_leg('vL*').test_equal(vR)
+                else:
                     guess.get_leg('wR').test_equal(wR)
                     guess.get_leg('vR').test_contractible(vL)
                     guess.get_leg('vR*').test_equal(vL)
-                except ValueError:
-                    logger.warning("dropping guess for MPOTransferMatrix with incompatible legs")
-                    guess = None
-            if guess is None:
+            except ValueError:
+                logger.warning("dropping guess for MPOTransferMatrix with incompatible legs")
+                guess = None
+        if guess is None:
+            if not transpose:
+                guess = eye_R.add_leg(wL, self.IdR, axis=1, label='wL')  # vL wL vL*
+            else:
                 guess = eye_L.add_leg(wR, self.IdL, axis=1, label='wR')  # vR* wR vR
+            # no need to _project: E = 0
+        else:
+            if not transpose:
+                guess = guess.transpose(['vL', 'wL', 'vL*'])  # copy!
             else:
                 guess = guess.transpose(['vR*', 'wR', 'vR'])  # copy!
-                self._project(guess)
+            self._project(guess)
         self.guess = guess
         self.flat_linop, self.flat_guess = FlatLinearOperator.from_guess_with_pipe(self.matvec,
                                                                                    self.guess,
@@ -2464,13 +2818,13 @@ class MPOTransferMatrix(NpcLinearOperator):
 
     def _project(self, vec):
         """Project out additive energy part from vec."""
-        if not self.transpose:
+        if not self.transpose: # Acts to the right, T * RP = RP + e_R * I
             vec.itranspose(['vL', 'wL', 'vL*'])  # shouldn't do anything
-            E = npc.inner(vec, self._proj_rho, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
+            E = npc.inner(vec, self._proj_subtr, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
             vec -= self._E_shift * E
-        else:
+        else: # Acts to the left, LP * T = LP + e_L * I
             vec.itranspose(['vR*', 'wR', 'vR'])  # shouldn't do anything
-            E = npc.inner(vec, self._proj_rho, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
+            E = npc.inner(vec, self._proj_subtr, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
             vec -= self._E_shift * E
 
     def dominant_eigenvector(self, **kwargs):
@@ -2507,14 +2861,17 @@ class MPOTransferMatrix(NpcLinearOperator):
         energy : float
             Energy *per site* of the MPS.
         """
-        vec = self.matvec(dom_vec, project=False)
         if not self.transpose:
-            E = npc.inner(vec, self._proj_rho, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
+            axes= (['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*'])
         else:
-            E = npc.inner(vec, self._proj_rho, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
+            axes= (['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL'])
+        E0 = npc.inner(dom_vec, self._proj_rho, axes)
+        vec = self.matvec(dom_vec, project=False)
+        E = npc.inner(vec, self._proj_rho, axes)
+        E = (E - E0) / self.L
         if self._explicit_plus_hc:
-            E = E + np.conj(E)
-        return E / self.L
+            E = np.real(E + np.conj(E))
+        return E
 
     @classmethod
     def find_init_LP_RP(cls,
@@ -2525,6 +2882,7 @@ class MPOTransferMatrix(NpcLinearOperator):
                         guess_init_env_data=None,
                         calc_E=False,
                         tol_ev0=1.e-8,
+                        _subtraction_gauge='rho',
                         **kwargs):
         """Find the initial LP and RP.
 
@@ -2541,6 +2899,10 @@ class MPOTransferMatrix(NpcLinearOperator):
         guess : None | dict
             Possible `init_env_data` with the guess/result of DMRG updates.
             If some legs are incompatible, trigger a warning and ignore.
+        _subtraction_gauge : string
+            How the additive part of the generalized eigenvector is subtracted out.
+            Possible values are 'rho' and 'trace'; see documentation for MPOTransferMatrix
+            for more details.
         **kwargs :
             Further keyword arguments for
             :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors`.
@@ -2551,31 +2913,46 @@ class MPOTransferMatrix(NpcLinearOperator):
             Dictionary with `init_LP` and `init_RP` that can be given to :class:`MPOEnvironment`.
         E : float
             Energy per site. Only returned if `calc_E` is True.
+        eps : float
+            The contraction of ``<LP |SS|RP>`` for the environment
         """
         # first right to left
         envs = []
+        Es = []
         if guess_init_env_data is None:
             guess_init_env_data = {}
         for transpose in [False, True]:
             guess = guess_init_env_data.get('init_LP' if transpose else 'init_RP', None)
-            TM = cls(H, psi, transpose=transpose, guess=guess)
+            TM = cls(H, psi, transpose=transpose, guess=guess, _subtraction_gauge=_subtraction_gauge)
             val, vec = TM.dominant_eigenvector(**kwargs)
             if abs(1. - val) > tol_ev0:
-                logger.warning("MPOTransferMatrix eigenvalue not 1: got 1. - %.3e", 1. - val)
+                logger.warning("MPOTransferMatrix eigenvalue not 1: got %s", val)
             envs.append(vec)
-            if calc_E and transpose:
-                E = TM.energy(vec)
+            if calc_E:
+                Es.append(TM.energy(vec)) #E_R, E_L
             L = TM.L
             del TM
         init_env_data = {'init_LP': envs[1], 'init_RP': envs[0], 'age_LP': 0, 'age_RP': 0}
-        if first != 0 or last is not None and last % L != L - 1:
+        if first != 0 or (last is not None and last % L != L - 1):
             env = MPOEnvironment(psi, H, psi, **init_env_data)
             if first % L != 0:
                 init_env_data['init_LP'] = env.get_LP(first, store=False)
-            if last % L != L - 1:
+            if last is not None and last % L != L - 1:
                 init_env_data['init_RP'] = env.get_RP(last, store=False)
         if calc_E:
-            return E, init_env_data
+            # We need this for segment excitation energies.
+            # TODO: this doesn't work for non-default first/last!?
+            if first != 0 or last is not None:
+                assert (last + 1) % L == first % L, "Need to have an integer number of unit cells for the bond to be the same."
+            SL = psi.get_SL(first)
+            if not isinstance(SL, npc.Array):
+                vL, vR = init_env_data['init_LP'].get_leg('vR').conj(), init_env_data['init_RP'].get_leg('vL').conj()
+                SL = npc.diag(SL, vL, dtype=np.promote_types(psi.dtype, H.dtype), labels=['vL', 'vR'])
+            E0 = npc.tensordot(init_env_data['init_LP'], SL, axes=(['vR'], ['vL']))
+            E0 = npc.tensordot(E0, SL.conj(), axes=(['vR*'], ['vL*']))
+            E0 = npc.tensordot(E0, init_env_data['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
+            # E0 = LP * s^2 * RP on site 0
+            return init_env_data, Es, E0
         # else:
         return init_env_data
 
@@ -2719,3 +3096,31 @@ def _mpo_graph_state_order(key):
         # fallback: compare strings
         return (0, key)
     return (0, str(key))
+
+def _partition_W(W, IdL_L, IdR_L, IdL_R, IdR_R):
+    """Split MPO into blocks with respect to standard upper triangular form.
+
+    1 C D
+    0 A B
+    0 0 1
+
+    """
+    DL, DR, d, d = W.shape
+    proj_L = np.ones(DL, dtype=np.bool_)
+    proj_L[IdL_L] = False
+    proj_L[IdR_L] = False
+    proj_R = np.ones(DR, dtype=np.bool_)
+    proj_R[IdL_R] = False
+    proj_R[IdR_R] = False
+
+    #Extract (A, B, C, D)
+    D_npc = W.copy()
+    D_npc.iproject([IdL_L, IdR_R], ['wL','wR'])
+    D_npc = D_npc.squeeze() # remove dummy wL, wR legs
+    C_npc = W.copy()
+    C_npc.iproject([IdL_L, proj_R], ['wL','wR'])
+    B_npc = W.copy()
+    B_npc.iproject([proj_L, IdR_R], ['wL','wR'])
+    A_npc = W.copy()
+    A_npc.iproject([proj_L, proj_R], ['wL','wR'])
+    return A_npc, B_npc, C_npc, D_npc

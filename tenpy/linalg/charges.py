@@ -19,10 +19,9 @@ For further details, see the definition of :func:`~tenpy.tools.optimization.use_
 
 .. autodata:: QTYPE
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
-import copy
 import bisect
 import warnings
 
@@ -32,7 +31,7 @@ from ..tools.optimization import optimize, OptimizationFlag, use_cython
 
 __all__ = ['ChargeInfo', 'DipolarChargeInfo', 'LegCharge', 'LegPipe', 'QTYPE']
 
-QTYPE = np.int_
+QTYPE = np.int64
 """Numpy data type for the charges."""
 
 
@@ -577,7 +576,7 @@ class LegCharge:
     def __init__(self, chargeinfo, slices, charges, qconj=1):
         self.chinfo = chargeinfo
         self.slices = np.array(slices, dtype=np.intp)
-        self.ind_len = self.slices[-1]
+        self.ind_len = int(self.slices[-1])
         self.charges = np.array(charges, dtype=QTYPE)
         self.block_number = self.charges.shape[0]
         self.qconj = int(qconj)
@@ -1095,10 +1094,12 @@ class LegCharge:
         if self.charges is other.charges and self.qconj == other.qconj and \
                 (self.slices is other.slices or np.all(self.slices == other.slices)):
             return True  # optimize: don't need to check all charges explicitly
-        if not np.array_equal(self.slices, other.slices) or \
-                not np.array_equal(self.charges * self.qconj, other.charges * other.qconj):
+        if not np.array_equal(self.slices, other.slices):
             return False
-        return True
+        return np.array_equal(
+            self.chinfo.make_valid(self.charges * self.qconj),
+            self.chinfo.make_valid(other.charges * other.qconj)
+        )
 
     def __ne__(self, other):
         r"""Define `self != other` as `not (self == other)`"""
@@ -1342,7 +1343,7 @@ class LegCharge:
 
     def _set_slices(self, slices):
         self.slices = slices
-        self.ind_len = slices[-1]
+        self.ind_len = int(slices[-1])
 
     def _set_block_sizes(self, block_sizes):
         """Set self.slices from an list of the block-sizes."""
@@ -1487,7 +1488,7 @@ class LegPipe(LegCharge):
         # the difficult part: calculate self.slices, self.charges, self.q_map and self.q_map_slices
         if self.subqshape == (1, ) * len(legs):
             # special case: only legs with each a single block, usually the case if qnumber=0
-            self.ind_len = ind_len = np.prod(self.subshape)
+            self.ind_len = ind_len = int(np.prod(self.subshape))
             self.slices = np.array([0, ind_len], np.intp)
             z = [0] * len(legs)
             self.charges = _partial_qtotal(chinfo, legs, np.array([z], np.intp), qconj, None)

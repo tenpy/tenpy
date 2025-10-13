@@ -11,6 +11,7 @@ If you are new to TeNPy, read the :doc:`intro/overview`.
     intro/overview
     intro/simulations
     intro/model
+    intro/model_details
     intro/lattices
     intro/input_output
     intro/logging

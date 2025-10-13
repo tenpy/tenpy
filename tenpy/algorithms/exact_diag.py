@@ -13,15 +13,18 @@ This might be used to obtain the spectrum, the ground state or highly excited st
     but just the ability to diagonalize the defined models for small system sizes
     without additional extra work.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import warnings
 
 from ..linalg import np_conserved as npc
 from ..networks.mps import MPS
+from ..models.model import CouplingModel
+from ..tools.misc import inverse_permutation
 
-__all__ = ['ExactDiag']
+__all__ = ['ExactDiag', 'get_full_wavefunction', 'get_numpy_Hamiltonian',
+           'get_scipy_sparse_Hamiltonian']
 
 
 class ExactDiag:
@@ -149,7 +152,7 @@ class ExactDiag:
         return cls(M, *args, **kwargs)
 
     def build_full_H_from_mpo(self):
-        """Calculate self.full_H from self.mpo."""
+        """Calculate self.full_H from the MPO (``H_MPO``) of the model."""
         if self._exceeds_max_size():
             return
         mpo = self.model.H_MPO
@@ -169,7 +172,7 @@ class ExactDiag:
         self._set_full_H(full_H)
 
     def build_full_H_from_bonds(self):
-        """Calculate self.full_H from self.mpo."""
+        """Calculate self.full_H from bond terms (``H_bond``) of the model."""
         if self._exceeds_max_size():
             return
         sites = self.model.lat.mps_sites()
@@ -329,3 +332,157 @@ class ExactDiag:
             warnings.warn(msg, stacklevel=2)
             return True
         return False
+
+
+def get_full_wavefunction(psi: MPS, undo_sort_charge: bool = True):
+    """Get the full wavefunction of a finite MPS as a 1D numpy array.
+
+    Parameters
+    ----------
+    psi : :class:`~tenpy.networks.mps.MPS`
+        The input MPS. Must have ``psi.bc == 'finite'``.
+    undo_sort_charge : bool
+        If we should undo the basis permutation induced by
+        :meth:`~tenpy.networks.site.Site.sort_charge`.
+
+    Returns
+    -------
+    theta : 1D array
+        The wavefunction. Basis order is like for a Kronecker product :func:`numpy.kron` of the
+        local basis order, see `undo_sort_charge`.
+    """
+    if psi.bc != 'finite':
+        raise ValueError('psi must have finite boundary conditions')
+    if len(psi._p_label) != 1:
+        # hard-coding standard MPS with a single leg here.
+        raise NotImplementedError
+    p = psi._p_label[0]
+    theta = psi.get_theta(0, psi.L)
+    theta = theta.itranspose(['vL'] + [f'{p}{n}' for n in range(psi.L)] + ['vR'])
+    theta = theta.to_ndarray()
+    theta = np.squeeze(theta, (0, -1))  # squeeze vL, vR
+    if undo_sort_charge:
+        perms = [inverse_permutation(site.perm) for site in psi.sites]
+        theta = theta[np.ix_(*perms)]
+    return np.reshape(theta, -1)
+
+
+def get_numpy_Hamiltonian(model, from_mpo: bool = True, undo_sort_charge: bool = True):
+    """Get the Hamiltonian as a matrix (2D numpy array).
+
+    Parameters
+    ----------
+    model
+        The model that defines the Hamiltonian. The lattice should be finite.
+    from_mpo : bool
+        If we should prioritize using the MPO over ``H_bond`` to build the Hamiltonian.
+    undo_sort_charge : bool
+        If we should undo the basis permutation induced by
+        :meth:`~tenpy.networks.site.Site.sort_charge`.
+
+    Returns
+    -------
+    H : 2D array
+        The Hamiltonian as a matrix. Basis order is like for a Kronecker product :func:`numpy.kron`
+        of the local basis order, see `undo_sort_charge`.
+    """
+    if model.lat.bc_MPS != 'finite':
+        raise ValueError('Model must be defined on a finite lattice.')
+    if isinstance(model, CouplingModel):
+        return _get_Hamiltonian_from_couplings(
+            model, sparse=False, undo_sort_charge=undo_sort_charge
+        )
+    return _get_numpy_Hamiltonian_ExactDiag_full_H(
+        model, from_mpo=from_mpo, undo_sort_charge=undo_sort_charge
+    )
+
+
+def get_scipy_sparse_Hamiltonian(model, undo_sort_charge: bool = True):
+    """Get the Hamiltonian as a sparse scipy matrix.
+
+    Parameters
+    ----------
+    model
+        The model that defines the Hamiltonian. The lattice should be finite.
+    undo_sort_charge : bool
+        If we should undo the basis permutation induced by
+        :meth:`~tenpy.networks.site.Site.sort_charge`.
+
+    Returns
+    -------
+    H : CSR matrix
+        The Hamiltonian as a scipy CSR sparse matrix. Basis order is like for a Kronecker product
+        :func:`numpy.kron` of the local basis order, see `undo_sort_charge`.
+    """
+    if model.lat.bc_MPS != 'finite':
+        raise ValueError('Model must be defined on a finite lattice.')
+    
+    if isinstance(model, CouplingModel):
+        return _get_Hamiltonian_from_couplings(
+            model=model, sparse=True, undo_sort_charge=undo_sort_charge
+        )
+    else:
+        raise NotImplementedError
+
+
+def _get_numpy_Hamiltonian_ExactDiag_full_H(model, from_mpo: bool, undo_sort_charge: bool):
+    ed = ExactDiag(model)
+    if from_mpo and hasattr(model, 'H_MPO'):
+        ed.build_full_H_from_mpo()
+    else:
+        ed.build_full_H_from_bonds()
+    res = ed.full_H.split_legs()
+    n_sites = model.lat.N_sites
+    assert res.rank == 2 * n_sites
+    # [p0, p1, ..., p0*, p1*, ...]
+    res = res.itranspose([f'p{n}{star}' for star in ['', '*'] for n in range(n_sites)])
+    res = res.to_ndarray()
+    if undo_sort_charge:
+        perms = [inverse_permutation(site.perm) for site in model.lat.mps_sites()] * 2
+        res = res[np.ix_(*perms)]
+    dim = np.prod(res.shape[:n_sites])
+    return np.reshape(res, (dim, dim))
+
+
+def _get_Hamiltonian_from_couplings(model, sparse: bool, undo_sort_charge: bool):
+    """Helper to get either dense numpy or sparse scipy matrix of the Hamiltonian."""
+    if not isinstance(model, CouplingModel):
+        raise ValueError('Must be a coupling model.')
+
+    ot = model.all_onsite_terms()
+    ot.remove_zeros()
+    ct = model.all_coupling_terms()
+    ct.remove_zeros()
+    edt = model.exp_decaying_terms
+    term_list = ot.to_TermList() + ct.to_TermList() + edt.to_TermList()
+
+    sites = model.lat.mps_sites()
+    dims = [s.leg.ind_len for s in sites]
+    if sparse:
+        import scipy.sparse as spsp
+        H = spsp.csr_matrix((np.prod(dims),) * 2, dtype=float)
+        kron = spsp.kron
+        eye_0 = spsp.eye(1)  # identity on zero sites. starting point for doing kron.
+    else:
+        H = np.zeros((np.prod(dims),) * 2, dtype=float)
+        kron = np.kron
+        eye_0 = np.eye(1)  # identity on zero sites. starting point for doing kron.
+
+    for s, terms in zip(term_list.strength, term_list.terms):
+        last_site = -1
+        t = eye_0
+        for op, i in terms:
+            sites_since_last_op = range(last_site + 1, i)
+            if len(sites_since_last_op) > 0:
+                t = kron(t, np.eye(np.prod([dims[n] for n in sites_since_last_op])))
+            op = sites[i].get_op(op).to_ndarray()
+            if undo_sort_charge:
+                perm = inverse_permutation(sites[i].perm)
+                op = op[np.ix_(perm, perm)]
+            t = kron(t, op)
+            last_site = i
+        sites_since_last_op = range(last_site + 1, len(sites))
+        if len(sites_since_last_op) > 0:
+            t = kron(t, np.eye(np.prod([dims[n] for n in sites_since_last_op])))
+        H = H + s * t
+    return H

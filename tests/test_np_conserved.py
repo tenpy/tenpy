@@ -1,13 +1,11 @@
 """A collection of tests for tenpy.linalg.np_conserved."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np
 import numpy.testing as npt
 import itertools as it
 from tenpy.tools.misc import inverse_permutation
-import warnings
-import pytest
 
 from random_test import gen_random_legcharge, random_Array
 
@@ -31,7 +29,7 @@ chinfoTr = npc.ChargeInfo()  # trivial charge
 
 lcTr = npc.LegCharge.from_qind(chinfoTr, [0, 2, 3, 5, 8], [[]] * 4)
 
-EPS = np.finfo(np.float_).eps
+EPS = np.finfo(np.float64).eps
 
 
 def project_multiple_axes(flat_array, perms, axes):
@@ -273,9 +271,7 @@ def test_npc_Array_reshape():
                                  ([[0], [1], [2]], [0, 1, 2]), ([[2, 0]], [1, 2, 0]),
                                  ([[2, 0, 1]], [2, 0, 1])]:
         print('combine legs', comb_legs)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", FutureWarning)
-            acomb = a.combine_legs(comb_legs)  # just sorts second leg
+        acomb = a.combine_legs(comb_legs)  # just sorts second leg
         print("=> labels: ", acomb.get_leg_labels())
         acomb.test_sanity()
         asplit = acomb.split_legs()
@@ -326,9 +322,7 @@ def test_npc_Array_reshape_2():
     shape = (2, 5, 2)
     a = random_Array(shape, chinfo3, sort=True)
     aflat = a.to_ndarray()
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", FutureWarning)
-        acomb = a.combine_legs([[0, 1]])
+    acomb = a.combine_legs([[0, 1]])
     acombflat = acomb.to_ndarray()
     pipe = acomb.legs[0]
     print(a)
@@ -507,12 +501,8 @@ def test_npc_addition_transpose():
     a2 = np.swapaxes(a1, 0, 1)
     t1 = npc.Array.from_ndarray_trivial(a1, labels=['a', 'b', 'c'])
     t2 = npc.Array.from_ndarray_trivial(a2, labels=['b', 'a', 'c'])
-    # TODO: for now warning
-    with pytest.warns(FutureWarning):
-        diff = npc.norm(t1 - t2)
-    # TODO: when the behaviour is changed do
-    #  diff = npc.norm(t1 - t2)
-    #  assert diff < 1.e-10
+    diff = npc.norm(t1 - t2)
+    assert diff < 1.e-10
 
 
 def test_npc_tensordot():
@@ -900,3 +890,37 @@ def test_pickle():
     b2flat = b2.to_ndarray()
     npt.assert_array_equal(aflat, a2flat)
     npt.assert_array_equal(bflat, b2flat)
+
+
+def test_fixes_468():
+    # See https://github.com/tenpy/tenpy/issues/468
+
+    chinfo = npc.ChargeInfo([1], ["q"])
+    leg_p = npc.LegCharge.from_qflat(chinfo, [[0], [1]])
+    leg_v = npc.LegCharge.from_qdict(chinfo, {0: slice(0,3), 1: slice(3,6), 2: slice(6,9)})
+
+    # this could be done via npc.Array.from_func(np.random.normal), but we keep the exact code
+    # from the bug report
+    B = npc.zeros([leg_v, leg_v.conj(), leg_p], labels=["vL", "vR", "p"])
+    for qL in range(3):
+        for qp in range(2):
+            qR = qL+qp
+            if qR < 3:
+                B[3*qL:3*(qL+1), 3*qR:3*(qR+1), qp] = np.random.normal(size=(3,3))
+
+    # SVD, fusion on left
+    B_fused = B.combine_legs(["vL", "p"])
+    U, S, V = npc.svd(B_fused, qtotal_LR=[B.qtotal, None], inner_labels=["vR", "vL"])
+    U2 = U.split_legs(0)
+
+    B_reconstructed_fused = npc.tensordot(U.scale_axis(S, 'vR'), V, ('vR', 'vL'))
+    assert npc.norm(B_reconstructed_fused - B_fused) < 1e-14
+
+    B_reconstructed_split = npc.tensordot(U2.scale_axis(S, 'vR'), V, ('vR', 'vL'))
+    assert npc.norm(B_reconstructed_split - B.transpose(['vL', 'p', 'vR'])) < 1e-14
+
+    # permutation induced by sorting the pipe by charge (worked out on paper)
+    perm = [0, 3, 1, 4, 2, 5, 6, 9, 7, 10, 8, 11, 12, 15, 13, 16, 14, 17]
+    U_np = U.to_ndarray()[perm, :]
+    U2_np = U2.to_ndarray().reshape(18, 9)
+    npt.assert_allclose(U_np, U2_np)

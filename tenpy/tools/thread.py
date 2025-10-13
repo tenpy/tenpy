@@ -1,6 +1,6 @@
 """Tools for thread-based parallelization."""
 
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import threading
 import queue

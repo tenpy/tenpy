@@ -1,11 +1,10 @@
 """Short test for vmem prediction."""
-# Copyright 2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 
 import tenpy.algorithms as algo
 import tenpy.models as mods
 import tenpy.networks.mps as mps
-from tenpy.algorithms import dmrg
 import numpy as np
 
 

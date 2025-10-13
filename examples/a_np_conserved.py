@@ -13,7 +13,7 @@ Note that this example uses only np_conserved, but no other modules.
 Compare it to the example `b_mps.py`,
 which does the same steps using a few predefined classes like MPS and MPO.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np

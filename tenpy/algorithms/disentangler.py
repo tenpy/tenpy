@@ -7,14 +7,14 @@ For now, this is written for disentangling purifications; could be generalized t
 
 .. autodata:: disentanglers_atom_parse_dict
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import logging
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
-from .truncation import svd_theta
+from ..linalg.truncation import svd_theta
 from ..tools.math import entropy
 from ..linalg import random_matrix as rand_mat
 
@@ -55,6 +55,18 @@ class Disentangler:
     ----------
     parent : :class:`~tenpy.algorithms.purification.PurificationTEBD`
         The parent class calling the disentangler.
+
+    Options
+    -------
+    .. cfg:configoptions :: PurificationTEBD
+        disent_eps : float
+            Threshold for stopping disentangler iterations if the change in Renyi entropy ``S(n=2)``
+            between iterations is smaller than this value. Used in :class:`RenyiDisentangler`,
+            :class:`NormDisentangler` and :class:`GradientDescentDisentangler`.
+        disent_max_iter : int
+            Maximum number of iterations for the disentangler. Used in :class:`RenyiDisentangler`,
+            :class:`NormDisentangler` and :class:`GradientDescentDisentangler`.
+
     """
     def __init__(self, parent):
         self.parent = parent
@@ -111,26 +123,13 @@ class BackwardDisentangler(Disentangler):
 
 
 class RenyiDisentangler(Disentangler):
-    """Iterative find `U` which minimized the second Renyi entropy.
+    """Iteratively find `U` which minimized the second Renyi entropy.
 
     See :cite:`hauschild2018`.
-
-    Reads of the following `options` as break criteria for the iteration:
-
-    ================ ====== ======================================================
-    key              type   description
-    ================ ====== ======================================================
-    disent_eps       float  Break, if the change in the Renyi entropy ``S(n=2)``
-                            per iteration is smaller than this value.
-    ---------------- ------ ------------------------------------------------------
-    disent_max_iter  float  Maximum number of iterations to perform.
-    ================ ====== ======================================================
-
-    Arguments and return values are the same as for :meth:`disentangle`.
     """
     def __init__(self, parent):
-        self.max_iter = parent.options.get('disent_max_iter', 20)
-        self.eps = parent.options.get('disent_eps', 1.e-10)
+        self.max_iter = parent.options.get('disent_max_iter', 20, int)
+        self.eps = parent.options.get('disent_eps', 1.e-10, float)
         self.parent = parent
 
     def __call__(self, theta):
@@ -217,38 +216,29 @@ class RenyiDisentangler(Disentangler):
 
 
 class NormDisentangler(Disentangler):
-    """Find optimal `U` for which the truncation of U|theta> has maximal overlap with U|theta>.
+    """Disentangle with the unitary that maximizes overlap with the truncated ``U|theta>``.
 
-    Reads of the following `options` as break criteria for the iteration:
+    Options
+    -------
+    .. cfg:configoptions :: PurificationTEBD
+        disent_trunc_par : dict
+            Only for the :class:`NormDisentangler`, truncation parameters for disentangling.
+            Defaults to the engines :cfg:option:`Algorithm.trunc_params`.
+        disent_norm_chi : iterable of int
+            Only for the :class:`NormDisentangler`, slowly increase the bond dimension.
+            The default is ``range(1, disent_trunc_par['chi_max']+1)``.
+            However, that's **very** slow for large `chi_max`, and makes the disentangler *scale*
+            with an extra power of `chi_max`, and thus worse than the rest of TEBD.
 
-    ================ ========= ======================================================
-    key              type      description
-    ================ ========= ======================================================
-    disent_eps       float     Break, if the change in the Renyi entropy ``S(n=2)``
-                               per iteration is smaller than this value.
-    ---------------- --------- ------------------------------------------------------
-    disent_max_iter  float     Maximum number of iterations to perform.
-    ---------------- --------- ------------------------------------------------------
-    disent_trunc_par dict      Truncation parameters; defaults to `trunc_params`.
-    ---------------- --------- ------------------------------------------------------
-    disent_norm_chi  iterable  To find the optimal U it can help to increase `chi_max`
-                               of `disent_trunc_par` slowly, the default is
-                               ``range(1, disent_trunc_par['chi_max']+1)``.
-                               However, that's **very** slow for large `chi_max`,
-                               so we allow to change it. (In fact, it makes the
-                               disentangler *scale* worse than the rest of TEBD.)
-    ================ ========= ======================================================
-
-    Arguments and return values are the same as for :meth:`disentangle`.
     """
     def __init__(self, parent):
-        self.max_iter = parent.options.get('disent_max_iter', 20)
-        self.eps = parent.options.get('disent_eps', 1.e-10)
+        self.max_iter = parent.options.get('disent_max_iter', 20, int)
+        self.eps = parent.options.get('disent_eps', 1.e-10, 'real')
         self.trunc_par = parent.options.subconfig('disent_trunc_par', parent.trunc_params)
-        self.chi_max = self.trunc_par.get('chi_max', 100)
-        self.trunc_cut = self.trunc_par.get('trunc_cut', None)
+        self.chi_max = self.trunc_par.get('chi_max', 100, int)
+        self.trunc_cut = self.trunc_par.get('trunc_cut', None, float)
         self.chi_range = self.trunc_par.get('disent_norm_chi', range(1, self.chi_max + 1))
-        self.parent = parent
+        Disentangler.__init__(self, parent=parent)
 
     def __call__(self, theta):
         _, i = self.parent._update_index
@@ -312,26 +302,20 @@ class NormDisentangler(Disentangler):
 class GradientDescentDisentangler(Disentangler):
     """Gradient-descent optimization, similar to :class:`RenyiDisentangler`.
 
-    Reads of the following `TEBD_params`:
+    Options
+    -------
+    .. cfg:configoptions :: PurificationTEBD
+        disent_n : float
+            Only for :class:`GradientDescentDisentangler`, the index of the Renyi entropy that is
+            optimized.
+        disent_stepsizes : list of float
+            Only for :class:`GradientDescentDisentangler`, the step sizes for gradient descend.
 
-    ================ ====== ======================================================
-    key              type   description
-    ================ ====== ======================================================
-    disent_eps       float  Break, if the change in the Renyi entropy ``S(n=2)``
-                            per iteration is smaller than this value.
-    ---------------- ------ ------------------------------------------------------
-    disent_max_iter  float  Maximum number of iterations to perform.
-    ---------------- ------ ------------------------------------------------------
-    disent_n         float  Renyi index of the entropy to be used.
-                            ``n=1`` for von-Neumann entropy.
-    ================ ====== ======================================================
-
-    Arguments and return values are the same as for :class:`Disentangler`.
     """
     def __init__(self, parent):
-        self.max_iter = parent.options.get('disent_max_iter', 20)
-        self.eps = parent.options.get('disent_eps', 1.e-10)
-        self.n = parent.options.get('disent_n', 1.)
+        self.max_iter = parent.options.get('disent_max_iter', 20, int)
+        self.eps = parent.options.get('disent_eps', 1.e-10, 'real')
+        self.n = parent.options.get('disent_n', 1., 'real')
         self.stepsizes = parent.options.get('disent_stepsizes', [0.2, 1., 2.])
         self.parent = parent
 
@@ -431,12 +415,20 @@ class GradientDescentDisentangler(Disentangler):
 
 
 class NoiseDisentangler(Disentangler):
-    """Apply a little bit of random noise. Useful as pre-step to :class:`RenyiDisentangler`.
+    """Disentangle with tunable noise, i.e. with random unitary close to identity.
 
-    Arguments and return values are the same as for :class:`Disentangler`.
+    This can be useful as pre-step to :class:`RenyiDisentangler`.
+
+    Options
+    -------
+    .. cfg:configoptions :: PurificationTEBD
+        disent_noiselevel : float | None
+            Only for the :class:`NoiseDisentangler`, how much noise is added. Default ``0.01``.
+            If ``None``, the unitary is Haar random, i.e. adds maximal noise.
+
     """
     def __init__(self, parent):
-        self.a = parent.options.get('disent_noiselevel', 0.01)
+        self.a = parent.options.get('disent_noiselevel', 0.01, 'real')
 
     def __call__(self, theta):
         a = self.a
@@ -451,13 +443,15 @@ class NoiseDisentangler(Disentangler):
 
 
 class LastDisentangler(Disentangler):
-    """Use the last total 'U' used in :meth:`disentangle` for the same _update_index as guess.
+    """Disentangle using the same unitary that was used the last time at that bond.
+
+    Apply the unitary stored in the parent engine, int eh attribute
+    :attr:`tenpy.algorithms.purification.PurificationTEBD._guess_U_disent`.
 
     Useful as a starting point in a :class:`CompositeDisentangler` to reduce the number of
     iterations for a following disentangler.
     """
     def __call__(self, theta):
-        # result was saved in :meth:`PurificationTEBD.disentangle`
         U = None
         U_idx_dt, i = self.parent._update_index
         if U_idx_dt is not None:
@@ -530,8 +524,8 @@ class MinDisentangler(Disentangler):
     """Chose the disentangler giving the smallest entropy.
 
     Apply each of the disentanglers to the given `theta`, use the result with smallest entropy.
-    Reads the TEBD_param ``'disent_min_n'`` which selects the :func:`~tenpy.tools.math.entropy`
-    to be used for comparison.
+    We compare the Renyi Entropy with :cfg:option:`PurificationTEBD.disent_min_n` (default ``n=1``,
+    i.e. the von Neumann entropy).
 
     Parameters
     ----------
@@ -546,10 +540,18 @@ class MinDisentangler(Disentangler):
         Selects the entropy to be used for comparison.
     disentanglers : list of :class:`Disentangler`
         The disentanglers to be used.
+
+    Options
+    -------
+    .. cfg:configoptions :: PurificationTEBD
+        disent_min_n : float
+            Only for :class:`MinDisentangler`, the index of the Renyi entropy that is compared.
+            Default ``1.``.
+
     """
     def __init__(self, disentanglers, parent):
         self.disentanglers = disentanglers
-        self.n = parent.options.get('disent_min_n', 1.)
+        self.n = parent.options.get('disent_min_n', 1., 'real')
 
     def __call__(self, theta):
         theta_min, U_min = self.disentanglers[0](theta)

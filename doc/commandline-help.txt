@@ -1,4 +1,4 @@
-usage: tenpy-run [-h] [--import-module MODULE] [--sim-class SIM_CLASS] [--merge MERGE]
+usage: tenpy-run [-h] [--import-module MODULE] [--sim-class SIM_CLASS] [--merge MERGE] [--RAM]
                  [--option KEY VALUE] [--version]
                  [parameters_file ...]
 
@@ -6,8 +6,10 @@ Command line interface to run a TeNPy simulation.
 
 positional arguments:
     parameters_file
-        Yaml (*.yml) file with the simulation parameters/options. Multiple files get merged
-        according to MERGE; see tenpy.tools.misc.merge_recursive for details.
+        Yaml (*.yml) file with the simulation parameters/options. We support an additional yaml
+        tag !py_eval: VALUE that gets initialized by python's ``eval(VALUE)`` with `np`, `scipy`
+        and `tenpy` defined. Multiple files get merged according to MERGE; see
+        tenpy.tools.misc.merge_recursive for details.
 
 options:
     -h, --help
@@ -22,6 +24,9 @@ options:
     --merge MERGE, -m MERGE
         Selects how to merge conflicts in case of multiple yaml files. Options are 'error',
         'first' or 'last'.
+    --RAM
+        Estimates the required RAM. This argument does not execute any simulation, but just
+        initializes it to predict the necessary RAM in MB and then exits.
     --option KEY VALUE, -o KEY VALUE
         Allows overwriting some options from the yaml files. KEY can be recursive separated by
         `.`, e.g. ``algorithm_params.trunc_params.chi``. VALUE is initialized by python's

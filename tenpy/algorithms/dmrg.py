@@ -30,7 +30,7 @@ crucial, as the one-site algorithm cannot increase the MPS bond dimension by its
 A generic protocol for approaching a physics question using DMRG is given in
 :doc:`/intro/dmrg-protocol`.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import time
@@ -39,9 +39,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
-from ..networks.mps import MPSEnvironment
 from ..linalg.krylov_based import lanczos_arpack, LanczosGroundState
-from .truncation import truncate, svd_theta
+from ..linalg.truncation import svd_theta
 from ..tools.params import asConfig
 from ..tools.math import entropy
 from ..tools.process import memory_usage
@@ -55,13 +54,6 @@ __all__ = [
     'TwoSiteDMRGEngine',
     'chi_list',
     'full_diag_effH',
-    'Mixer',
-    'DensityMatrixMixer',
-    'SubspaceExpansion',
-    'SingleSiteMixer',
-    'TwoSiteMixer',
-    'EngineCombine',
-    'EngineFracture',
 ]
 
 
@@ -75,7 +67,7 @@ def run(psi, model, options, **kwargs):
     model : :class:`~tenpy.models.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
     options : dict
-        Further optional parameters as described in :cfg:config:`DMRGEngine`.
+        Further optional parameters as described in :cfg:config:`DMRG`.
     **kwargs :
         Further keyword arguments for the algorithm classes :class:`TwoSiteDMRGEngine` or
         :class:`SingleSiteDMRGEngine`.
@@ -98,7 +90,7 @@ def run(psi, model, options, **kwargs):
     """
     # initialize the engine
     options = asConfig(options, 'DMRG')
-    active_sites = options.get('active_sites', 2)
+    active_sites = options.get('active_sites', 2, int)
     if active_sites == 1:
         engine = SingleSiteDMRGEngine(psi, model, options, **kwargs)
     elif active_sites == 2:
@@ -114,72 +106,6 @@ def run(psi, model, options, **kwargs):
     }
 
 
-class Mixer(mps_common.Mixer):
-    """Deprecated.
-
-    .. deprecated :: 1.0.0
-        Use :class:`~tenpy.algorithms.mps_common.Mixer` instead.
-        Note the changed function names and signatures
-    """
-    deprecated = True # disable class in find_subclass()
-    update_sites = 2
-
-    def __init__(self, options, sweep_activated):
-        msg = ('The `Mixer`, `SubspaceExpansion` and `DensityMatrixMixer` have been moved '
-               'to tenpy.algorithms.mps_common. Note the changed function names and signatures.')
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        super().__init__(options, sweep_activated)
-
-
-class SubspaceExpansion(Mixer, mps_common.SubspaceExpansion):
-    """Deprecated.
-
-    .. deprecated :: 1.0.0
-        Use :class:`~tenpy.algorithms.mps_common.SubspaceExpansion` instead.
-        Note the changed function names and signatures
-    """
-    update_sites = 1
-
-    def perturb_svd(self, engine, theta, i0, move_right):
-        U, S, VH, err = self.mix_and_decompose_1site(engine, theta, i0, move_right)
-        return U, S, VH, err, S
-
-
-class SingleSiteMixer(SubspaceExpansion):
-    r"""Deprecated name for the :class:`SubspaceExpansion` class.
-
-    .. deprecated :: 0.5.0
-       Instead of `SingleSiteMixer` and `TwoSiteMixer`, directly use :class:`SubspaceExpansion`
-       which is compatible with both single-site and two-site DMRG.
-    """
-    def __init__(self, *args, **kwargs):
-        msg = ("The `SingleSiteMixer` and `TwoSiteMixer` have been replaced by the unified "
-               "`SubspaceExpansion` class, and\n"
-               "all mixers are compatible with both SingleSiteDMRGEngine and TwoSiteDMRGEngine.")
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        super().__init__(*args, **kwargs)
-
-
-class TwoSiteMixer(SingleSiteMixer):
-    # Both DMRG engines have code in mixed_svd to support both single-site and two-site mixers
-    pass
-
-
-class DensityMatrixMixer(Mixer, mps_common.DensityMatrixMixer):
-    """Deprecated.
-
-    .. deprecated :: 1.0.0
-        Use :class:`~tenpy.algorithms.mps_common.DensityMatrixMixer` instead.
-        Note the changed function names and signatures
-    """
-    update_sites = 2
-
-    def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
-        qtotal_LR = [engine.psi.get_B(i0, form=None).qtotal,
-                     engine.psi.get_B(i0 + 1, form=None).qtotal]
-        return self.mixed_svd_2site(engine, theta, i0, update_LP, update_RP, qtotal_LR)
-
-
 class DMRGEngine(IterativeSweeps):
     """DMRG base class with common methods for the TwoSiteDMRG and SingleSiteDMRG.
 
@@ -191,32 +117,13 @@ class DMRGEngine(IterativeSweeps):
     A generic protocol for approaching a physics question using DMRG is given in
     :doc:`/intro/dmrg-protocol`.
 
-    .. deprecated :: 0.5.0
-        Renamed parameter/attribute `DMRG_params` to :attr:`options`.
-
     Options
     -------
     .. cfg:config :: DMRGEngine
-        :include: Sweep
+        :include: IterativeSweeps
 
     Attributes
     ----------
-    EffectiveH : class type
-        Class for the effective Hamiltonian, i.e., a subclass of
-        :class:`~tenpy.algorithms.mps_common.EffectiveH`. Has a `length` class attribute which
-        specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
-        DMRG).
-    chi_list : dict | ``None``
-        See :cfg:option:`DMRGEngine.chi_list`
-    eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
-        Effective two-site Hamiltonian.
-    shelve : bool
-        If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
-        terminate with `shelve = True`.
-    sweeps : int
-        The number of sweeps already performed. (Useful for re-start).
-    time0 : float
-        Time marker for the start of the run.
     update_stats : dict
         A dictionary with detailed statistics of the convergence at local update-level.
         For each key in the following table, the dictionary contains a list where one value is
@@ -282,27 +189,22 @@ class DMRGEngine(IterativeSweeps):
 
     def __init__(self, psi, model, options, **kwargs):
         options = asConfig(options, self.__class__.__name__)
-        self.diag_method = options.get('diag_method', 'default')
+        self.diag_method = options.get('diag_method', 'default', str)
         self._entropy_approx = [None] * psi.L  # always left of a given site
         super().__init__(psi, model, options, **kwargs)
-        self.N_sweeps_check = self.options.get('N_sweeps_check', 1 if self.psi.finite else 10)
+        self.N_sweeps_check = self.options.get('N_sweeps_check', 1 if self.psi.finite else 10, int)
         default_min_sweeps = int(1.5 * self.N_sweeps_check)
         if self.chi_list is not None:
             default_min_sweeps = max(max(self.chi_list.keys()), default_min_sweeps)
         self.options.setdefault('min_sweeps', default_min_sweeps)
-        mixer_options = self.options.subconfig('mixer_params')
-        mixer_options.setdefault('amplitude', 1.e-5)
+        mixer_params = self.options.subconfig('mixer_params')
+        mixer_params.setdefault('amplitude', 1.e-5)
         disable_finite = 15
         disable_infinite = 50
         decay_finite = 2.
         decay_infinite = decay_finite ** (disable_finite / disable_infinite)
-        mixer_options.setdefault('decay', decay_finite if self.finite else decay_infinite)
-        mixer_options.setdefault('disable_after', disable_finite if self.finite else disable_infinite)
-
-    @property
-    def DMRG_params(self):
-        warnings.warn("renamed self.DMRG_params -> self.options", FutureWarning, stacklevel=2)
-        return self.options
+        mixer_params.setdefault('decay', decay_finite if self.finite else decay_infinite)
+        mixer_params.setdefault('disable_after', disable_finite if self.finite else disable_infinite)
 
     def pre_run_initialize(self):
         super().pre_run_initialize()
@@ -310,21 +212,70 @@ class DMRGEngine(IterativeSweeps):
         return E, self.psi
 
     def run_iteration(self):
+        """Perform a single iteration, consisting of ``N_sweeps_check`` sweeps.
+
+        Options
+        -------
+        .. cfg:configoptions :: DMRGEngine
+
+            E_tol_to_trunc : float
+                It's reasonable to choose the Lanczos convergence criteria
+                ``'E_tol'`` not many magnitudes lower than the current
+                truncation error. Therefore, if `E_tol_to_trunc` is not
+                ``None``, we update `E_tol` of `lanczos_params` to
+                ``max_E_trunc*E_tol_to_trunc``,
+                restricted to the interval [`E_tol_min`, `E_tol_max`],
+                where ``max_E_trunc`` is the maximal energy difference due to
+                truncation right after each Lanczos optimization during the
+                sweeps.
+            E_tol_max : float
+                See `E_tol_to_trunc`
+            E_tol_min : float
+                See `E_tol_to_trunc`
+            N_sweeps_check : int
+                Number of sweeps to perform between checking convergence
+                criteria and giving a status update.
+            P_tol_to_trunc : float
+                It's reasonable to choose the Lanczos convergence criteria
+                ``'P_tol'`` not many magnitudes lower than the current
+                truncation error. Therefore, if `P_tol_to_trunc` is not
+                ``None``, we update `P_tol` of `lanczos_params` to
+                ``max_trunc_err*P_tol_to_trunc``,
+                restricted to the interval [`P_tol_min`, `P_tol_max`],
+                where ``max_trunc_err`` is the maximal truncation error
+                (discarded weight of the Schmidt values) due to truncation
+                right after each Lanczos optimization during the sweeps.
+            P_tol_max : float
+                See `P_tol_to_trunc`
+            P_tol_min : float
+                See `P_tol_to_trunc`
+            update_env : int
+                Number of sweeps without bond optimization to update the
+                environment for infinite boundary conditions,
+                performed every `N_sweeps_check` sweeps.
+
+        Returns
+        -------
+        E : float
+            The energy of the current ground state approximation.
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The current ground state approximation, i.e. just a reference to :attr:`psi`.
+        """
         options = self.options
         # parameters for lanczos
-        p_tol_to_trunc = options.get('P_tol_to_trunc', 0.05)
+        p_tol_to_trunc = options.get('P_tol_to_trunc', 0.05, 'real')
         if p_tol_to_trunc is not None:
             svd_min = self.trunc_params.silent_get('svd_min', 0.)
             svd_min = 0. if svd_min is None else svd_min
             trunc_cut = self.trunc_params.silent_get('trunc_cut', 0.)
             trunc_cut = 0. if trunc_cut is None else trunc_cut
             p_tol_min = max(1.e-30, svd_min**2 * p_tol_to_trunc, trunc_cut**2 * p_tol_to_trunc)
-            p_tol_min = options.get('P_tol_min', p_tol_min)
-            p_tol_max = options.get('P_tol_max', 1.e-4)
-        e_tol_to_trunc = options.get('E_tol_to_trunc', None)
+            p_tol_min = options.get('P_tol_min', p_tol_min, 'real')
+            p_tol_max = options.get('P_tol_max', 1.e-4, 'real')
+        e_tol_to_trunc = options.get('E_tol_to_trunc', None, 'real')
         if e_tol_to_trunc is not None:
-            e_tol_min = options.get('E_tol_min', 5.e-16)
-            e_tol_max = options.get('E_tol_max', 1.e-4)
+            e_tol_min = options.get('E_tol_min', 5.e-16, 'real')
+            e_tol_max = options.get('E_tol_max', 1.e-4, 'real')
 
         # energy and entropy before the iteration:
         if len(self.sweep_stats['E']) < 1:  # first iteration
@@ -333,7 +284,7 @@ class DMRGEngine(IterativeSweeps):
         else:
             E_old = self.sweep_stats['E'][-1]
             S_old = self.sweep_stats['S'][-1]
-        
+
         # perform sweeps
         logger.info('Running sweep with optimization')
         for i in range(self.N_sweeps_check - 1):
@@ -356,7 +307,7 @@ class DMRGEngine(IterativeSweeps):
 
         # update environment
         if not self.finite:
-            update_env = options.get('update_env', self.N_sweeps_check // 2)
+            update_env = options.get('update_env', self.N_sweeps_check // 2, int)
             self.environment_sweeps(update_env)
 
         # update statistics
@@ -415,71 +366,38 @@ class DMRGEngine(IterativeSweeps):
             })
 
     def is_converged(self):
-        max_E_err = self.options.get('max_E_err', 1.e-8)
-        max_S_err = self.options.get('max_S_err', 1.e-5)
-        E = self.sweep_stats['E'][-1]
-        Delta_E = self.sweep_stats['Delta_E'][-1]
-        Delta_S = self.sweep_stats['Delta_S'][-1]
-        return abs(Delta_E / max(E, 1.)) < max_E_err and abs(Delta_S) < max_S_err
-    
-    def post_run_cleanup(self):
-        super().post_run_cleanup()
-        self._canonicalize(True)
-        logger.info(f'{self.__class__.__name__} finished after {self.sweeps} sweeps, '
-                    f'max chi={max(self.psi.chi)}')
+        """Determines if the algorithm is converged.
 
-    def run(self):
-        """Run the DMRG simulation to find the ground state.
-
-        Returns
-        -------
-        E : float
-            The energy of the resulting ground state MPS.
-        psi : :class:`~tenpy.networks.mps.MPS`
-            The MPS representing the ground state after the simulation,
-            i.e. just a reference to :attr:`psi`.
+        Does not cover any other reasons to abort, such as reaching a time limit.
+        Such checks are covered by :meth:`stopping_condition`.
 
         Options
         -------
         .. cfg:configoptions :: DMRGEngine
 
-            diag_method : str
-                Method to be used for diagonalization, default ``'default'``.
-                For possible arguments see :meth:`DMRGEngine.diag`.
-            E_tol_to_trunc : float
-                It's reasonable to choose the Lanczos convergence criteria
-                ``'E_tol'`` not many magnitudes lower than the current
-                truncation error. Therefore, if `E_tol_to_trunc` is not
-                ``None``, we update `E_tol` of `lanczos_params` to
-                ``max_E_trunc*E_tol_to_trunc``,
-                restricted to the interval [`E_tol_min`, `E_tol_max`],
-                where ``max_E_trunc`` is the maximal energy difference due to
-                truncation right after each Lanczos optimization during the
-                sweeps.
-            E_tol_max : float
-                See `E_tol_to_trunc`
-            E_tol_min : float
-                See `E_tol_to_trunc`
             max_E_err : float
                 Convergence if the change of the energy in each step
                 satisfies ``|Delta E / max(E, 1)| < max_E_err``. Note that
                 this might be satisfied even if ``Delta E > 0``,
                 i.e., if the energy increases (due to truncation).
-            max_hours : float
-                If the DMRG took longer (measured in wall-clock time),
-                'shelve' the simulation, i.e. stop and return with the flag
-                ``shelve=True``.
             max_S_err : float
                 Convergence if the relative change of the entropy in each step
                 satisfies ``|Delta S|/S < max_S_err``
-            max_sweeps : int
-                Maximum number of sweeps to be performed.
-            min_sweeps : int
-                Minimum number of sweeps to be performed.
-                Defaults to 1.5*N_sweeps_check.
-            N_sweeps_check : int
-                Number of sweeps to perform between checking convergence
-                criteria and giving a status update.
+        """
+        max_E_err = self.options.get('max_E_err', 1.e-8, 'real')
+        max_S_err = self.options.get('max_S_err', 1.e-5, 'real')
+        E = self.sweep_stats['E'][-1]
+        Delta_E = self.sweep_stats['Delta_E'][-1]
+        Delta_S = self.sweep_stats['Delta_S'][-1]
+        return abs(Delta_E / max(E, 1.)) < max_E_err and abs(Delta_S) < max_S_err
+
+    def post_run_cleanup(self):
+        """Perform any final steps or clean up after the main loop has terminated.
+
+        Options
+        -------
+        .. cfg:configoptions :: DMRGEngine
+
             norm_tol : float
                 After the DMRG run, update the environment with at most
                 `norm_tol_iter` sweeps until
@@ -493,38 +411,48 @@ class DMRGEngine(IterativeSweeps):
                 :meth:`~tenpy.networks.mps.canonical_form` to canonicalize
                 instead. This tolerance should be stricter than `norm_tol`
                 to ensure canonical form even if DMRG cannot fully converge.
-            P_tol_to_trunc : float
-                It's reasonable to choose the Lanczos convergence criteria
-                ``'P_tol'`` not many magnitudes lower than the current
-                truncation error. Therefore, if `P_tol_to_trunc` is not
-                ``None``, we update `P_tol` of `lanczos_params` to
-                ``max_trunc_err*P_tol_to_trunc``,
-                restricted to the interval [`P_tol_min`, `P_tol_max`],
-                where ``max_trunc_err`` is the maximal truncation error
-                (discarded weight of the Schmidt values) due to truncation
-                right after each Lanczos optimization during the sweeps.
-            P_tol_max : float
-                See `P_tol_to_trunc`
-            P_tol_min : float
-                See `P_tol_to_trunc`
-            update_env : int
-                Number of sweeps without bond optimization to update the
-                environment for infinite boundary conditions,
-                performed every `N_sweeps_check` sweeps.
+
+        """
+        super().post_run_cleanup()
+        self._canonicalize(True)
+        logger.info(f'{self.__class__.__name__} finished after {self.sweeps} sweeps, '
+                    f'max chi={max(self.psi.chi)}')
+        if (len(self.ortho_to_envs) > 0) and (self.sweep_stats['E'][-1] > -1e-8):
+            msg = (f'{self.__class__.__name__} with orthogonal_to, i.e. searching for excited '
+                   f'states, terminated with an energy consistent with zero. '
+                   f'Orthogonality can not be guaranteed. Consider adding a negative constant to '
+                   f'the Hamiltonian such that the target state has negative energy. '
+                   f'See https://github.com/tenpy/tenpy/issues/329 for more information.')
+            # stacklevel: (1) this
+            #             (2) DMRGEngine.run()
+            #             (3) IterativeSweeps.run()
+            #             (4) user context
+            warnings.warn(msg, stacklevel=4)
+
+    def run(self):
+        """Run the DMRG simulation to find the ground state.
+
+        Returns
+        -------
+        E : float
+            The energy of the resulting ground state MPS.
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The MPS representing the ground state after the simulation,
+            i.e. just a reference to :attr:`psi`.
         """
         return super().run()
-    
+
     def _canonicalize(self, warn=False):
         #Update environment until norm_tol is reached. If norm_tol_final
         #is not reached, call canonical_form.
         if self.mixer is not None:
             return
         norm_err = np.linalg.norm(self.psi.norm_test())
-        norm_tol = self.options.get('norm_tol', 1.e-5)
-        norm_tol_final = self.options.get('norm_tol_final', 1.e-10)
+        norm_tol = self.options.get('norm_tol', 1.e-5, 'real')
+        norm_tol_final = self.options.get('norm_tol_final', 1.e-10, 'real')
         if not self.finite:
             update_env = self.options['update_env']
-            norm_tol_iter = self.options.get('norm_tol_iter', 5)
+            norm_tol_iter = self.options.get('norm_tol_iter', 5, int)
         if norm_tol is None or (norm_err < norm_tol and norm_err < norm_tol_final):
             return
         if warn and norm_err > norm_tol:
@@ -550,20 +478,7 @@ class DMRGEngine(IterativeSweeps):
             self.psi.canonical_form()
 
     def reset_stats(self, resume_data=None):
-        """Reset the statistics, useful if you want to start a new sweep run.
-
-        .. cfg:configoptions :: DMRGEngine
-
-            chi_list : dict | None
-                A dictionary to gradually increase the `chi_max` parameter of
-                `trunc_params`. The key defines starting from which sweep
-                `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}`` uses
-                ``chi_max=50`` for the first 20 sweeps and ``chi_max=100``
-                afterwards. Overwrites `trunc_params['chi_list']``.
-                By default (``None``) this feature is disabled.
-            sweep_0 : int
-                The number of sweeps already performed. (Useful for re-start).
-        """
+        """Reset the statistics, useful if you want to start a new sweep run."""
         super().reset_stats(resume_data)
         self.update_stats = {
             'i0': [],
@@ -684,6 +599,66 @@ class DMRGEngine(IterativeSweeps):
         self.trunc_err_list.append(err.eps)
         self.E_trunc_list.append(E_trunc)
 
+        if self.psi.bc == 'segment':
+            self.update_segment_boundaries()
+
+    def update_segment_boundaries(self):
+        """Update the singular values at the boundaries of the segment.
+
+        This method is called at the end of :meth:`post_update_local` for 'segment' boundary MPS.
+        It just updates the singular values on the very left/right end of the MPS segment.
+        """
+        psi = self.psi
+        if self.i0 == 0 and self.move_right:
+            # need to update bond to the left of site j=0
+            j = 0
+            A = psi.get_B(j, form='A')
+            th = psi.get_B(j, form='Th')
+            U, S, V = npc.svd(th.combine_legs(psi._p_label + ['vR'], qconj=-1),
+                              cutoff=0,
+                              qtotal_LR=[None, th.qtotal],
+                              inner_labels=['vR', 'vL'])
+            S = S / np.linalg.norm(S)
+            psi.set_SL(j, S)
+            A_new = npc.tensordot(U.conj().replace_label('vR*', 'vL'), A, ['vL*', 'vL'])
+            psi.set_B(j, A_new, form='A')
+
+            old_UL, old_VR = psi.segment_boundaries
+            if old_UL is not None:
+                new_UL = npc.tensordot(old_UL, U, axes=['vR', 'vL'])
+                psi.segment_boundaries = (new_UL, old_VR)
+
+            for env in self._all_envs:
+                update_ket = env.ket is psi
+                update_bra = env.bra is psi
+                env._update_gauge_LP(j, U, update_bra, update_ket)
+            # No need to clear the environments on the other bonds!
+
+        elif self.i0 == psi.L - self.EffectiveH.length and not self.move_right:
+            # need to update bond on the right of site j=L-1
+            j = psi.L - 1
+            B = psi.get_B(j, form='B')
+            th = psi.get_B(j, form='Th')
+            U, S, V = npc.svd(th.combine_legs(['vL'] + psi._p_label, qconj=+1),
+                              cutoff=0,
+                              qtotal_LR=[th.qtotal, None],
+                              inner_labels=['vR', 'vL'])
+            S = S / np.linalg.norm(S)
+            psi.set_SR(j, S)
+            B_new = npc.tensordot(B, V.conj().replace_label('vL*', 'vR'), ['vR', 'vR*'])
+            psi.set_B(j, B_new, form='B')
+
+            old_UL, old_VR = psi.segment_boundaries
+            if old_VR is not None:
+                new_VR = npc.tensordot(V, old_VR, axes=['vR', 'vL'])
+                psi.segment_boundaries = (old_UL, new_VR)
+
+            for env in self._all_envs:
+                update_ket = env.ket is psi
+                update_bra = env.bra is psi
+                env._update_gauge_RP(j, V, update_bra, update_ket)
+            # No need to clear the environments on the other bonds!
+
     def diag(self, theta_guess):
         """Diagonalize the effective Hamiltonian represented by self.
 
@@ -747,7 +722,7 @@ class DMRGEngine(IterativeSweeps):
 
         if self.diag_method == 'default':
             # use ED for small matrix dimensions, but lanczos by default
-            max_N = self.options.get('max_N_for_ED', 400)
+            max_N = self.options.get('max_N_for_ED', 400, int)
             if self.eff_H.N < max_N:
                 E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
             else:
@@ -872,66 +847,6 @@ class TwoSiteDMRGEngine(DMRGEngine):
     .. cfg:config :: TwoSiteDMRGEngine
         :include: DMRGEngine
 
-    Attributes
-    ----------
-    eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
-        Effective two-site Hamiltonian.
-    mixer : :class:`~tenpy.algorithms.mps_common.Mixer` | ``None``
-        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
-    shelve : bool
-        If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
-        terminate with ``shelve = True``.
-    sweeps : int
-        The number of sweeps already performed. (Useful for re-start).
-    time0 : float
-        Time marker for the start of the run.
-    update_stats : dict
-        A dictionary with detailed statistics of the convergence.
-        For each key in the following table, the dictionary contains a list where one value is
-        added each time :meth:`DMRGEngine.update_bond` is called.
-
-        =========== ===================================================================
-        key         description
-        =========== ===================================================================
-        i0          An update was performed on sites ``i0, i0+1``.
-        ----------- -------------------------------------------------------------------
-        age         The number of physical sites involved in the simulation.
-        ----------- -------------------------------------------------------------------
-        E_total     The total energy before truncation.
-        ----------- -------------------------------------------------------------------
-        N_lanczos   Dimension of the Krylov space used in the lanczos diagonalization.
-        ----------- -------------------------------------------------------------------
-        time        Wallclock time evolved since :attr:`time0` (in seconds).
-        =========== ===================================================================
-
-    sweep_stats : dict
-        A dictionary with detailed statistics of the convergence.
-        For each key in the following table, the dictionary contains a list where one value is
-        added each time :meth:`DMRGEngine.sweep` is called (with ``optimize=True``).
-
-        ============= ===================================================================
-        key           description
-        ============= ===================================================================
-        sweep         Number of sweeps performed so far.
-        ------------- -------------------------------------------------------------------
-        E             The energy *before* truncation (as calculated by Lanczos).
-        ------------- -------------------------------------------------------------------
-        Delta_E       The change in `E` (above) since the last iteration.
-        ------------- -------------------------------------------------------------------
-        S             Maximum entanglement entropy.
-        ------------- -------------------------------------------------------------------
-        Delta_S       The change in `S` (above) since the last iteration.
-        ------------- -------------------------------------------------------------------
-        time          Wallclock time evolved since :attr:`time0` (in seconds).
-        ------------- -------------------------------------------------------------------
-        max_trunc_err The maximum truncation error in the last sweep
-        ------------- -------------------------------------------------------------------
-        max_E_trunc   Maximum change or Energy due to truncation in the last sweep.
-        ------------- -------------------------------------------------------------------
-        max_chi       Maximum bond dimension used.
-        ------------- -------------------------------------------------------------------
-        norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
-        ============= ===================================================================
     """
     EffectiveH = TwoSiteH
     DefaultMixer = mps_common.DensityMatrixMixer
@@ -1038,71 +953,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
     .. cfg:config :: SingleSiteDMRGEngine
         :include: DMRGEngine
 
-    Attributes
-    ----------
-    chi_list : dict | ``None``
-        A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
-        defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
-        uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
-        `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
-    eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
-        Effective two-site Hamiltonian.
-    mixer : :class:`~tenpy.algorithms.mps_common.Mixer` | ``None``
-        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
-    shelve : bool
-        If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
-        terminate with ``shelve = True``.
-    sweeps : int
-        The number of sweeps already performed. (Useful for re-start).
-    time0 : float
-        Time marker for the start of the run.
-    update_stats : dict
-        A dictionary with detailed statistics of the convergence.
-        For each key in the following table, the dictionary contains a list where one value is
-        added each time :meth:`DMRGEngine.update_bond` is called.
-
-        =========== ===================================================================
-        key         description
-        =========== ===================================================================
-        i0          An update was performed on sites ``i0, i0+1``.
-        ----------- -------------------------------------------------------------------
-        age         The number of physical sites involved in the simulation.
-        ----------- -------------------------------------------------------------------
-        E_total     The total energy before truncation.
-        ----------- -------------------------------------------------------------------
-        N_lanczos   Dimension of the Krylov space used in the lanczos diagonalization.
-        ----------- -------------------------------------------------------------------
-        time        Wallclock time evolved since :attr:`time0` (in seconds).
-        =========== ===================================================================
-
-    sweep_stats : dict
-        A dictionary with detailed statistics of the convergence.
-        For each key in the following table, the dictionary contains a list where one value is
-        added each time :meth:`DMRGEngine.sweep` is called (with ``optimize=True``).
-
-        ============= ===================================================================
-        key           description
-        ============= ===================================================================
-        sweep         Number of sweeps performed so far.
-        ------------- -------------------------------------------------------------------
-        E             The energy *before* truncation (as calculated by Lanczos).
-        ------------- -------------------------------------------------------------------
-        Delta_E       The change in `E` (above) since the last iteration.
-        ------------- -------------------------------------------------------------------
-        S             Maximum entanglement entropy.
-        ------------- -------------------------------------------------------------------
-        Delta_S       The change in `S` (above) since the last iteration.
-        ------------- -------------------------------------------------------------------
-        time          Wallclock time evolved since :attr:`time0` (in seconds).
-        ------------- -------------------------------------------------------------------
-        max_trunc_err The maximum truncation error in the last sweep
-        ------------- -------------------------------------------------------------------
-        max_E_trunc   Maximum change or Energy due to truncation in the last sweep.
-        ------------- -------------------------------------------------------------------
-        max_chi       Maximum bond dimension used.
-        ------------- -------------------------------------------------------------------
-        norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
-        ============= ===================================================================
     """
     EffectiveH = OneSiteH
     DefaultMixer = mps_common.SubspaceExpansion
@@ -1269,48 +1119,10 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
     def mixer_activate(self):
         super().mixer_activate()
-        if not self.mixer.can_decompose_1site:
+        if not (self.mixer is None) and not self.mixer.can_decompose_1site:
             msg = (f'Using {self.mixer.__class__.__name__} with single-site DMRG is inefficient. '
                    f'The resulting algorithm has two-site costs!')
             warnings.warn(msg)
-
-
-class EngineCombine(TwoSiteDMRGEngine):
-    r"""Engine which combines legs into pipes as far as possible.
-
-    This engine combines the virtual and physical leg for the left site and right site into pipes.
-    This reduces the overhead of calculating charge combinations in the contractions,
-    but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
-
-    .. deprecated :: 0.5.0
-       Directly use the :class:`TwoSiteDMRGEngine` with the DMRG parameter ``combine=True``.
-    """
-    def __init__(self, psi, model, DMRG_params):
-        msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"
-               "Use `TwoSiteDMRGEngine` with parameter `combine=True` "
-               "instead of `EngineCombine`.")
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        DMRG_params['combine'] = True  # to reproduces old-style engine
-        super().__init__(psi, model, DMRG_params)
-
-
-class EngineFracture(TwoSiteDMRGEngine):
-    r"""Engine which keeps the legs separate.
-
-    Due to a different contraction order in :meth:`matvec`, this engine might be faster than
-    :class:`EngineCombine`, at least for large physical dimensions and if the MPO is sparse.
-    One :meth:`matvec` is :math:`O(2 \chi^3 d^2 W + 2 \chi^2 d^3 W^2 )`.
-
-    .. deprecated :: 0.5.0
-       Directly use the :class:`TwoSiteDMRGEngine` with the DMRG parameter ``combine=False``.
-    """
-    def __init__(self, psi, model, DMRG_params):
-        msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"
-               "Use `TwoSiteDMRGEngine` with parameter `combine=False` "
-               "instead of `EngineFracture`.")
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        DMRG_params['combine'] = False  # to reproduces old-style engine
-        super().__init__(psi, model, DMRG_params)
 
 
 def chi_list(chi_max, dchi=20, nsweeps=20):

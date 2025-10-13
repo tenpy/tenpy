@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
+        os: [ubuntu-latest, windows-latest, macos-14]
 
     steps:
     - name: Checkout
@@ -46,7 +46,7 @@ jobs:
           # Include latest Python beta.
           CIBW_PRERELEASE_PYTHONS: True
           # Run the test suite after each build.
-          CIBW_TEST_REQUIRES: pytest>=0.6 numpy>=1.13 scipy>=0.18 bottleneck h5py pyyaml
+          CIBW_TEST_REQUIRES: pytest>=6.0 numpy scipy bottleneck h5py pyyaml psutil
           CIBW_TEST_COMMAND: pytest {project}/tests
           # silence warning that arm wheels can not be tested.
           # Jakob has a M2 MacBook that can test them, e.g. from testPyPI, if needed.
@@ -61,7 +61,10 @@ jobs:
   build-sdist-and-upload:
     runs-on: ubuntu-latest
     needs: 'build-native-wheels'
-
+    permissions:
+      # allow trusted publishing / OIDC authentication for PyPI
+      # corresponding authentication settings on {test.}pypi.org
+      id-token: write
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -96,14 +99,12 @@ jobs:
       if: github.event_name != 'release'
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        password: ${{ secrets.test_pypi_password }}
         repository-url: https://test.pypi.org/legacy/
         packages-dir: dist-wheels/
     - name: Publish sdist to TestPyPI
       if: github.event_name != 'release'
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        password: ${{ secrets.test_pypi_password }}
         repository-url: https://test.pypi.org/legacy/
 
     # Publish to live PyPI *only on release*
@@ -111,10 +112,7 @@ jobs:
       if: github.event_name == 'release'
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        password: ${{ secrets.pypi_password }}
         packages-dir: dist-wheels/
     - name: Publish sdist to PyPI
       if: github.event_name == 'release'
       uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        password: ${{ secrets.pypi_password }}

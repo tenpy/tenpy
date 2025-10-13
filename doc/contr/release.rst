@@ -3,31 +3,45 @@ Checklist for a new release
 
 Follow this checklist when creating a new release, i.e. updating the version number.
 
-1. Make sure that tenpy can be compiled (``bash ./compile.sh``) and installed (``pip install .``).
+#. Check deprecated features, e.g. full-text search for ``.. deprecated ::``, ``DeprecationWarning``
+   and ``FutureWarning``. They should mention at which release the deprecated implementations will
+   be removed. If they are due, remove them.
+
+#. Make sure that tenpy can be compiled (``bash ./compile.sh``) and installed (``pip install .``).
    Make sure that *all* tests run successfully.
    A convenient way to check this is to re-run the github.com actions on the latest commit.
 
-2. Update the changelog and release notes.
+#. Update the changelog and release notes.
+   
+   - The "latest" contributions should have added entries in ``doc/changelog/latest/``.
+     Starting a docbuild (``make html``) pastes all of these entries into ``doc/changelog/_latest.rst``,
+     even if aborted after a few seconds.
+   - Check the commit list on the main branch and make sure all important changes are listed in the changelog.
+   - Create a new changelog file by duplicating the ``doc/changelog/template.txt``.
+     Name it ``vX.Y.Z.rst`` according to the new version number.
+     Include all notes from the latest changelog, add a summary, adjust the title.
+   - Add the new file to the toctree in ``doc/releases.rst``.
+   - Delete the outdated files in ``doc/changelog/latest``.
+   - Make sure to *not* delete the ``doc/changelog/latest/README`` though!
+   - Make sure to *not* accidentally commit changes to ``doc/changelog/_latest.rst``.
+     It should be empty except for the header.
 
-   - Make sure all important changes are listed in ``doc/changelog/latest.rst``.
-   - Rename that file to the next version number.
-   - Add it to the toctree in ``doc/releases.rst``.
-   - Create a new ``doc/changelog/latest.rst`` from the template.
-
-3. Update ``tenpy/version.py``
+#. Update ``tenpy/version.py``
   
    - Update the release number.
    - set ``released=True``.
 
-4. Create the version commit and a tag::
+#. Create the version commit and a tag::
     
      git commit -m "VERSION 0.42.1"
      git tag -s "v0.42.1"
-    
-   Change the version number appropriately.
+   
+   
+   Change the version number appropriately!
+   We usually choose ``VERSION 0.42.1`` for the commit message of the tag as well.
    You should GPG sign the commit.
 
-5. Reset the ``released=False`` flag in ``tenpy/version.py``.
+#. Reset the ``released=False`` flag in ``tenpy/version.py``.
    Commit and push these changes::
    
      git add tenpy/version.py
@@ -35,11 +49,11 @@ Follow this checklist when creating a new release, i.e. updating the version num
      git push
      git push origin v0.42.1  # also push the tag
 
-6. Pushing a tag should cause a github action to publish to test.pypi.org.
-   It executes ``.github/workflows/publish-test-pypi.yml``.
+#. Pushing a tag should cause a github action to publish to test.pypi.org.
+   It executes ``.github/workflows/publish.yml``.
    Double check that everything looks ok there.
 
-7. Perform a test installation.
+#. Perform a test installation.
 
    This is best done in a dedicated fresh environment.
    Since the dependencies (numpy, scipy) are not available on TestPyPI, we need to pre-install them.
@@ -68,13 +82,40 @@ Follow this checklist when creating a new release, i.e. updating the version num
 
       pytest path/to/local/repo/tests
 
-8. Create a release with release notes on github.
+#. Create a release with release notes on github.
    The release triggers the github action for uploading the package to PyPI.
-   It executes ``.github/workflows/publish-pypi.yml``.
+   It executes ``.github/workflows/publish.yml``.
 
-9. Wait for conda-forge bot to create a pull request in the `feedstock repo <https://github.com/conda-forge/physics-tenpy-feedstock>`_
+#. Wait for conda-forge bot to create a pull request in the `feedstock repo <https://github.com/conda-forge/physics-tenpy-feedstock>`_
    and merge it.
+   
+   
+If something goes wrong
+~~~~~~~~~~~~~~~~~~~~~~~
+The following is a loose collection of tips and pointers, in case something goes wrong during the
+release steps outlined above.
 
+- If you notice the problem quickly, cancel the TestPyPI publishing action.
+  TestPyPI, like the live PyPI can not be modified once uploaded and accepts only one upload per
+  unique version number. If you do not do this quick enough, subsequent uploads to TestPyPI
+  (with the same version number) will fail.
+  
+- After fixing the problems, you can simply make a second ``"VERSION 0.42.1"`` commit.
+  Consider putting an explanation into the commit message; what went wrong the first time?
+ 
+- To "move" the tag to the new commit follow these steps::
+   
+    git tag -d <tagname>                  # delete the old tag locally
+    git push origin :refs/tags/<tagname>  # delete the old tag remotely
+    git tag <tagname> <commitId>          # make a new tag locally
+    git push origin <tagname>             # push the new local tag to the remote
+
+- If there was already an upload to TestPyPI, the upload action triggered by pushing the tag will
+  fail. Make sure the steps before uploading (building the wheels and checking them locally) run
+  through without error.
+  If you are reasonably sure that everything is ok still, you can ignore this failed action.
+  If you want to check again, create a dummy branch, change the version number to something
+  we will not use for actual releases, e.g. ``0.42.1.1`` and manually publish.
 
 How to publish on PyPI
 ~~~~~~~~~~~~~~~~~~~~~~
