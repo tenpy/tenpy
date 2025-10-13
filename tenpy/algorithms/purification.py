@@ -298,6 +298,17 @@ class PurificationTEBD(tebd.TEBDEngine):
 
         Calculate the mutual information (in the auxiliary space) between two sites and determine
         where it is maximal. Disentangle these two sites with :meth:`disentangle`
+
+        Options
+        -------
+        .. cfg:configoptions :: PurificationTEBD
+            disent_gl_maxrange : int
+                Maximum range for the pair of sites disentangled during :meth:`disentangle_global`.
+                Default ``10``.
+            disent_gl_on_swap : bool
+                During :meth:`disentangle_global` of a pair of sites, if we should also disentangle
+                other pairs while they are swapped to bring the target pair together.
+
         """
         max_range = self.options.get('disent_gl_maxrange', 10, int)
         if pair is None:
@@ -377,7 +388,7 @@ class PurificationTEBD(tebd.TEBDEngine):
             self.disentangle_n_site(i + n1, n2, theta_R)
 
     def _disentangle_two_site(self, i, j):
-        """swap until i and j are next to each other and use :meth:`disentangle`; swap back."""
+        """Swap until i and j are next to each other and use :meth:`disentangle`; swap back."""
         on_way = self.options.get('disent_gl_on_swap', False, bool)
         if not self.psi.finite:
             raise NotImplementedError  # adjust: what's the shortest path?
