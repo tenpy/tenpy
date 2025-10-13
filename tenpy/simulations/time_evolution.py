@@ -299,12 +299,14 @@ class TimeDependentCorrelation(RealTimeEvolution):
                 determines the name of the corresponding measurement output see :meth:`_get_operator_t0_name`.
                 The corresponding position(s) to apply the operator(s) should also be passed as
                 a list (or string for a single operator).
+                The position of the operator must be specified as either
+                :cfg:option:`TimeDependentCorrelation.mps_idx` or
+                :cfg:option:`TimeDependentCorrelation.lat_idx`.
                 Either a lattice index ``lat_idx`` or a ``mps_idx`` should be passed.
-
-                .. note ::
-
-                    The ``lat_idx`` must have (dim+1) i.e. ``[x, y, u]``,
-                    where ``u = 0`` for a single-site unit cell
+            mps_idx : int
+                Position for ``operator_t0`` as an MPS index.
+            lat_idx : sequence of int
+                Position for ``operator_t0``, must have length ``dim + 1``, e.g. ``[x, y, u]``.
         """
         ops = to_iterable(self.operator_t0_config['opname'])  # opname is mandatory
         mps_idx = self.operator_t0_config.get('mps_idx', None)
