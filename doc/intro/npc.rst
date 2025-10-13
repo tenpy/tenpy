@@ -651,7 +651,7 @@ transform. The base class :class:`~tenpy.linalg.charges.ChargeInfo` implements o
 versions of these methods, that do not change the charges at all.
 It models charges with trivial translation properties, indicated by
 :attr:`~tenpy.linalg.charges.ChargeInfo.trivial_shift` being ``True``.
-Non-trivially transforming charges should then by implemented in subclasses, such as
+Non-trivially transforming charges should then be implemented in subclasses, such as
 :class:`~tenpy.linalg.charges.DipolarChargeInfo`.
 
 The subclass :class:`~tenpy.linalg.charges.DipolarChargeInfo` supports one (or multiple) charges of
@@ -663,12 +663,12 @@ Such a charge with non-:attr:`~tenpy.linalg.charges.ChargeInfo.trivial_shift` ha
 implications for MPS simulations in tenpy
 
 - The :attr:`~tenpy.networks.mps.MPS.sites` of an MPS are no longer just given by the sites in the
-  :attr:`~tenpy.models.lattice.Lattice.unit_cell`. If the MPS consists of multiple unit cells of the
-  lattice, the new positions of the site need be considered, since they affect the charge values
-  of the :math:`p_i` on the respective physical legs.
+  :attr:`~tenpy.models.lattice.Lattice.unit_cell`. If the MPS unit cell consists of multiple unit
+  cells of the lattice, the new positions of the site need be considered, since they affect the
+  charge values of the :math:`p_i` on the respective physical legs.
   We perform this shift in :meth:`~tenpy.models.lattice.Lattice.mps_sites`.
 
-- For sweeping algorithms using infinite MPS, the charges also need to adjusted when neighboring
+- For sweeping algorithms using infinite MPS, the charges also need to be adjusted when neighboring
   unit cells are inserted, e.g. when a two-site update on sites ``L - 1, L`` is performed, the
   (i)MPS tensor on site ``L`` is not the *same* as the one on site ``0``, but rather a shifted version.
   We account for this in :meth:`~tenpy.networks.mps.MPS.get_B`, :meth:`~tenpy.networks.mps.MPS.set_B`
