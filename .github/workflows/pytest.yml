@@ -56,7 +56,6 @@ jobs:
     - name: Install tenpy
       # also installs extra dependencies defined in pyproject.toml
       run: |
-        python -m build .
         python -m pip install ".[io, test, extra]"
     
     - name: Show tenpy config
