@@ -6,6 +6,9 @@ import numpy as np
 import numpy.testing as npt
 import itertools as it
 from tenpy.tools.misc import inverse_permutation
+from tenpy.networks.mps import MPS
+from tenpy.models.hubbard import FermiHubbardModel2
+from tenpy.networks.site import kron
 
 from random_test import gen_random_legcharge, random_Array
 
@@ -890,6 +893,117 @@ def test_pickle():
     b2flat = b2.to_ndarray()
     npt.assert_array_equal(aflat, a2flat)
     npt.assert_array_equal(bflat, b2flat)
+
+
+def test_fixes_454():
+    # See https://github.com/tenpy/tenpy/issues/454
+
+    def get_op(psi, i,j,U):
+        #Take as in input an MPS and 2 site indices and a 4x4 matrix to apply on this 2 sites and it outputs a 2x2x2x2 tensor operators
+        site = psi.sites[i]
+        id_1 = site.get_op("Id")
+        site = psi.sites[j]
+        id_2 = site.get_op("Id")
+        op = kron(id_1,id_2,group=False)
+        op_array=op.to_ndarray()
+        op_array[0][0][1][1]=U[1][1]
+        op_array[1][1][0][0]=U[2][2]
+        op_array[0][1][1][0]=U[1][2]
+        op_array[1][0][0][1]=U[2][1]
+        op=npc.Array.from_ndarray(op_array,op.legs)
+        op._labels=['p0', 'p0*', 'p1', 'p1*']
+        return op
+
+    def apply_long_range_gate(psi, i,j, U):
+        op=get_op(psi,i,j,U)
+        #Reshape the 2x2x2x2 operator in a 4x4 matrix to perform qr decomposition
+        op=op.combine_legs([ 'p0','p1'])
+        op=op.combine_legs(['p0*','p1*'])
+        q,r=npc.qr(op, inner_labels=['wR', 'wL'])
+        #Split the combined legs to have 3 legged tensors. .conj() to have the right qnumber
+        q=q.split_legs()
+        q.legs=[q.legs[0],q.legs[0].conj(),q.legs[2]]
+        r=r.split_legs()
+        r.legs=[r.legs[0],r.legs[1].conj(),r.legs[2]]
+        q._labels=['p', 'p*','wR']
+        r._labels=['wL', 'p', 'p*']
+        #W is the list that is going to contain all the operators we are going to apply. The first element is the q form the qr decomposition
+        #its last element is the r from the r decompostion and there are going to be all JW operators in between
+        W=[]
+        W.append(q)
+        #Get all JW operators
+        
+        for k in range(i+1,j,1):
+            jw = psi.sites[k].get_op("JW")
+            legs=[q.legs[2].conj(),r.legs[0].conj(),jw.legs[0],jw.legs[1]]
+            id1=jw.to_ndarray()
+            id2=np.eye(q.shape[2])
+            id3=np.tensordot(id2,id1,axes=0)
+            id_mpo=npc.Array.from_ndarray(id3,legs,labels=['wL', 'wR', 'p', 'p*'])
+            W.append(id_mpo)
+        W.append(r)
+        sites = np.arange(i,j+1,1)
+        print("Element we are going to mupltiply:")
+        print(W[0])
+        print(psi.get_B(i, 'B'))
+        w_array= W[0].to_ndarray()
+        b_array = psi.get_B(i, 'B').to_ndarray()
+        res_array = np.tensordot(b_array,w_array,axes=(1, 1))
+        print("Result from numpy:")
+        print(res_array)
+        #Multiply the q operator
+        B = npc.tensordot(psi.get_B(i, 'B'), W[0], axes=('p', 'p*'))
+        B_array = B.to_ndarray()
+        print("Result from tenpy")
+        print(B)
+        assert np.allclose(B.to_ndarray(), res_array)
+        B = B.combine_legs(['wR', 'vR'], qconj=[-1])
+        B.ireplace_labels(['(wR.vR)'], ['vR'])
+        B.legs[B.get_leg_index('vR')] = B.get_leg('vR').to_LegCharge()
+        psi.set_B(i, B, 'B')
+        
+        l=1
+        #Multiply all JW operators
+        for k in range(i+1,j,1):
+            B = npc.tensordot(psi.get_B(k, 'B'), W[l], axes=('p', 'p*'))
+            B = B.combine_legs([['wL', 'vL'], ['wR', 'vR']], qconj=[+1, -1])
+            B.ireplace_labels(['(wL.vL)', '(wR.vR)'], ['vL', 'vR'])
+            B.legs[B.get_leg_index('vL')] = B.get_leg('vL').to_LegCharge()
+            B.legs[B.get_leg_index('vR')] = B.get_leg('vR').to_LegCharge()
+            psi.set_B(k, B, 'B')
+            l+=1
+        #Multiply the r operator
+        B = npc.tensordot(psi.get_B(j, 'B'), W[-1], axes=('p', 'p*'))
+        B = B.combine_legs(['wL', 'vL'], qconj=[1])
+        B.ireplace_labels(['(wL.vL)'], ['vL'])
+        B.legs[B.get_leg_index('vL')] = B.get_leg('vL').to_LegCharge()
+        psi.set_B(j, B, 'B')
+        #Reset the singular values
+        S0 = np.ones(psi.get_B(0, None).get_leg('vL').ind_len)
+        psi.set_SL(0, S0)
+        for k in sites:
+            psi.set_SR(k, np.ones(psi.get_B(k, None).get_leg('vR').ind_len))
+        #Test and bring to canonical form just in case
+        psi.test_sanity()
+        psi.canonical_form(renormalize=True,cutoff=1e-6)
+        return op
+
+    #Use identity as starting operator
+    U = np.eye(4)
+    i = 4
+    j = 6
+    lx = 2
+    ly = 2
+    Nup = 2
+    Ndown = 2
+    L = lx*ly
+    model_params = dict(t=1, U=4 ,V=0,lattice="Square" ,mu=0,Lx=lx,Ly=ly ,bc_x = "open", bc_y='periodic', cons_N="N", cons_Sz = "Sz")
+    model = FermiHubbardModel2(model_params)
+    p_state=["empty", "full"] * Ndown + ["full", "empty"] * Nup + ["empty","empty"] * (L-Nup-Ndown)
+    psi = MPS.from_product_state(model.lat.mps_sites(), p_state, bc = model.lat.bc_MPS)
+    l = apply_long_range_gate(psi, i,j, U)
+
+    assert False
 
 
 def test_fixes_468():
