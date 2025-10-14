@@ -1448,7 +1448,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
     def _to_valid_index(self, i):
         """Make sure `i` is a valid index of a site.
 
-        .. deprecated :: 1.0.0
+        .. deprecated :: 1.2.0
             Use :meth:`~tenpy.networks.mps.MPSGeometry._to_valid_site_index`
             or :meth:`~tenpy.networks.mps.MPSGeometry._to_valid_bond_index` instead.
             Note that they have an additional return value.
@@ -6414,7 +6414,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
     def _to_valid_index(self, i):
         """Make sure `i` is a valid index of a site.
 
-        .. deprecated :: 1.0.0
+        .. deprecated :: 1.2.0
             Use :meth:`~tenpy.networks.mps.MPSGeometry._to_valid_site_index`
             or :meth:`~tenpy.networks.mps.MPSGeometry._to_valid_bond_index` instead.
             Note that they have an additional return value.
