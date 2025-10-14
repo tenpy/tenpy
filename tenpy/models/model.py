@@ -431,11 +431,7 @@ class NearestNeighborModel(Model):
         for i in range(first, last + 1):
             num_unit_cells, _i = divmod(i, L)
             h = self.H_bond[_i]
-            if num_unit_cells != 0 and (not h.chinfo.trivial_shift):
-                h = h.apply_charge_mapping(
-                    h.chinfo.shift_charges_horizontal,
-                    func_kwargs=dict(dx_0=num_unit_cells * self.lat.mps_unit_cell_width)
-                )
+            h = h.shift_charges_horizontal(dx_0=num_unit_cells * self.lat.mps_unit_cell_width)
             new_H_bond.append(h)
         cp.H_bond = new_H_bond
         return cp
@@ -585,11 +581,7 @@ class NearestNeighborModel(Model):
             Id_L, Id_R = sites[j].Id, sites[i].Id
             if i == 0:  # i==0 and j==(-1 % L)==L-1
                 assert bc == 'infinite'  # otherwise, (Hb is None) should have triggered
-                if not Id_L.chinfo.trivial_shift:
-                    Id_L = Id_L.apply_charge_mapping(
-                        Id_L.chinfo.shift_charges_horizontal,
-                        func_kwargs=dict(dx_0=-self.lat.mps_unit_cell_width)  # shift by -1 unit cell.
-                    )
+                Id_L = Id_L.shift_charges_horizontal(dx_0=-self.lat.mps_unit_cell_width)
             # project on onsite-terms by contracting with identities; Tr(Id_{L/R}) = d_{L/R}
             onsite_L = npc.tensordot(Hb, Id_R, axes=(['p1', 'p1*'], ['p*', 'p'])) / d_R
             if npc.norm(onsite_L) > tol_zero:
@@ -782,10 +774,7 @@ class MPOModel(Model):
             i = (j - 1) % L
             Wi = Ws[i]
             if j == 0:
-                Wi = Wi.apply_charge_mapping(
-                    Wi.chinfo.shift_charges_horizontal,
-                    func_kwargs=dict(dx_0=-H_MPO.unit_cell_width)
-                )
+                Wi = Wi.shift_charged_horizontal(dx_0=-H_MPO.unit_cell_width)
             IdL_a = H_MPO.IdL[i]
             IdR_c = H_MPO.IdR[j + 1]
             Hb = npc.tensordot(Wi[IdL_a, :, :, :], Wj[:, IdR_c, :, :], axes=('wR', 'wL'))
@@ -808,8 +797,8 @@ class MPOModel(Model):
             Id_i = sites[i].Id
             H_onsite_i = H_onsite[i]
             if j == 0:
-                Id_i = H_MPO.shift_Array(Id_i, -1)
-                H_onsite_i = H_MPO.shift_Array(H_onsite_i, -1)
+                Id_i = H_MPO.shift_Array_unit_cells(Id_i, -1, inplace=False)
+                H_onsite_i = H_MPO.shift_Array_unit_cells(H_onsite_i, -1, inplace=False)
             Hb = (npc.outer(Id_i, strength_j * H_onsite[j]) +
                   npc.outer(strength_i * H_onsite_i, sites[j].Id))
             Hb = add_with_None_0(H_bond[j], Hb)

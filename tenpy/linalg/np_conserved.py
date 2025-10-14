@@ -1393,7 +1393,7 @@ class Array:
         self._data = [self._data[p] for p in perm]
         self._qdata_sorted = True
 
-    def apply_charge_mapping(self, map_func, func_args=(), func_kwargs={}):
+    def apply_charge_mapping(self, map_func, func_args=(), func_kwargs={}, inplace: bool = False):
         """Apply a mapping to the charges of all legs and to qtotal.
 
         The resulting Array is a shallow copy with the same block structure and the same numerical
@@ -1418,15 +1418,40 @@ class Array:
             Positional arguments for `map_func`.
         func_kwargs : dict, optional
             Keyword arguments for `map_func`.
+        inplace : bool
+            If the array (its legs, qtotal) can be modified in-place.
+            Otherwise (default) we make a shallow copy.
 
         Returns
         -------
-        Shallow copy with mapped charges.
+        Shallow copy with mapped charges (or the modified instance if `inplace`)
         """
-        res = self.copy(deep=False)
+        if inplace:
+            res = self
+        else:
+            res = self.copy(deep=False)
         res.legs = [leg.apply_charge_mapping(map_func, func_args, func_kwargs) for leg in self.legs]
         res.qtotal = map_func(self.qtotal, *func_args, **func_kwargs)
         return res
+
+    def shift_charges(self, dx, inplace: bool = False):
+        """Map all leg-charged and the qtotal with :meth:`ChargeInfo.shift_charges`."""
+        if self.chinfo.trivial_shift or np.all(np.equal(dx, 0)):
+            if inplace:
+                return self
+            return self.copy()
+        return self.apply_charge_mapping(self.chinfo.shift_charged,
+                                         func_kwargs=dict(dx=dx, inplace=inplace), inplace=inplace)
+
+    def shift_charges_horizontal(self, dx_0: int, inplace: bool = False):
+        """Map all leg-charged and the qtotal with :meth:`ChargeInfo.shift_charges_horizontal`."""
+        if self.chinfo.trivial_shift or dx_0 == 0:
+            if inplace:
+                return self
+            return self.copy()
+        return self.apply_charge_mapping(self.chinfo.shift_charges_horizontal,
+                                         func_kwargs=dict(dx_0=dx_0, inplace=inplace),
+                                         inplace=inplace)
 
     # reshaping ===============================================================
 

@@ -401,12 +401,13 @@ class MPO(MPSGeometry):
     def get_W(self, i, copy=False):
         """Return `W` at site `i`."""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        return self.shift_Array(self._W[i_in_unit_cell], num_unit_cells=num_unit_cells, copy=copy)
+        return self.shift_Array_unit_cells(self._W[i_in_unit_cell], num_unit_cells=num_unit_cells,
+                                           inplace=not copy)
 
     def set_W(self, i, W):
-        """Set `W` at site `i`."""
+        """Set `W` at site `i`. Note that ``W`` may be modified in-place."""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        self._W[i_in_unit_cell] = self.shift_Array(W, -num_unit_cells, copy=False)
+        self._W[i_in_unit_cell] = self.shift_Array_unit_cells(W, -num_unit_cells, inplace=True)
 
     def get_IdL(self, i):
         """Return index of `IdL` at bond to the *left* of site `i`.
@@ -2756,38 +2757,6 @@ class MPOTransferMatrix(NpcLinearOperator):
                                                                                    dtype=dtype)
         self._explicit_plus_hc = H.explicit_plus_hc
 
-    def shift_Array(self, arr, num_unit_cells, copy):
-        """Shift an Array by an integer multiple of unit cells.
-        
-        See the notes on :ref:`shift_symmetry`.
-
-        A unit cell has length :attr:`~tenpy.networks.mpo.MPOTransferMatrix.L` and a shift by one
-        unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mpo.MPOTransferMatrix.unit_cell_width`
-        lattice spacings.
-
-        Parameters
-        ----------
-        arr : :class:`~tenpy.linalg.np_conserved.Array`
-            The site to shift.
-        num_unit_cells : int
-            The number of unit cells.
-        copy : bool
-            If ``True``, we return a copy of the array, even if the shift is trivial.
-            If ``False``, we return the same instance, if the shift is trivial.
-
-        Returns
-        -------
-        :class:`~tenpy.linalg.np_conserved.Array`
-            The shifted array."""
-        if num_unit_cells == 0 or arr.chinfo.trivial_shift:
-            if copy:
-                arr = arr.copy()
-            return arr
-        return arr.apply_charge_mapping(
-            arr.chinfo.shift_charges_horizontal,
-            func_kwargs=dict(dx_0=num_unit_cells * self.unit_cell_width)
-        )
-
     def matvec(self, vec, project=True):
         """One matvec-operation.
 
@@ -2805,14 +2774,14 @@ class MPOTransferMatrix(NpcLinearOperator):
                 vec = npc.tensordot(B, vec, axes=['vR', 'vL'])  # vL p wL vL*
                 vec = npc.tensordot(vec, W, axes=[['p', 'wL'], ['p*', 'wR']])  # vL vL* p wL
                 vec = npc.tensordot(vec, Bc, axes=[['vL*', 'p'], ['vR*', 'p*']])  # vL wL vL*
-            vec = self.shift_Array(vec, num_unit_cells=1, copy=False)
+            vec = vec.shift_charges_horizontal(dx_0=self.unit_cell_width, inplace=True)
         else:
             vec.itranspose(['vR*', 'wR', 'vR'])  # shouldn't do anything
             for Ac, W, A in zip(self._M_conj, self._W, self._M):
                 vec = npc.tensordot(vec, A, axes=['vR', 'vL'])  # vR* wR p vR
                 vec = npc.tensordot(W, vec, axes=[['wL', 'p*'], ['wR', 'p']])  # wR p vR* vR
                 vec = npc.tensordot(Ac, vec, axes=[['p*', 'vL*'], ['p', 'vR*']])  # vR* wR vR
-            vec = self.shift_Array(vec, num_unit_cells=-1, copy=False)
+            vec = vec.shift_charges_horizontal(dx_0=-self.unit_cell_width, inplace=True)
         if project:
             self._project(vec)
         return vec

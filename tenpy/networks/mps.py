@@ -196,9 +196,9 @@ class MPSGeometry:
         lattice spacing. It is given by :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
         For a :class:`~tenpy.models.lattice.Chain`, this is just the length of the chain.
         Is used for :ref:`shift_symmetry` or :meth:`MPS.correlation_length2`.
-        
+
     """
-    
+
     _valid_bc = ('finite', 'segment', 'infinite')  # valid boundary conditions. Dont overwrite this!
 
     def __init__(self, sites, bc, unit_cell_width = None):
@@ -257,7 +257,7 @@ class MPSGeometry:
     @property
     def N_sites_per_hor_spacing(self):
         """Number of sites per horizontal lattice spacing.
-        
+
         This is the number of MPS sites one has to traverse to travel one lattice spacing in the
         first dimension, such that ``self.unit_cell_width * N_sites_per_hor_spacing == self.L``.
         """
@@ -337,9 +337,9 @@ class MPSGeometry:
 
     def shift_charges(self, charges, num_unit_cells, inplace=False):
         """Shift charges by an integer multiple of unit cells.
-        
+
         See the notes on :ref:`shift_symmetry`.
-        
+
         A unit cell has length :attr:`~tenpy.networks.mps.MPSGeometry.L` and a shift by one
         unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mps.MPSGeometry.unit_cell_width`
         lattice spacings.
@@ -365,9 +365,9 @@ class MPSGeometry:
             charges, dx_0=num_unit_cells * self.unit_cell_width, inplace=inplace
         )
 
-    def shift_Site(self, site, num_unit_cells):
+    def shift_Site_unit_cells(self, site, num_unit_cells):
         """Shift a `site` by an integer multiple of unit cells.
-        
+
         See the notes on :ref:`shift_symmetry`.
 
         A unit cell has length :attr:`~tenpy.networks.mps.MPSGeometry.L` and a shift by one
@@ -394,9 +394,9 @@ class MPSGeometry:
         )
         return copy.copy(site).change_charge(leg)  # shallow copy
 
-    def shift_Array(self, arr, num_unit_cells, copy=False):
+    def shift_Array_unit_cells(self, arr, num_unit_cells, inplace: bool = False):
         """Shift an Array by an integer multiple of unit cells.
-        
+
         See the notes on :ref:`shift_symmetry`.
 
         A unit cell has length :attr:`~tenpy.networks.mps.MPSGeometry.L` and a shift by one
@@ -409,23 +409,17 @@ class MPSGeometry:
             The site to shift.
         num_unit_cells : int
             The number of unit cells.
-        copy : bool
-            If ``True``, we return a copy of the array, even if the shift is trivial.
-            If ``False``, we return the same instance, if the shift is trivial.
+        inplace : bool
+            If the array (its legs, qtotal) can be modified in-place.
+            Otherwise (default) we make a shallow copy.
 
         Returns
         -------
         :class:`~tenpy.linalg.np_conserved.Array`
             The shifted array.
         """
-        if num_unit_cells == 0 or arr.chinfo.trivial_shift:
-            if copy:
-                arr = arr.copy()
-            return arr
-        return arr.apply_charge_mapping(
-            arr.chinfo.shift_charges_horizontal,
-            func_kwargs=dict(dx_0=num_unit_cells * self.unit_cell_width)
-        )
+        return arr.shift_charges_horizontal(dx_0=num_unit_cells * self.unit_cell_width,
+                                            inplace=inplace)
 
     def get_site(self, i):
         """Get the `i`-th site.
@@ -434,7 +428,7 @@ class MPSGeometry:
         charges otherwise.
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        return self.shift_Site(self.sites[i_in_unit_cell], num_unit_cells)
+        return self.shift_Site_unit_cells(self.sites[i_in_unit_cell], num_unit_cells)
 
 
 class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
@@ -1497,8 +1491,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                        f'of {self.N_sites_per_hor_spacing}.')
                 raise ValueError(msg)
             dx_0 = num_unit_cells * self.unit_cell_width + num_op_lists * N_rings_per_op_list
-            op = op.apply_charge_mapping(op.chinfo.shift_charges_horizontal,
-                                         func_kwargs=dict(dx_0=dx_0))
+            op = op.shift_charges_horizontal(dx_0=dx_0, inplace=False)
             needs_JW = False
         else:
             needs_JW = False
@@ -1718,7 +1711,7 @@ class MPS(BaseMPSExpectationValue):
         hdf5_saver.save(np.array(self.form), subpath + "canonical_form")
         hdf5_saver.save(self.chinfo, subpath + "chinfo")
         hdf5_saver.save(self.unit_cell_width, subpath + "unit_cell_width")
-        
+
         segment_boundaries = getattr(self, "segment_boundaries", (None, None))
         hdf5_saver.save(self.segment_boundaries, subpath + "segment_boundaries")
         h5gr.attrs["norm"] = self.norm
@@ -2665,7 +2658,9 @@ class MPS(BaseMPSExpectationValue):
             For ``None``, return the matrix in whatever form it is.
             If any of the tuple entry is None, also don't scale on the corresponding axis.
         copy : bool
-            Whether to return a copy even if `form` matches the current form.
+            If we should always to return a copy.
+            Otherwise, if the `form` does not need to be modified and we dont need to shift any
+            charges, we return the stored Array. Then it should not be inplace modified after!
         cutoff : float
             During DMRG with a mixer, `S` may be a matrix for which we need the inverse.
             This is calculated as the Penrose pseudo-inverse, which uses a cutoff for the
@@ -2688,7 +2683,8 @@ class MPS(BaseMPSExpectationValue):
         ValueError : if self is not in canonical form and `form` is not None.
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        B = self.shift_Array(self._B[i_in_unit_cell], num_unit_cells=num_unit_cells, copy=copy)
+        B = self.shift_Array_unit_cells(self._B[i_in_unit_cell], num_unit_cells=num_unit_cells,
+                                        inplace=not copy)
         new_form = self._to_valid_form(form)
         old_form = self.form[i_in_unit_cell]
         if new_form is not None and old_form != new_form:
@@ -2719,7 +2715,7 @@ class MPS(BaseMPSExpectationValue):
             ``None`` stands for non-canonical form.
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        B = self.shift_Array(B, -num_unit_cells)
+        B = self.shift_Array_unit_cells(B, -num_unit_cells, inplace=True)
         self.form[i_in_unit_cell] = self._to_valid_form(form)
         self.dtype = np.promote_types(self.dtype, B.dtype)
         self._B[i_in_unit_cell] = B.itranspose(self._B_labels)
@@ -2770,7 +2766,7 @@ class MPS(BaseMPSExpectationValue):
         )
         S = self._S[i_in_unit_cell]
         if isinstance(S, npc.Array):
-            S = self.shift_Array(S, num_unit_cells)
+            S = self.shift_Array_unit_cells(S, num_unit_cells, inplace=False)
         return S
 
     def get_SR(self, i):
@@ -2783,11 +2779,11 @@ class MPS(BaseMPSExpectationValue):
         )
         S = self._S[i_in_unit_cell]
         if isinstance(S, npc.Array):
-            S = self.shift_Array(S, num_unit_cells)
+            S = self.shift_Array_unit_cells(S, num_unit_cells, inplace=False)
         return S
 
     def set_SL(self, i, S):
-        """Set singular values on the left of site `i`.
+        """Set singular values on the left of site `i`. No copy is made!
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
         """
@@ -2795,11 +2791,11 @@ class MPS(BaseMPSExpectationValue):
             i, is_left=True, return_num_unit_cells=True
         )
         if isinstance(S, npc.Array):
-            S = self.shift_Array(S, -num_unit_cells)
+            S = self.shift_Array_unit_cells(S, -num_unit_cells, inplace=True)
         self._S[i_in_unit_cell] = S
 
     def set_SR(self, i, S):
-        """Set singular values on the right of site `i`.
+        """Set singular values on the right of site `i`. No copy is made!
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
         """
@@ -2807,7 +2803,7 @@ class MPS(BaseMPSExpectationValue):
             i, is_left=False, return_num_unit_cells=True
         )
         if isinstance(S, npc.Array):
-            S = self.shift_Array(S, -num_unit_cells)
+            S = self.shift_Array_unit_cells(S, -num_unit_cells, inplace=True)
         self._S[i_in_unit_cell] = S
 
     def get_theta(self, i, n=2, cutoff=1.e-16, formL=1., formR=1.):
@@ -4432,7 +4428,7 @@ class MPS(BaseMPSExpectationValue):
         # phase 1: bring bond (i1-1, i1) in canonical form
         # find dominant right eigenvector
         norm, Gr = self._canonical_form_dominant_gram_matrix(i1, False, tol_xi)
-        Gr = self.shift_Array(Gr, -1)
+        Gr = self.shift_Array_unit_cells(Gr, -1, inplace=True)
         self._B[i1] /= np.sqrt(norm)  # correct norm
         if not renormalize:
             self.norm *= np.sqrt(norm)
@@ -4451,7 +4447,7 @@ class MPS(BaseMPSExpectationValue):
             self.norm *= np.sqrt(norm)
         # bring bond to canonical form
         Gl, Yl, Yr = self._canonical_form_correct_left(i1, Gl, Wr)
-        Gl = self.shift_Array(Gl, -1)
+        Gl = self.shift_Array_unit_cells(Gl, -1, inplace=True)
         Wr = np.ones(Yr.legs[0].ind_len, np.float64)
         # now the bond (i1-1,i1) is in canonical form
         Wr_list[i1] = Wr  # diag(Wr) is right eigenvector on bond (i1-1, i1)
@@ -4543,7 +4539,7 @@ class MPS(BaseMPSExpectationValue):
             self._B[i] = V.split_legs()
             self.set_SL(i, S)
         # note: we included SVD on i=0; else the virtual leg (-1, 0) might not even be sorted
-        U = self.shift_Array(U, 1)
+        U = self.shift_Array_unit_cells(U, 1, inplace=True)
         self._B[-1] = npc.tensordot(self._B[-1], U, axes=['vR', 'vL'])
 
     def _canonical_form_left_orthogonalize(self, L, tol, arnoldi_params):
@@ -4990,7 +4986,7 @@ class MPS(BaseMPSExpectationValue):
                                      "but can't extract JW signs from the charges") from e
             opname = op
         else:
-            op = self.shift_Array(op, -num_unit_cells)
+            op = self.shift_Array_unit_cells(op, -num_unit_cells, inplace=False)
             opname = op
             need_JW = False
 
@@ -5289,7 +5285,7 @@ class MPS(BaseMPSExpectationValue):
             #
             # -> swap has no well defined qtotal! (p charge rule for a swap-Array depends on q1, q2)
             raise RuntimeError('Can not swap sites if conserved charge has non-trivial shift.')
-        
+
         if trunc_par is None:
             trunc_par = {}
         siteL, siteR = self.get_site(i), self.get_site(i + 1)
@@ -6093,7 +6089,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             key = self._LP_keys[i0_in_unit_cell]
             LP = self.cache.get(key, None)
             if LP is not None:
-                LP = self.shift_Array(LP, num_unit_cells)
+                LP = self.shift_Array_unit_cells(LP, num_unit_cells, inplace=False)
                 break
             # (for finite, LP[0] should always be set, so we should abort at latest with i0=0)
         else:  # no break called
@@ -6139,7 +6135,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             key = self._RP_keys[i0_in_unit_cell]
             RP = self.cache.get(key, None)
             if RP is not None:
-                RP = self.shift_Array(RP, num_unit_cells)
+                RP = self.shift_Array_unit_cells(RP, num_unit_cells, inplace=False)
                 break
             # (for finite, RP[-1] should always be set, so we should abort at latest with i0=L-1)
         else:  # no break called
@@ -6167,21 +6163,21 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         return self._RP_age[self._to_valid_site_index(i)]
 
     def set_LP(self, i, LP, age):
-        """Store part to the left of site `i`.
+        """Store part to the left of site `i`. No copy is made!
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
         """
         i, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        self.cache[self._LP_keys[i]] = self.shift_Array(LP, -num_unit_cells)
+        self.cache[self._LP_keys[i]] = self.shift_Array_unit_cells(LP, -num_unit_cells, inplace=True)
         self._LP_age[i] = age
 
     def set_RP(self, i, RP, age):
-        """Store part to the right of site `i`.
+        """Store part to the right of site `i`. No copy is made!
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
         """
         i, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        self.cache[self._RP_keys[i]] = self.shift_Array(RP, -num_unit_cells)
+        self.cache[self._RP_keys[i]] = self.shift_Array_unit_cells(RP, -num_unit_cells, inplace=True)
         self._RP_age[i] = age
 
     def del_LP(self, i):
@@ -6723,30 +6719,6 @@ class TransferMatrix(sparse.NpcLinearOperator):
     def charge_sector(self, value):
         self.flat_linop.charge_sector = value
 
-    def shift_Array(self, arr, num_unit_cells):
-        """Shift an Array by an integer multiple of MPS unit cells.
-        
-        See the notes on :ref:`shift_symmetry`.
-
-        Parameters
-        ----------
-        arr : :class:`~tenpy.linalg.np_conserved.Array`
-            The site to shift.
-        num_unit_cells : int
-            The number of unit cells.
-
-        Returns
-        -------
-        :class:`~tenpy.linalg.np_conserved.Array`
-            The shifted array. If the shift is trivial, this is the same instance as `arr`.
-        """
-        if num_unit_cells == 0 or arr.chinfo.trivial_shift:
-            return arr
-        return arr.apply_charge_mapping(
-            arr.chinfo.shift_charges_horizontal,
-            func_kwargs=dict(dx_0=num_unit_cells * self.unit_cell_width)
-        )
-
     def matvec(self, vec):
         """Given `vec` as an npc.Array, apply the transfer matrix.
 
@@ -6777,13 +6749,13 @@ class TransferMatrix(sparse.NpcLinearOperator):
             for N, M in zip(self._bra_N, self._ket_M):
                 vec = npc.tensordot(M, vec, axes=['vR', 'vL'])
                 vec = npc.tensordot(vec, N, axes=contract)  # [['p', 'vL*'], ['p*', 'vR*']]
-            vec = self.shift_Array(vec, 1)
+            vec = vec.shift_charges_horizontal(dx_0=self.unit_cell_width, inplace=True)
         else:  # left to right
             contract = [['vL*'] + self._pstar_label, ['vR*'] + self._p_label]
             for N, M in zip(self._bra_N, self._ket_M):
                 vec = npc.tensordot(vec, M, axes=['vR', 'vL'])
                 vec = npc.tensordot(N, vec, axes=contract)  # [['vL*', 'p*'], ['vR*', 'p']])
-            vec = self.shift_Array(vec, -1)
+            vec = vec.shift_charges_horizontal(dx_0=-self.unit_cell_width, inplace=True)
         if pipe is None:
             vec.itranspose(orig_labels)  # make sure we have the same labels/order as before
         else:
