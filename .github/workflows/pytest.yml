@@ -2,8 +2,6 @@ name: Run Pytest
 # Run the test suite using pytest
 
 # Note: The doctests (pieces of test in the docstrings) are run by doc-build.yml
-# Note: The code-coverage.yml runs the test suite using the newest python version.
-#       So we can skip that version here.
 
 on:
   # pushes to main
@@ -24,21 +22,23 @@ jobs:
       # make pytest output in color
       PY_COLORS: 1
     strategy:
-      max-parallel: 5
       matrix:
-        # Note: python 3.14 is covered by code_coverage.yml
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        # reminder: when changing python versions, also look at the other workflows!
+        #           also check for new versions of pypa/cibuildwheel used in publish workflow!
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
         compiled: [True]
         include:
+          - python-version: "3.13"
+            compiled: False
           - python-version: "3.14"
             compiled: False
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
     
@@ -46,21 +46,21 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         python -m pip install --upgrade setuptools build
-        python -m pip install --upgrade pytest
     
-    - name: Build tenpy
-      if: ${{ matrix.compiled }}
+    - name: Build and install tenpy
       run: |
         python -m build .
+        python -m pip install ".[io, test]"
     
-    - name: Install tenpy
-      # also installs extra dependencies defined in pyproject.toml
+    - name: Set environment variable to disable the cython extension
+      if: ${{ matrix.compiled == false }}
       run: |
-        python -m pip install ".[io, test, extra]"
+        echo "TENPY_NO_CYTHON=True" >> "$GITHUB_ENV"
     
     - name: Show tenpy config
       working-directory: ..
       run: |
+        echo "TENPY_NO_CYTHON=$TENPY_NO_CYTHON"
         python -c "import tenpy; tenpy.show_config()"
     
     - name: Run pytest
