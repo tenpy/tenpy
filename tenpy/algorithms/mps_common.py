@@ -715,7 +715,7 @@ class Sweep(Algorithm):
                 # nothing to do
                 continue
             U, S, V = npc.svd(S, full_matrices=False, inner_labels=['vR', 'vL'])
-            _, form_L = self.psi.form[self.psi._to_valid_index(i - 1)]
+            _, form_L = self.psi.form[self.psi._to_valid_site_index(i - 1)]
             form_R, _ = self.psi.form[i]
             B_L = self.psi.get_B(i - 1, form=None)
             B_R = self.psi.get_B(i, form=None)
@@ -727,7 +727,7 @@ class Sweep(Algorithm):
                 B_L = npc.tensordot(B_L, X_L, ['vR', 'vL'])
             else:
                 msg = (f'Array S are only supported in A, B, Th or G form. '
-                       f'Got form {self.psi.form[self.psi._to_valid_index(i - 1)]} on site {i - 1}.')
+                       f'Got form {self.psi.form[self.psi._to_valid_site_index(i - 1)]} on site {i - 1}.')
                 raise RuntimeError(msg)
             if form_R == 0.:  # B or Gamma to the right
                 B_R = npc.tensordot(V, B_R, ['vR', 'vL'])

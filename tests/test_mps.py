@@ -390,8 +390,7 @@ def test_apply_op(bc, eps=1.e-13):
     psi3 = psi0.copy()
     SmSp = site.kron(s.Sm, s.Sp, group=False)
     if bc == 'finite':
-        expect_err_msg = 'Operator acting on sites 2-3 out of bounds for L=3'
-        with pytest.raises(ValueError, match=expect_err_msg):
+        with pytest.raises(ValueError, match='out of bounds'):
             psi3.apply_local_op(2, SmSp, understood_infinite=True)
     else:
         psi3.apply_local_op(2, SmSp, understood_infinite=True)
