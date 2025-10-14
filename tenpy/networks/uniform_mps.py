@@ -102,11 +102,27 @@ class UniformMPS(MPS):
 
     # Labels for other tensors are inherited from MPS.
 
-    def __init__(self, sites, ALs, ARs, ACs, Cs, norm=1.):
+    def __init__(self, sites, ALs, ARs, ACs, Cs, norm=1., unit_cell_width: int = None):
         warnings.warn('UniformMPS is a new experimental feature and not as well-tested as the '
                       'rest of the library', BetaWarning, stacklevel=2)
         self.sites = list(sites)
-        self.chinfo = self.sites[0].leg.chinfo
+        self.chinfo = chinfo = self.sites[0].leg.chinfo
+
+        if unit_cell_width is None:
+            msg = ('unit_cell_width is a new argument for MPS and similar classes. '
+                   'It is optional for now, but will become mandatory in a future release. '
+                   'The default value (unit_cell_width=len(sites)) is correct, iff the '
+                   'lattice is a Chain. For other lattices, it is incorrect. '
+                   'It is used for dipolar charges and correlation_function2.')
+            warnings.warn(msg, stacklevel=2)
+            unit_cell_width = len(sites)
+        self.unit_cell_width = unit_cell_width
+
+        if not chinfo.trivial_shift:
+            msg = ('UniformMPS together with shift symmetry is highly experimental and not '
+                   'well-tested. Proceed with care!')
+            warnings.warn(msg, BetaWarning, stacklevel=2)
+
         self.dtype = dtype = np.result_type(*ALs)
         self.form = [None] * len(ARs)
         self.bc = 'infinite'  # one of ``'finite', 'infinite', 'segment'``.
@@ -199,7 +215,8 @@ class UniformMPS(MPS):
         The copy still shares the sites, chinfo, and LegCharges, but the values of
         the tensors are deeply copied.
         """
-        cp = self.__class__(self.sites, self._AL, self._AR, self._AC, self._C, self.norm)
+        cp = self.__class__(self.sites, self._AL, self._AR, self._AC, self._C, self.norm,
+                            self.unit_cell_width)
         cp.grouped = self.grouped
         cp._transfermatrix_keep = self._transfermatrix_keep
         cp.segment_boundaries = self.segment_boundaries
@@ -273,11 +290,13 @@ class UniformMPS(MPS):
 
         self.test_validity()
 
-        MPS_B = MPS(self.sites, self._AR, self._S, bc='infinite', form='B', norm=1.)
+        MPS_B = MPS(self.sites, self._AR, self._S, bc='infinite', form='B', norm=1.,
+                    unit_cell_width=self.unit_cell_width)
 
         MPS_B.canonical_form()
         if check_overlap:
-            MPS_A = MPS(self.sites, self._AL, self._S, bc='infinite', form='A', norm=1.)
+            MPS_A = MPS(self.sites, self._AL, self._S, bc='infinite', form='A', norm=1.,
+                        unit_cell_width=self.unit_cell_width)
             MPS_A.canonical_form()  # [TODO] should we do this? It might be expensive.
             overlap_AB = np.abs(MPS_B.overlap(MPS_A, understood_infinite=True))
             logger.info(
@@ -447,7 +466,7 @@ class UniformMPS(MPS):
             C_ = npc.diag(psi.get_SL(i), AL[i].get_leg('vL'),
                           labels=['vL', 'vR'])  # center matrix on the left of site `i`
             C.append(C_.astype(dtype, copy=True).itranspose(cls._C_labels))
-        obj = cls(psi.sites, AL, AR, AC, C, psi.norm)
+        obj = cls(psi.sites, AL, AR, AC, C, psi.norm, unit_cell_width=psi.unit_cell_width)
         obj.bc = psi.bc
         obj.grouped = psi.grouped
         obj.segment_boundaries = psi.segment_boundaries
@@ -653,10 +672,9 @@ class UniformMPS(MPS):
         """
         Return (view of) `AL` at site `i` in canonical form.
         """
-        i = self._to_valid_index(i)
-        AL = self._AL[i]
-        if copy:
-            AL = AL.copy()
+        i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
+        AL = self.shift_Array_unit_cells(self._AL[i_in_unit_cell], num_unit_cells=num_unit_cells,
+                                         inplace=not copy)
         if label_p is not None:
             AL = self._replace_p_label(AL, label_p)
         return AL
@@ -665,10 +683,9 @@ class UniformMPS(MPS):
         """
         Return (view of) `AR` at site `i` in canonical form.
         """
-        i = self._to_valid_index(i)
-        AR = self._AR[i]
-        if copy:
-            AR = AR.copy()
+        i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
+        AR = self.shift_Array_unit_cells(self._AR[i_in_unit_cell], num_unit_cells=num_unit_cells,
+                                         inplace=not copy)
         if label_p is not None:
             AR = self._replace_p_label(AR, label_p)
         return AR
@@ -677,21 +694,18 @@ class UniformMPS(MPS):
         """
         Return (view of) `AC` at site `i` in canonical form.
         """
-        i = self._to_valid_index(i)
-        AC = self._AC[i]
-        if copy:
-            AC = AC.copy()
+        i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
+        AC = self.shift_Array_unit_cells(self._AC[i_in_unit_cell], num_unit_cells=num_unit_cells,
+                                         inplace=not copy)
         if label_p is not None:
             AC = self._replace_p_label(AC, label_p)
         return AC
 
     def get_C(self, i, copy=False):
         """Return center matrix C on the left of site `i`"""
-        i = self._to_valid_index(i)
-        C = self._C[i]
-        if copy:
-            C = C.copy()
-        return C
+        i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
+        return self.shift_Array_unit_cells(self._C[i_in_unit_cell], num_unit_cells=num_unit_cells,
+                                           inplace=not copy)
 
     def set_B(self, i, B, form='B'):
         """Set tensor `B` at site `i`.
@@ -719,33 +733,37 @@ class UniformMPS(MPS):
         """
         Set `AL` at site `i`
         """
-        i = self._to_valid_index(i)
+        i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
+        AL = self.shift_Array_unit_cells(AL, -num_unit_cells, inplace=True)
         self.dtype = np.promote_types(self.dtype, AL.dtype)
-        self._AL[i] = AL.itranspose(self._B_labels)
+        self._AL[i_in_unit_cell] = AL.itranspose(self._B_labels)
 
     def set_AR(self, i, AR):
         """
         Set `AR` at site `i`
         """
-        i = self._to_valid_index(i)
+        i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
+        AR = self.shift_Array_unit_cells(AR, -num_unit_cells, inplace=True)
         self.dtype = np.promote_types(self.dtype, AR.dtype)
-        self._AR[i] = AR.itranspose(self._B_labels)
+        self._AR[i_in_unit_cell] = AR.itranspose(self._B_labels)
 
     def set_AC(self, i, AC):
         """
         Set `AC` at site `i`
         """
-        i = self._to_valid_index(i)
+        i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
+        AC = self.shift_Array_unit_cells(AC, -num_unit_cells, inplace=True)
         self.dtype = np.promote_types(self.dtype, AC.dtype)
-        self._AC[i] = AC.itranspose(self._B_labels)
+        self._AC[i_in_unit_cell] = AC.itranspose(self._B_labels)
 
     def set_C(self, i, C):
         """
         Set `C` left of site `i`
         """
-        i = self._to_valid_index(i)
+        i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
+        C = self.shift_Array_unit_cells(C, -num_unit_cells, inplace=True)
         self.dtype = np.promote_types(self.dtype, C.dtype)
-        self._C[i] = C.itranspose(self._C_labels)
+        self._C[i_in_unit_cell] = C.itranspose(self._C_labels)
 
     def set_svd_theta(self, i, theta, trunc_par=None, update_norm=False):
         raise NotImplementedError("Not valid for UniformMPS.")
@@ -786,7 +804,6 @@ class UniformMPS(MPS):
             In Vidal's notation (with s=lambda, G=Gamma):
             ``theta = s**form_L G_i s G_{i+1} s ... G_{i+n-1} s**form_R``.
         """
-        i = self._to_valid_index(i)
         if n == 1:
             return self.get_B(i, (1., 1.), True, cutoff, '0')
         elif n < 1:
@@ -794,8 +811,7 @@ class UniformMPS(MPS):
         # n >= 2: contract some B's
         theta = self.get_B(i, "AC", False, cutoff, '0')  # site i in Th form
         for k in range(1, n):  # non-empty range
-            j = self._to_valid_index(i + k)
-            B = self.get_B(j, "AR", False, cutoff, str(k))
+            B = self.get_B(i + k, "AR", False, cutoff, str(k))
             theta = npc.tensordot(theta, B, axes=['vR', 'vL'])
         return theta
 
@@ -821,6 +837,7 @@ class UniformMPS(MPS):
         self._AR = factor * self._AR
         self._AC = factor * self._AC
         self._C = factor * self._C
+        # note unit_cell_width does not change
         self.test_sanity()
 
     def roll_mps_unit_cell(self, shift=1):
@@ -837,12 +854,12 @@ class UniformMPS(MPS):
         """
         if self.finite:
             raise ValueError("makes only sense for infinite boundary conditions")
-        inds = np.roll(np.arange(self.L), shift)
-        self.sites = [self.sites[i] for i in inds]
-        self._AL = [self._AL[i] for i in inds]
-        self._AR = [self._AR[i] for i in inds]
-        self._AC = [self._AC[i] for i in inds]
-        self._C = [self._C[i] for i in inds]
+        inds = np.arange(self.L) - shift
+        self.sites = [self.get_site(i) for i in inds]
+        self._AL = [self.get_AL(i, copy=False) for i in inds]
+        self._AR = [self.get_AR(i, copy=False) for i in inds]
+        self._AC = [self.get_AC(i, copy=False) for i in inds]
+        self._C = [self.get_C(i, copy=False) for i in inds]
 
     def spatial_inversion(self):
         """Perform a spatial inversion along the MPS.
@@ -853,6 +870,9 @@ class UniformMPS(MPS):
         (L-1)/2 (odd L) as a fixpoint.
         For infinite MPS, the bond between MPS unit cells is another fix point.
         """
+        if not self.chinfo.trivial_shift:
+            raise NotImplementedError
+
         self.sites = self.sites[::-1]
         self._AL = [
             AL.replace_labels(['vL', 'vR'], ['vR', 'vL']).transpose(self._B_labels)
