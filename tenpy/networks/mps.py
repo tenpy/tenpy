@@ -206,13 +206,12 @@ class MPSGeometry:
         self.chinfo = self.sites[0].leg.chinfo
         self.bc = bc
         if unit_cell_width is None:
-            # TODO: deprecate the default value.
-            #       when doing so, remove the default in other __init__, classmethods, ...
-            warnings.warn('unit_cell_width is a new argument for MPS and similar classes. '
-                          'It is optional for now, but will become mandatory in a future release. '
-                          'The default value (unit_cell_width=len(sites)) is correct, iff the '
-                          'lattice is a Chain. For other lattices, it is incorrect. '
-                          'It is used for dipolar charges and correlation_function2.')
+            msg = ('unit_cell_width is a new argument for MPS and similar classes. '
+                   'It is optional for now, but will become mandatory in a future release. '
+                   'The default value (unit_cell_width=len(sites)) is correct, iff the '
+                   'lattice is a Chain. For other lattices, it is incorrect. '
+                   'It is used for dipolar charges and correlation_function2.')
+            warnings.warn(msg, stacklevel=2)
             unit_cell_width = len(sites)
         self.unit_cell_width = unit_cell_width
 
@@ -2054,7 +2053,8 @@ class MPS(BaseMPSExpectationValue):
                                     bc='finite',
                                     dtype=np.float64,
                                     permute=True,
-                                    chargeL=None):
+                                    chargeL=None,
+                                    unit_cell_width=None):
         """Construct a matrix product state with given bond dimensions from random matrices (no charge conservation).
 
         Parameters
@@ -2075,6 +2075,8 @@ class MPS(BaseMPSExpectationValue):
             The `p_state` entries should then always be given as if `conserve=None` in the Site.
         chargeL : charges
             Leg charges at bond 0, which are purely conventional.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
         Returns
         -------
@@ -2120,7 +2122,8 @@ class MPS(BaseMPSExpectationValue):
             SVs.append(SVs[0])
         else:
             raise NotImplementedError("MPS.from_desired_bond_dimension not implemented for segment BC.")
-        psi = MPS.from_Bflat(sites, Bflat, bc=bc, dtype=dtype, permute=permute, form=None, legL=chargeL)
+        psi = MPS.from_Bflat(sites, Bflat, bc=bc, dtype=dtype, permute=permute, form=None, legL=chargeL,
+                             unit_cell_width=unit_cell_width)
         psi.canonical_form()
         logger.info("Generated MPS of bond dimension %r from random matrices.", list(psi.chi))
         return psi
@@ -2135,7 +2138,7 @@ class MPS(BaseMPSExpectationValue):
                    permute=True,
                    form='B',
                    legL=None,
-                   mps_unit_cell_width=None):
+                   unit_cell_width=None):
         """Construct a matrix product state from a set of numpy arrays `Bflat` and singular vals.
 
         Parameters
@@ -2205,7 +2208,7 @@ class MPS(BaseMPSExpectationValue):
             # so we need to gauge `qtotal` of the last `B` such that the right leg matches.
             chdiff = Bs[-1].get_leg('vR').charges[0] - Bs[0].get_leg('vL').charges[0]
             Bs[-1] = Bs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
-        res = cls(sites, Bs, SVs, form=form, bc=bc, unit_cell_width=mps_unit_cell_width)
+        res = cls(sites, Bs, SVs, form=form, bc=bc, unit_cell_width=unit_cell_width)
         if res.L > 1 and max(res.chi) > 1:
             # the SVs set above are not the correct Schmidt values if chi > 1.
             res.canonical_form()
@@ -3451,7 +3454,7 @@ class MPS(BaseMPSExpectationValue):
             psi_right.bc == 'finite' and new_last == psi_right.L - 1):
             bc = 'finite'
 
-        psi_new = MPS(sites, Bs, Ss, bc=bc, form=forms)
+        psi_new = MPS(sites, Bs, Ss, bc=bc, form=forms, unit_cell_width=self.unit_cell_width)
         psi_new.canonical_form_finite(cutoff=cutoff)  # important: call canonical form
         # this propagates the S from the orthogonality center in the segment to the outer parts
 

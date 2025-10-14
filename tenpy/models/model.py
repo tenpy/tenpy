@@ -774,7 +774,7 @@ class MPOModel(Model):
             i = (j - 1) % L
             Wi = Ws[i]
             if j == 0:
-                Wi = Wi.shift_charged_horizontal(dx_0=-H_MPO.unit_cell_width)
+                Wi = Wi.shift_charges_horizontal(dx_0=-H_MPO.unit_cell_width)
             IdL_a = H_MPO.IdL[i]
             IdR_c = H_MPO.IdR[j + 1]
             Hb = npc.tensordot(Wi[IdL_a, :, :, :], Wj[:, IdR_c, :, :], axes=('wR', 'wL'))

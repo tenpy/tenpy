@@ -103,7 +103,8 @@ def test_get_full_wavefunction(undo_sort_charge, conserve, L=10):
 
     # use get_full_wavefunction
     site = SpinHalfSite(conserve='Sz' if conserve == 'best' else conserve)
-    psi = MPS.from_singlets(site=site, L=L, pairs=[[i, i + 1] for i in range(0, L, 2)])
+    psi = MPS.from_singlets(site=site, L=L, pairs=[[i, i + 1] for i in range(0, L, 2)],
+                            unit_cell_width=L)
     res = exact_diag.get_full_wavefunction(psi, undo_sort_charge=undo_sort_charge)
 
     # compare

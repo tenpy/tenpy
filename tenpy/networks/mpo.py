@@ -1445,7 +1445,8 @@ class MPO(MPSGeometry):
         IdL = [0] * (self.L + 1)
         IdR = [-1] * (self.L + 1)
         return MPO.from_grids(self.sites, U, self.bc, IdL, IdR, max_range=self.max_range,
-                              explicit_plus_hc=self.explicit_plus_hc)
+                              explicit_plus_hc=self.explicit_plus_hc,
+                              mps_unit_cell_width=self.unit_cell_width)
 
     def overlap(self, other, understood_infinite: bool = False, num_sites: int = None):
         """Overlap between two MPOs.

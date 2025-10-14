@@ -250,7 +250,9 @@ def gen_disentangler_psi_singlet_test(site_P=spin_half, L=6, max_range=4):
 def test_purification_apply_local_op(n_sites, act_on_p, act_on_q):
     i = 2
     model = XXZChain(dict(L=8))
-    psi_inf = purification_mps.PurificationMPS.from_infiniteT(sites=model.lat.mps_sites())
+    psi_inf = purification_mps.PurificationMPS.from_infiniteT(
+        sites=model.lat.mps_sites(), unit_cell_width=8
+    )
     psi = psi_inf.copy()
 
     op_legs = []
@@ -299,7 +301,9 @@ def test_purification_from_density_matrix(n_sites, conserve):
     rho = npc.tensordot(U_D, U.conj(), axes=[1, 1]).split_legs()
     tr_rho = np.sum(np.abs(D))
 
-    psi = purification_mps.PurificationMPS.from_density_matrix(sites=[s] * n_sites, rho=rho)
+    psi = purification_mps.PurificationMPS.from_density_matrix(
+        sites=[s] * n_sites, rho=rho, unit_cell_width=n_sites
+    )
     psi.test_sanity()
 
     theta = psi.get_theta(0, n_sites)

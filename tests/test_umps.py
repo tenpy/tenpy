@@ -8,7 +8,7 @@ from tenpy.networks import mps, site, uniform_mps
 def test_to_and_from_mps():
     # create MPS, transform to uniform MPS and back to MPS
     spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
-    psi = mps.MPS.from_product_state([spin_half] * 4, [0, 1, 0, 1], bc='infinite')
+    psi = mps.MPS.from_product_state([spin_half] * 4, [0, 1, 0, 1], bc='infinite', unit_cell_width=4)
     psi.test_sanity()
 
     uniform_psi = uniform_mps.UniformMPS.from_MPS(psi)

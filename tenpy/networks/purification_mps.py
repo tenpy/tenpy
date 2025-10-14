@@ -208,7 +208,8 @@ class PurificationMPS(MPS):
                              bc='finite', outer_S=None)
 
     @classmethod
-    def from_density_matrix(cls, sites, rho, form=None, cutoff=1e-16, normalize=True):
+    def from_density_matrix(cls, sites, rho, form=None, cutoff=1e-16, normalize=True,
+                            unit_cell_width=None):
         r"""Construct a purification from a single tensor `rho` of the density matrix.
 
         Given the mixed state :math:`\rho`, we diagonalize it :math:`\rho = U D U^\dagger`,
@@ -234,6 +235,8 @@ class PurificationMPS(MPS):
             Cutoff of singular values used in the SVDs.
         normalize : bool
             Whether the resulting MPS should have 'norm' 1.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
         """
         L = len(sites)
         rho = rho.combine_legs([[f'p{i}' for i in range(L)], [f'p{i}*' for i in range(L)]])  # [P, P*]
@@ -252,7 +255,7 @@ class PurificationMPS(MPS):
         # [p0, p1, ..., p0*, p1*, ...] -> [p0, p1, ..., q0, q1, ...]
         psi.ireplace_labels([f'p{i}*' for i in range(L)], [f'q{i}' for i in range(L)])
         return cls.from_full(sites, psi, form=form, cutoff=cutoff, normalize=normalize,
-                             bc='finite', outer_S=None)
+                             bc='finite', outer_S=None, unit_cell_width=unit_cell_width)
 
     @classmethod
     def from_infiniteT(cls, sites, bc='finite', form='B', dtype=np.float64, unit_cell_width=None):

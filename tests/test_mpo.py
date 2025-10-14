@@ -265,7 +265,7 @@ def test_MPO_plus_identity(sites, alpha=.7, beta=.42):
     ct.add_coupling_term(2., 2, 3, 'Sp', 'Sm')
     ct.add_coupling_term(2., 1, 2, 'Sz', 'Sz')
     ot.add_onsite_term(3., 1, 'Sz')
-    H1 = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'finite').build_MPO()
+    H1 = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'finite', unit_cell_width=4).build_MPO()
 
     if sites is None:
         H2 = H1.plus_identity(alpha=alpha, beta=beta)
@@ -279,7 +279,7 @@ def test_MPO_plus_identity(sites, alpha=.7, beta=.42):
     ct_expect.add_coupling_term(beta * 2., 1, 2, 'Sz', 'Sz')
     ot_expect.add_onsite_term(beta * 3., 1, 'Sz')
     ot_expect.add_onsite_term(alpha, 1, 'Id')
-    H2_expect = mpo.MPOGraph.from_terms((ot_expect, ct_expect), [s] * 4, 'finite').build_MPO()
+    H2_expect = mpo.MPOGraph.from_terms((ot_expect, ct_expect), [s] * 4, 'finite', unit_cell_width=4).build_MPO()
 
     assert H2.is_equal(H2_expect)
 

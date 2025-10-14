@@ -395,21 +395,22 @@ def test_apply_op(bc, eps=1.e-13):
     else:
         psi3.apply_local_op(2, SmSp, understood_infinite=True)
         # result : -1/sqrt(2) |up up down>
-        ov = mps.MPS.from_product_state([s] * 3, ['up', 'up', 'down'], bc=bc).overlap(psi3, understood_infinite=True)
+        psi_uud = mps.MPS.from_product_state([s] * 3, ['up', 'up', 'down'], bc=bc, unit_cell_width=3)
+        ov = psi_uud.overlap(psi3, understood_infinite=True)
         assert abs(-ov / psi3.norm - 1.) < eps
     
 
 def test_apply_local_op_JW_string(eps=1e-13):
     L = 6
     s = site.FermionSite(conserve='N')
-    psi_full = mps.MPS.from_product_state([s] * L, ['full'] * L)
+    psi_full = mps.MPS.from_product_state([s] * L, ['full'] * L, unit_cell_width=L)
 
     for i in range(L):
         # C_i |11...1...1> = (-1) ** i |11...0...1>
         c_psi = psi_full.copy()
         c_psi.apply_local_op(i, 'C')
         expect_prod_state = ['full'] * i + ['empty'] + ['full'] * (L - i - 1)
-        expect_prod_state = mps.MPS.from_product_state([s] * L, expect_prod_state)
+        expect_prod_state = mps.MPS.from_product_state([s] * L, expect_prod_state, unit_cell_width=L)
         ov = c_psi.overlap(expect_prod_state)
         expect_ov = 1 - 2 * (i % 2)  # == (-1) ** i
         assert abs(ov - expect_ov) < eps
