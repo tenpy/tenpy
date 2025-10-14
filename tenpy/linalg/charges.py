@@ -293,7 +293,7 @@ class ChargeInfo:
         charges = np.asarray(charges, dtype=QTYPE)[..., self._mask]
         return np.all(np.logical_and(0 <= charges, charges < self._mod_masked))
 
-    def shift_charges(self, charges, dx, guarantee_copy=False):
+    def shift_charges(self, charges, dx, inplace=False):
         """Spatial translation acting on charges.
 
         Some conserved charges, such as e.g. an electric dipole moment, transform non-trivially
@@ -314,21 +314,21 @@ class ChargeInfo:
             The difference of lattice indices, i.e.
             ``dx == lat_idx_before - lat_idx_after == [dx_0, ..., dx_{D-1}, du]``.
             Note that these are integer values in units of the lattice vectors.
-        guarantee_copy : bool
-            If the charges should be copied. If not, they are acted on in-place.
+        inplace : bool
+            If the charges can be modified in-place. Otherwise (default) we make a copy.
 
         Returns
         -------
         charges : 2D ndarray of dtype QTYPE
             The mapped charges.
         """
-        if guarantee_copy:
+        if not inplace:
             charges = charges.copy()
         return charges
 
-    def shift_charges_horizontal(self, charges, dx_0, guarantee_copy=False):
+    def shift_charges_horizontal(self, charges, dx_0, inplace=False):
         """Like :meth:`shift_charges`, but restricted to the first dimension.
-        
+
         The base class :class:`ChargeInfo` only implements a trivial version,
         that does not change the charges.
 
@@ -339,10 +339,10 @@ class ChargeInfo:
         dx_0 : float
             Number of lattice indices of the translation.
             Horizontal shift is a general shift by ``dx=[dx_0] + [0] * dim``.
-        guarantee_copy : bool
-            If the charges should be copied. If not, they are acted on in-place.
+        inplace : bool
+            If the charges can be modified in-place. Otherwise (default) we make a copy.
         """
-        if guarantee_copy:
+        if not inplace:
             charges = charges.copy()
         return charges
 
@@ -423,7 +423,7 @@ class DipolarChargeInfo(ChargeInfo):
         Like parameters of same name
     """
     trivial_shift = False  # If shift_charges acts trivially
-    
+
     def __init__(self, mod=[], names=None, charge_idcs=[], dipole_idcs=[], dipole_dims=None):
         if dipole_dims is None:
             dipole_dims = [0] * len(dipole_idcs)
@@ -452,16 +452,18 @@ class DipolarChargeInfo(ChargeInfo):
         self._dipole_dims = dipole_dims
         super().__init__(mod=mod, names=names)
 
-    def shift_charges_horizontal(self, charges, dx_0, guarantee_copy=False):
-        charges = charges.copy()
+    def shift_charges_horizontal(self, charges, dx_0, inplace=False):
+        if not inplace:
+            charges = charges.copy()
         for c_idx, d_idx, dim in zip(self._charge_idcs, self._dipole_idcs, self._dipole_dims):
             if dim != 0:
                 continue
             charges[..., d_idx] += dx_0 * charges[..., c_idx]
         return self.make_valid(charges)
 
-    def shift_charges(self, charges, dx, guarantee_copy=False):
-        charges = charges.copy()
+    def shift_charges(self, charges, dx, inplace=False):
+        if not inplace:
+            charges = charges.copy()
         if dx[-1] != 0:
             # shifting between different sublattice indices requires details about the lattice
             # geometry, and causes headaches since we need *integer* translations...
@@ -486,7 +488,7 @@ class DipolarChargeInfo(ChargeInfo):
     def __repr__(self):
         return (f'DipolarChargeInfo({list(self.mod)}, {self.names}, {self._charge_idcs}, '
                 f'{self._dipole_idcs}, {self._dipole_dims})')
-        
+
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
         h5gr.attrs['num_charges'] = self._qnumber
         hdf5_saver.save(self._mod, subpath + "U1_ZN")

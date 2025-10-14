@@ -335,7 +335,7 @@ class MPSGeometry:
         # even if i is within the unit cell -> add one *before* parsing the site index
         return self._to_valid_site_index(i_site + int(not is_left), return_num_unit_cells)
 
-    def shift_charges(self, charges, num_unit_cells, copy=False):
+    def shift_charges(self, charges, num_unit_cells, inplace=False):
         """Shift charges by an integer multiple of unit cells.
         
         See the notes on :ref:`shift_symmetry`.
@@ -353,6 +353,8 @@ class MPSGeometry:
             The charges to shift.
         num_unit_cells : int
             The number of unit cells.
+        inplace : bool
+            If the charges can be modified in-place. Otherwise (default) we make a copy.
 
         Returns
         -------
@@ -360,7 +362,7 @@ class MPSGeometry:
             The shifted charges.
         """
         return self.chinfo.shift_charges_horizontal(
-            charges, dx_0=num_unit_cells * self.unit_cell_width, guarantee_copy=copy
+            charges, dx_0=num_unit_cells * self.unit_cell_width, inplace=inplace
         )
 
     def shift_Site(self, site, num_unit_cells):
@@ -386,8 +388,10 @@ class MPSGeometry:
         """
         if num_unit_cells == 0 or site.leg.chinfo.trivial_shift:
             return site
-        leg = site.leg.apply_charge_mapping(site.leg.chinfo.shift_charges_horizontal,
-                                            func_kwargs=dict(dx_0=num_unit_cells * self.unit_cell_width))
+        leg = site.leg.apply_charge_mapping(
+            site.leg.chinfo.shift_charges_horizontal,
+            func_kwargs=dict(dx_0=num_unit_cells * self.unit_cell_width)
+        )
         return copy.copy(site).change_charge(leg)  # shallow copy
 
     def shift_Array(self, arr, num_unit_cells, copy=False):

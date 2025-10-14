@@ -2213,7 +2213,7 @@ class MPOGraph(MPSGeometry):
                         if infinite or i + 1 < L:
                             edge_stack.append(((i + 1) % L, keyR))
                         if infinite and i + 1 == L:  # copy and shift to the left leg
-                            charges[0][r] = self.shift_charges(ch_r[r], -1, copy=True)
+                            charges[0][r] = self.shift_charges(ch_r[r], -1)
                 stack = edge_stack + stack
 
         travel_q_LR(0, 'IdL')
