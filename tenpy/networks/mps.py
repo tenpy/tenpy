@@ -2536,7 +2536,8 @@ class MPS(BaseMPSExpectationValue):
         return cls(sites, Bs, SVs, bc=bc, form='B', unit_cell_width=unit_cell_width)
 
     @classmethod
-    def project_onto_charge_sector(cls, sites, p_state_list, charge_sector, dtype=float, **kwargs):
+    def project_onto_charge_sector(cls, sites, p_state_list, charge_sector, dtype=float,
+                                   bc='finite', form='B', norm=1., unit_cell_width=None):
         """Generates an MPS from a product state list which is projected onto a given charge sector.
 
         Parameters
@@ -2549,16 +2550,22 @@ class MPS(BaseMPSExpectationValue):
         charge_sector : tuple of int
             The charge sector corresponding to the conserved charge of the ``sites``
         dtype : type
+        bc, form, norm, unit_cell_width
+            Same argument as for :class:`~tenpy.networks.mps.MPS`.
 
         Returns
         -------
         projected_MPS : :class:`~tenpy.networks.mps.MPS`
         """
         charge_tree = cls.get_charge_tree_for_given_charge_sector(sites, charge_sector)
-        return cls._project_onto_sector_from_charge_tree(sites, p_state_list, charge_tree, dtype, **kwargs)
+        return cls._project_onto_sector_from_charge_tree(
+            sites, p_state_list, charge_tree, dtype, bc=bc, form=form, norm=norm,
+            unit_cell_width=unit_cell_width
+        )
 
     @classmethod
-    def _project_onto_sector_from_charge_tree(cls, sites, p_state_list, charge_tree, dtype=float, **kwargs):
+    def _project_onto_sector_from_charge_tree(cls, sites, p_state_list, charge_tree, dtype=float,
+                                              bc='finite', form='B', norm=1., unit_cell_width=None):
         """Select entries in a product state that are in a charge tree.
 
         Parameters
@@ -2572,12 +2579,15 @@ class MPS(BaseMPSExpectationValue):
             a list containing a set of possible charges at each site
         dtype : type
             The data type of the ``B``-tensors, defaults to float
+        bc, form, norm, unit_cell_width
+            Same argument as for :class:`~tenpy.networks.mps.MPS`.
+
         Returns
         -------
         projected_state : :class:`~tenpy.networks.mps.MPS`
         """
         p_state_list = np.array(p_state_list)  # convert (possible list) to ndarray for indexing
-        # check chiinfo
+        # check chinfo
         chinfo = sites[0].leg.chinfo
         assert all(s.leg.chinfo == chinfo for s in sites), "Charge Info for all sites must be identical"
 
@@ -2617,7 +2627,8 @@ class MPS(BaseMPSExpectationValue):
             # ignore S values as they will be obtained below from :meth:`MPS.canonical_form_finite`
             Ss.append(np.ones(B.shape[1], np.float64))
 
-        projected_state = cls(sites, Bs, Ss, **kwargs)
+        projected_state = cls(sites, Bs, Ss, bc=bc, form=form, norm=norm,
+                              unit_cell_width=unit_cell_width)
         projected_state.canonical_form_finite()  # calculate S values and normalize
         return projected_state
 
