@@ -2531,6 +2531,8 @@ class MPS(BaseMPSExpectationValue):
             Bs.append(B)
             SVs.append(SR)
         SVs[0] = SVs[-1]
+        if bc == 'finite':
+            SVs = SVs[:-1]
         return cls(sites, Bs, SVs, bc=bc, form='B', unit_cell_width=unit_cell_width)
 
     @classmethod
