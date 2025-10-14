@@ -825,13 +825,12 @@ def test_InitialStateBuilder():
             'full_empty': ['up', 'down'],
         }).run()
     psi1.test_sanity()
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ValueError, match='incommensurate len'):
         psi1_odd = mps.InitialStateBuilder(
             lat_odd, {
                 'method': 'lat_product_state',
                 'product_state': [['up'], ['down']],
             }).run()
-    assert "incommensurate len" in str(excinfo.value)
     psi1_odd = mps.InitialStateBuilder(
         lat_odd, {
             'method': 'lat_product_state',
