@@ -508,18 +508,24 @@ def test_model_H_conversion_dipolar(L=6):
     ED = ExactDiag(m)
     ED.build_full_H_from_mpo()
     H0 = ED.full_H
+    H0.test_sanity()
+    assert np.all(H0.qtotal == 0)
 
     # convert H_MPO -> H_bond (calc_H_bond_from_MPO called by from_MPOModel)
     m_nn = model.NearestNeighborModel.from_MPOModel(m)
     ED = ExactDiag(m_nn)
     ED.build_full_H_from_bonds()
     H1 = ED.full_H
-    
+    H1.test_sanity()
+    assert np.all(H1.qtotal == 0)
+
     # convert H_bond -> H_MPO
     m_nn.H_MPO = m_nn.calc_H_MPO_from_bond()
     ED.full_H = None
     ED.build_full_H_from_mpo()
     H2 = ED.full_H
+    H2.test_sanity()
+    assert np.all(H2.qtotal == 0)
 
     assert npc.norm(H0 - H1) < 1e-13
     assert npc.norm(H0 - H2) < 1e-13
