@@ -304,10 +304,6 @@ def test_dmrg_explicit_plus_hc(N, bc_MPS, tol=1.e-13, bc='finite'):
 @pytest.mark.slow
 @pytest.mark.parametrize("N, bc_MPS", [(6, 'finite'), (2, 'infinite')])
 def test_dmrg_dipole_conservation(N, bc_MPS, S=1, tol=1.e-13, J4=0.):
-    if bc_MPS == 'infinite':
-        # DMRG runs, which is reassuring, but energy is above Sz-dmrg by ~1e-5
-        # Takes quite long too, looks like energy is oscillating.
-        pytest.xfail()
 
     dmrg_params = dict(N_sweeps_check=2, mixer=True, trunc_params={'chi_max': 50})
 
@@ -323,6 +319,7 @@ def test_dmrg_dipole_conservation(N, bc_MPS, S=1, tol=1.e-13, J4=0.):
                                              unit_cell_width=M_dip.lat.mps_unit_cell_width)
         E_dip, psi_dip = dmrg.TwoSiteDMRGEngine(psi_dip, M_dip, dmrg_params).run()
 
+    # run without dipole conservation for comparison
     with warnings.catch_warnings():  # may issue warning that H is zero in sector. thats ok since we use a mixer.
         warnings.simplefilter("ignore")
         M = DipolarSpinChain(dict(L=2 * N, S=S, J3=1., J4=J4, bc_MPS=bc_MPS, conserve='Sz'))
@@ -331,12 +328,17 @@ def test_dmrg_dipole_conservation(N, bc_MPS, S=1, tol=1.e-13, J4=0.):
         E, psi = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params).run()
 
     # can not compute overlap easily due to different chinfo...
-    
     print(f'E={E}')
     print(f'E_dip={E_dip}')
     print(f'diff : {abs(E - E_dip)}')
+
+    if bc_MPS == 'infinite':
+        # DMRG runs, which is reassuring, but energy is above Sz-dmrg by ~1e-5
+        # Takes quite long too, looks like energy is oscillating.
+        pytest.xfail()
+
     assert abs(E - E_dip) < tol
-    
+
 
 @pytest.mark.parametrize("L, bc_MPS", [(12, 'finite'), (4, 'infinite')])
 def test_dmrg_mixer_cleanup(L, bc_MPS):
