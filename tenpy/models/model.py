@@ -767,14 +767,15 @@ class MPOModel(Model):
             if IdL_b is not None:
                 W[IdL_a, IdL_b, :, :] *= 0.
         # now multiply together the bonds
-        for j, Wj in enumerate(Ws):
+        for i, Wi in enumerate(Ws):
             # for bond (i, j) == (j-1, j) == (i, i+1)
-            if finite and j == 0:
-                continue
-            i = (j - 1) % L
-            Wi = Ws[i]
-            if j == 0:
-                Wi = Wi.shift_charges_horizontal(dx_0=-H_MPO.unit_cell_width)
+            j = (i + 1) % L
+            Wj = Ws[j]
+            if i == L - 1:
+                if finite:
+                    continue
+                # shift inplace, since we later check that we removed all entries
+                Wj = Wj.shift_charges_horizontal(dx_0=-H_MPO.unit_cell_width, inplace=True)
             IdL_a = H_MPO.IdL[i]
             IdR_c = H_MPO.IdR[j + 1]
             Hb = npc.tensordot(Wi[IdL_a, :, :, :], Wj[:, IdR_c, :, :], axes=('wR', 'wL'))
