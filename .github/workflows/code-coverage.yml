@@ -22,10 +22,10 @@ jobs:
     steps:
 
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: "3.13"
     
@@ -40,7 +40,12 @@ jobs:
       # also installs extra dependencies defined in pyproject.toml
       run: |
         python -m build .
-        python -m pip install ".[io, test, extra]"
+        python -m pip install ".[io, test]"
+    
+    - name: Show tenpy config
+      working-directory: ..
+      run: |
+        python -c "import tenpy; tenpy.show_config()"
     
     - name: Run pytest with coverage
       # pytest configuration in pyproject.toml
