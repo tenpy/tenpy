@@ -59,7 +59,8 @@ from ..tools.params import asConfig
 from ..linalg.krylov_based import GMRES
 
 __all__ = [
-    'MPO', 'make_W_II', 'MPOGraph', 'MPOEnvironment', 'MPOEnvironmentBuilder', 'MPOTransferMatrix', 'grid_insert_ops'
+    'MPO', 'make_W_II', 'MPOGraph', 'MPOEnvironment', 'MPOEnvironmentBuilder', 'MPOTransferMatrix',
+    'grid_insert_ops'
 ]
 
 
@@ -186,7 +187,7 @@ class MPO:
             for jL in range(chiL):
                 for jR in range(chiR):
                     op = W[jL, jR]
-                    if npc.norm(op)>norm_tol:
+                    if npc.norm(op) > norm_tol:
                         self._graph[i][(jL, jR)] = op
 
     def _order_graph(self):
@@ -211,13 +212,13 @@ class MPO:
             warnings.warn("Ordering the MPO was already tried and failed. "
                           "If intentional, make sure that the MPO satisfies the requirements.")
             return
-        if self.bc=="finite":
+        if self.bc == "finite":
             warnings.warn("_order_graph() called for 'finite' MPO. This does not make sense.")
             self._outer_permutation = False
             return
         if self._graph is None:
             self._make_graph()
-        if self.finite: # segment
+        if self.finite:  # segment
             try:
                 self._W[0].get_leg('wL').test_contractible(self._W[-1].get_leg('wR'))
             except ValueError:
@@ -242,13 +243,13 @@ class MPO:
                 offsets[1] = -2
             # cycles
             for j, j_cycle in enumerate(j_other_cycles):
-                perm[offsets[0]+j] = j_cycle
+                perm[offsets[0] + j] = j_cycle
             # order j_upper / j_lower by iteratively removing all indices that do not couple to the block
             def sort_block(block):
                 ordering = []
-                while block: # still indices left
+                while block:  # still indices left
                     js_step = [j for j in block if not outer_connections[j] & block]
-                    if len(js_step)==0: # Illegal cycle
+                    if len(js_step) == 0:  # Illegal cycle
                         raise ValueError("Index ordering failed: "
                                          "Illegal cycle A1 -> A2 -> ... -> A1 over multiple "
                                          "unit cells found. "
@@ -258,20 +259,21 @@ class MPO:
                         ordering.append(j)
                         block.remove(j)
                 return ordering
+
             # upper indices
             j_upper_ordered = sort_block(j_upper)
             for index, j in enumerate(j_upper_ordered):
-                perm[offsets[0]-1-index] = j
+                perm[offsets[0] - 1 - index] = j
             # lower indices
             j_lower_ordered = sort_block(j_lower)
             for index, j in enumerate(j_lower_ordered):
-                perm[offsets[1]-index] = j
+                perm[offsets[1] - index] = j
             # ordering was successful
             self._cycles = {cycle[0]: cycle for cycle in cycles}
             self._outer_permutation = perm
         except ValueError as e:
             # graph cannot be ordered
-            warnings.warn("Ordering the MPO failed: "+str(e))
+            warnings.warn("Ordering the MPO failed: " + str(e))
             self._outer_permutation = False
 
     def _graph_connections(self):
@@ -298,24 +300,28 @@ class MPO:
             grid[0][j_outer] = j_outer
             # forward
             for j_site, layer in enumerate(self._graph):
-                js_connected = set(j for i,j in layer if i in grid[j_site])
+                js_connected = set(j for i, j in layer if i in grid[j_site])
                 for j_edge in js_connected:
-                    grid[j_site+1][j_edge] = j_edge
+                    grid[j_site + 1][j_edge] = j_edge
             # connected indices
-            outer_connections.append([j for j in grid[-1] if j!=-1])
+            outer_connections.append([j for j in grid[-1] if j != -1])
             # loop present
-            if grid[-1][j_outer]==j_outer:
+            if grid[-1][j_outer] == j_outer:
                 j_cycles.append(j_outer)
                 loop = [j_outer]
                 j_current = j_outer
                 # backward propagation
-                for j_right in range(self.L-1,-1,-1):
-                    js_backward = [i for i,j in self._graph[j_right] if j==j_current and i in grid[j_right]]
-                    if len(js_backward)!=1:
+                for j_right in range(self.L - 1, -1, -1):
+                    js_backward = [
+                        i for i, j in self._graph[j_right] if j == j_current and i in grid[j_right]
+                    ]
+                    if len(js_backward) != 1:
                         # only simple paths supported
                         # NOTE: Paths with multiple branches that reconnect can work in principle,
                         #       but are not supported by MPOEnvironmentBuilder
-                        raise ValueError("Loop missing or multiple loops found for outer index {0}".format(j_outer))
+                        raise ValueError(
+                            "Loop missing or multiple loops found for outer index {0}".format(
+                                j_outer))
                     j_current = js_backward[0]
                     loop.append(j_current)
                 cycles.append(list(reversed(loop)))
@@ -358,25 +364,28 @@ class MPO:
         if (j_IdR is not None) and (j_IdR not in j_cycles):
             raise ValueError("Connection IdR -> IdR missing")
         for j, connection in enumerate(outer_connections):
-            if j!=j_IdL and j_IdL in connection:
+            if j != j_IdL and j_IdL in connection:
                 raise ValueError("Outer index {0} -> IdL connection found ?!".format(j))
-        if (j_IdR is not None) and (len(outer_connections[j_IdR])!=1):
+        if (j_IdR is not None) and (len(outer_connections[j_IdR]) != 1):
             raise ValueError("IdR connects to different index ?!")
         # check loops and indices
-        other_cycles = set(j for j in j_cycles if j!=j_IdL and j!=j_IdR)
-        if not other_cycles: # only loops are IdL, IdR
-            return j_IdL, j_IdR, set(), set(j for j in range(self.chi[0]) if j not in j_cycles), set()
+        other_cycles = set(j for j in j_cycles if j != j_IdL and j != j_IdR)
+        if not other_cycles:  # only loops are IdL, IdR
+            return j_IdL, j_IdR, set(), set(j for j in range(self.chi[0])
+                                            if j not in j_cycles), set()
         j_upper = set()
         j_lower = set()
-        other_cycle_connections = set().union(*(outer_connections[j_loop] for j_loop in other_cycles))
+        other_cycle_connections = set().union(*(outer_connections[j_loop]
+                                                for j_loop in other_cycles))
         for j, connection in enumerate(outer_connections):
             if j not in j_cycles:
-                if j in other_cycle_connections: # existing connection some_loop -> label_j
+                if j in other_cycle_connections:  # existing connection some_loop -> label_j
                     j_lower.add(j)
-                    if connection & other_cycles: # existing connection label_j -> some loop
-                        raise ValueError("Connection I -> loop1 and loop2 -> I found for Index I={0}".format(j))
+                    if connection & other_cycles:  # existing connection label_j -> some loop
+                        raise ValueError(
+                            "Connection I -> loop1 and loop2 -> I found for Index I={0}".format(j))
 
-                else: # Default: add to j_upper if not a lower index
+                else:  # Default: add to j_upper if not a lower index
                     j_upper.add(j)
         return j_IdL, j_IdR, other_cycles, j_upper, j_lower
 
@@ -545,7 +554,7 @@ class MPO:
         for i in range(L):
             W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i], ['wL', 'wR'])
             Ws.append(W)
-        return cls(sites, Ws, bc, IdL, IdR, max_range, explicit_plus_hc) # no graph
+        return cls(sites, Ws, bc, IdL, IdR, max_range, explicit_plus_hc)  # no graph
 
     @classmethod
     def from_wavepacket(cls, sites, coeff, op, eps=1.e-15):
@@ -626,7 +635,7 @@ class MPO:
         # MPO to an MPS would need a non-trivial modification that is not captured when setting
         # IdL=0!
         IdR = [None] * L + [0]
-        return cls.from_grids(sites, grids, 'finite', IdL, IdR) # no graph
+        return cls.from_grids(sites, grids, 'finite', IdL, IdR)  # no graph
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -645,17 +654,17 @@ class MPO:
             raise ValueError("wrong len of `IdL`/`IdR`")
         if self._graph is not None and len(self._graph) != self.L:
             raise ValueError("wrong len of _graph")
-        if self.bc=="finite":
+        if self.bc == "finite":
             if self._outer_permutation:
-                raise ValueError("outer virtual legs are trivial for finite MPS, ordering them makes no sense")
+                raise ValueError(
+                    "outer virtual legs are trivial for finite MPS, ordering them makes no sense")
         elif self._outer_permutation is not None:
-            if self.chi[0]!=self.chi[-1]:
+            if self.chi[0] != self.chi[-1]:
                 raise ValueError("outer virtual legs ordered for MPO that is not periodic")
-            if len(self._outer_permutation)!=self.chi[0]:
+            if len(self._outer_permutation) != self.chi[0]:
                 raise ValueError("Different size of outer virtual leg and corresponding ordering")
-            if len(set(self._outer_permutation))!=len(self._outer_permutation):
+            if len(set(self._outer_permutation)) != len(self._outer_permutation):
                 raise ValueError("Invalid permutation of outer leg")
-
 
     @property
     def L(self):
@@ -730,10 +739,13 @@ class MPO:
         self.IdL = factor * self.IdL[:-1] + [self.IdL[-1]]
         self.IdR = factor * self.IdR[:-1] + [self.IdR[-1]]
         if self._graph is not None:
-            self._graph = factor*self._graph
+            self._graph = factor * self._graph
         # can keep self._ordering_checked, outer_permutations
         if self._outer_permutation:
-            self._cycles = {i0: factor*cycle[:-1]+[cycle[-1]] for i0, cycle in self._cycles.items()}
+            self._cycles = {
+                i0: factor * cycle[:-1] + [cycle[-1]]
+                for i0, cycle in self._cycles.items()
+            }
         self.test_sanity()
 
     def group_sites(self, n=2, grouped_sites=None):
@@ -804,7 +816,8 @@ class MPO:
         IdL.append(self.IdL[last % L + 1])
         IdR = [self.IdR[i % L] for i in range(first, last + 1)]
         IdR.append(self.IdR[last % L + 1])
-        cp = self.__class__(sites, W, 'segment', IdL, IdR, self.max_range, self.explicit_plus_hc) # no graph
+        cp = self.__class__(sites, W, 'segment', IdL, IdR, self.max_range,
+                            self.explicit_plus_hc)  # no graph
         cp.grouped = self.grouped
         return cp
 
@@ -837,7 +850,7 @@ class MPO:
             if IdR is not None:
                 IdR = IdR % chi[b]
                 self.IdR[b] = np.nonzero(p == IdR)[0][0]
-        if self._graph is not None: # makes sense to only permute the indices
+        if self._graph is not None:  # makes sense to only permute the indices
             inv_perms = []
             for perm in perms:
                 inv_perm = np.empty_like(perm)
@@ -845,14 +858,18 @@ class MPO:
                 inv_perms.append(inv_perm)
             new_graph = [{} for _ in range(self.L)]
             for j_site, layer in enumerate(self._graph):
-                for i,j in layer:
-                    new_graph[j_site][(inv_perms[j_site][i],inv_perms[j_site+1][j])] = self._graph[j_site][(i,j)]
+                for i, j in layer:
+                    new_graph[j_site][(inv_perms[j_site][i],
+                                       inv_perms[j_site + 1][j])] = self._graph[j_site][(i, j)]
             self._graph = new_graph
             if self._outer_permutation:
                 self._outer_permutation = [inv_perms[0][j] for j in self._outer_permutation]
                 perm_cycles = []
                 for j_outer in self._cycles:
-                    perm_cycles.append([inv_perms[j_bond][j_cycle] for j_bond, j_cycle in enumerate(self._cycles[j_outer])])
+                    perm_cycles.append([
+                        inv_perms[j_bond][j_cycle]
+                        for j_bond, j_cycle in enumerate(self._cycles[j_outer])
+                    ])
                 self._cycles = {cycle[0]: cycle for cycle in perm_cycles}
         # done
 
@@ -935,7 +952,7 @@ class MPO:
             IdLR_0 = IdL
         IdLR = [IdLR_0] + IdLR
 
-        return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf) # no graph
+        return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf)  # no graph
 
     def make_U_II(self, dt):
         r"""Creates the :math:`U_{II}` propagator.
@@ -999,7 +1016,7 @@ class MPO:
             # TODO: could sort by charges.
             U.append(W_II)
         Id = [0] * (self.L + 1)
-        return MPO(self.sites, U, self.bc, Id, Id, max_range=self.max_range) # no graph
+        return MPO(self.sites, U, self.bc, Id, Id, max_range=self.max_range)  # no graph
 
     def expectation_value(self, psi, tol=1.e-10, max_range=100, init_env_data={}):
         """Calculate ``<psi|self|psi>/<psi|psi>`` (or density for infinite).
@@ -1266,7 +1283,7 @@ class MPO:
             else:
                 proj = np.ones(contr.shape[0])
                 IdL = self.get_IdL(j)
-                IdR = self.get_IdR(j-1)
+                IdR = self.get_IdR(j - 1)
                 if IdL is not None:
                     proj[IdL] = 0.
                 if IdR is not None:
@@ -1280,7 +1297,8 @@ class MPO:
         contr = contr[IdR_final]
         return contr
 
-    def to_TermList(self, op_basis,
+    def to_TermList(self,
+                    op_basis,
                     start=None,
                     max_range=None,
                     cutoff=1.e-12,
@@ -1349,7 +1367,7 @@ class MPO:
                 op_basis_j = op_basis[j % len(op_basis)]
                 partial_R = [None] * W.get_leg('wR').ind_len
                 if k > 0 and IdL is not None:
-                    partial_L[IdL] = None # drop terms not starting at `start`
+                    partial_L[IdL] = None  # drop terms not starting at `start`
                 for opname in op_basis_j:
                     op = site_j.get_op(opname)
                     op_dagger = op.conj().transpose()
@@ -1360,7 +1378,7 @@ class MPO:
                     for x, y in zip(*np.nonzero(op_W)):
                         if partial_L[x] is None:
                             continue
-                        pref_j = op_W[x,y]
+                        pref_j = op_W[x, y]
                         if y == IdR:
                             # finish terms
                             for (term, pref) in partial_L[x]:
@@ -1682,12 +1700,13 @@ class MPO:
         N = len(sites)
         assert N <= self.L
         if not set(sites).issubset(set(list(range(self.L)))):
-            raise ValueError(f'The sites {sites} are not strictly contained in {{1, ..., {self.L-1}}}.')
+            raise ValueError(
+                f'The sites {sites} are not strictly contained in {{1, ..., {self.L-1}}}.')
         if sorted(sites) != [*range(min(sites), max(sites) + 1)]:
             # test fails for non-contiguous sites. not sure why
             raise NotImplementedError
 
-        t_beta = beta ** (1 / N)
+        t_beta = beta**(1 / N)
         t_alpha = alpha / N
 
         IdL = self.IdL
@@ -1703,7 +1722,7 @@ class MPO:
             assert np.all(W.qtotal == trivial)
             DL, DR, d, d = W.shape
 
-            A_npc, B_npc, C_npc, D_npc = _partition_W(W, IdL[k], IdR[k], IdL[k+1], IdR[k+1])
+            A_npc, B_npc, C_npc, D_npc = _partition_W(W, IdL[k], IdR[k], IdL[k + 1], IdR[k + 1])
             Id_npc = npc.eye_like(D_npc, labels=['p', 'p*'])
             dW = np.empty((DL, DR), dtype=object)
 
@@ -1720,15 +1739,15 @@ class MPO:
                 a = 0.
 
             # First Row - only this is modified
-            dW[0, 0] = d*Id_npc
+            dW[0, 0] = d * Id_npc
             for i in range(0, DR - 2):
-                dW[0, i+1] = b ** (counter) * C_npc[0, i]
-            dW[0, -1] = (b ** N) * D_npc + a * Id_npc
+                dW[0, i + 1] = b**(counter) * C_npc[0, i]
+            dW[0, -1] = (b**N) * D_npc + a * Id_npc
             # Middle Rows
             for i in range(0, DL - 2):
                 for j in range(0, DR - 2):
                     dW[i + 1, j + 1] = b * A_npc[i, j]
-                dW[i + 1, -1] = b ** (N - counter + 1) * B_npc[i, 0]
+                dW[i + 1, -1] = b**(N - counter + 1) * B_npc[i, 0]
             #Bottom Rows
             dW[-1, -1] = g * Id_npc
             U.append(dW)
@@ -1737,7 +1756,12 @@ class MPO:
         # Sajant: We have enforced that the MPO look upper block triangular without any permutations
         IdL = [0] * (self.L + 1)
         IdR = [-1] * (self.L + 1)
-        return MPO.from_grids(self.sites, U, self.bc, IdL, IdR, max_range=self.max_range,
+        return MPO.from_grids(self.sites,
+                              U,
+                              self.bc,
+                              IdL,
+                              IdR,
+                              max_range=self.max_range,
                               explicit_plus_hc=self.explicit_plus_hc)
 
     def overlap(self, other, understood_infinite: bool = False, num_sites: int = None):
@@ -1947,7 +1971,7 @@ class MPO:
             max_range = max(self.max_range, other.max_range)
         else:
             max_range = None
-        return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range, self.explicit_plus_hc) # no graph
+        return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range, self.explicit_plus_hc)  # no graph
 
     def _get_block_projections(self, i):
         """projections onto (IdL, other, IdR) on bond `i` in range(0, L+1)"""
@@ -3031,19 +3055,22 @@ class MPOEnvironmentBuilder:
         for j_outer, loop in self.H._cycles.items():
             norm = 1.
             for j in range(self.H.L):
-                op = self.H._graph[j][(loop[j],loop[j+1])] # (i,j)
-                factor = npc.norm(op, ord=1)/op.shape[0]
-                if norm*factor<tol:
-                    norm=0.
-                    break # norm close to zero
+                op = self.H._graph[j][(loop[j], loop[j + 1])]  # (i,j)
+                factor = npc.norm(op, ord=1) / op.shape[0]
+                if norm * factor < tol:
+                    norm = 0.
+                    break  # norm close to zero
                 # op == factor*id with factor>0
-                is_id = npc.norm(op-factor*npc.diag(1., op.get_leg("p")), ord=1)<tol
+                is_id = npc.norm(op - factor * npc.diag(1., op.get_leg("p")), ord=1) < tol
                 if not is_id:
-                    raise ValueError("W[{0}][{1},{2}] != a*Id with a>0".format(j, loop[j], loop[j+1]))
+                    raise ValueError("W[{0}][{1},{2}] != a*Id with a>0".format(
+                        j, loop[j], loop[j + 1]))
                 norm *= factor
-            if norm>=1.+tol:
-                raise ValueError("self.H contains cycle with norm larger than one at outer index {0}".format(loop[0]))
-            if abs(norm-1.)<1e-13:
+            if norm >= 1. + tol:
+                raise ValueError(
+                    "self.H contains cycle with norm larger than one at outer index {0}".format(
+                        loop[0]))
+            if abs(norm - 1.) < 1e-13:
                 ones.append(j_outer)
         return ones
 
@@ -3077,21 +3104,21 @@ class MPOEnvironmentBuilder:
         grid = []
         for chi in self.H.chi[1:]:
             # cPartial, ingoing inds - cPartial initialized as None
-            layer = [[None,set()] for _ in range(chi)]
+            layer = [[None, set()] for _ in range(chi)]
             grid.append(layer)
         for j_site, layer in enumerate(self.H._graph):
-            for i,j in layer:
+            for i, j in layer:
                 grid[j_site][j][1].add(i)
         # remove connections of left nodes that are 0
-        if len(remove)>0:
+        if len(remove) > 0:
             zero_nodes = remove
             for j_site in range(self.L):
                 empty_nodes = []
                 for iL in zero_nodes:
-                    conns = [j for i,j in self.H._graph[j_site] if i==iL]
+                    conns = [j for i, j in self.H._graph[j_site] if i == iL]
                     for j in conns:
                         grid[j_site][j][1].remove(iL)
-                        if not grid[j_site][j][1]: # ingoing indices sum to zero
+                        if not grid[j_site][j][1]:  # ingoing indices sum to zero
                             empty_nodes.append(j)
                 zero_nodes = empty_nodes
         return grid
@@ -3104,20 +3131,20 @@ class MPOEnvironmentBuilder:
         """
         grid = []
         for chi in self.H.chi[:-1]:
-            layer = [[None,set()] for _ in range(chi)]
+            layer = [[None, set()] for _ in range(chi)]
             grid.append(layer)
         for j_site, layer in enumerate(self.H._graph):
-            for i,j in layer:
+            for i, j in layer:
                 grid[j_site][i][1].add(j)
-        if len(remove)>0:
+        if len(remove) > 0:
             zero_nodes = remove
-            for j_site in range(self.L-1,-1,-1):
+            for j_site in range(self.L - 1, -1, -1):
                 empty_nodes = []
                 for jR in zero_nodes:
-                    conns = [i for i,j in self.H._graph[j_site] if j==jR]
+                    conns = [i for i, j in self.H._graph[j_site] if j == jR]
                     for i in conns:
                         grid[j_site][i][1].remove(jR)
-                        if not grid[j_site][i][1]: # all ingoing indices sum to zero
+                        if not grid[j_site][i][1]:  # all ingoing indices sum to zero
                             empty_nodes.append(i)
                 zero_nodes = empty_nodes
         return grid
@@ -3130,46 +3157,51 @@ class MPOEnvironmentBuilder:
         for j_site in range(self.L):
             finished_nodes = []
             for cL, iL in ready_nodes:
-                conns = [j for i,j in self.H._graph[j_site] if i==iL]
+                conns = [j for i, j in self.H._graph[j_site] if i == iL]
                 for j in conns:
-                    res = self._contract_cL(cL, j_site, self.H._graph[j_site][(iL,j)])
-                    if grid[j_site][j][0]==None:
+                    res = self._contract_cL(cL, j_site, self.H._graph[j_site][(iL, j)])
+                    if grid[j_site][j][0] == None:
                         grid[j_site][j][0] = res
                     else:
                         grid[j_site][j][0] += res
                     grid[j_site][j][1].remove(iL)
-                    if not grid[j_site][j][1]: # all ingoing indices summed up
-                       finished_nodes.append((grid[j_site][j][0],j))
+                    if not grid[j_site][j][1]:  # all ingoing indices summed up
+                        finished_nodes.append((grid[j_site][j][0], j))
                 # delete cL, not needed anymore & saves storage
-                if j_site!=0:
+                if j_site != 0:
                     # double check that set with ingoing elements for ready node is empty
-                    assert not grid[j_site-1][iL][1]
-                    del grid[j_site-1][iL][0]
+                    assert not grid[j_site - 1][iL][1]
+                    del grid[j_site - 1][iL][0]
             ready_nodes = finished_nodes
 
     def _contract_right_grid(self, grid, c0_outer, j_outer):
         ready_nodes = [[c0_outer, j_outer]]
-        for j_site in range(self.L-1,-1,-1):
+        for j_site in range(self.L - 1, -1, -1):
             finished_nodes = []
             for cR, jR in ready_nodes:
-                conns = [i for i,j in self.H._graph[j_site] if j==jR]
+                conns = [i for i, j in self.H._graph[j_site] if j == jR]
                 for i in conns:
-                    res = self._contract_cR(cR, j_site, self.H._graph[j_site][(i,jR)])
-                    if grid[j_site][i][0]==None:
+                    res = self._contract_cR(cR, j_site, self.H._graph[j_site][(i, jR)])
+                    if grid[j_site][i][0] == None:
                         grid[j_site][i][0] = res
                     else:
                         grid[j_site][i][0] += res
                     grid[j_site][i][1].remove(jR)
-                    if not grid[j_site][i][1]: # all ingoing indices summed up
-                       finished_nodes.append((grid[j_site][i][0],i))
+                    if not grid[j_site][i][1]:  # all ingoing indices summed up
+                        finished_nodes.append((grid[j_site][i][0], i))
                 # delete cR, not needed anymore & saves storage
-                if j_site!=self.L-1:
+                if j_site != self.L - 1:
                     # double check that set with ingoing elements for ready node is empty
-                    assert not grid[j_site+1][jR][1]
-                    del grid[j_site+1][jR][0] # won't be accessed anymore
+                    assert not grid[j_site + 1][jR][1]
+                    del grid[j_site + 1][jR][0]  # won't be accessed anymore
             ready_nodes = finished_nodes
 
-    def init_LP_RP_iterative(self, which='both', calc_E=False, tol_c0=None, gmres_options=None, tol_id=1e-12):
+    def init_LP_RP_iterative(self,
+                             which='both',
+                             calc_E=False,
+                             tol_c0=None,
+                             gmres_options=None,
+                             tol_id=1e-12):
         """ Construct boundary environments for periodic MPO environments.
 
             See class docstring for an explanation.
@@ -3203,33 +3235,45 @@ class MPOEnvironmentBuilder:
             Energy per site, only returned if `calc_E` is True.
         """
         if _mpo_check_for_iter_LP_RP_infinite(self.H) == False:
-            raise ValueError("Iterative environment initialization failed: Hamiltonian cannot be ordered.")
-        assert which=='LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
+            raise ValueError(
+                "Iterative environment initialization failed: Hamiltonian cannot be ordered.")
+        assert which == 'LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
         ones = self._determine_cycles()
         n_terms = len(ones)
         # gmres defaults, set N_min=0 for states close to product states
-        if gmres_options==None:
-            gmres_options = {'N_min':0,'res':1e-11}
+        if gmres_options == None:
+            gmres_options = {'N_min': 0, 'res': 1e-11}
         else:
-            gmres_options['N_min'] = gmres_options.get('N_min',0)
-            gmres_options['res'] = gmres_options.get('res',1e-11)
-        legs_labels = {"init_LP": ([self.H.get_W(0).get_leg('wL').conj(), self.ket.get_B(0).get_leg('vL').conj(),
-                            self.ket.get_B(0).get_leg('vL')], ['wR','vR','vR*']),
-                       "init_RP": ([self.H.get_W(self.L-1).get_leg('wR').conj(), self.ket.get_B(self.L-1).get_leg('vR').conj(),
-                             self.ket.get_B(self.L-1).get_leg('vR')], ['wL','vL','vL*'])}
+            gmres_options['N_min'] = gmres_options.get('N_min', 0)
+            gmres_options['res'] = gmres_options.get('res', 1e-11)
+        legs_labels = {
+            "init_LP": ([
+                self.H.get_W(0).get_leg('wL').conj(),
+                self.ket.get_B(0).get_leg('vL').conj(),
+                self.ket.get_B(0).get_leg('vL')
+            ], ['wR', 'vR', 'vR*']),
+            "init_RP": ([
+                self.H.get_W(self.L - 1).get_leg('wR').conj(),
+                self.ket.get_B(self.L - 1).get_leg('vR').conj(),
+                self.ket.get_B(self.L - 1).get_leg('vR')
+            ], ['wL', 'vL', 'vL*'])
+        }
         envs = {}
         # only for MPOEnvironments of extensive Hamiltonians, i.e. len(n_terms)==2
-        Es = [1.,1.] # per unit cell
+        Es = [1., 1.]  # per unit cell
 
         # NOTE: main work starts here
-        for name in ['init_LP','init_RP'] if which=='both' else ['init_'+which]:
+        for name in ['init_LP', 'init_RP'] if which == 'both' else ['init_' + which]:
             # Ms, Ns as needed for TransferMatrix
-            form = 'A' if name=='init_LP' else 'B'
+            form = 'A' if name == 'init_LP' else 'B'
             self._Ms = [self.ket.get_B(i, form=form) for i in range(self.L)]
             self._Ns = [self.ket.get_B(i, form=form).conj() for i in range(self.L)]
-            envs[name] = [npc.Array(legs_labels[name][0], dtype=self.dtype, labels=legs_labels[name][1]) for _ in range(n_terms)]
+            envs[name] = [
+                npc.Array(legs_labels[name][0], dtype=self.dtype, labels=legs_labels[name][1])
+                for _ in range(n_terms)
+            ]
             grids = self._make_grids(name, ones)
-            last_site = self.L-1 if name=='init_LP' else 0
+            last_site = self.L - 1 if name == 'init_LP' else 0
 
             # dominant eigenvector c0 = c0*TW_00, analytical prediction c0=Id
             # Unstable w.r.t. canonical form of the MPS <- fixed by checking explicitly
@@ -3237,18 +3281,19 @@ class MPOEnvironmentBuilder:
             c0_base, rho = self._c0_rho(name, legs_labels, tol_c0)
 
             m = 0
-            for j_outer in (self.H._outer_permutation if name=='init_LP' else reversed(self.H._outer_permutation)):
+            for j_outer in (self.H._outer_permutation
+                            if name == 'init_LP' else reversed(self.H._outer_permutation)):
                 cs = []
                 eps_temp = []
                 # NOTE: contributions ~ c0
                 if j_outer in ones:
                     c0 = c0_base.copy()
-                    if m!=0: # compute next epsilon
-                        Ctot = self._ctot_loop(grids[m-1], self.H._cycles[j_outer], name)
-                        next_eps = np.real(npc.inner(Ctot, rho)/m)
-                        if m==1:
-                            index = 0 if name=='init_LP' else 1
-                            Es[index] = next_eps # only meaningful if len(ones)==2
+                    if m != 0:  # compute next epsilon
+                        Ctot = self._ctot_loop(grids[m - 1], self.H._cycles[j_outer], name)
+                        next_eps = np.real(npc.inner(Ctot, rho) / m)
+                        if m == 1:
+                            index = 0 if name == 'init_LP' else 1
+                            Es[index] = next_eps  # only meaningful if len(ones)==2
                         eps_temp.insert(0, next_eps)
                         c0 *= next_eps
                     envs[name][m][j_outer] = c0
@@ -3256,31 +3301,35 @@ class MPOEnvironmentBuilder:
                     if m < len(grids):
                         self._contract_grid(grids[m], c0, j_outer, name)
                     # compute c0 contributions for lower envs and adjust epsilons
-                    for gamma in range(m-1,0,-1):
-                        Ctot_gamma = self._ctot_loop(grids[gamma-1], self.H._cycles[j_outer], name)
+                    for gamma in range(m - 1, 0, -1):
+                        Ctot_gamma = self._ctot_loop(grids[gamma - 1], self.H._cycles[j_outer],
+                                                     name)
                         eps_gamma = np.real(npc.inner(Ctot_gamma, rho))
-                        for j_eps, alpha in enumerate(range(gamma+1,m+1)):
+                        for j_eps, alpha in enumerate(range(gamma + 1, m + 1)):
                             # print("eps_temp j_eps:",eps_temp[j_eps],comb(alpha,gamma-1))
-                            eps_gamma -= eps_temp[j_eps]*comb(alpha,gamma-1)
+                            eps_gamma -= eps_temp[j_eps] * comb(alpha, gamma - 1)
                         eps_gamma /= gamma
-                        eps_temp.insert(0,eps_gamma)
+                        eps_temp.insert(0, eps_gamma)
                         # add to environment afterwards
                     m += 1
                 # NOTE: contributions orthogonal to c0
                 offset = 1 if j_outer in ones else 0
-                for gamma in range(m-1-offset, -1, -1):
+                for gamma in range(m - 1 - offset, -1, -1):
                     if j_outer in self.H._cycles:
                         Ctot = self._ctot_loop(grids[gamma], self.H._cycles[j_outer], name)
                     else:
                         Ctot = grids[gamma][last_site][j_outer][0]
-                        if Ctot is None: # nothing to sum up
-                            Ctot = npc.zeros(legs_labels[name][0][1:], dtype=self.dtype, labels=legs_labels[name][1][1:])
-                    for j_cs, alpha in enumerate(range(gamma+1, m)):
-                        Ctot -= comb(alpha, gamma)*cs[j_cs]
+                        if Ctot is None:  # nothing to sum up
+                            Ctot = npc.zeros(legs_labels[name][0][1:],
+                                             dtype=self.dtype,
+                                             labels=legs_labels[name][1][1:])
+                    for j_cs, alpha in enumerate(range(gamma + 1, m)):
+                        Ctot -= comb(alpha, gamma) * cs[j_cs]
                     if j_outer in self.H._cycles:
-                        res = self._solve_cj(self.H._cycles[j_outer], name, Ctot, offset, gmres_options)
-                        if offset==1 and gamma!=0:
-                            res += (eps_temp[gamma-1]/eps_temp[-1])*cs[-1]
+                        res = self._solve_cj(self.H._cycles[j_outer], name, Ctot, offset,
+                                             gmres_options)
+                        if offset == 1 and gamma != 0:
+                            res += (eps_temp[gamma - 1] / eps_temp[-1]) * cs[-1]
                         cs.insert(0, res)
                         with warnings.catch_warnings():
                             warnings.simplefilter("ignore")
@@ -3294,29 +3343,30 @@ class MPOEnvironmentBuilder:
                             # ignore complex warning when self.dtype=float since GMRES internally uses complex
                             envs[name][gamma][j_outer] = Ctot
                         self._contract_grid(grids[gamma], Ctot, j_outer, name)
-        if calc_E and n_terms==2 and which=='both':
-            return {k:envs[k][0] for k in envs.keys()}, envs, [E/self.L for E in Es]
-        return {k:envs[k][0] for k in envs.keys()}, envs
+        if calc_E and n_terms == 2 and which == 'both':
+            return {k: envs[k][0] for k in envs.keys()}, envs, [E / self.L for E in Es]
+        return {k: envs[k][0] for k in envs.keys()}, envs
 
     def _make_grids(self, name, ones):
         """ Initialize grids for `self.init_LP_RP_iterative()`"""
         js_loops = sorted([self.H._outer_permutation.index(j) for j in ones])
-        if name=="init_LP":
-            gs = [self._left_grid(self.H._outer_permutation[:j0])
-                  for j0 in js_loops[:-1]]
+        if name == "init_LP":
+            gs = [self._left_grid(self.H._outer_permutation[:j0]) for j0 in js_loops[:-1]]
             # last norm 1 cycle not on last index
             if self.H._outer_permutation[-1] not in ones:
                 gs += [self._left_grid(self.H._outer_permutation[:js_loops[-1]])]
         else:
-            gs = [self._right_grid(self.H._outer_permutation[j0+1:])
-                  for j0 in reversed(js_loops[1:])]
+            gs = [
+                self._right_grid(self.H._outer_permutation[j0 + 1:])
+                for j0 in reversed(js_loops[1:])
+            ]
             if self.H._outer_permutation[0] not in ones:
-                gs += [self._right_grid(self.H._outer_permutation[js_loops[0]+1:])]
+                gs += [self._right_grid(self.H._outer_permutation[js_loops[0] + 1:])]
         return gs
 
     def _contract_grid(self, grid, c0_outer, j_outer, name):
         """ For `self.init_LP_RP_iterative()`"""
-        if name=='init_LP':
+        if name == 'init_LP':
             self._contract_left_grid(grid, c0_outer, j_outer)
         else:
             self._contract_right_grid(grid, c0_outer, j_outer)
@@ -3326,7 +3376,7 @@ class MPOEnvironmentBuilder:
 
         Compute Ctot for indices with cycles
         """
-        if name=='init_LP':
+        if name == 'init_LP':
             return self._ctot_loop_left(grid, cycle)
         else:
             return self._ctot_loop_right(grid, cycle)
@@ -3336,37 +3386,44 @@ class MPOEnvironmentBuilder:
         c_loop = None
         for j_site in range(self.L):
             # double check, should not trigger
-            assert len(grid[j_site][cycle[j_site+1]][1])==1 and cycle[j_site] in grid[j_site][cycle[j_site+1]][1]
+            assert len(
+                grid[j_site][cycle[j_site +
+                                   1]][1]) == 1 and cycle[j_site] in grid[j_site][cycle[j_site +
+                                                                                        1]][1]
         for j_site in range(self.L):
-            if grid[j_site][cycle[j_site+1]][0]!=None:
-                c_loop = grid[j_site][cycle[j_site+1]][0]
+            if grid[j_site][cycle[j_site + 1]][0] != None:
+                c_loop = grid[j_site][cycle[j_site + 1]][0]
                 j_start = j_site
                 break
         # unlikely but not accounted for beforehand
-        assert c_loop!=None, "Hamiltonian contains cycle that does not connect to other indices"
+        assert c_loop != None, "Hamiltonian contains cycle that does not connect to other indices"
         # do contractions
-        for j_site in range(j_start+1, self.L):
-            c_loop = self._contract_cL(c_loop, j_site, self.H._graph[j_site][(cycle[j_site],cycle[j_site+1])])
-            if grid[j_site][cycle[j_site+1]][0]!=None:
-                c_loop += grid[j_site][cycle[j_site+1]][0]
+        for j_site in range(j_start + 1, self.L):
+            c_loop = self._contract_cL(c_loop, j_site,
+                                       self.H._graph[j_site][(cycle[j_site], cycle[j_site + 1])])
+            if grid[j_site][cycle[j_site + 1]][0] != None:
+                c_loop += grid[j_site][cycle[j_site + 1]][0]
         return c_loop
 
     def _ctot_loop_right(self, grid, cycle):
-        j_start = self.L-1
+        j_start = self.L - 1
         c_loop = None
-        for j_site in range(self.L-1,-1,-1):
+        for j_site in range(self.L - 1, -1, -1):
             # double check, should not trigger
-            assert len(grid[j_site][cycle[j_site]][1])==1 and cycle[j_site+1] in grid[j_site][cycle[j_site]][1]
-        for j_site in range(self.L-1,-1,-1):
-            if grid[j_site][cycle[j_site]][0]!=None:
+            assert len(
+                grid[j_site][cycle[j_site]][1]) == 1 and cycle[j_site +
+                                                               1] in grid[j_site][cycle[j_site]][1]
+        for j_site in range(self.L - 1, -1, -1):
+            if grid[j_site][cycle[j_site]][0] != None:
                 c_loop = grid[j_site][cycle[j_site]][0]
                 j_start = j_site
                 break
-        assert c_loop!=None, "Hamiltonian contains cycle that does not connect to other indices"
+        assert c_loop != None, "Hamiltonian contains cycle that does not connect to other indices"
         # do contractions
-        for j_site in range(j_start-1,-1,-1):
-            c_loop = self._contract_cR(c_loop, j_site, self.H._graph[j_site][(cycle[j_site],cycle[j_site+1])])
-            if grid[j_site][cycle[j_site]][0]!=None:
+        for j_site in range(j_start - 1, -1, -1):
+            c_loop = self._contract_cR(c_loop, j_site,
+                                       self.H._graph[j_site][(cycle[j_site], cycle[j_site + 1])])
+            if grid[j_site][cycle[j_site]][0] != None:
                 c_loop += grid[j_site][cycle[j_site]][0]
         return c_loop
 
@@ -3377,41 +3434,60 @@ class MPOEnvironmentBuilder:
         associated with `self.ket`.
         """
         # Identity
-        c0 = npc.diag(1., legs_labels[name][0][1], dtype=self.dtype, labels=legs_labels[name][1][1:])
-        if tol_c0 is None: # ignore canonical form errors
-            S = self.ket.get_SR(self.L-1) if name=='init_LP' else self.ket.get_SL(0)
+        c0 = npc.diag(1.,
+                      legs_labels[name][0][1],
+                      dtype=self.dtype,
+                      labels=legs_labels[name][1][1:])
+        if tol_c0 is None:  # ignore canonical form errors
+            S = self.ket.get_SR(self.L - 1) if name == 'init_LP' else self.ket.get_SL(0)
             if isinstance(S, npc.Array):
-                rho = npc.tensordot(S, S.conj(), axes=['vR', 'vR*'] if name=="init_LP" else ['vL','vL*'])
+                rho = npc.tensordot(S,
+                                    S.conj(),
+                                    axes=['vR', 'vR*'] if name == "init_LP" else ['vL', 'vL*'])
                 rho.iset_leg_labels(legs_labels[name][1][1:])
             else:
-                rho = npc.diag(S**2, legs_labels[name][0][1].conj(), labels=legs_labels[name][1][-1:-3:-1])
+                rho = npc.diag(S**2,
+                               legs_labels[name][0][1].conj(),
+                               labels=legs_labels[name][1][-1:-3:-1])
             return c0, rho
         # Compute dominant eigenvector pair if needed
-        _TM = TransferMatrix.from_Ns_Ms(self._Ns, self._Ms, transpose=True if name=='init_LP' else False,
-                                        charge_sector=None, p_label=self._p_label, conjugate_Ns=False)
-        if npc.norm(_TM.matvec(c0)-c0)<tol_c0:
-            S = self.ket.get_SR(self.L-1)**2 if name=='init_LP' else self.ket.get_SL(0)**2
+        _TM = TransferMatrix.from_Ns_Ms(self._Ns,
+                                        self._Ms,
+                                        transpose=True if name == 'init_LP' else False,
+                                        charge_sector=None,
+                                        p_label=self._p_label,
+                                        conjugate_Ns=False)
+        if npc.norm(_TM.matvec(c0) - c0) < tol_c0:
+            S = self.ket.get_SR(self.L - 1)**2 if name == 'init_LP' else self.ket.get_SL(0)**2
             if isinstance(S, npc.Array):
-                rho = npc.tensordot(S, S.conj(), axes=['vR', 'vR*'] if name=="init_LP" else ['vL','vL*'])
+                rho = npc.tensordot(S,
+                                    S.conj(),
+                                    axes=['vR', 'vR*'] if name == "init_LP" else ['vL', 'vL*'])
                 rho.iset_leg_labels(legs_labels[name][1][1:])
             else:
-                rho = npc.diag(S**2, legs_labels[name][0][1].conj(), labels=legs_labels[name][1][-1:-3:-1])
+                rho = npc.diag(S**2,
+                               legs_labels[name][0][1].conj(),
+                               labels=legs_labels[name][1][-1:-3:-1])
             # NOTE: iMPS should always be normalized s.t. npc.inner(c0,rho)=1
             return c0, rho
         warnings.warn("Identity not dominant eigenvector of MPSTransferMatrix up to tol={:.1e}." \
                       " Computing explicitly...".format(tol_c0))
         c0 = _TM.eigenvectors()[1][0]
         c0 = c0.split_legs()
-        c1 = TransferMatrix.from_Ns_Ms(self._Ns, self._Ms, transpose=False if name=='init_LP' else True,
-                                        charge_sector=None, p_label=self._p_label, conjugate_Ns=False).eigenvectors()[1][0]
+        c1 = TransferMatrix.from_Ns_Ms(self._Ns,
+                                       self._Ms,
+                                       transpose=False if name == 'init_LP' else True,
+                                       charge_sector=None,
+                                       p_label=self._p_label,
+                                       conjugate_Ns=False).eigenvectors()[1][0]
         c1 = c1.split_legs()
-        if name=='init_LP':
-            if npc.trace(c1)<0.:
-                c1 *= -1. # fix possible negative sign
+        if name == 'init_LP':
+            if npc.trace(c1) < 0.:
+                c1 *= -1.  # fix possible negative sign
             c1._labels = legs_labels[name][1][-1:-3:-1]
-            c0 /= npc.inner(c0, c1) # normalization
+            c0 /= npc.inner(c0, c1)  # normalization
             return c0, c1
-        if npc.trace(c1)<0: # init_RP
+        if npc.trace(c1) < 0:  # init_RP
             c1 *= -1.
         c1._labels = legs_labels[name][1][-1:-3:-1]
         c0 /= npc.inner(c1, c0)
@@ -3419,32 +3495,42 @@ class MPOEnvironmentBuilder:
 
     def _solve_cj(self, loop, name, b, norm_one, options):
         """ For `self._init_LP_RP_iterative()`: Solves c_gamma^j (1-TWjj) = b """
-        if npc.norm(b)==0.:
+        if npc.norm(b) == 0.:
             # A has not full rank if Wjj=id, as Id(1-TWjj)=0
             # Contributions in the kernel are already subtracted though
             # we can thus assume norm(b)==0 => x=npc.zeros()
             return npc.zeros(b.legs, dtype=b.dtype, qtotal=b.qtotal, labels=b._labels)
         # TWjj
-        transpose = True if name=='init_LP' else False
-        if norm_one==1: # skip Id contractions
+        transpose = True if name == 'init_LP' else False
+        if norm_one == 1:  # skip Id contractions
             ket_M = self._Ms
         else:
-            ops = [self.H._graph[j][(loop[j],loop[j+1])] for j in range(self.L)]
-            ket_M = [npc.tensordot(self._Ms[j], ops[j],
-                              axes=[self.ket._p_label,self.ket._get_p_label('*')]) for j in range(self.L)]
-        TWjj = TransferMatrix.from_Ns_Ms(self._Ns, ket_M, transpose=transpose, charge_sector=None, p_label=self.ket._p_label,
+            ops = [self.H._graph[j][(loop[j], loop[j + 1])] for j in range(self.L)]
+            ket_M = [
+                npc.tensordot(self._Ms[j],
+                              ops[j],
+                              axes=[self.ket._p_label,
+                                    self.ket._get_p_label('*')]) for j in range(self.L)
+            ]
+        TWjj = TransferMatrix.from_Ns_Ms(self._Ns,
+                                         ket_M,
+                                         transpose=transpose,
+                                         charge_sector=None,
+                                         p_label=self.ket._p_label,
                                          conjugate_Ns=False)
         # GMRES solver
         A = ShiftNpcLinearOperator(TWjj, -1.)
-        solver = GMRES(A, b, b, options=options) # makes internal copy
+        solver = GMRES(A, b, b, options=options)  # makes internal copy
         x_sol, res, _, _ = solver.run()
-        if res>options['res']:
-            warnings.warn("GMRES converged within tol={0} in environment initialization, requested was tol={1}.".format(res, options['res']))
+        if res > options['res']:
+            warnings.warn(
+                "GMRES converged within tol={0} in environment initialization, requested was tol={1}."
+                .format(res, options['res']))
         # fix legs
-        legs = ['vR','vR*'] if name=='init_LP' else ['vL','vL*']
+        legs = ['vR', 'vR*'] if name == 'init_LP' else ['vL', 'vL*']
         x_sol.split_legs()
         x_sol.itranspose(legs)
-        return -x_sol # cancel global minus sign
+        return -x_sol  # cancel global minus sign
 
 
 class MPOTransferMatrix(NpcLinearOperator):
@@ -3488,6 +3574,7 @@ class MPOTransferMatrix(NpcLinearOperator):
     flat_guess :
         Initial guess suitable for `flat_linop` in non-tenpy form.
     """
+
     def __init__(self, H, psi, transpose=False, guess=None, _subtraction_gauge='rho'):
         if psi.finite or H.bc != 'infinite':
             raise ValueError("Only makes sense for infinite MPS")
@@ -3509,7 +3596,7 @@ class MPOTransferMatrix(NpcLinearOperator):
         wR = wL.conj()
         S = psi.get_SL(0)
         if not transpose:  # right to left
-            vR = psi.get_B(psi.L-1, 'B').get_leg('vR')
+            vR = psi.get_B(psi.L - 1, 'B').get_leg('vR')
             if isinstance(S, npc.Array):
                 rho = npc.tensordot(S, S.conj(), axes=['vL', 'vL*'])
             else:
@@ -3622,11 +3709,11 @@ class MPOTransferMatrix(NpcLinearOperator):
 
     def _project(self, vec):
         """Project out additive energy part from vec."""
-        if not self.transpose: # Acts to the right, T * RP = RP + e_R * I
+        if not self.transpose:  # Acts to the right, T * RP = RP + e_R * I
             vec.itranspose(['vL', 'wL', 'vL*'])  # shouldn't do anything
             E = npc.inner(vec, self._proj_subtr, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
             vec -= self._E_shift * E
-        else: # Acts to the left, LP * T = LP + e_L * I
+        else:  # Acts to the left, LP * T = LP + e_L * I
             vec.itranspose(['vR*', 'wR', 'vR'])  # shouldn't do anything
             E = npc.inner(vec, self._proj_subtr, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
             vec -= self._E_shift * E
@@ -3666,9 +3753,9 @@ class MPOTransferMatrix(NpcLinearOperator):
             Energy *per site* of the MPS.
         """
         if not self.transpose:
-            axes= (['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*'])
+            axes = (['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*'])
         else:
-            axes= (['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL'])
+            axes = (['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL'])
         E0 = npc.inner(dom_vec, self._proj_rho, axes)
         vec = self.matvec(dom_vec, project=False)
         E = npc.inner(vec, self._proj_rho, axes)
@@ -3733,13 +3820,17 @@ class MPOTransferMatrix(NpcLinearOperator):
             guess_init_env_data = {}
         for transpose in [False, True]:
             guess = guess_init_env_data.get('init_LP' if transpose else 'init_RP', None)
-            TM = cls(H, psi, transpose=transpose, guess=guess, _subtraction_gauge=_subtraction_gauge)
+            TM = cls(H,
+                     psi,
+                     transpose=transpose,
+                     guess=guess,
+                     _subtraction_gauge=_subtraction_gauge)
             val, vec = TM.dominant_eigenvector(**kwargs)
             if abs(1. - val) > tol_ev0:
                 logger.warning("MPOTransferMatrix eigenvalue not 1: got %s", val)
             envs.append(vec)
             if calc_E:
-                Es.append(TM.energy(vec)) #E_R, E_L
+                Es.append(TM.energy(vec))  #E_R, E_L
             L = TM.L
             del TM
         init_env_data = {'init_LP': envs[1], 'init_RP': envs[0], 'age_LP': 0, 'age_RP': 0}
@@ -3753,14 +3844,22 @@ class MPOTransferMatrix(NpcLinearOperator):
             # We need this for segment excitation energies.
             # TODO: this doesn't work for non-default first/last!?
             if first != 0 or last is not None:
-                assert (last + 1) % L == first % L, "Need to have an integer number of unit cells for the bond to be the same."
+                assert (
+                    last + 1
+                ) % L == first % L, "Need to have an integer number of unit cells for the bond to be the same."
             SL = psi.get_SL(first)
             if not isinstance(SL, npc.Array):
-                vL, vR = init_env_data['init_LP'].get_leg('vR').conj(), init_env_data['init_RP'].get_leg('vL').conj()
-                SL = npc.diag(SL, vL, dtype=np.promote_types(psi.dtype, H.dtype), labels=['vL', 'vR'])
+                vL, vR = init_env_data['init_LP'].get_leg(
+                    'vR').conj(), init_env_data['init_RP'].get_leg('vL').conj()
+                SL = npc.diag(SL,
+                              vL,
+                              dtype=np.promote_types(psi.dtype, H.dtype),
+                              labels=['vL', 'vR'])
             E0 = npc.tensordot(init_env_data['init_LP'], SL, axes=(['vR'], ['vL']))
             E0 = npc.tensordot(E0, SL.conj(), axes=(['vR*'], ['vL*']))
-            E0 = npc.tensordot(E0, init_env_data['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
+            E0 = npc.tensordot(E0,
+                               init_env_data['init_RP'],
+                               axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
             # E0 = LP * s^2 * RP on site 0
             return init_env_data, Es, E0
         # else:
@@ -3938,12 +4037,12 @@ def _partition_W(W, IdL_L, IdR_L, IdL_R, IdR_R):
 
     #Extract (A, B, C, D)
     D_npc = W.copy()
-    D_npc.iproject([IdL_L, IdR_R], ['wL','wR'])
-    D_npc = D_npc.squeeze() # remove dummy wL, wR legs
+    D_npc.iproject([IdL_L, IdR_R], ['wL', 'wR'])
+    D_npc = D_npc.squeeze()  # remove dummy wL, wR legs
     C_npc = W.copy()
-    C_npc.iproject([IdL_L, proj_R], ['wL','wR'])
+    C_npc.iproject([IdL_L, proj_R], ['wL', 'wR'])
     B_npc = W.copy()
-    B_npc.iproject([proj_L, IdR_R], ['wL','wR'])
+    B_npc.iproject([proj_L, IdR_R], ['wL', 'wR'])
     A_npc = W.copy()
-    A_npc.iproject([proj_L, proj_R], ['wL','wR'])
+    A_npc.iproject([proj_L, proj_R], ['wL', 'wR'])
     return A_npc, B_npc, C_npc, D_npc
