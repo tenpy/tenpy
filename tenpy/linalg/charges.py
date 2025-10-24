@@ -479,6 +479,21 @@ class DipolarChargeInfo(ChargeInfo):
         return (f'DipolarChargeInfo({list(self.mod)}, {self.names}, {self._charge_idcs}, '
                 f'{self._dipole_idcs}, {self._dipole_dims})')
 
+    def __eq__(self, other):
+        if not isinstance(other, DipolarChargeInfo):
+            return False
+        if self is other:
+            return True
+        if not ChargeInfo.__eq__(self, other):
+            return False
+        if self._charge_idcs != other._charge_idcs:
+            return False
+        if self._dipole_idcs != other._dipole_idcs:
+            return False
+        if self._dipole_dims != other._dipole_dims:
+            return False
+        return True
+
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
         h5gr.attrs['num_charges'] = self._qnumber
         hdf5_saver.save(self._mod, subpath + "U1_ZN")
