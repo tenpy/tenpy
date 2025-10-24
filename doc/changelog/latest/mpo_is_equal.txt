@@ -1,0 +1,1 @@
+- Fix :meth:`tenpy.networks.mpo.MPO.is_equal` if ``explicit_plus_hc=True``.

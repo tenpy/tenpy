@@ -422,7 +422,7 @@ class ConfigNodeProcessor:
             par += nodes.Text(")")
         if option.context is not None:
             opt_context = option.context
-            if opt_context.startswith(context):
+            if context and opt_context.startswith(context):
                 opt_context = opt_context[len(context):]
             if opt_context:
                 par += nodes.Text(" in ")

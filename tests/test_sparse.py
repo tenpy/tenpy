@@ -1,4 +1,4 @@
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 import tenpy.linalg.np_conserved as npc
 import numpy as np
 

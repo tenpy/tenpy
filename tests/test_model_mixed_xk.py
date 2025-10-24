@@ -1,4 +1,4 @@
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 from tenpy.models.mixed_xk import SpinlessMixedXKSquare, HubbardMixedXKSquare
 from test_model import check_general_model
 from tenpy.models.fermions_spinless import FermionModel

@@ -6,7 +6,7 @@ the previous simulation, which can be seen at the "age".
 
 For the theoretical background why :math:`S = c/6 log(xi)`, see :cite:`pollmann2009`.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import tenpy

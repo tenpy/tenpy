@@ -2,7 +2,7 @@
 
 See the doc-string of :class:`Config` for details.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import warnings
 import numpy
@@ -382,11 +382,24 @@ class Config(MutableMapping):
             msg = "Deprecated option in {name!r}: {old!r} renamed to {new!r}"
             msg = msg.format(name=self.name, old=old_key, new=new_key)
             if extra_msg:
-                msg = '\n'.join(msg, extra_msg)
+                msg = f'{msg}\n{extra_msg}'
             warnings.warn(msg, FutureWarning, stacklevel=3)
             self.options[new_key] = self.options[old_key]
             self.unused.discard(old_key)
             self.unused.add(new_key)
+
+    def deprecated_ignore(self, *old_keys: str, extra_msg=""):
+        """Issue a warning if an old, deprecated key is encountered that will be ignored.
+
+        This makes it more readable than having the standard unused warning at the end.
+        """
+        for key in old_keys:
+            if key in self.options.keys():
+                msg = f'Deprecated option {key!r} in {self.name!r} was ignored.'
+                if extra_msg:
+                    msg = f'{msg}\n{extra_msg}'
+                warnings.warn(msg, stacklevel=3)
+                self.unused.discard(key)  # have already warned now -> consider it "used"
 
     def any_nonzero(self, keys, log_msg=None):
         """Check for any non-zero or non-equal entries in some parameters.

@@ -1,5 +1,5 @@
 """Short test for vmem prediction."""
-# Copyright 2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 
 import tenpy.algorithms as algo

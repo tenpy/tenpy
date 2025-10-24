@@ -14,7 +14,7 @@ latter by using :meth:`~tenpy.models.model.MPOModel.group_sites` and
 :meth:`~tenpy.models.model.NearestNeighborModel.from_MPOModel`.
 An example for such a case is given in the file ``examples/c_tebd.py``.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from .lattice import Chain
 from ..networks.site import SpinSite, GroupedSite
@@ -60,6 +60,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
             What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
         Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
             Coupling as defined for the Hamiltonian above.
+            Defaults to all ``Jx=Jy=Jz=Jxp=Jyp=Jzp=1`` and zero fields ``h*=0``.
         bc_MPS : {'finite' | 'infinite'}
             MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
 

@@ -1,9 +1,12 @@
 """A collection of tests to check the functionality of `tenpy.dmrg`"""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import tenpy.linalg.np_conserved as npc
+from tenpy.models.model import CouplingModel, MPOModel
+from tenpy.networks.site import SpinHalfSite
 from tenpy.models.tf_ising import TFIChain
 from tenpy.models.spins import SpinChain
+from tenpy.models.lattice import Chain
 from tenpy.algorithms import dmrg, dmrg_parallel
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.networks import mps
@@ -330,3 +333,53 @@ def test_dmrg_mixer_cleanup(L, bc_MPS):
     print(f'Check that expectation values have not changed...')
     for op in ['Sx', 'Sz']:
         assert np.allclose(engine.psi.expectation_value(op), old_psi.expectation_value(op))
+
+
+class _TransverseClusterModel(CouplingModel, MPOModel):
+    def __init__(self, model_params):
+        L = model_params.get('L', 2)
+        B = model_params.get('B', 0)
+        bc_MPS = model_params.get('bc_MPS', 'infinite')
+        site = SpinHalfSite(conserve=None)
+        lat = Chain(L, site, bc='periodic', bc_MPS=bc_MPS)
+        CouplingModel.__init__(self, lat)
+        self.add_onsite(-B, 0, 'Sigmax')
+        self.add_multi_coupling(-1, [('Sigmaz', -1, 0), ('Sigmax', 0, 0), ('Sigmaz', 1, 0)])
+        MPOModel.__init__(self, lat, self.calc_H_MPO())
+
+
+@pytest.mark.parametrize('model', ['tfi', 'cluster'])
+def test_segment_dmrg(model):
+    if model == 'tfi':
+        model = TFIChain(dict(J=1, g=1.5, L=2, bc_MPS='infinite'))
+    elif model == 'cluster':
+        # model from https://tenpy.johannes-hauschild.de/viewtopic.php?t=691
+        model = _TransverseClusterModel({})
+
+    # first dmrg run for *infinite* lattice
+    psi0_infinite = mps.MPS.from_lat_product_state(model.lat, [['up']])
+    trunc_params = dict(chi_max=100, svd_min=1e-10)
+    dmrg_params = dict(mixer=True, max_E_err=1e-10, trunc_params=trunc_params)
+    eng0 = dmrg.TwoSiteDMRGEngine(psi0_infinite, model, dmrg_params)
+    eng0.run()
+
+    model_segment = model.extract_segment(enlarge=10)
+    psi0_segment = psi0_infinite.extract_segment(*model_segment.lat.segment_first_last)
+    init_env_data = eng0.env.get_initialization_data(*model_segment.lat.segment_first_last)
+
+    psi1_segment = psi0_segment.copy()
+    psi1_segment.perturb()
+    eng1 = dmrg.TwoSiteDMRGEngine(psi1_segment, model_segment, dmrg_params,
+                                 resume_data={'init_env_data': init_env_data})
+    eng1.run()
+
+    assert np.allclose(psi1_segment.entanglement_entropy(),
+                       np.mean(psi0_infinite.entanglement_entropy()))
+    assert np.allclose(psi0_infinite.expectation_value('Sz', [0]),
+                       psi1_segment.expectation_value('Sz', [0]))
+    assert np.allclose(psi0_infinite.expectation_value('Sx', [0]),
+                       psi1_segment.expectation_value('Sx', [0]))
+
+    with pytest.warns():
+        eng0.options.warn_unused()
+        eng1.options.warn_unused()

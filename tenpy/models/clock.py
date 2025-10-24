@@ -2,7 +2,7 @@
 
 Generalization of transverse field Ising model to higher dimensional on-site Hilbert space.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 from .model import CouplingMPOModel, NearestNeighborModel
@@ -47,6 +47,7 @@ class ClockModel(CouplingMPOModel):
             The number of states per site.
         J, g : float | array
             Couplings as defined for the Hamiltonian above.
+            Defaults to ``J=g=1``.
 
     """
 

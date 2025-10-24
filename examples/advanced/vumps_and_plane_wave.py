@@ -2,7 +2,7 @@
 
 This example uses VUMPS to find the ground state of the transverse field Ising model and uses the plane wave excitation ansatz to compute the first excited states.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from tenpy.models.tf_ising import TFIChain
 from tenpy.algorithms import vumps, plane_wave_excitation

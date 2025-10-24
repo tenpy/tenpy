@@ -82,7 +82,7 @@ Overview
     speigs
 
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import scipy.linalg
@@ -4015,6 +4015,9 @@ def qr(a,
             q_block, r_block = np.linalg.qr(block, mode)
         else:
             q_block, r_block = qr_li(block, cutoff)
+            if q_block.size == 0:
+                # empty blocks would break below
+                continue
         if pos_diag_R:
             r_diag = np.diag(r_block)
             phase = r_diag / np.abs(r_diag)
@@ -4059,6 +4062,10 @@ def qr(a,
     if mode != 'complete':
         q._qdata[:, 1] = map_qind[q._qdata[:, 0]]
         r._qdata[:, 0] = q._qdata[:, 1]  # copy map_qind[q._qdata[:, 0]] from q
+        # filter out zero-size blocks
+        nonzero = q._qdata[:, 1] != -1
+        q._qdata = q._qdata[nonzero]
+        r._qdata = r._qdata[nonzero]
     else:  # mode == 'complete'
         q._qdata[:, 1] = q._qdata[:, 0]
         if len(q_data) < a_leg0.block_number:

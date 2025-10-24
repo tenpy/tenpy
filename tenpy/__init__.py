@@ -6,7 +6,7 @@ designed to study the physics of strongly correlated quantum systems.
 The code is intended to be accessible for newcomers
 and yet powerful enough for day-to-day research.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 # This file marks this directory as a python package.
 
 # Note: all external packages that are imported should be `del`-ed at the end of the file!
@@ -19,9 +19,9 @@ logger = logging.getLogger(__name__)
 # note that the order matters!
 from . import tools
 from . import linalg
-from . import algorithms
 from . import networks
 from . import models
+from . import algorithms
 from . import simulations
 from . import version  # needs to be after linalg!
 
@@ -37,7 +37,7 @@ from .algorithms.tdvp import (SingleSiteTDVPEngine, TwoSiteTDVPEngine, TimeDepen
                               TimeDependentTwoSiteTDVP)
 from .algorithms.vumps import SingleSiteVUMPSEngine, TwoSiteVUMPSEngine
 from .algorithms.tebd import TEBDEngine, QRBasedTEBDEngine, RandomUnitaryEvolution, TimeDependentTEBD
-from .algorithms.truncation import TruncationError, truncate, svd_theta, decompose_theta_qr_based
+from .linalg.truncation import TruncationError, truncate, svd_theta, decompose_theta_qr_based
 from .linalg.charges import ChargeInfo, LegCharge, LegPipe
 from .linalg.krylov_based import Arnoldi, LanczosGroundState, LanczosEvolution, lanczos_arpack
 from .linalg.np_conserved import (Array, zeros, ones, eye_like, diag,
@@ -47,6 +47,7 @@ from .linalg.np_conserved import (Array, zeros, ones, eye_like, diag,
 from .models.lattice import (Lattice, TrivialLattice, SimpleLattice, MultiSpeciesLattice,
                              IrregularLattice, HelicalLattice, Chain, Ladder, NLegLadder, Square,
                              Triangular, Honeycomb, Kagome, get_lattice)
+from .models.model import (Model, NearestNeighborModel, MPOModel, CouplingModel, CouplingMPOModel)
 from .models.tf_ising import TFIModel, TFIChain
 from .models.xxz_chain import XXZChain, XXZChain2
 from .models.spins import SpinModel, SpinChain
@@ -58,6 +59,7 @@ from .models.clock import ClockModel, ClockChain
 from .models.hubbard import (BoseHubbardModel, BoseHubbardChain, FermiHubbardModel,
                              FermiHubbardChain, FermiHubbardModel2)
 from .models.haldane import BosonicHaldaneModel, FermionicHaldaneModel
+from .models.molecular import MolecularModel
 from .models.toric_code import ToricCode
 from .models.aklt import AKLTChain
 from .models.mixed_xk import (MixedXKLattice, MixedXKModel, SpinlessMixedXKSquare,
@@ -114,7 +116,9 @@ __all__ = [
     # from tenpy.models
     'Lattice', 'TrivialLattice', 'SimpleLattice', 'MultiSpeciesLattice', 'IrregularLattice',
     'HelicalLattice', 'Chain', 'Ladder', 'NLegLadder', 'Square', 'Triangular', 'Honeycomb',
-    'Kagome', 'get_lattice', 'TFIModel', 'TFIChain', 'XXZChain', 'XXZChain2', 'SpinModel',
+    'Kagome', 'get_lattice',
+    'Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'CouplingMPOModel',
+    'TFIModel', 'TFIChain', 'XXZChain', 'XXZChain2', 'SpinModel',
     'SpinChain', 'SpinChainNNN', 'SpinChainNNN2', 'FermionModel', 'FermionChain', 'tJModel',
     'tJChain', 'HofstadterBosons', 'HofstadterFermions', 'ClockModel', 'ClockChain',
     'BoseHubbardModel', 'BoseHubbardChain', 'FermiHubbardModel', 'FermiHubbardChain',

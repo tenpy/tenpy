@@ -22,7 +22,7 @@ can be extended to include excitations that span several sites. This is implemen
 in :class:`MultiSitePlaneWaveExcitationEngine`. Note that with the current implementation, the
 numerical costs scale exponentially with the number of exciting sites.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import logging
@@ -218,7 +218,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         # We create GS_env_L and GS_env_R to make topological easier.
         self.GS_env = self.GS_env_L = self.GS_env_R = MPOEnvironment(self.psi, self.H, self.psi,
                                                                      **self.boundary_env_data)
-        self.lambda_C1 = options.get('lambda_C1', None, 'real')
+        self.lambda_C1 = self.options.get('lambda_C1', None, 'real')
         if self.lambda_C1 is None:
             C0_L = self.Cs[0]
             norm = npc.tensordot(C0_L, C0_L.conj(), axes=(['vL', 'vR'], ['vL*', 'vR*']))

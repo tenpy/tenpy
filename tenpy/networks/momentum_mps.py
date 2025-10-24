@@ -20,7 +20,7 @@ Here, `VL` is the orthogonal complement of the corresponding `AL` tensor, such t
 always orthogonal to the initial uniform MPS. `X` parametrizes the excited states.
 """
 
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import logging

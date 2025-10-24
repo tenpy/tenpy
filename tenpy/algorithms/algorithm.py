@@ -1,18 +1,21 @@
 """This module contains some base classes for algorithms."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import time
 import numpy as np
 import logging
 logger = logging.getLogger(__name__)
 
-from .truncation import TruncationError
+from ..linalg.truncation import TruncationError
 from ..tools.misc import consistency_check
 from ..tools.events import EventHandler
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
 
 __all__ = ['Algorithm', 'TimeEvolutionAlgorithm', 'TimeDependentHAlgorithm']
+__deprecated_submodules__ = [
+    'truncation', # moved to tenpy.linalg
+]
 
 
 class Algorithm:
@@ -92,8 +95,9 @@ class Algorithm:
             N_sites_per_ring = model.lat.N_sites_per_ring
         except AttributeError:  # for e.g. VariationalApplyMPO, model is just the MPO and has no lat
             N_sites_per_ring = 1
-        consistency_check(N_sites_per_ring, self.options, 'max_N_sites_per_ring', 18,
-                          'Maximum number of sites per ring (``max_N_sites_per_ring``) exceeded.')
+        if N_sites_per_ring is not None:
+            consistency_check(N_sites_per_ring, self.options, 'max_N_sites_per_ring', 18,
+                            'Maximum number of sites per ring (``max_N_sites_per_ring``) exceeded.')
 
     @classmethod
     def switch_engine(cls, other_engine, *, options=None, **kwargs):
@@ -347,13 +351,18 @@ class TimeEvolutionAlgorithm(Algorithm):
         preserve_norm : bool
             Whether the state will be normalized to its initial norm after each time step.
             Per default, this is ``False`` for real time evolution and ``True`` for imaginary time.
+        start_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            Initial truncation error for :attr:`trunc_err`.
 
     Attributes
     ----------
     evolved_time : float | complex
         Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
-        Not that the real-part of `t` is increasing for a real-time evolution,
+        Note that the real-part of `t` is increasing for a real-time evolution,
         while the imaginary-part of `t` is *decreasing* for a imaginary time evolution.
+    trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        Upper bound for the accumulated error of the represented state,
+        which is introduced due to the truncation during the sequence of update steps.
     """
     time_dependent_H = False  #: whether the algorithm supports time-dependent H
 
@@ -387,9 +396,11 @@ class TimeEvolutionAlgorithm(Algorithm):
 
         S = self.psi.entanglement_entropy()
         logger.info(
-            "--> time=%(t)3.3f, max(chi)=%(chi)d, max(S)=%(S).5f, "
+            "--> time=%(tr)3.3f %(sign)s %(tc)3.3fj, max(chi)=%(chi)d, max(S)=%(S).5f, "
             "avg DeltaS=%(dS).4e, since last update: %(wall_time).1fs", {
-                't': self.evolved_time.real,
+                'tr': self.evolved_time.real,
+                'sign': "+" if self.evolved_time.imag >= 0 else "-",
+                'tc': np.abs(self.evolved_time.imag),
                 'chi': max(self.psi.chi),
                 'S': max(S),
                 'dS': np.mean(S) - Sold,

@@ -116,7 +116,7 @@ see :cite:`hauschild2018`.
     Moreover, we don't split the physical and auxiliary space into separate sites, which makes
     TEBD as costly as :math:`O(d^6 \chi^3)`.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import copy
 import numpy as np
@@ -124,7 +124,6 @@ import numpy as np
 from .mps import MPS
 from ..linalg import np_conserved as npc
 from ..tools.math import entropy
-from ..tools.misc import lexsort
 
 __all__ = ['PurificationMPS', 'convert_model_purification_canonical_conserve_ancilla_charge']
 
@@ -160,6 +159,53 @@ class PurificationMPS(MPS):
             if not set(['vL', 'vR', 'p', 'q']) <= set(B.get_leg_labels()):
                 raise ValueError("B has wrong labels " + repr(B.get_leg_labels()))
         super().test_sanity()
+
+    @classmethod
+    def from_density_matrix(cls, sites, rho, form=None, cutoff=1e-16, normalize=True):
+        r"""Construct a purification from a single tensor `rho` of the density matrix.
+
+        Given the mixed state :math:`\rho`, we diagonalize it :math:`\rho = U D U^\dagger`,
+        and define :math:`\psi = \sum_{ijk} U_{ik} \sqrt{D_k} \bar{U}_{jk} |i>_{phys} |j>_{anc}`.
+        This is one of many possible purifications of :math:`rho`, and is valid since
+        :math:`Tr_{anc} |\psi><\psi| = \rho`.
+        We then construct a purification MPS of :math:`\psi` using :meth:`from_full`.
+
+        Boundary conditions are always finite.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the physical local Hilbert spaces.
+        rho : :class:`~tenpy.linalg.np_conserved.Array`
+            The full density matrix.
+            Should have labels ``'p0', 'p0*', 'p1', 'p1*, ...,  'p{L-1}', 'p{L-1}*`` (in any order).
+            Is assumed to be hermitian and positive semi-definite.
+        form  : ``'B' | 'A' | 'C' | 'G' | None``
+            The canonical form of the resulting MPS, see module doc-string.
+            ``None`` defaults to 'A' form on the first site and 'B' form on all following sites.
+        cutoff : float
+            Cutoff of singular values used in the SVDs.
+        normalize : bool
+            Whether the resulting MPS should have 'norm' 1.
+        """
+        L = len(sites)
+        rho = rho.combine_legs([[f'p{i}' for i in range(L)], [f'p{i}*' for i in range(L)]])  # [P, P*]
+        D, U = npc.eigh(rho)  # D[eig] , U[P, eig]
+
+        # fix negative eigenvalues
+        if np.any(D < -1e-12):
+            raise ValueError('Density matrix is not positive.')
+        D[D < 0] = 0
+
+        # [P, eig] * [eig] @ [P*, eig*] -> [P, P*]
+        psi = npc.tensordot(U.scale_axis(np.sqrt(D), axis=-1), U.conj(), (1, 1))
+
+        # [P, P*] -> [p0, p1, ..., p0*, p1*, ...]
+        psi = psi.split_legs()
+        # [p0, p1, ..., p0*, p1*, ...] -> [p0, p1, ..., q0, q1, ...]
+        psi.ireplace_labels([f'p{i}*' for i in range(L)], [f'q{i}' for i in range(L)])
+        return cls.from_full(sites, psi, form=form, cutoff=cutoff, normalize=normalize,
+                             bc='finite', outer_S=None)
 
     @classmethod
     def from_infiniteT(cls, sites, bc='finite', form='B', dtype=np.float64):
@@ -234,39 +280,13 @@ class PurificationMPS(MPS):
         L = len(sites)
         assert L > 0
         chinfo = sites[0].leg.chinfo
-        for s in sites:
-            assert s.leg.chinfo == chinfo
-        charge_sector_left = chinfo.make_valid(None)  # zero charges
-        charge_sector_right = chinfo.make_valid(charge_sector)
-        assert charge_sector_right.ndim == 1
-        # get bounds for the maximal and minimal charge values at each bond
-        Q_from_right = [None] * L + [set([tuple(charge_sector_right)])]  # all bonds 0, ... L
-        for i in reversed(range(L)):
-            Q_R = np.array(list(Q_from_right[i+1]))
-            # find new charges possible on left of site i, coming from the right
-            Q_L = set()
-            for Q_p in sites[i].leg.charges:
-                Q_L_add = chinfo.make_valid(Q_R - Q_p[np.newaxis, :])
-                Q_L_add = set([tuple(q) for q in Q_L_add])
-                Q_L = Q_L.union(Q_L_add)
-            Q_from_right[i] = Q_L
-        if tuple(charge_sector_left) not in Q_from_right[0]:
-            raise ValueError("can't get desired charge sector {charge_sector!r} "
-                             "for the given charges on physical sites!")
-        Q_from_left = [set([tuple(charge_sector_left)])] + [None] * L
+        assert all(s.leg.chinfo == chinfo for s in sites), "Charge Info for all sites must be identical"
+        # get a 'charge_tree', (list of sets with possible charges for each site, including 0 to the left)
+        charge_tree = cls.get_charge_tree_for_given_charge_sector(sites, charge_sector)
+        # get charges from charge_tree in correct array form
         Q_L_arrays = []
-        for i in range(L):
-            Q_L = np.array(list(Q_from_left[i]))
-            Q_L = Q_L[lexsort(Q_L.T), :]
-            Q_L_arrays.append(Q_L)
-            Q_R = set()
-            for Q_p in sites[i].leg.charges:
-                Q_R_add = chinfo.make_valid(Q_L + Q_p[:, np.newaxis])
-                Q_R_add = set([tuple(q) for q in Q_R_add])
-                Q_R = Q_R.union(Q_R_add)
-            Q_from_left[i+1] = Q_R.intersection(Q_from_right[i+1])
-        assert Q_from_left[-1] == Q_from_right[-1]  # should match charge_sector on the right
-        Q_L_arrays.append(chinfo.make_valid(charge_sector_right[np.newaxis, :]))
+        for possible_charges_L in charge_tree:
+            Q_L_arrays.append(np.array(list(possible_charges_L)))
 
         # now we can define the tensors following section VI.C) of [barthel2016]_:
         # B[vL, vR, p, q] = delta_{p,q} delta_{Q(p) + Q(vL), Q(vR)}

@@ -18,10 +18,11 @@ We have implemented:
 Much of the code is very similar to DMRG, and also based on the
 :class:`~tenpy.algorithms.mps_common.Sweep` class.
 
-.. warning ::
-    The interface changed compared to version 0.9.0: Using :class:`TDVPEngine` will result
-    in a error. Use :class:`SingleSiteTDVPEngine` or :class:`TwoSiteTDVPEngine` instead.
-    The old code is still around as :class:`OldTDVPEngine`.
+.. versionchanged :: 0.10.0
+    The interface changed compared to version 0.9.0:
+    Just :class:`TDVPEngine` will result in a error.
+    Use :class:`SingleSiteTDVPEngine` or :class:`TwoSiteTDVPEngine` instead.
+
 
 .. todo ::
     extend code to infinite MPS
@@ -29,15 +30,17 @@ Much of the code is very similar to DMRG, and also based on the
 .. todo ::
     allow for increasing bond dimension in SingleSiteTDVPEngine, similar to DMRG Mixer
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from ..linalg.krylov_based import LanczosEvolution
-from .truncation import svd_theta, TruncationError
+from ..linalg.truncation import svd_theta, TruncationError
 from .mps_common import Sweep, ZeroSiteH, OneSiteH, TwoSiteH
 from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg import np_conserved as npc
 from ..tools.misc import consistency_check
+from ..tools.params import asConfig
 import logging
+import warnings
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +55,10 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
     :class:`SingleSiteTDVPEngine` and :class:`TwoSiteTDVPEngine`.
     Use the latter two classes for actual TDVP runs.
 
+    .. versionchanged :: 1.1
+        Previously had separate `lanczos_options`, which have been renamed to `lanczos_params`
+        for consistency with the Sweep class.
+
     Parameters
     ----------
     psi, model, options, **kwargs:
@@ -59,13 +66,9 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
 
     Options
     -------
-    .. cfg:config :: TDVP
-        :include: TimeEvolutionAlgorithm
+    .. cfg:config :: TDVPEngine
+        :include: TimeEvolutionAlgorithm, Sweep
 
-        trunc_params : dict
-            Truncation parameters as described in :func:`~tenpy.algorithms.truncation.truncate`
-        lanczos_options : dict
-            Lanczos options as described in :cfg:config:`Lanczos`.
         Krylov_params : dict
             Krylov options as described in :meth:`prepare_evolve`.
         max_dt : float | None
@@ -77,16 +80,6 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
 
     Attributes
     ----------
-    options: dict
-        Optional parameters.
-    evolved_time : float | complex
-        Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
-    psi : :class:`~tenpy.networks.mps.MPS`
-        The MPS, time evolved in-place.
-    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
-        The environment, storing the `LP` and `RP` to avoid recalculations.
-    lanczos_options : :class:`~tenpy.tools.params.Config`
-        Options passed on to :class:`~tenpy.linalg.lanczos.LanczosEvolution`.
     Krylov_params : :class:`~tenpy.tools.params.Config`
         Parameters for subspace expansion in :meth:`prepare_evolve`.
     """
@@ -97,17 +90,25 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
             msg = ("TDVP interface changed. \n"
                    "The new TDVPEngine has subclasses SingleSiteTDVPEngine"
                    " and TwoSiteTDVPEngine that you can use.\n"
-                   "For now, the previous version is still available as OldTDVPEngine."
                    )
             raise NameError(msg)
         if psi.bc != 'finite':
             raise NotImplementedError("Only finite TDVP is implemented")
         assert psi.bc == model.lat.bc_MPS
+        options = asConfig(options, self.__class__.__name__)
+        options.deprecated_alias("lanczos_options", "lanczos_params",
+                                 "See also https://github.com/tenpy/tenpy/issues/459")
         super().__init__(psi, model, options, **kwargs)
-        self.lanczos_options = self.options.subconfig('lanczos_options')
-        self.Krylov_params = self.options.subconfig('Krylov_params')
+        self.Krylov_params = options.subconfig('Krylov_params')
 
     # run() from TimeEvolutionAlgorithm
+
+    @property
+    def lanczos_options(self):
+        """Deprecated alias of :attr:`lanczos_params`."""
+        warnings.warn("Accessing deprecated alias TDVPEngine.lanczos_options instead of lanczos_params",
+                      FutureWarning, stacklevel=2)
+        return self.lanczos_params
 
     def prepare_evolve(self, dt):
         """Expand the basis using Krylov or random vectors using the algorithm from :cite:`yang2020`.
@@ -173,7 +174,8 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
             The number of steps to evolve.
         """
         consistency_check(dt, self.options, 'max_dt', 1.,
-                          'dt > ``max_dt`` is unreasonably large for TDVP.')
+                          'dt > ``max_dt`` is unreasonably large for TDVP.',
+                          compare='abs()<=')
         self.dt = dt
         trunc_err = TruncationError()
         for _ in range(N_steps):
@@ -194,32 +196,14 @@ class TwoSiteTDVPEngine(TDVPEngine):
 
     Options
     -------
-    .. cfg:config :: TDVP
-        :include: TimeEvolutionAlgorithm
+    .. cfg:config :: TwoSiteTDVPEngine
+        :include: TDVPEngine
 
-        trunc_params : dict
-            Truncation parameters as described in :func:`~tenpy.algorithms.truncation.truncate`
-        lanczos_options : dict
-            Lanczos options as described in :cfg:config:`Lanczos`.
-
-    Attributes
-    ----------
-    options: dict
-        Optional parameters.
-    evolved_time : float | complex
-        Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
-    psi : :class:`~tenpy.networks.mps.MPS`
-        The MPS, time evolved in-place.
-    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
-        The environment, storing the `LP` and `RP` to avoid recalculations.
-    lanczos_options : :class:`~tenpy.tools.params.Config`
-        Options passed on to :class:`~tenpy.linalg.lanczos.LanczosEvolution`.
     """
     EffectiveH = TwoSiteH
 
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
-        self.trunc_err = TruncationError()
 
     def get_sweep_schedule(self):
         """Slightly different sweep schedule than DMRG"""
@@ -236,11 +220,11 @@ class TwoSiteTDVPEngine(TDVPEngine):
         i0 = self.i0
         L = self.psi.L
 
-        dt = self.dt
+        dt = -0.5j * self.dt
         if i0 == L - 2:
             dt = 2. * dt  # instead of updating the last pair of sites twice, we double the time
         # update two-site wavefunction
-        theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_options).run(-0.5j * dt)
+        theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_params).run(dt)
         if self.combine:
             theta.itranspose(['(vL.p0)', '(p1.vR)'])  # shouldn't do anything
         else:
@@ -267,6 +251,7 @@ class TwoSiteTDVPEngine(TDVPEngine):
         elif (self.move_right is False):
             self.one_site_update(i0, 0.5j * self.dt)
         # for the last update of the sweep, where move_right is None, there is no one_site_update
+
         return update_data
 
     def update_env(self, **update_data):
@@ -277,7 +262,7 @@ class TwoSiteTDVPEngine(TDVPEngine):
         H1 = OneSiteH(self.env, i, combine=False)
         theta = self.psi.get_theta(i, n=1, cutoff=self.S_inv_cutoff)
         theta = H1.combine_theta(theta)
-        theta, _ = LanczosEvolution(H1, theta, self.lanczos_options).run(dt)
+        theta, _ = LanczosEvolution(H1, theta, self.lanczos_params).run(dt)
         self.psi.set_B(i, theta.replace_label('p0', 'p'), form='Th')
 
 
@@ -291,26 +276,9 @@ class SingleSiteTDVPEngine(TDVPEngine):
 
     Options
     -------
-    .. cfg:config :: TDVP
-        :include: TimeEvolutionAlgorithm
+    .. cfg:config :: SingleSiteTDVPEngine
+        :include: TDVPEngine
 
-        trunc_params : dict
-            Truncation parameters as described in :func:`~tenpy.algorithms.truncation.truncate`
-        lanczos_options : dict
-            Lanczos options as described in :cfg:config:`Lanczos`.
-
-    Attributes
-    ----------
-    options: dict
-        Optional parameters.
-    evolved_time : float | complex
-        Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
-    psi : :class:`~tenpy.networks.mps.MPS`
-        The MPS, time evolved in-place.
-    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
-        The environment, storing the `LP` and `RP` to avoid recalculations.
-    lanczos_options : :class:`~tenpy.tools.params.Config`
-        Options passed on to :class:`~tenpy.linalg.lanczos.LanczosEvolution`.
     """
     EffectiveH = OneSiteH
 
@@ -329,12 +297,12 @@ class SingleSiteTDVPEngine(TDVPEngine):
         i0 = self.i0
         L = self.psi.L
 
-        dt = self.dt
+        dt = -0.5j * self.dt
         if i0 == L - 1:
             dt = 2. * dt  # instead of updating the last site twice, we double the time
 
         # update one-site wavefunction
-        theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_options).run(-0.5j * dt)
+        theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_params).run(dt)
         if self.move_right:
             self.right_moving_update(i0, theta)
         else:
@@ -394,7 +362,7 @@ class SingleSiteTDVPEngine(TDVPEngine):
     def zero_site_update(self, i, theta, dt):
         """Zero-site update on the left of site `i`."""
         H0 = ZeroSiteH(self.env, i)
-        theta, _ = LanczosEvolution(H0, theta, self.lanczos_options).run(dt)
+        theta, _ = LanczosEvolution(H0, theta, self.lanczos_params).run(dt)
         return theta, H0
 
     def post_update_local(self, **update_data):

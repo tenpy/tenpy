@@ -76,7 +76,7 @@ knobs you can turn to tweak the most out of this library, explained in the follo
 .. autodata:: have_cython_functions
 .. autodata:: compiled_with_MKL
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from enum import IntEnum
 import warnings
@@ -224,7 +224,7 @@ def set_level(level=1):
 
 def get_level():
     """Return the global optimization level."""
-    global _level
+    global _level  # noqa: F824
     return _level
 
 
@@ -242,7 +242,7 @@ def optimize(level_compare=OptimizationFlag.default):
         True if the algorithms should try to optimize, i.e., whether the global
         "optimization level" is equal or higher than the level to compare to.
     """
-    global _level
+    global _level  # noqa: F824
     return (_level >= level_compare)
 
 

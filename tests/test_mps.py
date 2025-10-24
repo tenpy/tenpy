@@ -1,5 +1,5 @@
 """A collection of tests for :module:`tenpy.networks.mps`."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import numpy.testing as npt
@@ -380,6 +380,22 @@ def test_apply_op(bc, eps=1.e-13):
     psi2.apply_product_op(['Sigmax', 'Sm', 'Sigmax'])
     th = psi2.get_theta(0, 3).to_ndarray().reshape((8, ))
     assert np.linalg.norm(th - [0., 0., 0., -s2, 0., 0., s2, 0.]) < eps
+
+
+def test_apply_local_op_JW_string(eps=1e-13):
+    L = 6
+    s = site.FermionSite(conserve='N')
+    psi_full = mps.MPS.from_product_state([s] * L, ['full'] * L)
+
+    for i in range(L):
+        # C_i |11...1...1> = (-1) ** i |11...0...1>
+        c_psi = psi_full.copy()
+        c_psi.apply_local_op(i, 'C')
+        expect_prod_state = ['full'] * i + ['empty'] + ['full'] * (L - i - 1)
+        expect_prod_state = mps.MPS.from_product_state([s] * L, expect_prod_state)
+        ov = c_psi.overlap(expect_prod_state)
+        expect_ov = 1 - 2 * (i % 2)  # == (-1) ** i
+        assert abs(ov - expect_ov) < eps
 
 
 def test_enlarge_mps_unit_cell():

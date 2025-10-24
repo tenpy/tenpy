@@ -110,3 +110,13 @@ References
 .. bibliography:: literature.bib
     :style: custom1
     :all:
+
+
+PhD theses
+----------
+For inspiration, we also (somewhat randomly) list a few PhD theses related to tensor networks (accessible online) - they
+often provide a very good introduction to some specific topic.
+
+.. bibliography:: theses.bib
+    :all:
+    :style: custom2

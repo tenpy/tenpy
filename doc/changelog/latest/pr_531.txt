@@ -1,0 +1,2 @@
+- Fixed a bug where :meth:`~tenpy.models.model.CouplingModel.add_exponentially_decaying_coupling`
+  with ``plus_hc=True`` did not hc the ``op_string``

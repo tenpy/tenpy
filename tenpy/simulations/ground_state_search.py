@@ -1,5 +1,5 @@
 """Simulations for ground state searches."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 from pathlib import Path
@@ -776,6 +776,8 @@ class TopologicalExcitations(OrthogonalExcitations):
             segment_enlarge, segment_first, segment_last : int | None
                 Arguments for :meth:`~tenpy.models.lattice.Lattice.extract_segment`.
                 `segment_enlarge` is only used for initially infinite ground states.
+            segment_boundary : int
+                Boundary should be measured from the SAME site as 'first' and not w.r.t. 'first'.
             write_back_converged_ground_state_environments : bool
                 Only used for infinite ground states, indicating that we should write converged
                 environments of the ground state back to `ground_state_filename`.
@@ -783,6 +785,12 @@ class TopologicalExcitations(OrthogonalExcitations):
                 simulation in the future with the same `ground_state_filename`.
                 (However, it is not faster when the simulations run at the same time; instead it
                 might even lead to errors!)
+            gauge : { 'rho' | 'trace' }
+                How the additive part of the generalized eigenvector is subtracted out for the
+                :class:`~tenpy.networks.mpo.MPOTransferMatrix`, see its docs for details.
+                Default ``'rho'``.
+            join_method : {'average charge' | 'most probable charge'}
+                How to build the :attr:`gluing_charge` from the charges of left and right environments.
 
         Parameters
         ----------
@@ -807,7 +815,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             return self._extract_segment_from_finite(psi0_alpha_Orig, psi0_beta_Orig, model_orig)
 
     def _extract_segment_from_finite(self, psi0_fin_alpha, psi0_fin_beta, model_fin):
-        """ Extract segment from finite MPS. """
+        """Extract segment from finite MPS. """
         first = self.options.get('segment_first', 0, int)
         last = self.options.get('segment_last', None, int)
         # boundary should be defined in terms of the ORIGINAL MPS and NOT first.
@@ -1181,8 +1189,6 @@ class ExcitationInitialState(InitialStateBuilder):
         randomize_params : dict-like
             Parameters for the random unitary evolution used to perturb the state a little bit
             in :meth:`~tenpy.networks.mps.MPS.perturb`.
-        randomize_close_1 : bool
-            Whether to randomize/perturb with unitaries close to the identity.
         use_highest_excitation : bool
             If True, start from  the last state in :attr:`orthogonal_to` and perturb it.
             If False, use the ground state (=the first entry of :attr:`orthogonal_to` and

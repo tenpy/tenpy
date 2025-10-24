@@ -6,7 +6,7 @@ the idea is more to serve as a pedagogical example for a 'model'.
 
 We choose the field along z to allow to conserve the parity, if desired.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 
@@ -47,6 +47,7 @@ class TFIModel(CouplingMPOModel):
             Whether to sort by charges of physical legs. `True` by default.
         J, g : float | array
             Coupling as defined for the Hamiltonian above.
+            Defaults to ``J=g=1``
 
     """
     def init_sites(self, model_params):

@@ -10,7 +10,7 @@ The version is provided in the standard python format ``major.minor.revision`` a
 .. autodata :: full_version
 .. autodata :: version_summary
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import sys
 import subprocess
@@ -22,7 +22,7 @@ __all__ = [
 
 # hard-coded version for people without git...
 #: current release version as a string
-version = '1.0.3'
+version = '1.0.6'
 
 #: whether this is a released version or modified
 released = False

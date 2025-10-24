@@ -4,7 +4,7 @@ The files are only imported, so please protect example code from running with st
 __name__ == "__main__": ...`` clauses, if you want to demonstrate an interactive code, which
 should not be executed as part of the tests.
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import sys
 import os

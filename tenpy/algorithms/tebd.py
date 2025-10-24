@@ -37,7 +37,7 @@ If one chooses imaginary :math:`dt`, the exponential projects
     Yet, imaginary TEBD might be useful for cross-checks and testing.
 
 """
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 import time
@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg import np_conserved as npc
-from .truncation import svd_theta, decompose_theta_qr_based, TruncationError
+from ..linalg.truncation import svd_theta, decompose_theta_qr_based, TruncationError
 from ..linalg import random_matrix
 from ..tools.misc import consistency_check
 
@@ -65,8 +65,6 @@ class TEBDEngine(TimeEvolutionAlgorithm):
     .. cfg:config :: TEBDEngine
         :include: TimeEvolutionAlgorithm
 
-        start_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
-            Initial truncation error for :attr:`trunc_err`.
         order : int
             Order of the algorithm. The total error for evolution up to a fixed time `t`
             scales as ``O(t*dt^order)``.
@@ -81,13 +79,6 @@ class TEBDEngine(TimeEvolutionAlgorithm):
 
     Attributes
     ----------
-    trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
-        The error of the represented state which is introduced due to the truncation during
-        the sequence of update steps.
-    psi : :class:`~tenpy.networks.mps.MPS`
-        The MPS, time evolved in-place.
-    model : :class:`~tenpy.models.model.NearestNeighborModel`
-        The model defining the Hamiltonian.
     _U : list of list of :class:`~tenpy.linalg.np_conserved.Array`
         Exponentiated `H_bond` (bond Hamiltonians), i.e. roughly ``exp(-i H_bond dt_i)``.
         First list for different `dt_i` as necessary for the chosen `order`,
@@ -212,7 +203,8 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             b1 = 0.42652466131587616168
             a2 = -0.078111158921637922695
             b2 = -0.12039526945509726545
-            return [a1, b1, a2, b2, 0.5 - a1 - a2, 1. - 2 * (b1 + b2)]  # a1 b1 a2 b2 a3 b3
+            # a1 b1 a2 b2 a3 b3 2*a1
+            return [a1, b1, a2, b2, 0.5 - a1 - a2, 1. - 2 * (b1 + b2), 2 * a1]
         # else
         raise ValueError("Unknown order %r for Suzuki Trotter decomposition" % order)
 
@@ -273,10 +265,19 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             steps = steps + [a]
             return steps
         elif order == '4_opt':
-            # symmetric: a1 b1 a2 b2 a3 b3 a2 b2 a2 b1 a1
-            steps = [(0, odd), (1, even), (2, odd), (3, even), (4, odd),  (5, even),
-                     (4, odd), (3, even), (2, odd), (1, even), (0, odd)]  # yapf: disable
-            return steps * N_steps
+            # U = [a1 b1 a2 b2 a3 b3 a3 b2 a2 b1 a1] * N
+            #   = [a1 b1 a2 b2 a3 b3 a3 b2 a2 b1] + [2*a1 b1 a2 b2 a3 b3 a3 b2 a2 b1] * (N-1) + [a1]
+            a1 = (0, odd)
+            b1 = (1, even)
+            a2 = (2, odd)
+            b2 = (3, even)
+            a3 = (4, odd)
+            b3 = (5, even)
+            a1_twice = (6, odd)
+            steps = [a1, b1, a2, b2, a3, b3, a3, b2, a2, b1]
+            steps = steps + [a1_twice, b1, a2, b2, a3, b3, a3, b2, a2, b1] * (N_steps - 1)
+            steps = steps + [a1]
+            return steps
         # else
         raise ValueError("Unknown order {0!r} for Suzuki Trotter decomposition".format(order))
 
@@ -575,7 +576,19 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         * ``U_bond = exp(-i dt (H_bond-E_offset_bond))`` for ``type_evo='real'``, or
         * ``U_bond = exp(- dt H_bond)`` for ``type_evo='imag'``.
         """
-        h = self.model.H_bond[i_bond]
+        try:
+            h = self.model.H_bond[i_bond]
+        except AttributeError:
+            msg = (f'The model has no attribute "H_bond", which is required for TEBD.\n '
+                   f'TEBD can only be used if the model is nearest-neighbor (in the MPS geometry!). '
+                   f'If you are using a pre-defined model, make sure you are using the '
+                   f'nearest-neighbor version, e.g. SpinChain, not SpinModel. '
+                   f'If you are using a custom model, check if it actually is  nearest-neighbor in '
+                   f'the MPS geometry. If yes, make sure you subclass  NearestNeighborModel, which '
+                   f'will set "H_bond" for you. If no, you can not directly use TEBD, you need to '
+                   f'either group sites to achieve a nearest-neighbor model, or use some other '
+                   f'time evolution method, e.g. ExpMPO or TDVP.')
+            raise AttributeError(msg)
         if h is None:
             return None  # don't calculate exp(i H t), if `H` is None
         H2 = h.combine_legs([('p0', 'p1'), ('p0*', 'p1*')], qconj=[+1, -1])
@@ -596,6 +609,14 @@ class QRBasedTEBDEngine(TEBDEngine):
     r"""Version of TEBD that relies on QR decompositions rather than SVD.
 
     As introduced in :arxiv:`2212.09782`.
+
+    .. warning ::
+        The QR-based decomposition imposes a heuristically chosen upper limit on bond dimension
+        growth. For dynamics with rapid entanglement growth, this "expansion rate" needs to be
+        chosen large enough. We issue a warning if we detect that it is too low, but if you
+        know that entanglement grows rapidly, have a look at
+        the :cfg:option:`QRBasedTEBDEngine.cbe_expand_0` and compare bond dimension growth
+        to a regular :class:`TEBDEngine`, at least for the first few Trotter steps.
 
     .. todo ::
         To use `use_eig_based_svd == True`, which makes sense on GPU only, we need to implement
@@ -660,15 +681,27 @@ class QRBasedTEBDEngine(TEBDEngine):
         old_B_L = self.psi.get_B(i0, 'B')
         old_B_R = self.psi.get_B(i1, 'B')
 
+        compute_err = self.options.get('compute_err', True, bool)
         _, S, B_R, form, trunc_err, renormalize = decompose_theta_qr_based(
             old_qtotal_L=old_B_L.qtotal, old_qtotal_R=old_B_R.qtotal, old_bond_leg=old_B_R.get_leg('vL'),
             theta=theta, move_right=False,
             expand=expand, min_block_increase=self.options.get('cbe_min_block_increase', 1, int),
             use_eig_based_svd=self.options.get('use_eig_based_svd', False, bool),
             trunc_params=self.trunc_params,
-            compute_err=self.options.get('compute_err', True, bool),
+            compute_err=compute_err,
             return_both_T=False,
         )
+        if compute_err:
+            chi_max = self.trunc_params.get('chi_max', None)
+            chi_current = len(S)
+            if trunc_err.eps > 1e-16 and chi_max is not None and chi_current < chi_max:
+                msg = ('QRBased decomposition resulted in large truncation error even though the bond '
+                    'dimension is not maxed out yet. Try increasing the expansion rate, e.g. '
+                    'via the `cbe_expand_0` and `cbe_min_block_increase` options for the engine. '
+                    'You probably should compare to a "regular" (non QR-based) engine and see how '
+                    'fast the bond dimension needs to grow for your scenario. '
+                    'See https://github.com/tenpy/tenpy/pull/513 .')
+                warnings.warn(msg, stacklevel=2)
         assert form[1] == 'B'
 
         B_L = npc.tensordot(C.combine_legs(('p1', 'vR'), pipes=theta.legs[1]),
@@ -707,7 +740,7 @@ class QRBasedTEBDEngine(TEBDEngine):
             expand = expand, min_block_increase=self.options.get('cbe_min_block_increase', 1, int),
             use_eig_based_svd=self.options.get('use_eig_based_svd', False, bool),
             trunc_params=self.trunc_params,
-            compute_err=self.options.get('compute_err', True, bool), 
+            compute_err=self.options.get('compute_err', True, bool),
             return_both_T=True,
         )
         assert form == ['A','B']

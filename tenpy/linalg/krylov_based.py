@@ -1,5 +1,5 @@
 """Lanczos algorithm for np_conserved arrays."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
 from .sparse import FlatHermitianOperator, OrthogonalNpcLinearOperator, ShiftNpcLinearOperator
@@ -73,6 +73,11 @@ class KrylovBased:
             is used: the orthogonal vectors are *exact* eigenvectors with eigenvalue 0 independent
             of the shift, so you can use it to ensure that the energy is smaller than zero
             to avoid getting those.
+        reortho : bool
+            For poorly conditioned matrices, one can quickly loose orthogonality of the
+            generated Krylov basis.
+            If `reortho` is True, we re-orthogonalize against all the
+            vectors kept in cache to avoid that problem.
 
     Attributes
     ----------
@@ -218,6 +223,8 @@ class GMRES():
         self.H = npc.Array.from_ndarray_trivial(np.zeros((self.N_max+1, self.N_max))*1.j)
 
     def run(self):
+        if self.total_error[0][0]<self.res:
+            return self.x, self.total_error[0][0], self.total_error, self.total_iters
         for _ in range(self.restart):
             converged=False
             for k in range(0,self.N_max):
@@ -249,7 +256,8 @@ class GMRES():
             self.H[i,k] = npc.inner(q, self.qs[i], axes='range', do_conj=True)
             q.iadd_prefactor_other(-self.H[i,k], self.qs[i])
         self.H[k+1,k] = npc.norm(q)
-        q.iscale_prefactor(1./self.H[k+1,k])
+        if self.H[k+1,k]>0: # avoid warning if norm(q)==0, error=0 in that case
+            q.iscale_prefactor(1./self.H[k+1,k])
         self.qs.append(q)
 
     def apply_givens_rotation(self, k):
@@ -324,7 +332,7 @@ class Arnoldi(KrylovBased):
         self.num_ev = self.options.get('num_ev', 1, int)  # number of desired eigenvectors
 
     def run(self):
-        """Find the ground state of H.
+        """Find the ground state of self.H.
 
         Returns
         -------
@@ -451,13 +459,6 @@ class LanczosGroundState(KrylovBased):
             Set this to a number >= 2 if you are short on memory.
             The penalty is that one needs another Lanczos iteration to
             determine the ground state in the end, i.e., runtime is large.
-        reortho : bool
-            For poorly conditioned matrices, one can quickly loose orthogonality of the
-            generated Krylov basis.
-            If `reortho` is True, we re-orthogonalize against all the
-            vectors kept in cache to avoid that problem.
-
-
     """
 
     _dtype_h_krylov = np.float64
@@ -495,7 +496,6 @@ class LanczosGroundState(KrylovBased):
         if N == 1:
             return E0, self.psi0.copy(), N  # no better estimate available
         return E0, self._calc_result_full(N), N
-
 
     def _build_krylov(self):
         """Build the Krylov space and the projection of H into it.

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68.0.0", "numpy", "scipy", "Cython>0.29"]
+requires = ["setuptools>=77.0.3", "numpy", "scipy", "Cython>0.29"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,8 +7,9 @@ name = "physics-tenpy"
 dynamic = ["version"]
 description = "Simulation of quantum many-body systems with tensor networks in Python"
 readme = {file = "README.rst", content-type = "text/x-rst"}
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.8"
-license = {text = "GPLv3"}
 authors = [
     {name = "TeNPy Developer Team"},
 ]
@@ -21,7 +22,6 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Natural Language :: English",
     "Programming Language :: C",
     "Programming Language :: Python",
@@ -31,6 +31,8 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Operating System :: Unix",
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",

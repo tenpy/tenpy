@@ -1,5 +1,5 @@
 """To be used in the `-m` argument of benchmark.py."""
-# Copyright (C) TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, Apache license
 
 from tenpy.networks.mps import MPS
 from tenpy.models.spins import SpinChain
