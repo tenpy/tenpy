@@ -106,7 +106,7 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
     # run() from TimeEvolutionAlgorithm
 
     def prepare_evolve(self, dt):
-        """Expand the basis using Krylov or random vectors using the algorithm from `:cite:yang20202`.
+        """Expand the basis using Krylov or random vectors using the algorithm from :cite:`yang2020`.
 
         This action of this function is specified by the 'Krylov_options' field of the options passed when constructing the
         TDVP engine. Below, I list the possible keys of the 'Krylov_options' dictionary:

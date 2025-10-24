@@ -312,7 +312,7 @@ def eigh_rho(rho, trunc_par, UPLO='L', sort=None):
     Perform a hermitian eigenvalue decomposition with :func:`~tenpy.linalg.np_conserved.eigh`
     and truncates with :func:`truncate`.
     The result is an approximation
-    ``theta ~= tensordot(V.scale_axis(W*renormalization, 1), V.conj().T, axes=1)``
+    ``rho ~= tensordot(V.scale_axis(W*renormalization, 1), V.conj().T, axes=1)``
 
     Parameters
     ----------
