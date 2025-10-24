@@ -1601,6 +1601,16 @@ class LegPipe(LegCharge):
         res.__setstate__(LegCharge.__getstate__(self))
         return res
 
+    def apply_charge_mapping(self, map_func, func_args=(), func_kwargs={}):
+        # TODO is this fine? we now have ``res != LegPipe(res.legs)`` in general...
+        #      this is because the charges sort differently after mapping
+        res = self.copy()
+        res.legs = [l.apply_charge_mapping(map_func, func_args=func_args, func_kwargs=func_kwargs)
+                    for l in self.legs]
+        res.charges = map_func(self.charges, *func_args, **func_kwargs)
+        res.sorted = res.bunched = False
+        return res
+
     def conj(self):
         """Return a shallow copy with opposite ``self.qconj``.
 
