@@ -742,7 +742,7 @@ class MPOModel(Model):
         ------
         ValueError : if the Hamiltonian contains longer-range terms.
         """
-        H_MPO = self.H_MPO
+        H_MPO: mpo.MPO = self.H_MPO
         sites = H_MPO.sites
         finite = (H_MPO.bc == 'finite')
         L = H_MPO.L
@@ -767,19 +767,23 @@ class MPOModel(Model):
             if IdL_b is not None:
                 W[IdL_a, IdL_b, :, :] *= 0.
         # now multiply together the bonds
-        for i, Wi in enumerate(Ws):
+        for j, Wj in enumerate(Ws):
             # for bond (i, j) == (j-1, j) == (i, i+1)
-            j = (i + 1) % L
-            Wj = Ws[j]
-            if i == L - 1:
-                if finite:
-                    continue
-                # shift inplace, since we later check that we removed all entries
-                Wj = Wj.shift_charges_horizontal(dx_0=-H_MPO.unit_cell_width, inplace=True)
+            pbc_bond = j == 0
+            i = (j - 1) % L
+            if pbc_bond and finite:
+                continue
+            Wi = Ws[i]
+            if pbc_bond:
+                Wi = H_MPO.shift_Array_unit_cells(Wi, -1)
             IdL_a = H_MPO.IdL[i]
             IdR_c = H_MPO.IdR[j + 1]
             Hb = npc.tensordot(Wi[IdL_a, :, :, :], Wj[:, IdR_c, :, :], axes=('wR', 'wL'))
-            Wi[IdL_a, :, :, :] *= 0.
+            if pbc_bond:
+                # make sure we modify the un-shifted array in Ws
+                Ws[i][IdL_a, :, :, :] *= 0.
+            else:
+                Wi[IdL_a, :, :, :] *= 0.
             Wj[:, IdR_c, :, :] *= 0.
             # Hb has legs p0, p0*, p1, p1*
             H_bond[j] = Hb

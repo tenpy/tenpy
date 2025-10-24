@@ -293,7 +293,7 @@ class ChargeInfo:
         charges = np.asarray(charges, dtype=QTYPE)[..., self._mask]
         return np.all(np.logical_and(0 <= charges, charges < self._mod_masked))
 
-    def shift_charges(self, charges, dx, inplace=False):
+    def shift_charges(self, charges, dx):
         """Spatial translation acting on charges.
 
         Some conserved charges, such as e.g. an electric dipole moment, transform non-trivially
@@ -314,19 +314,15 @@ class ChargeInfo:
             The difference of lattice indices, i.e.
             ``dx == lat_idx_before - lat_idx_after == [dx_0, ..., dx_{D-1}, du]``.
             Note that these are integer values in units of the lattice vectors.
-        inplace : bool
-            If the charges can be modified in-place. Otherwise (default) we make a copy.
 
         Returns
         -------
         charges : 2D ndarray of dtype QTYPE
-            The mapped charges.
+            The mapped charges. Note that 
         """
-        if not inplace:
-            charges = charges.copy()
         return charges
 
-    def shift_charges_horizontal(self, charges, dx_0, inplace=False):
+    def shift_charges_horizontal(self, charges, dx_0):
         """Like :meth:`shift_charges`, but restricted to the first dimension.
 
         The base class :class:`ChargeInfo` only implements a trivial version,
@@ -339,11 +335,7 @@ class ChargeInfo:
         dx_0 : float
             Number of lattice indices of the translation.
             Horizontal shift is a general shift by ``dx=[dx_0] + [0] * dim``.
-        inplace : bool
-            If the charges can be modified in-place. Otherwise (default) we make a copy.
         """
-        if not inplace:
-            charges = charges.copy()
         return charges
 
     def __repr__(self):
@@ -452,18 +444,8 @@ class DipolarChargeInfo(ChargeInfo):
         self._dipole_dims = dipole_dims
         super().__init__(mod=mod, names=names)
 
-    def shift_charges_horizontal(self, charges, dx_0, inplace=False):
-        if not inplace:
-            charges = charges.copy()
-        for c_idx, d_idx, dim in zip(self._charge_idcs, self._dipole_idcs, self._dipole_dims):
-            if dim != 0:
-                continue
-            charges[..., d_idx] += dx_0 * charges[..., c_idx]
-        return self.make_valid(charges)
-
-    def shift_charges(self, charges, dx, inplace=False):
-        if not inplace:
-            charges = charges.copy()
+    def shift_charges(self, charges, dx):
+        charges = charges.copy()  # we modify in-place!
         if dx[-1] != 0:
             # shifting between different sublattice indices requires details about the lattice
             # geometry, and causes headaches since we need *integer* translations...
@@ -472,6 +454,14 @@ class DipolarChargeInfo(ChargeInfo):
             # local dipole moment p_i = x_i[dim] * q_i  with position x_i and charge density q_i
             # x_i -> x_i + dx   =>   p_i -> p_i + dx[dim] * q_i
             charges[..., d_idx] += dx[dim] * charges[..., c_idx]
+        return self.make_valid(charges)
+
+    def shift_charges_horizontal(self, charges, dx_0):
+        charges = charges.copy()  # we modify in-place!
+        for c_idx, d_idx, dim in zip(self._charge_idcs, self._dipole_idcs, self._dipole_dims):
+            if dim != 0:
+                continue
+            charges[..., d_idx] += dx_0 * charges[..., c_idx]
         return self.make_valid(charges)
 
     def __getstate__(self):

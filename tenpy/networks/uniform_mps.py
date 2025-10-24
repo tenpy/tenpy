@@ -734,7 +734,7 @@ class UniformMPS(MPS):
         Set `AL` at site `i`
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        AL = self.shift_Array_unit_cells(AL, -num_unit_cells, inplace=True)
+        AL = self.shift_Array_unit_cells(AL, -num_unit_cells)
         self.dtype = np.promote_types(self.dtype, AL.dtype)
         self._AL[i_in_unit_cell] = AL.itranspose(self._B_labels)
 
@@ -743,7 +743,7 @@ class UniformMPS(MPS):
         Set `AR` at site `i`
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        AR = self.shift_Array_unit_cells(AR, -num_unit_cells, inplace=True)
+        AR = self.shift_Array_unit_cells(AR, -num_unit_cells)
         self.dtype = np.promote_types(self.dtype, AR.dtype)
         self._AR[i_in_unit_cell] = AR.itranspose(self._B_labels)
 
@@ -752,7 +752,7 @@ class UniformMPS(MPS):
         Set `AC` at site `i`
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        AC = self.shift_Array_unit_cells(AC, -num_unit_cells, inplace=True)
+        AC = self.shift_Array_unit_cells(AC, -num_unit_cells)
         self.dtype = np.promote_types(self.dtype, AC.dtype)
         self._AC[i_in_unit_cell] = AC.itranspose(self._B_labels)
 
@@ -761,7 +761,7 @@ class UniformMPS(MPS):
         Set `C` left of site `i`
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        C = self.shift_Array_unit_cells(C, -num_unit_cells, inplace=True)
+        C = self.shift_Array_unit_cells(C, -num_unit_cells)
         self.dtype = np.promote_types(self.dtype, C.dtype)
         self._C[i_in_unit_cell] = C.itranspose(self._C_labels)
 

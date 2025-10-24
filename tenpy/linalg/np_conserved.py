@@ -1435,22 +1435,53 @@ class Array:
         return res
 
     def shift_charges(self, dx, inplace: bool = False):
-        """Map all leg-charged and the qtotal with :meth:`ChargeInfo.shift_charges`."""
+        """Map all leg-charges and the qtotal with :meth:`ChargeInfo.shift_charges`.
+
+        Parameters
+        ----------
+        dx : (D + 1)-d array
+            Shift vector, e.g. ``[dx, du]`` for 1D or ``[dx, dy, du]`` for 2D lattices.
+        inplace : bool
+            If the array should be modified inplace.
+            By default (``False``), the original instance is not modified.
+            Note that if the mapping is trivial, we may return the same instance, not an
+            independent copy!
+
+        Returns
+        -------
+        mapped : Array
+            The mapped array. Note that if either the mapping trivial or if ``inplace=True``,
+            this is the unmodified (trivial mapping) or modified (inplace) original instance!
+        """
         if self.chinfo.trivial_shift or np.all(np.equal(dx, 0)):
-            if inplace:
-                return self
-            return self.copy()
-        return self.apply_charge_mapping(self.chinfo.shift_charged,
-                                         func_kwargs=dict(dx=dx, inplace=inplace), inplace=inplace)
+            return self
+        return self.apply_charge_mapping(self.chinfo.shift_charges, func_kwargs=dict(dx=dx),
+                                         inplace=inplace)
 
     def shift_charges_horizontal(self, dx_0: int, inplace: bool = False):
-        """Map all leg-charged and the qtotal with :meth:`ChargeInfo.shift_charges_horizontal`."""
+        """Map all leg-charged and the qtotal with :meth:`ChargeInfo.shift_charges_horizontal`.
+
+        Parameters
+        ----------
+        dx_0 : int
+            Horizontal shift, such that this method is equivalent to :meth:`shift_charges`
+            with ``dx = [dx_0, *zeros]``.
+        inplace : bool
+            If the array should be modified inplace.
+            By default (``False``), the original instance is not modified.
+            Note that if the mapping is trivial, we may return the same instance, not an
+            independent copy!
+
+        Returns
+        -------
+        mapped : Array
+            The mapped array. Note that if either the mapping trivial or if ``inplace=True``,
+            this is the unmodified (trivial mapping) or modified (inplace) original instance!
+        """
         if self.chinfo.trivial_shift or dx_0 == 0:
-            if inplace:
-                return self
-            return self.copy()
+            return self
         return self.apply_charge_mapping(self.chinfo.shift_charges_horizontal,
-                                         func_kwargs=dict(dx_0=dx_0, inplace=inplace),
+                                         func_kwargs=dict(dx_0=dx_0),
                                          inplace=inplace)
 
     # reshaping ===============================================================
