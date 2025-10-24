@@ -3499,12 +3499,9 @@ class MPOEnvironmentBuilder:
                               axes=[self.ket._p_label,
                                     self.ket._get_p_label('*')]) for j in range(self.L)
             ]
-        TWjj = TransferMatrix.from_Ns_Ms(self._Ns,
-                                         ket_M,
-                                         transpose=transpose,
-                                         charge_sector=None,
-                                         p_label=self.ket._p_label,
-                                         conjugate_Ns=False)
+        TWjj = TransferMatrix.from_Ns_Ms(self._Ns, ket_M, transpose=transpose, charge_sector=None,
+                                         p_label=self.ket._p_label, conjugate_Ns=False,
+                                         unit_cell_width=self.ket.unit_cell_width)
         # GMRES solver
         A = ShiftNpcLinearOperator(TWjj, -1.)
         solver = GMRES(A, b, b, options=options)  # makes internal copy
