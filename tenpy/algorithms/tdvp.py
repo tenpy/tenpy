@@ -66,6 +66,8 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
             Truncation parameters as described in :func:`~tenpy.algorithms.truncation.truncate`
         lanczos_options : dict
             Lanczos options as described in :cfg:config:`Lanczos`.
+        Krylov_params : dict
+            Krylov options as described in :meth:`prepare_evolve`.
         max_dt : float | None
             Threshold for raising errors on too large time steps. Default ``1.0``.
             See :meth:`~tenpy.tools.misc.consistency_check`.
@@ -85,6 +87,8 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
         The environment, storing the `LP` and `RP` to avoid recalculations.
     lanczos_options : :class:`~tenpy.tools.params.Config`
         Options passed on to :class:`~tenpy.linalg.lanczos.LanczosEvolution`.
+    Krylov_params : :class:`~tenpy.tools.params.Config`
+        Parameters for subspace expansion in :meth:`prepare_evolve`.
     """
     EffectiveH = None
 
@@ -101,29 +105,35 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
         assert psi.bc == model.lat.bc_MPS
         super().__init__(psi, model, options, **kwargs)
         self.lanczos_options = self.options.subconfig('lanczos_options')
-        self.Krylov_options = self.options.subconfig('Krylov_options')
+        self.Krylov_params = self.options.subconfig('Krylov_params')
 
     # run() from TimeEvolutionAlgorithm
 
     def prepare_evolve(self, dt):
         """Expand the basis using Krylov or random vectors using the algorithm from :cite:`yang2020`.
 
-        This action of this function is specified by the 'Krylov_options' field of the options passed when constructing the
-        TDVP engine. Below, I list the possible keys of the 'Krylov_options' dictionary:
+        The action of this function is specified by the 'Krylov_params' options passed when constructing the
+        TDVP engine.
 
-        1. Krylov_expansion_dim: how many additional vectors do we use to expand the basis; > 1 is sufficient for random extension.
-
-        2. mpo: what MPO do we use for expanion? If none is specified, we use the Hamiltonian. If 'None' is specified, we do
-            random extension. If a list is given, one applies multiple MPOs to get the next Krylov vector, e.g. with WII and a
-            higher order time step.
-
-        3. trunc_params: standard dictionary for truncation settings.
-                chi_max: max number of states that are added on each site.
-                svd_min: cutoff for kept sqrt(eigenvalues) of the RDM
-
-        4. apply_mpo_options: how do we apply the MPO to the MPS; e.g. SVD, zip_up, variational and associated parameters.
+        Options
+        -------
+        .. cfg:config :: TDVP_Krylov_params
+            Krylov_expansion_dim: int
+                How many additional vectors do we use to expand the basis; > 1 is sufficient for random extension.
+                Defaults to 0, which does no expansion.
+            mpo: 
+                What MPO do we use for expanion? If none is specified, we use the Hamiltonian.
+                If 'None' is specified, we do random extension. 
+                If a list is given, one applies multiple MPOs to get the next Krylov vector,
+                 e.g. with WII and a higher order time step.
+            trunc_params: dict
+                Standard dictionary for truncation settings, e.g. 
+                chi_max=max number of states that are added on each site.
+                svd_min=cutoff for kept sqrt(eigenvalues) of the RDM.
+            apply_mpo_options: dict
+                How do we apply the MPO to the MPS; e.g. SVD, zip_up, variational and associated parameters.
         """
-        Krylov_expansion_dim = self.Krylov_options.get('expansion_dim', 0)
+        Krylov_expansion_dim = self.Krylov_params.get('expansion_dim', 0)
         if Krylov_expansion_dim > 0:    # Do some basis expansion
             # Need to clear out left and right environments since the bond dimensions no longer match.
             # So we will need to recalculate the H envs for the next TDVP step
@@ -133,8 +143,9 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
             logger.info(f"Original bond dimension: {self.psi.chi}.")
             # Get the MPO A that will be used to generate Krylov vectors; {A^k |psi>}
             # We might want to use the WII MPO or (1 - itH) rather than H
-            Krylov_mpo = self.Krylov_options.get('mpo', self.model.H_MPO)
-            Krylov_trunc_params = self.Krylov_options.subconfig('trunc_params', self.trunc_params)    # How do we truncate the RDMs when extending?
+            Krylov_mpo = self.Krylov_params.get('mpo', self.model.H_MPO)
+            # How do we truncate the RDMs when extending?
+            Krylov_trunc_params = self.Krylov_params.subconfig('trunc_params', self.trunc_params) 
             if Krylov_mpo is None:  # Random expansion
                 extension_err = self.psi.subspace_expansion(expand_into=[], trunc_par=Krylov_trunc_params)
             else:                   # Expansion by MPO application
