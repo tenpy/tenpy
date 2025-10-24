@@ -96,17 +96,16 @@ def test_ExpMPOEvolution(bc_MPS, approximation, compression, use_eig_based_svd, 
 @pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
 @pytest.mark.parametrize('approximation', ['I', 'II'])
 @pytest.mark.parametrize('compression', ['SVD', 'variational'])
-def test_ExpMPOEvolution_dipolar(bc_MPS, approximation, compression, dt=.01, num_runs=5):
+def test_ExpMPOEvolution_dipolar(bc_MPS, approximation, compression, dt=.01, num_runs=5, L=6):
     if compression == 'variational':
         pytest.xfail('Bond dimension can not grow. Need mixing?')
-    
-    L = 6
+
     model = DipolarSpinChain(dict(L=L, J3=1., J4=.5, bc_MPS=bc_MPS, conserve='dipole'))
 
     psi = MPS.from_product_state(model.lat.mps_sites(), ['up', 'down'] * (L // 2), bc=bc_MPS,
                                  unit_cell_width=L)
     options = dict(dt=dt, N_steps=1, order=1, approximation=approximation,
-                  compression_method=compression, trunc_params=dict(chi_max=30, svd_min=1e-8))
+                   compression_method=compression, trunc_params=dict(chi_max=30, svd_min=1e-8))
     engine = mpo_evolution.ExpMPOEvolution(psi, model, options)
 
     if bc_MPS == 'finite':
