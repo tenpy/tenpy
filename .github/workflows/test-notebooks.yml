@@ -26,10 +26,10 @@ jobs:
       with:
         submodules: recursive
     
-    - name: Set up Python 3.12
+    - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: 3.12
+        python-version: 3.13
     
     - name: Install dependencies
       run: |
@@ -42,6 +42,11 @@ jobs:
       run: |
         python -m build .
         python -m pip install .
+    
+    - name: Show tenpy config
+      working-directory: ..
+      run: |
+        python -c "import tenpy; tenpy.show_config()"
     
     - name: Run pytest on notebooks
       # Note: we exclude the dmrg mixer notebook 12, since it runs very long.

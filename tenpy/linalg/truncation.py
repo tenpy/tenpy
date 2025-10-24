@@ -307,6 +307,60 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
     return U, S, VH, err, renormalization
 
 
+def eigh_rho(rho, trunc_par, UPLO='L', sort=None):
+    """Performs EIG of a hermitian matrix `rho` (= density matrix) and truncates it.
+
+    Perform a hermitian eigenvalue decomposition with :func:`~tenpy.linalg.np_conserved.eigh`
+    and truncates with :func:`truncate`.
+    The result is an approximation
+    ``rho ~= tensordot(V.scale_axis(W*renormalization, 1), V.conj().T, axes=1)``
+
+    Parameters
+    ----------
+    rho : :class:`~tenpy.linalg.np_conserved.Array`, shape ``(M, M)``
+        The matrix, on which the eigenvalue decomposition (EIG) is performed.
+        Usually, `rho` represents a density matrix and is assumed to be hermitian AND positive
+        so that the eigenvalues are non-negative.
+    trunc_par : dict
+        truncation parameters as described in :func:`truncate`.
+    UPLO : {'L', 'U'}
+        Whether to take the lower ('L', default) or upper ('U') triangular part of `a`.
+        Only used for hermitian eigenvalue decomposition.
+    sort : {'m>', 'm<', '>', '<', ``None``}
+        How the eigenvalues should are sorted *within* each charge block.
+        Defaults to ``None``, which is same as '<'. See :func:`argsort` for details.
+
+    Returns
+    -------
+    W : 1D ndarray
+        The eigenvalues, sorted within the same charge blocks according to `sort`.
+    V : :class:`Array`
+        Unitary matrix; ``V[:, i]`` is normalized eigenvector with eigenvalue ``W[i]``.
+        The first label is inherited from `A`, the second label is ``'eig'``.
+    err : :class:`TruncationError`
+        The truncation error introduced.
+    """
+    W, V = npc.eigh(rho, UPLO=UPLO, sort=sort)
+    W[W<1.e-14] = 0     # set small eigenvalues to zero
+    renormalization = np.sum(W)
+    W = W / renormalization
+    # We normalize the eigenvalues to have sum 1 to represent a valid density matrix.
+    # Truncation assumes SVs, so take square root.
+    piv, new_norm, err = truncate(np.sqrt(W), trunc_par)
+    # err reported is for the normalized eigenvalues.
+    new_len_W = np.sum(piv, dtype=np.int_)
+    if new_len_W * 100 < len(W) and (trunc_par['chi_max'] is None
+                                     or new_len_W != trunc_par['chi_max']):
+        msg = "Catastrophic reduction in chi: {0:d} -> {1:d}".format(len(W), new_len_W)
+        # NANs are excluded in npc.svd
+        VHV = npc.tensordot(V.conj(), V, axes=[[0], [0]])
+        msg += " |V^d V - 1| = {0:f}".format(npc.norm(VHV - npc.eye_like(VHV)))
+        warnings.warn(msg, stacklevel=2)
+    W = W[piv] / new_norm**2 * renormalization
+    V.iproject(piv, axes=1)  # V = V[:, piv]
+    return W, V, err
+
+
 def _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, move_right: bool, expand: float, min_block_increase: int):
     """Generate the initial guess `Y0` for the (left) right isometry for the QR based theta decomposition `decompose_theta_qr_based()`.
 

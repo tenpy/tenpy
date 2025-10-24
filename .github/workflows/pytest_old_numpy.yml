@@ -39,10 +39,10 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
     
@@ -51,22 +51,18 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install --upgrade setuptools build
         python -m pip install --upgrade numpy==${{ matrix.numpy-version }}
-        python -m pip install --upgrade pytest
     
     - name: Build and install tenpy
       # also installs extra dependencies defined in pyproject.toml
       run: |
         python -m build .
-        python -m pip install ".[io, test, extra]"
-        bash ./compile.sh
+        python -m pip install ".[io, test]"
     
     - name: Show tenpy config
+      working-directory: ..
       run: |
         python -c "import tenpy; tenpy.show_config()"
     
     - name: Run pytest
-      # configuration in pyproject.toml
-      # Note: This runs in the repo root directory, which contains the uncompiled tenpy package.
-      #       To use the version we just installed, it is important to run `pytest`
-      #       instead of `python -m pytest`.
+      working-directory: tests
       run: pytest

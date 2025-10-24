@@ -158,8 +158,9 @@ logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from ..linalg import sparse
+from ..linalg.random_matrix import GOE, GUE
 from ..linalg.krylov_based import Arnoldi
-from ..linalg.truncation import TruncationError, svd_theta, _machine_prec_trunc_par
+from ..linalg.truncation import TruncationError, svd_theta, eigh_rho, _machine_prec_trunc_par
 from .site import group_sites
 from ..tools.misc import argsort, to_iterable, to_array, get_recursive, inverse_permutation
 from ..tools.math import lcm, entropy
@@ -4930,6 +4931,109 @@ class MPS(BaseMPSExpectationValue):
         psi.canonical_form_finite(renormalize=False, cutoff=cutoff)
         return psi
 
+    def subspace_expansion(self, expand_into=[], trunc_par={'svd_min': 1.e-8}):
+        """Subspace expansion increasing chi without changing the represented state.
+
+        We mostly follow the approach `:cite:yang2020`; starting on the rightmost tensor and sweeping
+        to the left, we expand the basis on each site using either additional states specified in the
+        `expand_into` parameter or random basis vectors orthogonal to those contained in `|self>`. As
+        described in `:cite:yang2020:`, we use the current `B` tensor on each site to define a projector
+        into the orthogonal subspace.
+
+        This function works (for now) only for 'finite' boundary conditions; TDVP is only implemented for
+        `finite` BCs currently. While in principle this could work for segments, ._gauge_compatible_vL_vR
+        doesn't work is not currently implemented for 'segment' boundary conditions.
+
+        Parameters
+        ----------
+        expand_into : list of :class:`MPS` or an empty list ([])
+            MPS of same length used to extend the basis of self
+            If empty, we add random, orthogonal basis states on each site.
+        trunc_par : dict
+            Parameters for truncation, see :cfg:config:`truncation`.
+
+        Returns
+        -------
+        eig_error : :class:`TruncationError`
+            Error from truncating eigenvalues of reduced density matrices. Not the easiest to interpret.
+        """
+        L = self.L
+        assert self.finite
+        assert self.bc == 'finite'
+        assert L >= 2
+        psis = [self] + list(expand_into)
+
+        # assume that all psi are already canonical so that we can just use A form tensors immediately.
+        for i in range(1, len(psis)):
+            assert (psis[i].L == L and L >= 2)  # (if you need this, generalize this function...)
+            assert self.bc == psis[i].bc
+
+        eig_error = TruncationError()
+        trunc_par = asConfig(trunc_par, "trunc_params")
+        site_trunc_par = trunc_par.copy()
+        chi_max = site_trunc_par.get('chi_max', 100)    # Maximum bond dimension allowed on any bond
+        # site_dims = [s.dim for s in self.sites]       # Only needed if we impose edge constraints
+
+        current_Cs = []
+        for i in range(len(psis)):
+            current_Cs.append(psis[i].get_theta(L-1, n=1).replace_label('p0', 'p'))
+
+        for j in reversed(range(1, L)):
+            current_vL_dim = current_Cs[0].get_leg('vL').ind_len
+
+            # We want to ensure that the bond dimension after expansion is at most chi_max so that SingleSiteTDVP respects
+            # the maximum bond dimension. We know that the bond dimension must respect the exponential bounds from the edge
+            # of the chain (2**i or (L-2)**i for the two edges for spin-1/2 Hilbert spaces). However, I find that if we
+            # impose the edge constraints, the first site is decoupled from the rest when using Krylov vectors (random expansion
+            # works, however). So instead, we just force the bond dimension to be less than chi_max and then the SVDs will
+            # enforce the edge constraints.
+            # site_chi_max = int(np.min([chi_max, np.prod(site_dims[:j]), np.prod(site_dims[j:])])) - current_vL_dim
+            site_chi_max = int(chi_max - current_vL_dim)  # How much do we allow vL to grow?
+            site_trunc_par['chi_max'] = site_chi_max
+
+            _, exact_B = npc.lq(current_Cs[0].combine_legs(['p', 'vR']), mode='reduced', inner_labels=['vR', 'vL'])
+            eBhc_eB = npc.tensordot(exact_B.conj(), exact_B, axes=(['vL*'], ['vL']))    # (p.vR)*, (p.vR)
+            proj = npc.eye_like(eBhc_eB, labels=eBhc_eB.get_leg_labels()) - eBhc_eB
+            rho = proj.zeros_like()
+            if npc.norm(proj) < 1.e-12 or site_chi_max <= 0:
+                # First condition: original tensor already spans the virtual Hilbert space
+                # Second condition: we don't have any bond dimension budget for growth
+                new_B = exact_B.split_legs()
+            else:
+                if len(current_Cs) > 1:
+                    for C in current_Cs[1:]:
+                        C_k = C.combine_legs(['p', 'vR'])
+                        rho += npc.tensordot(C_k.conj(), C_k, axes=(['vL*'], ['vL']))
+                else:
+                    # Generate a random (hermitian) density matrix that will provide random vectors
+                    # in the orthogonal subspace.
+                    leg = proj.legs[0]
+                    rho = npc.Array.from_func_square(GUE if proj.dtype.kind == 'c' else GOE, leg, labels=proj.get_leg_labels())
+                    rho = npc.tensordot(rho.conj(), rho, axes=(['(p.vR)'], ['(p*.vR*)'])) # Make this positive
+                rho /= npc.norm(rho) # Normalize the density matrix
+                proj_rho = npc.tensordot(npc.tensordot(proj, rho, axes=(['(p.vR)'], ['(p*.vR*)'])), proj, axes=(['(p.vR)'], ['(p*.vR*)']))
+                if npc.norm(proj_rho) < 1.e-12:
+                    new_B = exact_B.split_legs()
+                else:
+                    w_enl_trunc, B_enl_trunc, err_trunc = eigh_rho(proj_rho, trunc_par=site_trunc_par, sort='m>')
+                    new_B = npc.concatenate([exact_B, B_enl_trunc.conj().transpose()], axis=0).split_legs()
+                    eig_error += err_trunc
+
+            old_Cs = current_Cs
+            current_Cs = []
+            for i, oC in enumerate(old_Cs):
+                current_Cs.append(npc.tensordot(psis[i].get_B(j-1, form='A'),
+                                                npc.tensordot(oC, new_B.conj(), axes=(['p', 'vR'], ['p*', 'vR*'])).replace_label('vL*', 'vR'),
+                                                axes=(['vR'], ['vL'])))
+             # Set new_B and padded SVs on site j AFTER we've gotten tensors on site j-1
+            self.set_B(j, new_B, form='B')
+            # Need to handle edge case if SVs are not 1D array but instead are npc matrices?
+            self.set_SL(j, np.pad(self.get_SL(j), (0, new_B.get_leg('vL').ind_len - current_vL_dim), mode='constant', constant_values=0.0))
+
+        self.set_B(0, current_Cs[0], form='B')
+        self.test_sanity()
+        return eig_error
+
     def apply_local_op(self, i, op, unitary=None, renormalize=False, cutoff=1.e-13,
                        understood_infinite=False):
         r"""Apply a local (one or multi-site) operator to `self`. In place.
@@ -6642,10 +6746,10 @@ class TransferMatrix(sparse.NpcLinearOperator):
         bra_N = [bra.get_B(i, form=form) for i in range(shift_bra, shift_bra + L)]
 
         self._init_from_Ns_Ms(bra_N, ket_M, transpose, charge_sector, ket._p_label, not ket.finite,
-                              unit_cell_width)
+                              unit_cell_width=unit_cell_width)
 
     def _init_from_Ns_Ms(self, bra_N, ket_M, transpose, charge_sector, p_label, infinite=True,
-                         unit_cell_width=None):
+                         conjugate_Ns=True, unit_cell_width=None):
         """Initialize directly from N and M.
 
         bra_N and ket_M are *not* reversed for transpose=False, i.e. ordered left to right.
@@ -6670,15 +6774,23 @@ class TransferMatrix(sparse.NpcLinearOperator):
             label = '(vL.vL*)'  # what we act on
             label_split = ['vL', 'vL*']
             M = self._ket_M = [B.itranspose(['vL'] + p + ['vR']) for B in reversed(ket_M)]
-            N = self._bra_N = [
-                B.conj().itranspose(pstar + ['vR*', 'vL*']) for B in reversed(bra_N)
-            ]
+            if conjugate_Ns:
+                N = self._bra_N = [
+                    B.conj().itranspose(pstar + ['vR*', 'vL*']) for B in reversed(bra_N)
+                ]
+            else:
+                N = self._bra_N = [
+                    B.itranspose(pstar + ['vR*', 'vL*']) for B in reversed(bra_N)
+                ]
             pipe = npc.LegPipe([M[0].get_leg('vR'), N[0].get_leg('vR*')], qconj=-1).conj()
         else:  # left to right
             label = '(vR*.vR)'  # mathematically more natural
             label_split = ['vR*', 'vR']
             M = self._ket_M = [B.itranspose(['vL'] + p + ['vR']) for B in ket_M]
-            N = self._bra_N = [B.conj().itranspose(['vR*', 'vL*'] + pstar) for B in bra_N]
+            if conjugate_Ns:
+                N = self._bra_N = [B.conj().itranspose(['vR*', 'vL*'] + pstar) for B in bra_N]
+            else:
+                N = self._bra_N = [B.itranspose(['vR*', 'vL*'] + pstar) for B in bra_N]
             pipe = npc.LegPipe([N[0].get_leg('vL*'), M[0].get_leg('vL')], qconj=+1).conj()
         dtype = np.promote_types(M[0].dtype, N[0].dtype)
         self.pipe = pipe
@@ -6702,7 +6814,8 @@ class TransferMatrix(sparse.NpcLinearOperator):
                              "by a factor of " + str(enlarge_factors))
 
     @classmethod
-    def from_Ns_Ms(cls, bra_N, ket_M, transpose=False, charge_sector=0, p_label=['p'], unit_cell_width=None):
+    def from_Ns_Ms(cls, bra_N, ket_M, transpose=False, charge_sector=0, p_label=['p'],
+                   conjugate_Ns=True, unit_cell_width=None):
         """Initialize a TransferMatrix directly from the MPS tensors.
 
         Parameters
@@ -6718,12 +6831,15 @@ class TransferMatrix(sparse.NpcLinearOperator):
             Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in charge sector 0.
         p_label : list of str
             Physical label(s) of the tensors.
+        conjugate_Ns : bool
+            If False, assumes that bra_N is already complex conjugated.
         unit_cell_width : int
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
         """
         self = cls.__new__(cls)
         self.shift_bra = self.shift_ket = 0
-        self._init_from_Ns_Ms(bra_N, ket_M, transpose, charge_sector, p_label, unit_cell_width=unit_cell_width)
+        self._init_from_Ns_Ms(bra_N, ket_M, transpose, charge_sector, p_label,
+                              conjugate_Ns=conjugate_Ns, unit_cell_width=unit_cell_width)
         return self
 
     @property
