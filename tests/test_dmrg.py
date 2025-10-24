@@ -301,11 +301,10 @@ def test_dmrg_explicit_plus_hc(N, bc_MPS, tol=1.e-13, bc='finite'):
     assert abs(ov - 1) < tol
 
 
-@pytest.mark.slow
 @pytest.mark.parametrize("N, bc_MPS", [(6, 'finite'), (2, 'infinite')])
 def test_dmrg_dipole_conservation(N, bc_MPS, S=1, tol=1.e-13, J4=0.):
 
-    dmrg_params = dict(N_sweeps_check=2, mixer=True, trunc_params={'chi_max': 50})
+    dmrg_params = dict(N_sweeps_check=2, mixer=True, trunc_params={'chi_max': 50}, max_sweeps=20)
 
     # initial_state = ['up', 'down'] * (N // 2) + ['down', 'up'] * (N // 2)
     initial_state = ['up', 'down'] * N
@@ -334,8 +333,11 @@ def test_dmrg_dipole_conservation(N, bc_MPS, S=1, tol=1.e-13, J4=0.):
 
     if bc_MPS == 'infinite':
         # DMRG runs, which is reassuring, but energy is above Sz-dmrg by ~1e-5
-        # Takes quite long too, looks like energy is oscillating.
-        pytest.xfail()
+        # Takes quite long too to fully converge (here we set max_sweeps=20).
+        # looks like energy is oscillating.
+        # not clear that we selected the correct charge sector here, i.e. the GS within this
+        # dipole sector might be higher in energy than the GS in the Sz sector
+        tol = 1e-5
 
     assert abs(E - E_dip) < tol
 
