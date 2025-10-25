@@ -599,7 +599,7 @@ class PurificationMPS(MPS):
         for i in range(first_site, last_site + 1):
             # theta = wave function in basis vL [sigmas...] p q vR
             # where the `sigmas` are already fixed to the measurement results
-            i0 = self._to_valid_index(i)
+            i0 = self._to_valid_site_index(i)
             site = self.sites[i0]
             if ops is not None:
                 op_name = ops[(i - first_site) % len(ops)]

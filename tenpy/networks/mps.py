@@ -5250,13 +5250,13 @@ class MPS(BaseMPSExpectationValue):
                 raise ValueError("open JW string ending in each unit cell"
                                  "breaks translation invariance!")
             try:
-                i = self._to_valid_index(i_min)
+                i = self._to_valid_site_index(i_min)
                 self.apply_JW_string_left_of_virt_leg(self._B[i], 'vL', i)
             except ValueError as e:
                 raise ValueError(f"Would need JW string for term {term!r}, "
                                  "but can't extract JW signs from the charges") from e
         for j, op in enumerate(ops):
-            i = self._to_valid_index(j + i_min)  # i_min includes i_offset!
+            i = self._to_valid_site_index(j + i_min)  # i_min includes i_offset!
             opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
             self.set_B(i, opB, self.form[i])
             if opB.norm() < 1.e-12:
