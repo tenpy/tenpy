@@ -29,7 +29,7 @@ from ..tools.misc import lexsort, inverse_permutation
 from ..tools.string import vert_join
 from ..tools.optimization import optimize, OptimizationFlag, use_cython
 
-__all__ = ['ChargeInfo', 'LegCharge', 'LegPipe', 'QTYPE']
+__all__ = ['ChargeInfo', 'DipolarChargeInfo', 'LegCharge', 'LegPipe', 'QTYPE']
 
 QTYPE = np.int64
 """Numpy data type for the charges."""
@@ -43,6 +43,9 @@ class ChargeInfo:
 
     (This class is implemented in :mod:`tenpy.linalg.charges` but also imported in
     :mod:`tenpy.linalg.np_conserved` for convenience.)
+
+    The base class :class:`ChargeInfo` assumes that the local conserved charge (the discrete
+    version of a charge density) is unchanged by spatial translations.
 
     Parameters
     ----------
@@ -68,14 +71,24 @@ class ChargeInfo:
     Notes
     -----
     Instances of this class can (should) be shared between different `LegCharge` and `Array`'s.
+
+    See Also
+    --------
+    DipolarChargeInfo
     """
+    trivial_shift = True
+
     def __init__(self, mod=[], names=None):
         mod = np.array(mod, dtype=QTYPE)
         assert mod.ndim == 1
         if names is None:
             names = [''] * len(mod)
         names = [str(n) for n in names]
-        self.__setstate__((len(mod), mod, names))
+        self._mod = mod
+        self._qnumber = mod.shape[0]
+        self._mask = np.not_equal(mod, 1)  # where we need to take modulo in :meth:`make_valid`
+        self._mod_masked = mod[self._mask].copy()  # only where mod != 1
+        self.names = names
         self.test_sanity()  # checks for invalid arguments
 
     def __getstate__(self):
@@ -280,6 +293,51 @@ class ChargeInfo:
         charges = np.asarray(charges, dtype=QTYPE)[..., self._mask]
         return np.all(np.logical_and(0 <= charges, charges < self._mod_masked))
 
+    def shift_charges(self, charges, dx):
+        """Spatial translation acting on charges.
+
+        Some conserved charges, such as e.g. an electric dipole moment, transform non-trivially
+        under spatial translations. This method defines how the charges transform.
+        See the notes on :ref:`shift_symmetry`.
+        The base class :class:`ChargeInfo` only implements a trivial version,
+        that does not change the charges.
+
+        As positions are mapped ``pos -> pos + dx``, the charges are mapped::
+
+            charges -> shift_charges(charges, dx)
+
+        Parameters
+        ----------
+        charges : 2D ndarray of dtype QTYPE
+            The charges to map.
+        dx : (dim + 1)D ndarray
+            The difference of lattice indices, i.e.
+            ``dx == lat_idx_before - lat_idx_after == [dx_0, ..., dx_{D-1}, du]``.
+            Note that these are integer values in units of the lattice vectors.
+
+        Returns
+        -------
+        charges : 2D ndarray of dtype QTYPE
+            The mapped charges. Note that 
+        """
+        return charges
+
+    def shift_charges_horizontal(self, charges, dx_0):
+        """Like :meth:`shift_charges`, but restricted to the first dimension.
+
+        The base class :class:`ChargeInfo` only implements a trivial version,
+        that does not change the charges.
+
+        Parameters
+        ----------
+        charges : 2D ndarray of dtype QTYPE
+            The charges to map.
+        dx_0 : float
+            Number of lattice indices of the translation.
+            Horizontal shift is a general shift by ``dx=[dx_0] + [0] * dim``.
+        """
+        return charges
+
     def __repr__(self):
         """Full string representation."""
         return "ChargeInfo({0!s}, {1!s})".format(list(self.mod), self.names)
@@ -300,6 +358,177 @@ class ChargeInfo:
     def __ne__(self, other):
         r"""Define `self != other` as `not (self == other)`"""
         return not self.__eq__(other)
+
+
+class DipolarChargeInfo(ChargeInfo):
+    r"""Version of :class:`ChargeInfo` that supports dipole conservation.
+
+    Assumes that one (or more) of the charges is the dipole moment associated with another charge.
+    This results in non-trivial behavior under spatial translations.
+    See the notes on :ref:`shift_symmetry`.
+
+    Given charges ``q_i`` on sites ``i``, the associated local dipole moment is ``p_i = r_i * q_i``,
+    where ``r_i`` is the position (or e.g. its x- or y- component) of site ``i``.
+    We take the ``lattice.order[0]`` position as the origin where ``r_i == 0``.
+    Since we need integer values for the charges, we can not use the true lattice positions,
+    but rather use the lattice index, which is the dimensionless position of the unit cell in
+    units of the lattice basis vector.
+
+    .. warning ::
+        This means that the position of a site within a unit cell is *ignored*.
+        This only gives a valid proxy for the physical dipole moment if all sites of the unit cell
+        that may carry charge ``q_i != 0`` are at the same spatial position, e.g. if there is only
+        one site per unit cell.
+
+    .. warning ::
+        The possible `mod` for the dipole charge is restricted as follows;
+        Consider the ``n``-th dipole charge ``p`` specified by ``dipole_idcs[n]``, with the
+        underlying charge ``q`` specified by ``charge_idcs[n]``.
+        First, if ``q`` has ``qmod_q > 1``, i.e. if it is a :math:`\mathbb{Z}_N` charge, the dipole
+        moment can at most by conserved module ``qmod_q``, thus ``qmod_p`` must divide ``qmod_q``.
+        Second, for the dipole moment along a ``dipole_dims[n] > 0``, e.g. along the circumference
+        of a cylinder, the periodic boundary conditions imply that (at most) the dipole moment
+        modulo ``L_pbc * e`` can be conserved, where ``L_pbc`` is the length of the periodic
+        direction and ``e`` is the "unit" of the original charge ``q`` specified by , i.e. the GCD
+        of its charge values.
+        Lastly, if both cases apply, i.e. if ``qmod_q > 1`` and ``dipole_dims[n] > 0``, we can
+        conserve the dipole only modulo ``gcd(L_pbc * e, qmod_q)``.
+        If that GCD is one, no non-trivial symmetry remains.
+
+    Parameters
+    ----------
+    mod, names
+        Same as for :class:`ChargeInfo`.
+    charge_idcs : list of int
+        For every dipole charge, which charge is the original charge ``q_i``.
+    dipole_idcs : list of int
+        For every dipole charge, which charge is the local dipole moment ``p_i``.
+    dipole_dims : list of int, optional
+        For every dipole charge, which spatial component of the dipole moment is conserved.
+        An entry ``dim`` indicates that the ``r_i`` as described above are integer coefficients
+        of ``lattice.basis[dim]``, i.e. that the dipole moment in that direction is conserved.
+        Defaults to all ``0``, i.e. x-component of the dipole moment.
+
+    Attributes
+    ----------
+    _charge_idcs, _dipole_idcs, _dipole_dims
+        Like parameters of same name
+    """
+    trivial_shift = False  # If shift_charges acts trivially
+
+    def __init__(self, mod=[], names=None, charge_idcs=[], dipole_idcs=[], dipole_dims=None):
+        if dipole_dims is None:
+            dipole_dims = [0] * len(dipole_idcs)
+        for n, i in enumerate(charge_idcs):
+            if not (0 <= i < len(mod)):
+                raise ValueError(f'charge_idcs[{n}] out of bounds')
+        for n, i in enumerate(dipole_idcs):
+            if not (0 <= i < len(mod)):
+                raise ValueError(f'charge_idcs[{n}] out of bounds')
+            if i in charge_idcs:
+                raise ValueError('dipole_idcs and charge_idcs must be disjoint.')
+        for n_dip, i in enumerate(dipole_idcs):
+            # can not check full restriction on dipole qmod, since we do not have access to L_pbc
+            # -> check as much as possible
+            qmod_dip = mod[i]
+            qmod_charge = mod[charge_idcs[n_dip]]
+            if dipole_dims[n_dip] > 0 and qmod_dip == 1:
+                msg = 'Can not conserve U(1) dipole charge (qmod==1) along dipole_dim > 0.'
+                raise ValueError(msg)
+            if not _is_subgroup_by_qmod(qmod_dip, qmod_charge):
+                msg = (f'Dipole charge can not have qmod={qmod_dip} if underlying charge has '
+                       f'qmod={qmod_charge}. (Not a subgroup)')
+                raise ValueError(msg)
+        self._charge_idcs = charge_idcs
+        self._dipole_idcs = dipole_idcs
+        self._dipole_dims = dipole_dims
+        super().__init__(mod=mod, names=names)
+
+    def shift_charges(self, charges, dx):
+        charges = charges.copy()  # we modify in-place!
+        if dx[-1] != 0:
+            # shifting between different sublattice indices requires details about the lattice
+            # geometry, and causes headaches since we need *integer* translations...
+            raise NotImplementedError
+        for c_idx, d_idx, dim in zip(self._charge_idcs, self._dipole_idcs, self._dipole_dims):
+            # local dipole moment p_i = x_i[dim] * q_i  with position x_i and charge density q_i
+            # x_i -> x_i + dx   =>   p_i -> p_i + dx[dim] * q_i
+            charges[..., d_idx] += dx[dim] * charges[..., c_idx]
+        return self.make_valid(charges)
+
+    def shift_charges_horizontal(self, charges, dx_0):
+        charges = charges.copy()  # we modify in-place!
+        for c_idx, d_idx, dim in zip(self._charge_idcs, self._dipole_idcs, self._dipole_dims):
+            if dim != 0:
+                continue
+            charges[..., d_idx] += dx_0 * charges[..., c_idx]
+        return self.make_valid(charges)
+
+    def __getstate__(self):
+        rest = (self._charge_idcs, self._dipole_idcs, self._dipole_dims)
+        return (super().__getstate__(), rest)
+
+    def __setstate__(self, state):
+        super_state, (charge_idcs, dipole_idcs, dipole_dims) = state
+        super().__setstate__(super_state)
+        self._charge_idcs = charge_idcs
+        self._dipole_idcs = dipole_idcs
+        self._dipole_dims = dipole_dims
+
+    def __repr__(self):
+        return (f'DipolarChargeInfo({list(self.mod)}, {self.names}, {self._charge_idcs}, '
+                f'{self._dipole_idcs}, {self._dipole_dims})')
+
+    def __eq__(self, other):
+        if not isinstance(other, DipolarChargeInfo):
+            return False
+        if self is other:
+            return True
+        if not ChargeInfo.__eq__(self, other):
+            return False
+        if self._charge_idcs != other._charge_idcs:
+            return False
+        if self._dipole_idcs != other._dipole_idcs:
+            return False
+        if self._dipole_dims != other._dipole_dims:
+            return False
+        return True
+
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        h5gr.attrs['num_charges'] = self._qnumber
+        hdf5_saver.save(self._mod, subpath + "U1_ZN")
+        hdf5_saver.save(self.names, subpath + "names")
+        hdf5_saver.save(self._charge_idcs, subpath + "charge_idcs")
+        hdf5_saver.save(self._dipole_idcs, subpath + "dipole_idcs")
+        hdf5_saver.save(self._dipole_dims, subpath + "dipole_dims")
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        obj = cls.__new__(cls)  # create class instance, no __init__() call
+        hdf5_loader.memorize_load(h5gr, obj)
+        qmod = hdf5_loader.load(subpath + "U1_ZN")
+        qmod = np.asarray(qmod, dtype=QTYPE)
+        qnumber = len(qmod)
+        charge_idcs = hdf5_loader.load(subpath + "charge_idcs")
+        dipole_idcs = hdf5_loader.load(subpath + "dipole_idcs")
+        dipole_dims = hdf5_loader.load(subpath + "dipole_dims")
+        if "names" in h5gr:
+            names = hdf5_loader.load(subpath + "names")
+        else:
+            names = [''] * qnumber
+        obj.__setstate__((qnumber, qmod, names), (charge_idcs, dipole_idcs, dipole_dims))
+        obj.test_sanity()
+        return obj
+
+    def test_sanity(self):
+        num_dipole_charges = len(self._charge_idcs)
+        if len(self._dipole_idcs) != num_dipole_charges:
+            raise ValueError('dipole_idcs has wrong length')
+        if len(self._dipole_dims) != num_dipole_charges:
+            raise ValueError('dipole_dims has wrong length')
+        if len(set(self._dipole_idcs)) != num_dipole_charges:
+            raise ValueError('duplicates in dipole_idcs')
+        super().test_sanity()
 
 
 class LegCharge:
@@ -739,6 +968,29 @@ class LegCharge:
         res.qconj = -self.qconj
         res.charges = self.chinfo.make_valid(-self.charges)
         res.sorted = False
+        return res
+
+    def apply_charge_mapping(self, map_func, func_args=(), func_kwargs={}):
+        """Apply mapping to :attr:`LegCharge.charges`.
+
+        Parameters
+        ----------
+        map_func : function | None
+            The mapping to be applied to the charges. (or ``None`` for "no mapping")
+            Signature ``mapped_charges = map_func(charges, *args, **kwargs)``, where ``charges``
+            are 2D ndarrays. Must not mutate its input.
+        func_args : tuple, optional
+            Positional arguments for `map_func`.
+        func_kwargs : dict, optional
+            Keyword arguments for `map_func`.
+
+        Returns
+        -------
+        Shallow copy with mapped charges.
+        """
+        res = self.copy()  # shallow copy
+        res.charges = map_func(self.charges, *func_args, **func_kwargs)
+        res.sorted = res.bunched = False
         return res
 
     def to_qflat(self):
@@ -1349,6 +1601,16 @@ class LegPipe(LegCharge):
         res.__setstate__(LegCharge.__getstate__(self))
         return res
 
+    def apply_charge_mapping(self, map_func, func_args=(), func_kwargs={}):
+        # TODO is this fine? we now have ``res != LegPipe(res.legs)`` in general...
+        #      this is because the charges sort differently after mapping
+        res = self.copy()
+        res.legs = [l.apply_charge_mapping(map_func, func_args=func_args, func_kwargs=func_kwargs)
+                    for l in self.legs]
+        res.charges = map_func(self.charges, *func_args, **func_kwargs)
+        res.sorted = res.bunched = False
+        return res
+
     def conj(self):
         """Return a shallow copy with opposite ``self.qconj``.
 
@@ -1558,6 +1820,17 @@ class LegPipe(LegCharge):
         if self._perm is None:
             return inds_before_perm  # no permutation necessary
         return self._perm[inds_before_perm]
+
+
+def _is_subgroup_by_qmod(qmod1, qmod2):
+    """If the group given by ``qmod1`` is a subgroup of the group given by ``qmod2``."""
+    # deal with U(1) special cases
+    if qmod2 == 1:
+        return True
+    if qmod1 == 1:  # and we have qmod2 != 1
+        return False
+    # remaining cases: both groups are some Z_N -> subgroup if qmod1 divides qmod2
+    return qmod2 % qmod1 == 0
 
 
 # (in cython, but with different arguments)

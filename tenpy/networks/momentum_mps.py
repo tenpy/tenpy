@@ -67,6 +67,11 @@ class MomentumMPS:
         self.dtype = dtype = np.find_common_type([X.dtype for X in Xs], [])
         self._X = [X.astype(dtype, copy=True) for X in Xs]
         self.uMPS_GS = uMPS
+
+        if not uMPS.chinfo.trivial_shift:
+            # should maybe inherit from MPSGeometry?
+            raise NotImplementedError('Shift symmetry not supported yet')
+
         self.p = p
         self.n_sites = n_sites  # Number of sites of single excitation tensor.
 

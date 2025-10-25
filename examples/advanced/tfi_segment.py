@@ -28,8 +28,10 @@ def calc_infinite_groundstates(dmrg_params, g=0.1):
     model = TFIChain(model_params)
     plus_x = np.array([1., 1.]) / np.sqrt(2)
     minus_x = np.array([1., -1.]) / np.sqrt(2)
-    psi_plus = MPS.from_product_state(model.lat.mps_sites(), [plus_x] * L, model.lat.bc_MPS)
-    psi_minus = MPS.from_product_state(model.lat.mps_sites(), [minus_x] * L, model.lat.bc_MPS)
+    psi_plus = MPS.from_product_state(model.lat.mps_sites(), [plus_x] * L, model.lat.bc_MPS,
+                                      unit_cell_width=model.lat.mps_unit_cell_width)
+    psi_minus = MPS.from_product_state(model.lat.mps_sites(), [minus_x] * L, model.lat.bc_MPS,
+                                       unit_cell_width=model.lat.mps_unit_cell_width)
 
     engine_plus = dmrg.TwoSiteDMRGEngine(psi_plus, model, dmrg_params)
     engine_plus.run()
@@ -78,7 +80,8 @@ def prepare_segment(model, data_L, data_R, repeat_L=20, repeat_R=20):
     Bs_L[-1] = npc.tensordot(Bs_L[-1], joint, axes=['vR', 'vL'])
     S = psi_L._S[:-1] + psi_R._S
 
-    psi = MPS(psi_L.sites + psi_R.sites, Bs_L + Bs_R, S, 'segment')
+    psi = MPS(psi_L.sites + psi_R.sites, Bs_L + Bs_R, S, 'segment',
+              unit_cell_width=model.lat.mps_unit_cell_width)
     # UL, UR = psi.canonical_form_finite()
 
     return psi, model, init_env_data

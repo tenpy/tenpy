@@ -237,9 +237,8 @@ def test_merge_recursive():
                       'conflict': 'third'},
              'foo': 3}
 
-    with pytest.raises(ValueError) as excinfo:
-        merged = tools.misc.merge_recursive(data1, data2, data3)
-    assert "'some':'conflict'" in str(excinfo.value)
+    with pytest.raises(ValueError, match="'some':'conflict'"):
+        _ = tools.misc.merge_recursive(data1, data2, data3)
     merged_first = tools.misc.merge_recursive(data1, data2, data3, conflict='first')
     expected_merged = {
         'some': {'nested': {'data': 123, 'other': 456},

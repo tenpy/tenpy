@@ -19,7 +19,8 @@ def test_ToricCode_general():
 def test_ToricCode(Lx=1, Ly=2):
     model_params = {'Lx': Lx, 'Ly': Ly, 'bc_MPS': 'infinite', 'sort_charge': True}
     M = ToricCode(model_params)
-    psi = MPS.from_product_state(M.lat.mps_sites(), [0] * M.lat.N_sites, bc='infinite')
+    psi = MPS.from_product_state(M.lat.mps_sites(), [0] * M.lat.N_sites, bc='infinite',
+                                 unit_cell_width=M.lat.mps_unit_cell_width)
     dmrg_params = {
         'mixer': True,
         'trunc_params': {

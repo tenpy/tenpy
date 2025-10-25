@@ -13,7 +13,7 @@ def test_bosonic_model_TEBD():
     L = 15
     model = mods.hubbard.BoseHubbardChain({"conserve":None, "U":1, "t":1, "bc_MPS": "finite", "L": L, "n_max": 4})
     # Test TEBD first
-    psi = mps.MPS.from_product_state(model.lat.mps_sites(), [0]*L)
+    psi = mps.MPS.from_product_state(model.lat.mps_sites(), [0]*L, unit_cell_width=model.lat.mps_unit_cell_width)
     engine = algo.tebd.TEBDEngine(psi, model, {"trunc_params": {"chi_max": 33}})
     # expected value:
     # bond | 0   | 1  | 2  | 3  | 4  | 5  | 6  | 7  | 8  | 9  | 10 | 11 | 12 | 13 | 14 | 15 |
@@ -32,7 +32,7 @@ def test_bosonic_model_DMRG():
     """Test with a bosonic chain."""
     L = 15
     model = mods.hubbard.BoseHubbardChain({"conserve":None, "U":1, "t":1, "bc_MPS": "finite", "L": L, "n_max": 4})
-    psi = mps.MPS.from_product_state(model.lat.mps_sites(), [0]*L)
+    psi = mps.MPS.from_product_state(model.lat.mps_sites(), [0]*L, unit_cell_width=model.lat.mps_unit_cell_width)
     engine = algo.dmrg.TwoSiteDMRGEngine(psi, model, {"trunc_params": {"chi_max": 99}})
     # expected value:
     # bond | 0   | 1  | 2  | 3  | 4  | 5  | 6  | 7  | 8  | 9  | 10 | 11 | 12 | 13 | 14 | 15 |

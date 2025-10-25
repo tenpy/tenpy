@@ -1,5 +1,6 @@
 # Copyright (C) TeNPy Developers, Apache license
 import pytest
+import numpy as np
 from tenpy.models import hubbard
 from test_model import check_general_model
 
@@ -33,3 +34,16 @@ def test_BoseHubbardModel():
 
 def test_BoseHubbardChain():
     check_general_model(hubbard.BoseHubbardChain, {}, {})
+
+
+def test_DipolarBoseHubbardChain():
+    # check dipolar charges for one specific case
+    Nmax = 4
+    model = hubbard.DipolarBoseHubbardChain(dict(conserve='dipole', Nmax=Nmax))
+    expect_N = np.arange(Nmax + 1)
+    for i, s in enumerate(model.lat.mps_sites()):
+        expect_dipole = i * expect_N
+        expect_charges = np.array([expect_N, expect_dipole]).T
+        assert np.all(s.leg.charges == expect_charges)
+    # check general properties for many cases
+    check_general_model(hubbard.DipolarBoseHubbardChain, {}, {'conserve': ['dipole', 'N', 'parity', None],})

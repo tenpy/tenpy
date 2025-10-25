@@ -38,10 +38,11 @@ def test_vumps(L, engine, mixer, g=1.2):
     model_params = dict(L=L, J=1., g=g, bc_MPS='infinite', conserve=None)
     M = TFIChain(model_params)
     if engine == vumps.SingleSiteVUMPSEngine:
-        psi = mps.MPS.from_desired_bond_dimension(M.lat.mps_sites(), 32, bc='infinite')
+        psi = mps.MPS.from_desired_bond_dimension(M.lat.mps_sites(), 32, bc='infinite',
+                                                  unit_cell_width=L)
     else:
         state = [0] * L  # Ferromagnetic Ising
-        psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc='infinite')
+        psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc='infinite', unit_cell_width=L)
     vumps_pars = {
         'combine': False,
         'mixer': mixer,

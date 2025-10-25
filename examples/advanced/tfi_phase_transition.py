@@ -34,7 +34,8 @@ def run(gs):
     }
 
     M = TFIChain(model_params)
-    psi = MPS.from_product_state(M.lat.mps_sites(), (["up", "down"] * L)[:L], M.lat.bc_MPS)
+    psi = MPS.from_product_state(M.lat.mps_sites(), (["up", "down"] * L)[:L], M.lat.bc_MPS,
+                                 unit_cell_width=M.lat.mps_unit_cell_width)
 
     engine = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
     np.set_printoptions(linewidth=120)
