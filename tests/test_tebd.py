@@ -168,7 +168,7 @@ def test_tebd_dipole_conservation(L, bc_MPS, S=1, tol=1.e-13, J4=0.):
     model_params = dict(L=L, S=S, J3=1., J4=J4, bc_MPS=bc_MPS, conserve='dipole')
     tebd_params = dict(order=2, )
     model = DipolarSpinChain(model_params)
-    psi = MPS.from_lat_product_state(model.lat, [['up'], ['down']])
+    psi = MPS.from_lat_product_state(model.lat, [['up'], ['down']], understood_shift_symmetry=True)
     #
     group = 3  # such that H4 becomes nearest neighbor
     model.group_sites(group)

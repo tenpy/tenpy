@@ -103,7 +103,7 @@ def test_ExpMPOEvolution_dipolar(bc_MPS, approximation, compression, dt=.01, num
     model = DipolarSpinChain(dict(L=L, J3=1., J4=.5, bc_MPS=bc_MPS, conserve='dipole'))
 
     psi = MPS.from_product_state(model.lat.mps_sites(), ['up', 'down'] * (L // 2), bc=bc_MPS,
-                                 unit_cell_width=L)
+                                 unit_cell_width=L, understood_shift_symmetry=True)
     options = dict(dt=dt, N_steps=1, order=1, approximation=approximation,
                    compression_method=compression, trunc_params=dict(chi_max=30, svd_min=1e-8))
     engine = mpo_evolution.ExpMPOEvolution(psi, model, options)

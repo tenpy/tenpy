@@ -158,11 +158,13 @@ logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from ..linalg import sparse
+from ..linalg.charges import DipolarChargeInfo
 from ..linalg.random_matrix import GOE, GUE
 from ..linalg.krylov_based import Arnoldi
 from ..linalg.truncation import TruncationError, svd_theta, eigh_rho, _machine_prec_trunc_par
 from .site import group_sites
-from ..tools.misc import argsort, to_iterable, to_array, get_recursive, inverse_permutation
+from ..tools.misc import (argsort, to_iterable, to_array, get_recursive, inverse_permutation,
+                          BetaWarning)
 from ..tools.math import lcm, entropy
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
@@ -1601,8 +1603,20 @@ class MPS(BaseMPSExpectationValue):
     # All labels of each tensor in _B (order is used!)
     _B_labels = ['vL', 'p', 'vR']
 
-    def __init__(self, sites, Bs, SVs, bc='finite', form='B', norm=1., unit_cell_width=None):
+    def __init__(self, sites, Bs, SVs, bc='finite', form='B', norm=1., unit_cell_width=None,
+                 understood_shift_symmetry: bool = False):
         super().__init__(sites, bc, unit_cell_width)
+
+        if not self.chinfo.trivial_shift and bc == 'infinite' and not understood_shift_symmetry:
+            msg = ('Shift-symmetry is a new experimental feature and the interplay with infinite '
+                   'boundary conditions is not yet extensively tested. '
+                   'Proceed with care, and compare to simulations without that symmetry enforced. ')
+            if isinstance(self.chinfo, DipolarChargeInfo):
+                msg += ('Note also that dipole symmetries tend to fragment the Hilbert space and '
+                        'it is vital to select an initial state in the correct charge sector. ')
+            msg += ('To suppress this warning, set `understood_shift_symmetry=True`')
+            warnings.warn(msg, BetaWarning, stacklevel=2)
+
         assert len(self.sites) > 0, "MPS need at least one site"
         self.dtype = dtype = np.result_type(*[B.dtype for B in Bs])
         self.form = self._parse_form(form)
@@ -1669,7 +1683,8 @@ class MPS(BaseMPSExpectationValue):
         B and S are deeply copied.
         """
         # __init__ makes deep copies of B, S
-        cp = self.__class__(self.sites, self._B, self._S, self.bc, self.form, self.norm, self.unit_cell_width)
+        cp = self.__class__(self.sites, self._B, self._S, self.bc, self.form, self.norm,
+                            self.unit_cell_width, understood_shift_symmetry=True)
         cp.grouped = self.grouped
         cp._transfermatrix_keep = self._transfermatrix_keep
         cp.segment_boundaries = getattr(self, "segment_boundaries", (None, None))
@@ -1873,7 +1888,8 @@ class MPS(BaseMPSExpectationValue):
                            permute=True,
                            form='B',
                            chargeL=None,
-                           unit_cell_width=None):
+                           unit_cell_width=None,
+                           understood_shift_symmetry: bool = False):
         """Construct a matrix product state from a given product state.
 
         Parameters
@@ -1976,7 +1992,8 @@ class MPS(BaseMPSExpectationValue):
                 B = B[site.perm, :, :]
             Bs.append(B)
         SVs = [[1.]] * (L + 1)
-        return cls.from_Bflat(sites, Bs, SVs, bc, dtype, False, form, legL, unit_cell_width)
+        return cls.from_Bflat(sites, Bs, SVs, bc, dtype, False, form, legL, unit_cell_width,
+                              understood_shift_symmetry=understood_shift_symmetry)
 
     @classmethod
     def from_random_unitary_evolution(cls,
@@ -1987,7 +2004,8 @@ class MPS(BaseMPSExpectationValue):
                                       dtype=np.float64,
                                       permute=True,
                                       form='B',
-                                      chargeL=None):
+                                      chargeL=None,
+                                      understood_shift_symmetry: bool = False):
         """Construct a matrix product state by evolving a product state with random unitaries.
 
         Parameters
@@ -2026,7 +2044,8 @@ class MPS(BaseMPSExpectationValue):
         if bc == 'segment':
             msg = "MPS.from_random_unitary_evolution not implemented for segment BC."
             raise NotImplementedError(msg)
-        psi = MPS.from_product_state(sites, p_state, bc, dtype, permute, form, chargeL)
+        psi = MPS.from_product_state(sites, p_state, bc, dtype, permute, form, chargeL,
+                                     understood_shift_symmetry=understood_shift_symmetry)
         tebd_params = dict(N_steps = 10, trunc_params={'chi_max': chi})
         eng = RandomUnitaryEvolution(psi, tebd_params)
         _max_iter = 1000
@@ -2052,7 +2071,8 @@ class MPS(BaseMPSExpectationValue):
                                     dtype=np.float64,
                                     permute=True,
                                     chargeL=None,
-                                    unit_cell_width=None):
+                                    unit_cell_width=None,
+                                    understood_shift_symmetry: bool = False):
         """Construct a matrix product state with given bond dimensions from random matrices (no charge conservation).
 
         Parameters
@@ -2121,7 +2141,8 @@ class MPS(BaseMPSExpectationValue):
         else:
             raise NotImplementedError("MPS.from_desired_bond_dimension not implemented for segment BC.")
         psi = MPS.from_Bflat(sites, Bflat, bc=bc, dtype=dtype, permute=permute, form=None, legL=chargeL,
-                             unit_cell_width=unit_cell_width)
+                             unit_cell_width=unit_cell_width,
+                             understood_shift_symmetry=understood_shift_symmetry)
         psi.canonical_form()
         logger.info("Generated MPS of bond dimension %r from random matrices.", list(psi.chi))
         return psi
@@ -2136,7 +2157,8 @@ class MPS(BaseMPSExpectationValue):
                    permute=True,
                    form='B',
                    legL=None,
-                   unit_cell_width=None):
+                   unit_cell_width=None,
+                   understood_shift_symmetry: bool = False):
         """Construct a matrix product state from a set of numpy arrays `Bflat` and singular vals.
 
         Parameters
@@ -2206,7 +2228,8 @@ class MPS(BaseMPSExpectationValue):
             # so we need to gauge `qtotal` of the last `B` such that the right leg matches.
             chdiff = Bs[-1].get_leg('vR').charges[0] - Bs[0].get_leg('vL').charges[0]
             Bs[-1] = Bs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
-        res = cls(sites, Bs, SVs, form=form, bc=bc, unit_cell_width=unit_cell_width)
+        res = cls(sites, Bs, SVs, form=form, bc=bc, unit_cell_width=unit_cell_width,
+                  understood_shift_symmetry=understood_shift_symmetry)
         if res.L > 1 and max(res.chi) > 1:
             # the SVs set above are not the correct Schmidt values if chi > 1.
             res.canonical_form()
@@ -2221,7 +2244,8 @@ class MPS(BaseMPSExpectationValue):
                   normalize=True,
                   bc='finite',
                   outer_S=None,
-                  unit_cell_width=None):
+                  unit_cell_width=None,
+                  understood_shift_symmetry: bool = False):
         """Construct an MPS from a single tensor `psi` with one leg per physical site.
 
         Performs a sequence of SVDs of psi to split off the `B` matrices and obtain the singular
@@ -2324,7 +2348,8 @@ class MPS(BaseMPSExpectationValue):
             S_list[0] = S_list[-1] = np.ones([1], dtype=np.float64)
         elif outer_S is not None:
             S_list[0], S_list[-1] = outer_S
-        res = cls(sites, B_list, S_list, bc=bc, form=B_form, norm=norm, unit_cell_width=unit_cell_width)
+        res = cls(sites, B_list, S_list, bc=bc, form=B_form, norm=norm,
+                  unit_cell_width=unit_cell_width, understood_shift_symmetry=understood_shift_symmetry)
         if form is not None:
             res.convert_form(form)
         return res
@@ -2339,7 +2364,8 @@ class MPS(BaseMPSExpectationValue):
                       lonely=[],
                       lonely_state='up',
                       bc='finite',
-                      unit_cell_width=None):
+                      unit_cell_width=None,
+                      understood_shift_symmetry: bool = False):
         """Create an MPS of entangled singlets.
 
         Parameters
@@ -2386,12 +2412,15 @@ class MPS(BaseMPSExpectationValue):
             psi_lonely = MPS.from_product_state([site], [lonely_state], unit_cell_width=1)
             mps_covering.extend([psi_lonely] * len(lonely))
             index_map.extend([(i, ) for i in lonely])
-        psi = cls.from_product_mps_covering(mps_covering, index_map, bc=bc, unit_cell_width=unit_cell_width)
+        psi = cls.from_product_mps_covering(mps_covering, index_map, bc=bc,
+                                            unit_cell_width=unit_cell_width,
+                                            understood_shift_symmetry=understood_shift_symmetry)
         assert psi.L == L
         return psi
 
     @classmethod
-    def from_product_mps_covering(cls, mps_covering, index_map, bc='finite', unit_cell_width=None):
+    def from_product_mps_covering(cls, mps_covering, index_map, bc='finite', unit_cell_width=None,
+                                  understood_shift_symmetry: bool = False):
         """Create an MPS as a product of (many) local mps covering all sites to be created.
 
         This is a generalization of :meth:`from_singlets` to allow arbitrary local, entangled
@@ -2534,11 +2563,13 @@ class MPS(BaseMPSExpectationValue):
         SVs[0] = SVs[-1]
         if bc == 'finite':
             SVs = SVs[:-1]
-        return cls(sites, Bs, SVs, bc=bc, form='B', unit_cell_width=unit_cell_width)
+        return cls(sites, Bs, SVs, bc=bc, form='B', unit_cell_width=unit_cell_width,
+                   understood_shift_symmetry=understood_shift_symmetry)
 
     @classmethod
     def project_onto_charge_sector(cls, sites, p_state_list, charge_sector, dtype=float,
-                                   bc='finite', form='B', norm=1., unit_cell_width=None):
+                                   bc='finite', form='B', norm=1., unit_cell_width=None,
+                                   understood_shift_symmetry: bool = False):
         """Generates an MPS from a product state list which is projected onto a given charge sector.
 
         Parameters
@@ -2561,12 +2592,13 @@ class MPS(BaseMPSExpectationValue):
         charge_tree = cls.get_charge_tree_for_given_charge_sector(sites, charge_sector)
         return cls._project_onto_sector_from_charge_tree(
             sites, p_state_list, charge_tree, dtype, bc=bc, form=form, norm=norm,
-            unit_cell_width=unit_cell_width
+            unit_cell_width=unit_cell_width, understood_shift_symmetry=understood_shift_symmetry
         )
 
     @classmethod
     def _project_onto_sector_from_charge_tree(cls, sites, p_state_list, charge_tree, dtype=float,
-                                              bc='finite', form='B', norm=1., unit_cell_width=None):
+                                              bc='finite', form='B', norm=1., unit_cell_width=None,
+                                              understood_shift_symmetry: bool = False):
         """Select entries in a product state that are in a charge tree.
 
         Parameters
@@ -2629,7 +2661,8 @@ class MPS(BaseMPSExpectationValue):
             Ss.append(np.ones(B.shape[1], np.float64))
 
         projected_state = cls(sites, Bs, Ss, bc=bc, form=form, norm=norm,
-                              unit_cell_width=unit_cell_width)
+                              unit_cell_width=unit_cell_width,
+                              understood_shift_symmetry=understood_shift_symmetry)
         projected_state.canonical_form_finite()  # calculate S values and normalize
         return projected_state
 
