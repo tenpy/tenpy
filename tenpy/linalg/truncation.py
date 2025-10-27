@@ -377,7 +377,7 @@ def _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, mov
         The leg between the old left tensor and the old right tensor.
         e.g. ``old_bond_leg = T_L.get_leg('vR')`` or ``old_bond_leg = T_R.get_leg('vL')``
     theta : Array with legs [(vL.p0), (p1.vR)]
-    move_right : bool 
+    move_right : bool
     expand : float
     min_block_increase : int
 
@@ -390,13 +390,13 @@ def _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, mov
 
     assert min_block_increase >= 0
     assert expand is not None and expand != 0
-    
+
     if move_right:
         Y0 = theta.copy(deep=False)
         Y0.legs[1] = Y0.legs[1].to_LegCharge()
         Y0.ireplace_label('(p1.vR)', 'vR')
         if any(old_qtotal_R != 0):
-            Y0.gauge_total_charge('vR', new_qtotal=old_qtotal_L)
+            Y0.gauge_total_charge('vR', old_qtotal_L)
         vR_old = old_bond_leg
         if not vR_old.is_blocked():
             vR_old = vR_old.sort()[1]
@@ -408,7 +408,7 @@ def _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, mov
         Y0.legs[0] = Y0.legs[0].to_LegCharge()
         Y0.ireplace_label('(vL.p0)', 'vL')
         if any(old_qtotal_L != 0):
-            Y0.gauge_total_charge('vL', new_qtotal=old_qtotal_R)
+            Y0.gauge_total_charge('vL', old_qtotal_R)
         vL_old = old_bond_leg
         if not vL_old.is_blocked():
             vL_old = vL_old.sort()[1]
@@ -454,7 +454,7 @@ def _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, mov
         qdata_idx += 1
         if qdata_idx >= Y0._qdata.shape[0]:
             break
-    
+
     if move_right:
         Y0.iproject(piv, 'vR')
     else:
@@ -524,9 +524,9 @@ def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[N
     return U, S, Vd, trunc_err, renormalize
 
 
-def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, 
-                             move_right: bool, expand: float, min_block_increase: int, 
-                             use_eig_based_svd: bool, trunc_params: dict, compute_err: bool, 
+def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array,
+                             move_right: bool, expand: float, min_block_increase: int,
+                             use_eig_based_svd: bool, trunc_params: dict, compute_err: bool,
                              return_both_T: bool):
     r"""Performs a QR based decomposition of a matrix `theta` (= the wavefunction) and truncates it.
     The result is an approximation.
@@ -543,9 +543,9 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
         |   -- theta --   ~=   renormalization * -- T_Lc --- T_Rc --
         |      |   |                                 |        |
 
-    Where `T_Lc` is in `'A'` (`'Th'`) form and `T_Rc` in `'Th'` (`'B'`) form, if ``move_right=True`` 
+    Where `T_Lc` is in `'A'` (`'Th'`) form and `T_Rc` in `'Th'` (`'B'`) form, if ``move_right=True``
     (``move_right=False``).
-    
+
     Parameters
     ----------
     old_qtotal_L : 1D array
@@ -563,7 +563,7 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
         Expansion rate. The QR-based decomposition is carried out at an expanded bond dimension.
     min_block_increase : int
         Minimum bond dimension increase for each block.
-    move_right : bool 
+    move_right : bool
         If `True`, the left tensor `T_Lc` is returned in `'A'` form and the right tensor `T_Rc` is set to `None`.
         If `False`, the right tensor `T_Rc` is returned in `'B'` form and the left tensor `T_Lc` is set to `None`.
     use_eig_based_svd : bool
@@ -579,9 +579,9 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
         Otherwise, the truncation error is set to NaN.
     return_both_T : bool
         Whether the other tensor (associated with ``not move_right``) should be returned as well.
-        If `True` and ``move_right=True``, the right tensor `T_Rc` is returned in `'Th'` (`'B'`) form, 
+        If `True` and ``move_right=True``, the right tensor `T_Rc` is returned in `'Th'` (`'B'`) form,
         if ``use_eig_based_svd=True`` (``use_eig_based_svd=False``).
-        If `True` and ``move_right=False``, the left tensor `T_Lc` is returned in `'Th'` (`'A'`) form, 
+        If `True` and ``move_right=False``, the left tensor `T_Lc` is returned in `'Th'` (`'A'`) form,
         if ``use_eig_based_svd=True`` (``use_eig_based_svd=False``).
 
     Returns
@@ -601,7 +601,7 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
 
     if compute_err:
         return_both_T = True
-    
+
     if move_right:
         # Get initial guess for the left isometry
         Y0 = _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta, move_right, expand, min_block_increase) # Y0: [(vL.p0), vR]
@@ -609,12 +609,12 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
         # QR based updates
         theta_i1 = npc.tensordot(Y0.conj(), theta, ['(vL*.p0*)', '(vL.p0)']).ireplace_label('vR*', 'vL') # theta_i1: [vL,(p1.vR)]
         theta_i1.itranspose(['(p1.vR)', 'vL']) # theta_i1: [(p1.vR),vL]
-        B_R, _ = npc.qr(theta_i1, inner_labels=['vL', 'vR'], inner_qconj=-1) # B_R: [(p1.vR),vL] 
-        B_R.itranspose(['vL', '(p1.vR)']) # B_R: [vL,(p1.vR)] 
+        B_R, _ = npc.qr(theta_i1, inner_labels=['vL', 'vR'], inner_qconj=-1) # B_R: [(p1.vR),vL]
+        B_R.itranspose(['vL', '(p1.vR)']) # B_R: [vL,(p1.vR)]
 
         theta_i0 = npc.tensordot(theta, B_R.conj(), ['(p1.vR)', '(p1*.vR*)']).ireplace_label('vL*', 'vR') # theta_i0: [(vL.p0),vR]
         A_L, Xi = npc.qr(theta_i0, inner_labels=['vR', 'vL']) # A_L: [(vL.p0), vR]
-        
+
     else:
         # Get initial guess for the right isometry
         Y0 = _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta, move_right, expand, min_block_increase) # Y0: [vL, (p1.vR)]
@@ -660,7 +660,7 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
                 form[0] = 'Th'
             else:
                 T_Lc = npc.tensordot(A_L, U, ['vR', 'vL'])
-    
+
     # Compute error
     if compute_err:
         if use_eig_based_svd:
@@ -682,7 +682,7 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
         T_Rc.ireplace_label('(p1.vR)', '(p.vR)')
         if return_both_T:
             T_Lc.ireplace_label('(vL.p0)', '(vL.p)')
-        
+
     return T_Lc, S, T_Rc, form, trunc_err, renormalization
 
 
