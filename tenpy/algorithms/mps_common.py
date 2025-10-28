@@ -1744,15 +1744,16 @@ class Mixer:
             pass  # fall back to using mix_and_decompose_1site
 
         if mix_left and mix_right:
-            qtotal_L, qtotal_R = self.determine_qtotal_L_R(theta.qtotal, qtotal_LR)
             # mix left site by treating p1 as part of vR leg
             theta_L = theta.replace_label('(p1.vR)', 'vR')
             U, _, _, err_L = self.mix_and_decompose_1site(engine, theta_L, i0, move_right=True)
-            U = U.gauge_total_charge(1, qtotal_L)
+            if qtotal_LR is not None:
+                U = U.gauge_total_charge(1, qtotal_LR[0])
             # mix right site by treating p0 as part of vL leg
             theta_R = theta.replace_labels(['(vL.p0)', '(p1.vR)'], ['vL', '(p0.vR)'])
             _, S_approx, VH, err_R = self.mix_and_decompose_1site(engine, theta_R, i0 + 1, move_right=False)
-            VH = VH.gauge_total_charge(0, qtotal_R)
+            if qtotal_LR is not None:
+                VH = VH.gauge_total_charge(0, qtotal_LR[1])
             VH.ireplace_label('(p0.vR)', '(p1.vR)')
             # calculate S = U^H theta V
             theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])
@@ -1762,18 +1763,12 @@ class Mixer:
             S = theta
             err = err_L + err_R
         elif mix_left:
-            if qtotal_LR is not None and qtotal_LR != (None, None):
-                msg = 'qtotal_LR is ignored if we mix only one site. U always carries the whole qtotal.'
-                warnings.warn(msg, stacklevel=2)
             theta_L = theta.replace_label('(p1.vR)', 'vR')
             U, S, VH, err = self.mix_and_decompose_1site(engine, theta_L, i0, move_right=True)
             # note: VH is not isometric
             VH.ireplace_label('vR', '(p1.vR)')
             S_approx = S
         elif mix_right:
-            if qtotal_LR is not None and qtotal_LR != (None, None):
-                msg = 'qtotal_LR is ignored if we mix only one site. Vh always carries the whole qtotal.'
-                warnings.warn(msg, stacklevel=2)
             theta_R = theta.replace_labels(['(vL.p0)', '(p1.vR)'], ['vL', '(p0.vR)'])
             U, S, VH, err = self.mix_and_decompose_1site(engine, theta_R, i0 + 1, move_right=False)
             # note: U is not isometric
@@ -1783,27 +1778,6 @@ class Mixer:
         else:
             raise ValueError('Expected mix_left=True and/or mix_right=True.')
         return U, S, VH, err, S_approx
-
-    @staticmethod
-    def determine_qtotal_L_R(theta_qtotal, qtotal_LR):
-        """Figure out ``qtotal_L, qtotal_R`` such that ``qtotal_L + qtotal_R == theta_qtotal``."""
-        if qtotal_LR is None:
-            qtotal_L = qtotal_R = None
-        else:
-            qtotal_L, qtotal_R = qtotal_LR
-
-        if qtotal_L is None and qtotal_R is None:
-            qtotal_L = 0
-            qtotal_R = theta_qtotal
-        elif qtotal_L is None:
-            qtotal_L = theta_qtotal - qtotal_R
-        elif qtotal_R is None:
-            qtotal_R = theta_qtotal - qtotal_L
-        if not np.all(qtotal_L + qtotal_R == theta_qtotal):
-            msg = f'qtotal_LR must add up to {theta_qtotal=}'
-            raise ValueError(msg)
-
-        return qtotal_L, qtotal_R
 
 
 def _mix_LR(H, i0, amplitude):
@@ -2000,8 +1974,6 @@ class DensityMatrixMixer(Mixer):
         U, S, VH, err, S_approx:
             As defined in :meth:`mixed_svd_2site`.
         """
-        qtotal_L, qtotal_R = self.determine_qtotal_L_R(theta.qtotal, qtotal_LR)
-
         rho_L.itranspose(['(vL.p0)', '(vL*.p0*)'])  # just to be sure of the order
         rho_R.itranspose(['(p1.vR)', '(p1*.vR*)'])  # just to be sure of the order
         # consider the SVD `theta = U S V^H` (with real, diagonal S>0)
@@ -2015,7 +1987,8 @@ class DensityMatrixMixer(Mixer):
         S_a = np.sqrt(val_L)
         keep_L, _, err_L = truncate(S_a, engine.trunc_params)
         U.iproject(keep_L, axes='vR')  # in place
-        U = U.gauge_total_charge(1, qtotal_L)
+        if qtotal_LR is not None:
+            U = U.gauge_total_charge(1, qtotal_LR[0])
         # rho_R ~=  theta^T theta^* = V^* S U^T U* S V^T = V^* S S V^T  (for mixer -> 0)
         # Thus, rho_R V^* = V^* S S, i.e. columns of V^* are eigenvectors of rho_R
         val_R, Vc = npc.eigh(rho_R)
@@ -2025,7 +1998,8 @@ class DensityMatrixMixer(Mixer):
         val_R /= np.sum(val_R)
         keep_R, _, err_R = truncate(np.sqrt(val_R), engine.trunc_params)
         VH.iproject(keep_R, axes='vL')
-        VH = VH.gauge_total_charge(0, qtotal_R)
+        if qtotal_LR is not None:
+            VH = VH.gauge_total_charge(0, qtotal_LR[1])
 
         # calculate S = U^H theta V
         theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])  # axes 0, 0
@@ -2034,8 +2008,6 @@ class DensityMatrixMixer(Mixer):
         # normalize `S` (as in svd_theta) to avoid blowing up numbers
         theta /= theta.norm()  # norm(singular values) = norm(whole array)
         S_a = S_a[keep_L]
-        assert np.all(theta.qtotal == 0)
-        breakpoint()
         return U, theta, VH, err_L + err_R, S_a
 
 
