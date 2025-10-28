@@ -906,8 +906,11 @@ class TwoSiteDMRGEngine(DMRGEngine):
             )
             S_a = S
         else:
-            qtotal_LR = [self.psi.get_B(i0, form=None).qtotal,
-                         self.psi.get_B(i0 + 1, form=None).qtotal]
+            # choose qtotal_LR to be "the same as before", if possible
+            # note that for diag_method='ED_all', the qtotal of theta may change.
+            # we absorb that change into the right tensor (arbitrary choice).
+            old_BL_qtotal = self.psi.get_B(i0, form=None).qtotal
+            qtotal_LR = [old_BL_qtotal, theta.qtotal - old_BL_qtotal]
             U, S, VH, err, S_a = mixer.mix_and_decompose_2site(
                 engine=self, theta=theta, i0=self.i0, mix_left=update_LP, mix_right=update_RP,
                 qtotal_LR=qtotal_LR
