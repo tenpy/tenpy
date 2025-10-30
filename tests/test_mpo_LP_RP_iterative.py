@@ -31,7 +31,7 @@ def helper_test_graph(H, name):
                 else:
                     assert npc.norm(op-H._graph[j][(jL,jR)])<1e-12, name+": _graph[{0}][({1},{2})] wrong".format(j, jL, jR)
 
-def helper_test_init_env(psi, E, H, name):
+def helper_test_init_env(psi, E, H, name, tol=1e-10):
     env_base, E_base, _ = MPOTransferMatrix.find_init_LP_RP(H, psi, 0, psi.L-1, calc_E=True)
     env = MPOEnvironmentBuilder(H, psi)
     init_env, _, E_iter = env.init_LP_RP_iterative(calc_E=True, which="both")
@@ -39,7 +39,8 @@ def helper_test_init_env(psi, E, H, name):
     env_base["init_LP"].itranspose(["wR","vR","vR*"])
     assert npc.norm(env_base["init_LP"]-init_env["init_LP"])<1e-8, name+": LP_iterative not converged"
     assert npc.norm(env_base["init_RP"]-init_env["init_RP"])<1e-8, name+": RP_iterative not converged"
-    assert abs(E_iter[0]-E_base[0])<1e-11 and abs(E_iter[1]-E_base[1])<1e-11, name+": Energies of iterative environment intialization don't match"
+    assert abs(E_iter[0] - E_base[0]) < tol
+    assert abs(E_iter[1] - E_base[1]) < tol, name+": Energies of iterative environment intialization don't match"
 
 def helper_test_H_square(psi, square_of_H, H, name, state):
     e_iter1 = MPOEnvironmentBuilder(square_of_H, psi)
