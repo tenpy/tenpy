@@ -431,7 +431,8 @@ class NearestNeighborModel(Model):
         for i in range(first, last + 1):
             num_unit_cells, _i = divmod(i, L)
             h = self.H_bond[_i]
-            h = h.shift_charges_horizontal(dx_0=num_unit_cells * self.lat.mps_unit_cell_width)
+            if h is not None:
+                h = h.shift_charges_horizontal(dx_0=num_unit_cells * self.lat.mps_unit_cell_width)
             new_H_bond.append(h)
         cp.H_bond = new_H_bond
         return cp
