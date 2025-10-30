@@ -9,7 +9,7 @@ description = "Simulation of quantum many-body systems with tensor networks in P
 readme = {file = "README.rst", content-type = "text/x-rst"}
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 authors = [
     {name = "TeNPy Developer Team"},
 ]
@@ -26,8 +26,6 @@ classifiers = [
     "Programming Language :: C",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
