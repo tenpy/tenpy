@@ -1,8 +1,8 @@
 name: Notify about Coverage
 
 
-# on:
-#   pull_request_target:
+on:
+  pull_request_target:
 
 jobs:
   calc_coverage:
