@@ -83,6 +83,20 @@ include = ['tenpy*']
 version = {attr = "tenpy.__version__"}
 
 
+[tool.cibuildwheel]
+# Disable building 32bit windows wheels (h5py does not support it)
+# Disable musllinux : would need to install BLAS/LAPACK
+# Disable free-threaded python 3.14 (h5py not yet supported), see issue 
+skip = "*-win32 *-musllinux_* cp314t-*"
+# Build separate wheels for macOS's different architectures.
+macos.archs = ["x86_64", "arm64"]
+# Build only on Linux architectures that don't need qemu emulation.
+linux.archs = ["x86_64"]
+# Run the test suite after each build.
+test-requires = ["pytest>=6.0", "h5py", "pyyaml", "psutil"]
+test-command = "pytest {project}/tests"
+
+
 [tool.pytest.ini_options]
 filterwarnings = [
     "error",  # consider all unfiltered warnings error. they should be handled or filtered.

@@ -31,26 +31,10 @@ jobs:
         python-version: '3.x'
 
     - name: Build wheels
-      uses: pypa/cibuildwheel@v3
+      # configuration in pyproject.toml
+      uses: pypa/cibuildwheel@v3.2.1
       with:
         output-dir: dist
-      env:
-          # Disable building PyPy wheels on all platforms
-          # Disable building 32bit windows wheels (h5py does not support it)
-          # Disable musllinux : would need to install BLAS/LAPACK
-          CIBW_SKIP: pp* *-win32 *-musllinux_*
-          # Build separate wheels for macOS's different architectures.
-          CIBW_ARCHS_MACOS: "x86_64 arm64"
-          # Build only on Linux architectures that don't need qemu emulation.
-          CIBW_ARCHS_LINUX: "x86_64"
-          # Include latest Python beta.
-          CIBW_PRERELEASE_PYTHONS: True
-          # Run the test suite after each build.
-          CIBW_TEST_REQUIRES: pytest>=6.0 numpy scipy bottleneck h5py pyyaml psutil
-          CIBW_TEST_COMMAND: pytest {project}/tests
-          # silence warning that arm wheels can not be tested.
-          # Jakob has a M2 MacBook that can test them, e.g. from testPyPI, if needed.
-          CIBW_TEST_SKIP: "*-macosx_arm64"
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
