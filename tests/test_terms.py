@@ -316,8 +316,8 @@ def test_exp_decaying_terms():
 
     # check whether the MPO construction works by comparing MPOs
     # constructed from ts vs. directly
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite').build_MPO()
-    G = mpo.MPOGraph(sites, bc='finite')
+    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite', unit_cell_width=L).build_MPO()  # Chain geometry
+    G = mpo.MPOGraph(sites, bc='finite', unit_cell_width=len(sites))
     edt.add_to_graph(G)
     G.test_sanity()
     G.add_missing_IdL_IdR()
@@ -336,12 +336,12 @@ def test_exp_decaying_terms():
     assert ts.terms == ts_desired
     strength_desired = np.tile(l**np.arange(1, cutoff_range + 1) * p, 4)
     assert np.all(ts.strength == strength_desired)
-    G = mpo.MPOGraph(sites, bc='infinite')
+    G = mpo.MPOGraph(sites, bc='infinite', unit_cell_width=len(sites))
     edt.add_to_graph(G)
     G.test_sanity()
     G.add_missing_IdL_IdR()
     H2 = G.build_MPO()
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='infinite').build_MPO()
+    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='infinite', unit_cell_width=L).build_MPO()
     assert H1.is_equal(H2, cutoff)
 
 
@@ -374,8 +374,8 @@ def test_exp_decaying_terms():
 
     # check whether the MPO construction works by comparing MPOs
     # constructed from ts vs. directly
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite').build_MPO()
-    G = mpo.MPOGraph(sites, bc='finite')
+    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite', unit_cell_width=L).build_MPO()
+    G = mpo.MPOGraph(sites, bc='finite', unit_cell_width=L)
     edt.add_to_graph(G)
     G.test_sanity()
     G.add_missing_IdL_IdR()
@@ -394,12 +394,12 @@ def test_exp_decaying_terms():
     assert ts.terms == ts_desired
     strength_desired = np.tile(l**np.arange(1, cutoff_range + 1) * p, 4)
     assert np.all(ts.strength == strength_desired)
-    G = mpo.MPOGraph(sites, bc='infinite')
+    G = mpo.MPOGraph(sites, bc='infinite', unit_cell_width=L)
     edt.add_to_graph(G)
     G.test_sanity()
     G.add_missing_IdL_IdR()
     H2 = G.build_MPO()
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='infinite').build_MPO()
+    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='infinite', unit_cell_width=L).build_MPO()
     assert H1.is_equal(H2, cutoff)
 
 
@@ -428,8 +428,8 @@ def test_exp_decaying_terms():
 
     # check whether the MPO construction works by comparing MPOs
     # constructed from ts vs. directly
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite').build_MPO()
-    G = mpo.MPOGraph(sites, bc='finite')
+    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite', unit_cell_width=L).build_MPO()
+    G = mpo.MPOGraph(sites, bc='finite', unit_cell_width=L)
     edt.add_to_graph(G)
     G.test_sanity()
     G.add_missing_IdL_IdR()
@@ -450,12 +450,12 @@ def test_exp_decaying_terms():
     assert ts.terms == ts_desired
     strength_desired = np.tile(l**np.arange(1, cutoff_range + 1) * p, 4)
     assert np.all(ts.strength == strength_desired)
-    G = mpo.MPOGraph(sites, bc='infinite')
+    G = mpo.MPOGraph(sites, bc='infinite', unit_cell_width=L)
     edt.add_to_graph(G)
     G.test_sanity()
     G.add_missing_IdL_IdR()
     H2 = G.build_MPO()
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='infinite').build_MPO()
+    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='infinite', unit_cell_width=L).build_MPO()
     assert H1.is_equal(H2, cutoff)
 
 
@@ -479,8 +479,8 @@ def test_exp_non_uniform_decaying_terms(bc):
     # check if ExponentiallyDecayingTerms.to_TermList and ExponentiallyDecayingTerms.add_to_graph
     # yield the same MPO
     ts = edt.to_TermList(bc=bc, cutoff=cutoff)
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc=bc).build_MPO()
-    G = mpo.MPOGraph(sites, bc=bc)
+    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc=bc, unit_cell_width=L).build_MPO()
+    G = mpo.MPOGraph(sites, bc=bc, unit_cell_width=L)
     edt.add_to_graph(G)
     G.test_sanity()
     G.add_missing_IdL_IdR()
@@ -550,8 +550,8 @@ def test_exp_non_uniform_decaying_terms_subsites_start(bc):
     # check if ExponentiallyDecayingTerms.to_TermList and ExponentiallyDecayingTerms.add_to_graph
     # yield the same MPO
     ts = edt.to_TermList(bc=bc, cutoff=cutoff)
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc=bc).build_MPO()
-    G = mpo.MPOGraph(sites, bc=bc)
+    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc=bc, unit_cell_width=L).build_MPO()
+    G = mpo.MPOGraph(sites, bc=bc, unit_cell_width=L)
     edt.add_to_graph(G)
     G.test_sanity()
     G.add_missing_IdL_IdR()
@@ -624,8 +624,8 @@ def test_exponentially_decaying_centered_terms(i, subsites, uniform):
     # check if ExponentiallyDecayingTerms.to_TermList and ExponentiallyDecayingTerms.add_to_graph
     # yield the same MPO
     ts = edt.to_TermList(bc='finite', cutoff=1e-6)
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite').build_MPO()
-    G = mpo.MPOGraph(sites, bc='finite')
+    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite', unit_cell_width=L).build_MPO()
+    G = mpo.MPOGraph(sites, bc='finite', unit_cell_width=L)
     edt.add_to_graph(G)
     G.test_sanity()
     G.add_missing_IdL_IdR()

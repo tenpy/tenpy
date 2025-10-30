@@ -160,13 +160,13 @@ def test_spin_site():
         print('s = ', s)
         sites = []
         for sort_charge in [True, False]:
-            for conserve in [None, 'Sz', 'parity']:
+            for conserve in [None, 'dipole', 'Sz', 'parity']:
                 print("conserve = ", conserve)
                 S = site.SpinSite(s, conserve, sort_charge=sort_charge)
                 S.test_sanity()
                 for op in S.onsite_ops:
                     assert S.hc_ops[op] == hcs[op]
-                if conserve != 'Sz':
+                if conserve not in ['dipole', 'Sz']:
                     SxSy = ['Sx', 'Sy']
                 else:
                     SxSy = None
@@ -284,7 +284,7 @@ def test_boson_site():
     hcs = dict(Id='Id', JW='JW', B='Bd', Bd='B', N='N', NN='NN', dN='dN', dNdN='dNdN', P='P')
     for Nmax in [1, 2, 5, 10]:
         sites = []
-        for conserve in ['N', 'parity', None]:
+        for conserve in ['dipole', 'N', 'parity', None]:
             S = site.BosonSite(Nmax, conserve=conserve)
             S.test_sanity()
             for op in S.onsite_ops:

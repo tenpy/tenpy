@@ -208,7 +208,57 @@ class PurificationMPS(MPS):
                              bc='finite', outer_S=None)
 
     @classmethod
-    def from_infiniteT(cls, sites, bc='finite', form='B', dtype=np.float64):
+    def from_density_matrix(cls, sites, rho, form=None, cutoff=1e-16, normalize=True,
+                            unit_cell_width=None):
+        r"""Construct a purification from a single tensor `rho` of the density matrix.
+
+        Given the mixed state :math:`\rho`, we diagonalize it :math:`\rho = U D U^\dagger`,
+        and define :math:`\psi = \sum_{ijk} U_{ik} \sqrt{D_k} \bar{U}_{jk} |i>_{phys} |j>_{anc}`.
+        This is one of many possible purifications of :math:`rho`, and is valid since
+        :math:`Tr_{anc} |\psi><\psi| = \rho`.
+        We then construct a purification MPS of :math:`\psi` using :meth:`from_full`.
+
+        Boundary conditions are always finite.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the physical local Hilbert spaces.
+        rho : :class:`~tenpy.linalg.np_conserved.Array`
+            The full density matrix.
+            Should have labels ``'p0', 'p0*', 'p1', 'p1*, ...,  'p{L-1}', 'p{L-1}*`` (in any order).
+            Is assumed to be hermitian and positive semi-definite.
+        form  : ``'B' | 'A' | 'C' | 'G' | None``
+            The canonical form of the resulting MPS, see module doc-string.
+            ``None`` defaults to 'A' form on the first site and 'B' form on all following sites.
+        cutoff : float
+            Cutoff of singular values used in the SVDs.
+        normalize : bool
+            Whether the resulting MPS should have 'norm' 1.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+        """
+        L = len(sites)
+        rho = rho.combine_legs([[f'p{i}' for i in range(L)], [f'p{i}*' for i in range(L)]])  # [P, P*]
+        D, U = npc.eigh(rho)  # D[eig] , U[P, eig]
+
+        # fix negative eigenvalues
+        if np.any(D < -1e-12):
+            raise ValueError('Density matrix is not positive.')
+        D[D < 0] = 0
+
+        # [P, eig] * [eig] @ [P*, eig*] -> [P, P*]
+        psi = npc.tensordot(U.scale_axis(np.sqrt(D), axis=-1), U.conj(), (1, 1))
+
+        # [P, P*] -> [p0, p1, ..., p0*, p1*, ...]
+        psi = psi.split_legs()
+        # [p0, p1, ..., p0*, p1*, ...] -> [p0, p1, ..., q0, q1, ...]
+        psi.ireplace_labels([f'p{i}*' for i in range(L)], [f'q{i}' for i in range(L)])
+        return cls.from_full(sites, psi, form=form, cutoff=cutoff, normalize=normalize,
+                             bc='finite', outer_S=None, unit_cell_width=unit_cell_width)
+
+    @classmethod
+    def from_infiniteT(cls, sites, bc='finite', form='B', dtype=np.float64, unit_cell_width=None):
         """Initial state corresponding to grand-canonical infinite-temperature ensemble.
 
         Parameters
@@ -223,6 +273,8 @@ class PurificationMPS(MPS):
             A single choice holds for all of the entries.
         dtype : type or string
             The data type of the array entries.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
         Returns
         -------
@@ -240,12 +292,12 @@ class PurificationMPS(MPS):
             # leg `q` has the physical leg with opposite `qconj`
             B = B.add_trivial_leg(0, label='vL', qconj=+1).add_trivial_leg(1, label='vR', qconj=-1)
             Bs[i] = B
-        res = cls(sites, Bs, S, bc, form)
+        res = cls(sites, Bs, S, bc, form, unit_cell_width=unit_cell_width)
         return res
 
     @classmethod
     def from_infiniteT_canonical(cls, sites, charge_sector, dtype=np.float64,
-                                 conserve_ancilla_charge=False):
+                                 conserve_ancilla_charge=False, unit_cell_width=None):
         """Initial state corresponding to *canonical* infinite-temperature ensemble.
 
         Works only for finite boundary conditions, following the idea outlined in
@@ -268,6 +320,8 @@ class PurificationMPS(MPS):
             In that case, use the function
             :func:`convert_model_purification_canonical_conserve_ancilla_charge`
             to get a converted model before using algorithms like the `PurificationTEBD`.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.unit_cell_width`.
 
         Returns
         -------
@@ -339,7 +393,7 @@ class PurificationMPS(MPS):
 
         if conserve_ancilla_charge:
             sites = sites_cac
-        res = cls(sites, Bs, Ss, 'finite', form='B')
+        res = cls(sites, Bs, Ss, 'finite', form='B', unit_cell_width=unit_cell_width)
         res.canonical_form_finite()  # calculate S values and normalize
         return res
 
@@ -545,7 +599,7 @@ class PurificationMPS(MPS):
         for i in range(first_site, last_site + 1):
             # theta = wave function in basis vL [sigmas...] p q vR
             # where the `sigmas` are already fixed to the measurement results
-            i0 = self._to_valid_index(i)
+            i0 = self._to_valid_site_index(i)
             site = self.sites[i0]
             if ops is not None:
                 op_name = ops[(i - first_site) % len(ops)]

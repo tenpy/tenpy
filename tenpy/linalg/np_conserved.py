@@ -92,7 +92,7 @@ import itertools
 from numbers import Integral
 
 # import public API from charges
-from .charges import ChargeInfo, LegCharge, LegPipe
+from .charges import ChargeInfo, DipolarChargeInfo, LegCharge, LegPipe
 from . import charges  # for private functions
 from .svd_robust import svd as svd_flat
 
@@ -103,7 +103,7 @@ from ..tools.string import vert_join, is_non_string_iterable
 from ..tools.optimization import optimize, OptimizationFlag, use_cython
 
 __all__ = [
-    'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'ones', 'eye_like', 'diag',
+    'QCUTOFF', 'ChargeInfo', 'DipolarChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'ones', 'eye_like', 'diag',
     'concatenate', 'grid_concat', 'grid_outer', 'detect_grid_outer_legcharge', 'detect_qtotal',
     'detect_legcharge', 'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh',
     'eig', 'eigvalsh', 'eigvals', 'speigs', 'expm', 'qr', 'lq', 'orthogonal_columns',
@@ -1394,6 +1394,97 @@ class Array:
         self._data = [self._data[p] for p in perm]
         self._qdata_sorted = True
 
+    def apply_charge_mapping(self, map_func, func_args=(), func_kwargs={}, inplace: bool = False):
+        """Apply a mapping to the charges of all legs and to qtotal.
+
+        The resulting Array is a shallow copy with the same block structure and the same numerical
+        entries, but the charges, i.e. the labels of the different blocks, are changed.
+        
+        The mapping needs to be compatible with charge rules, i.e. applying the mapping must
+        commute with charge fusion::
+
+                map_func((q1 + q2) % qmod) == (map_func(q1) + map_func(q2)) % qmod
+
+        and duality::
+
+            map_func((-q) % qmod) == (-map_func(q)) % qmod
+
+        Parameters
+        ----------
+        map_func : function
+            The mapping to be applied to the charges.
+            Signature ``mapped_charges = map_func(charges, *args, **kwargs)``, where ``charges``
+            are 2D ndarrays. Must not mutate its input.
+        func_args : tuple, optional
+            Positional arguments for `map_func`.
+        func_kwargs : dict, optional
+            Keyword arguments for `map_func`.
+        inplace : bool
+            If the array (its legs, qtotal) can be modified in-place.
+            Otherwise (default) we make a shallow copy.
+
+        Returns
+        -------
+        Shallow copy with mapped charges (or the modified instance if `inplace`)
+        """
+        if inplace:
+            res = self
+        else:
+            res = self.copy(deep=False)
+        res.legs = [leg.apply_charge_mapping(map_func, func_args, func_kwargs) for leg in self.legs]
+        res.qtotal = map_func(self.qtotal, *func_args, **func_kwargs)
+        return res
+
+    def shift_charges(self, dx, inplace: bool = False):
+        """Map all leg-charges and the qtotal with :meth:`ChargeInfo.shift_charges`.
+
+        Parameters
+        ----------
+        dx : (D + 1)-d array
+            Shift vector, e.g. ``[dx, du]`` for 1D or ``[dx, dy, du]`` for 2D lattices.
+        inplace : bool
+            If the array should be modified inplace.
+            By default (``False``), the original instance is not modified.
+            Note that if the mapping is trivial, we may return the same instance, not an
+            independent copy!
+
+        Returns
+        -------
+        mapped : Array
+            The mapped array. Note that if either the mapping trivial or if ``inplace=True``,
+            this is the unmodified (trivial mapping) or modified (inplace) original instance!
+        """
+        if self.chinfo.trivial_shift or np.all(np.equal(dx, 0)):
+            return self
+        return self.apply_charge_mapping(self.chinfo.shift_charges, func_kwargs=dict(dx=dx),
+                                         inplace=inplace)
+
+    def shift_charges_horizontal(self, dx_0: int, inplace: bool = False):
+        """Map all leg-charged and the qtotal with :meth:`ChargeInfo.shift_charges_horizontal`.
+
+        Parameters
+        ----------
+        dx_0 : int
+            Horizontal shift, such that this method is equivalent to :meth:`shift_charges`
+            with ``dx = [dx_0, *zeros]``.
+        inplace : bool
+            If the array should be modified inplace.
+            By default (``False``), the original instance is not modified.
+            Note that if the mapping is trivial, we may return the same instance, not an
+            independent copy!
+
+        Returns
+        -------
+        mapped : Array
+            The mapped array. Note that if either the mapping trivial or if ``inplace=True``,
+            this is the unmodified (trivial mapping) or modified (inplace) original instance!
+        """
+        if self.chinfo.trivial_shift or dx_0 == 0:
+            return self
+        return self.apply_charge_mapping(self.chinfo.shift_charges_horizontal,
+                                         func_kwargs=dict(dx_0=dx_0),
+                                         inplace=inplace)
+
     # reshaping ===============================================================
 
     def make_pipe(self, axes, **kwargs):
@@ -1890,7 +1981,7 @@ class Array:
                     new_data_ind = qdata.setdefault(tuple(new_qindices), len(data))
                     if new_data_ind == len(data):
                         # insert new block
-                        data.append(np.zeros(res._get_block_shape(new_qindices)))
+                        data.append(np.zeros(res._get_block_shape(new_qindices), dtype=old_block.dtype))
                     new_block = data[new_data_ind]
                     # copy data
                     new_block_idx[axis] = within_new

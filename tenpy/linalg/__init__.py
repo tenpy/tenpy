@@ -34,7 +34,9 @@ from .truncation import *
 
 __all__ = [
     *charges.__all__,
-    *[n for n in np_conserved.__all__ if n not in ['ChargeInfo', 'LegCharge', 'LegPipe']],
+    *[n for n in np_conserved.__all__ if n not in [
+               'ChargeInfo', 'DipolarChargeInfo', 'LegCharge', 'LegPipe'
+            ]],
     *krylov_based.__all__,
     *random_matrix.__all__,
     *sparse.__all__,

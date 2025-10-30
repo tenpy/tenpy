@@ -7,7 +7,7 @@ from tenpy.algorithms import dmrg
 N = 2  # number of sites in unit cell
 model = TFIChain({"L": N, "J": 1., "g": 1.1, "bc_MPS": "infinite"})
 sites = model.lat.mps_sites()
-psi = MPS.from_product_state(sites, ['up'] * N, "infinite")
+psi = MPS.from_product_state(sites, ['up'] * N, "infinite", unit_cell_width=N)
 dmrg_params = {"trunc_params": {"chi_max": 100, "svd_min": 1.e-10}, "mixer": True}
 info = dmrg.run(psi, model, dmrg_params)
 print("E =", info['E'])

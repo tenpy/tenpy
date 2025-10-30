@@ -37,8 +37,7 @@ import copy
 import logging
 logger = logging.getLogger(__name__)
 
-from .lattice import (get_lattice, Lattice, MultiSpeciesLattice, TrivialLattice, HelicalLattice,
-                      IrregularLattice)
+from .lattice import (get_lattice, Lattice, MultiSpeciesLattice, HelicalLattice, IrregularLattice)
 from ..linalg import np_conserved as npc
 from ..linalg.charges import LegCharge
 from ..tools.misc import to_array, add_with_None_0
@@ -199,9 +198,6 @@ class Model(Hdf5Exportable):
 
         This has to be done after finishing initialization and can not be reverted.
 
-        .. todo :
-            We could actually keep the lattice structure if the order is (default) Cstyle.
-
         Parameters
         ----------
         n : int
@@ -218,7 +214,7 @@ class Model(Hdf5Exportable):
             grouped_sites = group_sites(self.lat.mps_sites(), n, charges='same')
         else:
             assert grouped_sites[0].n_sites == n
-        self.lat = TrivialLattice(grouped_sites, bc_MPS=self.lat.bc_MPS, bc='periodic')
+        self.lat = self.lat.with_grouped_sites(grouped_sites=grouped_sites)
         return grouped_sites
 
     def get_extra_default_measurements(self):
@@ -431,7 +427,14 @@ class NearestNeighborModel(Model):
         first, last = cp.lat.segment_first_last
         H_bond = self.H_bond
         L = len(H_bond)
-        cp.H_bond = [H_bond[i % L] for i in range(first, last + 1)]
+        new_H_bond = []
+        for i in range(first, last + 1):
+            num_unit_cells, _i = divmod(i, L)
+            h = self.H_bond[_i]
+            if h is not None:
+                h = h.shift_charges_horizontal(dx_0=num_unit_cells * self.lat.mps_unit_cell_width)
+            new_H_bond.append(h)
+        cp.H_bond = new_H_bond
         return cp
 
     def enlarge_mps_unit_cell(self, factor=2):
@@ -576,7 +579,10 @@ class NearestNeighborModel(Model):
             j = (i - 1) % L
             Hb = Hb.transpose(['p0', 'p0*', 'p1', 'p1*'])
             d_L, d_R = sites[j].dim, sites[i].dim  # dimension of local hilbert space:
-            Id_L, Id_R = sites[i].Id, sites[j].Id
+            Id_L, Id_R = sites[j].Id, sites[i].Id
+            if i == 0:  # i==0 and j==(-1 % L)==L-1
+                assert bc == 'infinite'  # otherwise, (Hb is None) should have triggered
+                Id_L = Id_L.shift_charges_horizontal(dx_0=-self.lat.mps_unit_cell_width)
             # project on onsite-terms by contracting with identities; Tr(Id_{L/R}) = d_{L/R}
             onsite_L = npc.tensordot(Hb, Id_R, axes=(['p1', 'p1*'], ['p*', 'p'])) / d_R
             if npc.norm(onsite_L) > tol_zero:
@@ -629,7 +635,7 @@ class NearestNeighborModel(Model):
                 X, _ = bond_XYZ[j]
                 W[0, 1:-1, :, :] = X.itranspose(['wR', 'p0', 'p0*'])
             Ws[i] = W
-        H_MPO = mpo.MPO(sites, Ws, bc, 0, -1, max_range=2)
+        H_MPO = mpo.MPO(sites, Ws, bc, 0, -1, max_range=2, mps_unit_cell_width=self.lat.mps_unit_cell_width)
         return H_MPO
 
     def get_extra_default_measurements(self):
@@ -737,7 +743,7 @@ class MPOModel(Model):
         ------
         ValueError : if the Hamiltonian contains longer-range terms.
         """
-        H_MPO = self.H_MPO
+        H_MPO: mpo.MPO = self.H_MPO
         sites = H_MPO.sites
         finite = (H_MPO.bc == 'finite')
         L = H_MPO.L
@@ -764,14 +770,21 @@ class MPOModel(Model):
         # now multiply together the bonds
         for j, Wj in enumerate(Ws):
             # for bond (i, j) == (j-1, j) == (i, i+1)
-            if finite and j == 0:
-                continue
+            pbc_bond = j == 0
             i = (j - 1) % L
+            if pbc_bond and finite:
+                continue
             Wi = Ws[i]
+            if pbc_bond:
+                Wi = H_MPO.shift_Array_unit_cells(Wi, -1)
             IdL_a = H_MPO.IdL[i]
             IdR_c = H_MPO.IdR[j + 1]
             Hb = npc.tensordot(Wi[IdL_a, :, :, :], Wj[:, IdR_c, :, :], axes=('wR', 'wL'))
-            Wi[IdL_a, :, :, :] *= 0.
+            if pbc_bond:
+                # make sure we modify the un-shifted array in Ws
+                Ws[i][IdL_a, :, :, :] *= 0.
+            else:
+                Wi[IdL_a, :, :, :] *= 0.
             Wj[:, IdR_c, :, :] *= 0.
             # Hb has legs p0, p0*, p1, p1*
             H_bond[j] = Hb
@@ -787,8 +800,13 @@ class MPOModel(Model):
             i = (j - 1) % L
             strength_i = 1. if finite and i == 0 else 0.5
             strength_j = 1. if finite and j == L - 1 else 0.5
-            Hb = (npc.outer(sites[i].Id, strength_j * H_onsite[j]) +
-                  npc.outer(strength_i * H_onsite[i], sites[j].Id))
+            Id_i = sites[i].Id
+            H_onsite_i = H_onsite[i]
+            if j == 0:
+                Id_i = H_MPO.shift_Array_unit_cells(Id_i, -1, inplace=False)
+                H_onsite_i = H_MPO.shift_Array_unit_cells(H_onsite_i, -1, inplace=False)
+            Hb = (npc.outer(Id_i, strength_j * H_onsite[j]) +
+                  npc.outer(strength_i * H_onsite_i, sites[j].Id))
             Hb = add_with_None_0(H_bond[j], Hb)
             Hb.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
             H_bond[j] = Hb
@@ -1846,7 +1864,8 @@ class CouplingModel(Model):
         ct.remove_zeros(tol_zero)
         edt = self.exp_decaying_terms
 
-        H_MPO_graph = mpo.MPOGraph.from_terms((ot, ct, edt), self.lat.mps_sites(), self.lat.bc_MPS)
+        H_MPO_graph = mpo.MPOGraph.from_terms((ot, ct, edt), self.lat.mps_sites(), self.lat.bc_MPS,
+                                              unit_cell_width=self.lat.mps_unit_cell_width)
         H_MPO = H_MPO_graph.build_MPO()
         H_MPO.max_range = ct.max_range()
         H_MPO.explicit_plus_hc = self.explicit_plus_hc

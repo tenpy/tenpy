@@ -8,7 +8,7 @@ from ..networks.site import SpinSite
 from .model import CouplingMPOModel, NearestNeighborModel
 from .lattice import Chain
 
-__all__ = ['SpinModel', 'SpinChain']
+__all__ = ['SpinModel', 'SpinChain', 'DipolarSpinChain']
 
 
 class SpinModel(CouplingMPOModel):
@@ -102,3 +102,60 @@ class SpinChain(SpinModel, NearestNeighborModel):
     """
     default_lattice = Chain
     force_default_lattice = True
+
+
+class DipolarSpinChain(CouplingMPOModel):
+    r"""Dipole conserving H3-H4 spin-S chain.
+
+    The Hamiltonian reads:
+
+    .. math ::
+        H = - \mathtt{J3} \sum_{i} (S^+_i (S^-_{i + 1})^2 S^+_{i + 2} + \mathrm{h.c.})
+            - \mathtt{J4} \sum_{i} (S^+_i S^-_{i + 1} S^-_{i + 2} S^+_{i + 2} + \mathrm{h.c.})
+
+    Parameters
+    ----------
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`DipolarSpinChain` below.
+
+    Options
+    -------
+    .. cfg:config :: DipolarSpinChain
+        :include: CouplingMPOModel
+
+        S : {0.5, 1, 1.5, 2, ...}
+            The 2S+1 local states range from m = -S, -S+1, ... +S.
+            Defaults to ``S=1``.
+        conserve : 'best' | 'dipole' | 'Sz' | 'parity' | None
+            What should be conserved. See :class:`~tenpy.networks.site.SpinSite`.
+            Note that dipole conservation necessarily includes Sz conservation.
+            For ``'best'``, we preserve ``'dipole'``.
+        sort_charge : bool | None
+            Whether to sort by charges of physical legs.
+            See change comment in :class:`~tenpy.networks.site.Site`.
+        J3, J4 : float | array
+            Coupling as defined for the Hamiltonian above.
+    """
+
+    def init_lattice(self, model_params):
+        """Initialize a 1D lattice"""
+        L = model_params.get('L', 64)
+        S = model_params.get('S', 1)
+        conserve = model_params.get('conserve', 'best')
+        if conserve == 'best':
+            conserve = 'dipole'
+            self.logger.info("%s: set conserve to %s", self.name, conserve)
+        bc_MPS = model_params.get('bc_MPS', 'finite')
+        bc = 'periodic' if bc_MPS in ['infinite', 'segment'] else 'open'
+        bc = model_params.get('bc', bc)
+        sort_charge = model_params.get('sort_charge', None)
+        site = SpinSite(S=S, conserve=conserve, sort_charge=sort_charge)
+        lattice = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
+        return lattice
+
+    def init_terms(self, model_params):
+        """Add the onsite and coupling terms to the model"""
+        J3 = model_params.get('J3', 1)
+        J4 = model_params.get('J4', 0)
+        self.add_multi_coupling(-J3, [('Sp', 0, 0), ('Sm', 1, 0), ('Sm', 1, 0), ('Sp', 2, 0)], plus_hc=True)
+        self.add_multi_coupling(-J4, [('Sp', 0, 0), ('Sm', 1, 0), ('Sm', 2, 0), ('Sp', 3, 0)], plus_hc=True)

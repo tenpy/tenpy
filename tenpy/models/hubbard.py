@@ -9,7 +9,7 @@ from ..tools.params import asConfig
 from ..networks.site import FermionSite, BosonSite, SpinHalfFermionSite, spin_half_species
 
 __all__ = ['BoseHubbardModel', 'BoseHubbardChain', 'FermiHubbardModel', 'FermiHubbardChain',
-           'FermiHubbardModel2']
+           'FermiHubbardModel2', 'DipolarBoseHubbardChain']
 
 
 class BoseHubbardModel(CouplingMPOModel):
@@ -258,3 +258,64 @@ class FermiHubbardModel2(CouplingMPOModel):
 
         for u1, u2, dx in self.lat.pairs['nearest_neighbors_all-all']:
             self.add_coupling(V, u1, 'N', u2, 'N', dx)
+
+
+class DipolarBoseHubbardChain(CouplingMPOModel):
+    r"""Dipole-conserving spinless Bose-Hubbard model.
+
+    The Hamiltonian is:
+
+    .. math ::
+        H = - \mathtt{t} \sum_{i} (b_i^{\dagger} b_{i + 1}^2 b_{i + 2}^{\dagger} + \mathrm{h.c.})
+            - \mathtt{t4} \sum_{i} (b_i^{\dagger} b_{i + 1} b_{i + 2} b_{i + 3}^{\dagger} + \mathrm{h.c.})
+            + \frac{\mathtt{U}}{2} \sum_i n_i (n_i - 1)
+            - \mathtt{mu} \sum_i n_i
+
+    Parameters
+    ----------
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`DipolarBoseHubbardChain` below.
+
+    Options
+    -------
+    .. cfg:config :: DipolarBoseHubbardChain
+        :include: CouplingMPOModel
+
+        Nmax : int
+            Maximum number of bosons per site.
+        conserve : {'best' | 'dipole' | 'N' | 'parity' | None}
+            What should be conserved. See :class:`~tenpy.networks.site.BosonSite`.
+        t, t4, U, mu : float | array
+            Couplings as defined in the Hamiltonian above. Note the signs!
+    """
+
+    def init_lattice(self, model_params):
+        """Initialize a 1D lattice"""
+        L = model_params.get('L', 64)
+        Nmax = model_params.get('Nmax', 2)
+        conserve = model_params.get('conserve', 'best')
+        if conserve == 'best':
+            conserve = 'dipole'
+            self.logger.info("%s: set conserve to %s", self.name, conserve)
+        bc_MPS = model_params.get('bc_MPS', 'finite')
+        bc = 'periodic' if bc_MPS in ['infinite', 'segment'] else 'open'
+        bc = model_params.get('bc', bc)
+        site = BosonSite(Nmax=Nmax, conserve=conserve)
+        lattice = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
+        return lattice
+
+    def init_terms(self, model_params):
+        """Add the onsite and coupling terms to the model"""
+        L = model_params.get('L', 64)
+        U = model_params.get('U', 1)
+        t = model_params.get('t', 1)
+        t4 = model_params.get('t4', 0)
+        mu = model_params.get('mu', 0)
+
+        # dipole hopping
+        self.add_multi_coupling(-t, [('Bd', 0, 0), ('B', 1, 0), ('B', 1, 0), ('Bd', 2, 0)], plus_hc=True)
+        self.add_multi_coupling(-t4, [('Bd', 0, 0), ('B', 1, 0), ('B', 2, 0), ('Bd', 3, 0)], plus_hc=True)
+
+        # on-site interactions and chemical potential
+        self.add_onsite(U/2., 0, 'NN')
+        self.add_onsite(-mu-U/2., 0, 'N')

@@ -39,7 +39,7 @@ chinfo = p_leg.chinfo
 lat = Chain(L, site, bc_MPS='finite')
 state = ["up", "down"] * (L // 2) + ["up"] * (L % 2)  # Neel state
 print("state = ", state)
-psi = MPS.from_product_state(lat.mps_sites(), state, lat.bc_MPS)
+psi = MPS.from_product_state(lat.mps_sites(), state, lat.bc_MPS, unit_cell_width=lat.mps_unit_cell_width)
 
 print("2) create an MPO representing the AFM Heisenberg Hamiltonian")
 
@@ -59,7 +59,7 @@ W = npc.grid_outer(W_grid, [mpo_leg, mpo_leg.conj()], grid_labels=['wL', 'wR'])
 Ws = [W] * L
 Ws[0] = W[:1, :]
 Ws[-1] = W[:, -1:]
-H = MPO(psi.sites, Ws, psi.bc, IdL=0, IdR=-1)
+H = MPO(psi.sites, Ws, psi.bc, IdL=0, IdR=-1, mps_unit_cell_width=L)
 
 print("3) define 'environments' left and right")
 

@@ -6,7 +6,8 @@ import tenpy.linalg.np_conserved as npc
 import numpy as np
 
 from tenpy.networks.mps import MPS
-from tenpy.models.spins import SpinChain
+from tenpy.models.model import NearestNeighborModel
+from tenpy.models.spins import SpinChain, DipolarSpinChain
 import tenpy.algorithms.tebd as tebd
 from tenpy.networks.site import SpinHalfSite
 from tenpy.algorithms.exact_diag import ExactDiag
@@ -46,7 +47,7 @@ def test_tebd(bc_MPS, which_engine, compute_err, use_eig_based_svd, g=0.5):
     model_pars = dict(L=L, Jx=0., Jy=0., Jz=-4., hx=2. * g, bc_MPS=bc_MPS, conserve=None)
     M = SpinChain(model_pars)
     state = ([[1, -1.], [1, -1.]] * L)[:L]  # pointing in (-x)-direction
-    psi = MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
+    psi = MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
 
     tebd_param = {
         'dt': 0.01,
@@ -126,7 +127,7 @@ def test_tebd(bc_MPS, which_engine, compute_err, use_eig_based_svd, g=0.5):
 def test_RandomUnitaryEvolution():
     L = 8
     spin_half = SpinHalfSite(conserve='Sz', sort_charge=True)
-    psi = MPS.from_product_state([spin_half] * L, [0, 1] * (L // 2), bc='finite')  # Neel state
+    psi = MPS.from_product_state([spin_half] * L, [0, 1] * (L // 2), bc='finite', unit_cell_width=L)  # Neel state
     assert tuple(psi.chi) == (1, 1, 1, 1, 1, 1, 1)
     TEBD_params = dict(N_steps=2, trunc_params={'chi_max': 10})
     eng = tebd.RandomUnitaryEvolution(psi, TEBD_params)
@@ -136,12 +137,12 @@ def test_RandomUnitaryEvolution():
 
     # infinite versions
     TEBD_params['trunc_params']['chi_max'] = 20
-    psi = MPS.from_product_state([spin_half] * 2, [0, 0], bc='infinite')
+    psi = MPS.from_product_state([spin_half] * 2, [0, 0], bc='infinite', unit_cell_width=2)
     eng = tebd.RandomUnitaryEvolution(psi, TEBD_params)
     eng.run()
     print(eng.psi.chi)
     assert tuple(eng.psi.chi) == (1, 1)  # all up can not be changed
-    eng.psi = MPS.from_product_state([spin_half] * 2, [0, 1], bc='infinite')
+    eng.psi = MPS.from_product_state([spin_half] * 2, [0, 1], bc='infinite', unit_cell_width=2)
     eng.run()
     print(eng.psi.chi)
     assert tuple(eng.psi.chi) == (16, 8)
@@ -153,8 +154,26 @@ def test_fixes_issue_220(S):
     
     model = SpinChain(dict(S=S, conserve=None, sort_charge=True, Jx=1., Jy=1., Jz=1., L=L))
     neel = ['up', 'up'] * (L // 2) + ['up'] * (L % 2)
-    psi_init = MPS.from_product_state(sites=model.lat.unit_cell * L, p_state=neel)
+    psi_init = MPS.from_product_state(sites=model.lat.unit_cell * L, p_state=neel,
+                                      unit_cell_width=model.lat.mps_unit_cell_width)
     trunc_params=dict(chi_max=50, svd_min=1e-10, trunc_cut=None)
     options = dict(order=2, trunc_params=trunc_params, N_steps=5, dt=0.01)
     engine = tebd.QRBasedTEBDEngine(psi=psi_init, model=model, options=options)
     engine.run()
+
+
+@pytest.mark.parametrize("L, bc_MPS", [(12, 'finite'), (6, 'infinite')])
+def test_tebd_dipole_conservation(L, bc_MPS, S=1, tol=1.e-13, J4=0.):
+    #
+    model_params = dict(L=L, S=S, J3=1., J4=J4, bc_MPS=bc_MPS, conserve='dipole')
+    tebd_params = dict(order=2, )
+    model = DipolarSpinChain(model_params)
+    psi = MPS.from_lat_product_state(model.lat, [['up'], ['down']], understood_shift_symmetry=True)
+    #
+    group = 3  # such that H4 becomes nearest neighbor
+    model.group_sites(group)
+    psi.group_sites(group)
+    model = NearestNeighborModel.from_MPOModel(model)
+    #
+    eng = tebd.TEBDEngine(psi, model, tebd_params)
+    eng.run()
