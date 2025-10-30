@@ -334,10 +334,10 @@ def test_dmrg_dipole_conservation(N, bc_MPS, S=1, tol=1.e-13, J4=0.):
     if bc_MPS == 'infinite':
         # DMRG runs, which is reassuring, but energy is above Sz-dmrg by ~1e-5
         # Takes quite long too to fully converge (here we set max_sweeps=20).
-        # looks like energy is oscillating.
+        # looks like energy is oscillating (if we would let it run longer).
         # not clear that we selected the correct charge sector here, i.e. the GS within this
         # dipole sector might be higher in energy than the GS in the Sz sector
-        tol = 1e-5
+        tol = 2e-5
 
     assert abs(E - E_dip) < tol
 

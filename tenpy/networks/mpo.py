@@ -2678,11 +2678,23 @@ class MPOEnvironment(BaseEnvironment):
                 warnings.warn("call psi.canonical_form() to regenerate MPO environments from psi"
                               f" with current norm error {norm_err:.2e}")
                 self.ket.canonical_form()
+
+            # select method for initialization
+            if not self.chinfo.trivial_shift:
+                if force_init_method is None:
+                    force_init_method = 'TM'
+                if force_init_method == 'iter':
+                    msg = ('force_init_method="iter" is not yet supported with shift symmetry. '
+                           'use force_init_method="TM" in the meantime.')
+                    warnings.warn(msg, stacklevel=4)
+                    force_init_method = 'TM'
             if force_init_method is None:
                 if (max(self.ket.chi) <= 150) or (not _mpo_check_for_iter_LP_RP_infinite(self.H)):
                     force_init_method = "TM"
                 else:
                     force_init_method = "iter"
+
+            # call that method
             if force_init_method == "iter":
                 _env_init = MPOEnvironmentBuilder(self.H, self.ket)
                 env_data, _ = _env_init.init_LP_RP_iterative('both', gmres_options=gmres_options)
@@ -2690,6 +2702,7 @@ class MPOEnvironment(BaseEnvironment):
                 env_data = MPOTransferMatrix.find_init_LP_RP(self.H, self.ket, 0, self.L - 1)
             else:
                 raise ValueError(f"Invalid {force_init_method=}")
+
             init_LP = env_data['init_LP']
             init_RP = env_data['init_RP']
             start_env_sites = 0
@@ -3221,6 +3234,9 @@ class MPOEnvironmentBuilder:
         E : float
             Energy per site, only returned if `calc_E` is True.
         """
+        if not self.H.chinfo.trivial_shift:
+            raise NotImplementedError('Iterative LP/RP initialization is not yet supported for '
+                                      'shift-symmetry with infinite systems.')
         if _mpo_check_for_iter_LP_RP_infinite(self.H) == False:
             raise ValueError(
                 "Iterative environment initialization failed: Hamiltonian cannot be ordered.")
