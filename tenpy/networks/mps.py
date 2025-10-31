@@ -1770,7 +1770,6 @@ class MPS(BaseMPSExpectationValue):
         hdf5_saver.save(self.chinfo, subpath + 'chinfo')
         hdf5_saver.save(self.unit_cell_width, subpath + 'unit_cell_width')
 
-        segment_boundaries = getattr(self, 'segment_boundaries', (None, None))
         hdf5_saver.save(self.segment_boundaries, subpath + 'segment_boundaries')
         h5gr.attrs['norm'] = self.norm
         h5gr.attrs['grouped'] = self.grouped
@@ -3372,7 +3371,6 @@ class MPS(BaseMPSExpectationValue):
             grouped_sites = group_sites(self.sites, n, charges='same')
         else:
             assert grouped_sites[0].n_sites == n
-        old_L = self.L
         Bs = []
         Ss = []
         i = 0
@@ -3925,7 +3923,6 @@ class MPS(BaseMPSExpectationValue):
         if len(segment) < 8:
             warnings.warn('inefficient: use `entanglement_entropy_segment` instead!', stacklevel=2)
         assert np.all(segment[1:] != segment[:-1])  # duplicates in segment
-        N_ol = 0  # number of open legs within the segment
         i0 = segment[0]
         rho = self.get_theta(i0, 1)
         rho = npc.tensordot(
@@ -7242,8 +7239,6 @@ class TransferMatrix(sparse.NpcLinearOperator):
             pipe = self.pipe
         orig_labels = vec.get_leg_labels()
         # vec.itranspose(self.label_split)  # ['vL', 'vL*'] or ['vR*', 'vR']
-        qtotal = vec.qtotal
-        legs = vec.legs
         # the actual work
         if not self.transpose:  # right to left
             contract = [self._p_label + ['vL*'], self._pstar_label + ['vR*']]

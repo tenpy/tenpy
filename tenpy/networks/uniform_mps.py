@@ -287,7 +287,6 @@ class UniformMPS(MPS):
         hdf5_saver.save(self._AC, subpath + 'tensors_AC')
         hdf5_saver.save(self._C, subpath + 'tensors_C')
         hdf5_saver.save(self.chinfo, subpath + 'chinfo')
-        segment_boundaries = getattr(self, 'segment_boundaries', (None, None))
         hdf5_saver.save(self.segment_boundaries, subpath + 'segment_boundaries')
         h5gr.attrs['valid_umps'] = self.valid_umps
         h5gr.attrs['norm'] = self.norm

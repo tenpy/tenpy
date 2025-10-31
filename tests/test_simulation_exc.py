@@ -39,7 +39,7 @@ def test_OrthogonalExcitations(tmp_path, switch, group, eps=1.0e-10, N_exc=3):
     print(f'ED gives ground state E = {E_ED_gs:.10f}')
 
     charge_exc = [1] if switch else [0]
-    print(f'charge sector for excitations: ', charge_exc)
+    print('charge sector for excitations: ', charge_exc)
     leg = ED.V.get_leg('ps*')
     qi = list(leg.charges[:, 0]).index(charge_exc[0])
     i = leg.slices[qi] + (0 if switch else 1)

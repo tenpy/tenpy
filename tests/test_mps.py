@@ -752,6 +752,7 @@ def test_correlation_function():
     term1 = TermList([[('Cdu', 0)]], [1.0])
     term2 = TermList([[('Cu', 0)], [('Ntot', -1)]], [1.0, 2.0])  # N shouldn't contribute!
     corr3_long3 = psi3.term_list_correlation_function_right(term1, term2)
+    npt.assert_array_almost_equal(corr3_long3, corr3_long)
 
 
 def test_expectation_value_multisite():
@@ -787,6 +788,7 @@ def test_correlation_length():
     )
     assert psi_product.correlation_length2() == 0.0  # trivial
     ch_s = psi_product.correlation_length_charge_sectors()
+    assert ch_s == []
 
     # generate test-MPS with non-trivial correlation length
     model_AKLT = AKLTChain({'bc_MPS': 'infinite', 'L': 2})
@@ -991,7 +993,6 @@ def test_InitialStateBuilder():
             'full_empty': ('up', 'down'),
             'fill_where': 'x_ind % 2 == 0',
             'check_filling': 0.5,
-            'full_empty': ['up', 'down'],
         },
     ).run()
     psi3.test_sanity()

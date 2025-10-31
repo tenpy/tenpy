@@ -607,15 +607,15 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             h = self.model.H_bond[i_bond]
         except AttributeError:
             msg = (
-                f'The model has no attribute "H_bond", which is required for TEBD.\n '
-                f'TEBD can only be used if the model is nearest-neighbor (in the MPS geometry!). '
-                f'If you are using a pre-defined model, make sure you are using the '
-                f'nearest-neighbor version, e.g. SpinChain, not SpinModel. '
-                f'If you are using a custom model, check if it actually is  nearest-neighbor in '
-                f'the MPS geometry. If yes, make sure you subclass  NearestNeighborModel, which '
-                f'will set "H_bond" for you. If no, you can not directly use TEBD, you need to '
-                f'either group sites to achieve a nearest-neighbor model, or use some other '
-                f'time evolution method, e.g. ExpMPO or TDVP.'
+                'The model has no attribute "H_bond", which is required for TEBD.\n '
+                'TEBD can only be used if the model is nearest-neighbor (in the MPS geometry!). '
+                'If you are using a pre-defined model, make sure you are using the '
+                'nearest-neighbor version, e.g. SpinChain, not SpinModel. '
+                'If you are using a custom model, check if it actually is  nearest-neighbor in '
+                'the MPS geometry. If yes, make sure you subclass  NearestNeighborModel, which '
+                'will set "H_bond" for you. If no, you can not directly use TEBD, you need to '
+                'either group sites to achieve a nearest-neighbor model, or use some other '
+                'time evolution method, e.g. ExpMPO or TDVP.'
             )
             raise AttributeError(msg)
         if h is None:

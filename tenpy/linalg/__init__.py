@@ -24,7 +24,7 @@ so you probably won't need to import `charges` directly.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from . import charges, np_conserved, krylov_based, random_matrix, sparse, svd_robust, truncation
+from . import charges, np_conserved, krylov_based, random_matrix, sparse, svd_robust, truncation  # noqa F401
 from .charges import *
 from .np_conserved import *
 from .krylov_based import *
@@ -56,7 +56,6 @@ def _patch_cython():
     _npc_helper._np_conserved = np_conserved
     assert _npc_helper.QTYPE == charges.QTYPE, f'{_npc_helper.QTYPE} != {charges.QTYPE}'
     # check types
-    warn = False
     import numpy as np
 
     check_types = [

@@ -11,7 +11,7 @@ def test_FermiHubbardModel():
     )
 
 
-def test_FermiHubbardModel():
+def test_FermiHubbardModel2():
     check_general_model(
         hubbard.FermiHubbardModel2,
         {'lattice': 'Square', 'Lx': 2, 'Ly': 3},

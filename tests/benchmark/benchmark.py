@@ -81,7 +81,7 @@ def perform_benchmark(
     print('module ', mod_name)
     namespace = {}
     exec('import {mod_name} as benchmark_mod'.format(mod_name=mod_name), namespace, namespace)
-    benchmark_mod = namespace['benchmark_mod']
+    benchmark_mod = namespace['benchmark_mod']  # noqa F841
     used_sizes = []
     results = []
     for size in sorted(sizes):

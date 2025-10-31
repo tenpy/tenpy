@@ -304,6 +304,7 @@ __all__ = [
     'FermiHubbardChain',
     'FermiHubbardModel2',
     'BosonicHaldaneModel',
+    'MolecularModel',
     'FermionicHaldaneModel',
     'ToricCode',
     'AKLTChain',

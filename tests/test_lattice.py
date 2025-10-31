@@ -166,10 +166,10 @@ def test_HelicalLattice():
         [['up', 'down'], ['down', 'down'], ['up', 'down']],
         [['down', 'down'], ['up', 'down'], ['down', 'down']],
     ]
-    psi = MPS.from_lat_product_state(hel, p_state)
+    _ = MPS.from_lat_product_state(hel, p_state)
     p_state[0][2] = ['down', 'down']
     with pytest.raises(ValueError, match='.* not translation invariant .*'):
-        psi = MPS.from_lat_product_state(hel, p_state)
+        _ = MPS.from_lat_product_state(hel, p_state)
 
 
 def test_number_nn():

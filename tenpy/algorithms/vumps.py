@@ -398,7 +398,7 @@ class VUMPSEngine(IterativeSweeps):
             i.e. just a reference to :attr:`psi`.
         """
         self.shelve = False
-        result = self.pre_run_initialize()
+        self.pre_run_initialize()
         is_first_sweep = True
         while True:
             iteration_start_time = time.time()
@@ -406,7 +406,7 @@ class VUMPSEngine(IterativeSweeps):
                 break
             if not is_first_sweep:
                 self.checkpoint.emit(self)
-            result = self.run_iteration()
+            self.run_iteration()
             self.status_update(iteration_start_time=iteration_start_time)
             is_first_sweep = False
         return self.post_run_cleanup()

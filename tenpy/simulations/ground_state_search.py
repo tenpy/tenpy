@@ -774,7 +774,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             if gs_D is not None:
                 gs_F = None
                 self.logger.info('use ground state data of simulation class arguments')
-                gs_data = gs_D
+                gs_data = gs_D  # noqa F841
                 gs_D = None  # reset to None to potentially allow to free the memory
                 # even though this can only work if the call structure is
                 #      sim = OrthogonalExcitations(..., gs_data=gs_data)
@@ -1267,7 +1267,7 @@ class TopologicalExcitations(OrthogonalExcitations):
                 )
                 epsilon_alpha = np.mean(epsilon_alpha).real
             else:
-                epsilon_alpha, E0_alpha, epsilon_beta, E0_beta = 0, 0, 0, 0
+                epsilon_alpha, E0_alpha = 0, 0
 
             E_alpha2 = E0_alpha + seg_alpha.L * epsilon_alpha
 

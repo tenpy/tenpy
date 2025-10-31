@@ -1018,7 +1018,7 @@ def consistency_check(value, options, threshold_key, threshold_default, msg, com
 
     try:
         check_passed = compare_func(value, threshold)
-    except Exception as e:
+    except Exception:
         # note: logger.exception adds traceback info
         logger.exception(
             'Error during consistency_check for ``%s``. This is likely due to a bug '

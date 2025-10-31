@@ -185,7 +185,7 @@ def test_Simulation_resume(tmp_path):
     sim_params['connect_algorithm_checkpoint'] = [(__name__, 'raise_SimulationStop', {}, -1)]
     sim = DummySimulation(sim_params)
     try:
-        results = sim.run()
+        _ = sim.run()
         assert False, 'expected to raise a SimulationStop in sim.run()'
     except SimulationStop:
         checkpoint_results = sim.prepare_results_for_save()
@@ -422,7 +422,7 @@ sequential:
 
 
 def test_yaml_load(tmp_path):
-    yaml = pytest.importorskip('yaml')
+    _ = pytest.importorskip('yaml')
 
     # load without writing to file first
     simulation_params = tenpy.load_yaml_with_py_eval(

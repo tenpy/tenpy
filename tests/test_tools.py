@@ -262,7 +262,6 @@ def test_logging_setup(tmp_path):
     import logging.config
 
     logger = logging.getLogger('tenpy.test_logging')
-    root = logging.getLogger()
     logging_params = {
         'output_filename': tmp_path / 'output.pkl',
         'to_stdout': 'INFO',

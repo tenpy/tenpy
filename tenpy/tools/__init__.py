@@ -39,7 +39,7 @@ from . import (
     thread,
     spectral_function_tools,
     prediction,
-    docs,
+    docs,  # noqa F841
 )
 from .events import *
 from .fit import *

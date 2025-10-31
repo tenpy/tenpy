@@ -161,9 +161,7 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
             # How do we truncate the RDMs when extending?
             Krylov_trunc_params = self.Krylov_params.subconfig('trunc_params', self.trunc_params)
             if Krylov_mpo is None:  # Random expansion
-                extension_err = self.psi.subspace_expansion(
-                    expand_into=[], trunc_par=Krylov_trunc_params
-                )
+                _ = self.psi.subspace_expansion(expand_into=[], trunc_par=Krylov_trunc_params)
             else:  # Expansion by MPO application
                 # Cast to list to allow for multiple mpos (i.e. W2 with order > 1)
                 Krylov_mpo = [Krylov_mpo] if not isinstance(Krylov_mpo, list) else Krylov_mpo
@@ -176,7 +174,7 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
                     for krylov_mpo in Krylov_mpo:
                         krylov_mpo.apply(new_psi, Krylov_apply_mpo_options)
                     Krylov_extended_basis.append(new_psi.copy())
-                extension_err = self.psi.subspace_expansion(
+                _ = self.psi.subspace_expansion(
                     expand_into=Krylov_extended_basis, trunc_par=Krylov_trunc_params
                 )
             logger.info(f'Extended bond dimension: {self.psi.chi}.')

@@ -26,7 +26,6 @@ from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalN
 from ..networks.mpo import MPOEnvironment
 from ..networks.mps import MPSEnvironment
 from ..linalg.truncation import truncate, svd_theta, decompose_theta_qr_based, TruncationError
-from ..linalg import np_conserved as npc
 from ..tools.params import asConfig
 from ..tools.misc import find_subclass, consistency_check
 from ..tools.process import memory_usage
@@ -620,7 +619,6 @@ class Sweep(Algorithm):
         """
         i_L, i_R = self._update_env_inds()  # left and right updated site
         # envs between `i_L` and `i_R` where already deleted and updated in `update_env`
-        i0 = self.i0
         n = self.n_optimize
         update_LP, update_RP = self.update_LP_RP
         all_envs = self._all_envs

@@ -584,15 +584,15 @@ def compare_models_plus_hc(
 
 
 @pytest.mark.parametrize(
-    'which_site, which_ops, op_string',
+    'which_site, which_ops',
     [
-        ('spin', 'Sp-Sm', None),
-        ('fermion', 'Cd-C', None),
-        ('spin-fermion', 'Sp-Sm', None),
-        ('spin-fermion', 'Cd-C', None),
+        ('spin', 'Sp-Sm'),
+        ('fermion', 'Cd-C'),
+        ('spin-fermion', 'Sp-Sm'),
+        ('spin-fermion', 'Cd-C'),
     ],
 )
-def test_model_plus_hc(which_site, which_ops, op_string, L=6):
+def test_model_plus_hc(which_site, which_ops, L=6):
     """Same as `test_model_plus_hc`, but uses fermions and default JW behavior"""
     if which_site == 'spin':
         lat = lattice.Chain(L=L, site=tenpy.networks.site.SpinHalfSite(None))
@@ -627,11 +627,6 @@ def test_model_plus_hc(which_site, which_ops, op_string, L=6):
         Sz = 'N'
         exp_A = 'Cd'
         exp_B = 'C'
-    else:
-        raise ValueError
-
-    if op_string is None:
-        op_str_kw = {}  # TODO use, more cases
     else:
         raise ValueError
 

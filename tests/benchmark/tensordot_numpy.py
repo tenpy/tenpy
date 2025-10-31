@@ -16,4 +16,4 @@ def setup_benchmark(**kwargs):
 
 def benchmark(data):
     a, b, axes = data
-    x = np.tensordot(a, b, axes)
+    _ = np.tensordot(a, b, axes)

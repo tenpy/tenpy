@@ -178,6 +178,7 @@ def test_LegPipe():
         pipe = charges.LegPipe(legs, sort=sort, bunch=bunch)
         pipe.test_sanity()
         pipe_conj = pipe.conj()
+        pipe_conj.test_sanity()
         pipe.test_contractible(pipe.conj())
         pipe_equal = pipe.flip_charges_qconj()
         pipe_equal.test_equal(pipe)

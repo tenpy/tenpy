@@ -653,7 +653,6 @@ class CouplingTerms(Hdf5Exportable):
 
             def style_map(i, j, op_i, op_string, op_j, strength):
                 """define the plot style for a given coupling."""
-                key = (op_i, op_string, op_j)
                 style = {}
                 style['linewidth'] = np.abs(strength) * matplotlib.rcParams['lines.linewidth']
                 style['color'] = hsv(norm_angle(np.angle(strength)))
@@ -1704,7 +1703,6 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
 
     def _test_terms(self, sites):
         """Check the format of self.exp_decaying_terms."""
-        L = self.L
         for term in self.exp_decaying_terms:
             strength, lambda_, op_i, op_j, subsites, subsites_start, op_string = term
             for i in subsites_start:

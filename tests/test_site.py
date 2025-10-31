@@ -90,7 +90,7 @@ def test_double_site():
     assert ds.need_JW_string == set(
         [op + 'a' for op in fs.need_JW_string] + [op + 'b' for op in fs.need_JW_string] + ['JW']
     )
-    ss = site.GroupedSite([fs])
+    ss = site.GroupedSite([fs])  # noqa: F841
 
 
 def check_spin_site(S, SpSmSz=['Sp', 'Sm', 'Sz'], SxSy=['Sx', 'Sy']):
@@ -260,7 +260,7 @@ def test_spin_half_hole_site():
         S.test_sanity()
         for op in S.onsite_ops:
             assert S.hc_ops[op] == hcs[op]
-        Id = S.Id.to_ndarray()
+        Id = S.Id.to_ndarray()  # noqa F841
         JW = S.JW.to_ndarray()
         Cu, Cd = S.Cu.to_ndarray(), S.Cd.to_ndarray()
         Cdu, Cdd = S.Cdu.to_ndarray(), S.Cdd.to_ndarray()

@@ -17,7 +17,6 @@ def tdvp(Psi, W, dt, Rp_list=None, k=5, O=None):
 
         spectrum = []
         spectrum.append(np.array([1]))
-        expectation_O = []
         for j in range(L):
             # Get theta
             theta = np.tensordot(s, Psi[j], axes=[1, 1])  # a,i,b
@@ -75,14 +74,12 @@ def tdvp(Psi, W, dt, Rp_list=None, k=5, O=None):
     Lp_list = [np.zeros([1, 1, D])]
     Lp_list[0][0, 0, 0] = 1
     Psi, Rp_list, spectrum = sweep(Psi, W, dt, Lp_list, Rp_list)
-    Lp_mid = Rp_list[int(L / 2)]
     Psi = mps_invert(Psi)
     W = mpo_invert(W)
 
     Lp_list = [np.zeros([1, 1, D])]
     Lp_list[0][0, 0, D - 1] = 1
     Psi, Rp_list, spectrum = sweep(Psi, W, dt, Lp_list, Rp_list)
-    Rp_mid = Rp_list[int(L / 2)]
 
     Psi = mps_invert(Psi)
     W = mpo_invert(W)
@@ -195,12 +192,12 @@ def evolve_lanczos(H, psiI, dt, krylovDim):
 
 def MPO_TFI(Jx, Jz, hx, hz):
     d = 2
-    Id = np.eye(2, dtype=float)
+    Id = np.eye(d, dtype=float)
     Sx = np.array([[0.0, 1.0], [1.0, 0.0]])
     Sz = np.array([[1.0, 0.0], [0.0, -1.0]])
 
     chi = 4
-    W = np.zeros((chi, chi, 2, 2))
+    W = np.zeros((chi, chi, d, d))
     W[0, 0] += Id
     W[0, 1] += Sz
     W[0, 2] += Sx
@@ -227,7 +224,6 @@ def MPO_TFI_general(Jx, Jz, hx, hz, d):
     Sm = np.transpose(Sp)
     # Sp = Sx + i Sy, Sm = Sx - i Sy
     Sx = (Sp + Sm) * 0.5
-    Sy = (Sm - Sp) * 0.5j
     chi = 4
     W = np.zeros((chi, chi, d, d))
     W[0, 0] += Id
@@ -254,9 +250,6 @@ def MPO_Heisenberg(J, d):
         m = n - S
         Sp[n + 1, n] = np.sqrt(S * (S + 1) - m * (m + 1))
     Sm = np.transpose(Sp)
-    # Sp = Sx + i Sy, Sm = Sx - i Sy
-    Sx = (Sp + Sm) * 0.5
-    Sy = (Sm - Sp) * 0.5j
     chi = 5
     W = np.zeros((chi, chi, d, d))
     W[0, 0] += Id
@@ -278,7 +271,6 @@ def MPO_XXZ(Jp, Jz, hz):
     sp = np.array([[0.0, 1.0], [0.0, 0.0]])
     sm = np.array([[0.0, 0.0], [1.0, 0.0]])
     sz = np.array([[0.5, 0.0], [0.0, -0.5]])
-    w_list = []
 
     w = np.zeros((5, 5, 2, 2), dtype=np.float64)
     w[0, :4] = [s0, sp, sm, sz]

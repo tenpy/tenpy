@@ -78,7 +78,7 @@ class DataLoader:
                 h5group = h5py.File(self.filename, 'r')
                 self._Hdf5Loader = hdf5_io.Hdf5Loader(h5group)
             else:
-                self.logger.info(f'Not using hdf5 data-format.\nLoading data can be slow')
+                self.logger.info('Not using hdf5 data-format.\nLoading data can be slow')
                 # all data is loaded as other filenames
                 self._all_data = hdf5_io.load(self.filename)
 
@@ -95,7 +95,7 @@ class DataLoader:
                 self._psi = self.sim.psi
 
         elif data is not None:
-            self.logger.info(f'Initializing data loader from passed results')
+            self.logger.info('Initializing data loader from passed results')
             # all data is loaded as other filenames
             self._all_data = data
             self.sim_params = self._load('simulation_parameters')
@@ -347,7 +347,7 @@ class DataFiles:
             print(f'loading {file!s}', end=' ')
             try:
                 _ = self[file]
-            except OSError as e:
+            except OSError:
                 print('... FAILED! Ignoring.')
             else:
                 print('... successful')

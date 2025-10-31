@@ -407,7 +407,6 @@ class Site(Hdf5Exportable):
         old_hc_name = self.hc_ops.get(old_name, None)
         op = getattr(self, old_name)
         need_JW = old_name in self.need_JW_string
-        hc_op_name = self.get_hc_op_name(old_name)
         self.remove_op(old_name)
         setattr(self, new_name, op)
         self.opnames.add(new_name)
@@ -785,7 +784,6 @@ class GroupedSite(Site):
             Kronecker product :math:`ops[0] \otimes ops[1] \otimes \cdots`,
             with labels ``['p', 'p*']``.
         """
-        sites = self.sites
         op = ops[0].transpose(['p', 'p*'])
         for op2 in ops[1:]:
             op = npc.outer(op, op2.transpose(['p', 'p*']))

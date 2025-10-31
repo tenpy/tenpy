@@ -265,7 +265,6 @@ def setup(test_case: int):
         # pauli_op
         s = SpinHalfSite(conserve='parity')
         Sig_x = s.get_op('Sigmax')
-        Sig_y = s.get_op('Sigmay')
         Sig_z = s.get_op('Sigmaz')
         Sig_id = s.get_op('Id')
         # TFI
@@ -307,7 +306,7 @@ def test_init_LP_RP_iterative(test_case):
     # check with and without sorted legcharges
     for sort_charges in [0, 1, 2]:
         if sort_charges == 1:
-            tperms = H.sort_legcharges()
+            _ = H.sort_legcharges()
         if sort_charges == 2:
             H._reset_graph()
         if sort_charges != 1:
