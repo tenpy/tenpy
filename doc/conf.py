@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) TeNPy Developers, Apache license
 #
-import sys
-import os
 import inspect
+import os
+import sys
 import warnings
 from datetime import datetime
 
@@ -401,10 +401,10 @@ bibtex_bibfiles = ['literature.bib', 'papers_using_tenpy.bib', 'theses.bib']
 # https://www.zotero.org/groups/2569413/tenpy/library
 # with the `betterbibtex` add-on, sorting by bibtex key (can be changed in addon settings).
 
+from pybtex.plugin import register_plugin
 from pybtex.style.formatting.unsrt import Style as UnsrtStyle
 from pybtex.style.labels import BaseLabelStyle
 from pybtex.style.sorting.author_year_title import SortingStyle
-from pybtex.plugin import register_plugin
 
 
 class CustomBibtexStyle1(UnsrtStyle):

@@ -1,15 +1,16 @@
 """Short tests for the :class:`DataLoader` and for post_processing functions in a Simulation"""
 # Copyright (C) TeNPy Developers, Apache license
 
-import tenpy
 import copy
+
 import numpy as np
 import pytest
 
+import tenpy
 from tenpy.algorithms import Algorithm
-from tenpy.simulations.simulation import Simulation
-from tenpy.simulations.post_processing import DataLoader
 from tenpy.models.xxz_chain import XXZChain
+from tenpy.simulations.post_processing import DataLoader
+from tenpy.simulations.simulation import Simulation
 
 tenpy.tools.misc.skip_logging_setup = True  # skip logging setup
 

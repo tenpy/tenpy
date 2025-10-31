@@ -5,10 +5,10 @@ import numpy as np
 import pytest
 
 import tenpy.linalg.np_conserved as npc
-from tenpy.linalg import truncation
-from tenpy.networks.mps import MPS
-from tenpy.models.tf_ising import TFIChain
 from tenpy.algorithms import mpo_evolution
+from tenpy.linalg import truncation
+from tenpy.models.tf_ising import TFIChain
+from tenpy.networks.mps import MPS
 
 
 def is_expected_S(S_expected, S_truncated):

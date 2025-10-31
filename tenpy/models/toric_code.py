@@ -7,8 +7,8 @@ established name for this model...
 
 import numpy as np
 
-from .lattice import Lattice, get_order, _parse_sites
 from ..networks.site import SpinHalfSite
+from .lattice import Lattice, _parse_sites, get_order
 from .model import CouplingMPOModel
 
 __all__ = ['DualSquare', 'ToricCode']

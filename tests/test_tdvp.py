@@ -2,11 +2,11 @@
 # Copyright (C) TeNPy Developers, Apache license
 import numpy as np
 import pytest
-from tenpy.models.spins import SpinChain
-from tenpy.algorithms import tdvp
-from tenpy.algorithms import tebd
-from tenpy.networks.mps import MPS
+
+from tenpy.algorithms import tdvp, tebd
 from tenpy.linalg.truncation import TruncationError
+from tenpy.models.spins import SpinChain
+from tenpy.networks.mps import MPS
 
 
 @pytest.mark.slow

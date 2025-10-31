@@ -1,10 +1,11 @@
 """This module contains functions for linear prediction."""
 # Copyright (C) TeNPy Developers, Apache license
 
+import logging
+
 import numpy as np
 from scipy.linalg import solve_toeplitz
 from scipy.signal import correlate
-import logging
 
 logger = logging.getLogger(__name__)
 

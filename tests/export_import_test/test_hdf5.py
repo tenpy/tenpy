@@ -1,9 +1,11 @@
 """Test output to and import from hdf5."""
 
-import io_test
 import os
-import pytest
 import warnings
+
+import io_test
+import pytest
+
 from tenpy.tools import hdf5_io
 
 h5py = pytest.importorskip('h5py')

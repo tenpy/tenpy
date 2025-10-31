@@ -15,10 +15,11 @@ Afterwards, you can plot the produced files::
 
 from __future__ import print_function  # (backwards compatibility to python 2)
 
-import timeit
-import time
-import numpy as np
 import sys
+import time
+import timeit
+
+import numpy as np
 
 fn_template = '{mod_name!s}_benchmark_s_{sectors:d}_l_{legs:d}_mod_q_{mod_q_str}.txt'
 

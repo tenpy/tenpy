@@ -8,12 +8,11 @@ Based on the model in [Yang2012]_
 import numpy as np
 
 from tenpy.algorithms import dmrg
-from tenpy.networks.mps import MPS
-from tenpy.networks import site
-
-from tenpy.models.model import CouplingMPOModel
-from tenpy.networks.site import FermionSite, GroupedSite
 from tenpy.models import lattice
+from tenpy.models.model import CouplingMPOModel
+from tenpy.networks import site
+from tenpy.networks.mps import MPS
+from tenpy.networks.site import FermionSite, GroupedSite
 
 
 class TripartiteTriangular(lattice.Lattice):

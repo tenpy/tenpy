@@ -3,9 +3,9 @@
 
 import numpy as np
 
-from .model import CouplingMPOModel
-from .lattice import Chain
 from ..networks.site import SpinHalfSite
+from .lattice import Chain
+from .model import CouplingMPOModel
 
 __all__ = ['PXPChain']
 

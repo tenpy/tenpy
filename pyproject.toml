@@ -119,7 +119,7 @@ exclude = ["doc/sphinx_ext/*"]
 
 [tool.ruff.lint]
 # all possible rules see here: https://docs.astral.sh/ruff/rules/
-select = ["F", "E"]
+select = ["F", "E", "I"]
 ignore = [
     "F403", "F405",  # star imports
     "E741",  # ignore ambiguous variable names like l

@@ -2,12 +2,13 @@
 # Copyright (C) TeNPy Developers, Apache license
 
 import itertools
+
 import numpy as np
 
-from .model import CouplingMPOModel
-from .lattice import Lattice
 from ..networks.site import SpinHalfFermionSite
 from ..tools.params import Config
+from .lattice import Lattice
+from .model import CouplingMPOModel
 
 __all__ = ['MolecularModel']
 

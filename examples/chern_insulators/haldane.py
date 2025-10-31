@@ -8,8 +8,8 @@ Reproduces Fig. 2.a,b) in [Grushin2015]_
 import numpy as np
 
 from tenpy.algorithms import dmrg
-from tenpy.networks.mps import MPS
 from tenpy.models.haldane import FermionicHaldaneModel
+from tenpy.networks.mps import MPS
 
 
 def plot_model(model_params, phi_ext=0.1):

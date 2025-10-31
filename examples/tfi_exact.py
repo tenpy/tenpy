@@ -6,11 +6,12 @@ The Hamiltonian reads
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import warnings
+
 import numpy as np
+import scipy.integrate
 import scipy.sparse as sparse
 from scipy.sparse.linalg import eigsh
-import warnings
-import scipy.integrate
 
 
 def finite_gs_energy(L, J, g):

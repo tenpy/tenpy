@@ -15,8 +15,9 @@ which does the same steps using a few predefined classes like MPS and MPO.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import tenpy.linalg.np_conserved as npc
 import numpy as np
+
+import tenpy.linalg.np_conserved as npc
 
 # model parameters
 Jxx, Jz = 1.0, 1.0

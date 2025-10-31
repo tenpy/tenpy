@@ -1,8 +1,9 @@
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
 import numpy as np
-from tenpy.models import hubbard
+import pytest
 from test_model import check_general_model
+
+from tenpy.models import hubbard
 
 
 def test_FermiHubbardModel():

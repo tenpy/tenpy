@@ -4,9 +4,9 @@
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from .model import CouplingMPOModel, NearestNeighborModel
 from ..networks.site import FermionSite
 from .lattice import Chain
+from .model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = ['FermionModel', 'FermionChain']
 

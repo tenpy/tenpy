@@ -1,9 +1,11 @@
 """A test for tenpy.tools.params."""
 # Copyright (C) TeNPy Developers, Apache license
 
-from tenpy.tools.params import Config, asConfig
 import copy
+
 import pytest
+
+from tenpy.tools.params import Config, asConfig
 
 
 def example_function(example_pars, keys=['a', 'b', 'c']):

@@ -1,9 +1,9 @@
 """tJ model"""
 # Copyright (C) TeNPy Developers, Apache license
 
-from .model import CouplingMPOModel, NearestNeighborModel
-from .lattice import Chain
 from ..networks.site import SpinHalfHoleSite
+from .lattice import Chain
+from .model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = ['tJModel', 'tJChain']
 

@@ -16,8 +16,8 @@ An example for such a case is given in the file ``examples/c_tebd.py``.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+from ..networks.site import GroupedSite, SpinSite
 from .lattice import Chain
-from ..networks.site import SpinSite, GroupedSite
 from .model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = ['SpinChainNNN', 'SpinChainNNN2']

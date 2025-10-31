@@ -1,11 +1,12 @@
 # Copyright (C) TeNPy Developers, Apache license
 
-from tenpy.models.toric_code import ToricCode
-from test_model import check_general_model
-import pytest
-from tenpy.networks.mps import MPS
-from tenpy.algorithms import dmrg
 import numpy as np
+import pytest
+from test_model import check_general_model
+
+from tenpy.algorithms import dmrg
+from tenpy.models.toric_code import ToricCode
+from tenpy.networks.mps import MPS
 
 
 @pytest.mark.slow

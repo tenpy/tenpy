@@ -1,9 +1,10 @@
 # Copyright (C) TeNPy Developers, Apache license
 
+import os
+import tempfile
+
 import numpy as np
 import numpy.testing as npt
-import tempfile
-import os
 import pytest
 
 from tenpy.tools.cache import CacheFile

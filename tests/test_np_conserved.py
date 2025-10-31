@@ -1,13 +1,14 @@
 """A collection of tests for tenpy.linalg.np_conserved."""
 # Copyright (C) TeNPy Developers, Apache license
 
-import tenpy.linalg.np_conserved as npc
+import itertools as it
+
 import numpy as np
 import numpy.testing as npt
-import itertools as it
-from tenpy.tools.misc import inverse_permutation
-
 from random_test import gen_random_legcharge, random_Array
+
+import tenpy.linalg.np_conserved as npc
+from tenpy.tools.misc import inverse_permutation
 
 chinfo = npc.ChargeInfo([1, 2], ['number', 'parity'])
 # parity can be derived from number. Yet, this should all work...

@@ -21,13 +21,14 @@ For further details, see the definition of :func:`~tenpy.tools.optimization.use_
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import bisect
 import warnings
 
-from ..tools.misc import lexsort, inverse_permutation
+import numpy as np
+
+from ..tools.misc import inverse_permutation, lexsort
+from ..tools.optimization import OptimizationFlag, optimize, use_cython
 from ..tools.string import vert_join
-from ..tools.optimization import optimize, OptimizationFlag, use_cython
 
 __all__ = ['ChargeInfo', 'DipolarChargeInfo', 'LegCharge', 'LegPipe', 'QTYPE']
 

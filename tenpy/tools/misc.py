@@ -1,14 +1,16 @@
 """Miscellaneous tools, somewhat random mix yet often helpful."""
 # Copyright (C) TeNPy Developers, Apache license
 
+import logging
 import operator
-import numpy as np
-from .optimization import bottleneck
-from .params import Config
-from collections.abc import Mapping
 import os.path
 import warnings
-import logging
+from collections.abc import Mapping
+
+import numpy as np
+
+from .optimization import bottleneck
+from .params import Config
 
 __all__ = [
     'to_iterable',

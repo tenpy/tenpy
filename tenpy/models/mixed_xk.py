@@ -64,15 +64,16 @@ The Jordan-Wigner strings follow the *final* DMRG snake.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import itertools as it
 
-from .lattice import Lattice
-from .model import CouplingMPOModel
+import numpy as np
+
+from ..linalg import np_conserved as npc
 from ..networks.site import FermionSite
 from ..networks.terms import TermList
-from ..tools.misc import to_array, inverse_permutation, to_iterable
-from ..linalg import np_conserved as npc
+from ..tools.misc import inverse_permutation, to_array, to_iterable
+from .lattice import Lattice
+from .model import CouplingMPOModel
 
 __all__ = ['MixedXKLattice', 'MixedXKModel', 'SpinlessMixedXKSquare', 'HubbardMixedXKSquare']
 

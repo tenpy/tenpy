@@ -15,12 +15,13 @@ This might be used to obtain the spectrum, the ground state or highly excited st
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import warnings
 
+import numpy as np
+
 from ..linalg import np_conserved as npc
-from ..networks.mps import MPS
 from ..models.model import CouplingModel
+from ..networks.mps import MPS
 from ..tools.misc import inverse_permutation
 
 __all__ = [
@@ -149,8 +150,8 @@ class ExactDiag:
         **kwargs :
             Further keyword arguments as for the ``__init__`` of the class.
         """
-        from ..models.model import MPOModel
         from ..models.lattice import TrivialLattice
+        from ..models.model import MPOModel
 
         assert H_MPO.bc == 'finite'
         M = MPOModel(TrivialLattice(H_MPO.sites), H_MPO)

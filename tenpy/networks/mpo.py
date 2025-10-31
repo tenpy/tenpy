@@ -36,24 +36,25 @@ i.e. between sites ``i-1`` and ``i``.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import copy
+import logging
+import warnings
+
 import numpy as np
 from scipy.linalg import expm
 from scipy.special import comb
-import warnings
-import copy
-import logging
 
 from ..linalg import np_conserved as npc
-from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator, ShiftNpcLinearOperator
+from ..linalg.krylov_based import GMRES
+from ..linalg.sparse import FlatLinearOperator, NpcLinearOperator, ShiftNpcLinearOperator
 from ..linalg.truncation import TruncationError, svd_theta
-from .site import group_sites
+from ..tools.math import lcm
+from ..tools.misc import add_with_None_0, inverse_permutation, to_iterable
+from ..tools.params import asConfig
 from ..tools.string import vert_join
 from .mps import BaseEnvironment, MPSGeometry, TransferMatrix
+from .site import group_sites
 from .terms import TermList
-from ..tools.misc import to_iterable, add_with_None_0, inverse_permutation
-from ..tools.math import lcm
-from ..tools.params import asConfig
-from ..linalg.krylov_based import GMRES
 
 __all__ = [
     'MPO',
@@ -3509,7 +3510,9 @@ class MPOEnvironmentBuilder:
                 j_start = j_site
                 break
         # unlikely but not accounted for beforehand
-        assert c_loop is not None, 'Hamiltonian contains cycle that does not connect to other indices'
+        assert (
+            c_loop is not None
+        ), 'Hamiltonian contains cycle that does not connect to other indices'
         # do contractions
         for j_site in range(j_start + 1, self.L):
             c_loop = self._contract_cL(
@@ -3533,7 +3536,9 @@ class MPOEnvironmentBuilder:
                 c_loop = grid[j_site][cycle[j_site]][0]
                 j_start = j_site
                 break
-        assert c_loop is not None, 'Hamiltonian contains cycle that does not connect to other indices'
+        assert (
+            c_loop is not None
+        ), 'Hamiltonian contains cycle that does not connect to other indices'
         # do contractions
         for j_site in range(j_start - 1, -1, -1):
             c_loop = self._contract_cR(

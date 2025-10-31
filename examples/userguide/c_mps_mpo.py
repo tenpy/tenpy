@@ -1,8 +1,8 @@
 """Initialization of sites, MPS and MPO."""
 
-from tenpy.networks.site import SpinHalfSite
-from tenpy.networks.mps import MPS
 from tenpy.networks.mpo import MPO
+from tenpy.networks.mps import MPS
+from tenpy.networks.site import SpinHalfSite
 
 spin = SpinHalfSite(conserve='Sz')
 

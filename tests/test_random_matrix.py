@@ -3,8 +3,9 @@
 
 import numpy as np
 import numpy.testing as npt
-import tenpy.linalg.random_matrix as rmat
+
 import tenpy.linalg.np_conserved as npc
+import tenpy.linalg.random_matrix as rmat
 
 chinfo = npc.ChargeInfo([1], ['testcharge'])
 _, leg = npc.LegCharge.from_qflat(chinfo, np.array([0, 1, 1, 2, 2, 2, 3, 4, 4])).bunch()

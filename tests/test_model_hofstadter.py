@@ -1,9 +1,10 @@
 # Copyright (C) TeNPy Developers, Apache license
-from tenpy.models.hofstadter import HofstadterBosons, HofstadterFermions, hopping_phases
-from tenpy.algorithms.exact_diag import ExactDiag
-from test_model import check_general_model
 import numpy as np
 import pytest
+from test_model import check_general_model
+
+from tenpy.algorithms.exact_diag import ExactDiag
+from tenpy.models.hofstadter import HofstadterBosons, HofstadterFermions, hopping_phases
 
 
 def test_HofstadterBosons():

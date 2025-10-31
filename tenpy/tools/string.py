@@ -2,6 +2,7 @@
 # Copyright (C) TeNPy Developers, Apache license
 
 from typing import Sequence
+
 import numpy as np
 
 __all__ = [

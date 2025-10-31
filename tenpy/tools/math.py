@@ -4,12 +4,13 @@
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import warnings
-from . import misc
 
+import numpy as np
 import scipy.linalg
 import scipy.sparse.linalg
+
+from . import misc
 
 __all__ = [
     'LeviCivita3',

@@ -2,20 +2,18 @@
 and method `init_LP_RP_iterative` in :class:`tenpy.netoworks.mpo.MPOEnvironment`."""
 # Copyright (C) TeNPy Developers, Apache license
 
-from tenpy.linalg import np_conserved as npc
-from tenpy.algorithms.dmrg import TwoSiteDMRGEngine as dmrg_eng
+import pytest
 
-from tenpy.models.tf_ising import TFIChain
+from tenpy.algorithms.dmrg import TwoSiteDMRGEngine as dmrg_eng
+from tenpy.linalg import np_conserved as npc
 from tenpy.models.lattice import Square
 from tenpy.models.model import CouplingModel, MPOModel
+from tenpy.models.tf_ising import TFIChain
+from tenpy.networks.mpo import MPO, MPOEnvironment, MPOEnvironmentBuilder, MPOTransferMatrix
+from tenpy.networks.mps import MPS
 
 # networks
 from tenpy.networks.site import SpinHalfSite
-from tenpy.networks.mps import MPS
-from tenpy.networks.mpo import MPO, MPOEnvironment, MPOTransferMatrix, MPOEnvironmentBuilder
-
-import pytest
-
 
 # ----- TEST FUNCTIONS -----
 

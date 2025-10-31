@@ -10,11 +10,12 @@ Afterwards, you can print the produced statistics::
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import cProfile
 import pstats
 import sys
 import time
+
+import numpy as np
 
 fn_template = '{mod_name!s}_profile_S_{size:d}_s_{sectors:d}_l_{legs:d}_mod_q_{mod_q_str}.prof'
 

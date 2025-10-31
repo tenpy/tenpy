@@ -1,10 +1,10 @@
-import tenpy.linalg.np_conserved as npc
-from tenpy.models.tf_ising import TFIChain
-from tenpy.algorithms.exact_diag import ExactDiag
-import tenpy
-import pytest
 import numpy as np
+import pytest
 
+import tenpy
+import tenpy.linalg.np_conserved as npc
+from tenpy.algorithms.exact_diag import ExactDiag
+from tenpy.models.tf_ising import TFIChain
 
 tenpy.tools.misc.skip_logging_setup = True  # skip logging setup
 

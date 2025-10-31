@@ -6,8 +6,9 @@ Call this file with arguments, e.g:     python singlerun.py -m tensordot_npc ten
 
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import time
+
+import numpy as np
 
 
 def single_run(mod_name, repeat=1, seed=0, **kwargs):

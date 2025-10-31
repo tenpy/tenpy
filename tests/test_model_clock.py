@@ -1,8 +1,9 @@
 # Copyright (C) TeNPy Developers, Apache license
 
-from tenpy.models.clock import ClockModel, ClockChain
-from test_model import check_general_model
 import pytest
+from test_model import check_general_model
+
+from tenpy.models.clock import ClockChain, ClockModel
 
 
 def test_ClockChain_general():

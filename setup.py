@@ -1,5 +1,5 @@
 # Copyright (C) TeNPy Developers, Apache license
-from setuptools import setup, Extension
+from setuptools import Extension, setup
 
 try:
     from Cython.Build import cythonize
@@ -7,6 +7,7 @@ except Exception:
     cythonize = None
 
 import os
+
 import numpy
 
 

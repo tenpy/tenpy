@@ -18,15 +18,14 @@ For example an MPS represents the contraction along the 'virtual' legs/bonds of 
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from . import site, mps, mpo, purification_mps, momentum_mps, uniform_mps
-
-from .site import *
-from .mps import *
+from . import momentum_mps, mpo, mps, purification_mps, site, uniform_mps
+from .momentum_mps import *
 from .mpo import *
+from .mps import *
 from .purification_mps import *
+from .site import *
 from .terms import *
 from .uniform_mps import *
-from .momentum_mps import *
 
 __all__ = [
     *site.__all__,

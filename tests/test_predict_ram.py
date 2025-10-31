@@ -1,10 +1,11 @@
 """Short test for vmem prediction."""
 # Copyright (C) TeNPy Developers, Apache license
 
+import numpy as np
+
 import tenpy.algorithms as algo
 import tenpy.models as mods
 import tenpy.networks.mps as mps
-import numpy as np
 
 
 def test_bosonic_model_TEBD():

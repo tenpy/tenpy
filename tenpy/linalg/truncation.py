@@ -43,10 +43,12 @@ is the discarded part (orthogonal to the kept part) and the
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import warnings
+
 import numpy as np
+
 from ..linalg import np_conserved as npc
 from ..tools.hdf5_io import Hdf5Exportable
-import warnings
 from ..tools.params import asConfig
 
 __all__ = ['TruncationError', 'truncate', 'svd_theta', 'decompose_theta_qr_based', 'eigh_rho']

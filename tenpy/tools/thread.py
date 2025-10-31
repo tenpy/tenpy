@@ -2,9 +2,9 @@
 
 # Copyright (C) TeNPy Developers, Apache license
 
-import threading
-import queue
 import logging
+import queue
+import threading
 
 logger = logging.getLogger(__name__)
 

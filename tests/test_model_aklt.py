@@ -1,9 +1,10 @@
 # Copyright (C) TeNPy Developers, Apache license
-from tenpy.models import aklt
-from test_model import check_general_model
-from tenpy.algorithms.dmrg import TwoSiteDMRGEngine
-from tenpy.networks.mps import MPS
 import pytest
+from test_model import check_general_model
+
+from tenpy.algorithms.dmrg import TwoSiteDMRGEngine
+from tenpy.models import aklt
+from tenpy.networks.mps import MPS
 
 
 def test_AKLT_finite():

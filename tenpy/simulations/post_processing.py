@@ -11,17 +11,18 @@ the simulation class in a post-processing step. They follow the syntax
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import logging
 import os
 import warnings
 from pathlib import Path
-import numpy as np
-import logging
 
-from ..tools.spectral_function_tools import spectral_function, plot_correlations_on_lattice
-from ..tools import hdf5_io
-from ..tools.misc import to_iterable, get_recursive, set_recursive, find_subclass
-from ..tools.params import Config
+import numpy as np
+
 from ..models import Model
+from ..tools import hdf5_io
+from ..tools.misc import find_subclass, get_recursive, set_recursive, to_iterable
+from ..tools.params import Config
+from ..tools.spectral_function_tools import plot_correlations_on_lattice, spectral_function
 
 try:
     import h5py

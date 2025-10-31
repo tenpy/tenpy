@@ -1,8 +1,9 @@
 # Copyright (C) TeNPy Developers, Apache license
 import numpy as np
+from test_model import check_general_model
+
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.models import spins
-from test_model import check_general_model
 
 
 def test_SpinModel():

@@ -1,6 +1,7 @@
 # Copyright (C) TeNPy Developers, Apache license
-from tenpy.models import tj_model
 from test_model import check_general_model
+
+from tenpy.models import tj_model
 
 
 def test_tJModel():

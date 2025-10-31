@@ -9,14 +9,16 @@ to convert flat numpy arrays to and from np_conserved arrays.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import warnings
+
 import numpy as np
-from . import np_conserved as npc
 import scipy.sparse.linalg
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator
+
 from ..tools.math import speigs, speigsh
 from ..tools.misc import argsort, group_by_degeneracy
 from . import krylov_based
-import warnings
+from . import np_conserved as npc
 
 __all__ = [
     'NpcLinearOperator',

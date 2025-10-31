@@ -78,9 +78,9 @@ knobs you can turn to tweak the most out of this library, explained in the follo
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from enum import IntEnum
-import warnings
 import os
+import warnings
+from enum import IntEnum
 
 __all__ = [
     'bottleneck',

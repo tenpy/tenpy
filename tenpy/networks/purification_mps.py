@@ -119,11 +119,12 @@ see :cite:`hauschild2018`.
 # Copyright (C) TeNPy Developers, Apache license
 
 import copy
+
 import numpy as np
 
-from .mps import MPS
 from ..linalg import np_conserved as npc
 from ..tools.math import entropy
+from .mps import MPS
 
 __all__ = ['PurificationMPS', 'convert_model_purification_canonical_conserve_ancilla_charge']
 

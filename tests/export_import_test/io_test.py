@@ -9,12 +9,14 @@ and the tenpy version in the filename.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import os
+import types
+
+import numpy as np
+
 import tenpy
 import tenpy.linalg.np_conserved as npc
 import tenpy.models.tf_ising
-import types
 
 try:
     from packaging.version import parse as parse_version  # part of setuptools

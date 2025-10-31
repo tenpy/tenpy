@@ -1,12 +1,13 @@
 """A collection of tests to check the functionality of `tenpy.vumps`"""
 # Copyright (C) TeNPy Developers, Apache license
 
-from tenpy.models.tf_ising import TFIChain
-from tenpy.algorithms import vumps
-from tenpy.networks import mps
-import pytest
 import numpy as np
+import pytest
 from scipy import integrate
+
+from tenpy.algorithms import vumps
+from tenpy.models.tf_ising import TFIChain
+from tenpy.networks import mps
 
 
 def e0_transverse_ising(g=0.5):

@@ -29,23 +29,29 @@ See also the introduction in :doc:`/intro/model`.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
-import warnings
-import inspect
-from functools import wraps
 import copy
+import inspect
 import logging
+import warnings
+from functools import wraps
 
-from .lattice import get_lattice, Lattice, MultiSpeciesLattice, HelicalLattice, IrregularLattice
+import numpy as np
+
 from ..linalg import np_conserved as npc
 from ..linalg.charges import LegCharge
-from ..tools.misc import to_array, add_with_None_0
-from ..tools.params import asConfig
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
-from ..networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
-from ..networks.terms import ExponentiallyDecayingTerms, order_combine_term
 from ..networks.site import Site, group_sites
+from ..networks.terms import (
+    CouplingTerms,
+    ExponentiallyDecayingTerms,
+    MultiCouplingTerms,
+    OnsiteTerms,
+    order_combine_term,
+)
 from ..tools.hdf5_io import Hdf5Exportable
+from ..tools.misc import add_with_None_0, to_array
+from ..tools.params import asConfig
+from .lattice import HelicalLattice, IrregularLattice, Lattice, MultiSpeciesLattice, get_lattice
 
 __all__ = ['Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'CouplingMPOModel']
 

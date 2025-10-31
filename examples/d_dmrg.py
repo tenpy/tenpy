@@ -7,10 +7,10 @@ but make use of the classes defined in tenpy.
 
 import numpy as np
 
-from tenpy.networks.mps import MPS
-from tenpy.models.tf_ising import TFIChain
-from tenpy.models.spins import SpinModel
 from tenpy.algorithms import dmrg
+from tenpy.models.spins import SpinModel
+from tenpy.models.tf_ising import TFIChain
+from tenpy.networks.mps import MPS
 
 
 def example_DMRG_tf_ising_finite(L, g):

@@ -1,10 +1,11 @@
 """a collection of tests to check the functionality of network_contractor.py."""
 # Copyright (C) TeNPy Developers, Apache license
 
-from tenpy.algorithms.network_contractor import contract, ncon
 import numpy as np
-from tenpy.linalg import np_conserved as npc
 from random_test import random_Array
+
+from tenpy.algorithms.network_contractor import contract, ncon
+from tenpy.linalg import np_conserved as npc
 
 # Construct toy tensors
 # =====================
