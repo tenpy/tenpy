@@ -8,10 +8,6 @@ Minor changes and fixes.
 Changelog
 ---------
 
-Backwards incompatible changes
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- nothing yet
-
 Added
 ^^^^^
 - Add config options to control what is conserved for the :class:`~tenpy.models.xxz_chain.XXZChain`
@@ -25,7 +21,8 @@ Added
 
 Changed
 ^^^^^^^
-- `ExponentiallyDecayingCouplingTerms` now accepts a 1D array of size `L` for the decay rate `lambda_`.  (:issue: `176`).
+- :class:`~tenpy.networks.terms.ExponentiallyDecayingCouplingTerms` now accepts a 1D array of size
+  ``L`` for the decay rate ``lambda_``, see :issue:`176`.
 
 Fixed
 ^^^^^

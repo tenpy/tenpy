@@ -3,7 +3,7 @@
 
 Release Notes
 -------------
-The v0.99 release is the Backwards-compatible version of the :mod:`v1.0 release</changelog/v1.0.0>` release.
+The v0.99 release is the Backwards-compatible version of the :doc:`v1.0</changelog/v1.0.0>` release.
 It has all of the same features, but should raise informative warnings for those features
 that are not compatible with v1.0.
 
@@ -61,7 +61,7 @@ Fixed
 ^^^^^
 - MPO methods :meth:`~tenpy.networks.mpo.MPO.dagger`, :meth:`~tenpy.networks.mpo.MPO.is_hermitian`,
   and :meth:`~tenpy.networks.mpo.MPO.__add__` now respect
-  the :attr:`:~tenpy.networks.mpo.MPO.explicit_plus_hc` flag.
+  the :attr:`~tenpy.networks.mpo.MPO.explicit_plus_hc` flag.
 - Handle Jordan wigner strings better, see :pull:`355`. This includes a new way to add JW signs on a virtual MPS leg 
   via the site's :meth:`~tenpy.networks.site.Site.charge_to_JW_signs`
 
