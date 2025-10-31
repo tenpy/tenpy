@@ -117,14 +117,27 @@ line-length = 100
 target-version = "py310"
 exclude = ["doc/sphinx_ext/*"]
 
-
 [tool.ruff.lint]
 # all possible rules see here: https://docs.astral.sh/ruff/rules/
-select = ["F"]
-extend-ignore = [
+select = ["F", "E"]
+ignore = [
     "F403", "F405",  # star imports
+    "E741",  # ignore ambiguous variable names like l
+    "E501",  # ignore line too long
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"doc/toycodes/*.ipynb" = [
+    "E402",  # Module level import not at top of cell
+    "F841",  # Local variable is assigned to but never used
+]
+"doc/notebooks/*.ipynb" = [
+    "E402",  # Module level import not at top of cell
+    "F841",  # Local variable is assigned to but never used
+]
+"doc/conf.py" = [
+    "E402",  # Module level import not at top of file
+]
 
 [tool.ruff.format]
 quote-style = "single"
