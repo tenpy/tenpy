@@ -28,12 +28,13 @@ jobs:
         submodules: recursive
       
     - name: Setup miniconda
-      uses: conda-incubator/setup-miniconda@v3
+      uses: conda-incubator/setup-miniconda@v3.2.0
       with:
         auto-update-conda: true
         activate-environment: tenpydoc
         environment-file: doc/environment.yml
         python-version: 3.13
+        conda-remove-defaults: "true"
     
     - name: Build documentation
       # -W treats warnings as errors, i.e. the action fails if there are warnings from sphinx
