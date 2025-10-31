@@ -12,7 +12,6 @@ Afterwards, you can print the produced statistics::
 
 import cProfile
 import pstats
-import sys
 import time
 
 import numpy as np
@@ -46,13 +45,10 @@ def perform_profiling(mod_name, repeat=1, seed=0, filename=fn_template, **kwargs
     setup_code = setup_code.format(mod_name=mod_name, kwargs=kwargs)
     namespace = {}
     exec(setup_code, namespace, namespace)
-    timing_code = '{mod_name}.benchmark(data)'.format(mod_name=mod_name)
+    timing_code = f'{mod_name}.benchmark(data)'
     if repeat > 1:
-        timing_code = 'for _ in range({repeat:d}): '.format(repeat=repeat) + timing_code
-    if sys.version_info > (3, 3):
-        prof = cProfile.Profile(time.perf_counter)
-    else:
-        prof = cProfile.Profile()
+        timing_code = f'for _ in range({repeat:d}): ' + timing_code
+    prof = cProfile.Profile(time.perf_counter)
     prof.runctx(timing_code, namespace, namespace)
     prof.dump_stats(filename)
 

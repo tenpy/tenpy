@@ -29,16 +29,14 @@ def check_all_attribute(check_module=tenpy):
     """
     _name_ = check_module.__name__
     if not hasattr(check_module, '__all__'):
-        raise AssertionError('module {0} has no line __all__ = [...]'.format(_name_))
+        raise AssertionError(f'module {_name_} has no line __all__ = [...]')
     _all_ = check_module.__all__
 
     # print("test __all__ of", _name_)
     # find entries in __all__ but not in the module
     nonexistent = [n for n in _all_ if not hasattr(check_module, n)]
     if len(nonexistent) > 0:
-        raise AssertionError(
-            'found entries {0!s} in __all__ but not in module {1}'.format(nonexistent, _name_)
-        )
+        raise AssertionError(f'found entries {nonexistent!s} in __all__ but not in module {_name_}')
 
     # find objects in the module, which are not listed in __all__ (although they should be)
     for n, obj in inspect.getmembers(check_module):
@@ -46,9 +44,7 @@ def check_all_attribute(check_module=tenpy):
             continue
         if getattr(obj, '__module__', None) == _name_:
             # got a class or function defined in the module
-            raise AssertionError(
-                'object {0!r} defined in {1} but not in __all__'.format(obj, _name_)
-            )
+            raise AssertionError(f'object {obj!r} defined in {_name_} but not in __all__')
 
     # recurse into submodules
     path = getattr(check_module, '__path__', [])
@@ -89,7 +85,7 @@ def check_copyright_notice():
     # tenpy_files = get_python_files(os.path.dirname(os.path.dirname(tenpy.__file__)))
     #  (but this doesn't work for the pip-installed tenpy, so you can only do it temporary!)
     for fn in tenpy_files:
-        with open(fn, 'r') as f:
+        with open(fn) as f:
             for line in f:
                 if line.startswith('# Copyright (C) TeNPy Developers, Apache license'):
                     break

@@ -46,7 +46,7 @@ def test_onsite_terms():
     strength1 = np.arange(1.0, 1.0 + L * 0.25, 0.25)
     o1 = OnsiteTerms(L)
     for i in [1, 0, 3]:
-        o1.add_onsite_term(strength1[i], i, 'X_{i:d}'.format(i=i))
+        o1.add_onsite_term(strength1[i], i, f'X_{i:d}')
     assert o1.onsite_terms == [{"X_0": strength1[0]},
                                {"X_1": strength1[1]},
                                {},
@@ -56,7 +56,7 @@ def test_onsite_terms():
     strength2 = np.arange(2.0, 2.0 + L * 0.25, 0.25)
     o2 = OnsiteTerms(L)
     for i in [1, 4, 3, 5]:
-        o2.add_onsite_term(strength2[i], i, 'Y_{i:d}'.format(i=i))
+        o2.add_onsite_term(strength2[i], i, f'Y_{i:d}')
     o2.add_onsite_term(strength2[3], 3, 'X_3')  # add to previous part
     o2.add_onsite_term(-strength1[1], 1, 'X_1')  # remove previous part
     o1 += o2
@@ -92,18 +92,18 @@ def test_coupling_terms():
     sites = []
     for i in range(L):
         s = site.Site(spin_half.leg)
-        s.add_op('X_{i:d}'.format(i=i), 2.0 * np.eye(2))
-        s.add_op('Y_{i:d}'.format(i=i), 3.0 * np.eye(2))
+        s.add_op(f'X_{i:d}', 2.0 * np.eye(2))
+        s.add_op(f'Y_{i:d}', 3.0 * np.eye(2))
         s.add_op('S1', 4.0 * np.eye(2))
         s.add_op('S2', 5.0 * np.eye(2))
         sites.append(s)
     strength1 = np.arange(0.0, 5)[:, np.newaxis] + np.arange(0.0, 0.625, 0.125)[np.newaxis, :]
     c1 = CouplingTerms(L)
     for i, j in [(2, 3)]:
-        c1.add_coupling_term(strength1[i, j], i, j, 'X_{i:d}'.format(i=i), 'Y_{j:d}'.format(j=j))
+        c1.add_coupling_term(strength1[i, j], i, j, f'X_{i:d}', f'Y_{j:d}')
     assert c1.max_range() == 3 - 2
     for i, j in [(0, 1), (0, 3), (0, 2)]:
-        c1.add_coupling_term(strength1[i, j], i, j, 'X_{i:d}'.format(i=i), 'Y_{j:d}'.format(j=j))
+        c1.add_coupling_term(strength1[i, j], i, j, f'X_{i:d}', f'Y_{j:d}')
     c1_des = {0: {('X_0', 'Id'): {1: {'Y_1': 0.125},
                                   2: {'Y_2': 0.25},
                                   3: {'Y_3': 0.375}}},
@@ -126,10 +126,10 @@ def test_coupling_terms():
 
     mc = MultiCouplingTerms(L)
     for i, j in [(2, 3)]:  # exact same terms as c1
-        mc.add_coupling_term(strength1[i, j], i, j, 'X_{i:d}'.format(i=i), 'Y_{j:d}'.format(j=j))
+        mc.add_coupling_term(strength1[i, j], i, j, f'X_{i:d}', f'Y_{j:d}')
     assert mc.max_range() == 3 - 2
     for i, j in [(0, 1), (0, 3), (0, 2)]:  # exact same terms as c1
-        mc.add_coupling_term(strength1[i, j], i, j, 'X_{i:d}'.format(i=i), 'Y_{j:d}'.format(j=j))
+        mc.add_coupling_term(strength1[i, j], i, j, f'X_{i:d}', f'Y_{j:d}')
     # couplings now in left/ right structure from MultiCoupling
 
     t_des_L = {2: {('X_2', 'Id'): {-1: [1]}},
@@ -207,7 +207,7 @@ def test_coupling_terms():
     # addition
     c2 = CouplingTerms(L)
     for i, j in [(0, 1), (1, 2)]:
-        c2.add_coupling_term(strength1[i, j], i, j, 'X_{i:d}'.format(i=i), 'Y_{j:d}'.format(j=j))
+        c2.add_coupling_term(strength1[i, j], i, j, f'X_{i:d}', f'Y_{j:d}')
     c1 += c2
     c1_des = {0: {('X_0', 'Id'): {1: {'Y_1': 0.25},
                                   2: {'Y_2': 0.25},
@@ -257,8 +257,8 @@ def test_coupling_terms_handle_JW():
     L = 4
     for i in range(L):
         s = site.Site(spin_half.leg)
-        s.add_op('X_{i:d}'.format(i=i), 2.0 * np.eye(2))
-        s.add_op('Y_{i:d}'.format(i=i), 3.0 * np.eye(2), need_JW=True)
+        s.add_op(f'X_{i:d}', 2.0 * np.eye(2))
+        s.add_op(f'Y_{i:d}', 3.0 * np.eye(2), need_JW=True)
         sites.append(s)
     mc = MultiCouplingTerms(L)
     # two-site terms

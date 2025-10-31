@@ -232,21 +232,17 @@ class Array:
         for l in self.legs:
             if l.chinfo != self.chinfo:
                 raise ValueError(
-                    'leg has different ChargeInfo:\n{0!s}\n vs {1!s}'.format(l.chinfo, self.chinfo)
+                    f'leg has different ChargeInfo:\n{l.chinfo!s}\n vs {self.chinfo!s}'
                 )
         if self.shape != tuple([lc.ind_len for lc in self.legs]):
             raise ValueError(
-                'shape mismatch with LegCharges\n self.shape={0!s} != {1!s}'.format(
-                    self.shape, tuple([lc.ind_len for lc in self.legs])
-                )
+                f'shape mismatch with LegCharges\n self.shape={self.shape!s} != {tuple([lc.ind_len for lc in self.legs])!s}'
             )
         for l in self.legs:
             l.test_sanity()
         if any([self.dtype != d.dtype for d in self._data]):
             raise ValueError(
-                'wrong dtype: {0!s} vs\n {1!s}'.format(
-                    self.dtype, [self.dtype != d.dtype for d in self._data]
-                )
+                f'wrong dtype: {self.dtype!s} vs\n {[self.dtype != d.dtype for d in self._data]!s}'
             )
         if self._qdata.shape != (self.stored_blocks, self.rank):
             raise ValueError('_qdata shape wrong')
@@ -502,9 +498,7 @@ class Array:
         res = cls(legcharges, dtype, qtotal, labels)  # without any data
         if res.shape != data_flat.shape:
             raise ValueError(
-                'Incompatible shapes: legcharges {0!s} vs flat {1!s} '.format(
-                    res.shape, data_flat.shape
-                )
+                f'Incompatible shapes: legcharges {res.shape!s} vs flat {data_flat.shape!s} '
             )
         if qtotal is None:
             res.qtotal = qtotal = detect_qtotal(data_flat, legcharges, cutoff)
@@ -715,13 +709,13 @@ class Array:
             try:
                 label = self._labels.index(label)
             except ValueError:  # not in List
-                msg = 'Label not found: {0!r}, current labels: {1!r}'.format(label, self._labels)
+                msg = f'Label not found: {label!r}, current labels: {self._labels!r}'
                 raise KeyError(msg) from None
         else:
             if label < 0:
                 label += self.rank
             if label > self.rank or label < 0:
-                raise ValueError('axis {0:d} out of rank {1:d}'.format(label, self.rank))
+                raise ValueError(f'axis {label:d} out of rank {self.rank:d}')
         return label
 
     def get_leg_indices(self, labels):
@@ -793,7 +787,7 @@ class Array:
         labels[old_index] = None
         new_label = str(new_label)
         if new_label in labels:
-            msg = 'Duplicate label: trying to set {0!r} in {1!r}'.format(new_label, labels)
+            msg = f'Duplicate label: trying to set {new_label!r} in {labels!r}'
             raise ValueError(msg)
         labels[old_index] = new_label
         self._labels = labels
@@ -812,7 +806,7 @@ class Array:
         for i, new_label in zip(old_inds, new_labels):
             new_label = str(new_label)
             if new_label in labels:
-                msg = 'Duplicate label: trying to set {0!r} in {1!r}'.format(new_label, labels)
+                msg = f'Duplicate label: trying to set {new_label!r} in {labels!r}'
                 raise ValueError(msg)
             labels[i] = new_label
         self._labels = labels
@@ -844,7 +838,7 @@ class Array:
     # string output ===========================================================
 
     def __repr__(self):
-        return '<npc.Array shape={0!s} labels={1!s}>'.format(self.shape, self.get_leg_labels())
+        return f'<npc.Array shape={self.shape!s} labels={self.get_leg_labels()!s}>'
 
     def __str__(self):
         res = [
@@ -1775,7 +1769,7 @@ class Array:
                 raise ValueError("can't split a leg multiple times!")
         for ax in axes:
             if not isinstance(self.legs[ax], LegPipe):
-                raise ValueError("can't split leg {ax:d} which is not a LegPipe".format(ax=ax))
+                raise ValueError(f"can't split leg {ax:d} which is not a LegPipe")
         if len(axes) == 0:
             return self.copy(deep=True)
         elif self.stored_blocks == 0:
@@ -2384,9 +2378,7 @@ class Array:
         other gets **transposed** before the action.
         """
         if not isinstance(other, Array) or not np.isscalar(prefactor):
-            raise ValueError(
-                'wrong argument types: {0!r}, {1!r}'.format(type(prefactor), type(other))
-            )
+            raise ValueError(f'wrong argument types: {type(prefactor)!r}, {type(other)!r}')
         self.ibinary_blockwise(np.add, other.__mul__(prefactor))
         return self
 
@@ -2397,7 +2389,7 @@ class Array:
         Note that we allow the type of `self` to change if necessary.
         """
         if not np.isscalar(prefactor):
-            raise ValueError('prefactor is not scalar: {0!r}'.format(type(prefactor)))
+            raise ValueError(f'prefactor is not scalar: {type(prefactor)!r}')
         if prefactor == 0.0:
             self._data = []
             self._qdata = np.empty((0, self.rank), np.intp)
@@ -2457,9 +2449,7 @@ class Array:
         """Return ``self / other`` for scalar `other`."""
         if np.isscalar(other):
             if other == 0.0:
-                raise ZeroDivisionError(
-                    'a/b for b=0. Types: {0!s}, {1!s}'.format(type(self), type(other))
-                )
+                raise ZeroDivisionError(f'a/b for b=0. Types: {type(self)!s}, {type(other)!s}')
             res = self.copy(deep=True)
             return res.iscale_prefactor(1.0 / other)
         return NotImplemented
@@ -2468,9 +2458,7 @@ class Array:
         """``self /= other`` for scalar `other`."""
         if np.isscalar(other):
             if other == 0.0:
-                raise ZeroDivisionError(
-                    'a/b for b=0. Types: {0!s}, {1!s}'.format(type(self), type(other))
-                )
+                raise ZeroDivisionError(f'a/b for b=0. Types: {type(self)!s}, {type(other)!s}')
             return self.iscale_prefactor(1.0 / other)
         return NotImplemented
 
@@ -3018,7 +3006,7 @@ def diag(s, leg, dtype=None, labels=None):
     s = np.asarray(s, dtype)
     scalar = s.ndim == 0
     if not scalar and len(s) != leg.ind_len:
-        raise ValueError('len(s)={0:d} not equal to leg.ind_len={1:d}'.format(len(s), leg.ind_len))
+        raise ValueError(f'len(s)={len(s):d} not equal to leg.ind_len={leg.ind_len:d}')
     res = Array((leg, leg.conj()), s.dtype, labels=labels)  # default charge is 0
     # qdata = [[0, 0], [1, 1], ....]
     res._qdata = np.arange(leg.block_number, dtype=np.intp)[:, np.newaxis] * np.ones(2, np.intp)
@@ -3466,7 +3454,7 @@ def trace(a, leg1=0, leg2=1):
     """
     ax1, ax2 = a.get_leg_indices([leg1, leg2])
     if ax1 == ax2:
-        raise ValueError('leg1 = {0!r} == leg2 = {1!r} ???'.format(leg1, leg2))
+        raise ValueError(f'leg1 = {leg1!r} == leg2 = {leg2!r} ???')
     a.legs[ax1].test_contractible(a.legs[ax2])
     if a.rank == 2:
         # full contraction: ax1, ax2 = 0, 1 or vice versa
@@ -5001,9 +4989,7 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
                 )
                 if anynan(U_b) or anynan(VH_b) or anynan(S_b):
                     raise ValueError(
-                        'NaN in U_b {0:d} and/or VH_b: {1:d}'.format(
-                            np.sum(np.isnan(U_b)), np.sum(np.isnan(VH_b))
-                        )
+                        f'NaN in U_b {np.sum(np.isnan(U_b)):d} and/or VH_b: {np.sum(np.isnan(VH_b)):d}'
                     )
         else:
             S_b = svd_flat(block, False, False, overwrite_a, check_finite=True)

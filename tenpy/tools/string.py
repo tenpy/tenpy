@@ -1,7 +1,7 @@
 """Tools for handling strings."""
 # Copyright (C) TeNPy Developers, Apache license
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import numpy as np
 

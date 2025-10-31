@@ -284,12 +284,12 @@ def test_logging_setup(tmp_path):
     logging.config.dictConfig({'version': 1, 'disable_existing_loggers': False})
 
     assert os.path.exists(tmp_path / 'output.log')
-    with open(tmp_path / 'output.log', 'r') as f:
+    with open(tmp_path / 'output.log') as f:
         file_text = f.read()
     assert test_message % 'warning' in file_text
     assert test_message % 'info' not in file_text  # should have filtered that out
 
-    with open(tmp_path / 'stdout.txt', 'r') as stdout:
+    with open(tmp_path / 'stdout.txt') as stdout:
         stdout_text = stdout.read()
     assert test_message % 'warning' in stdout_text
     assert test_message % 'info' in stdout_text

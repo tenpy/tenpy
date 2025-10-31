@@ -33,7 +33,7 @@ def check_model_sanity(M, hermitian=True):
                     err = npc.norm(H - H.conj().transpose(H.get_leg_labels()))
                     if err > 1.0e-14:
                         print(H)
-                        raise ValueError('H on bond {i:d} not hermitian'.format(i=i))
+                        raise ValueError(f'H on bond {i:d} not hermitian')
     if isinstance(M, model.MPOModel):
         model.MPOModel.test_sanity(M)
         if hermitian:

@@ -105,7 +105,7 @@ def fit_plot_central_charge(s_list, xi_list, filename):
         fitFunc(Xi, fitParams[0], fitParams[1]),
         linewidth=1.5,
         c='black',
-        label='fit c={c:.2f}'.format(c=fitParams[0]),
+        label=f'fit c={fitParams[0]:.2f}',
     )
 
     plt.xlabel(r'$\log{\,}\xi_{\chi}$', fontsize=16)

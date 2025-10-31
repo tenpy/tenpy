@@ -98,7 +98,7 @@ def run(psi, model, options, **kwargs):
     elif active_sites == 2:
         engine = TwoSiteDMRGEngine(psi, model, options, **kwargs)
     else:
-        raise ValueError('For DMRG, can only use 1 or 2 active sites, not {}'.format(active_sites))
+        raise ValueError(f'For DMRG, can only use 1 or 2 active sites, not {active_sites}')
     E, _ = engine.run()
     return {
         'E': E,

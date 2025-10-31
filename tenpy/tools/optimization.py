@@ -153,7 +153,7 @@ class OptimizationFlag(IntEnum):
     @classmethod
     def from_bytes(cls, bytes, byteorder, *, signed=False):
         """Like ``int.from_bytes``, which has a docstring which sphinx cant parse"""
-        return super(OptimizationFlag, cls).from_bytes(bytes, byteorder, signed=signed)
+        return super().from_bytes(bytes, byteorder, signed=signed)
 
     def to_bytes(self, length=1, byteorder='big', *, signed=False):
         """Like ``int.to_bytes``, which has a docstring which sphinx cant parse"""
@@ -348,7 +348,7 @@ def use_cython(func=None, replacement=None, check_doc=True):
         # function signature, so the doc string starts only with the second line
         clean_cdoc2 = inspect.cleandoc(cdoc[cdoc.find('\n') + 1 :])
         if clean_fdoc != clean_cdoc and clean_fdoc != clean_cdoc2:
-            msg = 'cython version of {0!s} has different doc-string'.format(func.__name__)
+            msg = f'cython version of {func.__name__!s} has different doc-string'
             raise ValueError(msg)
     return fast_func
 

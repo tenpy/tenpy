@@ -164,9 +164,9 @@ def test_renyi_disentangler(L=4, eps=1.0e-15):
         S, U = eng.used_disentangler.iter(theta, U)
         if i == 0:
             S_0 = S
-        print('iteration {i:d}: S={S:.5f}, DS={DS:.4e} '.format(i=i, S=S, DS=Sold - S))
+        print(f'iteration {i:d}: S={S:.5f}, DS={Sold - S:.4e} ')
         if abs(Sold - S) < eps:
-            print('break: S converged down to {eps:.1e}'.format(eps=eps))
+            print(f'break: S converged down to {eps:.1e}')
             break
         Sold, S = S, Sold
     else:

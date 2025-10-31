@@ -1001,9 +1001,7 @@ class CouplingModel(Model):
                 strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
         if not self.lat.unit_cell[u].valid_opname(opname):
             raise ValueError(
-                'unknown onsite operator {0!r} for u={1:d}\n' '{2!r}'.format(
-                    opname, u, self.lat.unit_cell[u]
-                )
+                f'unknown onsite operator {opname!r} for u={u:d}\n' f'{self.lat.unit_cell[u]!r}'
             )
         if self.lat.unit_cell[u].op_needs_JW(opname):
             raise ValueError("can't add onsite operator which needs a Jordan-Wigner string!")
@@ -1184,9 +1182,7 @@ class CouplingModel(Model):
         for op, u in [(op1, u1), (op2, u2)]:
             if not self.lat.unit_cell[u].valid_opname(op):
                 raise ValueError(
-                    ('unknown onsite operator {0!r} for u={1:d}\n' '{2!r}').format(
-                        op, u, self.lat.unit_cell[u]
-                    )
+                    f'unknown onsite operator {op!r} for u={u:d}\n' f'{self.lat.unit_cell[u]!r}'
                 )
         site1 = self.lat.unit_cell[u1]
         site2 = self.lat.unit_cell[u2]
@@ -1202,9 +1198,8 @@ class CouplingModel(Model):
         for u in range(len(self.lat.unit_cell)):
             if not self.lat.unit_cell[u].valid_opname(op_string):
                 raise ValueError(
-                    'unknown onsite operator {0!r} for u={1:d}\n' '{2!r}'.format(
-                        op_string, u, self.lat.unit_cell[u]
-                    )
+                    f'unknown onsite operator {op_string!r} for u={u:d}\n'
+                    f'{self.lat.unit_cell[u]!r}'
                 )
         str_on_first = op_string == 'JW'
         if np.all(dx == 0) and u1 == u2:
@@ -1218,7 +1213,7 @@ class CouplingModel(Model):
             else:
                 strength_vals = strength_vals / 2.0  # ... so we should avoid double-counting
         if category is None:
-            category = '{op1}_i {op2}_j'.format(op1=op1, op2=op2)
+            category = f'{op1}_i {op2}_j'
         ct = self.coupling_terms.setdefault(category, CouplingTerms(self.lat.N_sites))
         # loop to perform the sum over {x_0, x_1, ...}
         for i, j, current_strength in zip(mps_i, mps_j, strength_vals):
@@ -1283,7 +1278,7 @@ class CouplingModel(Model):
             else:
                 strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
         if category is None:
-            category = '{op_i}_i {op_j}_j'.format(op_i=op_i, op_j=op_j)
+            category = f'{op_i}_i {op_j}_j'
         ct = self.coupling_terms.setdefault(category, CouplingTerms(self.lat.N_sites))
         ct.add_coupling_term(strength, i, j, op_i, op_j, op_string)
         if plus_hc:
@@ -1403,17 +1398,14 @@ class CouplingModel(Model):
         for op, _, u in ops:
             if not self.lat.unit_cell[u].valid_opname(op):
                 raise ValueError(
-                    'unknown onsite operator {0!r} for u={1:d}\n' '{2!r}'.format(
-                        op, u, self.lat.unit_cell[u]
-                    )
+                    f'unknown onsite operator {op!r} for u={u:d}\n' f'{self.lat.unit_cell[u]!r}'
                 )
         if op_string is not None:
             for u in range(len(self.lat.unit_cell)):
                 if not self.lat.unit_cell[u].valid_opname(op_string):
                     raise ValueError(
-                        'unknown onsite operator {0!r} for u={1:d}\n' '{2!r}'.format(
-                            op_string, u, self.lat.unit_cell[u]
-                        )
+                        f'unknown onsite operator {op_string!r} for u={u:d}\n'
+                        f'{self.lat.unit_cell[u]!r}'
                     )
         if np.all(all_dxs == all_dxs[0, :]) and np.all(all_us[0] == all_us):
             # note: we DO allow couplings with some onsite terms, but not all of them

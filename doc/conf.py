@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 # Copyright (C) TeNPy Developers, Apache license
 #
 import inspect
@@ -116,7 +115,7 @@ def create_example_stubs():
                 '(`download <{base}/raw/main/{dirs!s}/{fn!s}>`_).'
             )
             sentence = sentence.format(dirs=dirs, fn=fn, base=GITHUBBASE)
-            include = '.. literalinclude:: /../{dirs!s}/{fn!s}'.format(dirs=dirs, fn=fn)
+            include = f'.. literalinclude:: /../{dirs!s}/{fn!s}'
             text = '\n'.join([fn, '=' * len(fn), '', sentence, '', include, ''])
             with open(outfile, 'w') as f:
                 f.write(text)
@@ -148,7 +147,7 @@ def create_toycode_stubs():
             '(`download <{base}/raw/main/tenpy_toycodes/{fn!s}>`_).'
         )
         sentence = sentence.format(fn=fn, base=GITHUBTOYCODES)
-        include = '.. literalinclude:: /toycodes/tenpy_toycodes/{fn!s}'.format(fn=fn)
+        include = f'.. literalinclude:: /toycodes/tenpy_toycodes/{fn!s}'
         text = '\n'.join([fn, '=' * len(fn), '', sentence, '', include, ''])
         with open(outfile, 'w') as f:
             f.write(text)
@@ -204,7 +203,7 @@ def stitch_changelog_latest():
         fn = os.path.join(folder, fn)
         if not fn.endswith('.txt'):
             continue
-        with open(fn, 'r') as f:
+        with open(fn) as f:
             lines = f.readlines()
         contents.extend(lines)
         contents.append('\n\n')  # at least one empty line between (even if no \n at file end)
@@ -383,9 +382,9 @@ def linkcode_resolve(domain, info):
         return None
 
     if tenpy.version.released:
-        return '%s/blob/v%s/tenpy/%s%s' % (GITHUBBASE, tenpy.__version__, fn, linespec)
+        return f'{GITHUBBASE}/blob/v{tenpy.__version__}/tenpy/{fn}{linespec}'
     else:
-        return '%s/blob/main/tenpy/%s%s' % (GITHUBBASE, fn, linespec)
+        return f'{GITHUBBASE}/blob/main/tenpy/{fn}{linespec}'
 
 
 # -- sphinx_cfg_options ---------------------------------------------------

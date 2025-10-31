@@ -44,9 +44,9 @@ def test_bosonic_model_TEBD():
     # expected MPS vmem:
     exact = (num_entries * np.dtype('complex128').itemsize) / 1024**2  # in MB
     estimate = engine.estimate_RAM()
-    assert abs(estimate - exact) < 1e-10, (
-        'TEBD RAM did not match expectation (expected: %f, gotten:%f)' % (exact, estimate)
-    )
+    assert (
+        abs(estimate - exact) < 1e-10
+    ), f'TEBD RAM did not match expectation (expected: {exact}, gotten: {estimate})'
 
 
 def test_bosonic_model_DMRG():

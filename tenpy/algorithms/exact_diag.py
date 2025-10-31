@@ -343,7 +343,7 @@ class ExactDiag:
     def _exceeds_max_size(self):
         size = np.prod([float(s.dim) for s in self._sites]) ** 2  # use float to avoid overflow!
         if size > self.max_size:
-            msg = 'size {0:.2e} exceeds max_size {1:.2e}'.format(size, self.max_size)
+            msg = f'size {size:.2e} exceeds max_size {self.max_size:.2e}'
             warnings.warn(msg, stacklevel=2)
             return True
         return False

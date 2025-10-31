@@ -1758,11 +1758,7 @@ def output_filename_from_dict(
     """
     formatted_parts = [prefix]
     if parts_order is None:
-        if sys.version_info < (3, 7):
-            # dictionaries are not ordered -> sort keys alphabetically
-            parts_order = sorted(parts.keys(), key=lambda x: x[0] if isinstance(x, tuple) else x)
-        else:
-            parts_order = parts.keys()  # dictionaries are ordered, so use that order
+        parts_order = parts.keys()  # dictionaries are ordered, so use that order
     else:
         assert set(parts_order) == set(parts.keys())
     for recursive_key in parts_order:

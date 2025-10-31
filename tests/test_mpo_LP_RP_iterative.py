@@ -29,7 +29,7 @@ def helper_test_graph(H, name):
                     assert (jL, jR) not in H._graph[j], name + ': entry of norm zero found in graph'
                 else:
                     assert npc.norm(op - H._graph[j][(jL, jR)]) < 1e-12, (
-                        name + ': _graph[{0}][({1},{2})] wrong'.format(j, jL, jR)
+                        name + f': _graph[{j}][({jL},{jR})] wrong'
                     )
 
 
@@ -162,10 +162,7 @@ def helper_test_enlarge_unit_cell(H, name):
                     )
                 else:
                     assert npc.norm(op - H._graph[j][(jL, jR)]) < 1e-12, (
-                        name
-                        + ': _graph[{0}][({1},{2})] wrong after enlarge_unit_cell()'.format(
-                            j, jL, jR
-                        )
+                        name + f': _graph[{j}][({jL},{jR})] wrong after enlarge_unit_cell()'
                     )
 
 
@@ -351,5 +348,5 @@ def test_init_LP_RP_iterative(test_case):
         if sort_charges == 0 and test_case != 1:  # explicit cycle check
             for j_cycle in cycle_indices:
                 assert H._cycles[j_cycle] == [j_cycle] * (H.L + 1), (
-                    name + ': _cycles[{0}] not as expected'.format(j_cycle)
+                    name + f': _cycles[{j_cycle}] not as expected'
                 )

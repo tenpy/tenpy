@@ -34,13 +34,13 @@ def single_run(mod_name, repeat=1, seed=0, **kwargs):
     setup_code = setup_code.format(mod_name=mod_name, kwargs=kwargs)
     namespace = {}
     exec(setup_code, namespace, namespace)
-    timing_code = '{mod_name}.benchmark(data)'.format(mod_name=mod_name)
+    timing_code = f'{mod_name}.benchmark(data)'
     if repeat > 1:
-        timing_code = 'for _ in range({repeat:d}): '.format(repeat=repeat) + timing_code
+        timing_code = f'for _ in range({repeat:d}): ' + timing_code
     t0 = time.time()
     exec(timing_code, namespace, namespace)
     t1 = time.time()
-    print('finished single run for module', mod_name, 'after {0:.2e} seconds'.format(t1 - t0))
+    print('finished single run for module', mod_name, f'after {t1 - t0:.2e} seconds')
 
 
 if __name__ == '__main__':

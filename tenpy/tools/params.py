@@ -199,12 +199,12 @@ class Config(MutableMapping):
         return len(self.options)
 
     def __str__(self):
-        res = 'Config, name={0!r}, options:\n'.format(self.name)
+        res = f'Config, name={self.name!r}, options:\n'
         res += pprint.pformat(self.options)
         return res
 
     def __repr__(self):
-        return 'Config(<{0:d} options>, {1!r})'.format(len(self.options), self.name)
+        return f'Config(<{len(self.options):d} options>, {self.name!r})'
 
     def __del__(self):
         self.warn_unused()
@@ -572,7 +572,7 @@ def load_yaml_with_py_eval(filename=None, yaml_content=None, context={'np': nump
     _YamlLoaderWithPyEval.eval_context = context
 
     if filename is not None:
-        with open(filename, 'r') as stream:
+        with open(filename) as stream:
             config = yaml.load(stream, Loader=_YamlLoaderWithPyEval)
     elif yaml_content is not None:
         config = yaml.load(yaml_content, Loader=_YamlLoaderWithPyEval)

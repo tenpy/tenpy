@@ -3735,8 +3735,6 @@ def _parse_sites(sites, expected_number):
         return [sites] * expected_number
     if len(sites) != expected_number:
         raise ValueError(
-            'need to specify a single site or exactly {0:d}, got {1:d}'.format(
-                expected_number, len(sites)
-            )
+            f'need to specify a single site or exactly {expected_number:d}, got {len(sites):d}'
         )
     return sites

@@ -88,7 +88,7 @@ def test_tebd(bc_MPS, which_engine, compute_err, use_eig_based_svd, g=0.5):
         ED.full_diagonalization()
         E_ED, psi_ED = ED.groundstate()
         Etebd = np.sum(M.bond_energies(psi))
-        print('E_TEBD={Etebd:.14f} vs E_exact={Eex:.14f}'.format(Etebd=Etebd, Eex=E_ED))
+        print(f'E_TEBD={Etebd:.14f} vs E_exact={E_ED:.14f}')
         assert abs((Etebd - E_ED) / E_ED) < 1.0e-7
         ov = npc.inner(psi_ED, ED.mps_to_full(psi), 'range', do_conj=True)
         print('compare with ED: overlap = ', abs(ov) ** 2)
@@ -114,7 +114,7 @@ def test_tebd(bc_MPS, which_engine, compute_err, use_eig_based_svd, g=0.5):
             )
         Etebd = np.average(M.bond_energies(psi))
         Eexact = e0_transverse_ising(g)
-        print('E_TEBD={Etebd:.14f} vs E_exact={Eex:.14f}'.format(Etebd=Etebd, Eex=Eexact))
+        print(f'E_TEBD={Etebd:.14f} vs E_exact={Eexact:.14f}')
 
         Sold = np.average(psi.entanglement_entropy())
         for i in range(2):
