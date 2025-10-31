@@ -40,7 +40,7 @@ def gen_random_legcharge_nq(chinfo, ind_len, n_qsector):
     if np.isscalar(n_qsector):
         n_qsector = [n_qsector] * chinfo.qnumber
     n_qsector = np.asarray(n_qsector, dtype=np.intp)
-    if n_qsector.shape != (chinfo.qnumber, ):
+    if n_qsector.shape != (chinfo.qnumber,):
         raise ValueError
     slices = rand_partitions(0, ind_len, np.prod(n_qsector, dtype=int))
     qs = np.zeros((len(slices) - 1, len(n_qsector)), int)
@@ -50,13 +50,9 @@ def gen_random_legcharge_nq(chinfo, ind_len, n_qsector):
     return npc.LegCharge.from_qind(chinfo, slices, qs)
 
 
-def setup_benchmark(mod_q=[1],
-                    sectors=3,
-                    size=20,
-                    legs=2,
-                    select_frac=1.,
-                    dtype=np.float64,
-                    **kwargs):
+def setup_benchmark(
+    mod_q=[1], sectors=3, size=20, legs=2, select_frac=1.0, dtype=np.float64, **kwargs
+):
     """Returns ``a, b, axes`` for timing of ``npc.tensordot(a, b, axes)``
 
     Constructed such that leg_contract legs are contracted, with
@@ -67,15 +63,15 @@ def setup_benchmark(mod_q=[1],
     """
     chinfo = npc.ChargeInfo(mod_q)
     legs_contr = [gen_random_legcharge_nq(chinfo, size, sectors) for i in range(legs)]
-    legs_a = legs_contr + \
-        [gen_random_legcharge_nq(chinfo, size, sectors) for i in range(legs)]
-    legs_b = [l.conj() for l in legs_contr] + \
-        [gen_random_legcharge_nq(chinfo, size, sectors) for i in range(legs)]
+    legs_a = legs_contr + [gen_random_legcharge_nq(chinfo, size, sectors) for i in range(legs)]
+    legs_b = [l.conj() for l in legs_contr] + [
+        gen_random_legcharge_nq(chinfo, size, sectors) for i in range(legs)
+    ]
     a = npc.Array.from_func(np.random.random, legs_a, dtype, shape_kw='size')
     b = npc.Array.from_func(np.random.random, legs_b, dtype, shape_kw='size')
     a.ipurge_zeros()
     b.ipurge_zeros()
-    if chinfo.qnumber > 0 and select_frac < 1.:
+    if chinfo.qnumber > 0 and select_frac < 1.0:
         a_bl = a.stored_blocks
         if a_bl > 0:
             a_subset = rand_distinct_int(0, a_bl - 1, max(int(a_bl * select_frac), 1))
@@ -87,9 +83,9 @@ def setup_benchmark(mod_q=[1],
             b._qdata = b._qdata[b_subset, :]
             b._data = [b._data[i] for i in b_subset]
 
-    labs = ["l{i:d}".format(i=i) for i in range(2 * legs)]
-    a.iset_leg_labels(labs[:a.rank])
-    b.iset_leg_labels(labs[:b.rank])
+    labs = ['l{i:d}'.format(i=i) for i in range(2 * legs)]
+    a.iset_leg_labels(labs[: a.rank])
+    b.iset_leg_labels(labs[: b.rank])
     a.itranspose(rand_permutation(a.rank))
     b.itranspose(rand_permutation(b.rank))
     axes = [a.get_leg_indices(labs[:legs]), b.get_leg_indices(labs[:legs])]

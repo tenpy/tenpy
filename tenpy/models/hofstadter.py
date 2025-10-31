@@ -88,8 +88,10 @@ def hopping_phases(p: int, q: int, Lx: int, Ly: int, pbc_x: bool, pbc_y: bool, g
                 return hopping_phases(p=p, q=q, Lx=Lx, Ly=Ly, pbc_x=pbc_x, pbc_y=pbc_y, gauge=g)
             except ValueError as e:
                 errs.append(e)
-        raise ValueError('None of the supported gauge choices could be applied. '
-                         'Error message for the default gauge choice above. ') from errs[0]
+        raise ValueError(
+            'None of the supported gauge choices could be applied. '
+            'Error message for the default gauge choice above. '
+        ) from errs[0]
 
     num_bonds_x = Lx if pbc_x else Lx - 1
     num_bonds_y = Ly if pbc_y else Ly - 1
@@ -97,30 +99,30 @@ def hopping_phases(p: int, q: int, Lx: int, Ly: int, pbc_x: bool, pbc_y: bool, g
     if gauge == 'landau_x':
         mx, my = (q, 1)
         phase_x = np.ones((num_bonds_x, Ly), complex)
-        phase_y = np.tile(np.exp(2.j * np.pi * phi * np.arange(Lx))[:, None],
-                          [1, num_bonds_y])
+        phase_y = np.tile(np.exp(2.0j * np.pi * phi * np.arange(Lx))[:, None], [1, num_bonds_y])
     elif gauge == 'landau_y':
         mx, my = (1, q)
-        phase_x = np.tile(np.exp(-2.j * np.pi * phi * np.arange(Ly))[None, :],
-                          [num_bonds_x, 1])
+        phase_x = np.tile(np.exp(-2.0j * np.pi * phi * np.arange(Ly))[None, :], [num_bonds_x, 1])
         phase_y = np.ones((Lx, num_bonds_y), complex)
     elif gauge == 'symmetric':
         mx, my = (2 * q, 2 * q)
-        phase_x = np.tile(np.exp(-1.j * np.pi * phi * np.arange(Ly))[None, :],
-                          [num_bonds_x, 1])
-        phase_y = np.tile(np.exp(1.j * np.pi * phi * np.arange(Lx))[:, None],
-                          [1, num_bonds_y])
+        phase_x = np.tile(np.exp(-1.0j * np.pi * phi * np.arange(Ly))[None, :], [num_bonds_x, 1])
+        phase_y = np.tile(np.exp(1.0j * np.pi * phi * np.arange(Lx))[:, None], [1, num_bonds_y])
     else:
         raise ValueError(f'Invalid gauge : "{gauge}"')
 
     # check commensuration with unit cell along any pbc direction
     if pbc_x and Lx % mx != 0:
-        msg = (f'Magnetic unit cell is incommensurate with lattice unit cell in x-direction. '
-               f'Expected `Lx` to be a multiple of ``{mx}``.')
+        msg = (
+            f'Magnetic unit cell is incommensurate with lattice unit cell in x-direction. '
+            f'Expected `Lx` to be a multiple of ``{mx}``.'
+        )
         raise ValueError(msg)
     if pbc_y and Ly % my != 0:
-        msg = (f'Magnetic unit cell is incommensurate with lattice unit cell in y-direction. '
-               f'Expected `Ly` to be a multiple of ``{my}``.')
+        msg = (
+            f'Magnetic unit cell is incommensurate with lattice unit cell in y-direction. '
+            f'Expected `Ly` to be a multiple of ``{my}``.'
+        )
         raise ValueError(msg)
 
     # sanity check for the periodicity of the phases
@@ -191,6 +193,7 @@ class HofstadterFermions(CouplingMPOModel):
             the allowed MPS unit cell sizes. See :func:`hopping_phases` for details.
 
     """
+
     default_lattice = Square
     force_default_lattice = True
 
@@ -202,21 +205,25 @@ class HofstadterFermions(CouplingMPOModel):
         return site
 
     def init_terms(self, model_params):
-        phi_ext = model_params.get('phi_ext', 0., 'real')
-        mu = np.asarray(model_params.get('mu', 0., 'real_or_array'))
+        phi_ext = model_params.get('phi_ext', 0.0, 'real')
+        mu = np.asarray(model_params.get('mu', 0.0, 'real_or_array'))
         v = np.asarray(model_params.get('v', 0, 'real_or_array'))
         p, q = model_params.get('phi', (1, 3))
         gauge = model_params.get('gauge', None)
-        Jx = model_params.get('Jx', 1., 'real')
-        Jy = model_params.get('Jy', 1., 'real')
-        model_params.deprecated_ignore('mx', 'my',
-                                       extra_msg='This option did not affect the behavior anyway.')
+        Jx = model_params.get('Jx', 1.0, 'real')
+        Jy = model_params.get('Jy', 1.0, 'real')
+        model_params.deprecated_ignore(
+            'mx', 'my', extra_msg='This option did not affect the behavior anyway.'
+        )
 
         phases_x, phases_y = hopping_phases(
-            p, q,
-            Lx=self.lat.shape[0], Ly=self.lat.shape[1],
-            pbc_x=not self.lat.bc[0], pbc_y=not self.lat.bc[1],
-            gauge=gauge
+            p,
+            q,
+            Lx=self.lat.shape[0],
+            Ly=self.lat.shape[1],
+            pbc_x=not self.lat.bc[0],
+            pbc_y=not self.lat.bc[1],
+            gauge=gauge,
         )
         hop_x = -Jx * phases_x
         hop_y = -Jy * phases_y
@@ -227,7 +234,7 @@ class HofstadterFermions(CouplingMPOModel):
         self.add_coupling(hop_x, 0, 'Cd', 0, 'C', dx)
         self.add_coupling(np.conj(hop_x), 0, 'Cd', 0, 'C', -dx)  # h.c.
         dy = np.array([0, 1])
-        hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, [0, 2. * np.pi * phi_ext])
+        hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, [0, 2.0 * np.pi * phi_ext])
         self.add_coupling(hop_y, 0, 'Cd', 0, 'C', dy)
         self.add_coupling(np.conj(hop_y), 0, 'Cd', 0, 'C', -dy)  # h.c.
         self.add_coupling(v, 0, 'N', 0, 'N', dx)
@@ -285,6 +292,7 @@ class HofstadterBosons(CouplingMPOModel):
             the magnetic unit cell (the unit cell for the hopping phases), which in turn restricts
             the allowed MPS unit cell sizes. See :func:`hopping_phases` for details.
     """
+
     default_lattice = Square
     force_default_lattice = True
 
@@ -297,21 +305,25 @@ class HofstadterBosons(CouplingMPOModel):
         return site
 
     def init_terms(self, model_params):
-        phi_ext = model_params.get('phi_ext', 0., 'real')
-        mu = np.asarray(model_params.get('mu', 0., 'real_or_array'))
+        phi_ext = model_params.get('phi_ext', 0.0, 'real')
+        mu = np.asarray(model_params.get('mu', 0.0, 'real_or_array'))
         U = np.asarray(model_params.get('U', 0, 'real_or_array'))
         p, q = model_params.get('phi', (1, 3))
-        Jx = model_params.get('Jx', 1., 'real')
-        Jy = model_params.get('Jy', 1., 'real')
+        Jx = model_params.get('Jx', 1.0, 'real')
+        Jy = model_params.get('Jy', 1.0, 'real')
         gauge = model_params.get('gauge', None)
-        model_params.deprecated_ignore('mx', 'my',
-                                       extra_msg='This option did not affect the behavior anyway.')
+        model_params.deprecated_ignore(
+            'mx', 'my', extra_msg='This option did not affect the behavior anyway.'
+        )
 
         phases_x, phases_y = hopping_phases(
-            p, q,
-            Lx=self.lat.shape[0], Ly=self.lat.shape[1],
-            pbc_x=not self.lat.bc[0], pbc_y=not self.lat.bc[1],
-            gauge=gauge
+            p,
+            q,
+            Lx=self.lat.shape[0],
+            Ly=self.lat.shape[1],
+            pbc_x=not self.lat.bc[0],
+            pbc_y=not self.lat.bc[1],
+            gauge=gauge,
         )
         hop_x = -Jx * phases_x
         hop_y = -Jy * phases_y

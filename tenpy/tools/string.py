@@ -4,8 +4,13 @@
 from typing import Sequence
 import numpy as np
 
-__all__ = ['is_non_string_iterable', 'vert_join', 'to_mathematica_lists', 'format_like_list',
-           'join_as_many_as_possible']
+__all__ = [
+    'is_non_string_iterable',
+    'vert_join',
+    'to_mathematica_lists',
+    'format_like_list',
+    'join_as_many_as_possible',
+]
 
 
 def is_non_string_iterable(x):
@@ -82,8 +87,13 @@ def vert_join(strlist, valign='t', halign='l', delim=' '):
     return res
 
 
-def join_as_many_as_possible(msgs: Sequence[str], separator: str, priorities: Sequence[int] = None,
-                             max_len: int = None, fill: str = '...') -> str:
+def join_as_many_as_possible(
+    msgs: Sequence[str],
+    separator: str,
+    priorities: Sequence[int] = None,
+    max_len: int = None,
+    fill: str = '...',
+) -> str:
     """Like ``separator.join(msgs)`` but truncated if the result is too long.
 
     We append the ``fill`` value to indicate that entries were omitted.
@@ -117,7 +127,7 @@ def to_mathematica_lists(a):
         return '"' + str(a) + '"'
     try:
         iter(a)
-        s = "{" + ", ".join([to_mathematica_lists(suba) for suba in a]) + "}"
+        s = '{' + ', '.join([to_mathematica_lists(suba) for suba in a]) + '}'
         return s
     except TypeError:
         if isinstance(a, float) or isinstance(a, complex):

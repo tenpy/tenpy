@@ -11,12 +11,10 @@ from tenpy.models.hubbard import FermiHubbardModel
 def test_cs_projection():
     # Test for SpinHalfSite
     # define a product state (as used in MPS.from_product_state)
-    product_state_list = np.array([[1, 1],
-                                   [-1, 1],
-                                   [1, 1]]) / np.sqrt(2)
+    product_state_list = np.array([[1, 1], [-1, 1], [1, 1]]) / np.sqrt(2)
 
     # define a list of sites (with conservation of the desired charge)
-    sites = [SpinSite(S=0.5, conserve='Sz')]*len(product_state_list)
+    sites = [SpinSite(S=0.5, conserve='Sz')] * len(product_state_list)
 
     charge_sectors = [(-1,), (1,), (-3,), (3,)]
     for charge_sector in charge_sectors:
@@ -30,11 +28,9 @@ def test_cs_projection():
         assert np.isclose(expval_Sz, charge_sector[0] / 2)
 
     # test for SpinSite with S=1
-    product_state_list = np.array([[1, 1, 1],
-                                   [1, 1, 1],
-                                   [1, 1, 1]])
+    product_state_list = np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]])
 
-    sites = [SpinSite(S=1, conserve='Sz')]*len(product_state_list)
+    sites = [SpinSite(S=1, conserve='Sz')] * len(product_state_list)
 
     # try different charge sectors
     charge_sectors = [(-6,), (-2,), (0,), (2,)]
@@ -43,14 +39,12 @@ def test_cs_projection():
             sites, product_state_list, charge_sector=charge_sector, unit_cell_width=len(sites)
         )
         expval_Sz = mps_projected.expectation_value('Sz').sum()
-        assert np.isclose(expval_Sz, charge_sector[0]/2)
+        assert np.isclose(expval_Sz, charge_sector[0] / 2)
 
     # test conservation of ``'N'`` for FermionSite
-    product_state_list = np.array([[1, 1],
-                                   [1, 1],
-                                   [1, 1]])
+    product_state_list = np.array([[1, 1], [1, 1], [1, 1]])
 
-    sites = [FermionSite()]*len(product_state_list)
+    sites = [FermionSite()] * len(product_state_list)
     # try different charge sectors
     charge_sectors = [(0,), (1,), (2,)]
     for charge_sector in charge_sectors:
@@ -64,9 +58,7 @@ def test_cs_projection():
 
 def test_cs_projection_with_two_charges():
     # Test SpinHalfFermionSite (conserving N and Sz9
-    product_state_list = np.array([[1, 1, 1, 1],
-                                   [1, 1, 1, 1],
-                                   [1, 1, 1, 1]])
+    product_state_list = np.array([[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]])
 
     sites = [SpinHalfFermionSite()] * len(product_state_list)
 
@@ -78,7 +70,7 @@ def test_cs_projection_with_two_charges():
         )
         expval_Sz = mps_projected.expectation_value('Sz').sum()
         expval_N = mps_projected.expectation_value('Ntot').sum()
-        assert np.isclose(expval_Sz, charge_sector[1]/2)
+        assert np.isclose(expval_Sz, charge_sector[1] / 2)
         assert np.isclose(expval_N, charge_sector[0])
 
 

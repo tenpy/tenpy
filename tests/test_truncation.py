@@ -19,11 +19,11 @@ def is_expected_S(S_expected, S_truncated):
 
 def test_truncate():
     # generate a test-S
-    S = 10**(-np.arange(15.))  # exponentially decaying
+    S = 10 ** (-np.arange(15.0))  # exponentially decaying
     assert len(S) == 15  # 15 values
     # make artificial degeneracy
-    S[5] = S[6] * (1. + 1.e-11)
-    S[4] = S[5] * (1. + 1.e-9)
+    S[5] = S[6] * (1.0 + 1.0e-11)
+    S[4] = S[5] * (1.0 + 1.0e-9)
     # for degeneracy_tol = 1.e-10, S[4] != S[5] = S[6]
     # S is not normalized, but shouldn't matter for `truncate`
     S_shuffled = S.copy()
@@ -36,20 +36,20 @@ def test_truncate():
     pars['chi_max'] = 12
     mask, norm_new, TE = truncation.truncate(S_shuffled, pars.copy())
     is_expected_S(S[:12], S_shuffled[mask])  # chi_max dominates
-    pars['svd_min'] = 1.e-13  #  smaller than S[11], so chi_max should still dominate
+    pars['svd_min'] = 1.0e-13  #  smaller than S[11], so chi_max should still dominate
     mask, norm_new, TE = truncation.truncate(S_shuffled, pars.copy())
     is_expected_S(S[:12], S_shuffled[mask])
-    pars['svd_min'] = 2.e-10  #  between S[9] and S[10], should keep S[9], exclude S[10]
+    pars['svd_min'] = 2.0e-10  #  between S[9] and S[10], should keep S[9], exclude S[10]
     mask, norm_new, TE = truncation.truncate(S_shuffled, pars.copy())
     is_expected_S(S[:10], S_shuffled[mask])
     # now with degeneracy: decrease chi_max to 7 to expect keeping S[6]
     pars['chi_max'] = 6  # not allowed to keep S[6]
     mask, norm_new, TE = truncation.truncate(S_shuffled, pars.copy())
     is_expected_S(S[:6], S_shuffled[mask])
-    pars['degeneracy_tol'] = 1.e-10  # degeneracy: then also can't keep S[5]
+    pars['degeneracy_tol'] = 1.0e-10  # degeneracy: then also can't keep S[5]
     mask, norm_new, TE = truncation.truncate(S_shuffled, pars.copy())
     is_expected_S(S[:5], S_shuffled[mask])
-    pars['degeneracy_tol'] = 1.e-8  # more degernacy: also can't keep S[4]
+    pars['degeneracy_tol'] = 1.0e-8  # more degernacy: also can't keep S[4]
     mask, norm_new, TE = truncation.truncate(S_shuffled, pars.copy())
     is_expected_S(S[:4], S_shuffled[mask])
     pars['chi_min'] = 5  # want to keep S[4] nevertheless
@@ -65,16 +65,10 @@ def test_truncate():
 @pytest.mark.parametrize('conserve', [None, 'parity'])
 @pytest.mark.parametrize('move_right', [True, False])
 @pytest.mark.parametrize('chi_max', [None, 10, 45])
-@pytest.mark.filterwarnings("ignore:_eig_based_svd is nonsensical on CPU!!")
+@pytest.mark.filterwarnings('ignore:_eig_based_svd is nonsensical on CPU!!')
 def test_decompose_theta_qr_based(use_eig_based_svd, conserve, move_right, chi_max, tol=1e-12):
     # Evolve state to obtain evolved tensors
-    model_params = {
-        'J': 1. ,
-        'g': 1.,
-        'L': 16,
-        'bc_MPS': 'finite',
-        'conserve': conserve
-        }
+    model_params = {'J': 1.0, 'g': 1.0, 'L': 16, 'bc_MPS': 'finite', 'conserve': conserve}
     M = TFIChain(model_params)
     psi = MPS.from_lat_product_state(M.lat, [['up']])
     options = {
@@ -89,7 +83,7 @@ def test_decompose_theta_qr_based(use_eig_based_svd, conserve, move_right, chi_m
         'trunc_params': {
             'chi_max': 50,
             'svd_min': 1e-12,
-        }
+        },
     }
     eng = mpo_evolution.ExpMPOEvolution(psi, M, options)
     for i in range(15):
@@ -98,28 +92,31 @@ def test_decompose_theta_qr_based(use_eig_based_svd, conserve, move_right, chi_m
 
     # Fabricate dummy theta (not actually updated)
     S = psi.get_SL(8)
-    old_T_L = psi.get_B(8, 'B').ireplace_label('p','p0')
-    old_T_R = psi.get_B(9, 'B').ireplace_label('p','p1')
-    theta = npc.tensordot(old_T_L.scale_axis(S, axis='vL'), old_T_R, ['vL','vR'])
-    theta = theta.combine_legs([['vL','p0'], ['p1','vR']])
+    old_T_L = psi.get_B(8, 'B').ireplace_label('p', 'p0')
+    old_T_R = psi.get_B(9, 'B').ireplace_label('p', 'p1')
+    theta = npc.tensordot(old_T_L.scale_axis(S, axis='vL'), old_T_R, ['vL', 'vR'])
+    theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']])
 
-    options.update(trunc_params={
-        'chi_max': chi_max, 'svd_min': 1e-12
-    })
+    options.update(trunc_params={'chi_max': chi_max, 'svd_min': 1e-12})
 
     # SVD decomposition and truncation
-    U, S_svd, VH, err_svd, renormalize_svd = truncation.svd_theta(theta, trunc_par=options.get('trunc_params'))
+    U, S_svd, VH, err_svd, renormalize_svd = truncation.svd_theta(
+        theta, trunc_par=options.get('trunc_params')
+    )
 
     # QR decomposition and truncation
     T_Lc, S_qr, T_Rc, form, err_qr, renormalize_qr = truncation.decompose_theta_qr_based(
-        old_qtotal_L=old_T_L.qtotal, old_qtotal_R=old_T_R.qtotal, old_bond_leg=old_T_R.get_leg('vL'),
-        theta=theta, move_right=move_right,
+        old_qtotal_L=old_T_L.qtotal,
+        old_qtotal_R=old_T_R.qtotal,
+        old_bond_leg=old_T_R.get_leg('vL'),
+        theta=theta,
+        move_right=move_right,
         expand=options.get('cbe_expand'),
         min_block_increase=options.get('cbe_min_block_increase'),
         use_eig_based_svd=use_eig_based_svd,
         trunc_params=options.get('trunc_params'),
         compute_err=True,
-        return_both_T=True
+        return_both_T=True,
     )
     T_L = T_Lc.split_legs(['(vL.p)'])
     T_R = T_Rc.split_legs(['(p.vR)'])
@@ -148,7 +145,7 @@ def test_decompose_theta_qr_based(use_eig_based_svd, conserve, move_right, chi_m
 
     # Check expected form of the QR tensors T_L and T_R:
     if form[0] == 'A':
-        expect_eye = npc.tensordot(T_L.conj(), T_L, [['vL*','p*'],['vL','p']])
+        expect_eye = npc.tensordot(T_L.conj(), T_L, [['vL*', 'p*'], ['vL', 'p']])
         assert npc.norm(expect_eye - npc.eye_like(expect_eye)) < tol
     elif form[0] == 'Th':
         assert abs(npc.norm(T_L) - 1) < tol
@@ -158,7 +155,7 @@ def test_decompose_theta_qr_based(use_eig_based_svd, conserve, move_right, chi_m
     if form[1] == 'Th':
         assert abs(npc.norm(T_R) - 1) < tol
     elif form[1] == 'B':
-        expect_eye = npc.tensordot(T_R.conj(), T_R, [['vR*','p*'],['vR','p']])
+        expect_eye = npc.tensordot(T_R.conj(), T_R, [['vR*', 'p*'], ['vR', 'p']])
         assert npc.norm(expect_eye - npc.eye_like(expect_eye)) < tol
     else:
         raise NotImplementedError

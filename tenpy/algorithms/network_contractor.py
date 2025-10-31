@@ -47,9 +47,11 @@ def ncon(tensor_list, leg_links, sequence=None):
     """
     tensor_list, leg_links, sequence = _ncon_input_checks(tensor_list, leg_links, sequence)
     tensor_list, leg_links, sequence = _ncon_do_traces(tensor_list, leg_links, sequence)
-    tensor_list, leg_links, sequence = _ncon_do_binary_contractions(tensor_list, leg_links, sequence)
+    tensor_list, leg_links, sequence = _ncon_do_binary_contractions(
+        tensor_list, leg_links, sequence
+    )
     tensor_list, leg_links = _ncon_do_outer_products(tensor_list, leg_links)
-    result, = tensor_list
+    (result,) = tensor_list
     if len(leg_links[0]) > 0:
         result.itranspose(np.argsort(-leg_links[0]))
     return result
@@ -114,17 +116,26 @@ def contract(tensor_list, tensor_names=None, leg_contractions=None, open_legs=No
     contraction_counter = 1
     new_sequence = []
     for n in sequence:
-
         con = leg_contractions[n - 1]
         leg_idx1 = tensor_list[con[0]].get_leg_index(con[1])
         leg_idx2 = tensor_list[con[2]].get_leg_index(con[3])
 
         if leg_links[con[0]][leg_idx1] is not None:
-            raise RuntimeError('Multiple contradictory contractions for the leg ' + str(con[1]) +
-                               ' of tensor ' + str(tensor_names[con[0]]) + 'were supplied')
+            raise RuntimeError(
+                'Multiple contradictory contractions for the leg '
+                + str(con[1])
+                + ' of tensor '
+                + str(tensor_names[con[0]])
+                + 'were supplied'
+            )
         if leg_links[con[2]][leg_idx2] is not None:
-            raise RuntimeError('Multiple contradictory contractions for the leg ' + str(con[3]) +
-                               ' of tensor ' + str(tensor_names[con[2]]) + 'were supplied')
+            raise RuntimeError(
+                'Multiple contradictory contractions for the leg '
+                + str(con[3])
+                + ' of tensor '
+                + str(tensor_names[con[2]])
+                + 'were supplied'
+            )
 
         leg_links[con[0]][leg_idx1] = contraction_counter
         leg_links[con[2]][leg_idx2] = contraction_counter
@@ -163,7 +174,7 @@ def _ncon_input_checks(tensor_list, leg_links, sequence):
     num_contractions = max((value for value in leg_links_flat if value > 0), default=0)
     missing_positive_values = [n for n in range(1, num_contractions + 1) if n not in leg_links_flat]
     if missing_positive_values:
-        which = ", ".join(map(str, missing_positive_values))
+        which = ', '.join(map(str, missing_positive_values))
         msg = f'The following positive values are missing in leg_links: {which}'
         raise ValueError(msg)
 
@@ -171,7 +182,9 @@ def _ncon_input_checks(tensor_list, leg_links, sequence):
         sequence = np.arange(1, num_contractions + 1)
     else:
         sequence = np.asarray(sequence)
-        if len(sequence) != num_contractions or set(sequence) != set(range(1, num_contractions + 1)):
+        if len(sequence) != num_contractions or set(sequence) != set(
+            range(1, num_contractions + 1)
+        ):
             msg = f'Invalid sequence. Expected a permutation of [1, ..., {num_contractions}]. Got {sequence}.'
             raise ValueError(msg)
 
@@ -181,8 +194,12 @@ def _ncon_input_checks(tensor_list, leg_links, sequence):
 def _ncon_do_traces(tensor_list, leg_links, sequence):
     for n in range(len(leg_links)):
         if len(leg_links[n]) > len(np.unique(leg_links[n])):
-            tensor_list[n], leg_links[n], used_values = _partial_trace(tensor_list[n], leg_links[n], loc=n)
-            sequence = np.delete(sequence, np.intersect1d(sequence, used_values, return_indices=True)[1])
+            tensor_list[n], leg_links[n], used_values = _partial_trace(
+                tensor_list[n], leg_links[n], loc=n
+            )
+            sequence = np.delete(
+                sequence, np.intersect1d(sequence, used_values, return_indices=True)[1]
+            )
     return tensor_list, leg_links, sequence
 
 
@@ -217,11 +234,15 @@ def _partial_trace(tensor, tensor_links, loc):
         trace_axes[n, :] = np.where(tensor_links == value)[0]
 
     try:
-        tensor = tensor.combine_legs(combine_legs=(trace_axes[:, 0], trace_axes[:, 1]), new_axes=(-2, -1))
+        tensor = tensor.combine_legs(
+            combine_legs=(trace_axes[:, 0], trace_axes[:, 1]), new_axes=(-2, -1)
+        )
         tensor = npc.trace(tensor, leg1=-2, leg2=-1)
     except Exception as e:
-        msg = (f'An error ocurred while performing the partial trace on tensor_list[{loc}]. '
-               f'Original stacktrace below.')
+        msg = (
+            f'An error ocurred while performing the partial trace on tensor_list[{loc}]. '
+            f'Original stacktrace below.'
+        )
         raise type(e)(msg) from e
 
     return tensor, res_links, trace_links
@@ -243,21 +264,27 @@ def _ncon_do_binary_contractions(tensor_list, leg_links, sequence):
         tensor_a = tensor_list.pop(loc_a)
         links_a = leg_links.pop(loc_a)
 
-        common_values, a_axes, b_axes = np.intersect1d(links_a, links_b, assume_unique=True, return_indices=True)
+        common_values, a_axes, b_axes = np.intersect1d(
+            links_a, links_b, assume_unique=True, return_indices=True
+        )
 
         try:
             res = npc.tensordot(tensor_a, tensor_b, (a_axes, b_axes))
         except Exception as e:
-            msg = (f'An error occurred while performing the pairwise contraction indicated by '
-                   f'values {", ".join(common_values)} in leg_links. '
-                   f'Original stacktrace below.')
+            msg = (
+                f'An error occurred while performing the pairwise contraction indicated by '
+                f'values {", ".join(common_values)} in leg_links. '
+                f'Original stacktrace below.'
+            )
             raise type(e)(msg) from e
 
         res_links = np.append(np.delete(links_a, a_axes), np.delete(links_b, b_axes))
 
         tensor_list.append(res)
         leg_links.append(res_links)
-        used_sequence_values = np.intersect1d(sequence, common_values, assume_unique=True, return_indices=True)[1]
+        used_sequence_values = np.intersect1d(
+            sequence, common_values, assume_unique=True, return_indices=True
+        )[1]
         sequence = np.delete(sequence, used_sequence_values)
 
     return tensor_list, leg_links, sequence
@@ -270,9 +297,11 @@ def _ncon_do_outer_products(tensor_list, leg_links):
         try:
             tensor_list[-1] = npc.outer(tensor_list[-1], tensor_b)
         except Exception as e:
-            msg = (f'An error occurred while performing a final outer product between the last two '
-                   f'of {len(tensor_list) + 1} remaining tensors. '
-                   f'Original stacktrace below.')
+            msg = (
+                f'An error occurred while performing a final outer product between the last two '
+                f'of {len(tensor_list) + 1} remaining tensors. '
+                f'Original stacktrace below.'
+            )
             raise type(e)(msg) from e
         leg_links[-1] = np.append(leg_links[-1], links_b)
 

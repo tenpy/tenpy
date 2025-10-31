@@ -26,7 +26,7 @@ __all__ = [
     'OrthogonalNpcLinearOperator',
     'FlatLinearOperator',
     'FlatHermitianOperator',
-    'BoostNpcLinearOperator'
+    'BoostNpcLinearOperator',
 ]
 
 
@@ -43,6 +43,7 @@ class NpcLinearOperator:
     acts_on : list of str
         Labels of the state on which the operator can act. NB: Class attribute.
     """
+
     acts_on = None  # Derived classes should set this as a class attribute
 
     def matvec(self, vec):
@@ -53,7 +54,7 @@ class NpcLinearOperator:
         that they can be added. Note that this excludes a non-trivial `qtotal` for square
         operators.
         """
-        raise NotImplementedError("This function should be implemented in derived classes")
+        raise NotImplementedError('This function should be implemented in derived classes')
 
     def to_matrix(self):
         """Contract `self` to a matrix.
@@ -67,7 +68,7 @@ class NpcLinearOperator:
         matrix : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of the represented operator.
         """
-        raise NotImplementedError("This function should be implemented in derived classes")
+        raise NotImplementedError('This function should be implemented in derived classes')
 
     def adjoint(self):
         """Return the hermitian conjugate of `self`
@@ -75,7 +76,7 @@ class NpcLinearOperator:
         If `self` is hermitian, subclasses *can* choose to implement this to define
         the adjoint operator of `self`.
         """
-        raise NotImplementedError("No adjoint defined")
+        raise NotImplementedError('No adjoint defined')
 
 
 class NpcLinearOperatorWrapper:
@@ -99,6 +100,7 @@ class NpcLinearOperatorWrapper:
     orig_operator : NpcLinearOperator
         The original operator implementing the `matvec`.
     """
+
     def __init__(self, orig_operator):
         self.orig_operator = orig_operator
 
@@ -113,17 +115,17 @@ class NpcLinearOperatorWrapper:
         """
         parent = self.orig_operator
         for _ in range(10000):
-            if hasattr(parent, "unwrapped"):
+            if hasattr(parent, 'unwrapped'):
                 parent = parent.unwrapped()
             else:
                 break
         else:
-            raise ValueError("maximum recursion depth for unwrapping reached")
+            raise ValueError('maximum recursion depth for unwrapping reached')
         return parent
 
     def to_matrix(self):
         """Contract `self` to a matrix."""
-        raise NotImplementedError("This function should be implemented in derived classes")
+        raise NotImplementedError('This function should be implemented in derived classes')
 
     def adjoint(self):
         """Return the hermitian conjugate of `self`.
@@ -131,11 +133,12 @@ class NpcLinearOperatorWrapper:
         If `self` is hermitian, subclasses *can* choose to implement this to define
         the adjoint operator of `self`.
         """
-        raise NotImplementedError("This function should be implemented in derived classes")
+        raise NotImplementedError('This function should be implemented in derived classes')
 
 
 class SumNpcLinearOperator(NpcLinearOperatorWrapper):
     """Sum of two linear operators."""
+
     def __init__(self, orig_operator, other_operator):
         super().__init__(orig_operator)
         self.other_operator = other_operator
@@ -145,7 +148,10 @@ class SumNpcLinearOperator(NpcLinearOperatorWrapper):
             return self.orig_operator.matvec(vec) + self.other_operator.matvec(vec)
         else:
             assert isinstance(vec, list)
-            return [a + b for a,b in zip(self.orig_operator.matvec(vec), self.other_operator.matvec(vec))]
+            return [
+                a + b
+                for a, b in zip(self.orig_operator.matvec(vec), self.other_operator.matvec(vec))
+            ]
 
     def to_matrix(self):
         return self.orig_operator.to_matrix() + self.other_operator.to_matrix()
@@ -159,9 +165,10 @@ class ShiftNpcLinearOperator(NpcLinearOperatorWrapper):
 
     This can be useful e.g. for better Lanczos convergence.
     """
+
     def __init__(self, orig_operator, shift):
-        if shift == 0.:
-            warnings.warn("shift=0: no need for ShiftNpcLinearOperator", stacklevel=2)
+        if shift == 0.0:
+            warnings.warn('shift=0: no need for ShiftNpcLinearOperator', stacklevel=2)
         super().__init__(orig_operator)
         self.shift = shift
 
@@ -184,10 +191,11 @@ class BoostNpcLinearOperator(NpcLinearOperatorWrapper):
 
     This can be useful e.g. for better Lanczos convergence.
     """
+
     def __init__(self, orig_operator, boosts, boost_vecs):
         assert len(boosts) == len(boost_vecs)
-        if len(boosts) == 0.:
-            warnings.warn("boost_vecs=[]: no need for BoostNpcLinearOperator", stacklevel=2)
+        if len(boosts) == 0.0:
+            warnings.warn('boost_vecs=[]: no need for BoostNpcLinearOperator', stacklevel=2)
         super().__init__(orig_operator)
         self.boosts = boosts
         self.boost_vecs = boost_vecs
@@ -195,7 +203,9 @@ class BoostNpcLinearOperator(NpcLinearOperatorWrapper):
     def matvec(self, vec):
         temp = self.orig_operator.matvec(vec)
         for b, bv in zip(self.boosts, self.boost_vecs):
-            krylov_based.iadd_prefactor_other(temp, b * npc.inner(bv, vec, axes='range', do_conj=True), bv)
+            krylov_based.iadd_prefactor_other(
+                temp, b * npc.inner(bv, vec, axes='range', do_conj=True), bv
+            )
         return temp
         # return self.orig_operator.matvec(vec) + self.shift * vec
 
@@ -204,7 +214,9 @@ class BoostNpcLinearOperator(NpcLinearOperatorWrapper):
         return mat + self.shift * npc.eye_like(mat)
 
     def adjoint(self):
-        return BoostNpcLinearOperator(self.orig_operator.adjoint(), np.conj(self.boosts), self.boost_vecs)
+        return BoostNpcLinearOperator(
+            self.orig_operator.adjoint(), np.conj(self.boosts), self.boost_vecs
+        )
 
 
 class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
@@ -219,12 +231,15 @@ class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
     ortho_vecs : list of :class:`~tenpy.linalg.np_conserved.Array`
         The vectors to orthogonalize against.
     """
+
     def __init__(self, orig_operator, ortho_vecs):
         if len(ortho_vecs) == 0:
-            warnings.warn("Empty `ortho_vecs`: no need to patch `OrthogonalNpcLinearOperator`",
-                          stacklevel=2)
+            warnings.warn(
+                'Empty `ortho_vecs`: no need to patch `OrthogonalNpcLinearOperator`', stacklevel=2
+            )
         super().__init__(orig_operator)
         from .krylov_based import gram_schmidt
+
         ortho_vecs = gram_schmidt(ortho_vecs)
         self.ortho_vecs = ortho_vecs
 
@@ -232,14 +247,18 @@ class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
         # equivalent to using H' = P H P where P is the projector (1-sum_o |o><o|)
         vec = vec.copy()
         for o in self.ortho_vecs:  # Project out
-            #for a, b in zip(vec, o):
+            # for a, b in zip(vec, o):
             #    a.iadd_prefactor_other(-npc.inner(b, a, axes='range', do_conj=True), b)
-            krylov_based.iadd_prefactor_other(vec, -npc.inner(o, vec, axes='range', do_conj=True), o)
+            krylov_based.iadd_prefactor_other(
+                vec, -npc.inner(o, vec, axes='range', do_conj=True), o
+            )
         vec = self.orig_operator.matvec(vec)
         for o in self.ortho_vecs[::-1]:  # reverse: more obviously Hermitian.
-            #for a, b in zip(vec, o):
+            # for a, b in zip(vec, o):
             #    a.iadd_prefactor_other(-npc.inner(b, a, axes='range', do_conj=True), b)
-            krylov_based.iadd_prefactor_other(vec, -npc.inner(o, vec, axes='range', do_conj=True), o)
+            krylov_based.iadd_prefactor_other(
+                vec, -npc.inner(o, vec, axes='range', do_conj=True), o
+            )
         return vec
 
     def to_matrix(self):
@@ -318,6 +337,7 @@ class FlatLinearOperator(ScipyLinearOperator):
         Only set if initialized with :meth:`from_guess_with_pipe`.
         Labels of the guess before combining them into a pipe (stored as `leg`).
     """
+
     def __init__(self, npc_matvec, leg, dtype, charge_sector=0, vec_label=None, compact_flat=None):
         self.npc_matvec = npc_matvec
         self.leg = leg
@@ -328,8 +348,9 @@ class FlatLinearOperator(ScipyLinearOperator):
             compact_flat = charge_sector is not None and leg.is_blocked()
         elif compact_flat:
             if not leg.is_blocked():
-                raise ValueError("FlatLinearOperator with `compact_flat` works only "
-                                 "for blocked `leg`.")
+                raise ValueError(
+                    'FlatLinearOperator with `compact_flat` works only ' 'for blocked `leg`.'
+                )
         self.compact_flat = compact_flat
         self.vec_label = vec_label
         self.matvec_count = 0
@@ -360,17 +381,14 @@ class FlatLinearOperator(ScipyLinearOperator):
             None defaults to ``leg.is_blocked()``.
         """
         if mat.rank != 2:
-            raise ValueError("Works only for square matrices")
+            raise ValueError('Works only for square matrices')
         mat.legs[1].test_contractible(mat.legs[0])
         return cls(mat.matvec, mat.legs[0], mat.dtype, charge_sector, compact_flat=compact_flat)
 
     @classmethod
-    def from_guess_with_pipe(cls,
-                             npc_matvec,
-                             v0_guess,
-                             labels_split=None,
-                             dtype=None,
-                             compact_flat=True):
+    def from_guess_with_pipe(
+        cls, npc_matvec, v0_guess, labels_split=None, dtype=None, compact_flat=True
+    ):
         """Create a `FlatLinearOperator`` from a `matvec` function acting on multiple legs.
 
         This function creates a wrapper `matvec` function to allow acting on a "vector" with
@@ -409,7 +427,7 @@ class FlatLinearOperator(ScipyLinearOperator):
             labels_split = v0_guess.get_leg_labels()
         v0_combined = v0_guess.combine_legs(labels_split, qconj=+1)
         if v0_combined.rank != 1:
-            raise ValueError("`labels_split` must contain all the legs of `v0_guess`")
+            raise ValueError('`labels_split` must contain all the legs of `v0_guess`')
         pipe = v0_combined.legs[0]
         pipe_label = v0_combined.get_leg_labels()[0]
         res = cls(npc_matvec, pipe, dtype, v0_combined.qtotal, pipe_label, compact_flat)
@@ -504,12 +522,13 @@ class FlatLinearOperator(ScipyLinearOperator):
             return res
         else:
             leg = self.leg
-            ch_leg = npc.LegCharge.from_qflat(leg.chinfo,
-                                              self.possible_charge_sectors,
-                                              qconj=-leg.qconj)
+            ch_leg = npc.LegCharge.from_qflat(
+                leg.chinfo, self.possible_charge_sectors, qconj=-leg.qconj
+            )
             res = npc.zeros([self.leg, ch_leg], vec.dtype, labels=[self.vec_label, 'charge'])
-            res._qdata = np.repeat(np.arange(leg.block_number, dtype=np.intp),
-                                   2).reshape(leg.block_number, 2)
+            res._qdata = np.repeat(np.arange(leg.block_number, dtype=np.intp), 2).reshape(
+                leg.block_number, 2
+            )
             for qi in range(leg.block_number):
                 res._data.append(vec[leg.get_slice(qi)].reshape((-1, 1)))
             res.test_sanity()
@@ -550,10 +569,10 @@ class FlatLinearOperator(ScipyLinearOperator):
             for qinds, data in zip(npc_vec._qdata, npc_vec._data):
                 qi = qinds[0]
                 assert qi == qinds[1]
-                res[leg.get_slice(qi)] = data.reshape((-1, ))
+                res[leg.get_slice(qi)] = data.reshape((-1,))
             return res
 
-    def flat_to_npc_None_sector(self, vec, cutoff=1.e-10):
+    def flat_to_npc_None_sector(self, vec, cutoff=1.0e-10):
         """Convert flat vector of undetermined charge sectors into npc Array.
 
         The charge sector to be used is chosen as the block with the maximal norm,
@@ -596,7 +615,7 @@ class FlatLinearOperator(ScipyLinearOperator):
             i.e., the result of applying `npc_matvec` to an npc Array generated from `vec`.
             Has the same leg structure as `vec`.
         """
-        legs_initially_combined = (vec.rank == 1)
+        legs_initially_combined = vec.rank == 1
         if legs_initially_combined:
             vec = vec.split_legs(0)
         vec.itranspose(self._labels_split)  # ensure correct leg/label structure
@@ -606,16 +625,18 @@ class FlatLinearOperator(ScipyLinearOperator):
             vec = vec.combine_legs(self._labels_split, pipes=self.leg)
         return vec
 
-    def eigenvectors(self,
-                     num_ev=1,
-                     max_num_ev=None,
-                     max_tol=1.e-12,
-                     which='LM',
-                     v0=None,
-                     v0_npc=None,
-                     cutoff=1.e-10,
-                     hermitian=False,
-                     **kwargs):
+    def eigenvectors(
+        self,
+        num_ev=1,
+        max_num_ev=None,
+        max_tol=1.0e-12,
+        which='LM',
+        v0=None,
+        v0_npc=None,
+        cutoff=1.0e-10,
+        hermitian=False,
+        **kwargs,
+    ):
         """Find (dominant) eigenvector(s) of self using :func:`scipy.sparse.linalg.eigs`.
 
         If no charge_sector was selected, we look in *all* charge sectors.
@@ -665,7 +686,7 @@ class FlatLinearOperator(ScipyLinearOperator):
         # for given charge sector
         for k in range(num_ev, max_num_ev + 1):
             if k > num_ev:
-                warnings.warn("TransferMatrix: increased `num_ev` to " + str(k + 1))
+                warnings.warn('TransferMatrix: increased `num_ev` to ' + str(k + 1))
             try:
                 if hermitian:
                     eta, A = speigsh(self, k=k, which=which, **kwargs)
@@ -676,11 +697,10 @@ class FlatLinearOperator(ScipyLinearOperator):
                 if k == max_num_ev:
                     raise
             kwargs['tol'] = max(max_tol, kwargs.get('tol', 0))
-        cutoff = max(cutoff, 10*kwargs.get('tol', 1.e-16))
-        from_ndarray_args = dict(legcharges=[self.leg],
-                                 cutoff=cutoff,
-                                 labels=[self.vec_label],
-                                 raise_wrong_sector=True)
+        cutoff = max(cutoff, 10 * kwargs.get('tol', 1.0e-16))
+        from_ndarray_args = dict(
+            legcharges=[self.leg], cutoff=cutoff, labels=[self.vec_label], raise_wrong_sector=True
+        )
         A = np.real_if_close(A)
         if self._charge_sector is not None:
             vecs = [self.flat_to_npc(A[:, j]) for j in range(A.shape[1])]
@@ -708,11 +728,15 @@ class FlatLinearOperator(ScipyLinearOperator):
                 degenerate = list(degenerate)
                 for _ in range(len(degenerate)):
                     # find sector with maximal weight amongst all degenerate vectors
-                    sector_norms = np.array([[np.linalg.norm(A[leg.get_slice(qi), j])
-                                              for j in degenerate]
-                                             for qi in range(leg.block_number)])
-                    max_qi, max_j = np.unravel_index(np.argmax(sector_norms, axis=None),
-                                                      sector_norms.shape)
+                    sector_norms = np.array(
+                        [
+                            [np.linalg.norm(A[leg.get_slice(qi), j]) for j in degenerate]
+                            for qi in range(leg.block_number)
+                        ]
+                    )
+                    max_qi, max_j = np.unravel_index(
+                        np.argmax(sector_norms, axis=None), sector_norms.shape
+                    )
                     j = degenerate[max_j]
                     # project vector `j` into the maximal charge sector
                     vecs[j] = npc.Array.from_ndarray(A[:, j], **from_ndarray_args)
@@ -735,6 +759,7 @@ class FlatHermitianOperator(FlatLinearOperator):
     Note that we don't check :meth:`matvec` to return a hermitian result, we only define an adjoint
     to be `self`.
     """
+
     def _adjoint(self):
         return self
 

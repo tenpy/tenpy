@@ -13,8 +13,13 @@ from tenpy.networks.mps import MPS
 np.random.seed(3141592)  # (it should work for any seed)
 
 __all__ = [
-    'rand_permutation', 'rand_distinct_int', 'rand_partitions', 'gen_random_legcharge_nq',
-    'gen_random_legcharge', 'random_Array', 'random_MPS'
+    'rand_permutation',
+    'rand_distinct_int',
+    'rand_partitions',
+    'gen_random_legcharge_nq',
+    'gen_random_legcharge',
+    'random_Array',
+    'random_MPS',
 ]
 
 
@@ -50,7 +55,7 @@ def gen_random_legcharge_nq(chinfo, ind_len, n_qsector):
     if np.isscalar(n_qsector):
         n_qsector = [n_qsector] * chinfo.qnumber
     n_qsector = np.asarray(n_qsector, dtype=np.intp)
-    if n_qsector.shape != (chinfo.qnumber, ):
+    if n_qsector.shape != (chinfo.qnumber,):
         raise ValueError
     slices = rand_partitions(0, ind_len, np.prod(n_qsector, dtype=int))
     qs = np.zeros((len(slices) - 1, len(n_qsector)), int)
@@ -89,9 +94,9 @@ def random_Array(shape, chinfo, func=np.random.random, shape_kw='size', qtotal=N
 
 def random_MPS(L, d, chimax, func=randmat.standard_normal_complex, bc='finite', form='B'):
     site = Site(charges.LegCharge.from_trivial(d))
-    site.add_op('D', np.diag(np.arange(1, d+1)), hc='D')
-    h = func(size=(d,d))
-    h = 0.5*(h + h.T.conj())
+    site.add_op('D', np.diag(np.arange(1, d + 1)), hc='D')
+    h = func(size=(d, d))
+    h = 0.5 * (h + h.T.conj())
     site.add_op('h', h, hc='D')
     chi = [chimax] * (L + 1)
     if bc == 'finite':

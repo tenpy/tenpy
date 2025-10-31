@@ -29,7 +29,11 @@ except ImportError:
 
 
 __all__ = [
-    'datadir', 'datadir_files', 'gen_example_data', 'assert_equal_data', 'get_datadir_filename'
+    'datadir',
+    'datadir_files',
+    'gen_example_data',
+    'assert_equal_data',
+    'get_datadir_filename',
 ]
 
 datadir = os.path.join(os.path.dirname(__file__), 'data')
@@ -40,6 +44,7 @@ if os.path.isdir(datadir):
 
 class DummyClass:
     """Used to test exporting a custom class."""
+
     def __init__(self):
         self.data = []
 
@@ -61,46 +66,33 @@ def gen_example_data(version=tenpy.version.full_version):
     data = {
         'SpinHalfSite': s,
         'trivial_array': npc.Array.from_ndarray_trivial(np.arange(20).reshape([4, 5])),
-        'Sz': s.Sz
+        'Sz': s.Sz,
     }
     if parse_version(version) >= parse_version('0.5.0.dev25'):
-        psi = tenpy.networks.mps.MPS.from_singlets(s, 6, [(0, 3), (1, 2), (4, 5)], unit_cell_width=6)
+        psi = tenpy.networks.mps.MPS.from_singlets(
+            s, 6, [(0, 3), (1, 2), (4, 5)], unit_cell_width=6
+        )
         psi.test_sanity()
         M = tenpy.models.tf_ising.TFIChain({'L': 3, 'bc_MPS': 'infinite', 'sort_charge': False})
-        data.update({
-            'version':
-            version,
-            'None':
-            None,
-            'scalars': [0, np.int64(1), 2., np.float64(3.), 4.j, 'five'],
-            'arrays': [np.array([6, 66]), np.array([]),
-                       np.zeros([])],
-            'iterables': [[], [11, 12],
-                          tuple([]),
-                          tuple([1, 2, 3]),
-                          set([]),
-                          set([1, 2, 3])],
-            'recursive': [0, None, 2, [3, None, 5]],
-            'dict_complicated': {
-                0: 1,
-                'asdf': 2,
-                (1, 2): '3'
-            },
-            'exportable':
-            tenpy.tools.hdf5_io.Hdf5Exportable(),
-            'range':
-            range(2, 8, 3),
-            'dtypes': [np.dtype("int64"),
-                       np.dtype([('a', np.int32, 8), ('b', np.float64, 5)])],
-            'psi':
-            psi,
-            'H_mpo':
-            M.H_MPO,
-            'model':
-            M,
-        })
+        data.update(
+            {
+                'version': version,
+                'None': None,
+                'scalars': [0, np.int64(1), 2.0, np.float64(3.0), 4.0j, 'five'],
+                'arrays': [np.array([6, 66]), np.array([]), np.zeros([])],
+                'iterables': [[], [11, 12], tuple([]), tuple([1, 2, 3]), set([]), set([1, 2, 3])],
+                'recursive': [0, None, 2, [3, None, 5]],
+                'dict_complicated': {0: 1, 'asdf': 2, (1, 2): '3'},
+                'exportable': tenpy.tools.hdf5_io.Hdf5Exportable(),
+                'range': range(2, 8, 3),
+                'dtypes': [np.dtype('int64'), np.dtype([('a', np.int32, 8), ('b', np.float64, 5)])],
+                'psi': psi,
+                'H_mpo': M.H_MPO,
+                'model': M,
+            }
+        )
         data['recursive'][3][1] = data['recursive'][1] = data['recursive']
-        data['exportable'].some_attr = "something"
+        data['exportable'].some_attr = 'something'
     if parse_version(version) >= parse_version('0.7.2.dev33'):
         dummy = DummyClass()
         data['dummy'] = dummy
@@ -141,7 +133,7 @@ def assert_equal_data(data_imported, data_expected, max_recursion_depth=10):
             for vi, ve in zip(data_imported, data_expected):
                 assert_equal_data(vi, ve, max_recursion_depth - 1)
     elif isinstance(data_expected, npc.Array):
-        assert npc.norm(data_imported - data_expected) == 0.  # should be exactly equal!
+        assert npc.norm(data_imported - data_expected) == 0.0  # should be exactly equal!
     elif isinstance(data_expected, np.ndarray):
         np.testing.assert_array_equal(data_imported, data_expected)
     elif isinstance(data_expected, (int, float, np.int64, np.float64, complex, str)):
@@ -151,7 +143,7 @@ def assert_equal_data(data_imported, data_expected, max_recursion_depth=10):
         assert data_imported is data_expected
 
 
-def get_datadir_filename(template="pickled_from_tenpy_{0}.pkl"):
+def get_datadir_filename(template='pickled_from_tenpy_{0}.pkl'):
     """Determine filename for export to `datadir`."""
     if not os.path.isdir(datadir):
         os.mkdir(datadir)
@@ -159,6 +151,6 @@ def get_datadir_filename(template="pickled_from_tenpy_{0}.pkl"):
     fn = template.format(version)
     filename = os.path.join(datadir, fn)
     if os.path.exists(filename):
-        raise ValueError("File already exists: " + filename)
-    print("export to datadir: ", fn)
+        raise ValueError('File already exists: ' + filename)
+    print('export to datadir: ', fn)
     return filename

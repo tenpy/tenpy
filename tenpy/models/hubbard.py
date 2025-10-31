@@ -8,8 +8,14 @@ from .lattice import Chain
 from ..tools.params import asConfig
 from ..networks.site import FermionSite, BosonSite, SpinHalfFermionSite, spin_half_species
 
-__all__ = ['BoseHubbardModel', 'BoseHubbardChain', 'FermiHubbardModel', 'FermiHubbardChain',
-           'FermiHubbardModel2', 'DipolarBoseHubbardChain']
+__all__ = [
+    'BoseHubbardModel',
+    'BoseHubbardChain',
+    'FermiHubbardModel',
+    'FermiHubbardChain',
+    'FermiHubbardModel2',
+    'DipolarBoseHubbardChain',
+]
 
 
 class BoseHubbardModel(CouplingMPOModel):
@@ -51,26 +57,27 @@ class BoseHubbardModel(CouplingMPOModel):
             'across' the periodic boundary are modified such that particles hopping around the
             circumference of the cylinder acquire a phase ``2 pi phi_ext``.
     """
+
     def init_sites(self, model_params):
         n_max = model_params.get('n_max', 3, int)
         filling = model_params.get('filling', 0.5, 'real')
         conserve = model_params.get('conserve', 'N', str)
         if conserve == 'best':
             conserve = 'N'
-            self.logger.info("%s: set conserve to %s", self.name, conserve)
+            self.logger.info('%s: set conserve to %s', self.name, conserve)
         site = BosonSite(Nmax=n_max, conserve=conserve, filling=filling)
         return site
 
     def init_terms(self, model_params):
         # 0) Read and set parameters.
-        t = model_params.get('t', 1., 'real_or_array')
-        U = model_params.get('U', 0., 'real_or_array')
-        V = model_params.get('V', 0., 'real_or_array')
+        t = model_params.get('t', 1.0, 'real_or_array')
+        U = model_params.get('U', 0.0, 'real_or_array')
+        V = model_params.get('V', 0.0, 'real_or_array')
         mu = model_params.get('mu', 0, 'real_or_array')
         phi_ext = model_params.get('phi_ext', None, 'real')
         for u in range(len(self.lat.unit_cell)):
-            self.add_onsite(-mu - U / 2., u, 'N')
-            self.add_onsite(U / 2., u, 'NN')
+            self.add_onsite(-mu - U / 2.0, u, 'N')
+            self.add_onsite(U / 2.0, u, 'NN')
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             if phi_ext is None:
                 hop = -t
@@ -85,9 +92,10 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
 
     See the :class:`BoseHubbardModel` for the documentation of parameters.
     """
+
     def __init__(self, model_params):
         model_params = asConfig(model_params, self.__class__.__name__)
-        model_params.setdefault('lattice', "Chain")
+        model_params.setdefault('lattice', 'Chain')
         CouplingMPOModel.__init__(self, model_params)
 
     def estimate_RAM_saving_factor(self):
@@ -113,11 +121,11 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
 
         """
         chinfo = self.lat.unit_cell[0].leg.chinfo
-        savings = 1.
+        savings = 1.0
         for mod in chinfo.mod:
             if mod == 1:
-                savings *= 1/8. # this is what we found empirically
-        return self.options.get("mem_saving_factor", savings, 'real')
+                savings *= 1 / 8.0  # this is what we found empirically
+        return self.options.get('mem_saving_factor', savings, 'real')
 
 
 class FermiHubbardModel(CouplingMPOModel):
@@ -166,6 +174,7 @@ class FermiHubbardModel(CouplingMPOModel):
             'across' the periodic boundary are modified such that particles hopping around the
             circumference of the cylinder acquire a phase ``2 pi phi_ext``.
     """
+
     def init_sites(self, model_params):
         cons_N = model_params.get('cons_N', 'N', str)
         cons_Sz = model_params.get('cons_Sz', 'Sz', str)
@@ -174,10 +183,10 @@ class FermiHubbardModel(CouplingMPOModel):
 
     def init_terms(self, model_params):
         # 0) Read out/set default parameters.
-        t = model_params.get('t', 1., 'real_or_array')
+        t = model_params.get('t', 1.0, 'real_or_array')
         U = model_params.get('U', 0, 'real_or_array')
         V = model_params.get('V', 0, 'real_or_array')
-        mu = model_params.get('mu', 0., 'real_or_array')
+        mu = model_params.get('mu', 0.0, 'real_or_array')
         phi_ext = model_params.get('phi_ext', None, 'real')
 
         for u in range(len(self.lat.unit_cell)):
@@ -198,6 +207,7 @@ class FermiHubbardChain(FermiHubbardModel, NearestNeighborModel):
 
     See the :class:`FermiHubbardModel` for the documentation of parameters.
     """
+
     default_lattice = Chain
     force_default_lattice = True
 
@@ -238,10 +248,10 @@ class FermiHubbardModel2(CouplingMPOModel):
         # based on the lattice specified in the model parameters
 
     def init_terms(self, model_params):
-        t = model_params.get('t', 1., 'real_or_array')
+        t = model_params.get('t', 1.0, 'real_or_array')
         U = model_params.get('U', 0, 'real_or_array')
         V = model_params.get('V', 0, 'real_or_array')
-        mu = model_params.get('mu', 0., 'real_or_array')
+        mu = model_params.get('mu', 0.0, 'real_or_array')
         phi_ext = model_params.get('phi_ext', None, 'real')
 
         for u in range(len(self.lat.unit_cell)):
@@ -296,7 +306,7 @@ class DipolarBoseHubbardChain(CouplingMPOModel):
         conserve = model_params.get('conserve', 'best')
         if conserve == 'best':
             conserve = 'dipole'
-            self.logger.info("%s: set conserve to %s", self.name, conserve)
+            self.logger.info('%s: set conserve to %s', self.name, conserve)
         bc_MPS = model_params.get('bc_MPS', 'finite')
         bc = 'periodic' if bc_MPS in ['infinite', 'segment'] else 'open'
         bc = model_params.get('bc', bc)
@@ -313,9 +323,13 @@ class DipolarBoseHubbardChain(CouplingMPOModel):
         mu = model_params.get('mu', 0)
 
         # dipole hopping
-        self.add_multi_coupling(-t, [('Bd', 0, 0), ('B', 1, 0), ('B', 1, 0), ('Bd', 2, 0)], plus_hc=True)
-        self.add_multi_coupling(-t4, [('Bd', 0, 0), ('B', 1, 0), ('B', 2, 0), ('Bd', 3, 0)], plus_hc=True)
+        self.add_multi_coupling(
+            -t, [('Bd', 0, 0), ('B', 1, 0), ('B', 1, 0), ('Bd', 2, 0)], plus_hc=True
+        )
+        self.add_multi_coupling(
+            -t4, [('Bd', 0, 0), ('B', 1, 0), ('B', 2, 0), ('Bd', 3, 0)], plus_hc=True
+        )
 
         # on-site interactions and chemical potential
-        self.add_onsite(U/2., 0, 'NN')
-        self.add_onsite(-mu-U/2., 0, 'N')
+        self.add_onsite(U / 2.0, 0, 'NN')
+        self.add_onsite(-mu - U / 2.0, 0, 'N')

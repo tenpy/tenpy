@@ -13,7 +13,7 @@ from .hdf5_io import find_global
 
 __all__ = ['Listener', 'EventHandler']
 
-Listener = namedtuple('Listener', "listener_id, callback, priority, extra_kwargs")
+Listener = namedtuple('Listener', 'listener_id, callback, priority, extra_kwargs')
 
 
 class EventHandler:
@@ -103,6 +103,7 @@ class EventHandler:
         my_listener called: iteration 3 with data 12
         another_one called: iteration 3
     """
+
     def __init__(self, arg_descr=None):
         self.arg_descr = arg_descr
         self.listeners = []
@@ -195,7 +196,7 @@ class EventHandler:
             if listener.listener_id == 0:
                 del self.listeners[i]
                 return
-        warnings.warn("No listener with listener_id {id_:d} found".format(id_=listener_id))
+        warnings.warn('No listener with listener_id {id_:d} found'.format(id_=listener_id))
 
     def emit(self, *args, **kwargs):
         """Call the `callback` functions of all listeners.

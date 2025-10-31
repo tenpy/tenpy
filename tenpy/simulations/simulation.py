@@ -35,8 +35,13 @@ from ..tools.misc import update_recursive, get_recursive, set_recursive, merge_r
 from ..tools.misc import setup_logging as setup_logging_
 from .. import version
 from .post_processing import DataLoader
-from .measurement import (measurement_wrapper, _m_psi_method, _m_psi_method_wrapped,
-                          _m_model_method, _m_model_method_wrapped)
+from .measurement import (
+    measurement_wrapper,
+    _m_psi_method,
+    _m_psi_method_wrapped,
+    _m_model_method,
+    _m_model_method_wrapped,
+)
 
 __all__ = [
     'Simulation',
@@ -176,6 +181,7 @@ class Simulation:
         Flag to indicate that the user pressed ctrl-c and want's the process to terminate.
         See :meth:`handle_ctrl_c_sigint` for details.
     """
+
     #: name of the default algorithm `engine` class
     default_algorithm = 'TwoSiteDMRGEngine'
 
@@ -191,14 +197,14 @@ class Simulation:
     default_post_processing = []
 
     #: logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
-    logger = logging.getLogger(__name__ + ".Simulation")
+    logger = logging.getLogger(__name__ + '.Simulation')
 
     def __init__(self, options, *, setup_logging=True, resume_data=None):
         self._init_walltime = time.time()
         if not hasattr(self, 'loaded_from_checkpoint'):
             self.loaded_from_checkpoint = False
         self.options = options  # delay conversion to Config: avoid logging before setup_logging
-        cwd = self.options.setdefault("directory", None)
+        cwd = self.options.setdefault('directory', None)
         if cwd is not None:
             if not os.path.exists(cwd):
                 os.mkdir(cwd)
@@ -209,21 +215,30 @@ class Simulation:
             log_params = self.options.setdefault('log_params', {})
             setup_logging_(**log_params, output_filename=self.output_filename)
         # now that we have logging running, catch up with log messages
-        self.logger.info("new simulation\n%s\n%s\n%s", "=" * 80, self.__class__.__name__, "=" * 80)
+        self.logger.info('new simulation\n%s\n%s\n%s', '=' * 80, self.__class__.__name__, '=' * 80)
         self.options = asConfig(self.options, self.__class__.__name__)
-        self.options.touch('directory', 'output_filename', 'output_filename_params',
-                           'overwrite_output', 'skip_if_output_exists', 'safe_write', 'log_params',
-                           'estimate_RAM_const_offset')
+        self.options.touch(
+            'directory',
+            'output_filename',
+            'output_filename_params',
+            'overwrite_output',
+            'skip_if_output_exists',
+            'safe_write',
+            'log_params',
+            'estimate_RAM_const_offset',
+        )
         if cwd is not None:
-            self.logger.info("change directory to %s", cwd)  # os.chdir(cwd) above
-        self.logger.info("output filename: %s", self.output_filename)
+            self.logger.info('change directory to %s', cwd)  # os.chdir(cwd) above
+        self.logger.info('output filename: %s', self.output_filename)
 
         random_seed = self.options.get('random_seed', None)
         if random_seed is not None:
             if self.loaded_from_checkpoint:
-                warnings.warn("resetting `random_seed` for a simulation loaded from checkpoint."
-                              "Depending on where you use random numbers, "
-                              "this might or might not be what you want!")
+                warnings.warn(
+                    'resetting `random_seed` for a simulation loaded from checkpoint.'
+                    'Depending on where you use random numbers, '
+                    'this might or might not be what you want!'
+                )
             np.random.seed(random_seed)
             self.options.subconfig('model_params').setdefault('random_seed', random_seed + 123456)
         self.results = {
@@ -233,7 +248,7 @@ class Simulation:
         }
         self._last_save = time.time()
         self.errors_during_run = []  # add tuples holding ("name_step", module_name, module_func, err_traceback)
-        self.measurement_event = EventHandler("psi, simulation, model, results")
+        self.measurement_event = EventHandler('psi, simulation, model, results')
         if resume_data is not None:
             if 'psi' in resume_data:
                 self.psi = resume_data['psi']
@@ -256,8 +271,10 @@ class Simulation:
     def __exit__(self, exc_type, exc_value, traceback):
         self.cache.__exit__(exc_type, exc_value, traceback)  # exit cache context
         if exc_type is not None:
-            self.logger.exception("simulation abort with the following exception",
-                                  exc_info=(exc_type, exc_value, traceback))
+            self.logger.exception(
+                'simulation abort with the following exception',
+                exc_info=(exc_type, exc_value, traceback),
+            )
         self.options.warn_unused(True)
         signal.signal(signal.SIGINT, self._orig_sigint_handler)
         orig_dir = getattr(self, '_orig_dir', None)
@@ -280,16 +297,16 @@ class Simulation:
         signal, e.g. with SLURM you can call ``scancel --signal=INT 1234`` for the job ide `1234`.
         """
         if signum != signal.SIGINT:
-            raise ValueError(f"unexpected signal to handle: {signum=}")
+            raise ValueError(f'unexpected signal to handle: {signum=}')
         if self.received_signal_sigint:
-            raise KeyboardInterrupt("Got second SIGINT signal; abort the simulation immediately")
+            raise KeyboardInterrupt('Got second SIGINT signal; abort the simulation immediately')
         self.received_signal_sigint = True
-        msg = ("Got SIGINT signal (likely from Ctrl-C in the terminal) the first time. \n"
-               "TeNPy simulation will continue until the next checkpoint, then save and abort.")
+        msg = (
+            'Got SIGINT signal (likely from Ctrl-C in the terminal) the first time. \n'
+            'TeNPy simulation will continue until the next checkpoint, then save and abort.'
+        )
         self.logger.error(msg)
-        print(msg, "\nTo exit immediately, press Ctrl-C again.",
-              file=sys.stderr,
-              flush=True)
+        print(msg, '\nTo exit immediately, press Ctrl-C again.', file=sys.stderr, flush=True)
         # the received_signal_sigint flag should be handled in the next save_at_checkpoint call
         # which is always added to the algorithm checkpoints.
 
@@ -301,10 +318,10 @@ class Simulation:
         RAM : int
             The expected RAM usage in kB.
         """
-        self.init_model()       # model, required for algorithm
-        self.init_state()       # psi, required for algorithm
+        self.init_model()  # model, required for algorithm
+        self.init_state()  # psi, required for algorithm
         self.group_sites_for_algorithm()  # algorithm might only work if grouped
-        self.init_algorithm()   # create engine (subclass of Algorithm)
+        self.init_algorithm()  # create engine (subclass of Algorithm)
 
         return self.engine.estimate_RAM()
 
@@ -317,8 +334,10 @@ class Simulation:
             The :attr:`results` as returned by :meth:`prepare_results_for_save`.
         """
         if self.loaded_from_checkpoint:
-            warnings.warn("called `run()` on a simulation loaded from checkpoint. "
-                          "You should probably call `resume_run()` instead!")
+            warnings.warn(
+                'called `run()` on a simulation loaded from checkpoint. '
+                'You should probably call `resume_run()` instead!'
+            )
         self.init_model()
         self.init_state()
         self.group_sites_for_algorithm()
@@ -333,7 +352,7 @@ class Simulation:
         self.run_post_processing()
         self.results['finished_run'] = True
         results = self.save_results()
-        self.logger.info('finished simulation run\n' + "=" * 80)
+        self.logger.info('finished simulation run\n' + '=' * 80)
         self.options.warn_unused(True)
         self._display_errors_during_run()
         return results
@@ -359,10 +378,10 @@ class Simulation:
         """
         if filename is not None:
             if checkpoint_results is not None:
-                raise ValueError("pass either filename or checkpoint_results")
+                raise ValueError('pass either filename or checkpoint_results')
             checkpoint_results = hdf5_io.load(filename)
         if checkpoint_results is None:
-            raise ValueError("you need to pass `filename` or `checkpoint_results`")
+            raise ValueError('you need to pass `filename` or `checkpoint_results`')
         options = checkpoint_results['simulation_parameters']
         # usually, we would say `sim = cls(options)`.
         # the following 3 lines provide an additional hook setting :attr:`loaded_from_checkpoint`
@@ -374,8 +393,9 @@ class Simulation:
         sim.__init__(options, **kwargs)
         sim.results = checkpoint_results
         if 'measurements' in checkpoint_results:
-            sim.results['measurements'] = {k: list(v)
-                                           for k, v in sim.results['measurements'].items()}
+            sim.results['measurements'] = {
+                k: list(v) for k, v in sim.results['measurements'].items()
+            }
         return sim
 
     def resume_run(self):
@@ -387,8 +407,10 @@ class Simulation:
             The :attr:`results` as returned by :meth:`prepare_results_for_save`.
         """
         if not self.loaded_from_checkpoint:
-            warnings.warn("called `resume_run()` on a simulation *not* loaded from checkpoint. "
-                          "You probably want `run()` instead!")
+            warnings.warn(
+                'called `resume_run()` on a simulation *not* loaded from checkpoint. '
+                'You probably want `run()` instead!'
+            )
         self.init_model()
 
         if not hasattr(self, 'psi'):
@@ -413,7 +435,7 @@ class Simulation:
         self.run_post_processing()
         self.results['finished_run'] = True
         results = self.save_results()
-        self.logger.info('finished simulation (resume_)run\n' + "=" * 80)
+        self.logger.info('finished simulation (resume_)run\n' + '=' * 80)
         self.options.warn_unused(True)
         self._display_errors_during_run()
         return results
@@ -436,16 +458,17 @@ class Simulation:
                 Dictionary with parameters for the cache, see
                 :meth:`~tenpy.tools.cache.CacheFile.open`.
         """
-        cache_threshold_chi = self.options.get("cache_threshold_chi", 2000, int)
-        chi = get_recursive(self.options, "algorithm_params.trunc_params.chi_max", default=None)
+        cache_threshold_chi = self.options.get('cache_threshold_chi', 2000, int)
+        chi = get_recursive(self.options, 'algorithm_params.trunc_params.chi_max', default=None)
         if chi is not None and chi < cache_threshold_chi:
-            self.options.touch("cache_params")
-            self.logger.info("No cache due to chi=%d < cache_threshold_chi = %d",
-                             chi, cache_threshold_chi)
+            self.options.touch('cache_params')
+            self.logger.info(
+                'No cache due to chi=%d < cache_threshold_chi = %d', chi, cache_threshold_chi
+            )
             self.cache = CacheFile.open()  # default = keep in RAM.
             return
         self.cache.close()
-        cache_params = self.options.get("cache_params", {})
+        cache_params = self.options.get('cache_params', {})
         self.cache = CacheFile.open(**cache_params)
         # note: can't use a `with self.cache` statement, but emulate it:
         # self.__enter__() calls this function followed by
@@ -466,7 +489,7 @@ class Simulation:
                 Dictionary with parameters for the model; see the documentation of the
                 corresponding `model_class`.
         """
-        model_class_name = self.options["model_class"]  # no default value!
+        model_class_name = self.options['model_class']  # no default value!
         if hasattr(self, 'model'):
             self.options.touch('model_params')
             return  # skip actually regenerating the model
@@ -499,7 +522,7 @@ class Simulation:
             initial_state_builder = Builder(self.model.lat, params, self.model.dtype)
             self.psi = initial_state_builder.run()
         else:
-            self.logger.info("initial state as given")  # nothing to do
+            self.logger.info('initial state as given')  # nothing to do
             # but avoid warnings about unused parameters
             self.options.touch('initial_state_builder_class', 'initial_state_params')
         if self.options.get('save_psi', True, bool):
@@ -520,10 +543,10 @@ class Simulation:
                 Use this if you want to run TEBD with a model that was originally next-nearest
                 neighbor.
         """
-        group_sites = self.grouped = self.options.get("group_sites", 1, int)
-        to_NN = self.options.get("group_to_NearestNeighborModel", False, bool)
+        group_sites = self.grouped = self.options.get('group_sites', 1, int)
+        to_NN = self.options.get('group_to_NearestNeighborModel', False, bool)
         if group_sites < 1:
-            raise ValueError("invalid `group_sites` = " + str(group_sites))
+            raise ValueError('invalid `group_sites` = ' + str(group_sites))
         if group_sites > 1:
             if not self.loaded_from_checkpoint or self.psi.grouped < group_sites:
                 self.psi.group_sites(group_sites)
@@ -572,10 +595,10 @@ class Simulation:
                 `priority` allows to tune the order in which the measurement functions get called.
                 See :meth:`~tenpy.tools.events.EventHandler.connect_by_name` for more details.
         """
-        alg_class_name = self.options.get("algorithm_class", self.default_algorithm)
+        alg_class_name = self.options.get('algorithm_class', self.default_algorithm)
         AlgorithmClass = find_subclass(Algorithm, alg_class_name)
         if 'resume_data' in self.results:
-            self.logger.info("use `resume_data` for initializing the algorithm engine")
+            self.logger.info('use `resume_data` for initializing the algorithm engine')
             kwargs.setdefault('resume_data', self.results['resume_data'].copy())
             # clean up: they are no longer up to date after algorithm initialization!
             # up to date resume_data is added in :meth:`prepare_results_for_save`
@@ -701,12 +724,12 @@ class Simulation:
 
     def make_measurements(self):
         """Perform measurements and merge the results into ``self.results['measurements']``."""
-        self.logger.info("make measurements")
+        self.logger.info('make measurements')
         m_start_time = time.time()
         results = self.perform_measurements()
         self._merge_measurement_results(results)
         m_end_time = time.time()
-        self.logger.info(f"measurements took {m_end_time-m_start_time:.2f}s")
+        self.logger.info(f'measurements took {m_end_time-m_start_time:.2f}s')
 
     def _merge_measurement_results(self, results):
         """Merge dictionary `results` from measurements into ``self.results['measurement']``."""
@@ -720,21 +743,25 @@ class Simulation:
         new_keys = set(results.keys())
         new_keys_not_previous = new_keys - previous_keys
         if new_keys_not_previous:
-            warnings.warn(f"measurement gave new keys {new_keys_not_previous!r} "
-                            "fill up with `None` for previous measurements.")
+            warnings.warn(
+                f'measurement gave new keys {new_keys_not_previous!r} '
+                'fill up with `None` for previous measurements.'
+            )
             some_previous_measurement = next(iter(previous_results.values()))
             measurement_len = len(some_previous_measurement)
             for key in new_keys_not_previous:
                 previous_results[key] = [None] * measurement_len
 
         # actual merge
-        for k, v in results.items():   # only new keys
+        for k, v in results.items():  # only new keys
             previous_results[k].append(v)
 
         previous_keys_not_new = previous_keys - new_keys
         if previous_keys_not_new:
-            warnings.warn(f"measurement didn't give keys {previous_keys_not_new!r} "
-                          "we have from previous measurements, fill up with `None`")
+            warnings.warn(
+                f"measurement didn't give keys {previous_keys_not_new!r} "
+                'we have from previous measurements, fill up with `None`'
+            )
             for key in previous_keys_not_new:
                 previous_results[key].append(None)
         # done
@@ -754,27 +781,34 @@ class Simulation:
 
         returned = []  # make sure list exists if try-clause fails
         try:
-            returned = self.measurement_event.emit(results=results,
-                                                   psi=psi,
-                                                   model=model,
-                                                   simulation=self)
+            returned = self.measurement_event.emit(
+                results=results, psi=psi, model=model, simulation=self
+            )
             # we safe-guard the measurements with try-except
             # to avoid that mistakes in the measurement cause us to loose all our data,
             # e.g. if we were running DMRG for days, and just have a stupid typo in a measurement function
         except Exception:
             err_traceback = traceback.format_exc()
-            self.errors_during_run.append(("measurement", "?", "?", err_traceback))
+            self.errors_during_run.append(('measurement', '?', '?', err_traceback))
             max_errs = self.max_errors_before_abort
-            if max_errs is not None and len(self.errors_during_run) >= max_errs and not self.final_processing:
-                tracebacks = [f"Error during {step} of {module_name} {module_func}\n{err_traceback}"
-                        for (step, module_name, module_func, err_traceback) in self.errors_during_run]
-                raise RuntimeError('\n'.join(["Too many failed measurements \n"] + tracebacks))
+            if (
+                max_errs is not None
+                and len(self.errors_during_run) >= max_errs
+                and not self.final_processing
+            ):
+                tracebacks = [
+                    f'Error during {step} of {module_name} {module_func}\n{err_traceback}'
+                    for (step, module_name, module_func, err_traceback) in self.errors_during_run
+                ]
+                raise RuntimeError('\n'.join(['Too many failed measurements \n'] + tracebacks))
 
         # check for returned values, although there shouldn't be any
         returned = [entry for entry in returned if entry is not None]
         if len(returned) > 0:
-            msg = ("Some measurement function returned a value instead of writing to `results`.\n"
-                   "Add it to measurement results as 'UNKNOWN'.")
+            msg = (
+                'Some measurement function returned a value instead of writing to `results`.\n'
+                "Add it to measurement results as 'UNKNOWN'."
+            )
             warnings.warn(msg)
             results['UNKNOWN'] = returned
         return results
@@ -802,7 +836,7 @@ class Simulation:
         model :
             Model matching `psi` (in terms of indexing, MPS order, grouped sites, ...)
         """
-        if self.options.get("canonicalize_before_measurement", False, bool):
+        if self.options.get('canonicalize_before_measurement', False, bool):
             if psi is self.psi:
                 psi = psi.copy()  # make copy before
             psi.canonical_form()
@@ -853,9 +887,13 @@ class Simulation:
                     self._post_processing(DL, *pp_step)
                 except Exception:
                     err_traceback = traceback.format_exc()
-                    self.errors_during_run.append(("post_process", pp_step[0], pp_step[1], err_traceback))
+                    self.errors_during_run.append(
+                        ('post_process', pp_step[0], pp_step[1], err_traceback)
+                    )
 
-    def _post_processing(self, DL: DataLoader, module_name: str, func_name: str, extra_kwargs: dict = None):
+    def _post_processing(
+        self, DL: DataLoader, module_name: str, func_name: str, extra_kwargs: dict = None
+    ):
         """Apply one post-processing step."""
         # get function / from module_name namespace
         if extra_kwargs is None:
@@ -868,7 +906,7 @@ class Simulation:
         else:
             results_key = func_name
         # perform post-processing
-        self.logger.info(f"calling post-processing function {func_name}")
+        self.logger.info(f'calling post-processing function {func_name}')
         pp_result = function(DL, **extra_kwargs)
         # pp_result might be None, skip saving
         if pp_result is not None:
@@ -876,30 +914,34 @@ class Simulation:
             all_results_keys = self.results.keys()
             if results_key in all_results_keys:
                 for i in range(1, 1000):
-                    new_results_key = f"{results_key}_{i:d}"
+                    new_results_key = f'{results_key}_{i:d}'
                     if new_results_key not in all_results_keys:
                         results_key = new_results_key
                         break
                     else:
-                        raise ValueError("specify different results_key, there are already too many of them!")
+                        raise ValueError(
+                            'specify different results_key, there are already too many of them!'
+                        )
 
-            self.logger.info(f"Saving post-processing result under {results_key}")
+            self.logger.info(f'Saving post-processing result under {results_key}')
             self.results[results_key] = pp_result
 
     def _display_errors_during_run(self):
         if len(self.errors_during_run) > 0:
-            for (step, module_name, module_func, err_traceback) in self.errors_during_run:
-                msg = f"Error during {step} of {module_name} {module_func}\n{err_traceback}"
+            for step, module_name, module_func, err_traceback in self.errors_during_run:
+                msg = f'Error during {step} of {module_name} {module_func}\n{err_traceback}'
                 warnings.warn(msg)
             if self.output_filename is not None and self.max_errors_before_abort is not None:
-                raise Exception("Error(s) occurred during the Simulation, see warning of error messages above -"
-                                f"but we saved results anyways in {self.output_filename}.")
+                raise Exception(
+                    'Error(s) occurred during the Simulation, see warning of error messages above -'
+                    f'but we saved results anyways in {self.output_filename}.'
+                )
 
     def get_version_info(self):
         """Try to save version info which is necessary to allow reproducibility."""
         sim_module = self.__class__.__module__
         # also try to extract git revision of the simulation class
-        if sim_module.startswith('tenpy') or sim_module == "__main__":
+        if sim_module.startswith('tenpy') or sim_module == '__main__':
             cwd = os.getcwd()
         else:
             # use the cwd of the file where the simulation class is defined
@@ -978,8 +1020,8 @@ class Simulation:
         # note: this function shouldn't use logging: it's called before setup_logging()
         # hence, assume that `options` is still a pure dict, not a tenpy.tools.misc.Config
         output_filename = self.get_output_filename()
-        overwrite_output = self.options.setdefault("overwrite_output", False)
-        skip_if_exists = self.options.setdefault("skip_if_output_exists", False)
+        overwrite_output = self.options.setdefault('overwrite_output', False)
+        skip_if_exists = self.options.setdefault('skip_if_output_exists', False)
         if output_filename is None:
             self.output_filename = None
             self._backup_filename = None
@@ -991,7 +1033,7 @@ class Simulation:
         if out_fn.exists():
             if skip_if_exists:
                 # no need to touch options: not yet converted to config
-                raise Skip("simulation output filename already exists", out_fn)
+                raise Skip('simulation output filename already exists', out_fn)
             if not overwrite_output and not self.loaded_from_checkpoint:
                 # adjust output filename to avoid overwriting stuff
                 root, ext = os.path.splitext(out_fn)
@@ -1000,8 +1042,8 @@ class Simulation:
                     if not new_out_fn.exists():
                         break
                 else:
-                    raise ValueError("Refuse to make another copy. CLEAN UP!")
-                warnings.warn(f"changed output filename to {new_out_fn!s}")
+                    raise ValueError('Refuse to make another copy. CLEAN UP!')
+                warnings.warn(f'changed output filename to {new_out_fn!s}')
                 self.output_filename = out_fn = new_out_fn
                 self._backup_filename = self.get_backup_filename(out_fn)
             # else: overwrite stuff in `save_results`
@@ -1015,7 +1057,8 @@ class Simulation:
                     log_fn.rename(backup_log_fn)
         if self._backup_filename is not None and not self._backup_filename.exists():
             import socket
-            text = "simulation initialized on {host!r} at {time!s}\n"
+
+            text = 'simulation initialized on {host!r} at {time!s}\n'
             text = text.format(host=socket.gethostname(), time=time.asctime())
             with self._backup_filename.open('w') as f:
                 f.write(text)
@@ -1034,7 +1077,7 @@ class Simulation:
             The filename where to keep a backup while writing files to avoid.
         """
         # note: this function shouldn't use logging
-        if self.options.setdefault("safe_write", True):
+        if self.options.setdefault('safe_write', True):
             return output_filename.with_suffix('.backup' + output_filename.suffix)
         else:
             return None
@@ -1077,7 +1120,7 @@ class Simulation:
             backup_filename.unlink()
 
         self._last_save = time.time()
-        self.logger.info("saving results to disk; took %.1fs", self._last_save - start_time)
+        self.logger.info('saving results to disk; took %.1fs', self._last_save - start_time)
         return results
 
     def _save_to_file(self, results, output_filename):
@@ -1118,8 +1161,8 @@ class Simulation:
                                 v_err = [err.eps for err in v]
                                 v_ov = [err.ov for err in v]
                                 del data[k]
-                                data[k + "_eps"] = np.array(v_err)
-                                data[k + "_ov"] = np.array(v_ov)
+                                data[k + '_eps'] = np.array(v_err)
+                                data[k + '_ov'] = np.array(v_ov)
                             except:
                                 pass
                             continue
@@ -1168,18 +1211,25 @@ class Simulation:
         """
         save_every = self.options.get('save_every_x_seconds', None, 'real')
         now = time.time()
-        if save_every is not None and now - self._last_save > save_every or \
-                self.received_signal_sigint:
+        if (
+            save_every is not None
+            and now - self._last_save > save_every
+            or self.received_signal_sigint
+        ):
             self.save_results()
             if self.received_signal_sigint:
-                raise KeyboardInterrupt("Got SIGINT interrupt signal during TeNPy simulation, "
-                    "but continued until the next checkpoint and saved checkpoint results")
+                raise KeyboardInterrupt(
+                    'Got SIGINT interrupt signal during TeNPy simulation, '
+                    'but continued until the next checkpoint and saved checkpoint results'
+                )
             time_to_save = time.time() - now
-            if time_to_save > 0.1 * save_every > 0.:
+            if time_to_save > 0.1 * save_every > 0.0:
                 save_every = 20 * time_to_save
                 self.logger.warning(
-                    "Saving took longer than 10%% of `save_every_x_seconds`. "
-                    "Increase the latter to %.1f", save_every)
+                    'Saving took longer than 10%% of `save_every_x_seconds`. '
+                    'Increase the latter to %.1f',
+                    save_every,
+                )
                 self.options['save_every_x_seconds'] = save_every
         # done
 
@@ -1210,15 +1260,16 @@ class Skip(ValueError):
     filename : str
         Filename of the existing output file due to which the simulation is skipped.
     """
+
     def __init__(self, msg, filename):
         filename = str(filename)
         super().__init__(msg + '\n' + filename)
         self.filename = filename
 
 
-def init_simulation(simulation_class='GroundStateSearch',
-                    simulation_class_kwargs=None,
-                    **simulation_params):
+def init_simulation(
+    simulation_class='GroundStateSearch', simulation_class_kwargs=None, **simulation_params
+):
     """Run the simulation with a simulation class.
 
     If you need to run the simulation, you can use a `with` statement for proper context
@@ -1251,9 +1302,9 @@ def init_simulation(simulation_class='GroundStateSearch',
     return sim
 
 
-def run_simulation(simulation_class='GroundStateSearch',
-                   simulation_class_kwargs=None,
-                   **simulation_params):
+def run_simulation(
+    simulation_class='GroundStateSearch', simulation_class_kwargs=None, **simulation_params
+):
     """Run the simulation with a simulation class.
 
     Parameters
@@ -1279,11 +1330,9 @@ def run_simulation(simulation_class='GroundStateSearch',
     return results
 
 
-def init_simulation_from_checkpoint(*,
-                                    filename=None,
-                                    checkpoint_results=None,
-                                    update_sim_params=None,
-                                    simulation_class_kwargs=None):
+def init_simulation_from_checkpoint(
+    *, filename=None, checkpoint_results=None, update_sim_params=None, simulation_class_kwargs=None
+):
     """Re-initialize a simulation from a given checkpoint without running it.
 
     (All parameters have to be given as keyword arguments.)
@@ -1325,12 +1374,12 @@ def init_simulation_from_checkpoint(*,
     """
     if filename is not None:
         if checkpoint_results is not None:
-            raise ValueError("pass either filename or checkpoint_results")
+            raise ValueError('pass either filename or checkpoint_results')
         checkpoint_results = hdf5_io.load(filename)
     if checkpoint_results is None:
-        raise ValueError("you need to pass `filename` or `checkpoint_results`")
+        raise ValueError('you need to pass `filename` or `checkpoint_results`')
     if checkpoint_results['finished_run']:
-        raise Skip("Simulation already finished", filename)
+        raise Skip('Simulation already finished', filename)
     sim_class_mod = checkpoint_results['version_info']['simulation_module']
     sim_class_name = checkpoint_results['version_info']['simulation_class']
     SimClass = hdf5_io.find_global(sim_class_mod, sim_class_name)
@@ -1341,16 +1390,15 @@ def init_simulation_from_checkpoint(*,
     if update_sim_params is not None:
         update_recursive(options, update_sim_params)
 
-    sim = SimClass.from_saved_checkpoint(checkpoint_results=checkpoint_results,
-                                        **simulation_class_kwargs)
+    sim = SimClass.from_saved_checkpoint(
+        checkpoint_results=checkpoint_results, **simulation_class_kwargs
+    )
     return sim
 
 
-def resume_from_checkpoint(*,
-                           filename=None,
-                           checkpoint_results=None,
-                           update_sim_params=None,
-                           simulation_class_kwargs=None):
+def resume_from_checkpoint(
+    *, filename=None, checkpoint_results=None, update_sim_params=None, simulation_class_kwargs=None
+):
     """Resume a simulation run from a given checkpoint.
 
     (All parameters have to be given as keyword arguments.)
@@ -1384,10 +1432,12 @@ def resume_from_checkpoint(*,
     where you originally started, or update the :cfg:option:`Simulation.directory`
     (and :cfg:option`Simulation.output_filename`) parameter with `update_sim_params`.
     """
-    sim = init_simulation_from_checkpoint(filename=filename,
-                                          checkpoint_results=checkpoint_results,
-                                          update_sim_params=update_sim_params,
-                                          simulation_class_kwargs=simulation_class_kwargs)
+    sim = init_simulation_from_checkpoint(
+        filename=filename,
+        checkpoint_results=checkpoint_results,
+        update_sim_params=update_sim_params,
+        simulation_class_kwargs=simulation_class_kwargs,
+    )
     del checkpoint_results  # possibly free memory
     options = sim.options
     with sim:
@@ -1403,21 +1453,21 @@ def resume_from_checkpoint(*,
         if simulation_class_kwargs is None:
             simulation_class_kwargs = {}
         del sim  # free memory
-        return run_seq_simulations(sequential,
-                                   SimClass,
-                                   simulation_class_kwargs,
-                                   resume_data=resume_data,
-                                   **options)
+        return run_seq_simulations(
+            sequential, SimClass, simulation_class_kwargs, resume_data=resume_data, **options
+        )
     return results
 
 
-def run_seq_simulations(sequential,
-                        simulation_class='GroundStateSearch',
-                        simulation_class_kwargs=None,
-                        *,
-                        resume_data=None,
-                        collect_results_in_memory=False,
-                        **simulation_params):
+def run_seq_simulations(
+    sequential,
+    simulation_class='GroundStateSearch',
+    simulation_class_kwargs=None,
+    *,
+    resume_data=None,
+    collect_results_in_memory=False,
+    **simulation_params,
+):
     """Sequentially run (variational) simulations.
 
     Uses the results (in particular the state) from one simulation to initialize another one.
@@ -1500,7 +1550,7 @@ def run_seq_simulations(sequential,
         for k in recursive_keys:
             # goal of sequential simulation: keep the initial state from previous simulation!
             for check in ['initial_state', 'output_filename_params']:
-                assert not k.startswith(check), "really?!?"
+                assert not k.startswith(check), 'really?!?'
     else:
         N_sims = 1
 
@@ -1510,8 +1560,10 @@ def run_seq_simulations(sequential,
 
     # try to create varying output filenames
     # do we save to file at all?
-    if simulation_params.get('output_filename', None) is not None or \
-            simulation_params.get('output_filename_params', None) is not None:
+    if (
+        simulation_params.get('output_filename', None) is not None
+        or simulation_params.get('output_filename_params', None) is not None
+    ):
         if 'output_filename' not in recursive_keys and 'directory' not in recursive_keys:
             # need to update the output_filename for each simulation
             output_filename_params = simulation_params.get('output_filename_params', {})
@@ -1529,7 +1581,7 @@ def run_seq_simulations(sequential,
             simulation_params['output_filename_params'] = output_filename_params
     else:  # we don't save results to files
         if not collect_results_in_memory:
-            raise ValueError("Refuse to run without producing output")
+            raise ValueError('Refuse to run without producing output')
     if collect_results_in_memory:
         all_results = []
 
@@ -1563,11 +1615,13 @@ def run_seq_simulations(sequential,
         return results
 
 
-def estimate_simulation_RAM(*,
-                            suppress_non_RAM_output=True,
-                            RAM_output_unit=None,
-                            estimate_RAM_const_offset=(100, "MB"),
-                            **simulation_params):
+def estimate_simulation_RAM(
+    *,
+    suppress_non_RAM_output=True,
+    RAM_output_unit=None,
+    estimate_RAM_const_offset=(100, 'MB'),
+    **simulation_params,
+):
     """Pre-simulation RAM estimate.
 
     Large-scale simulations need to be submitted to a simulation cluster, which often requires to
@@ -1607,10 +1661,13 @@ def estimate_simulation_RAM(*,
         for key in ['output_filename', 'output_filename_params']:  # ignore the output filename
             if key in simulation_params:
                 del simulation_params[key]
-        overwrite = {'log_params': {'filename': None,
-                                    'to_stdout': 'ERROR'
-                                    # ERROR level suppresses unused parameters warning as well
-                                    }}
+        overwrite = {
+            'log_params': {
+                'filename': None,
+                'to_stdout': 'ERROR',
+                # ERROR level suppresses unused parameters warning as well
+            }
+        }
         simulation_params = merge_recursive(simulation_params, overwrite, conflict='last')
     # get simulation
     with init_simulation(**simulation_params) as sim:
@@ -1619,19 +1676,15 @@ def estimate_simulation_RAM(*,
 
     est, est_unit = convert_memory_units(estimate_MB, 'MB', RAM_output_unit)
     total, total_unit = convert_memory_units(total_MB, 'MB', RAM_output_unit)
-    print(f"  {est:5.1f} {est_unit} estimated usage for tensors")
-    print(f"+ {offset_val:5.1f} {offset_unit} constant offset for loading python etc")
-    print(f"= {total:5.1f} {total_unit} total estimated RAM")
+    print(f'  {est:5.1f} {est_unit} estimated usage for tensors')
+    print(f'+ {offset_val:5.1f} {offset_unit} constant offset for loading python etc')
+    print(f'= {total:5.1f} {total_unit} total estimated RAM')
     return total, total_unit
 
 
-def output_filename_from_dict(options,
-                              parts={},
-                              prefix='result',
-                              suffix='.h5',
-                              joint='_',
-                              parts_order=None,
-                              separator='.'):
+def output_filename_from_dict(
+    options, parts={}, prefix='result', suffix='.h5', joint='_', parts_order=None, separator='.'
+):
     """Format a `output_filename` from parts with values from nested `options`.
 
     The results of a simulation are ideally fixed by the simulation class and the `options`.
@@ -1711,7 +1764,7 @@ def output_filename_from_dict(options,
         if not format_str:
             continue
         if not isinstance(recursive_key, tuple):
-            recursive_key = (recursive_key, )
+            recursive_key = (recursive_key,)
         vals = [get_recursive(options, r_key, separator) for r_key in recursive_key]
         part = format_str.format(*vals)
         formatted_parts.append(part)

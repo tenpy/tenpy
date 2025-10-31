@@ -5,13 +5,15 @@
 import threading
 import queue
 import logging
+
 logger = logging.getLogger(__name__)
 
-__all__ = ["WorkerDied", "Worker"]
+__all__ = ['WorkerDied', 'Worker']
 
 
 class WorkerDied(Exception):
     """Exception thrown if the main thread detects that the worker subthread died."""
+
     pass
 
 
@@ -58,7 +60,8 @@ class Worker:
         >>> results
         {'2+2': 4, '3+4': 7}
     """
-    def __init__(self, name="tenpy worker", max_queue_size=0, daemon=None):
+
+    def __init__(self, name='tenpy worker', max_queue_size=0, daemon=None):
         self.name = name
         self.tasks = queue.Queue(maxsize=max_queue_size)
         self.exit = threading.Event()  # set by both threads to tell each other to terminate
@@ -81,20 +84,24 @@ class Worker:
 
     def run(self):
         """Main function for worker thread."""
-        logger.info("%s thread starting", self.name)
+        logger.info('%s thread starting', self.name)
         try:
             while True:
                 if self.exit.is_set():  # main thread wants to finish
-                    logger.info("%s thread finishes", self.name)
+                    logger.info('%s thread finishes', self.name)
                     return
                 try:
-                    task = self.tasks.get(timeout=1.)
+                    task = self.tasks.get(timeout=1.0)
                 except queue.Empty:  # hit timeout
                     continue
                 try:
                     fct, args, kwargs, return_dict, return_key = task
-                    logger.debug("task for %s thread: %s, return=%s", self.name, fct.__qualname__,
-                                 return_dict is not None)
+                    logger.debug(
+                        'task for %s thread: %s, return=%s',
+                        self.name,
+                        fct.__qualname__,
+                        return_dict is not None,
+                    )
                     res = fct(*args, **kwargs)
                     if return_dict is not None:
                         return_dict[return_key] = res
@@ -102,20 +109,20 @@ class Worker:
                     self.tasks.task_done()
         except:
             self.exit.set()
-            logger.exception("%s thread dies with following exception", self.name)
+            logger.exception('%s thread dies with following exception', self.name)
         finally:
             # drain the queue such that Queue.join() doesn't block
             while not self.tasks.empty():
                 self.tasks.get()
                 self.tasks.task_done()
-        logger.info("%s thread terminates after exception", self.name)
+        logger.info('%s thread terminates after exception', self.name)
 
     def _test_worker_alive(self):
         """Check wether worker thread is still alive."""
         if not self._entered:
-            raise ValueError("Worker needs to be started in `with` statement.")
+            raise ValueError('Worker needs to be started in `with` statement.')
         if self.exit.is_set() or not self.worker_thread.is_alive():
-            raise WorkerDied(self.name + ": either exception occurred or close() was called.")
+            raise WorkerDied(self.name + ': either exception occurred or close() was called.')
 
     def put_task(self, fct, *args, return_dict=None, return_key=None, **kwargs):
         """Add a task to be done by the worker.
@@ -133,7 +140,7 @@ class Worker:
         while True:
             self._test_worker_alive()
             try:
-                self.tasks.put(task, timeout=1.)
+                self.tasks.put(task, timeout=1.0)
                 return
             except queue.Full:  # hit timeout
                 continue

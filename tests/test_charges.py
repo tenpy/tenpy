@@ -8,11 +8,71 @@ import itertools as it
 from random_test import gen_random_legcharge
 
 # charges for comparison, unsorted (*_us) and sorted (*_s)
-qflat_us = np.array([  #   v  v  <-- note the missing minus below
-    -6, -6, -6, -4, -4, -4, 4, 4, -4, -4, -4, -4, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, -2, -2, -2, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4,
-    4, 4, 4, 6, 6
-]).reshape((-1, 1))
+qflat_us = np.array(
+    [  #   v  v  <-- note the missing minus below
+        -6,
+        -6,
+        -6,
+        -4,
+        -4,
+        -4,
+        4,
+        4,
+        -4,
+        -4,
+        -4,
+        -4,
+        -2,
+        -2,
+        -2,
+        -2,
+        -2,
+        -2,
+        -2,
+        -2,
+        -2,
+        -2,
+        -2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        -2,
+        -2,
+        -2,
+        0,
+        0,
+        0,
+        0,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        4,
+        4,
+        4,
+        4,
+        6,
+        6,
+    ]
+).reshape((-1, 1))
 slices_us = np.array([0, 3, 6, 8, 12, 23, 34, 37, 41, 55, 59, 61])
 charges_us = np.array([[-6], [-4], [4], [-4], [-2], [0], [-2], [0], [2], [4], [6]])
 # sorted
@@ -21,13 +81,13 @@ slices_s = np.array([0, 3, 10, 24, 39, 53, 59, 61])
 charges_s = np.array([[-6], [-4], [-2], [0], [2], [4], [6]])
 
 qdict_s = {
-    (-6, ): slice(0, 3),
-    (-4, ): slice(3, 10),
-    (-2, ): slice(10, 24),
-    (0, ): slice(24, 39),
-    (2, ): slice(39, 53),
-    (4, ): slice(53, 59),
-    (6, ): slice(59, 61)
+    (-6,): slice(0, 3),
+    (-4,): slice(3, 10),
+    (-2,): slice(10, 24),
+    (0,): slice(24, 39),
+    (2,): slice(39, 53),
+    (4,): slice(53, 59),
+    (6,): slice(59, 61),
 }
 
 ch_1 = charges.ChargeInfo([1])
@@ -36,10 +96,10 @@ ch_1 = charges.ChargeInfo([1])
 def test_ChargeInfo():
     trivial = charges.ChargeInfo()
     trivial.test_sanity()
-    print("trivial: ", trivial)
+    print('trivial: ', trivial)
     assert trivial.qnumber == 0
     chinfo = charges.ChargeInfo([3, 1], ['some', ''])
-    print("nontrivial chinfo: ", chinfo)
+    print('nontrivial chinfo: ', chinfo)
     assert chinfo.qnumber == 2
     qs = [[0, 2], [2, 0], [5, 3], [-2, -3]]
     is_valid = [True, True, False, False]
@@ -49,17 +109,20 @@ def test_ChargeInfo():
     qs_valid = np.array([chinfo.make_valid(q) for q in qs])
     npt.assert_equal(qs_valid, chinfo.make_valid(qs))
     chinfo2 = charges.ChargeInfo([3, 1], ['some', ''])
-    assert (chinfo2 == chinfo)
+    assert chinfo2 == chinfo
     chinfo3 = charges.ChargeInfo([3, 1], ['other', ''])
-    assert (chinfo3 != chinfo)
+    assert chinfo3 != chinfo
 
 
 def test__find_row_differences():
     for qflat in [qflat_us, qflat_s]:
         qflat = np.array(qflat, dtype=charges.QTYPE)
         diff = charges._find_row_differences(qflat)
-        comp = [0] + [i for i in range(1, len(qflat)) if np.any(qflat[i - 1] != qflat[i])
-                      ] + [len(qflat)]
+        comp = (
+            [0]
+            + [i for i in range(1, len(qflat)) if np.any(qflat[i - 1] != qflat[i])]
+            + [len(qflat)]
+        )
         npt.assert_equal(diff, comp)
 
 
@@ -104,8 +167,8 @@ def test_LegCharge():
     # test get_qindex
     for i in range(lcs.ind_len):
         qidx, idx_in_block = lcs.get_qindex(i)
-        assert (lcs.slices[qidx] <= i < lcs.slices[qidx + 1])
-        assert (lcs.slices[qidx] + idx_in_block == i)
+        assert lcs.slices[qidx] <= i < lcs.slices[qidx + 1]
+        assert lcs.slices[qidx] + idx_in_block == i
 
 
 def test_LegPipe():
@@ -119,7 +182,7 @@ def test_LegPipe():
         pipe_equal = pipe.flip_charges_qconj()
         pipe_equal.test_equal(pipe)
 
-        assert (pipe.ind_len == np.prod(shape))
+        assert pipe.ind_len == np.prod(shape)
         print(pipe.q_map)
         # test pipe._map_incoming_qind
         qind_inc = pipe.q_map[:, 3:].copy()  # all possible qindices
@@ -138,13 +201,13 @@ def test__sliced_copy():
     y = np.random.random([5, 6, 7])
     y_cpy = y.copy()
     shape = np.array([4, 3, 2], dtype=np.intp)
-    z = 2. * np.ones(shape)
+    z = 2.0 * np.ones(shape)
     x_beg = np.array([3, 7, 1], dtype=np.intp)
     y_beg = np.array([1, 0, 4], dtype=np.intp)
     z_beg = np.array([0, 0, 0], dtype=np.intp)
     charges._sliced_copy(z, z_beg, x, x_beg, shape)
     npt.assert_equal(x, x_cpy)
-    assert (not np.any(z == 2.))
+    assert not np.any(z == 2.0)
     npt.assert_equal(x[3:7, 7:10, 1:3], z)
     charges._sliced_copy(y, y_beg, x, x_beg, shape)
     npt.assert_equal(y[1:5, 0:3, 4:6], z)
@@ -154,5 +217,5 @@ def test__sliced_copy():
 
 def test_fixes_issue_470():
     z2 = charges.ChargeInfo([2])
-    leg = charges.LegCharge(z2, [0,1,2], [[0],[1]])
+    leg = charges.LegCharge(z2, [0, 1, 2], [[0], [1]])
     leg.test_equal(leg.conj())

@@ -15,17 +15,17 @@ from tenpy.linalg.krylov_based import LanczosGroundState
 
 def test_ED():
     # just quickly check that it runs without errors for a small system
-    xxz_pars = dict(L=4, Jxx=1., Jz=1., hz=0.1, bc_MPS='finite', sort_charge=True)
+    xxz_pars = dict(L=4, Jxx=1.0, Jz=1.0, hz=0.1, bc_MPS='finite', sort_charge=True)
     M = XXZChain(xxz_pars)
     ED = exact_diag.ExactDiag(M)
     ED.build_full_H_from_mpo()
     H, ED.full_H = ED.full_H, None
     ED.build_full_H_from_bonds()
     H2 = ED.full_H
-    assert (npc.norm(H - H2, np.inf) < 1.e-14)
+    assert npc.norm(H - H2, np.inf) < 1.0e-14
     ED.full_diagonalization()
     E, psi = ED.groundstate()
-    print("select charge_sector =", psi.qtotal)
+    print('select charge_sector =', psi.qtotal)
     assert np.all(psi.qtotal == [0])
     E_sec2, psi_sec2 = ED.groundstate([2])
     assert np.all(psi_sec2.qtotal == [2])
@@ -36,21 +36,21 @@ def test_ED():
     full_psi2 = psi.zeros_like()
     full_psi2[ED2._mask] = psi2
     ov = npc.inner(psi, full_psi2, 'range', do_conj=True)
-    print("overlap <psi | psi2> = 1. -", 1. - ov)
-    assert (abs(abs(ov) - 1.) < 1.e-15)
+    print('overlap <psi | psi2> = 1. -', 1.0 - ov)
+    assert abs(abs(ov) - 1.0) < 1.0e-15
     # starting from a random guess in the correct charge sector,
     # check if we can also do lanczos.
     np.random.seed(12345)
     psi3 = npc.Array.from_func(np.random.random, psi2.legs, qtotal=psi2.qtotal, shape_kw='size')
     E0, psi3, N = LanczosGroundState(ED2, psi3, {}).run()
-    print("Lanczos E0 =", E0)
+    print('Lanczos E0 =', E0)
     ov = npc.inner(psi3, psi2, 'range', do_conj=True)
-    print("overlap <psi2 | psi3> = 1. -", 1. - ov)
-    assert (abs(abs(ov) - 1.) < 1.e-15)
+    print('overlap <psi2 | psi3> = 1. -', 1.0 - ov)
+    assert abs(abs(ov) - 1.0) < 1.0e-15
 
     ED3 = exact_diag.ExactDiag.from_H_mpo(M.H_MPO)
     ED3.build_full_H_from_mpo()
-    assert npc.norm(ED3.full_H - H, np.inf) < 1.e-14
+    assert npc.norm(ED3.full_H - H, np.inf) < 1.0e-14
 
     xxz_pars_inf = copy.copy(xxz_pars)
     xxz_pars_inf['bc_MPS'] = 'infinite'
@@ -58,7 +58,7 @@ def test_ED():
     M_inf = XXZChain(xxz_pars_inf)
     ED4 = exact_diag.ExactDiag.from_infinite_model(M_inf, enlarge=2)
     ED4.build_full_H_from_mpo()
-    assert npc.norm(ED4.full_H - H, np.inf) < 1.e-14
+    assert npc.norm(ED4.full_H - H, np.inf) < 1.0e-14
 
 
 def get_tfi_Hamiltonian(L, J, g, up_down_basis=True):
@@ -103,8 +103,9 @@ def test_get_full_wavefunction(undo_sort_charge, conserve, L=10):
 
     # use get_full_wavefunction
     site = SpinHalfSite(conserve='Sz' if conserve == 'best' else conserve)
-    psi = MPS.from_singlets(site=site, L=L, pairs=[[i, i + 1] for i in range(0, L, 2)],
-                            unit_cell_width=L)
+    psi = MPS.from_singlets(
+        site=site, L=L, pairs=[[i, i + 1] for i in range(0, L, 2)], unit_cell_width=L
+    )
     res = exact_diag.get_full_wavefunction(psi, undo_sort_charge=undo_sort_charge)
 
     # compare
@@ -115,7 +116,9 @@ def test_get_full_wavefunction(undo_sort_charge, conserve, L=10):
 @pytest.mark.parametrize('conserve', ['best', 'None'])
 def test_get_scipy_sparse_Hamiltonian(undo_sort_charge, conserve, L=10, J=1, g=4.3291):
     model = TFIChain(dict(L=L, conserve=conserve, J=J, g=g))
-    H_expect = get_tfi_Hamiltonian(L=L, J=J, g=g, up_down_basis=undo_sort_charge or conserve == 'None')
+    H_expect = get_tfi_Hamiltonian(
+        L=L, J=J, g=g, up_down_basis=undo_sort_charge or conserve == 'None'
+    )
     H_res = exact_diag.get_scipy_sparse_Hamiltonian(model, undo_sort_charge=undo_sort_charge)
     assert np.allclose(H_res.toarray(), H_expect)
 
@@ -126,7 +129,9 @@ def test_get_scipy_sparse_Hamiltonian(undo_sort_charge, conserve, L=10, J=1, g=4
 def test_get_numpy_Hamiltonian(undo_sort_charge, conserve, use_ED, J=1, g=4.3291):
     L = 6 if use_ED else 10  # using ED is a bit slow (overhead from combine? or is np.ix_ slow?)
     model = TFIChain(dict(L=L, conserve=conserve, J=J, g=g))
-    H_expect = get_tfi_Hamiltonian(L=L, J=J, g=g, up_down_basis=undo_sort_charge or conserve == 'None')
+    H_expect = get_tfi_Hamiltonian(
+        L=L, J=J, g=g, up_down_basis=undo_sort_charge or conserve == 'None'
+    )
     if use_ED:
         # default behavior for this model is from couplings. test from full_H explicitly.
         H_res = exact_diag._get_numpy_Hamiltonian_ExactDiag_full_H(

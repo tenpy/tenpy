@@ -20,9 +20,16 @@ from ..networks.mpo import MPOEnvironment
 from ..tools.misc import get_recursive
 
 __all__ = [
-    'measurement_wrapper', 'm_measurement_index', 'm_bond_dimension', 'm_bond_energies',
-    'm_simulation_parameter', 'm_energy_MPO', 'm_entropy', 'm_onsite_expectation_value',
-    'm_correlation_length', 'm_evolved_time',
+    'measurement_wrapper',
+    'm_measurement_index',
+    'm_bond_dimension',
+    'm_bond_energies',
+    'm_simulation_parameter',
+    'm_energy_MPO',
+    'm_entropy',
+    'm_onsite_expectation_value',
+    'm_correlation_length',
+    'm_evolved_time',
 ]
 
 
@@ -41,9 +48,11 @@ def measurement_wrapper(function, results_key, **kwargs):
     @functools.wraps(function)
     def measurement_call(results, psi, model, simulation, **kwargs):
         if results_key in results:
-            raise ValueError(f"key {results_key!r} already exists in `results`, "
-                             "measurement would overwrite data. "
-                             "Probably a measurement function used multiple times!")
+            raise ValueError(
+                f'key {results_key!r} already exists in `results`, '
+                'measurement would overwrite data. '
+                'Probably a measurement function used multiple times!'
+            )
         res = function(**kwargs)
         results[results_key] = res
 
@@ -117,7 +126,9 @@ def m_bond_energies(results, psi, model, simulation, results_key='bond_energies'
     results[results_key] = simulation.model.bond_energies(simulation.psi)
 
 
-def m_simulation_parameter(results, psi, model, simulation, recursive_key, results_key=None, **kwargs):
+def m_simulation_parameter(
+    results, psi, model, simulation, recursive_key, results_key=None, **kwargs
+):
     """Dummy measurement of a simulation parameter.
 
     This can be useful e.g. if you have a time-dependent hamiltonian parameter.
@@ -144,7 +155,9 @@ def m_energy_MPO(results, psi, model, simulation, results_key='energy_MPO'):
     results, psi, model, simulation, results_key :
         See :func:`~tenpy.simulation.measurement.measurement_index`.
     """
-    psi = simulation.psi  # take original psi, possibly grouped, but compatible with simulation.model
+    psi = (
+        simulation.psi
+    )  # take original psi, possibly grouped, but compatible with simulation.model
     if psi.bc == 'segment':
         init_env_data = simulation.init_env_data
         E = MPOEnvironment(psi, simulation.model.H_MPO, psi, **init_env_data).full_contraction(0)
@@ -164,8 +177,9 @@ def m_entropy(results, psi, model, simulation, results_key='entropy'):
     results[results_key] = psi.entanglement_entropy()
 
 
-def m_onsite_expectation_value(results, psi, model, simulation, opname, results_key=None, fix_u=None,
-                             **kwargs):
+def m_onsite_expectation_value(
+    results, psi, model, simulation, opname, results_key=None, fix_u=None, **kwargs
+):
     """Measure expectation values of an onsite operator.
 
     The resulting array of measurements is indexed by *lattice* indices ``(x, y, u)``
@@ -187,9 +201,9 @@ def m_onsite_expectation_value(results, psi, model, simulation, opname, results_
     if results_key is None:
         if not isinstance(opname, str):
             raise ValueError("can't auto-determine key for operator " + repr(opname))
-        results_key = f"<{opname}>"
+        results_key = f'<{opname}>'
     if results_key in results:
-        raise ValueError(f"key {results_key!r} already exists in results")
+        raise ValueError(f'key {results_key!r} already exists in results')
     if fix_u is not None:
         kwargs['sites'] = model.lat.mps_idx_fix_u(fix_u)
 
@@ -205,7 +219,9 @@ def m_onsite_expectation_value(results, psi, model, simulation, opname, results_
     results[results_key] = exp_vals
 
 
-def m_correlation_length(results, psi, model, simulation, results_key='correlation_length', unit=None, **kwargs):
+def m_correlation_length(
+    results, psi, model, simulation, results_key='correlation_length', unit=None, **kwargs
+):
     """Measure the correlation of an infinite MPS.
 
     Parameters
@@ -235,8 +251,10 @@ def m_correlation_length(results, psi, model, simulation, results_key='correlati
     corr = psi.correlation_length(**kwargs)
     if unit is None:
         warnings.warn(
-            "`unit` for correlation_length not specified."
-            "Defaults now to `MPS_sites`, but might change. Specify it explicitly!", FutureWarning)
+            '`unit` for correlation_length not specified.'
+            'Defaults now to `MPS_sites`, but might change. Specify it explicitly!',
+            FutureWarning,
+        )
         unit = 'MPS_sites'
     if unit == 'MPS_sites':
         pass
@@ -256,6 +274,7 @@ def m_correlation_length(results, psi, model, simulation, results_key='correlati
         raise ValueError("can't understand unit=" + repr(unit))
     results[results_key] = corr
 
+
 def m_evolved_time(results, psi, model, simulation, results_key='evolved_time'):
     """Measure the time evolved by the engine, ``engine.evolved_time``.
 
@@ -273,6 +292,7 @@ def m_evolved_time(results, psi, model, simulation, results_key='evolved_time'):
 # in simulation._connect_measurement_fct  for entries with 'psi_method' and 'model_method' in
 # :cfg:option:`Simulation.connect_measurement`
 
+
 def _m_psi_method(results, psi, model, simulation, func_name, **kwargs):
     psi_method = getattr(psi, func_name)
     psi_method(results, model, simulation, **kwargs)
@@ -280,9 +300,11 @@ def _m_psi_method(results, psi, model, simulation, func_name, **kwargs):
 
 def _m_psi_method_wrapped(results, psi, model, simulation, func_name, results_key, **kwargs):
     if results_key in results:
-        raise ValueError(f"key {results_key!r} already exists in `results`, "
-                         "measurement would overwrite data. "
-                         "Probably a measurement function used multiple times!")
+        raise ValueError(
+            f'key {results_key!r} already exists in `results`, '
+            'measurement would overwrite data. '
+            'Probably a measurement function used multiple times!'
+        )
     psi_method = getattr(psi, func_name)
     res = psi_method(**kwargs)
     results[results_key] = res
@@ -295,9 +317,11 @@ def _m_model_method(results, psi, model, simulation, func_name, **kwargs):
 
 def _m_model_method_wrapped(results, psi, model, simulation, func_name, results_key, **kwargs):
     if results_key in results:
-        raise ValueError(f"key {results_key!r} already exists in `results`, "
-                         "measurement would overwrite data. "
-                         "Probably a measurement function used multiple times!")
+        raise ValueError(
+            f'key {results_key!r} already exists in `results`, '
+            'measurement would overwrite data. '
+            'Probably a measurement function used multiple times!'
+        )
     model_method = getattr(model, func_name)
     res = model_method(**kwargs)
     results[results_key] = res

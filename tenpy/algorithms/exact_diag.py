@@ -23,8 +23,12 @@ from ..networks.mps import MPS
 from ..models.model import CouplingModel
 from ..tools.misc import inverse_permutation
 
-__all__ = ['ExactDiag', 'get_full_wavefunction', 'get_numpy_Hamiltonian',
-           'get_scipy_sparse_Hamiltonian']
+__all__ = [
+    'ExactDiag',
+    'get_full_wavefunction',
+    'get_numpy_Hamiltonian',
+    'get_scipy_sparse_Hamiltonian',
+]
 
 
 class ExactDiag:
@@ -78,9 +82,10 @@ class ExactDiag:
     _mask : 1D bool ndarray | ``None``
         Bool mask, which of the indices of the pipe are in the desired `charge_sector`.
     """
+
     def __init__(self, model, charge_sector=None, sparse=False, max_size=2e6):
         if model.lat.bc_MPS != 'finite':
-            raise ValueError("Full diagonalization works only on finite systems")
+            raise ValueError('Full diagonalization works only on finite systems')
         self.model = model
         self.chinfo = model.lat.unit_cell[0].leg.chinfo
         self.full_H = None
@@ -97,7 +102,7 @@ class ExactDiag:
             self.charge_sector = self.chinfo.make_valid(charge_sector)
             self._mask = np.all(self._pipe.to_qflat() == self.charge_sector[np.newaxis, :], axis=1)
             if np.sum(self._mask) == 0:
-                raise ValueError("The chosen charge sector is empty.")
+                raise ValueError('The chosen charge sector is empty.')
         else:
             self.charge_sector = None
             self._mask = None
@@ -106,8 +111,7 @@ class ExactDiag:
         return self._pipe.charge_sectors()
 
     @classmethod
-    def from_infinite_model(cls, model, first=0, last=None, enlarge=None,
-                                      **kwargs):
+    def from_infinite_model(cls, model, first=0, last=None, enlarge=None, **kwargs):
         """Initialize by extracting a finite segment from a ``bc_MPS=infinite'`` model.
 
         This method calls :meth:`~tenpy.models.model.Model.extract_segment` on the model and sets
@@ -147,6 +151,7 @@ class ExactDiag:
         """
         from ..models.model import MPOModel
         from ..models.lattice import TrivialLattice
+
         assert H_MPO.bc == 'finite'
         M = MPOModel(TrivialLattice(H_MPO.sites), H_MPO)
         return cls(M, *args, **kwargs)
@@ -164,9 +169,11 @@ class ExactDiag:
             if i == mpo.L - 1:
                 W = W.take_slice(mpo.get_IdR(mpo.L - 1), 'wR')
             full_H = npc.tensordot(full_H, W, axes=['wR', 'wL'])
-        full_H = full_H.combine_legs([self._labels_p, self._labels_pconj],
-                                     new_axes=[0, 1],
-                                     pipes=[self._pipe, self._pipe_conj])
+        full_H = full_H.combine_legs(
+            [self._labels_p, self._labels_pconj],
+            new_axes=[0, 1],
+            pipes=[self._pipe, self._pipe_conj],
+        )
         if mpo.explicit_plus_hc:
             full_H = full_H + full_H.conj().itranspose(full_H.get_leg_labels())
         self._set_full_H(full_H)
@@ -200,9 +207,11 @@ class ExactDiag:
                 Hb = npc.outer(Ids_L[i - 2], Hb)  # need i-2 == j
             if i < L - 1:
                 Hb = npc.outer(Hb, Ids_R[L - 2 - i])  # need i+1 == L-1-j   =>   j = L-2-i
-            Hb = Hb.combine_legs([self._labels_p, self._labels_pconj],
-                                 new_axes=[0, 1],
-                                 pipes=[self._pipe, self._pipe_conj])
+            Hb = Hb.combine_legs(
+                [self._labels_p, self._labels_pconj],
+                new_axes=[0, 1],
+                pipes=[self._pipe, self._pipe_conj],
+            )
             if full_H is None:
                 full_H = Hb
             else:
@@ -215,7 +224,7 @@ class ExactDiag:
         Arguments are given to :class:`~tenpy.linalg.np_conserved.eigh`.
         """
         if self.full_H is None:
-            raise ValueError("You need to call one of `build_full_H_*` first!")
+            raise ValueError('You need to call one of `build_full_H_*` first!')
         E, V = npc.eigh(self.full_H, *args, **kwargs)
         V.iset_leg_labels(['ps', 'ps*'])
         self.E = E
@@ -238,26 +247,26 @@ class ExactDiag:
             Ground state (possibly in the given sector).
         """
         if self.E is None or self.V is None:
-            raise ValueError("You need to call `full_diagonalization` first!")
+            raise ValueError('You need to call `full_diagonalization` first!')
         if charge_sector is None:
             i0 = np.argmin(self.E)
         else:
             if self.charge_sector is not None:
-                raise ValueError("``self.charge_sector`` was specified before.")
+                raise ValueError('``self.charge_sector`` was specified before.')
             charge_sector = self.chinfo.make_valid(charge_sector)
             mask = np.all(self._pipe.to_qflat() == charge_sector[np.newaxis, :], axis=1)
             if np.sum(mask) == 0:
-                raise ValueError("The chosen charge sector is empty.")
-            i0 = np.argmin(np.where(mask, self.E, np.max(self.E) + 1.))
+                raise ValueError('The chosen charge sector is empty.')
+            i0 = np.argmin(np.where(mask, self.E, np.max(self.E) + 1.0))
         return self.E[i0], self.V.take_slice(i0, axes='ps*')
 
     def exp_H(self, dt):
         """Return ``U(dt) := exp(-i H dt)``."""
         if self.E is None or self.V is None:
-            raise ValueError("You need to call `full_diagonalization` first!")
-        return npc.tensordot(self.V.scale_axis(np.exp(-1.j * dt * self.E), 'ps*'),
-                             self.V.conj(),
-                             axes=['ps*', 'ps'])
+            raise ValueError('You need to call `full_diagonalization` first!')
+        return npc.tensordot(
+            self.V.scale_axis(np.exp(-1.0j * dt * self.E), 'ps*'), self.V.conj(), axes=['ps*', 'ps']
+        )
 
     def mps_to_full(self, mps):
         """Contract an MPS along the virtual bonds and combine its legs.
@@ -273,7 +282,7 @@ class ExactDiag:
             The MPS contracted along the virtual bonds.
         """
         if mps.bc != 'finite':
-            raise ValueError("Full diagonalization works only on finite systems")
+            raise ValueError('Full diagonalization works only on finite systems')
         psi = mps.get_theta(0, mps.L)  # does exactly what we need
         psi = psi.take_slice([0, 0], ['vL', 'vR'])
         psi = psi.combine_legs(range(mps.L))
@@ -304,7 +313,12 @@ class ExactDiag:
             psi = full_psi
         psi.iset_leg_labels(['(' + '.'.join(self._labels_p) + ')'])
         psi = psi.split_legs([0])  # split the combined leg into the physical legs of the sites
-        return MPS.from_full(self._sites, psi, form=canonical_form, unit_cell_width=self.model.lat.mps_unit_cell_width)
+        return MPS.from_full(
+            self._sites,
+            psi,
+            form=canonical_form,
+            unit_cell_width=self.model.lat.mps_unit_cell_width,
+        )
 
     def matvec(self, psi):
         """Allow to use `self` as LinearOperator for lanczos.
@@ -319,16 +333,16 @@ class ExactDiag:
 
     def _set_full_H(self, full_H):
         if self.full_H is not None:
-            warnings.warn("full_H calculated multiple times!?", stacklevel=2)
+            warnings.warn('full_H calculated multiple times!?', stacklevel=2)
         if self.charge_sector is not None:
             full_H.legs = [l.to_LegCharge() for l in full_H.legs]  # avoids warnings of project
             full_H = full_H[self._mask, self._mask]
         self.full_H = full_H
 
     def _exceeds_max_size(self):
-        size = np.prod([float(s.dim) for s in self._sites])**2  # use float to avoid overflow!
+        size = np.prod([float(s.dim) for s in self._sites]) ** 2  # use float to avoid overflow!
         if size > self.max_size:
-            msg = "size {0:.2e} exceeds max_size {1:.2e}".format(size, self.max_size)
+            msg = 'size {0:.2e} exceeds max_size {1:.2e}'.format(size, self.max_size)
             warnings.warn(msg, stacklevel=2)
             return True
         return False
@@ -460,6 +474,7 @@ def _get_Hamiltonian_from_couplings(model, sparse: bool, undo_sort_charge: bool)
     dims = [s.leg.ind_len for s in sites]
     if sparse:
         import scipy.sparse as spsp
+
         H = spsp.csr_matrix((np.prod(dims),) * 2, dtype=float)
         kron = spsp.kron
         eye_0 = spsp.eye(1)  # identity on zero sites. starting point for doing kron.

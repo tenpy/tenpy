@@ -12,11 +12,12 @@ from collections.abc import MutableMapping
 import pprint
 import os
 import logging
+
 logger = logging.getLogger(__name__)
 
 from .hdf5_io import ATTR_FORMAT
 
-__all__ = ["Config", "asConfig", "load_yaml_with_py_eval"]
+__all__ = ['Config', 'asConfig', 'load_yaml_with_py_eval']
 
 
 class Config(MutableMapping):
@@ -51,6 +52,7 @@ class Config(MutableMapping):
     unused : set
         Keeps track of any :attr:`options` not yet used.
     """
+
     def __init__(self, config, name):
         self.options = config
         self.unused = set(config.keys())
@@ -89,6 +91,7 @@ class Config(MutableMapping):
             Name of the resulting YAML file.
         """
         import yaml
+
         with open(filename, 'w') as stream:
             yaml.dump(self.as_dict(), stream)
 
@@ -140,8 +143,8 @@ class Config(MutableMapping):
         """
         type_repr = hdf5_saver.save_dict_content(self.options, h5gr, subpath)
         h5gr.attrs[ATTR_FORMAT] = type_repr
-        h5gr.attrs["name"] = self.name
-        h5gr.attrs["unused"] = [str(u) for u in self.unused]
+        h5gr.attrs['name'] = self.name
+        h5gr.attrs['unused'] = [str(u) for u in self.unused]
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
@@ -167,13 +170,13 @@ class Config(MutableMapping):
         obj = cls.__new__(cls)  # create class instance, no __init__() call
         hdf5_loader.memorize_load(h5gr, obj)
         obj.options = hdf5_loader.load_dict(h5gr, dict_format, subpath)
-        obj.name = hdf5_loader.get_attr(h5gr, "name")
-        obj.unused = set(hdf5_loader.get_attr(h5gr, "unused"))
+        obj.name = hdf5_loader.get_attr(h5gr, 'name')
+        obj.unused = set(hdf5_loader.get_attr(h5gr, 'unused'))
         return obj
 
     def __getitem__(self, key):
         val = self.options[key]
-        self.log(key, "reading")
+        self.log(key, 'reading')
         self.unused.discard(key)
         return val
 
@@ -181,10 +184,10 @@ class Config(MutableMapping):
         if key not in self.options.keys():
             self.unused.add(key)
         self.options[key] = value
-        self.log(key, "setting")
+        self.log(key, 'setting')
 
     def __delitem__(self, key):
-        self.log(key, "deleting")
+        self.log(key, 'deleting')
         self.unused.discard(key)
         del self.options[key]
 
@@ -195,12 +198,12 @@ class Config(MutableMapping):
         return len(self.options)
 
     def __str__(self):
-        res = "Config, name={0!r}, options:\n".format(self.name)
+        res = 'Config, name={0!r}, options:\n'.format(self.name)
         res += pprint.pformat(self.options)
         return res
 
     def __repr__(self):
-        return "Config(<{0:d} options>, {1!r})".format(len(self.options), self.name)
+        return 'Config(<{0:d} options>, {1!r})'.format(len(self.options), self.name)
 
     def __del__(self):
         self.warn_unused()
@@ -226,9 +229,9 @@ class Config(MutableMapping):
             return
         if len(unused) > 0:
             if len(unused) > 1:
-                msg = "unused options for config {name!s}:\n{keys!s}"
+                msg = 'unused options for config {name!s}:\n{keys!s}'
             else:
-                msg = "unused option {keys!s} for config {name!s}"
+                msg = 'unused option {keys!s} for config {name!s}'
             warnings.warn(msg.format(keys=sorted(unused), name=self.name))
             self.unused.clear()  # don't warn twice about the same parameters
         if recursive:
@@ -269,7 +272,7 @@ class Config(MutableMapping):
         """
         use_default = key not in self.options.keys()
         val = self.options.setdefault(key, default)  # get & set default if not existent
-        self.log(key, "reading", use_default)
+        self.log(key, 'reading', use_default)
         self.unused.discard(key)  # (does nothing if key not in set)
         if (expect_type is not None) and (val is not None):  # (val is None) => nothing to check
             # convert to sequence
@@ -327,7 +330,7 @@ class Config(MutableMapping):
         """
         use_default = key not in self.keys()
         self.options.setdefault(key, default)
-        self.log(key, "set default", not use_default)
+        self.log(key, 'set default', not use_default)
         self.unused.discard(key)  # (does nothing if key not in set)
         # do no return the value: not added to self.unused!
 
@@ -343,7 +346,7 @@ class Config(MutableMapping):
             subconfig = self.options[key]
         subconfig = asConfig(subconfig, key)
         self.options[key] = subconfig
-        self.log(key, "subconfig", use_default)
+        self.log(key, 'subconfig', use_default)
         self.unused.discard(key)  # (does nothing if key not in set)
         return subconfig
 
@@ -358,7 +361,7 @@ class Config(MutableMapping):
         for key in keys:
             self.unused.discard(key)  # (does nothing if key not in set)
 
-    def log(self, option, action="Option", use_default=False):
+    def log(self, option, action='Option', use_default=False):
         """Print out `option` if verbosity and other conditions are met.
 
         Parameters
@@ -370,16 +373,16 @@ class Config(MutableMapping):
         """
         name = self.name
         new_key = option in self.unused or use_default
-        val = self.options.get(option, "<not set>")
+        val = self.options.get(option, '<not set>')
         if new_key:
             if use_default:
-                logger.debug("%s: %s %r=%r (default)", name, action, option, val)
+                logger.debug('%s: %s %r=%r (default)', name, action, option, val)
             else:
-                logger.info("%s: %s %r=%r", name, action, option, val)
+                logger.info('%s: %s %r=%r', name, action, option, val)
 
-    def deprecated_alias(self, old_key, new_key, extra_msg=""):
+    def deprecated_alias(self, old_key, new_key, extra_msg=''):
         if old_key in self.options.keys():
-            msg = "Deprecated option in {name!r}: {old!r} renamed to {new!r}"
+            msg = 'Deprecated option in {name!r}: {old!r} renamed to {new!r}'
             msg = msg.format(name=self.name, old=old_key, new=new_key)
             if extra_msg:
                 msg = f'{msg}\n{extra_msg}'
@@ -388,7 +391,7 @@ class Config(MutableMapping):
             self.unused.discard(old_key)
             self.unused.add(new_key)
 
-    def deprecated_ignore(self, *old_keys: str, extra_msg=""):
+    def deprecated_ignore(self, *old_keys: str, extra_msg=''):
         """Issue a warning if an old, deprecated key is encountered that will be ignored.
 
         This makes it more readable than having the standard unused warning at the end.
@@ -423,26 +426,26 @@ class Config(MutableMapping):
         for k in keys:
             if isinstance(k, tuple):
                 if len(k) == 0:
-                    raise ValueError("got empty tuple, nothing to compare")
+                    raise ValueError('got empty tuple, nothing to compare')
                 # check equality
                 nonzero = [self.has_nonzero(k0) for k0 in k]
                 if not any(nonzero):
                     continue  # all zero, so equal
                 if not all(nonzero):
                     if log_msg is not None:
-                        logger.debug("%s: %r would need to be equal", log_msg, k)
+                        logger.debug('%s: %r would need to be equal', log_msg, k)
                     return True
                 val = self.options[k[0]]
                 for k1 in k[1:]:
                     other_val = self.options[k1]
                     if not np.array_equal(val, other_val):
                         if log_msg is not None:
-                            logger.debug("%s: %r and %r have different entries", log_msg, k, k1)
+                            logger.debug('%s: %r and %r have different entries', log_msg, k, k1)
                         return True
             else:
                 if self.has_nonzero(k):
                     if log_msg is not None:
-                        logger.debug("%s: %r as nonzero entries", log_msg, k)
+                        logger.debug('%s: %r as nonzero entries', log_msg, k)
                     return True
         return False
 
@@ -459,8 +462,11 @@ class Config(MutableMapping):
         bool
             True if `self` has key `key` with a nontrivial value. False otherwise.
         """
-        return (key in self.keys() and self.options[key] is not None
-                and np.any(np.array(self.options[key])) != 0)
+        return (
+            key in self.keys()
+            and self.options[key] is not None
+            and np.any(np.array(self.options[key])) != 0
+        )
 
 
 def asConfig(config, name):
@@ -484,16 +490,15 @@ def asConfig(config, name):
     return Config(config, name)
 
 
-
 def _yaml_eval_constructor(loader, node):
     """Yaml constructor to support `!py_eval` tag in yaml files."""
     cmd = loader.construct_scalar(node)
     if not isinstance(cmd, str):
-        raise ValueError("expect string argument to `!py_eval`")
+        raise ValueError('expect string argument to `!py_eval`')
     try:
         res = eval(cmd, loader.eval_context)
     except:
-        print("\nError while yaml parsing the following !py_eval command:\n", cmd, "\n")
+        print('\nError while yaml parsing the following !py_eval command:\n', cmd, '\n')
         raise
     return res
 
@@ -506,10 +511,11 @@ except ImportError:
 if yaml is None:
     _YamlLoaderWithPyEval = None
 else:
+
     class _YamlLoaderWithPyEval(yaml.FullLoader):
         eval_context = {}
 
-    yaml.add_constructor("!py_eval", _yaml_eval_constructor, Loader=_YamlLoaderWithPyEval)
+    yaml.add_constructor('!py_eval', _yaml_eval_constructor, Loader=_YamlLoaderWithPyEval)
 
 
 def load_yaml_with_py_eval(filename=None, yaml_content=None, context={'np': numpy}):
@@ -570,5 +576,5 @@ def load_yaml_with_py_eval(filename=None, yaml_content=None, context={'np': nump
     elif yaml_content is not None:
         config = yaml.load(yaml_content, Loader=_YamlLoaderWithPyEval)
     else:
-        raise ValueError("pass either filename or yaml_content!")
+        raise ValueError('pass either filename or yaml_content!')
     return config

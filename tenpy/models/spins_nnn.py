@@ -65,6 +65,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
             MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
 
     """
+
     default_lattice = Chain
     force_default_lattice = True
 
@@ -73,28 +74,29 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
         conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
             # check how much we can conserve
-            if not model_params.any_nonzero([('Jx', 'Jy'),
-                                             ('Jxp', 'Jyp'), 'hx', 'hy'], "check Sz conservation"):
+            if not model_params.any_nonzero(
+                [('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'], 'check Sz conservation'
+            ):
                 conserve = 'Sz'
-            elif not model_params.any_nonzero(['hx', 'hy'], "check parity conservation"):
+            elif not model_params.any_nonzero(['hx', 'hy'], 'check parity conservation'):
                 conserve = 'parity'
             else:
                 conserve = None
-            self.logger.info("%s: set conserve to %s", self.name, conserve)
+            self.logger.info('%s: set conserve to %s', self.name, conserve)
         spinsite = SpinSite(S, conserve, sort_charge=False)  # GroupedSite does sort charges
         site = GroupedSite([spinsite, spinsite], charges='same')
         return site
 
     def init_terms(self, model_params):
-        Jx = model_params.get('Jx', 1., 'real_or_array')
-        Jy = model_params.get('Jy', 1., 'real_or_array')
-        Jz = model_params.get('Jz', 1., 'real_or_array')
-        Jxp = model_params.get('Jxp', 1., 'real_or_array')
-        Jyp = model_params.get('Jyp', 1., 'real_or_array')
-        Jzp = model_params.get('Jzp', 1., 'real_or_array')
-        hx = model_params.get('hx', 0., 'real_or_array')
-        hy = model_params.get('hy', 0., 'real_or_array')
-        hz = model_params.get('hz', 0., 'real_or_array')
+        Jx = model_params.get('Jx', 1.0, 'real_or_array')
+        Jy = model_params.get('Jy', 1.0, 'real_or_array')
+        Jz = model_params.get('Jz', 1.0, 'real_or_array')
+        Jxp = model_params.get('Jxp', 1.0, 'real_or_array')
+        Jyp = model_params.get('Jyp', 1.0, 'real_or_array')
+        Jzp = model_params.get('Jzp', 1.0, 'real_or_array')
+        hx = model_params.get('hx', 0.0, 'real_or_array')
+        hy = model_params.get('hy', 0.0, 'real_or_array')
+        hz = model_params.get('hz', 0.0, 'real_or_array')
 
         # Only valid for self.lat being a Chain...
         self.add_onsite(-hx, 0, 'Sx0')
@@ -107,18 +109,18 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
         # Sx.Sx = 0.25 ( Sp.Sm + Sm.Sp + Sp.Sp + Sm.Sm )
         # Sy.Sy = 0.25 ( Sp.Sm + Sm.Sp - Sp.Sp - Sm.Sm )
         # nearest neighbors
-        self.add_onsite((Jx + Jy) / 4., 0, 'Sp0 Sm1', plus_hc=True)
-        self.add_onsite((Jx - Jy) / 4., 0, 'Sp0 Sp1', plus_hc=True)
+        self.add_onsite((Jx + Jy) / 4.0, 0, 'Sp0 Sm1', plus_hc=True)
+        self.add_onsite((Jx - Jy) / 4.0, 0, 'Sp0 Sp1', plus_hc=True)
         self.add_onsite(Jz, 0, 'Sz0 Sz1')
-        self.add_coupling((Jx + Jy) / 4., 0, 'Sp1', 0, 'Sm0', 1, plus_hc=True)
-        self.add_coupling((Jx - Jy) / 4., 0, 'Sp1', 0, 'Sp0', 1, plus_hc=True)
+        self.add_coupling((Jx + Jy) / 4.0, 0, 'Sp1', 0, 'Sm0', 1, plus_hc=True)
+        self.add_coupling((Jx - Jy) / 4.0, 0, 'Sp1', 0, 'Sp0', 1, plus_hc=True)
         self.add_coupling(Jz, 0, 'Sz1', 0, 'Sz0', 1)
         # next nearest neighbors
-        self.add_coupling((Jxp + Jyp) / 4., 0, 'Sp0', 0, 'Sm0', 1, plus_hc=True)
-        self.add_coupling((Jxp - Jyp) / 4., 0, 'Sp0', 0, 'Sp0', 1, plus_hc=True)
+        self.add_coupling((Jxp + Jyp) / 4.0, 0, 'Sp0', 0, 'Sm0', 1, plus_hc=True)
+        self.add_coupling((Jxp - Jyp) / 4.0, 0, 'Sp0', 0, 'Sp0', 1, plus_hc=True)
         self.add_coupling(Jzp, 0, 'Sz0', 0, 'Sz0', 1)
-        self.add_coupling((Jxp + Jyp) / 4., 0, 'Sp1', 0, 'Sm1', 1, plus_hc=True)
-        self.add_coupling((Jxp - Jyp) / 4., 0, 'Sp1', 0, 'Sp1', 1, plus_hc=True)
+        self.add_coupling((Jxp + Jyp) / 4.0, 0, 'Sp1', 0, 'Sm1', 1, plus_hc=True)
+        self.add_coupling((Jxp - Jyp) / 4.0, 0, 'Sp1', 0, 'Sp1', 1, plus_hc=True)
         self.add_coupling(Jzp, 0, 'Sz1', 0, 'Sz1', 1)
 
 
@@ -160,34 +162,36 @@ class SpinChainNNN2(CouplingMPOModel):
         Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
             Coupling as defined for the Hamiltonian above.
     """
+
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5, 'real')
         conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
             # check how much we can conserve
-            if not model_params.any_nonzero([('Jx', 'Jy'),
-                                             ('Jxp', 'Jyp'), 'hx', 'hy'], "check Sz conservation"):
+            if not model_params.any_nonzero(
+                [('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'], 'check Sz conservation'
+            ):
                 conserve = 'Sz'
-            elif not model_params.any_nonzero(['hx', 'hy'], "check parity conservation"):
+            elif not model_params.any_nonzero(['hx', 'hy'], 'check parity conservation'):
                 conserve = 'parity'
             else:
                 conserve = None
-            self.logger.info("%s: set conserve to %s", self.name, conserve)
+            self.logger.info('%s: set conserve to %s', self.name, conserve)
         sort_charge = model_params.get('sort_charge', True)
         site = SpinSite(S, conserve, sort_charge=sort_charge)
         return site
 
     def init_terms(self, model_params):
         # 0) read out/set default parameters
-        Jx = model_params.get('Jx', 1., 'real_or_array')
-        Jy = model_params.get('Jy', 1., 'real_or_array')
-        Jz = model_params.get('Jz', 1., 'real_or_array')
-        Jxp = model_params.get('Jxp', 1., 'real_or_array')
-        Jyp = model_params.get('Jyp', 1., 'real_or_array')
-        Jzp = model_params.get('Jzp', 1., 'real_or_array')
-        hx = model_params.get('hx', 0., 'real_or_array')
-        hy = model_params.get('hy', 0., 'real_or_array')
-        hz = model_params.get('hz', 0., 'real_or_array')
+        Jx = model_params.get('Jx', 1.0, 'real_or_array')
+        Jy = model_params.get('Jy', 1.0, 'real_or_array')
+        Jz = model_params.get('Jz', 1.0, 'real_or_array')
+        Jxp = model_params.get('Jxp', 1.0, 'real_or_array')
+        Jyp = model_params.get('Jyp', 1.0, 'real_or_array')
+        Jzp = model_params.get('Jzp', 1.0, 'real_or_array')
+        hx = model_params.get('hx', 0.0, 'real_or_array')
+        hy = model_params.get('hy', 0.0, 'real_or_array')
+        hz = model_params.get('hz', 0.0, 'real_or_array')
 
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-hx, u, 'Sx')
@@ -197,10 +201,10 @@ class SpinChainNNN2(CouplingMPOModel):
         # Sx.Sx = 0.25 ( Sp.Sm + Sm.Sp + Sp.Sp + Sm.Sm )
         # Sy.Sy = 0.25 ( Sp.Sm + Sm.Sp - Sp.Sp - Sm.Sm )
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            self.add_coupling((Jx + Jy) / 4., u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
-            self.add_coupling((Jx - Jy) / 4., u1, 'Sp', u2, 'Sp', dx, plus_hc=True)
+            self.add_coupling((Jx + Jy) / 4.0, u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
+            self.add_coupling((Jx - Jy) / 4.0, u1, 'Sp', u2, 'Sp', dx, plus_hc=True)
             self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)
         for u1, u2, dx in self.lat.pairs['next_nearest_neighbors']:
-            self.add_coupling((Jxp + Jyp) / 4., u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
-            self.add_coupling((Jxp - Jyp) / 4., u1, 'Sp', u2, 'Sp', dx, plus_hc=True)
+            self.add_coupling((Jxp + Jyp) / 4.0, u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
+            self.add_coupling((Jxp - Jyp) / 4.0, u1, 'Sp', u2, 'Sp', dx, plus_hc=True)
             self.add_coupling(Jzp, u1, 'Sz', u2, 'Sz', dx)

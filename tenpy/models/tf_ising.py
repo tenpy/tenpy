@@ -50,19 +50,20 @@ class TFIModel(CouplingMPOModel):
             Defaults to ``J=g=1``
 
     """
+
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity', str)
         assert conserve != 'Sz'
         if conserve == 'best':
             conserve = 'parity'
-            self.logger.info("%s: set conserve to %s", self.name, conserve)
+            self.logger.info('%s: set conserve to %s', self.name, conserve)
         sort_charge = model_params.get('sort_charge', True, bool)
         site = SpinHalfSite(conserve=conserve, sort_charge=sort_charge)
         return site
 
     def init_terms(self, model_params):
-        J = np.asarray(model_params.get('J', 1., 'real_or_array'))
-        g = np.asarray(model_params.get('g', 1., 'real_or_array'))
+        J = np.asarray(model_params.get('J', 1.0, 'real_or_array'))
+        g = np.asarray(model_params.get('g', 1.0, 'real_or_array'))
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-g, u, 'Sigmaz')
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
@@ -75,5 +76,6 @@ class TFIChain(TFIModel, NearestNeighborModel):
 
     See the :class:`TFIModel` for the documentation of parameters.
     """
+
     default_lattice = Chain
     force_default_lattice = True

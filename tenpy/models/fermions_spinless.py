@@ -4,7 +4,6 @@
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-
 from .model import CouplingMPOModel, NearestNeighborModel
 from ..networks.site import FermionSite
 from .lattice import Chain
@@ -53,18 +52,19 @@ class FermionModel(CouplingMPOModel):
             Hopping amplitudes for bonds 'across' the periodic boundary are modified such that
             particles hopping around the circumference of the cylinder acquire a phase `phi_ext`.
     """
+
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N', str)
         if conserve == 'best':
             conserve = 'N'
-            self.logger.info("%s: set conserve to %s", self.name, conserve)
+            self.logger.info('%s: set conserve to %s', self.name, conserve)
         site = FermionSite(conserve=conserve)
         return site
 
     def init_terms(self, model_params):
-        J = model_params.get('J', 1., 'real_or_array')
-        V = model_params.get('V', 1., 'real_or_array')
-        mu = model_params.get('mu', 0., 'real_or_array')
+        J = model_params.get('J', 1.0, 'real_or_array')
+        V = model_params.get('V', 1.0, 'real_or_array')
+        mu = model_params.get('mu', 0.0, 'real_or_array')
         phi_ext = model_params.get('phi_ext', None, 'real')
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu, u, 'N')
@@ -82,5 +82,6 @@ class FermionChain(FermionModel, NearestNeighborModel):
 
     See the :class:`FermionModel` for the documentation of parameters.
     """
+
     default_lattice = Chain
     force_default_lattice = True

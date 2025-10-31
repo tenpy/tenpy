@@ -14,12 +14,16 @@ def test_HofstadterBosons():
         'conserve': 'N',
         'U': 0.456,
         'mu': 0.123,
-        'Nmax': 1
+        'Nmax': 1,
     }
-    check_general_model(HofstadterBosons, model_pars, {
-        'bc_MPS': ['finite', 'infinite'],
-        'gauge': ['landau_x', 'landau_y'],
-    })
+    check_general_model(
+        HofstadterBosons,
+        model_pars,
+        {
+            'bc_MPS': ['finite', 'infinite'],
+            'gauge': ['landau_x', 'landau_y'],
+        },
+    )
     model_pars['gauge'] = 'symmetric'
     model_pars['Lx'] = model_pars['Ly'] = 6
     check_general_model(HofstadterBosons, model_pars, {'bc_MPS': ['finite', 'infinite']})
@@ -27,10 +31,14 @@ def test_HofstadterBosons():
 
 def test_HofstadterFermions():
     model_pars = {'Lx': 3, 'Ly': 3, 'phi': (1, 3), 'conserve': 'N', 'v': 0.456, 'mu': 0.123}
-    check_general_model(HofstadterFermions, model_pars, {
-        'bc_MPS': ['finite', 'infinite'],
-        'gauge': ['landau_x', 'landau_y'],
-    })
+    check_general_model(
+        HofstadterFermions,
+        model_pars,
+        {
+            'bc_MPS': ['finite', 'infinite'],
+            'gauge': ['landau_x', 'landau_y'],
+        },
+    )
     model_pars['gauge'] = 'symmetric'
     model_pars['Lx'] = model_pars['Ly'] = 6
     check_general_model(HofstadterFermions, model_pars, {'bc_MPS': ['finite', 'infinite']})
@@ -39,14 +47,54 @@ def test_HofstadterFermions():
 # comparison values for test_ED_spectrum_HofstadterFermions
 # 3x3 system, keys are (bc_x, bc_y)
 _HofstadterFermions_spectra = {
-    ('periodic', 'periodic'): [-7.19852401, -5.14005494, -5.14005494, -5.14005494, -4.99137522,
-                               -4.99137522, -4.99137522, -3.80818865, -3.80818865, -3.80818865],
-    ('periodic', 'open'): [-6.50953401, -5.09804883, -5.09804883, -4.60171247, -4.56760104,
-                           -4.56760104, -4.30320927, -3.94132612, -3.94132612, -3.61801836],
-    ('open', 'periodic'): [-6.50953401, -5.09804883, -5.09804883, -4.60171247, -4.56760104,
-                           -4.56760104, -4.30320927, -3.94132612, -3.94132612, -3.61801836],
-    ('open', 'open'): [-5.30259582, -5.11380114, -4.49492842, -4.17538168, -4.01502519,
-                       -3.93726486, -3.90488366, -3.84296889, -3.74585977, -3.65848589],
+    ('periodic', 'periodic'): [
+        -7.19852401,
+        -5.14005494,
+        -5.14005494,
+        -5.14005494,
+        -4.99137522,
+        -4.99137522,
+        -4.99137522,
+        -3.80818865,
+        -3.80818865,
+        -3.80818865,
+    ],
+    ('periodic', 'open'): [
+        -6.50953401,
+        -5.09804883,
+        -5.09804883,
+        -4.60171247,
+        -4.56760104,
+        -4.56760104,
+        -4.30320927,
+        -3.94132612,
+        -3.94132612,
+        -3.61801836,
+    ],
+    ('open', 'periodic'): [
+        -6.50953401,
+        -5.09804883,
+        -5.09804883,
+        -4.60171247,
+        -4.56760104,
+        -4.56760104,
+        -4.30320927,
+        -3.94132612,
+        -3.94132612,
+        -3.61801836,
+    ],
+    ('open', 'open'): [
+        -5.30259582,
+        -5.11380114,
+        -4.49492842,
+        -4.17538168,
+        -4.01502519,
+        -3.93726486,
+        -3.90488366,
+        -3.84296889,
+        -3.74585977,
+        -3.65848589,
+    ],
 }
 
 
@@ -75,14 +123,54 @@ def test_ED_spectrum_HofstadterFermions(bc_x, bc_y, gauge):
 # comparison values for test_ED_spectrum_HofstadterBosons
 # 3x3 system, keys are (bc_x, bc_y)
 _HofstadterBosons_spectra = {
-    ('periodic', 'periodic'): [-7.10623032, -7.10623032, -7.10623032, -7.10623032, -7.10623032,
-                               -7.10623032, -6.87298335, -6.87298335, -6.72092373, -6.72092373],
-    ('periodic', 'open'): [-6.68491519, -6.68491519, -6.54147708, -6.54147708, -6.54147708,
-                           -6.54147708, -6.3261335 , -6.3261335 , -5.70748017, -5.70748017],
-    ('open', 'periodic'): [-6.68491519, -6.68491519, -6.54147708, -6.54147708, -6.54147708,
-                           -6.54147708, -6.3261335 , -6.3261335 , -5.70748017, -5.70748017],
-    ('open', 'open'): [-5.7278833 , -5.7278833 , -5.53489416, -5.53489416, -5.08982148,
-                       -5.08982148, -4.93255091, -4.93255091, -4.92485095, -4.92485095],
+    ('periodic', 'periodic'): [
+        -7.10623032,
+        -7.10623032,
+        -7.10623032,
+        -7.10623032,
+        -7.10623032,
+        -7.10623032,
+        -6.87298335,
+        -6.87298335,
+        -6.72092373,
+        -6.72092373,
+    ],
+    ('periodic', 'open'): [
+        -6.68491519,
+        -6.68491519,
+        -6.54147708,
+        -6.54147708,
+        -6.54147708,
+        -6.54147708,
+        -6.3261335,
+        -6.3261335,
+        -5.70748017,
+        -5.70748017,
+    ],
+    ('open', 'periodic'): [
+        -6.68491519,
+        -6.68491519,
+        -6.54147708,
+        -6.54147708,
+        -6.54147708,
+        -6.54147708,
+        -6.3261335,
+        -6.3261335,
+        -5.70748017,
+        -5.70748017,
+    ],
+    ('open', 'open'): [
+        -5.7278833,
+        -5.7278833,
+        -5.53489416,
+        -5.53489416,
+        -5.08982148,
+        -5.08982148,
+        -4.93255091,
+        -4.93255091,
+        -4.92485095,
+        -4.92485095,
+    ],
 }
 
 
@@ -108,12 +196,16 @@ def test_ED_spectrum_HofstadterBosons(bc_x, bc_y, gauge):
     assert np.allclose(low_energy_spectrum, expect)
 
 
-@pytest.mark.parametrize('lx, ly, p, q, commensurate_gauges',
-                         [(6, 6, 1, 3, 'all'),  # A
-                          (18, 18, 4, 9, 'all'),  # B
-                          (2, 5, 4, 9, None),  # C
-                          (2, 9, 4, 9, 'landau_y'),  # D
-                          ], ids='ABCD')
+@pytest.mark.parametrize(
+    'lx, ly, p, q, commensurate_gauges',
+    [
+        (6, 6, 1, 3, 'all'),  # A
+        (18, 18, 4, 9, 'all'),  # B
+        (2, 5, 4, 9, None),  # C
+        (2, 9, 4, 9, 'landau_y'),  # D
+    ],
+    ids='ABCD',
+)
 @pytest.mark.parametrize('pbc_x', [True, False])
 @pytest.mark.parametrize('pbc_y', [True, False])
 @pytest.mark.parametrize('gauge', [None, 'landau_x', 'landau_y', 'symmetric'])
@@ -155,9 +247,9 @@ def test_hopping_phases(lx, ly, p, q, commensurate_gauges, pbc_x, pbc_y, gauge):
     assert np.allclose(np.abs(phases_y), 1)
 
     # check enclosed phase on every plaquette
-    expect_plaquette_phase = np.exp(2.j * np.pi * p / q)
+    expect_plaquette_phase = np.exp(2.0j * np.pi * p / q)
     plaquettes_x_range = range(lx) if pbc_x else range(lx - 1)
-    plaquettes_y_range = range(ly) if pbc_y  else range(ly - 1)
+    plaquettes_y_range = range(ly) if pbc_y else range(ly - 1)
     for x in plaquettes_x_range:
         for y in plaquettes_y_range:
             phase = phases_x[x, y]

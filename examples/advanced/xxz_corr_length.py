@@ -17,41 +17,41 @@ import matplotlib.pyplot as plt
 
 def run(Jzs):
     L = 2
-    model_params = dict(L=L, Jx=1., Jy=1., Jz=Jzs[0], bc_MPS='infinite', conserve='Sz')
+    model_params = dict(L=L, Jx=1.0, Jy=1.0, Jz=Jzs[0], bc_MPS='infinite', conserve='Sz')
     chi = 300
     dmrg_params = {
-        'trunc_params': {
-            'chi_max': chi,
-            'svd_min': 1.e-10,
-            'trunc_cut': None
-        },
+        'trunc_params': {'chi_max': chi, 'svd_min': 1.0e-10, 'trunc_cut': None},
         'update_env': 20,
         'start_env': 20,
         'max_E_err': 0.0001,
         'max_S_err': 0.0001,
-        'mixer': False
+        'mixer': False,
     }
 
     M = SpinChain(model_params)
-    psi = MPS.from_product_state(M.lat.mps_sites(), (["up", "down"] * L)[:L], M.lat.bc_MPS,
-                                 unit_cell_width=M.lat.mps_unit_cell_width)
+    psi = MPS.from_product_state(
+        M.lat.mps_sites(),
+        (['up', 'down'] * L)[:L],
+        M.lat.bc_MPS,
+        unit_cell_width=M.lat.mps_unit_cell_width,
+    )
 
     engine = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
     np.set_printoptions(linewidth=120)
     corr_length = []
     for Jz in Jzs:
-        print("-" * 80)
-        print("Jz = {Jz:.4f}".format(Jz))
-        print("-" * 80)
+        print('-' * 80)
+        print('Jz = {Jz:.4f}'.format(Jz))
+        print('-' * 80)
         model_params['Jz'] = Jz
         M = SpinChain(model_params)
         engine.init_env(model=M)  # (re)initialize DMRG environment with new model
         # this uses the result from the previous DMRG as first initial guess
         engine.run()
         # psi is modified by engine.run() and now represents the ground state for the current `Jz`.
-        corr_length.append(psi.correlation_length(tol_ev0=1.e-3))
-        print("corr. length", corr_length[-1])
-        print("<Sz>", psi.expectation_value('Sz'))
+        corr_length.append(psi.correlation_length(tol_ev0=1.0e-3))
+        print('corr. length', corr_length[-1])
+        print('<Sz>', psi.expectation_value('Sz'))
         dmrg_params['start_env'] = 0  # (some of) the parameters are read out again
     corr_length = np.array(corr_length)
     results = {
@@ -59,7 +59,7 @@ def run(Jzs):
         'dmrg_params': dmrg_params,
         'Jzs': Jzs,
         'corr_length': corr_length,
-        'eval_transfermatrix': np.exp(-1. / corr_length)
+        'eval_transfermatrix': np.exp(-1.0 / corr_length),
     }
     return results
 
@@ -67,23 +67,24 @@ def run(Jzs):
 def plot(results, filename):
     corr_length = results['corr_length']
     Jzs = results['Jzs']
-    plt.plot(Jzs, np.exp(-1. / corr_length))
+    plt.plot(Jzs, np.exp(-1.0 / corr_length))
     plt.xlabel(r'$J_z/J_x$')
     plt.ylabel(r'$t = \exp(-\frac{1}{\xi})$')
     plt.savefig(filename)
-    print("saved to " + filename)
+    print('saved to ' + filename)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     filename = 'xxz_corrlength.pkl'
     import pickle
     import os.path
+
     if not os.path.exists(filename):
         results = run(list(np.arange(4.0, 1.5, -0.25)) + list(np.arange(1.5, 0.8, -0.05)))
         with open(filename, 'wb') as f:
             pickle.dump(results, f)
     else:
-        print("just load the data")
+        print('just load the data')
         with open(filename, 'rb') as f:
             results = pickle.load(f)
     plot(results, filename[:-4] + '.pdf')

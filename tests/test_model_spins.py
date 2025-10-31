@@ -6,26 +6,28 @@ from test_model import check_general_model
 
 
 def test_SpinModel():
-    check_general_model(spins.SpinModel,
-                        {'lattice': "Square", 'Lx': 2, 'Ly': 3, 'sort_charge': True},
-                        {})
+    check_general_model(
+        spins.SpinModel, {'lattice': 'Square', 'Lx': 2, 'Ly': 3, 'sort_charge': True}, {}
+    )
 
 
 def test_SpinChain():
-    check_general_model(spins.SpinChain, {'sort_charge': True}, {
-        'conserve': [None, 'parity', 'Sz'],
-        'S': [0.5, 1, 2]
-    })
-    check_general_model(spins.SpinChain, {
-        'hz': 2.,
-        'Jx': -4.,
-        'Jz': -0.4,
-        'L': 4,
-        'sort_charge': True,
-    }, {
-        'conserve': [None, 'parity'],
-        'bc_MPS': ['finite', 'infinite']
-    })
+    check_general_model(
+        spins.SpinChain,
+        {'sort_charge': True},
+        {'conserve': [None, 'parity', 'Sz'], 'S': [0.5, 1, 2]},
+    )
+    check_general_model(
+        spins.SpinChain,
+        {
+            'hz': 2.0,
+            'Jx': -4.0,
+            'Jz': -0.4,
+            'L': 4,
+            'sort_charge': True,
+        },
+        {'conserve': [None, 'parity'], 'bc_MPS': ['finite', 'infinite']},
+    )
 
 
 def test_DipolarSpinChain():
@@ -42,4 +44,6 @@ def test_DipolarSpinChain():
     full_H_qtotal = ED.full_H.qtotal
     assert np.allclose(full_H_qtotal, [0, 0])
     # check general properties for many cases
-    check_general_model(spins.DipolarSpinChain, {}, {'J4': [0, 1], 'conserve': ['dipole', 'Sz', None]})
+    check_general_model(
+        spins.DipolarSpinChain, {}, {'J4': [0, 1], 'conserve': ['dipole', 'Sz', None]}
+    )

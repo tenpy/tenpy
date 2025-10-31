@@ -11,7 +11,11 @@ from tenpy.algorithms.algorithm import Algorithm
 from tenpy.algorithms.truncation import TruncationError
 from tenpy.simulations.simulation import *
 from tenpy.simulations.ground_state_search import GroundStateSearch
-from tenpy.simulations.time_evolution import RealTimeEvolution, SpectralSimulation, SpectralSimulationEvolveBraKet
+from tenpy.simulations.time_evolution import (
+    RealTimeEvolution,
+    SpectralSimulation,
+    SpectralSimulationEvolveBraKet,
+)
 import pytest
 
 tenpy.tools.misc.skip_logging_setup = True  # skip logging setup
@@ -21,11 +25,11 @@ class DummyAlgorithm(Algorithm):
     def __init__(self, psi, model, options, *, resume_data=None, cache=None):
         super().__init__(psi, model, options, resume_data=resume_data)
         self.dummy_value = -1
-        self.evolved_time = self.options.get('start_time', 0.)
+        self.evolved_time = self.options.get('start_time', 0.0)
         init_env_data = {} if resume_data is None else resume_data['init_env_data']
         self.env = DummyEnv(**init_env_data)
         self.trunc_err = TruncationError()
-        if not hasattr(self.psi, "dummy_counter"):
+        if not hasattr(self.psi, 'dummy_counter'):
             self.psi.dummy_counter = 0  # note: doesn't get saved!
             # But good enough to check `run_seq_simulations`
 
@@ -55,8 +59,8 @@ class DummySimulation(Simulation):
 
 
 def raise_SimulationStop(algorithm):
-    if algorithm.evolved_time == 1.:
-        raise SimulationStop("from raise_SimulationStop")
+    if algorithm.evolved_time == 1.0:
+        raise SimulationStop('from raise_SimulationStop')
 
 
 class DummyEnv:
@@ -65,7 +69,7 @@ class DummyEnv:
             assert kwargs == self.get_initialization_data()
 
     def get_initialization_data(self):
-        return {"Env data": "Could be big"}
+        return {'Env data': 'Could be big'}
 
 
 def dummy_value_measurement(results, psi, model, simulation):
@@ -75,36 +79,34 @@ def dummy_value_measurement(results, psi, model, simulation):
 def bad_dummy_measurement(results, psi, model, simulation):
     """Check using different keys - it should still work."""
     i = results['measurement_index']
-    results[f"changing_key_{i:d}"] = simulation.engine.dummy_value
+    results[f'changing_key_{i:d}'] = simulation.engine.dummy_value
     #  if i == 3:
     #      raise ValueError("something went wrong")
 
 
 simulation_params = {
-    'model_class':
-    'XXZChain',
+    'model_class': 'XXZChain',
     'model_params': {
         'bc_MPS': 'infinite',  # defaults to finite
         'L': 4,
         'sort_charge': True,
     },
-    'algorithm_class':
-    'DummyAlgorithm',
+    'algorithm_class': 'DummyAlgorithm',
     'algorithm_params': {
         'N_steps': 4,
         'dt': 0.5,
     },
     'initial_state_params': {
         'method': 'lat_product_state',  # mandatory -> would complain if not passed on
-        'product_state': [['up'], ['down']]
+        'product_state': [['up'], ['down']],
     },
-    'save_every_x_seconds':
-    0.,  # save at each checkpoint
-    'connect_measurements': [('tenpy.simulations.measurement', 'm_onsite_expectation_value', {
-        'opname': 'Sz'
-    }), (__name__, 'dummy_value_measurement')],
+    'save_every_x_seconds': 0.0,  # save at each checkpoint
+    'connect_measurements': [
+        ('tenpy.simulations.measurement', 'm_onsite_expectation_value', {'opname': 'Sz'}),
+        (__name__, 'dummy_value_measurement'),
+    ],
 }
-expected_dummy_value = simulation_params['algorithm_params']['N_steps']**2
+expected_dummy_value = simulation_params['algorithm_params']['N_steps'] ** 2
 
 
 def test_Simulation(tmp_path):
@@ -139,10 +141,14 @@ def test_bad_measurements():
     sim_params['connect_measurements'].append((__name__, 'bad_dummy_measurement', {}, -1))
     sim = Simulation(sim_params)
 
-    expect_warning1 = ("measurement gave new keys {'changing_key_[0-9]'} fill up with `None` for "
-                       "previous measurements.")
-    expect_warning2 = ("measurement didn't give keys {'changing_key_[0-9]'} we have from previous "
-                       "measurements, fill up with `None`")
+    expect_warning1 = (
+        "measurement gave new keys {'changing_key_[0-9]'} fill up with `None` for "
+        'previous measurements.'
+    )
+    expect_warning2 = (
+        "measurement didn't give keys {'changing_key_[0-9]'} we have from previous "
+        'measurements, fill up with `None`'
+    )
     with pytest.warns(UserWarning, match=f'({expect_warning1}|{expect_warning2})'):
         results = sim.run()
 
@@ -167,8 +173,8 @@ def test_measure_at_algorithm_checkpoint():
     # expect multiple measurements:
     # once in `init_measurements` and in `final_measurement`, and 4 algorithm checkpoints
     assert np.all(meas['measurement_index'] == np.arange(2 + 4))
-    assert np.all(meas['evolved_time'] == [0., 0.5, 1., 1.5, 2.0, 2.0])
-    assert np.all(meas['dummy_value'] == [-1] + [expected_dummy_value] * (1+4))
+    assert np.all(meas['evolved_time'] == [0.0, 0.5, 1.0, 1.5, 2.0, 2.0])
+    assert np.all(meas['dummy_value'] == [-1] + [expected_dummy_value] * (1 + 4))
 
 
 def test_Simulation_resume(tmp_path):
@@ -180,14 +186,15 @@ def test_Simulation_resume(tmp_path):
     sim = DummySimulation(sim_params)
     try:
         results = sim.run()
-        assert False, "expected to raise a SimulationStop in sim.run()"
+        assert False, 'expected to raise a SimulationStop in sim.run()'
     except SimulationStop:
         checkpoint_results = sim.prepare_results_for_save()
     assert not checkpoint_results['finished_run']
     # try resuming with `resume_from_checkpoint`
     update_sim_params = {'connect_algorithm_checkpoint': []}
-    res = resume_from_checkpoint(filename=tmp_path / 'data.pkl',
-                                 update_sim_params=update_sim_params)
+    res = resume_from_checkpoint(
+        filename=tmp_path / 'data.pkl', update_sim_params=update_sim_params
+    )
 
     # alternatively, resume from the checkpoint results we have
     checkpoint_results['simulation_parameters']['connect_algorithm_checkpoint'] = []
@@ -206,7 +213,7 @@ def test_sequential_simulation(tmp_path):
     sim_params['output_filename'] = 'data.pkl'
     sim_params['sequential'] = {
         'recursive_keys': ['algorithm_params.dt'],
-        'value_lists': [[0.5, 0.3, 0.2]]
+        'value_lists': [[0.5, 0.3, 0.2]],
     }
 
     results = run_seq_simulations(**sim_params)
@@ -237,7 +244,7 @@ def test_GroundStateSearch():
 
 
 timeevol_params = copy.deepcopy(simulation_params)
-timeevol_params['final_time'] = 4.
+timeevol_params['final_time'] = 4.0
 
 
 def test_RealTimeEvolution():
@@ -249,8 +256,9 @@ def test_RealTimeEvolution():
     meas = results['measurements']
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
     alg_params = sim_params['algorithm_params']
-    expected_times = np.arange(0., sim_params['final_time'] + 1.e-10,
-                               alg_params['N_steps'] * alg_params['dt'])
+    expected_times = np.arange(
+        0.0, sim_params['final_time'] + 1.0e-10, alg_params['N_steps'] * alg_params['dt']
+    )
     N = len(expected_times)
     assert np.allclose(meas['evolved_time'], expected_times)
     assert np.all(meas['measurement_index'] == np.arange(N))
@@ -258,7 +266,7 @@ def test_RealTimeEvolution():
 
 
 regrouping_params = copy.deepcopy(simulation_params)
-regrouping_params['final_time'] = 4.
+regrouping_params['final_time'] = 4.0
 regrouping_params['group_to_NearestNeighborModel'] = True
 regrouping_params['group_sites'] = 2
 
@@ -272,8 +280,9 @@ def test_regrouping_and_group_to_NearestNeighborModel():
     meas = results['measurements']
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
     alg_params = sim_params['algorithm_params']
-    expected_times = np.arange(0., sim_params['final_time'] + 1.e-10,
-                               alg_params['N_steps'] * alg_params['dt'])
+    expected_times = np.arange(
+        0.0, sim_params['final_time'] + 1.0e-10, alg_params['N_steps'] * alg_params['dt']
+    )
     N = len(expected_times)
     assert np.allclose(meas['evolved_time'], expected_times)
     assert np.all(meas['measurement_index'] == np.arange(N))
@@ -302,8 +311,9 @@ def test_SpectralSimulation():
         meas = results['measurements']
         # expect two measurements: once in `init_measurements` and in `final_measurement`.
         alg_params = sim_params['algorithm_params']
-        expected_times = np.arange(0., sim_params['final_time'] + 1.e-10,
-                                   alg_params['N_steps'] * alg_params['dt'])
+        expected_times = np.arange(
+            0.0, sim_params['final_time'] + 1.0e-10, alg_params['N_steps'] * alg_params['dt']
+        )
         N = len(expected_times)
         assert np.allclose(meas['evolved_time'], expected_times)
         assert np.all(meas['measurement_index'] == np.arange(N))
@@ -311,7 +321,11 @@ def test_SpectralSimulation():
 
         # remove init_state_builder and model and pull from gs_search
         sim_params = copy.deepcopy(spectral_sim_params)
-        del sim_params['initial_state_params'], sim_params['model_class'], sim_params['model_params']
+        del (
+            sim_params['initial_state_params'],
+            sim_params['model_class'],
+            sim_params['model_params'],
+        )
         # first run a gs_search
         sim_params_gs = copy.deepcopy(groundstate_params)
         sim_params_gs['model_params']['bc_MPS'] = 'finite'
@@ -326,8 +340,9 @@ def test_SpectralSimulation():
         meas = results['measurements']
         # expect two measurements: once in `init_measurements` and in `final_measurement`.
         alg_params = sim_params['algorithm_params']
-        expected_times = np.arange(0., sim_params['final_time'] + 1.e-10,
-                                   alg_params['N_steps'] * alg_params['dt'])
+        expected_times = np.arange(
+            0.0, sim_params['final_time'] + 1.0e-10, alg_params['N_steps'] * alg_params['dt']
+        )
         N = len(expected_times)
         assert np.allclose(meas['evolved_time'], expected_times)
         assert np.all(meas['measurement_index'] == np.arange(N))
@@ -336,37 +351,34 @@ def test_SpectralSimulation():
 
 def test_output_filename_from_dict():
     options = copy.deepcopy(simulation_params)
-    assert output_filename_from_dict(options) == 'result.h5', "hard-coded default values changed"
+    assert output_filename_from_dict(options) == 'result.h5', 'hard-coded default values changed'
     assert output_filename_from_dict(options, suffix='.pkl') == 'result.pkl'
     fn = output_filename_from_dict(options, {'algorithm_params.dt': 'dt_{0:.2f}'})
     assert fn == 'result_dt_0.50.h5'
-    fn = output_filename_from_dict(options, {
-        'algorithm_params.dt': 'dt_{0:.2f}',
-        'model_params.L': 'L_{0:d}'
-    })
+    fn = output_filename_from_dict(
+        options, {'algorithm_params.dt': 'dt_{0:.2f}', 'model_params.L': 'L_{0:d}'}
+    )
     assert fn == 'result_dt_0.50_L_4.h5'
     # re-ordered parts
     parts_order = ['model_params.L', 'algorithm_params.dt']
-    fn = output_filename_from_dict(options, {
-        'model_params.L': 'L_{0:d}',
-        'algorithm_params.dt': 'dt_{0:.2f}'
-    },
-                                   parts_order=parts_order)
+    fn = output_filename_from_dict(
+        options,
+        {'model_params.L': 'L_{0:d}', 'algorithm_params.dt': 'dt_{0:.2f}'},
+        parts_order=parts_order,
+    )
     assert fn == 'result_L_4_dt_0.50.h5'
     if not sys.version_info < (3, 7):
         # should also work without specifying the parts_order for python >= 3.7
-        fn = output_filename_from_dict(options, {
-            'model_params.L': 'L_{0:d}',
-            'algorithm_params.dt': 'dt_{0:.2f}'
-        })
+        fn = output_filename_from_dict(
+            options, {'model_params.L': 'L_{0:d}', 'algorithm_params.dt': 'dt_{0:.2f}'}
+        )
     assert fn == 'result_L_4_dt_0.50.h5'
     options = {'alg': {'dt': 0.5}, 'model': {'Lx': 3, 'Ly': 4}, 'other': 'ignored'}
-    fn = output_filename_from_dict(options,
-                                   parts={
-                                       'alg.dt': 'dt_{0:.2f}',
-                                       ('model.Lx', 'model.Ly'): '{0:d}x{1:d}'
-                                   },
-                                   parts_order=['alg.dt', ('model.Lx', 'model.Ly')])
+    fn = output_filename_from_dict(
+        options,
+        parts={'alg.dt': 'dt_{0:.2f}', ('model.Lx', 'model.Ly'): '{0:d}x{1:d}'},
+        parts_order=['alg.dt', ('model.Lx', 'model.Ly')],
+    )
     assert fn == 'result_dt_0.50_3x4.h5'
 
 
@@ -413,14 +425,13 @@ def test_yaml_load(tmp_path):
     yaml = pytest.importorskip('yaml')
 
     # load without writing to file first
-    simulation_params = tenpy.load_yaml_with_py_eval(yaml_content=yaml_example,
-                                                     context=dict(np=np, tenpy=tenpy))
+    simulation_params = tenpy.load_yaml_with_py_eval(
+        yaml_content=yaml_example, context=dict(np=np, tenpy=tenpy)
+    )
     assert simulation_params['simulation_class'] == 'GroundStateSearch'
     assert simulation_params['model_params']['Jx'] == [0, 1, 4, 9, 16, 25]
     np.testing.assert_array_almost_equal_nulp(
-        simulation_params['model_params']['hx'],
-        np.linspace(0, 5, 21, endpoint=True),
-        10
+        simulation_params['model_params']['hx'], np.linspace(0, 5, 21, endpoint=True), 10
     )
     assert simulation_params['model_params']['lattice'] is tenpy.Square
 
@@ -434,8 +445,6 @@ def test_yaml_load(tmp_path):
     assert simulation_params['simulation_class'] == 'GroundStateSearch'
     assert simulation_params['model_params']['Jx'] == [0, 1, 4, 9, 16, 25]
     np.testing.assert_array_almost_equal_nulp(
-        simulation_params['model_params']['hx'],
-        np.linspace(0, 5, 21, endpoint=True),
-        10
+        simulation_params['model_params']['hx'], np.linspace(0, 5, 21, endpoint=True), 10
     )
     assert simulation_params['model_params']['lattice'] is tenpy.Square

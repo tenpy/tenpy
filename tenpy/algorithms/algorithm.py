@@ -4,6 +4,7 @@
 import time
 import numpy as np
 import logging
+
 logger = logging.getLogger(__name__)
 
 from ..linalg.truncation import TruncationError
@@ -14,7 +15,7 @@ from ..tools.cache import DictCache
 
 __all__ = ['Algorithm', 'TimeEvolutionAlgorithm', 'TimeDependentHAlgorithm']
 __deprecated_submodules__ = [
-    'truncation', # moved to tenpy.linalg
+    'truncation',  # moved to tenpy.linalg
 ]
 
 
@@ -76,6 +77,7 @@ class Algorithm:
     _resume_psi :
         Possibly a copy of `psi` to be used for :meth:`get_resume_data`.
     """
+
     def __init__(self, psi, model, options, *, resume_data=None, cache=None):
         self.options = asConfig(options, self.__class__.__name__)
         self.trunc_params = self.options.subconfig('trunc_params')
@@ -89,15 +91,20 @@ class Algorithm:
         if cache is None:
             cache = DictCache.trivial()
         self.cache = cache
-        self.checkpoint = EventHandler("algorithm")
+        self.checkpoint = EventHandler('algorithm')
         self._resume_psi = None
         try:
             N_sites_per_ring = model.lat.N_sites_per_ring
         except AttributeError:  # for e.g. VariationalApplyMPO, model is just the MPO and has no lat
             N_sites_per_ring = 1
         if N_sites_per_ring is not None:
-            consistency_check(N_sites_per_ring, self.options, 'max_N_sites_per_ring', 18,
-                            'Maximum number of sites per ring (``max_N_sites_per_ring``) exceeded.')
+            consistency_check(
+                N_sites_per_ring,
+                self.options,
+                'max_N_sites_per_ring',
+                18,
+                'Maximum number of sites per ring (``max_N_sites_per_ring``) exceeded.',
+            )
 
     @classmethod
     def switch_engine(cls, other_engine, *, options=None, **kwargs):
@@ -145,7 +152,7 @@ class Algorithm:
 
         Needs to be implemented in subclasses.
         """
-        raise NotImplementedError("Subclasses should implement this.")
+        raise NotImplementedError('Subclasses should implement this.')
 
     def resume_run(self):
         """Resume a run that was interrupted.
@@ -238,22 +245,24 @@ class Algorithm:
 
         # get info from model & params
         L = self.psi.L
-        chi_max = self.trunc_params["chi_max"]
+        chi_max = self.trunc_params['chi_max']
         H_dim = [self.model.lat.mps_sites()[i].dim for i in range(self.psi.L)]
 
         # determine all bond dimensions for arbitrary chains
-        if self.psi.bc == "finite":
-            chis = np.zeros(L+1, dtype=int)
+        if self.psi.bc == 'finite':
+            chis = np.zeros(L + 1, dtype=int)
             # first go from left to right
             chis[0] = self.model.lat.mps_sites()[0].dim
             for i in range(1, L):
-                chis[i] = min(chis[i-1] * self.model.lat.mps_sites()[i-1].dim, chi_max)
+                chis[i] = min(chis[i - 1] * self.model.lat.mps_sites()[i - 1].dim, chi_max)
             # now introduce cutoff from right
-            chis[L] = self.model.lat.mps_sites()[L-1].dim
-            for i in range(L-1, 0, -1):
-                chis[i] = min(chis[i], min(chis[i+1] * self.model.lat.mps_sites()[i].dim, chi_max))
+            chis[L] = self.model.lat.mps_sites()[L - 1].dim
+            for i in range(L - 1, 0, -1):
+                chis[i] = min(
+                    chis[i], min(chis[i + 1] * self.model.lat.mps_sites()[i].dim, chi_max)
+                )
         else:
-            chis = [chi_max]*(L+1)
+            chis = [chi_max] * (L + 1)
 
         # now start counting number of tensor entries
         total_entries = 0
@@ -262,11 +271,11 @@ class Algorithm:
         psi_entries = 0
         for i in range(len(self.model.lat.mps_sites())):
             site_i = self.model.lat.mps_sites()[i]
-            psi_entries += site_i.dim * chis[i] * chis[i+1]
+            psi_entries += site_i.dim * chis[i] * chis[i + 1]
 
         total_entries += psi_entries
 
-        logger.debug("Extracted MPS RAM usage as             %10.0f entries", psi_entries)
+        logger.debug('Extracted MPS RAM usage as             %10.0f entries', psi_entries)
 
         from .mps_common import Sweep
         from .mpo_evolution import ExpMPOEvolution
@@ -284,32 +293,31 @@ class Algorithm:
                 # Size of each environment: chi_{i}**2 * D_i or chi_{i+1}**2 * D_i
                 #                           (depending on left/right environment)
                 # The shape is ordered like (wL, wR, p, p*)
-                env_entries += chis[i]**2 * max(W.shape[0], W.shape[1])
+                env_entries += chis[i] ** 2 * max(W.shape[0], W.shape[1])
                 # max: sweeps need only L, not 2L env tensors
 
             lanczos_entries = 0
             # Additional RAM, if Lanczos is performed
             # We need to construct (1) the effective Hamiltonian and (2) the two-site wave-function
             # (1) H_eff
-            W = MPO.get_W(L//2)
+            W = MPO.get_W(L // 2)
             # Left and right part from H_eff -> 2 times environment
             # The third comes from the first contraction from 2-site wave function to left H_eff
-            lanczos_entries += 3 * H_dim[L//2]**2 * (chi_max**2 * max(W.shape[0], W.shape[1]))
+            lanczos_entries += 3 * H_dim[L // 2] ** 2 * (chi_max**2 * max(W.shape[0], W.shape[1]))
             #                  |         |                          |
             #           occurrences   from W                environment RAM
             #                        contraction
 
             # (2) 2-site wave-function
 
-            lanczos_entries += 2 * chi_max**2 * H_dim[L//2]**2
+            lanczos_entries += 2 * chi_max**2 * H_dim[L // 2] ** 2
             #              |          |           |
             #         occurrences  virtual     physical
             #       (top & bottom)  legs         legs
 
-
-            logger.debug("Extracted MPS environment RAM usage as %10.0f kB", env_entries)
-            logger.debug("Extracted MPO RAM usage as             %10.0f kB", MPO_entries)
-            logger.debug("Extracted extra RAM from Lanczos as    %10.0f kB", lanczos_entries)
+            logger.debug('Extracted MPS environment RAM usage as %10.0f kB', env_entries)
+            logger.debug('Extracted MPO RAM usage as             %10.0f kB', MPO_entries)
+            logger.debug('Extracted extra RAM from Lanczos as    %10.0f kB', lanczos_entries)
             total_entries += env_entries
             total_entries += MPO_entries
             total_entries += lanczos_entries
@@ -317,14 +325,19 @@ class Algorithm:
         if mem_saving_factor is None:
             mem_saving_factor = self.model.estimate_RAM_saving_factor()
 
-        logger.debug("We get a total of %.3e = %d entries for the RAM estimate", entry_size, entry_size)
-        logger.debug("Each entry uses %d byte", entry_size)
+        logger.debug(
+            'We get a total of %.3e = %d entries for the RAM estimate', entry_size, entry_size
+        )
+        logger.debug('Each entry uses %d byte', entry_size)
         RAM = total_entries * entry_size
-        logger.debug("We have a saving factor of %.5f ~= 1/%d",
-                     mem_saving_factor, int(1./mem_saving_factor + 0.5))
+        logger.debug(
+            'We have a saving factor of %.5f ~= 1/%d',
+            mem_saving_factor,
+            int(1.0 / mem_saving_factor + 0.5),
+        )
         RAM *= mem_saving_factor
         RAM_MB = RAM / 1024**2
-        logger.info("Total RAM estimate: %8d MB", RAM_MB)
+        logger.info('Total RAM estimate: %8d MB', RAM_MB)
         return RAM_MB
 
 
@@ -364,11 +377,12 @@ class TimeEvolutionAlgorithm(Algorithm):
         Upper bound for the accumulated error of the represented state,
         which is introduced due to the truncation during the sequence of update steps.
     """
+
     time_dependent_H = False  #: whether the algorithm supports time-dependent H
 
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
-        self.evolved_time = self.options.get('start_time', 0., 'real')
+        self.evolved_time = self.options.get('start_time', 0.0, 'real')
         self.trunc_err = self.options.get('start_trunc_err', TruncationError(), TruncationError)
         self.force_prepare_evolve = False
         if self.resume_data:
@@ -396,16 +410,18 @@ class TimeEvolutionAlgorithm(Algorithm):
 
         S = self.psi.entanglement_entropy()
         logger.info(
-            "--> time=%(tr)3.3f %(sign)s %(tc)3.3fj, max(chi)=%(chi)d, max(S)=%(S).5f, "
-            "avg DeltaS=%(dS).4e, since last update: %(wall_time).1fs", {
+            '--> time=%(tr)3.3f %(sign)s %(tc)3.3fj, max(chi)=%(chi)d, max(S)=%(S).5f, '
+            'avg DeltaS=%(dS).4e, since last update: %(wall_time).1fs',
+            {
                 'tr': self.evolved_time.real,
-                'sign': "+" if self.evolved_time.imag >= 0 else "-",
+                'sign': '+' if self.evolved_time.imag >= 0 else '-',
                 'tc': np.abs(self.evolved_time.imag),
                 'chi': max(self.psi.chi),
                 'S': max(S),
                 'dS': np.mean(S) - Sold,
                 'wall_time': time.time() - start_time,
-            })
+            },
+        )
         return self.psi
 
     def run_evolution(self, N_steps, dt):
@@ -441,7 +457,7 @@ class TimeEvolutionAlgorithm(Algorithm):
             The time step to be used.
         """
         # this function can e.g. calculate an approximation
-        raise NotImplementedError("Subclasses should implement this.")
+        raise NotImplementedError('Subclasses should implement this.')
 
     def evolve(self, N_steps, dt):
         """Evolve by N_steps*dt.
@@ -474,15 +490,20 @@ class TimeEvolutionAlgorithm(Algorithm):
 
         for _ in range(N_steps):
             trunc_err += self.evolve_step(dt)
-            consistency_check(trunc_err.eps, self.options, 'max_trunc_err', 0.01,
-                              'Maximum truncation error (``max_trunc_err``) exceeded.')
+            consistency_check(
+                trunc_err.eps,
+                self.options,
+                'max_trunc_err',
+                0.01,
+                'Maximum truncation error (``max_trunc_err``) exceeded.',
+            )
 
         self.evolved_time = self.evolved_time + N_steps * dt
         # (this is done to avoid problems of users storing self.trunc_err after each `update`)
         return trunc_err
 
     def evolve_step(self, dt):
-        raise NotImplementedError("Subclasses should implement this.")
+        raise NotImplementedError('Subclasses should implement this.')
 
 
 class TimeDependentHAlgorithm(TimeEvolutionAlgorithm):
@@ -507,6 +528,7 @@ class TimeDependentHAlgorithm(TimeEvolutionAlgorithm):
     .. todo ::
         This is still under development and lacks rigorous tests.
     """
+
     time_dependent_H = True
 
     def __init__(self, psi, model, options, **kwargs):
@@ -533,7 +555,6 @@ class TimeDependentHAlgorithm(TimeEvolutionAlgorithm):
             trunc_err += self.evolve(1, dt)  # update changes self.evolved_time
 
             self.reinit_model()
-
 
         if preserve_norm:
             self.psi.norm = old_norm

@@ -9,32 +9,32 @@ from random_test import random_Array
 # Construct toy tensors
 # =====================
 
-Sx = npc.Array.from_ndarray_trivial([[0., 1.], [1., 0.]])
-Sy = npc.Array.from_ndarray_trivial([[0., -1.j], [1.j, 0.]], dtype=complex)
-Sz = npc.Array.from_ndarray_trivial([[1., 0.], [0., -1.]])
-S0 = npc.Array.from_ndarray_trivial([[1., 0.], [0., 1.]])
+Sx = npc.Array.from_ndarray_trivial([[0.0, 1.0], [1.0, 0.0]])
+Sy = npc.Array.from_ndarray_trivial([[0.0, -1.0j], [1.0j, 0.0]], dtype=complex)
+Sz = npc.Array.from_ndarray_trivial([[1.0, 0.0], [0.0, -1.0]])
+S0 = npc.Array.from_ndarray_trivial([[1.0, 0.0], [0.0, 1.0]])
 
 
 def two_site_hamiltonian(coupling=1, ferro=True):
-    """ returns the two site gate h = -ZZ - gX for ferro=True and h = ZZ - gX otherwise
-        the gX term is symmetrized as 1/2 (1*Sx + Sx*1)
+    """returns the two site gate h = -ZZ - gX for ferro=True and h = ZZ - gX otherwise
+    the gX term is symmetrized as 1/2 (1*Sx + Sx*1)
 
-        Index convention
+    Index convention
 
-          p1*   p2*
-          ^     ^
-          |     |
-        |---------|
-        |    h    |
-        |---------|
-          |     |
-          ^     ^
-          p1    p2
+      p1*   p2*
+      ^     ^
+      |     |
+    |---------|
+    |    h    |
+    |---------|
+      |     |
+      ^     ^
+      p1    p2
 
     """
     h = -npc.outer(Sz, Sz)
-    sign = -1. if ferro else 1.
-    h = h + sign * coupling * .5 * (npc.outer(Sx, S0) + npc.outer(S0, Sx))
+    sign = -1.0 if ferro else 1.0
+    h = h + sign * coupling * 0.5 * (npc.outer(Sx, S0) + npc.outer(S0, Sx))
     h.iset_leg_labels(['p1*', 'p1', 'p2*', 'p2'])
     return h
 
@@ -46,95 +46,116 @@ def two_site_hamiltonian(coupling=1, ferro=True):
 def test_contract_to_real_number():
     # 1 contract to real number
     # ==========================
-    v = npc.Array.from_ndarray_trivial([[1., .5], [0, -1.6]])
+    v = npc.Array.from_ndarray_trivial([[1.0, 0.5], [0, -1.6]])
     v.iset_leg_labels(['L1', 'L2'])
-    w = npc.Array.from_ndarray_trivial([[1.2, .6], [0.1, -1.2]])
+    w = npc.Array.from_ndarray_trivial([[1.2, 0.6], [0.1, -1.2]])
     w.iset_leg_labels(['U1', 'U2'])
     h2 = two_site_hamiltonian()
-    h = two_site_hamiltonian(coupling=.3)
+    h = two_site_hamiltonian(coupling=0.3)
     S = Sz
     S.iset_leg_labels(['U', 'L'])
 
-    res = contract(tensor_list=[v, h2, S, h, w],
-                   leg_contractions=[['v', 'L1', 'h2', 'p1*'], ['v', 'L2', 'h2', 'p2*'],
-                                     ['h2', 'p1', 'h', 'p1*'], ['h2', 'p2', 'S', 'U'],
-                                     ['S', 'L', 'h', 'p2*'], ['h', 'p1', 'w', 'U1'],
-                                     ['h', 'p2', 'w', 'U2']],
-                   open_legs=None,
-                   tensor_names=['v', 'h2', 'S', 'h', 'w'])
+    res = contract(
+        tensor_list=[v, h2, S, h, w],
+        leg_contractions=[
+            ['v', 'L1', 'h2', 'p1*'],
+            ['v', 'L2', 'h2', 'p2*'],
+            ['h2', 'p1', 'h', 'p1*'],
+            ['h2', 'p2', 'S', 'U'],
+            ['S', 'L', 'h', 'p2*'],
+            ['h', 'p1', 'w', 'U1'],
+            ['h', 'p2', 'w', 'U2'],
+        ],
+        open_legs=None,
+        tensor_names=['v', 'h2', 'S', 'h', 'w'],
+    )
     expected_result = -0.2970000000000002  # from MatLab
 
-    assert np.abs(res - expected_result) < 1.e-10
+    assert np.abs(res - expected_result) < 1.0e-10
 
 
 def test_contract_to_complex_number():
     # 2 contract to complex number
     # ==========================
-    v = npc.Array.from_ndarray_trivial([[1. + .2j, .5], [0 + .1j, -1.6]], dtype=complex)
+    v = npc.Array.from_ndarray_trivial([[1.0 + 0.2j, 0.5], [0 + 0.1j, -1.6]], dtype=complex)
     v.iset_leg_labels(['L1', 'L2'])
-    w = npc.Array.from_ndarray_trivial([[1.2 + .3j, .6], [0.1 + .2j, -1.2]], dtype=complex)
+    w = npc.Array.from_ndarray_trivial([[1.2 + 0.3j, 0.6], [0.1 + 0.2j, -1.2]], dtype=complex)
     w.iset_leg_labels(['U1', 'U2'])
     h2 = two_site_hamiltonian()
-    h = two_site_hamiltonian(coupling=.3)
+    h = two_site_hamiltonian(coupling=0.3)
     S = Sy
     S.iset_leg_labels(['U', 'L'])
 
-    res = contract(tensor_list=[v, h2, S, h, w],
-                   tensor_names=['v', 'h2', 'S', 'h', 'w'],
-                   leg_contractions=[['v', 'L1', 'h2', 'p1*'], ['v', 'L2', 'h2', 'p2*'],
-                                     ['h2', 'p1', 'h', 'p1*'], ['h2', 'p2', 'S', 'U'],
-                                     ['S', 'L', 'h', 'p2*'], ['h', 'p1', 'w', 'U1'],
-                                     ['h', 'p2', 'w', 'U2']])
+    res = contract(
+        tensor_list=[v, h2, S, h, w],
+        tensor_names=['v', 'h2', 'S', 'h', 'w'],
+        leg_contractions=[
+            ['v', 'L1', 'h2', 'p1*'],
+            ['v', 'L2', 'h2', 'p2*'],
+            ['h2', 'p1', 'h', 'p1*'],
+            ['h2', 'p2', 'S', 'U'],
+            ['S', 'L', 'h', 'p2*'],
+            ['h', 'p1', 'w', 'U1'],
+            ['h', 'p2', 'w', 'U2'],
+        ],
+    )
     expected_result = -0.1735 - 0.5015j  # from MatLab
 
-    assert np.abs(res - expected_result) < 1.e-10
+    assert np.abs(res - expected_result) < 1.0e-10
 
 
 def test_contract_with_sequence():
     # 3 contract to complex number using a sequence
     # ==========================
-    v = npc.Array.from_ndarray_trivial([[1. + .2j, .5], [0 + .1j, -1.6]], dtype=complex)
+    v = npc.Array.from_ndarray_trivial([[1.0 + 0.2j, 0.5], [0 + 0.1j, -1.6]], dtype=complex)
     v.iset_leg_labels(['L1', 'L2'])
-    w = npc.Array.from_ndarray_trivial([[1.2 + .3j, .6], [0.1 + .2j, -1.2]], dtype=complex)
+    w = npc.Array.from_ndarray_trivial([[1.2 + 0.3j, 0.6], [0.1 + 0.2j, -1.2]], dtype=complex)
     w.iset_leg_labels(['U1', 'U2'])
     h2 = two_site_hamiltonian()
-    h = two_site_hamiltonian(coupling=.3)
+    h = two_site_hamiltonian(coupling=0.3)
     S = Sy
     S.iset_leg_labels(['U', 'L'])
 
-    res = contract(tensor_list=[v, h2, S, h, w],
-                tensor_names=['v', 'h2', 'S', 'h', 'w'],
-                leg_contractions=[['v', 'L1', 'h2', 'p1*'], ['v', 'L2', 'h2', 'p2*'],
-                                    ['h2', 'p1', 'h', 'p1*'], ['h2', 'p2', 'S', 'U'],
-                                    ['S', 'L', 'h', 'p2*'], ['h', 'p1', 'w', 'U1'],
-                                    ['h', 'p2', 'w', 'U2']],
-                sequence=[1, 3, 5, 6, 4, 2, 0])
+    res = contract(
+        tensor_list=[v, h2, S, h, w],
+        tensor_names=['v', 'h2', 'S', 'h', 'w'],
+        leg_contractions=[
+            ['v', 'L1', 'h2', 'p1*'],
+            ['v', 'L2', 'h2', 'p2*'],
+            ['h2', 'p1', 'h', 'p1*'],
+            ['h2', 'p2', 'S', 'U'],
+            ['S', 'L', 'h', 'p2*'],
+            ['h', 'p1', 'w', 'U1'],
+            ['h', 'p2', 'w', 'U2'],
+        ],
+        sequence=[1, 3, 5, 6, 4, 2, 0],
+    )
 
     expected_result = -0.1735 - 0.5015j  # from MatLab
 
-    assert np.abs(res - expected_result) < 1.e-10
+    assert np.abs(res - expected_result) < 1.0e-10
 
 
 def test_contract_to_tensor():
     h2 = two_site_hamiltonian()
-    h = two_site_hamiltonian(coupling=.3)
+    h = two_site_hamiltonian(coupling=0.3)
     S = Sy
     S.iset_leg_labels(['U', 'L'])
 
-    res = contract(tensor_list=[h2, S, h],
-                   tensor_names=['h2', 'S', 'h'],
-                   leg_contractions=[['h2', 'p1', 'h', 'p1*'], ['h2', 'p2', 'S', 'U'],
-                                     ['S', 'L', 'h', 'p2*']],
-                   open_legs=[['h2', 'p1*', 'U1'], ['h2', 'p2*', 'U2'], ['h', 'p1', 'L1'],
-                              ['h', 'p2', 'L2']])
+    res = contract(
+        tensor_list=[h2, S, h],
+        tensor_names=['h2', 'S', 'h'],
+        leg_contractions=[['h2', 'p1', 'h', 'p1*'], ['h2', 'p2', 'S', 'U'], ['S', 'L', 'h', 'p2*']],
+        open_legs=[['h2', 'p1*', 'U1'], ['h2', 'p2*', 'U2'], ['h', 'p1', 'L1'], ['h', 'p2', 'L2']],
+    )
 
     expected_result = np.ones([2, 2, 2, 2], dtype=complex)
-    expected_result[:, :, 0, 0] = [[.35j, -1j], [0, .65j]]
-    expected_result[:, :, 1, 0] = [[0, -.65j], [-.35j, -1j]]
-    expected_result[:, :, 0, 1] = [[1j, +.35j], [.65j, 0]]
-    expected_result[:, :, 1, 1] = [[-.65j, 0], [1j, -.35j]]
+    expected_result[:, :, 0, 0] = [[0.35j, -1j], [0, 0.65j]]
+    expected_result[:, :, 1, 0] = [[0, -0.65j], [-0.35j, -1j]]
+    expected_result[:, :, 0, 1] = [[1j, +0.35j], [0.65j, 0]]
+    expected_result[:, :, 1, 1] = [[-0.65j, 0], [1j, -0.35j]]
 
-    assert np.linalg.norm(res.to_ndarray() - expected_result) < 1.e-10
+    assert np.linalg.norm(res.to_ndarray() - expected_result) < 1.0e-10
 
 
 def test_outer_product():
@@ -143,15 +164,18 @@ def test_outer_product():
     S2 = Sz
     S2.iset_leg_labels(['U', 'L'])
 
-    res = contract(tensor_list=[S, S2],
-                   tensor_names=['Sy', 'Sz'],
-                   open_legs=[['Sy', 'U', 'U2'], ['Sy', 'L', 'L2'], ['Sz', 'U', 'U1'],
-                              ['Sz', 'L', 'L1']])
-    expected_result = np.kron(np.array([[1., 0.], [0., -1.]]), np.array([[0., -1.j], [1.j, 0.]]))
+    res = contract(
+        tensor_list=[S, S2],
+        tensor_names=['Sy', 'Sz'],
+        open_legs=[['Sy', 'U', 'U2'], ['Sy', 'L', 'L2'], ['Sz', 'U', 'U1'], ['Sz', 'L', 'L1']],
+    )
+    expected_result = np.kron(
+        np.array([[1.0, 0.0], [0.0, -1.0]]), np.array([[0.0, -1.0j], [1.0j, 0.0]])
+    )
     expected_result = expected_result.reshape([2, 2, 2, 2])
     expected_result = expected_result.transpose([1, 3, 0, 2])
 
-    assert np.linalg.norm(res.to_ndarray() - expected_result) < 1.e-10
+    assert np.linalg.norm(res.to_ndarray() - expected_result) < 1.0e-10
 
 
 def test_fixes_issue131():
@@ -159,7 +183,6 @@ def test_fixes_issue131():
     with_charge = random_Array((20, 15, 10), npc.ChargeInfo([1, 3, 1, 2]), sort=False)
 
     for A in [no_charge, with_charge]:
-
         links1 = [[1, -1, -3], [1, -2, -4]]
         # sum_x A[x, a, c] A[x, b, d] = result[a, b, c, d]
         expect1 = npc.tensordot(A, A.conj(), (0, 0)).transpose([0, 2, 1, 3])
