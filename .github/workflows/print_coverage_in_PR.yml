@@ -1,8 +1,8 @@
 name: Notify about Coverage
 
 
-# on:
-#   pull_request_target:
+on:
+  pull_request_target:
 
 jobs:
   calc_coverage:
@@ -30,7 +30,7 @@ jobs:
         # also installs extra dependencies defined in pyproject.toml
         run: |
           python -m build .
-          python -m pip install ".[io, test, extra]"
+          python -m pip install ".[test, extra]"
 
       - name: Run pytest with coverage
         # pytest configuration in pyproject.toml

@@ -1,0 +1,46 @@
+[v1.0.7] - 2025-10-30
+=====================
+
+Release Notes
+-------------
+A bunch of smaller new features and bug fixes.
+
+Python versions ``< 3.10`` are no longer officially supported and built for.
+
+Several bugs were fixed that have silently caused wrong behavior in the past.
+In particular this had affected Hofstadter models with symmetric gauge, mixed xk models in edge cases,
+some MPO methods if explicit_plus_hc was used and DMRG with ``chi_list``.
+
+
+Changelog
+---------
+
+Added
+^^^^^
+- Added the `subsites_start` parameter to exponentially decaying couplings,
+  making the kind of couplings it can cover even more general.
+  See :meth:`~tenpy.models.model.CouplingModel.add_exponentially_decaying_coupling`.
+- Added :meth:`~tenpy.models.model.CouplingModel.add_centered_exponentially_decaying_term`
+- Added :meth:`~tenpy.networks.mpo.MPO.plus_identity` for MPO.
+- Added :meth:`tenpy.networks.purification_mps.PurificationMPS.from_density_matrix`
+- Implemented Krylov subspace expansion for TDVP.
+
+Fixed
+^^^^^
+- Fixed a bug in the :class:`~tenpy.models.hofstadter` models, where the symmetric gauge was not
+  implemented correctly and yielded a different physical model. Removed the config options for
+  controlling the magnetic unit cell size, since in all well-configured cases they had no effect.
+  See :pull:`527` for details.
+- Fixed a bug (see :issue:`446` ) where segment DMRG failed with an error.
+- Fixed a bug where :meth:`~tenpy.models.model.CouplingModel.add_exponentially_decaying_coupling`
+  with ``plus_hc=True`` did not hc the ``op_string``
+- Fixed a bug in single-site DMRG, where ``mixer_activate`` raised an error if ``mixer = None``
+- Fixed a bug where DMRG using a ``chi_list`` caused the environment sweeps to use the default
+  ``chi_max``, which is ``100`` and implies unintentional heavy truncation in most settings.
+- Fixed a typo (wrong keyword) for QRBasedTEBDEngine with nontrivial qtotal of MPS B tensors
+- Fixed a typo in the :mod:`~tenpy.models.mixed_xk` models,
+  where :meth:`~tenpy.models.mixed_xk.MixedXKLattice.from_charges_of_orbitals` ignored the
+  ``ring_order``.
+- Fix :meth:`tenpy.networks.mpo.MPO.is_equal` if ``explicit_plus_hc=True``.
+- Fixed a bug where ``CouplingMPOModel`` could not configure ``NLegLadder`` lattices automatically,
+  from only the ``model_params``, because that lattice has a different ``__init__`` call structure.
