@@ -47,7 +47,7 @@ dependencies = [
 [project.optional-dependencies]
 plot = ["matplotlib"]
 io = ["h5py", "pyyaml"]
-test = ["pytest>=6.0"]
+memory = ["psutil"]
 extra = ["bottleneck", "yapf==0.28.0", "docformatter==1.3.1"]
 docbuild = [
     "Sphinx", 
@@ -59,7 +59,8 @@ docbuild = [
     "pandoc",
     "sphinx_copybutton",
 ]
-all = ["tenpy[plot, io, test, extra, docbuild]"]
+test = ["pytest>=6.0", "physics_tenpy[io, memory]"]
+all = ["physics_tenpy[plot, io, test, extra, docbuild]"]
 
 
 [project.urls]

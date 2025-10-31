@@ -50,7 +50,7 @@ jobs:
     - name: Build and install tenpy
       run: |
         python -m build .
-        python -m pip install ".[io, test]"
+        python -m pip install ".[test]"
     
     - name: Set environment variable to disable the cython extension
       if: ${{ matrix.compiled == false }}
