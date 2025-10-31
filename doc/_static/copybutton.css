@@ -5,7 +5,7 @@ a.copybtn {
     right: .2em;
     width: 1em;
     height: 1em;
-	opacity: .3;
+    opacity: .3;
     transition: opacity 0.5s;
     border: none;
     user-select: none;
@@ -24,7 +24,7 @@ a.copybtn > img {
 }
 
 .highlight:hover .copybtn {
-	opacity: 1;
+    opacity: 1;
 }
 
 /**

@@ -48,10 +48,10 @@ io = ["h5py", "pyyaml"]
 memory = ["psutil"]
 extra = ["bottleneck"]
 docbuild = [
-    "Sphinx", 
-    "sphinx-rtd-theme", 
-    "sphinxcontrib-bibtex", 
-    "matplotlib", 
+    "Sphinx",
+    "sphinx-rtd-theme",
+    "sphinxcontrib-bibtex",
+    "matplotlib",
     "ipykernel",
     "nbsphinx",
     "pandoc",
@@ -85,7 +85,7 @@ version = {attr = "tenpy.__version__"}
 [tool.cibuildwheel]
 # Disable building 32bit windows wheels (h5py does not support it)
 # Disable musllinux : would need to install BLAS/LAPACK
-# Disable free-threaded python 3.14 (h5py not yet supported), see issue 
+# Disable free-threaded python 3.14 (h5py not yet supported), see issue 570 (https://github.com/tenpy/tenpy/issues/570)
 skip = "*-win32 *-musllinux_* cp314t-*"
 # Build separate wheels for macOS's different architectures.
 macos.archs = ["x86_64", "arm64"]

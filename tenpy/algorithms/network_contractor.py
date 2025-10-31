@@ -146,7 +146,7 @@ def contract(tensor_list, tensor_names=None, leg_contractions=None, open_legs=No
         res.iset_leg_labels(final_labels)
 
     return res
-    
+
 
 def _ncon_input_checks(tensor_list, leg_links, sequence):
     """Check inputs for consistency and convert to the following format
@@ -154,7 +154,7 @@ def _ncon_input_checks(tensor_list, leg_links, sequence):
     sequence: np.ndarray
     """
     tensor_list = list(tensor_list)
-    
+
     if len(leg_links) != len(tensor_list):
         msg = f'Mismatching lengths: Got {len(tensor_list)} Arrays and {len(leg_links)} leg_links'
         raise ValueError(msg)
@@ -166,7 +166,7 @@ def _ncon_input_checks(tensor_list, leg_links, sequence):
         which = ", ".join(map(str, missing_positive_values))
         msg = f'The following positive values are missing in leg_links: {which}'
         raise ValueError(msg)
-    
+
     if sequence is None:
         sequence = np.arange(1, num_contractions + 1)
     else:
@@ -174,7 +174,7 @@ def _ncon_input_checks(tensor_list, leg_links, sequence):
         if len(sequence) != num_contractions or set(sequence) != set(range(1, num_contractions + 1)):
             msg = f'Invalid sequence. Expected a permutation of [1, ..., {num_contractions}]. Got {sequence}.'
             raise ValueError(msg)
-        
+
     return tensor_list, leg_links, sequence
 
 
@@ -188,7 +188,7 @@ def _ncon_do_traces(tensor_list, leg_links, sequence):
 
 def _partial_trace(tensor, tensor_links, loc):
     """Perform all partial traces on a given tensor.
-    
+
     Parameters
     ----------
     tensor: :class:'Array'
@@ -196,7 +196,7 @@ def _partial_trace(tensor, tensor_links, loc):
         the corresponding entry of `tensor_links`
     loc: int
         the index of `tensor` in `tensor_list`
-        
+
     Returns
     -------
     result: :class:'Array'
@@ -215,7 +215,7 @@ def _partial_trace(tensor, tensor_links, loc):
     trace_axes = np.zeros((num_traces, 2), dtype=np.int_)
     for n, value in enumerate(trace_links):
         trace_axes[n, :] = np.where(tensor_links == value)[0]
-    
+
     try:
         tensor = tensor.combine_legs(combine_legs=(trace_axes[:, 0], trace_axes[:, 1]), new_axes=(-2, -1))
         tensor = npc.trace(tensor, leg1=-2, leg2=-1)
@@ -223,9 +223,9 @@ def _partial_trace(tensor, tensor_links, loc):
         msg = (f'An error ocurred while performing the partial trace on tensor_list[{loc}]. '
                f'Original stacktrace below.')
         raise type(e)(msg) from e
-    
+
     return tensor, res_links, trace_links
-    
+
 
 def _ncon_do_binary_contractions(tensor_list, leg_links, sequence):
     while len(sequence) > 0:
@@ -242,9 +242,9 @@ def _ncon_do_binary_contractions(tensor_list, leg_links, sequence):
         links_b = leg_links.pop(loc_b)
         tensor_a = tensor_list.pop(loc_a)
         links_a = leg_links.pop(loc_a)
-        
+
         common_values, a_axes, b_axes = np.intersect1d(links_a, links_b, assume_unique=True, return_indices=True)
-        
+
         try:
             res = npc.tensordot(tensor_a, tensor_b, (a_axes, b_axes))
         except Exception as e:
@@ -254,15 +254,15 @@ def _ncon_do_binary_contractions(tensor_list, leg_links, sequence):
             raise type(e)(msg) from e
 
         res_links = np.append(np.delete(links_a, a_axes), np.delete(links_b, b_axes))
-        
+
         tensor_list.append(res)
         leg_links.append(res_links)
         used_sequence_values = np.intersect1d(sequence, common_values, assume_unique=True, return_indices=True)[1]
         sequence = np.delete(sequence, used_sequence_values)
-        
+
     return tensor_list, leg_links, sequence
-    
-    
+
+
 def _ncon_do_outer_products(tensor_list, leg_links):
     while len(tensor_list) > 1:
         tensor_b = tensor_list.pop(-1)
@@ -275,7 +275,5 @@ def _ncon_do_outer_products(tensor_list, leg_links):
                    f'Original stacktrace below.')
             raise type(e)(msg) from e
         leg_links[-1] = np.append(leg_links[-1], links_b)
-    
+
     return tensor_list, leg_links
-    
-        

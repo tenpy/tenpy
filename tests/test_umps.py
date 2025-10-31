@@ -18,6 +18,3 @@ def test_to_and_from_mps():
     psi2 = uniform_psi.to_MPS(check_overlap=True)
     ov = psi.overlap(psi2, understood_infinite=True)
     assert (abs(ov - 1.) < 1.e-15)
-
-
-

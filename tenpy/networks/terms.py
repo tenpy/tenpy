@@ -1341,7 +1341,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
     An easy example would be a ladder, where we want the long-range interactions on the first rung
     only, ``subsites = lat.mps_idx_fix_u(u=0)``, see :meth:`~tenpy.models.lattice.mps_idx_fix_u`.
 
-    Suppose we want long-range (LR) couplings between all sites on a strip of width Ly. The 
+    Suppose we want long-range (LR) couplings between all sites on a strip of width Ly. The
     `subsites` parameters allows us to implement LR couplings along each leg of the strip. We want
     LR couplings between sites that have both vertical and horizontal offset according to the
     Euclidean distance. To do this, we use `subsites_start`. For each site in
@@ -1420,7 +1420,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                 raise ValueError("subsites needs to be sorted; choose a different MPS ordering!")
             assert subsites[0] >= 0
             assert subsites[-1] < self.L
-        
+
         if subsites_start is None:
             subsites_start = subsites
         else:
@@ -1588,7 +1588,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
         L = self.L
         for term in self.exp_decaying_terms:
             strength, lambda_, op_i, op_j, subsites, subsites_start, op_string = term
-            if np.isscalar(lambda_): 
+            if np.isscalar(lambda_):
                 lambda_ = np.full(self.L, lambda_)
             N1 = len(subsites)
             if bc == 'finite':
@@ -1671,7 +1671,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
             for i in subsites_start:
                 if not sites[i].valid_opname(op_i):
                     raise ValueError("Operator {op!r} not in site {i:d}".format(op=op_i, i=i))
-                
+
             for j in subsites:
                 if not sites[j].valid_opname(op_j):
                     raise ValueError("Operator {op!r} not in site {i:d}".format(op=op_j, i=j))

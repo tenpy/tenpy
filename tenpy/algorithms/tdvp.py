@@ -122,13 +122,13 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
             Krylov_expansion_dim: int
                 How many additional vectors do we use to expand the basis; > 1 is sufficient for random extension.
                 Defaults to 0, which does no expansion.
-            mpo: 
+            mpo:
                 What MPO do we use for expanion? If none is specified, we use the Hamiltonian.
-                If 'None' is specified, we do random extension. 
+                If 'None' is specified, we do random extension.
                 If a list is given, one applies multiple MPOs to get the next Krylov vector,
                  e.g. with WII and a higher order time step.
             trunc_params: dict
-                Standard dictionary for truncation settings, e.g. 
+                Standard dictionary for truncation settings, e.g.
                 chi_max=max number of states that are added on each site.
                 svd_min=cutoff for kept sqrt(eigenvalues) of the RDM.
             apply_mpo_options: dict
@@ -146,7 +146,7 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
             # We might want to use the WII MPO or (1 - itH) rather than H
             Krylov_mpo = self.Krylov_params.get('mpo', self.model.H_MPO)
             # How do we truncate the RDMs when extending?
-            Krylov_trunc_params = self.Krylov_params.subconfig('trunc_params', self.trunc_params) 
+            Krylov_trunc_params = self.Krylov_params.subconfig('trunc_params', self.trunc_params)
             if Krylov_mpo is None:  # Random expansion
                 extension_err = self.psi.subspace_expansion(expand_into=[], trunc_par=Krylov_trunc_params)
             else:                   # Expansion by MPO application

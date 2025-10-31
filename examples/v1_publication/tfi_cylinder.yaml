@@ -12,7 +12,7 @@ model_params:
   J: 1
   g: !py_eval |
     np.linspace(2, 4, 101, endpoint=True)
-    
+
 initial_state_params:
   method: lat_product_state
   product_state: [[[up], [down]]]
@@ -23,12 +23,12 @@ algorithm_params:
   trunc_params:
     svd_min: 1.e-10
     chi_max: 258
-    
+
 connect_measurements:
   - - tenpy.simulations.measurement
     - m_onsite_expectation_value
     - opname: Sz
-    
+
 sequential:
   recursive_keys:
     - model_params.g

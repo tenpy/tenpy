@@ -119,7 +119,7 @@ class Site(Hdf5Exportable):
         from tenpy.networks.site import Site
 
     .. doctest :: Site
-    
+
         >>> chinfo = npc.ChargeInfo([1], ['2 * Sz'])
         >>> ch = npc.LegCharge.from_qflat(chinfo, [1, -1])
         >>> Sp = [[0, 1.], [0, 0]]
@@ -135,7 +135,7 @@ class Site(Hdf5Exportable):
         >>> print(site.get_op('Splus Sminus').to_ndarray())
         [[0. 0.]
          [0. 1.]]
-     
+
     Note that sorting the charges (which happens by default!) may lead to unintuitive
     matrix representations of the operators, because physicists are typically not used to
     writing them in the sorted basis (in this case ``['down', 'up']``);

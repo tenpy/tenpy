@@ -61,4 +61,3 @@ def test_parameters():
     assert len(sub.unused) == 2
     with pytest.warns(UserWarning, match=r"unused options for config sub:\n\['x', 'y_new'\]"):
         sub.__del__()
-

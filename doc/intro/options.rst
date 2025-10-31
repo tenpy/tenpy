@@ -12,7 +12,7 @@ It can be convenient to represent these options in a [yaml]_ file, say ``paramet
 Note that the default values and even the allowed/used option names often depend on other parameters.
 For example, the `model_class` parameter above given to a :class:`~tenpy.simulations.simulation.Simulation` selects a model class,
 and different model classes might have completely different parameters.
-This gives you freedom to easily define your own parameters when you implement a model, 
+This gives you freedom to easily define your own parameters when you implement a model,
 but it also makes it a little bit harder to keep track of allowed values.
 
 In the TeNPy documentation, we use the ``Options`` sections of doc-strings to define parameters that are read out.

@@ -51,4 +51,3 @@ def test_bosonic_model_DMRG():
     estimate = engine.estimate_RAM()
     assert abs(estimate - exact) < 1.e-10, \
         "DMRG RAM did not match expectation (expected: %d, gotten:%d)" % (exact, estimate)
-

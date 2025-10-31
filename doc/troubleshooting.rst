@@ -26,7 +26,7 @@ Why is TeNPy not respecting MKL_NUM_THREADS?
 
 How can I double check the installed TeNPy version?
     You can call :func:`tenpy.show_config` to print details about the installed tenpy version.
-    If you have multiple TeNPy/Python versions on your computer, 
+    If you have multiple TeNPy/Python versions on your computer,
     just calling ``print(tenpy)`` after an ``import tenpy`` will print the path of the used tenpy and can thus help
     you identify which of the TeNPy installations you use.
 

@@ -4,7 +4,7 @@ Logging and terminal output
 By default, calling (almost) any function in TeNPy will not print output, apart from error messages, tracebacks, and warnings.
 Instead, we use Python's :mod:`logging` module to allow fine-grained redirecting of status messages etc.
 
-Of course, when you get an error message, you should be concerned to find out what it is about and how to fix it. 
+Of course, when you get an error message, you should be concerned to find out what it is about and how to fix it.
 (If you believe it is a bug, `report <https://github.com/tenpy/tenpy/issues/new/choose>`_ it.)
 Warnings can be reported either using ``warnings.warn(...)`` or with the logging mechanism ``logger.warning(...)``.
 The former is used for warnings about things in your setup that you *should* fix.
@@ -56,7 +56,7 @@ For example, the following both prints log messages to stdout and saves them to`
 To also capture warnings, you might also want to call :func:`logging.captureWarnings`.
 
 In fact, the above is the default configuration used by :func:`tenpy.tools.misc.setup_logging`.
-If you use a :class:`~tenpy.simulations.simulation.Simulation` class, it will automatically 
+If you use a :class:`~tenpy.simulations.simulation.Simulation` class, it will automatically
 call :meth:`~tenpy.tools.misc.setup_logging` for you, saving the log to the same filename as the :cfg:option:`Simulation.output_filename` but with a ``.log`` ending.
 Moreover, you can easily adjust the log levels with simple parameters, for example with the following configuration (using [yaml]_ notation):
 
@@ -83,7 +83,7 @@ yourself, and at the same time redirect the logging messages of tenpy to a file,
 However, these ``print(...)`` statements are not re-directed to the log-files.
 Therefore, if you write your own sub-classes like Models, I would recommended that you also use the loggers instead of
 simple print statements.
-You can read the `official logging tutorial <https://docs.python.org/3/howto/logging.html>`_ for details, 
+You can read the `official logging tutorial <https://docs.python.org/3/howto/logging.html>`_ for details,
 but it's actually straight-forward, and just requires at most two steps.
 
 1.  If necessary, import the necessary modules and create a logger at the top of your module::
@@ -95,7 +95,7 @@ but it's actually straight-forward, and just requires at most two steps.
     .. note ::
 
         Most TeNPy classes that you might want to subclass, like models, algorithm engines or simulations,
-        provide a :class:`~logging.Logger` as ``self.logger`` class attribute. 
+        provide a :class:`~logging.Logger` as ``self.logger`` class attribute.
         In that case you can even **skip** this step and just use ``self.logger`` instead of ``logger`` in the snippets
         below.
 

@@ -29,8 +29,8 @@ def tfi_vumps(g=1.5):
         'max_E_err': 1.e-12,
         'max_S_err': 1.e-8,
     }
-   
-    
+
+
     eng = vumps.TwoSiteVUMPSEngine(psi, M, vumps_pars)
     E, psi = eng.run()
     print(f"ground state energy: {E:.5f}")
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     momenta, dispersions = tfi_excitations(psi, M)
 
     # plot and compare to exact results
-    import matplotlib.pyplot as plt 
+    import matplotlib.pyplot as plt
 
     plt.plot(momenta, dispersions, 'x', label='plane wave ansatz')
     plt.plot(np.arange(0, np.pi, 0.1), tfi_dispersion(np.arange(0, np.pi, 0.1), 1.5), ':', label='exact', c='black')

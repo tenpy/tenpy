@@ -1,10 +1,10 @@
-#!/usr/bin/env -S python -m tenpy 
+#!/usr/bin/env -S python -m tenpy
 
 simulation_class : GroundStateSearch
 
 directory: results
 
-output_filename_params : 
+output_filename_params :
     prefix: c_sequential
     parts:
         model_params.Jz: "Jz_{0:.2f}"

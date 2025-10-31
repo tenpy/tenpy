@@ -1399,7 +1399,7 @@ class Array:
 
         The resulting Array is a shallow copy with the same block structure and the same numerical
         entries, but the charges, i.e. the labels of the different blocks, are changed.
-        
+
         The mapping needs to be compatible with charge rules, i.e. applying the mapping must
         commute with charge fusion::
 

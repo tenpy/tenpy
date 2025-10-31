@@ -8,13 +8,13 @@ The last release of v0.9.0 is by now over a year old, so there have accumulated 
 Everything should still work on Python 3.6, but we now officially support Python 3.7-3.11.
 
 First of all, note that we did a (backwards-incompatible) rewrite of TDVP, which is now based on the
-:class:`~tenpy.algorithms.mps_common.Sweep` class. 
-If you need the old TDVP implementation, it's for now still available as :class:`tenpy.algorithms.tdvp.OldTDVPEngine`. 
+:class:`~tenpy.algorithms.mps_common.Sweep` class.
+If you need the old TDVP implementation, it's for now still available as :class:`tenpy.algorithms.tdvp.OldTDVPEngine`.
 Thanks to Wilhelm Kadow for his great work here!
 
 There are 2 other significant changes that might require you to change something in your setup:
 
-- If you are using simulations with measurements, the measurement functions for simulations need to be updated 
+- If you are using simulations with measurements, the measurement functions for simulations need to be updated
   to accept a `model` keyword argument, see :issue:`182` for more details.
 - When you initialize Sites (in models) you should explicitly pass an argument `sort_charge`.
   Set it to `True` for new projects, but keep it as `False` if you neeed backwards compatibility with previously saved
@@ -26,7 +26,7 @@ Changelog
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- Replace the :class:`~tenpy.algorithms.tdvp.TDVPEngine` with a new version. 
+- Replace the :class:`~tenpy.algorithms.tdvp.TDVPEngine` with a new version.
   The previous one is for now still available as :class:`tenpy.algorithms.tdvp.OldTDVPEngine`.
 - Measurement functions now have to take another argument `model` as well, which matches the indexing/sites of `psi`.
   This helps to avoid special cases for grouped sites and `OrthogonalExciations`.
@@ -37,13 +37,13 @@ Backwards incompatible changes
 - Adjusted default paramters of :meth:`tenpy.networks.mps.InitialStateBuilder.randomized` to be as documented with better ``chi_max``.
 - No longer return `ov` from :func:`tenpy.linalg.lanczos.gram_schmidt`.
 - Unify structure of  :class:`tenpy.algorithms.algorithm.TimeEvolutionAlgorithm` subclasses
-  (e.g. :class:`tenpy.algorihtms.tebd.TEBDEngine`, :class:`tenpy.algorithms.tdvp.TDVPEngine` 
+  (e.g. :class:`tenpy.algorihtms.tebd.TEBDEngine`, :class:`tenpy.algorithms.tdvp.TDVPEngine`
   and :class:`tenpy.algorithms.mpo_evolution.ExpMPOEvolution`).
   In particular, the default values for ``N_steps=1`` and ``dt=0.1`` are now the same for these classes;
   Previously, TEBD had a default of ``N_steps=10``, and the ExpMPOEvolution had ``dt=0.01``.
 - Add option `sort_charge` to the :class:`~tenpy.networks.site.Site` (calling the new :meth:`~tenpy.networks.site.Site.sort_charge` method).
   Using `True` sorts the charges of the physical leg and thus helps to reduce overhead when using charge conservation.
-  However, doing this can lead to inconsistencies between saved data and newly generated data (after updating TeNPy). 
+  However, doing this can lead to inconsistencies between saved data and newly generated data (after updating TeNPy).
   Hence, for now we keep the current default `False` behaviour, but raise a warning that you should set this option explicitly for cases where it changes things.
   Set it to `False`, if you already have data (for your particular model), that you want to be able to load/compare to.
   If you start a new project and don't have data yet, set it to `True`.
@@ -68,7 +68,7 @@ Added
 - :class:`~tenpy.models.lattice.NLegLadder`, and more `pairs` (``'rung_NN', 'leg_NN', 'diagonal'``) for the :class:`~tenpy.models.lattice.Ladder`.
 - :meth:`tenpy.algorithms.Algorithm.switch_engine` for simplified switching from e.g. the `TwoSiteDMRGEngine` to the `SingleSiteDMRGEngine`.
 - :class:`~tenpy.models.lattice.MultiSpeciesLattice` to simplify implementing e.g. spin-full fermions or bosons without
-  using the :class:`~tenpy.networks.site.GroupedSite`. Further helper functions :func:`~tenpy.networks.site.spin_half_species`, 
+  using the :class:`~tenpy.networks.site.GroupedSite`. Further helper functions :func:`~tenpy.networks.site.spin_half_species`,
   as well as the new :class:`~tenpy.models.hubbard.FermiHubbardModel2` using it, and an example
   :doc:`/notebooks/31_multispecies_models`.
 - Keyword argument `permute_dense` for :meth:`tenpy.networks.site.Site.add_op`.
@@ -84,7 +84,7 @@ Changed
 - Split up :meth:`tenpy.networks.mpo.MPO.expectation_value` into :meth:`~tenpy.networks.mpo.MPO.expectation_value_finite`
   and :meth:`~tenpy.networks.mpo.MPO.expectation_value_power` and add :meth:`tenpy.networks.mpo.MPO.expectation_value_TM`
 - Enhanced documentation of the lattices with more plots.
-- Renamed ``prepare_update`` function of :class:`tenpy.algorithms.mps_common.Sweep` to 
+- Renamed ``prepare_update`` function of :class:`tenpy.algorithms.mps_common.Sweep` to
   :meth:`~tenpy.algorithm.mps_common.prepare_update_local`.
 
 Fixed

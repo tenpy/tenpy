@@ -114,4 +114,3 @@ def test_fixes_339(L=8, chi=10, dt=0.5):
     assert np.allclose(tdvp2.trunc_err.ov_err, expect_err.ov_err)
     assert not np.allclose(tdvp2.trunc_err.eps, wrong_err.eps)
     assert not np.allclose(tdvp2.trunc_err.ov_err, wrong_err.ov_err)
-
