@@ -223,13 +223,13 @@ def test_npc_Array_itemacces():
         try:
             for i, ax in zip(idx, axes):
                 sl[ax] = i
-        except:
+        except Exception:
             sl[axes] = idx
         sl = tuple(sl)
         npt.assert_equal(a_sl.to_ndarray(), aflat[sl])
         npt.assert_equal(a[sl].to_ndarray(), aflat[sl])
         # NOTE: interally uses advanced indexing notation, but only with slices.
-        if type(axes) == int:
+        if isinstance(axes, int):
             a_ext = a_sl.add_leg(a.legs[axes], idx, axes)
             npt.assert_equal(a.qtotal, a_ext.qtotal)
             npt.assert_equal(a_ext.to_ndarray()[sl], aflat[sl])

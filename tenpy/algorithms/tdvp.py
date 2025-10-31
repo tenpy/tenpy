@@ -42,8 +42,6 @@ from ..tools.params import asConfig
 import logging
 import warnings
 
-logger = logging.getLogger(__name__)
-
 __all__ = [
     'TDVPEngine',
     'SingleSiteTDVPEngine',
@@ -51,6 +49,8 @@ __all__ = [
     'TimeDependentSingleSiteTDVP',
     'TimeDependentTwoSiteTDVP',
 ]
+
+logger = logging.getLogger(__name__)
 
 
 class TDVPEngine(TimeEvolutionAlgorithm, Sweep):

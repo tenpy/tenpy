@@ -81,7 +81,7 @@ def _get_git_description():
             .strip()
         )
         n_commits = int(descr.split('-')[1])
-    except:
+    except Exception:
         n_commits = 0
     return n_commits
 

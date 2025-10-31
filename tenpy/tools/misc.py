@@ -10,8 +10,6 @@ import os.path
 import warnings
 import logging
 
-logger = logging.getLogger(__name__)
-
 __all__ = [
     'to_iterable',
     'to_iterable_of_len',
@@ -42,12 +40,14 @@ __all__ = [
     'BetaWarning',
 ]
 
+logger = logging.getLogger(__name__)
+
 _not_set = object()  # sentinel
 
 
 def to_iterable(a):
     """If `a` is a not iterable or a string, return ``[a]``, else return ``a``."""
-    if type(a) == str:
+    if isinstance(a, str):
         return [a]
     try:
         iter(a)
@@ -62,7 +62,7 @@ def to_iterable_of_len(a, L):
 
     Raises ValueError if `a` is already an iterable of different length.
     """
-    if type(a) == str:
+    if isinstance(a, str):
         return [a] * L
     try:
         iter(a)

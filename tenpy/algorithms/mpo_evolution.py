@@ -4,13 +4,13 @@
 
 import logging
 
-logger = logging.getLogger(__name__)
-
 from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg.truncation import TruncationError
 from ..tools.misc import consistency_check
 
 __all__ = ['ExpMPOEvolution', 'TimeDependentExpMPOEvolution']
+
+logger = logging.getLogger(__name__)
 
 
 class ExpMPOEvolution(TimeEvolutionAlgorithm):

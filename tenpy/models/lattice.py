@@ -24,8 +24,6 @@ import itertools
 import copy
 import logging
 
-logger = logging.getLogger(__name__)
-
 from ..linalg.charges import DipolarChargeInfo
 from ..networks.site import Site
 from ..tools.misc import to_iterable, to_array, inverse_permutation, get_close, find_subclass
@@ -50,6 +48,8 @@ __all__ = [
     'get_order',
     'get_order_grouped',
 ]
+
+logger = logging.getLogger(__name__)
 
 # (update module doc string if you add further lattices)
 
@@ -535,7 +535,7 @@ class Lattice:
             lattice. An integer means periodic boundary condition with a shift given by that number,
             see :attr:`bc_shift`.
         """
-        global bc_choices  # noqa: F824
+        global bc_choices
         bc_choices_reverse = dict([(v, k) for (k, v) in bc_choices.items()])
         bc = [bc_choices_reverse[bc] for bc in self.bc]
         if self.bc_shift is not None:
@@ -547,7 +547,7 @@ class Lattice:
 
     @boundary_conditions.setter
     def boundary_conditions(self, bc):
-        global bc_choices  # noqa: F824
+        global bc_choices
         if bc in list(bc_choices.keys()):
             bc = [bc_choices[bc]] * self.dim
             self.bc_shift = None
@@ -1159,7 +1159,7 @@ class Lattice:
     def possible_couplings(self, u1, u2, dx, strength=None):
         """Find possible MPS indices for two-site couplings.
 
-        For periodic boundary conditions (``bc[a] == False``)
+        For periodic boundary conditions (``bc[a] is False``)
         the index ``x_a`` is taken modulo ``Ls[a]`` and runs through ``range(Ls[a])``.
         For open boundary conditions, ``x_a`` is limited to ``0 <= x_a < Ls[a]`` and
         ``0 <= x_a+dx[a] < lat.Ls[a]``.

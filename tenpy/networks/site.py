@@ -375,7 +375,7 @@ class Site(Hdf5Exportable):
         if need_JW:
             self.need_JW_string.add(name)
         # keep track of h.c. operators
-        if hc is None and not name in self.hc_ops:
+        if hc is None and name not in self.hc_ops:
             if op.conj().transpose() == op:
                 hc = name
             else:

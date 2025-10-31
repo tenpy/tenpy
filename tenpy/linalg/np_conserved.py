@@ -2614,7 +2614,7 @@ class Array:
         inds : tuple, len=self.rank
             `inds`, where ``Ellipsis`` is replaced by the correct number of slice(None).
         """
-        if type(inds) != tuple:  # for rank 1
+        if not isinstance(inds, tuple):  # for rank 1
             inds = (inds,)
         i = next((i for i, idx in enumerate(inds) if idx is Ellipsis), None)
         # i is index of Ellipsis or None if we don't have one
@@ -2631,7 +2631,7 @@ class Array:
         try:
             only_int = np.array(inds, dtype=np.intp)
             assert only_int.shape == (len(inds),)
-        except:
+        except Exception:
             return False, inds
         else:
             return True, inds
@@ -2686,7 +2686,7 @@ class Array:
             else:
                 try:
                     iter(i)
-                except:  # not iterable: single index
+                except Exception:  # not iterable: single index
                     slice_inds.append(int(i))
                     slice_axes.append(a)
                 else:  # iterable

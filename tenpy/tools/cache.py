@@ -19,13 +19,13 @@ import pathlib
 import warnings
 import logging
 
-logger = logging.getLogger(__name__)
-
 from .misc import find_subclass
 from .thread import Worker
 from .hdf5_io import load_from_hdf5, save_to_hdf5
 
 __all__ = ['DictCache', 'CacheFile', 'Storage', 'PickleStorage', 'Hdf5Storage', 'ThreadedStorage']
+
+logger = logging.getLogger(__name__)
 
 
 class DictCache(collections.abc.MutableMapping):

@@ -27,8 +27,6 @@ numerical costs scale exponentially with the number of exciting sites.
 import numpy as np
 import logging
 
-logger = logging.getLogger(__name__)
-
 from ..linalg import np_conserved as npc
 from ..linalg.charges import LegPipe
 from ..networks.momentum_mps import MomentumMPS
@@ -45,6 +43,8 @@ __all__ = [
     'PlaneWaveExcitationEngine',
     'MultiSitePlaneWaveExcitationEngine',
 ]
+
+logger = logging.getLogger(__name__)
 
 
 def append_right_env(As, Bs, R, Ws=None):

@@ -554,7 +554,7 @@ class PurificationMPS(MPS):
             are explicitly sampled. This is because to get expectation values of the density matrix,
             one should trace over (i.e. forget the outcome of) the ancilla legs.
         probability : float
-            If `sample_q` == False, the probability ``trace(|psi><psi|sigmas...><sigmas...|)``,
+            If `sample_q` is False, the probability ``trace(|psi><psi|sigmas...><sigmas...|)``,
             i.e. the probability of measuring ``|sigmas...>`` on the physical legs.
             If `sample_q` == True, we return the probability of measuring a particular configuration
             on both physical and ancilla legs, even though we don't return the ancilla configuration.

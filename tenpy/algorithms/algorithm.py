@@ -5,8 +5,6 @@ import time
 import numpy as np
 import logging
 
-logger = logging.getLogger(__name__)
-
 from ..linalg.truncation import TruncationError
 from ..tools.misc import consistency_check
 from ..tools.events import EventHandler
@@ -17,6 +15,8 @@ __all__ = ['Algorithm', 'TimeEvolutionAlgorithm', 'TimeDependentHAlgorithm']
 __deprecated_submodules__ = [
     'truncation',  # moved to tenpy.linalg
 ]
+
+logger = logging.getLogger(__name__)
 
 
 class Algorithm:

@@ -5,8 +5,6 @@
 import numpy as np
 import logging
 
-logger = logging.getLogger(__name__)
-
 from ..linalg import np_conserved as npc
 from . import tebd
 from .mps_common import VariationalApplyMPO, TwoSiteH
@@ -14,6 +12,8 @@ from ..linalg.truncation import svd_theta, TruncationError
 from .disentangler import get_disentangler
 
 __all__ = ['PurificationTwoSiteU', 'PurificationApplyMPO', 'PurificationTEBD', 'PurificationTEBD2']
+
+logger = logging.getLogger(__name__)
 
 
 class PurificationTwoSiteU(TwoSiteH):
@@ -67,7 +67,7 @@ class PurificationApplyMPO(VariationalApplyMPO):
         A0 = U.split_legs(['(vL.p0.q0)'])
         B1 = VH.split_legs(['(p1.q1.vR)'])
         # first compare to old best guess to check convergence of the sweeps
-        if self._tol_theta_diff is not None and self.update_LP_RP[0] == False:
+        if self._tol_theta_diff is not None and not self.update_LP_RP[0]:
             theta_old = new_psi.get_theta(i0)
             theta_new_trunc = npc.tensordot(A0.scale_axis(S, 'vR'), B1, ['vR', 'vL'])
             ov = npc.inner(theta_new_trunc, theta_old, do_conj=True, axes='labels')

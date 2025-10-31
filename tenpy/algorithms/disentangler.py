@@ -12,12 +12,12 @@ For now, this is written for disentangling purifications; could be generalized t
 import numpy as np
 import logging
 
-logger = logging.getLogger(__name__)
-
 from ..linalg import np_conserved as npc
 from ..linalg.truncation import svd_theta
 from ..tools.math import entropy
 from ..linalg import random_matrix as rand_mat
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'Disentangler',

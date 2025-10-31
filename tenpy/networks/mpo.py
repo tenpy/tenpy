@@ -43,8 +43,6 @@ import warnings
 import copy
 import logging
 
-logger = logging.getLogger(__name__)
-
 from ..linalg import np_conserved as npc
 from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator, ShiftNpcLinearOperator
 from ..linalg.truncation import TruncationError, svd_theta
@@ -66,6 +64,8 @@ __all__ = [
     'MPOTransferMatrix',
     'grid_insert_ops',
 ]
+
+logger = logging.getLogger(__name__)
 
 
 class MPO(MPSGeometry):
@@ -3257,7 +3257,7 @@ class MPOEnvironmentBuilder:
                 conns = [j for i, j in self.H._graph[j_site] if i == iL]
                 for j in conns:
                     res = self._contract_cL(cL, j_site, self.H._graph[j_site][(iL, j)])
-                    if grid[j_site][j][0] == None:
+                    if grid[j_site][j][0] is None:
                         grid[j_site][j][0] = res
                     else:
                         grid[j_site][j][0] += res
@@ -3279,7 +3279,7 @@ class MPOEnvironmentBuilder:
                 conns = [i for i, j in self.H._graph[j_site] if j == jR]
                 for i in conns:
                     res = self._contract_cR(cR, j_site, self.H._graph[j_site][(i, jR)])
-                    if grid[j_site][i][0] == None:
+                    if grid[j_site][i][0] is None:
                         grid[j_site][i][0] = res
                     else:
                         grid[j_site][i][0] += res
@@ -3333,7 +3333,7 @@ class MPOEnvironmentBuilder:
                 'Iterative LP/RP initialization is not yet supported for '
                 'shift-symmetry with infinite systems.'
             )
-        if _mpo_check_for_iter_LP_RP_infinite(self.H) == False:
+        if not _mpo_check_for_iter_LP_RP_infinite(self.H):
             raise ValueError(
                 'Iterative environment initialization failed: Hamiltonian cannot be ordered.'
             )
@@ -3341,7 +3341,7 @@ class MPOEnvironmentBuilder:
         ones = self._determine_cycles()
         n_terms = len(ones)
         # gmres defaults, set N_min=0 for states close to product states
-        if gmres_options == None:
+        if gmres_options is None:
             gmres_options = {'N_min': 0, 'res': 1e-11}
         else:
             gmres_options['N_min'] = gmres_options.get('N_min', 0)
@@ -3504,18 +3504,18 @@ class MPOEnvironmentBuilder:
                 and cycle[j_site] in grid[j_site][cycle[j_site + 1]][1]
             )
         for j_site in range(self.L):
-            if grid[j_site][cycle[j_site + 1]][0] != None:
+            if grid[j_site][cycle[j_site + 1]][0] is not None:
                 c_loop = grid[j_site][cycle[j_site + 1]][0]
                 j_start = j_site
                 break
         # unlikely but not accounted for beforehand
-        assert c_loop != None, 'Hamiltonian contains cycle that does not connect to other indices'
+        assert c_loop is not None, 'Hamiltonian contains cycle that does not connect to other indices'
         # do contractions
         for j_site in range(j_start + 1, self.L):
             c_loop = self._contract_cL(
                 c_loop, j_site, self.H._graph[j_site][(cycle[j_site], cycle[j_site + 1])]
             )
-            if grid[j_site][cycle[j_site + 1]][0] != None:
+            if grid[j_site][cycle[j_site + 1]][0] is not None:
                 c_loop += grid[j_site][cycle[j_site + 1]][0]
         return c_loop
 
@@ -3529,17 +3529,17 @@ class MPOEnvironmentBuilder:
                 and cycle[j_site + 1] in grid[j_site][cycle[j_site]][1]
             )
         for j_site in range(self.L - 1, -1, -1):
-            if grid[j_site][cycle[j_site]][0] != None:
+            if grid[j_site][cycle[j_site]][0] is not None:
                 c_loop = grid[j_site][cycle[j_site]][0]
                 j_start = j_site
                 break
-        assert c_loop != None, 'Hamiltonian contains cycle that does not connect to other indices'
+        assert c_loop is not None, 'Hamiltonian contains cycle that does not connect to other indices'
         # do contractions
         for j_site in range(j_start - 1, -1, -1):
             c_loop = self._contract_cR(
                 c_loop, j_site, self.H._graph[j_site][(cycle[j_site], cycle[j_site + 1])]
             )
-            if grid[j_site][cycle[j_site]][0] != None:
+            if grid[j_site][cycle[j_site]][0] is not None:
                 c_loop += grid[j_site][cycle[j_site]][0]
         return c_loop
 

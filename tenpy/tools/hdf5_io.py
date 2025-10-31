@@ -77,7 +77,7 @@ import sys
 
 try:
     from packaging.version import parse as parse_version
-except:
+except Exception:
     try:
         from setuptools._vendor.packaging.version import parse as parse_version
     except ImportError:

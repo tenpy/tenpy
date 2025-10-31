@@ -13,11 +13,11 @@ import pprint
 import os
 import logging
 
-logger = logging.getLogger(__name__)
-
 from .hdf5_io import ATTR_FORMAT
 
 __all__ = ['Config', 'asConfig', 'load_yaml_with_py_eval']
+
+logger = logging.getLogger(__name__)
 
 
 class Config(MutableMapping):
@@ -497,7 +497,7 @@ def _yaml_eval_constructor(loader, node):
         raise ValueError('expect string argument to `!py_eval`')
     try:
         res = eval(cmd, loader.eval_context)
-    except:
+    except Exception:
         print('\nError while yaml parsing the following !py_eval command:\n', cmd, '\n')
         raise
     return res

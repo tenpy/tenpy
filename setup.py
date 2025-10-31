@@ -3,7 +3,7 @@ from setuptools import setup, Extension
 
 try:
     from Cython.Build import cythonize
-except:
+except Exception:
     cythonize = None
 
 import os

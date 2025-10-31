@@ -12,9 +12,6 @@ and yet powerful enough for day-to-day research.
 # Note: all external packages that are imported should be `del`-ed at the end of the file!
 import logging
 
-# main logger for tenpy
-logger = logging.getLogger(__name__)
-
 # load and provide sub packages on first input
 # note that the order matters!
 from . import tools
@@ -374,6 +371,9 @@ __all__ = [
     'show_config',
     'console_main',
 ]
+
+# main logger for tenpy
+logger = logging.getLogger(__name__)
 
 
 def show_config():

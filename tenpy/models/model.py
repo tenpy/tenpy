@@ -36,8 +36,6 @@ from functools import wraps
 import copy
 import logging
 
-logger = logging.getLogger(__name__)
-
 from .lattice import get_lattice, Lattice, MultiSpeciesLattice, HelicalLattice, IrregularLattice
 from ..linalg import np_conserved as npc
 from ..linalg.charges import LegCharge
@@ -50,6 +48,8 @@ from ..networks.site import Site, group_sites
 from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = ['Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'CouplingMPOModel']
+
+logger = logging.getLogger(__name__)
 
 
 class Model(Hdf5Exportable):

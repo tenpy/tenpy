@@ -154,8 +154,6 @@ import copy
 from collections.abc import Iterable
 import logging
 
-logger = logging.getLogger(__name__)
-
 from ..linalg import np_conserved as npc
 from ..linalg import sparse
 from ..linalg.charges import DipolarChargeInfo
@@ -186,6 +184,8 @@ __all__ = [
     'InitialStateBuilder',
     'build_initial_state',
 ]
+
+logger = logging.getLogger(__name__)
 
 
 class MPSGeometry:
@@ -7556,7 +7556,7 @@ class InitialStateBuilder:
         try:
             p, q = check_filling
             check_filling = p / q
-        except:
+        except Exception:
             p, q = int(round(check_filling * N_total)), N_total
         if abs(p - check_filling * N_total) > 1.0e-13:
             raise ValueError(
@@ -7607,7 +7607,7 @@ class InitialStateBuilder:
         full, empty = self.options.get('full_empty', ('full', 'empty'))
         try:
             fill_array = eval(condition, variables)
-        except:
+        except Exception:
             print('Error in InitialStateBuilder.fill_where condition')
             print('>>> condition:')
             print(condition)
@@ -7772,7 +7772,7 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
     for num in n_states:
         if (num - round(num)) < 1e-12:
             num = int(round(num))
-        if type(num) != int and not num.is_integer():
+        if not isinstance(num, int) and not num.is_integer():
             raise ValueError(
                 'Cannot create model of length {} with filling {}'.format(size, filling)
             )

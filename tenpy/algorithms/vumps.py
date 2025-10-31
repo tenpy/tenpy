@@ -38,8 +38,6 @@ import time
 import logging
 import warnings
 
-logger = logging.getLogger(__name__)
-
 from ..linalg import np_conserved as npc
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS
@@ -55,6 +53,8 @@ from ..linalg.truncation import svd_theta
 from .plane_wave_excitation import append_right_env, append_left_env, construct_orthogonal
 
 __all__ = ['VUMPSEngine', 'SingleSiteVUMPSEngine', 'TwoSiteVUMPSEngine']
+
+logger = logging.getLogger(__name__)
 
 
 class VUMPSEngine(IterativeSweeps):
@@ -479,7 +479,7 @@ class VUMPSEngine(IterativeSweeps):
         theta = self.psi.get_theta(
             i0, n=self.n_optimize, cutoff=self.S_inv_cutoff
         )  # n_optimize will be 1
-        assert self.eff_H.combine == False
+        assert not self.eff_H.combine
         theta = self.eff_H.combine_theta(theta)  # combine should be false.
         C1, C2 = self.psi.get_C(i0), self.psi.get_C(i0 + self.n_optimize)
 

@@ -97,7 +97,7 @@ __all__ = [
 
 try:
     import bottleneck
-except:
+except Exception:
     bottleneck = None
     #: None, or the `bottleneck` module, if installed.
 
@@ -233,7 +233,7 @@ def set_level(level=1):
 
 def get_level():
     """Return the global optimization level."""
-    global _level  # noqa: F824
+    global _level
     return _level
 
 
@@ -251,7 +251,7 @@ def optimize(level_compare=OptimizationFlag.default):
         True if the algorithms should try to optimize, i.e., whether the global
         "optimization level" is equal or higher than the level to compare to.
     """
-    global _level  # noqa: F824
+    global _level
     return _level >= level_compare
 
 

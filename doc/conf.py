@@ -23,7 +23,7 @@ if not sys.version_info >= (3, 5):
 os.environ['TENPY_NO_CYTHON'] = 'true'
 try:
     import tenpy
-except:
+except Exception:
     print("ERROR: can't import tenpy.")
     sys.exit(1)
 

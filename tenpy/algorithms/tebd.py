@@ -45,8 +45,6 @@ import typing
 import warnings
 import logging
 
-logger = logging.getLogger(__name__)
-
 from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg import np_conserved as npc
 from ..linalg.truncation import svd_theta, decompose_theta_qr_based, TruncationError
@@ -54,6 +52,8 @@ from ..linalg import random_matrix
 from ..tools.misc import consistency_check
 
 __all__ = ['TEBDEngine', 'QRBasedTEBDEngine', 'RandomUnitaryEvolution', 'TimeDependentTEBD']
+
+logger = logging.getLogger(__name__)
 
 
 class TEBDEngine(TimeEvolutionAlgorithm):

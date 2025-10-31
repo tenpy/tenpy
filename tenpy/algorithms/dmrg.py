@@ -37,8 +37,6 @@ import time
 import warnings
 import logging
 
-logger = logging.getLogger(__name__)
-
 from ..linalg import np_conserved as npc
 from ..linalg.krylov_based import lanczos_arpack, LanczosGroundState
 from ..linalg.truncation import svd_theta
@@ -47,6 +45,8 @@ from ..tools.math import entropy
 from ..tools.process import memory_usage
 from .mps_common import IterativeSweeps, OneSiteH, TwoSiteH
 from . import mps_common
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'run',
@@ -1149,7 +1149,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
     def mixer_activate(self):
         super().mixer_activate()
-        if not (self.mixer is None) and not self.mixer.can_decompose_1site:
+        if self.mixer is not None and not self.mixer.can_decompose_1site:
             msg = (
                 f'Using {self.mixer.__class__.__name__} with single-site DMRG is inefficient. '
                 f'The resulting algorithm has two-site costs!'
