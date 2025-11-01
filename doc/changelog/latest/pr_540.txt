@@ -1,2 +1,0 @@
-- Fixed a bug where ``CouplingMPOModel`` could not configure ``NLegLadder`` lattices automatically,
-  from only the ``model_params``, because that lattice has a different ``__init__`` call structure.

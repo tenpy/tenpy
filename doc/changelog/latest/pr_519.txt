@@ -1,3 +1,0 @@
-- Added the `subsites_start` parameter to exponentially decaying couplings,
-  making the kind of couplings it can cover even more general.
-  See :meth:`~tenpy.models.model.CouplingModel.add_exponentially_decaying_coupling`.

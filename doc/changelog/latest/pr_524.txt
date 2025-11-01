@@ -1,1 +1,0 @@
-- Added :meth:`~tenpy.models.model.CouplingModel.add_centered_exponentially_decaying_term`.

@@ -1,3 +1,0 @@
-- Fixed a bug in single-site DMRG, where ``mixer_activate`` failed if ``mixer = None``
-- Fixed a bug where DMRG using a ``chi_list`` caused the environment sweeps to use the default
-  ``chi_max``, which is ``100`` and implies unintentional heavy truncation in most settings.

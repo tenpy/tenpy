@@ -1,3 +1,0 @@
-- Fixed a typo in the :mod:`~tenpy.models.mixed_xk` models,
-  where :meth:`~tenpy.models.mixed_xk.MixedXKLattice.from_charges_of_orbitals` ignored the
-  ``ring_order``.
