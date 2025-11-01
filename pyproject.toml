@@ -115,7 +115,7 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-exclude = ["doc/sphinx_ext/*"]
+exclude = ["doc/sphinx_ext/*", "doc/toycodes"]
 
 [tool.ruff.lint]
 # all possible rules see here: https://docs.astral.sh/ruff/rules/
