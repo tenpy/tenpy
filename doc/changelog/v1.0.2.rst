@@ -21,7 +21,7 @@ Fixed
 
 - fix ``str(TermList)`` formatting to add brackets if multiple operators act on single site
 
-- fix expectation values during the imaginary evolution with :class:`tenpy.algorithms.purification.PurificationTEBD` by calling 
+- fix expectation values during the imaginary evolution with :class:`tenpy.algorithms.purification.PurificationTEBD` by calling
   :meth:`~tenpy.networks.mps.PurificationMPS.canonical_form`.
 
 - fix that :meth:`~tenpy.networks.mps.MPS.compute_K` didn't use the argument ``expect_mean_k``.

@@ -4,7 +4,7 @@ Installation from PyPi with pip
 Preparation: install requirements
 ---------------------------------
 
-If you have the [conda]_ package manager from `anaconda <https://www.anaconda.com/distribution>`_, you can just download the 
+If you have the [conda]_ package manager from `anaconda <https://www.anaconda.com/distribution>`_, you can just download the
 `environment.yml <https://raw.githubusercontent.com/tenpy/tenpy/main/environment.yml>`_ file (using the `conda-forge`
 channel, or the `environment_other.yml <https://raw.githubusercontent.com/tenpy/tenpy/main/environment_other.yml>`_ for all other channels) out of the repository
 and create a new environment (called ``tenpy``, if you don't specify another name) for TeNPy with all the required packages::
@@ -15,22 +15,22 @@ and create a new environment (called ``tenpy``, if you don't specify another nam
 Further information on conda environments can be found in the `conda documentation <https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html>`_. Note that installing conda also installs a version of [pip]_.
 
 Alternatively, if you only have [pip]_ (and not [conda]_), install the
-required packages with the following command (after downloading the 
+required packages with the following command (after downloading the
 `requirements.txt <https://raw.githubusercontent.com/tenpy/tenpy/main/requirements.txt>`_ file from the repository)::
 
     pip install -r requirements.txt
 
 .. note ::
-    
+
     Make sure that the ``pip`` you call corresponds to the python version you want to use.
     (One way to ensure this is to use ``python -m pip`` instead of a simple ``pip``.)
-    Also, you might need to use the argument ``--user`` to install the packages to your home directory, 
+    Also, you might need to use the argument ``--user`` to install the packages to your home directory,
     if you don't have ``sudo`` rights. (Using ``--user`` with conda's ``pip`` is discouraged, though.)
 
 .. warning ::
-    
-    It might just be a temporary problem, but I found that the `pip` version of numpy is incompatible with 
-    the python distribution of anaconda. 
+
+    It might just be a temporary problem, but I found that the `pip` version of numpy is incompatible with
+    the python distribution of anaconda.
     If you have installed the intelpython or anaconda distribution, use the `conda` package manager instead of `pip` for updating the packages whenever possible!
 
 Installing the latest stable TeNPy package
@@ -41,7 +41,7 @@ Now we are ready to install TeNPy. It should be as easy as (note the different p
     pip install physics-tenpy
 
 .. note ::
-    
+
     If the installation fails, don't give up yet. In the minimal version, tenpy requires only pure Python with
     somewhat up-to-date NumPy and SciPy. See :doc:`from_source`.
 
@@ -58,7 +58,7 @@ Disclaimer: this might sometimes be broken, although we do our best to keep to k
 Installation from the downloaded source folder
 ----------------------------------------------
 
-Finally, if you downloaded the source and want to **modify parts of the source**, 
+Finally, if you downloaded the source and want to **modify parts of the source**,
 You can also install TeNPy with in
 development version with ``--editable``::
 

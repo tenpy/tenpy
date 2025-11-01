@@ -36,33 +36,33 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v5
-    
+
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
-    
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         python -m pip install --upgrade setuptools build
-    
+
     - name: Build and install tenpy
       run: |
         python -m build .
         python -m pip install ".[test]"
-    
+
     - name: Set environment variable to disable the cython extension
       if: ${{ matrix.compiled == false }}
       run: |
         echo "TENPY_NO_CYTHON=True" >> "$GITHUB_ENV"
-    
+
     - name: Show tenpy config
       working-directory: ..
       run: |
         echo "TENPY_NO_CYTHON=$TENPY_NO_CYTHON"
         python -c "import tenpy; tenpy.show_config()"
-    
+
     - name: Run pytest
       working-directory: tests
       run: pytest

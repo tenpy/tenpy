@@ -6,7 +6,7 @@ Backwards incompatible changes
 - Switch the sign of the :class:`~tenpy.models.hubbard.BoseHubbardModel` and :class:`~tenpy.models.hubbard.FermiHubbardModel`
   to hopping and chemical potential having negative prefactors.
   Of course, the same adjustment happens in the :class:`~tenpy.models.hubbard.BoseHubbardChain` and :class:`~tenpy.models.hubbard.FermiHubbardChain`.
-- moved :class:`~tenpy.models.hubbard.BoseHubbardModel` and :class:`~tenpy.models.hubbard.BoseHubbardChain` as well as 
+- moved :class:`~tenpy.models.hubbard.BoseHubbardModel` and :class:`~tenpy.models.hubbard.BoseHubbardChain` as well as
   :class:`~tenpy.models.hubbard.FermiHubbardModel` and :class:`~tenpy.models.hubbard.FermiHubbardChain` into the new
   module :mod:`tenpy.models.hubbard`.
 - Change arguments of :meth:`~tenpy.networks.terms.CouplingTerms.coupling_term_handle_JW` and :meth:`~tenpy.networks.terms.MultiCouplingTerms.multi_coupling_term_handle_JW`

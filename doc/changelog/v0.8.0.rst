@@ -12,7 +12,7 @@ If you want to continue using the existing conda environment, you need to ``cond
 Another great reason to update are **simulation classes** and a console script `tenpy-run` to allow running and even resuming a simulation when it aborted!
 See :doc:`/intro/simulations` for details.
 
-Further, there is a big change in **verbosity**: we switched to using Python's default :mod:`logging` mechanism. 
+Further, there is a big change in **verbosity**: we switched to using Python's default :mod:`logging` mechanism.
 This implies that by default you don't get any output besides error messages and warning any more, at least not in pre-`simulation` setups.
 See :doc:`/intro/logging` on how to get the output back, and what to change in your code.
 
@@ -46,7 +46,7 @@ Backwards incompatible changes
   - deprecate the `verbose` class argument of the :class:`~tenpy.tools.params.Config`
   - deprecate the `verbose` class attribute of all classes (if they had it).
   - change argument names of :meth:`~tenpy.tools.params`.
-- Changed default parameter (actually in :doc:`/changelog/v0.8.4`), namely to 
+- Changed default parameter (actually in :doc:`/changelog/v0.8.4`), namely to
   use the :cfg:option:`DMRGEngine.mixer` for :class:`~tenpy.algorithms.dmrg.SingleSiteDMRG` by default.
 
 Added
@@ -81,7 +81,7 @@ Changed
 - Change the ``chinfo.names`` of the specific :class:`~tenpy.networks.site.Site` classes to be more consistent and clear.
 - Add the more powerful :meth:`tenpy.networks.site.set_common_charges` to replace :meth:`tenpy.networks.site.multi_sites_combine_charges`.
 - Allow ``swap_op='autoInv'`` for :meth:`tenpy.networks.mps.MPS.swap_sites` and explain the idea of the `swap_op`.
-- The :meth:`tenpy.models.model.CouplingMPOModel.init_lattice` now respects new class attributes 
+- The :meth:`tenpy.models.model.CouplingMPOModel.init_lattice` now respects new class attributes
   :attr:`~tenpy.models.model.CouplingMPOModel.default_lattice` and
   :attr:`~tenpy.models.model.CouplingMPOModel.force_default_lattice`.
 - Support additional `priority` argument for :func:`~tenpy.models.lattice.get_order_grouped`, :issue:`122`.
@@ -90,7 +90,7 @@ Changed
 Fixed
 ^^^^^
 - Sign error for the couplings of the :class:`tenpy.models.toric_code.ToricCode`.
-- The form of the eigenvectors returned by :meth:`tenpy.networks.mps.TransferMatrix.eigenvectors` 
+- The form of the eigenvectors returned by :meth:`tenpy.networks.mps.TransferMatrix.eigenvectors`
   was dependent on the `charge_sector` given in the initialization; we try to avoid this now (if possible).
 - The charge conserved by ``SpinHalfFermionSite(cons_Sz='parity')`` was weird.
 - Allow to pass npc Arrays as Arguments to :meth:`~tenpy.networks.mps.MPS.expectation_value_multi_sites` and

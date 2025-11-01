@@ -3,26 +3,26 @@
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- The argument order of :class:`tenpy.models.lattice.Lattice` could be a tuple ``(priority, snake_winding)`` before. 
+- The argument order of :class:`tenpy.models.lattice.Lattice` could be a tuple ``(priority, snake_winding)`` before.
   This is no longer valid and needs to be replaced by ``("standard", snake_winding, priority)``.
 - Moved the boundary conditions `bc_coupling` from the :class:`tenpy.models.model.CouplingModel` into the :class:`tenpy.models.lattice.Lattice` (as `bc`).
   Using the parameter `bc_coupling` will raise a FutureWarning, one should set the boundary conditions directly in the lattice.
 - Added parameter `permute` (True by default) in :meth:`tenpy.networks.mps.MPS.from_product_state` and :meth:`tenpy.networks.mps.MPS.from_Bflat`.
-  The resulting state will therefore be independent of the "conserve" parameter of the Sites - unlike before, 
+  The resulting state will therefore be independent of the "conserve" parameter of the Sites - unlike before,
   where the meaning of the p_state argument might have changed.
 - Generalize and rename  ``tenpy.networks.site.DoubleSite`` to :class:`tenpy.networks.site.GroupedSite`,
-  to allow for an arbitrary number of sites to be grouped. 
+  to allow for an arbitrary number of sites to be grouped.
   Arguments ``site0, site1, label0, label1`` of the __init__ can be replaced with ``[site0, site1], [label0, label1]``
   and ``op0, op1`` of the `kronecker_product` with ``[op0, op1]``; this will recover the functionality of the `DoubleSite`.
 - Restructured callstructure of Mixer in DMRG, allowing an implementation of other mixers.
   To enable the mixer, set the DMRG parameter ``"mixer"`` to ``True`` or ``'DensityMatrixMixer'``
   instead of just ``'Mixer'``.
-- The interaction parameter in the :class:`tenpy.models.bose_hubbbard_chain.BoseHubbardModel` 
-  (and :class:`tenpy.models.bose_hubbbard_chain.BoseHubbardChain`) did not correspond to :math:`U/2 N (N-1)` 
+- The interaction parameter in the :class:`tenpy.models.bose_hubbbard_chain.BoseHubbardModel`
+  (and :class:`tenpy.models.bose_hubbbard_chain.BoseHubbardChain`) did not correspond to :math:`U/2 N (N-1)`
   as claimed in the Hamiltonian, but to :math:`U N^2`.
   The correcting factor 1/2 and change in the chemical potential have been fixed.
 - Major restructuring of :mod:`tenpy.linalg.np_conserved` and :mod:`tenpy.linalg.charges`.
-  This should not break backwards-compatibility, but if you compiled the cython files, you **need** to remove the 
+  This should not break backwards-compatibility, but if you compiled the cython files, you **need** to remove the
   old binaries in the source directory. Using ``bash cleanup.sh`` might be helpful to do that, but also remove other files within the repository, so be careful and make a backup beforehand to be on the save side.
   Afterwards recompile with ``bash compile.sh``.
 - Changed structure of :attr:`tenpy.models.model.CouplingModel.onsite_terms` and :attr:`tenpy.models.model.CouplingModel.coupling_terms`:
@@ -44,7 +44,7 @@ Added
 - possibility to change the number of charges after creating LegCharges/Arrays.
 - more general way to specify the order of sites in a :class:`tenpy.models.lattice.Lattice`.
 - new :class:`tenpy.models.lattice.Triangular`, :class:`tenpy.models.lattice.Honeycomb` and :class:`tenpy.models.lattice.Kagome` lattice
-- a way to specify nearest neighbor couplings in a :class:`~tenpy.models.lattice.Lattice`, 
+- a way to specify nearest neighbor couplings in a :class:`~tenpy.models.lattice.Lattice`,
   along with methods to count the number of nearest neighbors for sites in the bulk, and
   a way to plot them (:meth:`~tenpy.models.lattice.Lattice.plot_coupling` and friends)
 - :meth:`tenpy.networks.mpo.MPO.from_grids` to generate the MPO from a grid.
@@ -58,11 +58,11 @@ Added
   :meth:`tenpy.models.model.MPOModel.calc_H_bond_from_MPO` for conversion of H_bond into H_MPO and vice
   versa.
 - :class:`tenpy.algorithms.tebd.RandomUnitaryEvolution` for random unitary circuits
-- Allow documentation links to github issues, arXiv, papers by doi and the forum with 
+- Allow documentation links to github issues, arXiv, papers by doi and the forum with
   e.g. ``:issue:`5`, :arxiv:`1805.00055`, :doi:`10.21468/SciPostPhysLectNotes.5`, :forum:`3```
 - :meth:`tenpy.models.model.CouplingModel.coupling_strength_add_ext_flux` for adding hoppings with external flux.
 - :meth:`tenpy.models.model.CouplingModel.plot_coupling_terms` to visualize the added coupling terms.
-- :class:`tenpy.networks.terms.OnsiteTerms`, :class:`tenpy.networks.terms.CouplingTerms`, :class:`tenpy.networks.terms.MultiCouplingTerm` 
+- :class:`tenpy.networks.terms.OnsiteTerms`, :class:`tenpy.networks.terms.CouplingTerms`, :class:`tenpy.networks.terms.MultiCouplingTerm`
   containing the of terms for the :class:`~tenpy.models.model.CouplingModel` and :class:`~tenpy.models.model.MultiCouplingModel`.
   This allowed to add the `category` argument to :class:`~tenpy.models.model.CouplingModel.add_onsite`, :class:`~tenpy.models.model.CouplingModel.add_coupling` and :class:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
 - :class:`tenpy.networks.terms.TermList` as another (more human readable) representation of terms with conversion from
@@ -87,7 +87,7 @@ Changed
   :meth:`~tenpy.linalg.charges.LegCharge.extend`.
 - Restructured :mod:`tenpy.algorithms.dmrg`:
 
-  - :func:`~tenpy.algorithms.dmrg.run` is now just a wrapper around the new 
+  - :func:`~tenpy.algorithms.dmrg.run` is now just a wrapper around the new
     :meth:`~tenpy.algorithms.dmrg.Engine.run`, ``run(psi, model, pars)`` is roughly equivalent to
     ``eng = EngineCombine(psi, model, pars); eng.run()``.
   - Added :meth:`~tenpy.algorithms.dmrg.Engine.init_env` and :meth:`~tenpy.algorithms.dmrg.Engine.reset_stats`

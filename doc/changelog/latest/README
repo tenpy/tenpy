@@ -1,5 +1,5 @@
 Files `*.txt` in this folder are included verbatim into the docs of the `docs/changelog/_latest.rst` version.
-We use this folder to collect the changes to be merged into the release notes of the next version 
+We use this folder to collect the changes to be merged into the release notes of the next version
 without having git merge conflicts. See also the `docs/contr/release.rst` documentation.
 
 NOTE: This file is required for the docbuild on git to function properly on github!

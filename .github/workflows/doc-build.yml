@@ -14,19 +14,19 @@ on:
 jobs:
   build:
     if: github.event.pull_request.draft == false
-    
+
     runs-on: ubuntu-latest
     defaults:
       run:
         # https://github.com/marketplace/actions/setup-miniconda#use-a-default-shell
         shell: bash -el {0}
     steps:
-    
+
     - name: Checkout
       uses: actions/checkout@v4
       with:
         submodules: recursive
-      
+
     - name: Setup miniconda
       uses: conda-incubator/setup-miniconda@v3.2.0
       with:
@@ -35,13 +35,13 @@ jobs:
         environment-file: doc/environment.yml
         python-version: 3.13
         conda-remove-defaults: "true"
-    
+
     - name: Build documentation
       # -W treats warnings as errors, i.e. the action fails if there are warnings from sphinx
       # --keep-going causes sphinx to not quit on a warning/error, so we get to see all of them
       run: |
         conda activate tenpydoc
         python -m sphinx -W --keep-going -b html ./doc ./doc/sphinx_build
-    
+
     - name: Run doctests
       run: python -m sphinx -b doctest ./doc ./doc/sphinx_build

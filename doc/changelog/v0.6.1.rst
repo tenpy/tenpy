@@ -9,4 +9,3 @@ It fixes a small bug in the `examples/c_tebd.py` and some roundoff problems in t
 It is now possible to install TeNPy with the conda package manager::
 
     conda install --channel=conda-forge physics-tenpy
-

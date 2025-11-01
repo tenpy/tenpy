@@ -12,7 +12,7 @@ However, these are just guidelines - it still helps if you contribute something,
 
   .. note ::
 
-    Since no tool is perfect, you can format some regions of code manually and enclose them 
+    Since no tool is perfect, you can format some regions of code manually and enclose them
     with the special comments ``# yapf: disable`` and ``# yapf: enable``.
 
 - Every function/class/module should be documented by its doc-string, see :pep:`257`.
@@ -63,7 +63,7 @@ However, these are just guidelines - it still helps if you contribute something,
   You should make sure that all tests run through, before you ``git push`` back into the public repo.
   Long-running tests are marked with the attribute `slow`; for a quick check you can also run
   ``pytest -m "not slow"``.
-  
+
   We have set up github actions to automatically run the tests.
 
 - Reversely, if you write new functions, please also include suitable tests!
@@ -82,7 +82,7 @@ However, these are just guidelines - it still helps if you contribute something,
   For deprecated config options use :meth:`~tenpy.tools.config.Config.deprecated_alias`.
 
 - During development, you might introduce ``# TODO`` comments.  But also try to remove them again later!
-  If you're not 100% sure that you will remove it soon, please add a doc-string with a 
+  If you're not 100% sure that you will remove it soon, please add a doc-string with a
   ``.. todo ::`` block, such that we can keep track of it.
 
   Unfinished functions should ``raise NotImplementedError()``.
@@ -93,13 +93,13 @@ However, these are just guidelines - it still helps if you contribute something,
 - If you want to try out new things in temporary files: any folder named ``playground`` is ignored by `git`.
 - If you add a new toycode or example: add a reference to include it in the documentation.
 - We've created a sphinx extensions for `documenting config-option dictionaries <https://sphinx-cfg-options.readthedocs.io/en/latest/>`_.
-  If a class takes a dictionary of options, we usually call it `options`, 
+  If a class takes a dictionary of options, we usually call it `options`,
   convert it to a :class:`~tenpy.tools.params.Config` at the very beginning of the `__init__` with
-  :func:`~tenpy.tools.params.asConfig`, save it as ``self.options``, 
+  :func:`~tenpy.tools.params.asConfig`, save it as ``self.options``,
   and document it in the class doc-string with a ``.. cfg:config ::`` directive.
   The name of the `config` should usually be the class-name (if that is sufficiently unique),
-  or for algorithms directly the common name of the algorithm, e.g. "DMRG"; use the same name for the 
-  use the same name for the documentation of the ``.. cfg:config ::`` directive as for the 
+  or for algorithms directly the common name of the algorithm, e.g. "DMRG"; use the same name for the
+  use the same name for the documentation of the ``.. cfg:config ::`` directive as for the
   :class:`~tenpy.tools.params.Config` class instance.
   Attributes which are simply read-out options should be documented by just referencing the options with the
   ``:cfg:option:`configname.optionname``` role.

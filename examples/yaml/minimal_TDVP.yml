@@ -1,4 +1,4 @@
-#!/usr/bin/env -S python -m tenpy 
+#!/usr/bin/env -S python -m tenpy
 
 simulation_class : RealTimeEvolution
 
@@ -25,7 +25,7 @@ algorithm_params:
 final_time :  1.
 
 # additional measurements during the evolution
-connect_measurements: 
+connect_measurements:
   - - tenpy.simulations.measurement
     - m_onsite_expectation_value
     - opname: Sz

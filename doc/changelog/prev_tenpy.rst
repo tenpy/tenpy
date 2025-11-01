@@ -9,8 +9,8 @@ Global Changes
 ^^^^^^^^^^^^^^
 - syntax style based on PEP8. Use ``$>yapf -r -i ./`` to ensure consitent formatting over the whole project.
   Special comments ``# yapf: disable`` and ``# yapf: enable`` can be used for manual formatting of some regions in code.
-- Following PEP8, we distinguish between 'private' functions, 
-  indicated by names starting with an underscore and to be used only within the library, and the public API. 
+- Following PEP8, we distinguish between 'private' functions,
+  indicated by names starting with an underscore and to be used only within the library, and the public API.
   The puplic API should be backwards-compatible with different releases, while private functions might change at any time.
 - all modules are in the folder ``tenpy`` to avoid name conflicts with other libraries.
 - withing the library, relative imports are used, e.g., ``from ..tools.math import (toiterable, tonparray)``
@@ -39,7 +39,7 @@ np_conserved
 TEBD
 ^^^^
 - Introduced TruncationError for easy handling of total truncation error.
-- some truncation parameters are renamed and may have a different meaning, e.g. `svd_max` -> `svd_min` 
+- some truncation parameters are renamed and may have a different meaning, e.g. `svd_max` -> `svd_min`
   has no 'log' in the definition.
 
 DMRG

@@ -5,11 +5,11 @@ this module is more to serve as a pedagogical example for a model.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from .lattice import Site, Chain
-from .model import CouplingModel, NearestNeighborModel, MPOModel, CouplingMPOModel
 from ..linalg import np_conserved as npc
-from ..tools.params import asConfig
 from ..networks.site import SpinHalfSite  # if you want to use the predefined site
+from ..tools.params import asConfig
+from .lattice import Chain, Site
+from .model import CouplingModel, CouplingMPOModel, MPOModel, NearestNeighborModel
 
 __all__ = ['XXZChain', 'XXZChain2']
 
@@ -50,13 +50,14 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
             Whether to sort by charges of physical legs. `True` by default.
 
     """
+
     def __init__(self, model_params):
         # 0) read out/set default parameters
-        model_params = asConfig(model_params, "XXZChain")
+        model_params = asConfig(model_params, 'XXZChain')
         L = model_params.get('L', 2, int)
-        Jxx = model_params.get('Jxx', 1., 'real_or_array')
-        Jz = model_params.get('Jz', 1., 'real_or_array')
-        hz = model_params.get('hz', 0., 'real_or_array')
+        Jxx = model_params.get('Jxx', 1.0, 'real_or_array')
+        Jz = model_params.get('Jz', 1.0, 'real_or_array')
+        hz = model_params.get('hz', 0.0, 'real_or_array')
         bc_MPS = model_params.get('bc_MPS', 'finite', str)
         conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
@@ -73,9 +74,9 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
             else:
                 leg = npc.LegCharge.from_trivial(2)
             # 2) onsite operators
-            Sp = [[0., 1.], [0., 0.]]
-            Sm = [[0., 0.], [1., 0.]]
-            Sz = [[0.5, 0.], [0., -0.5]]
+            Sp = [[0.0, 1.0], [0.0, 0.0]]
+            Sm = [[0.0, 0.0], [1.0, 0.0]]
+            Sz = [[0.5, 0.0], [0.0, -0.5]]
             # (Can't define Sx and Sy as onsite operators: they are incompatible with Sz charges.)
             # 3) local physical site
             site = Site(leg, ['up', 'down'], sort_charge=sort_charge, Sp=Sp, Sm=Sm, Sz=Sz)
@@ -112,7 +113,8 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
     model_params : dict | :class:`~tenpy.tools.params.Config`
         See :cfg:config:`XXZChain`
     """
-    default_lattice = "Chain"
+
+    default_lattice = 'Chain'
     force_default_lattice = True
 
     def init_sites(self, model_params):
@@ -124,9 +126,9 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
 
     def init_terms(self, model_params):
         # read out parameters
-        Jxx = model_params.get('Jxx', 1., 'real_or_array')
-        Jz = model_params.get('Jz', 1., 'real_or_array')
-        hz = model_params.get('hz', 0., 'real_or_array')
+        Jxx = model_params.get('Jxx', 1.0, 'real_or_array')
+        Jz = model_params.get('Jz', 1.0, 'real_or_array')
+        hz = model_params.get('hz', 0.0, 'real_or_array')
         # add terms
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-hz, u, 'Sz')

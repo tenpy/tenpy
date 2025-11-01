@@ -6,14 +6,15 @@ should not be executed as part of the tests.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import sys
 import os
+import sys
+
 import pytest
 
 # get directory where the examples can be found
 examples_dir = os.path.join(os.path.dirname(__file__), '..', 'examples')
 
-exclude = ["__pycache__"]
+exclude = ['__pycache__']
 
 try:
     examples = [fn for fn in os.listdir(examples_dir) if fn[-3:] == '.py' and fn not in exclude]

@@ -6,7 +6,7 @@ TeNPy does not import the following libraries (at least not globally), but some 
 behaving like objects from these libraries.
 
 .. note ::
-    
+
     If you created a [conda]_ environment with ``conda env create -f environment.yml``, all the extra requirements below
     should already be installed :)
     (However, a ``pip install -r requirements.txt`` does not install all of them.)
@@ -23,17 +23,17 @@ It ships with a Lapack library, and uses optimization for Intel CPUs.
 Moreover, it uses parallelization of the LAPACK/BLAS routines, which makes execution much faster.
 As of now, the library itself supports no other way of parallelization.
 
-If you don't have a python version which is built against MKL, 
+If you don't have a python version which is built against MKL,
 we recommend using [conda]_ or directly `intelpython <https://software.intel.com/en-us/distribution-for-python/get-started>`_.
 Conda has the advantage that it allows to use different environments for different projects.
 Both are available for Linux, Mac and Windows; note that you don't even need administrator rights to install it on linux.
 Simply follow the (straight-forward) instructions of the web page for the installation.
-After a successful installation, if you run ``python`` interactively, the first output line should 
+After a successful installation, if you run ``python`` interactively, the first output line should
 state the python version and contain ``Anaconda`` or ``Intel Corporation``, respectively.
 
 If you have a working conda package manager, you can install the numpy build against MKL with::
 
-    conda install mkl mkl-devel numpy scipy 
+    conda install mkl mkl-devel numpy scipy
 
 The ``mkl-devel`` package is required for linking against MKL, i.e. for compiling the Cython code.
 As outlined in :doc:`/install/conda`, on Linux/Mac you also need to pin blas to use MKL with the following line, **if you use the `conda-forge` channel**::
@@ -41,7 +41,7 @@ As outlined in :doc:`/install/conda`, on Linux/Mac you also need to pin blas to 
     conda install "libblas=*=*mkl"
 
 .. note ::
-    
+
     MKL uses different threads to parallelize various BLAS and LAPACK routines.
     If you run the code on a cluster, make sure that you specify the number of used cores/threads correctly.
     By default, MKL uses all the available CPUs, which might be in stark contrast than what you required from the
@@ -69,14 +69,14 @@ packages installed during compilation. In this case, it will link against the MK
     >>> tenpy.show_config()
     tenpy 0.7.2.dev130+76c5b7f (compiled with HAVE_MKL),
     git revision 76c5b7fe46df3e2241d85c47cbced3400caad05a using
-    python 3.9.1 | packaged by conda-forge | (default, Jan 10 2021, 02:55:42) 
+    python 3.9.1 | packaged by conda-forge | (default, Jan 10 2021, 02:55:42)
     [GCC 9.3.0]
     numpy 1.19.5, scipy 1.6.0
 
 
 HDF5 file format support
 ^^^^^^^^^^^^^^^^^^^^^^^^
-We support exporting data to files in the [HDF5]_ format through the python interface of the 
+We support exporting data to files in the [HDF5]_ format through the python interface of the
 `h5py <https://docs.h5py.org/en/stable/>` package, see :doc:`/intro/input_output` for more information.
 However, that requires the installation of the HDF5 library and h5py.
 

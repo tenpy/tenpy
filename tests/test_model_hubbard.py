@@ -1,15 +1,23 @@
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
 import numpy as np
-from tenpy.models import hubbard
+import pytest
 from test_model import check_general_model
 
+from tenpy.models import hubbard
+
 
 def test_FermiHubbardModel():
-    check_general_model(hubbard.FermiHubbardModel, {'lattice': "Square", 'Lx': 2, 'Ly': 3}, {'phi_ext': [None, 0.2]})
+    check_general_model(
+        hubbard.FermiHubbardModel, {'lattice': 'Square', 'Lx': 2, 'Ly': 3}, {'phi_ext': [None, 0.2]}
+    )
 
-def test_FermiHubbardModel():
-    check_general_model(hubbard.FermiHubbardModel2, {'lattice': "Square", 'Lx': 2, 'Ly': 3}, {'phi_ext': [None, 0.2]})
+
+def test_FermiHubbardModel2():
+    check_general_model(
+        hubbard.FermiHubbardModel2,
+        {'lattice': 'Square', 'Lx': 2, 'Ly': 3},
+        {'phi_ext': [None, 0.2]},
+    )
 
 
 def test_FermiHubbardChain():
@@ -21,14 +29,9 @@ def test_FermiHubbardChain():
     assert e_info.type is ValueError
     assert e_info.value.args[0] == 'Expected one phase per lattice dimension.'
 
+
 def test_BoseHubbardModel():
-    params = {
-        'lattice': "Square",
-        'Lx': 2,
-        'Ly': 3,
-        'V': 0.1,
-        'U': 0.3
-    }
+    params = {'lattice': 'Square', 'Lx': 2, 'Ly': 3, 'V': 0.1, 'U': 0.3}
     check_general_model(hubbard.BoseHubbardModel, params, {'phi_ext': [None, 0.2]})
 
 
@@ -46,4 +49,10 @@ def test_DipolarBoseHubbardChain():
         expect_charges = np.array([expect_N, expect_dipole]).T
         assert np.all(s.leg.charges == expect_charges)
     # check general properties for many cases
-    check_general_model(hubbard.DipolarBoseHubbardChain, {}, {'conserve': ['dipole', 'N', 'parity', None],})
+    check_general_model(
+        hubbard.DipolarBoseHubbardChain,
+        {},
+        {
+            'conserve': ['dipole', 'N', 'parity', None],
+        },
+    )

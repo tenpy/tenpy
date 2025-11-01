@@ -12,12 +12,17 @@ The version is provided in the standard python format ``major.minor.revision`` a
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import sys
-import subprocess
 import os
+import subprocess
+import sys
 
 __all__ = [
-    "version", "released", "short_version", "git_revision", "full_version", "version_summary"
+    'version',
+    'released',
+    'short_version',
+    'git_revision',
+    'full_version',
+    'version_summary',
 ]
 
 # hard-coded version for people without git...
@@ -48,13 +53,15 @@ def _get_git_revision(cwd=None):
     if cwd is None:
         cwd = os.path.dirname(os.path.abspath(__file__))
     try:
-        rev = subprocess.check_output(['git', 'rev-parse', 'HEAD'],
-                                      cwd=cwd,
-                                      stderr=subprocess.STDOUT).decode().strip()
+        rev = (
+            subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=cwd, stderr=subprocess.STDOUT)
+            .decode()
+            .strip()
+        )
     except (subprocess.SubprocessError, FileNotFoundError):
         # FileNotFound e.g if git is not installed or cwd doesn't exist
         # SubprocessError: git command failed for whatever reason
-        rev = "unknown"
+        rev = 'unknown'
     return rev
 
 
@@ -64,11 +71,17 @@ def _get_git_description():
     If unknown, return 0
     """
     try:
-        descr = subprocess.check_output(['git', 'describe', '--tags', '--long'],
-                                        cwd=os.path.dirname(os.path.abspath(__file__)),
-                                        stderr=subprocess.STDOUT).decode().strip()
+        descr = (
+            subprocess.check_output(
+                ['git', 'describe', '--tags', '--long'],
+                cwd=os.path.dirname(os.path.abspath(__file__)),
+                stderr=subprocess.STDOUT,
+            )
+            .decode()
+            .strip()
+        )
         n_commits = int(descr.split('-')[1])
-    except:
+    except Exception:
         n_commits = 0
     return n_commits
 
@@ -81,7 +94,7 @@ def _get_full_version():
     """obtain version from git."""
     full_version = version
     if not released:
-        full_version += '.dev{0:d}+{1!s}'.format(_get_git_description(), git_revision[:7])
+        full_version += f'.dev{_get_git_description():d}+{git_revision[:7]!s}'
     return full_version
 
 
@@ -90,29 +103,34 @@ full_version = _get_full_version()
 
 
 def _get_version_summary():
-    from .tools.optimization import have_cython_functions, compiled_with_MKL
     import numpy
     import scipy
 
-    if have_cython_functions:
-        cython_info = "compiled"
-        if compiled_with_MKL:
-            cython_info = cython_info + " with HAVE_MKL"
-        else:
-            cython_info = cython_info + " without HAVE_MKL"
-    else:
-        cython_info = "not compiled"
+    from .tools.optimization import compiled_with_MKL, have_cython_functions
 
-    summary = ("tenpy {tenpy_ver!s} ({cython_info!s}),\n"
-               "git revision {git_rev!s} using\n"
-               "python {python_ver!s}\n"
-               "numpy {numpy_ver!s}, scipy {scipy_ver!s}")
-    summary = summary.format(tenpy_ver=full_version,
-                             cython_info=cython_info,
-                             git_rev=git_revision,
-                             python_ver=sys.version,
-                             numpy_ver=numpy.version.full_version,
-                             scipy_ver=scipy.version.full_version)
+    if have_cython_functions:
+        cython_info = 'compiled'
+        if compiled_with_MKL:
+            cython_info = cython_info + ' with HAVE_MKL'
+        else:
+            cython_info = cython_info + ' without HAVE_MKL'
+    else:
+        cython_info = 'not compiled'
+
+    summary = (
+        'tenpy {tenpy_ver!s} ({cython_info!s}),\n'
+        'git revision {git_rev!s} using\n'
+        'python {python_ver!s}\n'
+        'numpy {numpy_ver!s}, scipy {scipy_ver!s}'
+    )
+    summary = summary.format(
+        tenpy_ver=full_version,
+        cython_info=cython_info,
+        git_rev=git_revision,
+        python_ver=sys.version,
+        numpy_ver=numpy.version.full_version,
+        scipy_ver=scipy.version.full_version,
+    )
     return summary
 
 

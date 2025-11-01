@@ -9,6 +9,11 @@ to support loading pickle and HDF5 data files with `TruncationError` instances i
 # just provide namespace from ..linalg.truncation
 
 from ..linalg import truncation
-from ..linalg.truncation import TruncationError, truncate, svd_theta, decompose_theta_qr_based  # noqa: F401
+from ..linalg.truncation import (  # noqa: F401
+    TruncationError,
+    decompose_theta_qr_based,
+    svd_theta,
+    truncate,
+)
 
 __all__ = truncation.__all__

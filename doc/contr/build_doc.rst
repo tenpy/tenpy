@@ -1,7 +1,7 @@
 Building the documentation
 ==========================
 
-You can use `Sphinx <https://www.sphinx-doc.org>`_ to generate the full documentation 
+You can use `Sphinx <https://www.sphinx-doc.org>`_ to generate the full documentation
 in various formats (including HTML or PDF) yourself, as described in the following.
 
 First, I will assume that you downloaded the [TeNPySource]_ repository with::
@@ -16,7 +16,7 @@ The recommended way is to create a separate conda environment for it with::
     conda env create -f doc/environment.yml  # make sure to use the file from the doc/ subfolder!
     conda activate tenpydoc
 
-Alternatively, you can use `pip` and ``pip install -r doc/requirements.txt``, but this will not be able to install 
+Alternatively, you can use `pip` and ``pip install -r doc/requirements.txt``, but this will not be able to install
 all dependencies: some packages like `Graphviz <https://graphviz.org/>`_ are not available from pip alone.
 
 Afterwards, simply go to the folder ``doc/`` and run the following command::

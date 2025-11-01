@@ -46,19 +46,20 @@ dependencies = [
 plot = ["matplotlib"]
 io = ["h5py", "pyyaml"]
 memory = ["psutil"]
-extra = ["bottleneck", "yapf==0.28.0", "docformatter==1.3.1"]
+extra = ["bottleneck"]
 docbuild = [
-    "Sphinx", 
-    "sphinx-rtd-theme", 
-    "sphinxcontrib-bibtex", 
-    "matplotlib", 
+    "Sphinx",
+    "sphinx-rtd-theme",
+    "sphinxcontrib-bibtex",
+    "matplotlib",
     "ipykernel",
     "nbsphinx",
     "pandoc",
     "sphinx_copybutton",
 ]
 test = ["pytest>=6.0", "physics_tenpy[io, memory]"]
-all = ["physics_tenpy[plot, io, test, extra, docbuild]"]
+develop = ["pre-commit", "ruff", "physics_tenpy[test]"]
+all = ["physics_tenpy[plot, io, develop, test, extra, docbuild]"]
 
 
 [project.urls]
@@ -84,7 +85,7 @@ version = {attr = "tenpy.__version__"}
 [tool.cibuildwheel]
 # Disable building 32bit windows wheels (h5py does not support it)
 # Disable musllinux : would need to install BLAS/LAPACK
-# Disable free-threaded python 3.14 (h5py not yet supported), see issue 
+# Disable free-threaded python 3.14 (h5py not yet supported), see issue 570 (https://github.com/tenpy/tenpy/issues/570)
 skip = "*-win32 *-musllinux_* cp314t-*"
 # Build separate wheels for macOS's different architectures.
 macos.archs = ["x86_64", "arm64"]
@@ -109,3 +110,36 @@ markers = [
 log_level = "INFO"
 log_format = "%(asctime)s %(levelname)-8s %(filename)-16s%(lineno)4d: %(message)s"
 testpaths = ["tests"]
+
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+exclude = ["doc/sphinx_ext/*", "doc/toycodes"]
+
+[tool.ruff.lint]
+# all possible rules see here: https://docs.astral.sh/ruff/rules/
+select = ["F", "E", "I", "UP"]
+ignore = [
+    "F403", "F405",  # star imports
+    "E741",  # ignore ambiguous variable names like l
+    "E501",  # ignore line too long
+    "UP038",  # Use `X | Y` in `isinstance` call instead of `(X, Y)`
+]
+
+[tool.ruff.lint.per-file-ignores]
+"doc/toycodes/*.ipynb" = [
+    "E402",  # Module level import not at top of cell
+    "F841",  # Local variable is assigned to but never used
+]
+"doc/notebooks/*.ipynb" = [
+    "E402",  # Module level import not at top of cell
+    "F841",  # Local variable is assigned to but never used
+]
+"doc/conf.py" = [
+    "E402",  # Module level import not at top of file
+]
+
+[tool.ruff.format]
+quote-style = "single"
+docstring-code-format = false

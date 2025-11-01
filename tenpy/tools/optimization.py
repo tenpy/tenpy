@@ -78,18 +78,26 @@ knobs you can turn to tweak the most out of this library, explained in the follo
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from enum import IntEnum
-import warnings
 import os
+import warnings
+from enum import IntEnum
 
 __all__ = [
-    'bottleneck', 'have_cython_functions', 'OptimizationFlag', 'temporary_level',
-    'to_OptimizationFlag', 'set_level', 'get_level', 'optimize', 'use_cython', 'compiled_with_MKL'
+    'bottleneck',
+    'have_cython_functions',
+    'OptimizationFlag',
+    'temporary_level',
+    'to_OptimizationFlag',
+    'set_level',
+    'get_level',
+    'optimize',
+    'use_cython',
+    'compiled_with_MKL',
 ]
 
 try:
     import bottleneck
-except:
+except Exception:
     bottleneck = None
     #: None, or the `bottleneck` module, if installed.
 
@@ -136,18 +144,18 @@ class OptimizationFlag(IntEnum):
         Enable this optimization only during the parts of the code where it is really necessary.
         Check whether it actually helps - if it doesn't, keep the optimization disabled!
     """
+
     none = 0
     default = 1
     safe = 2
     skip_arg_checks = 3
 
     @classmethod
-    def from_bytes(cls, bytes, byteorder, *, signed = False):
+    def from_bytes(cls, bytes, byteorder, *, signed=False):
         """Like ``int.from_bytes``, which has a docstring which sphinx cant parse"""
-        return super(OptimizationFlag, cls).from_bytes(bytes, byteorder, signed=signed)
+        return super().from_bytes(bytes, byteorder, signed=signed)
 
-
-    def to_bytes(self, length = 1, byteorder="big", *, signed=False):
+    def to_bytes(self, length=1, byteorder='big', *, signed=False):
         """Like ``int.to_bytes``, which has a docstring which sphinx cant parse"""
         return super().to_bytes(length, byteorder, signed=signed)
 
@@ -180,6 +188,7 @@ class temporary_level:
             do_some_really_heavy_stuff()
         # here we are back to the optimization level as before the ``with ...`` statement
     """
+
     def __init__(self, temporary_level):
         self.temporary_level = temporary_level
 
@@ -224,7 +233,7 @@ def set_level(level=1):
 
 def get_level():
     """Return the global optimization level."""
-    global _level  # noqa: F824
+    global _level
     return _level
 
 
@@ -242,8 +251,8 @@ def optimize(level_compare=OptimizationFlag.default):
         True if the algorithms should try to optimize, i.e., whether the global
         "optimization level" is equal or higher than the level to compare to.
     """
-    global _level  # noqa: F824
-    return (_level >= level_compare)
+    global _level
+    return _level >= level_compare
 
 
 def use_cython(func=None, replacement=None, check_doc=True):
@@ -305,11 +314,12 @@ def use_cython(func=None, replacement=None, check_doc=True):
     global have_cython_functions
     global compiled_with_MKL
     if have_cython_functions is None:
-        if os.getenv("TENPY_NO_CYTHON", "").lower() in ["true", "yes", "y", "1"]:
+        if os.getenv('TENPY_NO_CYTHON', '').lower() in ['true', 'yes', 'y', '1']:
             have_cython_functions = False
         elif optimize(OptimizationFlag.default):
             try:
                 from ..linalg import _npc_helper
+
                 _npc_helper_module = _npc_helper
                 have_cython_functions = True
                 compiled_with_MKL = _npc_helper.compiled_with_MKL
@@ -330,19 +340,20 @@ def use_cython(func=None, replacement=None, check_doc=True):
         raise ValueError(msg)
     if check_doc:
         import inspect
+
         clean_fdoc = inspect.getdoc(func)
         clean_cdoc = inspect.getdoc(fast_func)
         cdoc = fast_func.__doc__
         # if the cython compiler directive 'embedsignature' is used, the first line contains the
         # function signature, so the doc string starts only with the second line
-        clean_cdoc2 = inspect.cleandoc(cdoc[cdoc.find("\n") + 1:])
+        clean_cdoc2 = inspect.cleandoc(cdoc[cdoc.find('\n') + 1 :])
         if clean_fdoc != clean_cdoc and clean_fdoc != clean_cdoc2:
-            msg = "cython version of {0!s} has different doc-string".format(func.__name__)
+            msg = f'cython version of {func.__name__!s} has different doc-string'
             raise ValueError(msg)
     return fast_func
 
 
 # private global variables
 _level = OptimizationFlag.default  # set default optimization level
-set_level(os.getenv("TENPY_OPTIMIZE", default=None))  # update from environment variable
+set_level(os.getenv('TENPY_OPTIMIZE', default=None))  # update from environment variable
 _npc_helper_module = None

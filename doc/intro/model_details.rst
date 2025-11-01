@@ -82,12 +82,12 @@ In the initialization method ``__init__(self, ...)`` of this class you can then 
 
       The method :meth:`~tenpy.models.model.CouplingModel.add_coupling` adds the coupling only in one direction, i.e.
       not switching `i` and `j` in a :math:`\sum_{\langle i, j\rangle}`.
-      If you have terms like :math:`c^\dagger_i c_j` or :math:`S^{+}_i S^{-}_j` in your Hamiltonian, 
+      If you have terms like :math:`c^\dagger_i c_j` or :math:`S^{+}_i S^{-}_j` in your Hamiltonian,
       you *need* to add it in both directions to get a Hermitian Hamiltonian!
       The easiest way to do that is to use the `plus_hc` option of
       :meth:`~tenpy.models.model.CouplingModel.add_onsite` and :meth:`~tenpy.models.model.CouplingModel.add_coupling`,
       as we did for the :math:`J/2 (S^{+}_i S^{-}_j + h.c.)` terms of the Heisenberg model above.
-      Alternatively, you can add the hermitian conjugate terms explicitly, see the examples in 
+      Alternatively, you can add the hermitian conjugate terms explicitly, see the examples in
       :meth:`~tenpy.models.model.CouplingModel.add_coupling` for more details.
 
    Note that the `strength` arguments of these functions can be (numpy) arrays for site-dependent couplings.
@@ -208,7 +208,7 @@ Instead of adding the conjugate terms explicitly, you can set a flag `explicit_p
     The model flag `explicit_plus_hc` should be used in conjunction with the flag `plus_hc` in :meth:`~tenpy.models.model.CouplingModel.add_coupling()` or :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling()`.
     If `plus_hc` is `False` while `explicit_plus_hc` is `True` the MPO bond dimension will not be reduced, but you will still pay the additional computational cost of computing the Hermitian conjugate at runtime.
 
-Thus, we end up with several use cases, depending on your preferences. 
+Thus, we end up with several use cases, depending on your preferences.
 Consider the :class:`~tenpy.models.fermions_spinless.FermionModel`.
 If you do not care about the MPO bond dimension, and want to add Hermitian conjugate terms manually, you would set `model_par['explicit_plus_hc'] = False` and write::
 
@@ -226,7 +226,7 @@ Finally, if you wanted a reduction in MPO bond dimension, you would need to set 
 
 Non-uniform terms and couplings
 -------------------------------
-The CouplingModel-methods :meth:`~tenpy.models.model.CouplingModel.add_onsite`, :meth:`~tenpy.models.model.CouplingModel.add_coupling`, 
+The CouplingModel-methods :meth:`~tenpy.models.model.CouplingModel.add_onsite`, :meth:`~tenpy.models.model.CouplingModel.add_coupling`,
 and :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling` add a sum over a "coupling" term shifted by lattice
 vectors. However, some models are not that "uniform" over the whole lattice.
 
@@ -235,10 +235,10 @@ You can add such a term for example with :meth:`~tenpy.models.model.CouplingMode
 
 Second, if you have irregular lattices, take a look at the corresponding section in :doc:`/intro/lattices`.
 
-Finally, note that the argument `strength` for the `add_onsite`, `add_coupling`, and `add_multi_coupling` methods 
+Finally, note that the argument `strength` for the `add_onsite`, `add_coupling`, and `add_multi_coupling` methods
 can not only be a numpy scalar, but also a (numpy) array.
-In general, the sum performed by the methods runs over the given term 
-shifted by lattice vectors *as far as possible to still fit the term into the lattice*. 
+In general, the sum performed by the methods runs over the given term
+shifted by lattice vectors *as far as possible to still fit the term into the lattice*.
 
 For the :meth:`~tenpy.models.model.CouplingModel.add_onsite` case this criterion is simple: there is exactly one site in each lattice unit cell with the `u` specified as separate argument, so the correct shape for the `strength` array is simply given by :attr:`~tenpy.models.lattice.Lattice.Ls`.
 For example, if you want the defacto standard model studied for many-body localization, a Heisenberg chain with random , uniform onsite field :math:`h^z_i \in [-W, W]`,
@@ -267,7 +267,7 @@ To avoid any ambiguity, the shape of the `strength` always has to fit, at least 
 
 For example, consider the Su-Schrieffer-Heeger model, a spin-less :class:`~tenpy.models.fermions.FermionChain` with hopping strength alternating between two values, say `t1` and `t2`.
 You can generate this model for example like this::
-    
+
     L = 30 # or whatever you like...
     t1, t2 = 0.5, 1.5
     t_array = np.array([(t1 if i % 2 == 0 else t2) for i in range(L-1)])
@@ -291,10 +291,10 @@ Some random remarks on models
   The :class:`~tenpy.models.aklt.AKLTChain` is another example which is directly constructed from the `H_bond` terms.
 - We suggest writing the model to take a single parameter dictionary for the initialization,
   as the :class:`~tenpy.models.model.CouplingMPOModel` does.
-  The :class:`~tenpy.models.model.CouplingMPOModel` converts the dictionary to a dict-like 
+  The :class:`~tenpy.models.model.CouplingMPOModel` converts the dictionary to a dict-like
   :class:`~tenpy.tools.params.Config` with some additional features before passing it on to the `init_lattice`,
   `init_site`, ... methods.
-  It is recommended to read out providing default values with ``model_params.get("key", default_value)``, 
+  It is recommended to read out providing default values with ``model_params.get("key", default_value)``,
   see :meth:`~tenpy.tools.params.Config.get`.
 - When you write a model and want to include a test that it can be at least constructed,
   take a look at ``tests/test_model.py``.

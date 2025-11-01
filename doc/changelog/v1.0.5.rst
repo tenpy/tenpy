@@ -26,5 +26,3 @@ Fixed
 - Fixed a bug in the comparison of :class:`~tenpy.linalg.charges.LegCharge`\ s, see :issue:`470`.
 - Fixed multiple bugs in the consistency checks: We had bugs for ExpMPOEvolution with imaginary time
   and for DMRG with the IrregularLattice.
-
-

@@ -20,3 +20,4 @@ dependencies:
   - graphviz
   - pandoc
   - sphinx-copybutton
+  - ruff

@@ -49,5 +49,5 @@ Fixed
 - When saving simulation results, convert list from ``update_stats`` and ``sweep_stats`` into numpy arrays.
   This can significantly reduce saving time and the size of the resulting hdf5 file - we have seen the size go down from 30MB to 700kB, when no psi and environment were saved!
 - :class:`~tenpy.algorithms.tdvp.TwoSiteTDVP` wasn't using the ``start_trunc_err`` option.
-- Fix :issue:`459` that TDVP and VUMPS shouldn't have both ``lanczos_params`` and ``lanczos_options``. 
+- Fix :issue:`459` that TDVP and VUMPS shouldn't have both ``lanczos_params`` and ``lanczos_options``.
   Deprecated the name ``lanczos_options`` (which was the one actually used) for more consistency with other algorithm engines.

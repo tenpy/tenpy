@@ -1,18 +1,22 @@
 """An example simulating the dynamics of the Neel state under Heisenberg evolution, using TEBD."""
+
 # Copyright (C) TeNPy Developers, Apache license
 import argparse
 import os
-import matplotlib.pyplot as plt
-import matplotlib as mpl
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-import numpy as np
-import tenpy
 import pickle
 
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+import tenpy
 
 model_params = dict(
     L=50,
-    Jx=1, Jy=1, Jz=1,
+    Jx=1,
+    Jy=1,
+    Jz=1,
 )
 model = tenpy.SpinChain(model_params)
 
@@ -23,7 +27,7 @@ engine_params = dict(
     trunc_params=dict(
         chi_max=None,  # to be set in loop
         svd_min=1e-10,
-    )
+    ),
 )
 dt_measure = engine_params['dt'] * engine_params['N_steps']
 
@@ -33,10 +37,16 @@ def main():
         description='Either run simulation at fixed chi, or plot results.'
     )
     parser.add_argument('--chi', type=int, default=50, help='MPS bond dimension. Default 50.')
-    parser.add_argument('--outfolder', default='./',
-                        help='Folder to write results to. Default is CWD.')
-    parser.add_argument('--plot', type=str, metavar='FOLDER', default=None,
-                        help='Plot results in the given folder instead of running the simulation.')
+    parser.add_argument(
+        '--outfolder', default='./', help='Folder to write results to. Default is CWD.'
+    )
+    parser.add_argument(
+        '--plot',
+        type=str,
+        metavar='FOLDER',
+        default=None,
+        help='Plot results in the given folder instead of running the simulation.',
+    )
     args = parser.parse_args()
 
     if args.plot is not None:
@@ -51,16 +61,16 @@ def main():
 def run(chi: int):
     psi = tenpy.MPS.from_lat_product_state(model.lat, [['up'], ['down']])
     # Selects Sz=0 sector
-    
+
     engine_params['trunc_params'].update(chi_max=chi)
     engine = tenpy.TEBDEngine(psi, model, engine_params)
     # engine = tenpy.TDVPEngine(psi, model, engine_params)
-    
+
     t = [0]
     S = [psi.entanglement_entropy()]
     mag_z = [psi.expectation_value('Sz')]
     err = [0]
-    
+
     for n in range(200):
         print(f'n={n}')
         engine.run()
@@ -68,12 +78,12 @@ def run(chi: int):
         S.append(psi.entanglement_entropy())
         mag_z.append(psi.expectation_value('Sz'))
         err.append(engine.trunc_err.eps)
-    
+
     t = np.array(t)
     S = np.array(S)
     mag_z = np.array(mag_z)
     err = np.array(err)
-    imbalance = .5 * np.average(mag_z[:, ::2] - mag_z[:, 1::2], axis=1),
+    imbalance = (0.5 * np.average(mag_z[:, ::2] - mag_z[:, 1::2], axis=1),)
     return dict(t=t, S=S, mag_z=mag_z, imbalance=imbalance, err=err, chi=chi)
 
 
@@ -92,7 +102,6 @@ def plot(folder):
             res = pickle.load(f)
         results[chi] = res
 
-    
     fontsize = 10
     linewidth = 5.90666  # inches
     L = model_params['L']
@@ -111,25 +120,31 @@ def plot(folder):
             color=c,
             label=rf'$\chi={chi}$',
             ls=ls,
-            lw=2 if chi == max_chi else (1 if chi == min(chis) else 1.5)
+            lw=2 if chi == max_chi else (1 if chi == min(chis) else 1.5),
         )
-        for chi, c, ls in zip(chis,
-                              ['tab:blue', 'tab:orange', 'tab:green', 'tab:purple', 'tab:red'],
-                              ['-', ':', '--', '-.', '-'])
+        for chi, c, ls in zip(
+            chis,
+            ['tab:blue', 'tab:orange', 'tab:green', 'tab:purple', 'tab:red'],
+            ['-', ':', '--', '-.', '-'],
+        )
         for which in [None, 'S', 'Imb', 'err']
     }
 
-    aspect = .7
-    fig, ((ax_mag, ax_S), (ax_Imb, ax_err)) = plt.subplots(2, 2, figsize=(linewidth, aspect * linewidth))
+    aspect = 0.7
+    fig, ((ax_mag, ax_S), (ax_Imb, ax_err)) = plt.subplots(
+        2, 2, figsize=(linewidth, aspect * linewidth)
+    )
 
     # magnetization profile
     ax_mag.set_xlabel(r'$\langle S^z_i \rangle(t)$')
     ax_mag.set_xlabel(r'$t$')
     ax_mag.set_ylabel(r'Site $i$')
     ax_mag.set_yticks([0, 12, 24, 36, 49])
-    ax_mag.xaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda x, pos: str(int(dt_measure * int(x)))))
+    ax_mag.xaxis.set_major_formatter(
+        mpl.ticker.FuncFormatter(lambda x, pos: str(int(dt_measure * int(x))))
+    )
     im = ax_mag.pcolor(results[max_chi]['mag_z'].T[:, t_mask], cmap='inferno', edgecolor='face')
-    # cmap candidates: viridis, inferno, coolwarm, bwr, RdBu, 
+    # cmap candidates: viridis, inferno, coolwarm, bwr, RdBu,
     divider = make_axes_locatable(ax_mag)
     cax = divider.append_axes('right', size='5%', pad=0.05)
     cbar = plt.colorbar(im, cax=cax)
@@ -139,20 +154,28 @@ def plot(folder):
     ax_S.set_ylabel(r'$S_{\text{vN}}$')
     ax_S.set_xlabel('$t$')
     for chi in chis:
-        ax_S.plot(results[chi]['t'][t_mask], results[chi]['S'][t_mask, L // 2], **plot_styles[chi, 'S'])
+        ax_S.plot(
+            results[chi]['t'][t_mask], results[chi]['S'][t_mask, L // 2], **plot_styles[chi, 'S']
+        )
 
     # subplot: imbalance
     ax_Imb.set_ylabel(r'$\mathcal{I}$')
     ax_Imb.set_xlabel('$t$')
     for chi in chis:
-        ax_Imb.plot(results[chi]['t'][t_mask], results[chi]['imbalance'][0][t_mask], **plot_styles[chi, 'Imb'])
+        ax_Imb.plot(
+            results[chi]['t'][t_mask],
+            results[chi]['imbalance'][0][t_mask],
+            **plot_styles[chi, 'Imb'],
+        )
     ax_Imb.legend()
 
     # subplot: truncation error
     ax_err.set_ylabel(r'$\varepsilon_\text{trunc}$')
     ax_err.set_xlabel('$t$')
     for chi in chis:
-        ax_err.semilogy(results[chi]['t'][t_mask], results[chi]['err'][t_mask], **plot_styles[chi, 'err'])
+        ax_err.semilogy(
+            results[chi]['t'][t_mask], results[chi]['err'][t_mask], **plot_styles[chi, 'err']
+        )
 
     fig.tight_layout(pad=0.1)
     fig.savefig(outfile, bbox_inches='tight')

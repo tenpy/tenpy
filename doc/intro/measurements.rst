@@ -25,14 +25,14 @@ The setup for simulations in TeNPy is as follows.
 2) For a given simulation, we specify the list of measurement functions in the simulation parameter
    :cfg:option:`Simulation.connect_measurements`.
 3) When the simulation runs, it calls the :meth:`~tenpy.simulations.Simulation.make_measurements` method
-   each time a set of measurements should be performed, e.g. on the initial state, during the time 
+   each time a set of measurements should be performed, e.g. on the initial state, during the time
    evolution, and on the final state.
    This causes a call to each of the measurement functions specified in
    the :cfg:option:`Simulation.connect_measurements` parameter, passing the current state
-   ``psi, model, simulation`` as arguments (possibly amongst other keyword arguments 
+   ``psi, model, simulation`` as arguments (possibly amongst other keyword arguments
    also specified in :cfg:option:`Simulation.connect_measurements`).
    Moreover, it passes a dictionary ``results``, in which measurement results should be saved.
-   At the end of `make_measurements`, the simulation class merges the obtained results 
+   At the end of `make_measurements`, the simulation class merges the obtained results
    into the collection :attr:`~tenpy.simulations.Simulation.results` of all previous measurements
 4) At the end of simulation, the `results` are saved and returned for further analysis (e.g. plotting).
 
@@ -42,7 +42,7 @@ Measurement functions
 
 In the simplest case, a measurement function is just a function, which can take the keyword arguments
 ``results, psi, model, simulation`` and saves the measurement results in the dictionary `results`.
-The other arguments `psi` and `model` are the current MPS and model that can be used for measurements, 
+The other arguments `psi` and `model` are the current MPS and model that can be used for measurements,
 and `simulation` gives access to the full simulation class, in case other additional data is needed.
 
 Within TeNPy, we use the convention that measurement functions (taking these arguments and saving to `results` instead
@@ -56,7 +56,7 @@ As a first, somewhat trivial example, let us look at the source code of
         results[results_key] = psi.entanglement_entropy()
 
 As you can see, it's a simple wrapper around the MPS method :meth:`~tenpy.networks.mps.MPS.entanglement_entropy`.
-Note that usually the `psi` and `model` arguments are the same as the simulation attributes 
+Note that usually the `psi` and `model` arguments are the same as the simulation attributes
 ``simulation.psi`` and ``simulation.model``, but they can be different in certain cases, e.g. when grouping sites.
 In most cases, you should directly use the passed `psi` and `model`.
 
@@ -112,7 +112,7 @@ is measured for any simulation, as it appears in :attr:`~tenpy.simulations.simul
 Often, what you want to measure is just calling a method of the state `psi`, so there is a special syntax in the
 `connect_measurements` parameter:
 if you **specify the first entry to be** ``psi_method``, ``model_method`` or ``simulation_method``, you can call a method of the
-corresponding classes. 
+corresponding classes.
 As for global measurement functions, we pass the corresponding ``results, psi, model, simulation`` keyword arguments,
 e.g. `psi_method` measurement functions need to accept ``results, model, simulation`` as arguments, and
 `simulation_method` measurement functions should accept ``results, psi, model``.

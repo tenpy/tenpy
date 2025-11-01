@@ -4,8 +4,8 @@
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from scipy.linalg import expm
 import numpy as np
+from scipy.linalg import expm
 
 
 def tdvp(Psi, W, dt, Rp_list=None, k=5, O=None):
@@ -17,7 +17,6 @@ def tdvp(Psi, W, dt, Rp_list=None, k=5, O=None):
 
         spectrum = []
         spectrum.append(np.array([1]))
-        expectation_O = []
         for j in range(L):
             # Get theta
             theta = np.tensordot(s, Psi[j], axes=[1, 1])  # a,i,b
@@ -25,9 +24,10 @@ def tdvp(Psi, W, dt, Rp_list=None, k=5, O=None):
             # Apply expm (-dt H) for 1-site
             d, chia, chib = theta.shape
             H = H1_mixed(Lp_list[-1], Rp_list[L - j - 1], W[j])
-            theta = evolve_lanczos(H, theta.reshape(d * chia * chib), -dt,
-                                   np.min([d * chia * chib - 1, k]))
-            #theta = expm_multiply(H, theta.reshape(d*chia*chib), -dt, np.min([d*chia*chib-1,k]))
+            theta = evolve_lanczos(
+                H, theta.reshape(d * chia * chib), -dt, np.min([d * chia * chib - 1, k])
+            )
+            # theta = expm_multiply(H, theta.reshape(d*chia*chib), -dt, np.min([d*chia*chib-1,k]))
             theta = theta.reshape(d * chia, chib) / np.linalg.norm(theta)
             # SVD and update environment
             U, s, V = np.linalg.svd(theta, full_matrices=0)
@@ -53,7 +53,7 @@ def tdvp(Psi, W, dt, Rp_list=None, k=5, O=None):
 
                 H = H0_mixed(Lp_list[-1], Rp)
                 s = evolve_lanczos(H, s.reshape(chib * chib), dt, np.min([chib * chib - 1, k]))
-                #s = expm_multiply(H, s.reshape(chib*chib), dt, np.min([chib*chib-1,k]))
+                # s = expm_multiply(H, s.reshape(chib*chib), dt, np.min([chib*chib-1,k]))
 
                 s = s.reshape(chib, chib) / np.linalg.norm(s)
 
@@ -61,7 +61,7 @@ def tdvp(Psi, W, dt, Rp_list=None, k=5, O=None):
 
     D = W[0].shape[0]
 
-    if Rp_list == None:
+    if Rp_list is None:
         Rp_list = [np.zeros([1, 1, D])]
         Rp_list[0][0, 0, D - 1] = 1
         for i in np.arange(L - 1, -1, -1):
@@ -74,14 +74,12 @@ def tdvp(Psi, W, dt, Rp_list=None, k=5, O=None):
     Lp_list = [np.zeros([1, 1, D])]
     Lp_list[0][0, 0, 0] = 1
     Psi, Rp_list, spectrum = sweep(Psi, W, dt, Lp_list, Rp_list)
-    Lp_mid = Rp_list[int(L / 2)]
     Psi = mps_invert(Psi)
     W = mpo_invert(W)
 
     Lp_list = [np.zeros([1, 1, D])]
     Lp_list[0][0, 0, D - 1] = 1
     Psi, Rp_list, spectrum = sweep(Psi, W, dt, Lp_list, Rp_list)
-    Rp_mid = Rp_list[int(L / 2)]
 
     Psi = mps_invert(Psi)
     W = mpo_invert(W)
@@ -89,11 +87,11 @@ def tdvp(Psi, W, dt, Rp_list=None, k=5, O=None):
     return Psi, Rp_list, spectrum
 
 
-#def tdvp_robust(Psi, W, dt,chi,chi0,U,Rp_list=None, k=5,O=None):
+# def tdvp_robust(Psi, W, dt,chi,chi0,U,Rp_list=None, k=5,O=None):
 #    if chi0<chi
 
 
-class H0_mixed(object):
+class H0_mixed:
     def __init__(self, Lp, Rp, dtype=float):
         self.Lp = Lp  # a,ap,m
         self.Rp = Rp  # b,bp,n
@@ -107,10 +105,10 @@ class H0_mixed(object):
         x = np.tensordot(self.Lp, x, axes=(0, 0))  # ap,m,b
         x = np.tensordot(x, self.Rp, axes=([1, 2], [2, 0]))  # ap,bp
         x = np.reshape(x, self.chi1 * self.chi2)
-        return (x)
+        return x
 
 
-class H1_mixed(object):
+class H1_mixed:
     def __init__(self, Lp, Rp, M, dtype=float):
         self.Lp = Lp  # a,ap,m
         self.Rp = Rp  # b,bp,n
@@ -128,7 +126,7 @@ class H1_mixed(object):
         x = np.tensordot(x, self.Rp, axes=([1, 2], [0, 2]))  # ap,ip,bp
         x = np.transpose(x, (1, 0, 2))
         x = np.reshape(x, self.d * self.chi1 * self.chi2)
-        return (x)
+        return x
 
 
 def evolve_lanczos(H, psiI, dt, krylovDim):
@@ -157,23 +155,26 @@ def evolve_lanczos(H, psiI, dt, krylovDim):
                 beta[jj + 1] = np.linalg.norm(w)
                 Vmatrix[:, jj + 1] = w / beta[jj + 1]
 
-            w = H.matvec(
-                Vmatrix[:, krylovDim - 1]) - beta[krylovDim - 1] * Vmatrix[:, krylovDim - 2]
+            w = (
+                H.matvec(Vmatrix[:, krylovDim - 1])
+                - beta[krylovDim - 1] * Vmatrix[:, krylovDim - 2]
+            )
             alpha[krylovDim - 1] = np.real(np.inner(np.conjugate(w), Vmatrix[:, krylovDim - 1]))
-            Tmatrix = np.diag(alpha, 0) + np.diag(beta[1:krylovDim], 1) + np.diag(
-                beta[1:krylovDim], -1)
+            Tmatrix = (
+                np.diag(alpha, 0) + np.diag(beta[1:krylovDim], 1) + np.diag(beta[1:krylovDim], -1)
+            )
 
             unitVector = np.zeros(krylovDim, dtype=complex)
-            unitVector[0] = 1.
+            unitVector[0] = 1.0
             subspaceFinal = np.dot(expm(dt * Tmatrix), unitVector)
 
             psiF = np.dot(Vmatrix, subspaceFinal)
-        except:
+        except Exception:
             M = np.zeros([Dim, Dim], dtype=complex)
             for i in range(Dim):
                 for j in range(Dim):
                     vj = np.zeros(Dim)
-                    vj[j] = 1.
+                    vj[j] = 1.0
                     M[i, j] = H.matvec(vj)[i]
             psiF = np.dot(expm(dt * M), psiI)
 
@@ -182,7 +183,7 @@ def evolve_lanczos(H, psiI, dt, krylovDim):
         for i in range(Dim):
             for j in range(Dim):
                 vj = np.zeros(Dim)
-                vj[j] = 1.
+                vj[j] = 1.0
                 M[i, j] = H.matvec(vj)[i]
         psiF = np.dot(expm(dt * M), psiI)
 
@@ -191,12 +192,12 @@ def evolve_lanczos(H, psiI, dt, krylovDim):
 
 def MPO_TFI(Jx, Jz, hx, hz):
     d = 2
-    Id = np.eye(2, dtype=float)
-    Sx = np.array([[0., 1.], [1., 0.]])
-    Sz = np.array([[1., 0.], [0., -1.]])
+    Id = np.eye(d, dtype=float)
+    Sx = np.array([[0.0, 1.0], [1.0, 0.0]])
+    Sz = np.array([[1.0, 0.0], [0.0, -1.0]])
 
     chi = 4
-    W = np.zeros((chi, chi, 2, 2))
+    W = np.zeros((chi, chi, d, d))
     W[0, 0] += Id
     W[0, 1] += Sz
     W[0, 2] += Sx
@@ -223,7 +224,6 @@ def MPO_TFI_general(Jx, Jz, hx, hz, d):
     Sm = np.transpose(Sp)
     # Sp = Sx + i Sy, Sm = Sx - i Sy
     Sx = (Sp + Sm) * 0.5
-    Sy = (Sm - Sp) * 0.5j
     chi = 4
     W = np.zeros((chi, chi, d, d))
     W[0, 0] += Id
@@ -250,9 +250,6 @@ def MPO_Heisenberg(J, d):
         m = n - S
         Sp[n + 1, n] = np.sqrt(S * (S + 1) - m * (m + 1))
     Sm = np.transpose(Sp)
-    # Sp = Sx + i Sy, Sm = Sx - i Sy
-    Sx = (Sp + Sm) * 0.5
-    Sy = (Sm - Sp) * 0.5j
     chi = 5
     W = np.zeros((chi, chi, d, d))
     W[0, 0] += Id
@@ -271,26 +268,25 @@ def MPO_Heisenberg(J, d):
 
 def MPO_XXZ(Jp, Jz, hz):
     s0 = np.eye(2)
-    sp = np.array([[0., 1.], [0., 0.]])
-    sm = np.array([[0., 0.], [1., 0.]])
-    sz = np.array([[0.5, 0.], [0., -0.5]])
-    w_list = []
+    sp = np.array([[0.0, 1.0], [0.0, 0.0]])
+    sm = np.array([[0.0, 0.0], [1.0, 0.0]])
+    sz = np.array([[0.5, 0.0], [0.0, -0.5]])
 
     w = np.zeros((5, 5, 2, 2), dtype=np.float64)
     w[0, :4] = [s0, sp, sm, sz]
-    w[0:, 4] = [hz * sz, Jp / 2. * sm, Jp / 2. * sp, Jz * sz, s0]
+    w[0:, 4] = [hz * sz, Jp / 2.0 * sm, Jp / 2.0 * sp, Jz * sz, s0]
     return w
 
 
 def middle_bond_hamiltonian(Jx, Jz, hx, hz, L):
-    """" Returns the spin operators sigma_x and sigma_z for L sites."""
-    sx = np.array([[0., 1.], [1., 0.]])
-    sz = np.array([[1., 0.], [0., -1.]])
+    """ " Returns the spin operators sigma_x and sigma_z for L sites."""
+    sx = np.array([[0.0, 1.0], [1.0, 0.0]])
+    sz = np.array([[1.0, 0.0], [0.0, -1.0]])
 
     H_bond = Jx * np.kron(sx, sx) + Jz * np.kron(sz, sz)
     H_bond = H_bond + hx / 2 * np.kron(sx, np.eye(2)) + hx / 2 * np.kron(np.eye(2), sx)
     H_bond = H_bond + hz / 2 * np.kron(sz, np.eye(2)) + hz / 2 * np.kron(np.eye(2), sz)
-    H_bond = H_bond.reshape(2, 2, 2, 2).transpose(0, 2, 1, 3).reshape(4, 4)  #i1 i2 i1' i2' -->
+    H_bond = H_bond.reshape(2, 2, 2, 2).transpose(0, 2, 1, 3).reshape(4, 4)  # i1 i2 i1' i2' -->
     U, s, V = np.linalg.svd(H_bond)
 
     M1 = np.dot(U, np.diag(s)).reshape(2, 2, 1, 4).transpose(2, 3, 0, 1)
@@ -311,8 +307,8 @@ def middle_bond_hamiltonian(Jx, Jz, hx, hz, L):
 def middle_site_hamiltonian(Jx, Jz, hx, hz, L):
     M0 = np.tensordot(np.tensordot([1], [1], axes=0), np.eye(2), axes=0)
     M1 = MPO_TFI(0, 0, 0, 0)[0:1, :, :, :]
-    M2 = MPO_TFI(Jx / 2., Jz / 2., hx, hz)
-    M3 = MPO_TFI(Jx / 2., Jz / 2., 0, 0)[:, 3:4, :, :]
+    M2 = MPO_TFI(Jx / 2.0, Jz / 2.0, hx, hz)
+    M3 = MPO_TFI(Jx / 2.0, Jz / 2.0, 0, 0)[:, 3:4, :, :]
 
     W = []
     for i in range(L):
@@ -324,7 +320,7 @@ def middle_site_hamiltonian(Jx, Jz, hx, hz, L):
             W.append(M3)
         else:
             W.append(M0)
-    return (W)
+    return W
 
 
 def mps_invert(Psi):

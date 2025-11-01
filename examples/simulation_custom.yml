@@ -1,4 +1,4 @@
-#!/usr/bin/env -S python -m tenpy -i model_custom 
+#!/usr/bin/env -S python -m tenpy -i model_custom
 # requires that `model_custom.py` can be imported.
 
 simulation_class : GroundStateSearch
@@ -39,7 +39,7 @@ algorithm_params:
         svd_min: 1.e-8
         chi_max: 100
 
-connect_measurements: 
+connect_measurements:
   - - tenpy.simulations.measurement
     - m_onsite_expectation_value
     - opname: Sz

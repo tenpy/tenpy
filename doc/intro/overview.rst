@@ -35,14 +35,14 @@ Layer structure
 ---------------
 
 There are several layers of abstraction in TeNPy.
-While there is a certain hierarchy of how the concepts build up on each other, the user can decide to utilize only some of them. 
+While there is a certain hierarchy of how the concepts build up on each other, the user can decide to utilize only some of them.
 A maximal flexibility is provided by an object oriented style based on classes, which can be inherited and adjusted to individual demands.
 
 The following figure gives an overview of the most important modules, classes and functions in TeNPy.
 Gray backgrounds indicate (sub)modules, yellow backgrounds indicate classes.
 Red arrows indicate inheritance relations, dashed black arrows indicate a direct use.
 (The individual models might be derived from the :class:`~tenpy.models.model.NearestNeighborModel` depending on the geometry of the lattice.)
-There is a fairly clear hierarchy from top-level simulations wrapping everything you want to do in a single job, 
+There is a fairly clear hierarchy from top-level simulations wrapping everything you want to do in a single job,
 over high-level algorithms in the :mod:`tenpy.algorithms` module down to basic
 operations from linear algebra in the :mod:`tenpy.linalg` module.
 
@@ -52,15 +52,15 @@ operations from linear algebra in the :mod:`tenpy.linalg` module.
 High-level simulations
 ----------------------
 The high-level interface is given by simulations, which probably handle everything you want to run on a computing cluster job:
-Given a set of parameters (often in the form of a parameter input file), 
+Given a set of parameters (often in the form of a parameter input file),
 the simulation consists of initializing the model, tensor network and algorithms, running the algorithm,
 performing some measurements and finally saving the results to disk.
-It also provides some extra functionality like the ability to resume an interrupted simulation, 
+It also provides some extra functionality like the ability to resume an interrupted simulation,
 e.g., if your job got killed on the cluster due to runtime limits.
 Ideally, the simulation (sub) class represents the whole simulation from start to end, giving reproducible results
 depending only on the parameters given to it.
 
-For example, calling ``tenpy-run parameters.yml`` from the terminal with the following content in the `parameters.yml` file 
+For example, calling ``tenpy-run parameters.yml`` from the terminal with the following content in the `parameters.yml` file
 will run DMRG for a :class:`~tenpy.models.spins.SpinChain`:
 
 .. literalinclude:: /../examples/userguide/i_dmrg_parameters.yml
@@ -77,7 +77,7 @@ Low-level: tensors and linear algebra
 -------------------------------------
 
 .. note ::
-    
+
     See :doc:`/intro/npc` for more information on defining charges for arrays.
 
 The most basic layer is given by in the :mod:`~tenpy.linalg` module, which provides basic features of linear algebra.
@@ -108,7 +108,7 @@ Sites for the local Hilbert space and tensor networks
 
 The next basic concept is that of a local Hilbert space, which is represented by a :class:`~tenpy.networks.site.Site` in TeNPy.
 This class does not only label the local states and define the charges, but also
-provides onsite operators. For example, the :class:`~tenpy.networks.site.SpinHalfSite` provides the 
+provides onsite operators. For example, the :class:`~tenpy.networks.site.SpinHalfSite` provides the
 :math:`S^+, S^-, S^z` operators under the names ``'Sp', 'Sm', 'Sz'``, defined as :class:`~tenpy.linalg.np_conserved.Array` instances similarly as
 in the code above.
 Since the most common sites like for example the :class:`~tenpy.networks.site.SpinSite` (for general spin S=0.5, 1, 1.5,...), :class:`~tenpy.networks.site.BosonSite` and
@@ -128,7 +128,7 @@ Models
 ------
 
 .. note ::
-    
+
     See :doc:`/intro/model` for more information on sites and how to define and extend models on your own.
 
 Technically, the explicit definition of an :class:`~tenpy.networks.mpo.MPO` is already enough to call an algorithm like DMRG in :mod:`~tenpy.algorithms.dmrg`.
@@ -146,7 +146,7 @@ Internally, the MPO is generated using a finite state machine picture.
 This allows not only to translate more complicated Hamiltonians into their corresponding MPOs,
 but also to automate the mapping from a higher dimensional lattice to the 1D chain along which the MPS
 winds.
-Note that this mapping introduces longer-range couplings, so the model can no longer be defined to be a 
+Note that this mapping introduces longer-range couplings, so the model can no longer be defined to be a
 :class:`~tenpy.models.model.NearestNeighborModel` suited for TEBD if another lattice than the :class:`~tenpy.models.lattice.Chain` is to be used.
 Of course, many commonly studied models are also predefined.
 For example, the following code initializes the Heisenberg model on a kagome lattice;
@@ -159,7 +159,7 @@ Algorithms
 
 The highest level beyond the wrapping simulations) is given by algorithms like DMRG and TEBD.
 They usually need to be initialized with a state, i.e., tensor network like an MPS, and suitable model.
-Those are defined in the next lower levels. 
+Those are defined in the next lower levels.
 The following simple example illustrates the basic structure that the simulation class needs to perform for the same
 parameters as the example above, calling the cl:mod:`~tenpy.algorithms.dmrg`.
 
@@ -167,7 +167,7 @@ parameters as the example above, calling the cl:mod:`~tenpy.algorithms.dmrg`.
 
 The switch from DMRG to iDMRG in TeNPy is simply accomplished by a change of the parameter
 ``"bc_MPS"`` from ``"finite"`` to ``"infinite"``, both for the model and the state.
-The returned ``E`` is then the energy density per site. 
+The returned ``E`` is then the energy density per site.
 Due to the translation invariance, one can also evaluate the correlation length, here slightly away from the critical point.
 
 .. literalinclude:: /../examples/userguide/g_dmrg_infinite.py
@@ -179,4 +179,3 @@ The following code shows this directly for the infinite version of TEBD.
 
 Note that there is also a simulation class for :class:`~tenpy.simulations.time_evolution.RealTimeEvolution` that can handle this extra loop over time, and
 allows to easily switch between different time evolution algorithms.
-

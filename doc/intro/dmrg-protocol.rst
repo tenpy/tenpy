@@ -25,16 +25,16 @@ If the model contains only single- and two-body terms, this latter approach shou
 
 Low-effort tests
 ----------------
-As not every state can be accurately represented by an MPS, some results are outside the reach of (i)DMRG. 
+As not every state can be accurately represented by an MPS, some results are outside the reach of (i)DMRG.
 To prevent wasting considerable numerical resources on a fruitless project, it is recommended to run some low-effort trials first, and see whether any indication of the desired result can be found.
 If so, one can then go on to more computationally expensive simulations.
 If not, one should evaluate:
 
-1. Whether there is a mistake in the model or simulation set-up, 
+1. Whether there is a mistake in the model or simulation set-up,
 2. Whether a slightly more computationally expensive test would potentially yield a result, or
 3. Whether your approach is unfortunately out of reach of (i)DMRG.
 
-To set up low-effort trials, one should limit system size, bond dimension and the range of interactions, as well as (if possible) target a non-critical region of phase space. 
+To set up low-effort trials, one should limit system size, bond dimension and the range of interactions, as well as (if possible) target a non-critical region of phase space.
 All these measures reduce the size of and/or entanglement entropy needing to be captured by the MPS, which yields both memory and run time advantages.
 Of course, one introduces a trade-off between computational cost and accuracy, which is why one should be careful to not put too much faith into results obtained at this stage.
 
@@ -55,7 +55,7 @@ To combat convergence issues of the (i)DMRG algorithm, several strategies (short
 
 1. Ensure that there are no errors in the model (see above) or the simulation set-up.
 2. Increase the maximum bond dimension.
-3. Ramp up the maximum bond dimension during simulation, rather than starting at the highest value. I.e., define a schedule wherein the first :math:`N_{\mathrm{sweeps}}` sweeps run at some :math:`\chi_1 < \chi_\mathrm{max}`, the next :math:`N_{\mathrm{sweeps}}` at :math:`\chi_1 < \chi_2 < \chi_{\mathrm{max}}`, etc. 
+3. Ramp up the maximum bond dimension during simulation, rather than starting at the highest value. I.e., define a schedule wherein the first :math:`N_{\mathrm{sweeps}}` sweeps run at some :math:`\chi_1 < \chi_\mathrm{max}`, the next :math:`N_{\mathrm{sweeps}}` at :math:`\chi_1 < \chi_2 < \chi_{\mathrm{max}}`, etc.
    This can be done through the ``chi_list`` option of the :class:`~tenpy.algorithms.dmrg.DMRGEngine`.
    You should also make sure that the ``max_hours`` option is set to sufficiently long runtimes.
 4. Increase the maximum number of sweeps the algorithm is allowed to make, through the ``max_sweeps`` option of the :class:`~tenpy.algorithms.dmrg.DMRGEngine`.
@@ -66,7 +66,7 @@ To combat convergence issues of the (i)DMRG algorithm, several strategies (short
    This can be done through the ``min_sweeps`` option of the :class:`~tenpy.algorithms.dmrg.DMRGEngine`.
 8. Change the size and shape of the MPS unit cell (where possible), in case an artificially enforced translational invariance prevents the algorithm from finding a true ground state which is incommensurate with this periodicity.
    For example, a chain system which has a true ground state that is periodic in three sites, will not be accurately represented by a two-site MPS unit cell, as the latter enforces two-site periodicity.
-	
+
 
 In some instances, it is essentially unavoidable to encounter convergence issues.
 In particular, a simulation of a critical state can cause problems with (i)DMRG convergence, as these states violate the area law underlying an accurate MPS approximation.

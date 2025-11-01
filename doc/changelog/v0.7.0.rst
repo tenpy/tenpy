@@ -3,7 +3,7 @@
 
 Release Notes
 -------------
-The big new feature is the implementation of the ``W_I`` and ``W_II`` method for approximating exponentials of an MPO with an MPO, 
+The big new feature is the implementation of the ``W_I`` and ``W_II`` method for approximating exponentials of an MPO with an MPO,
 and MPS compression / MPO application to an MPS, to allow time evolution with :meth:`~tenpy.algorithms.mpo_evolution.ExpMPOEvolution`.
 
 Changelog
@@ -22,7 +22,7 @@ Added
 ^^^^^
 - :class:`~tenpy.algorithms.mps_common.VariationalCompression` and
   :class:`~tenpy.algorithms.mps_common.VariationalApplyMPO` for variational compression
-- :class:`~tenpy.algorithms.purification.PurificationApplyMPO` and :class:`~tenpy.algorithms.purification.PurificationTwoSiteU` 
+- :class:`~tenpy.algorithms.purification.PurificationApplyMPO` and :class:`~tenpy.algorithms.purification.PurificationTwoSiteU`
   for variational compression with purifications.
 - Argument `insert_all_id` for :meth:`tenpy.networks.mpo.MPOGraph.from_terms` and :meth:`~tenpy.networks.mpo.MPOGraph.from_term_list`
 - implemented the :class:`~tenpy.models.lattice.IrregularLattice`.

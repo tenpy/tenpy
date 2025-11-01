@@ -25,21 +25,35 @@ Common to all tools is that they are not just useful for a single algorithm but 
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from . import (events, fit, hdf5_io, math, misc, params, process, string, optimization, cache,
-               thread, spectral_function_tools, prediction, docs)
+from . import (
+    cache,
+    docs,  # noqa F841
+    events,
+    fit,
+    hdf5_io,
+    math,
+    misc,
+    optimization,
+    params,
+    prediction,
+    process,
+    spectral_function_tools,
+    string,
+    thread,
+)
+from .cache import *
 from .events import *
 from .fit import *
 from .hdf5_io import *
 from .math import *
 from .misc import *
-from .params import *
-from .process import *
-from .string import *
 from .optimization import *
-from .cache import *
-from .thread import *
-from .spectral_function_tools import *
+from .params import *
 from .prediction import *
+from .process import *
+from .spectral_function_tools import *
+from .string import *
+from .thread import *
 
 __all__ = [
     *events.__all__,
@@ -54,5 +68,5 @@ __all__ = [
     *cache.__all__,
     *thread.__all__,
     *spectral_function_tools.__all__,
-    *prediction.__all__
+    *prediction.__all__,
 ]
