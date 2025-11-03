@@ -119,12 +119,13 @@ exclude = ["doc/sphinx_ext/*", "doc/toycodes"]
 
 [tool.ruff.lint]
 # all possible rules see here: https://docs.astral.sh/ruff/rules/
-select = ["F", "E", "I", "UP"]
+select = ["F", "E", "W", "I", "UP"]
 ignore = [
     "F403", "F405",  # star imports
     "E741",  # ignore ambiguous variable names like l
     "E501",  # ignore line too long
     "UP038",  # Use `X | Y` in `isinstance` call instead of `(X, Y)`
+    "DOC501",  # Raised exception {id} missing from docstring
 ]
 
 [tool.ruff.lint.per-file-ignores]
