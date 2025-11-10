@@ -1475,7 +1475,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                 try:
                     if label[1] == key:
                         all_states += label
-                except:  # not a tuple / wrong types
+                except Exception:  # not a tuple / wrong types
                     pass
         key_nr = 1000  # start with high value such that they get added in the end of the MPO
         finite = (graph.bc == 'finite')

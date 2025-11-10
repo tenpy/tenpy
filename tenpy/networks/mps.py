@@ -7214,7 +7214,7 @@ class InitialStateBuilder:
         try:
             p, q = check_filling
             check_filling = p / q
-        except:
+        except Exception:
             p, q = int(round(check_filling * N_total)), N_total
         if abs(p - check_filling * N_total) > 1.e-13:
             raise ValueError(

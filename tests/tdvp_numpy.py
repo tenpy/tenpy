@@ -168,7 +168,7 @@ def evolve_lanczos(H, psiI, dt, krylovDim):
             subspaceFinal = np.dot(expm(dt * Tmatrix), unitVector)
 
             psiF = np.dot(Vmatrix, subspaceFinal)
-        except:
+        except Exception:
             M = np.zeros([Dim, Dim], dtype=complex)
             for i in range(Dim):
                 for j in range(Dim):

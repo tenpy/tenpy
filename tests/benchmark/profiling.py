@@ -140,7 +140,7 @@ if __name__ == "__main__":
         for i in range(len(limits)):
             try:
                 limits[i] = int(limits[i])
-            except:
+            except Exception:
                 pass
         for fn in files + args.print_stats:
             print_profiling(fn, args.sort, limits, args.callees, args.callers)

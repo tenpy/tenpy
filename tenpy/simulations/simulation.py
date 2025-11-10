@@ -1120,12 +1120,12 @@ class Simulation:
                                 del data[k]
                                 data[k + "_eps"] = np.array(v_err)
                                 data[k + "_ov"] = np.array(v_ov)
-                            except:
+                            except Exception:
                                 pass
                             continue
                         try:
                             v = np.array(v)
-                        except:
+                        except Exception:
                             continue
                         if v.dtype != np.dtype(object):
                             data[k] = v

@@ -89,7 +89,7 @@ __all__ = [
 
 try:
     import bottleneck
-except:
+except ImportError:
     bottleneck = None
     #: None, or the `bottleneck` module, if installed.
 

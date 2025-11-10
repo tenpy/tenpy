@@ -68,7 +68,7 @@ def _get_git_description():
                                         cwd=os.path.dirname(os.path.abspath(__file__)),
                                         stderr=subprocess.STDOUT).decode().strip()
         n_commits = int(descr.split('-')[1])
-    except:
+    except Exception:
         n_commits = 0
     return n_commits
 

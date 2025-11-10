@@ -2560,7 +2560,7 @@ class Array:
         try:
             only_int = np.array(inds, dtype=np.intp)
             assert (only_int.shape == (len(inds), ))
-        except:
+        except Exception:
             return False, inds
         else:
             return True, inds
@@ -2614,7 +2614,7 @@ class Array:
             else:
                 try:
                     iter(i)
-                except:  # not iterable: single index
+                except TypeError:  # not iterable: single index
                     slice_inds.append(int(i))
                     slice_axes.append(a)
                 else:  # iterable

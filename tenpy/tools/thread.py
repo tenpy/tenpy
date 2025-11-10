@@ -100,7 +100,7 @@ class Worker:
                         return_dict[return_key] = res
                 finally:
                     self.tasks.task_done()
-        except:
+        except Exception:
             self.exit.set()
             logger.exception("%s thread dies with following exception", self.name)
         finally:
