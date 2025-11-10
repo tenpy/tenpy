@@ -5,8 +5,7 @@
 import sys
 import os
 import inspect
-import sphinx_rtd_theme
-import io
+import sphinx_rtd_theme  # noqa F401
 import warnings
 from datetime import datetime
 

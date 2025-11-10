@@ -1122,7 +1122,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
     def mixer_activate(self):
         super().mixer_activate()
-        if not (self.mixer is None) and not self.mixer.can_decompose_1site:
+        if self.mixer is not None and not self.mixer.can_decompose_1site:
             msg = (f'Using {self.mixer.__class__.__name__} with single-site DMRG is inefficient. '
                    f'The resulting algorithm has two-site costs!')
             warnings.warn(msg)
