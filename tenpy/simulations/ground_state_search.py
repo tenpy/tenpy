@@ -1011,7 +1011,7 @@ class TopologicalExcitations(OrthogonalExcitations):
                 #Q_offset = (vL.chinfo.make_valid(Qmostprobable_alpha - Qmostprobable_beta))
                 Q_offset = Qmostprobable_alpha - Qmostprobable_beta
             else:
-                raise ValueError("Invalid `join_method` %s " % join_method)
+                raise ValueError(f"Invalid `join_method` {join_method}")
 
             self.logger.info("Q Offset (offset L - offset R): %r", Q_offset)
             #switch_charge_sector = vL.chinfo.make_valid(switch_charge_sector)

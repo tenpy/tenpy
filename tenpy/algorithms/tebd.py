@@ -207,7 +207,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             # a1 b1 a2 b2 a3 b3 2*a1
             return [a1, b1, a2, b2, 0.5 - a1 - a2, 1. - 2 * (b1 + b2), 2 * a1]
         # else
-        raise ValueError("Unknown order %r for Suzuki Trotter decomposition" % order)
+        raise ValueError(f"Unknown order {order} for Suzuki Trotter decomposition")
 
     @staticmethod
     def suzuki_trotter_decomposition(order, N_steps):

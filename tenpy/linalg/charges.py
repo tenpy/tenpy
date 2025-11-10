@@ -1698,11 +1698,11 @@ class LegPipe(LegCharge):
     def __str__(self):
         """Fairly short debug output."""
         res_lines = [
-            f"LegPipe(shape {self.subshape!s}->{self.ind_len:d}, ",
-            "    qconj {0}->{1:+1};".format(
-                '(' + ', '.join(['%+d' % l.qconj for l in self.legs]) + ')', self.qconj),
-            f"    block numbers {self.subqshape!s}->{self.block_number:d})",
-            vert_join([str(l) for l in self.legs], delim=' | '), ')'
+            f'LegPipe(shape {self.subshape!s}->{self.ind_len:d}, ',
+            f'    qconj ({", ".join(f"{l.qconj:+d}" for l in self.legs)})->{self.qconj:+1};'
+            f'    block numbers {self.subqshape!s}->{self.block_number:d})',
+            vert_join([str(l) for l in self.legs], delim=' | '),
+            ')'
         ]
         return '\n'.join(res_lines)
 

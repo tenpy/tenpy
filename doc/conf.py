@@ -364,7 +364,7 @@ def linkcode_resolve(domain, info):
         lineno = None
 
     if lineno:
-        linespec = "#L%d-L%d" % (lineno, lineno + len(source) - 1)
+        linespec = f"#L{lineno}-L{lineno + len(source) + 1}"
     else:
         linespec = ""
     fn = os.path.relpath(fn, start=os.path.dirname(tenpy.__file__))
@@ -372,9 +372,9 @@ def linkcode_resolve(domain, info):
         return None
 
     if tenpy.version.released:
-        return "%s/blob/v%s/tenpy/%s%s" % (GITHUBBASE, tenpy.__version__, fn, linespec)
+        return f"{GITHUBBASE}/blob/v{tenpy.__version__}/tenpy/{fn}{linespec}"
     else:
-        return "%s/blob/main/tenpy/%s%s" % (GITHUBBASE, fn, linespec)
+        return f"{GITHUBBASE}/blob/main/tenpy/{fn}{linespec}"
 
 
 # -- sphinx_cfg_options ---------------------------------------------------
