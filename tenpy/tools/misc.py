@@ -556,7 +556,7 @@ def get_recursive(nested_data, recursive_key, separator=".", default=_UNSET):
         For example, ``recursive_key="some.sub.key"`` will result in extracting
         ``nested_data["some"]["sub"]["key"]``.
 
-    See also
+    See Also
     --------
     set_recursive : same for changing/setting a value.
     flatten : Get a completely flat structure.
@@ -686,7 +686,7 @@ def flatten(mapping, separator='.'):
     'topentry' : 1
 
 
-    See also
+    See Also
     --------
     get_recursive : Useful to obtain a single entry from a nested data structure.
 

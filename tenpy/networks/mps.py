@@ -812,7 +812,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             >>> bool(np.all(np.diag(CdC) == psi.expectation_value("Cd C")))  # "Cd C" is equivalent to "N"
             True
 
-        See also
+        See Also
         --------
         expectation_value_term : for a single combination of `i` and `j` of ``A_i B_j```.
         term_correlation_function_right : for correlations between multi-site terms, fix left term.
@@ -918,7 +918,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 In contrast, the :class:`MPS` variant of this method *ignores* the `norm`,
                 i.e. returns the expectation value for the normalized state.
 
-        See also
+        See Also
         --------
         correlation_function : efficient way to evaluate many correlation functions.
 
@@ -999,7 +999,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 In contrast, the :class:`MPS` variant of this method *ignores* the `norm`,
                 i.e. returns the expectation value for the normalized state.
 
-        See also
+        See Also
         --------
         correlation_function : varying both `i` and `j` at once.
         term_list_correlation_function_right : generalization to sums of terms on the left/right.
@@ -1152,7 +1152,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 In contrast, the :class:`MPS` variant of this method *ignores* the `norm`,
                 i.e. returns the expectation value for the normalized state.
 
-        See also
+        See Also
         --------
         term_correlation_function_right : version for a single term in both `term_list_L/R`.
 
@@ -3037,7 +3037,7 @@ class MPS(BaseMPSExpectationValue):
         self_Tn_psi : float
             Contraction of ``<self|T^N|psi>``.
 
-        See also
+        See Also
         --------
         permute_sites : Allows more general permutations of the sites.
         overlap : Directly the overlap between two MPS without translation.
@@ -3232,7 +3232,7 @@ class MPS(BaseMPSExpectationValue):
         grouped_sites : None | list of :class:`~tenpy.networks.site.GroupedSite`
             The sites grouped together.
 
-        See also
+        See Also
         --------
         group_split : Reverts the grouping.
 
@@ -3280,7 +3280,7 @@ class MPS(BaseMPSExpectationValue):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error introduced by the truncation for the splitting.
 
-        See also
+        See Also
         --------
         group_sites : Should have been used before to combine sites.
 
@@ -4190,7 +4190,7 @@ class MPS(BaseMPSExpectationValue):
             For a finite MPS, ``terms_sum = _mpo.expectation_value(self)``, for an infinite MPS
             ``terms_sum = _mpo.expectation_value(self) * self.L``
 
-        See also
+        See Also
         --------
         expectation_value_term : evaluates a single `term`.
         tenpy.networks.mpo.MPO.expectation_value : expectation value density of an MPO.
@@ -4792,7 +4792,7 @@ class MPS(BaseMPSExpectationValue):
             For each entry in `xi` the charge sector, i.e., qtotal of the dominant eigenvalue.
             Only returned if `return_charges`.
 
-        See also
+        See Also
         --------
         correlation_length_charge_sectors : lists possible charge sectors.
 
@@ -6632,7 +6632,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             For a finite MPS, ``terms_sum = _mpo.expectation_value(self)``, for an infinite MPS
             ``terms_sum = _mpo.expectation_value(self) * self.L``
 
-        See also
+        See Also
         --------
         expectation_value_term : evaluates a single `term`.
         tenpy.networks.mpo.MPO.expectation_value : expectation value density of an MPO.

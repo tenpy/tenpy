@@ -474,7 +474,7 @@ class Lattice:
         order : array, shape (N, D+1), dtype np.intp
             the order to be used for :attr:`order`.
 
-        See also
+        See Also
         --------
         get_order : generates the `order` from equivalent `priority` and `snake_winding`.
         get_order_grouped : variant of `get_order`.
@@ -3546,7 +3546,7 @@ def get_order(shape, snake_winding, priority=None):
     order : ndarray (np.prod(shape), len(shape))
         An order of the sites for :attr:`Lattice.order` in the specified `ordering`.
 
-    See also
+    See Also
     --------
     Lattice.ordering : method in :class:`Lattice` to obtain the order from parameters.
     Lattice.plot_order : visualizes the resulting order in a :class:`Lattice`.
@@ -3656,7 +3656,7 @@ def get_order_grouped(shape, groups, priority=None):
     order : ndarray (np.prod(shape), len(shape))
         An order of the sites for :attr:`Lattice.order` in the specified `ordering`.
 
-    See also
+    See Also
     --------
     :meth:`Lattice.ordering` : method in :class:`Lattice` to obtain the order from parameters.
     :meth:`Lattice.plot_order` : visualizes the resulting order in a :class:`Lattice`.

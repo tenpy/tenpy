@@ -770,7 +770,7 @@ class LegCharge:
         qconj : {-1, 1}
             A flag telling whether the charge points inwards (+1) or outwards (-1).
 
-        See also
+        See Also
         --------
         sort : sorts by charges
         bunch : bunches contiguous blocks of the same charge.
@@ -792,7 +792,7 @@ class LegCharge:
     def from_qind(cls, chargeinfo, slices, charges, qconj=1):
         """Just a wrapper around self.__init__(), see class doc-string for parameters.
 
-        See also
+        See Also
         --------
         sort : sorts by charges
         bunch : bunches contiguous blocks of the same charge.
@@ -1090,7 +1090,7 @@ class LegCharge:
         check whether the charges are actually valid
         or whether ``self`` and ``other`` are blocked or should be sorted.
 
-        See also
+        See Also
         --------
         test_equal :
             ``self.test_contractible(other)`` just performs ``self.test_equal(other.conj())``.
@@ -1111,7 +1111,7 @@ class LegCharge:
 
                 self.charges * self.qconj = other.charges * other.qconj
 
-        See also
+        See Also
         --------
         test_contractible :
             ``self.test_equal(other)`` is equivalent to ``self.test_contractible(other.conj())``.
@@ -1243,7 +1243,7 @@ class LegCharge:
         sorted_copy : :class:`LegCharge`
             A shallow copy of self, with new qind sorted (and thus blocked if bunch) by charges.
 
-        See also
+        See Also
         --------
         bunch : enlarge blocks for contiguous qind of the same charges.
         numpy.take : can apply `perm_flat` to a given axis
@@ -1275,7 +1275,7 @@ class LegCharge:
             A new LegCharge with the same charges at given indices of the leg,
             but (possibly) shorter ``self.charges`` and ``self.slices``.
 
-        See also
+        See Also
         --------
         sort : sorts by charges, thus enforcing complete blocking in combination with bunch.
 

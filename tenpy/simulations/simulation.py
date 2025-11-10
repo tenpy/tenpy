@@ -1628,7 +1628,7 @@ def estimate_simulation_RAM(*,
     unit : str
         Unit of the estimate
 
-    See also
+    See Also
     --------
     Simulation.estimate_RAM : Corresponding simulation method
     tenpy.algorithms.algorithm.Algorithm.estimate_RAM : corresponding algorithm method.

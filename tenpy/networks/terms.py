@@ -217,7 +217,7 @@ class TermList(Hdf5Exportable):
             Used to check whether the operators anticommute
             (= whether they need Jordan-Wigner strings) and for multiplication rules.
 
-        See also
+        See Also
         --------
         order_and_combine_term : does it for a single term.
 
@@ -647,7 +647,7 @@ class CouplingTerms(Hdf5Exportable):
             Specify where to put the text on the line between `i` (0.0) and `j` (1.0),
             e.g. `0.5` is exactly in the middle between `i` and `j`.
 
-        See also
+        See Also
         --------
         tenpy.models.lattice.Lattice.plot_sites : plot the sites of the lattice.
 

@@ -226,7 +226,7 @@ class Algorithm:
         usage : float
             Required RAM in MB.
 
-        See also
+        See Also
         --------
         tenpy.simulations.simulation.estimate_simulation_RAM: global function calling this.
 

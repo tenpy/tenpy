@@ -802,6 +802,7 @@ class UniformMPS(MPS):
             Exponent for the singular values to the left. (Not used for UniformMPS)
         formR : float
             Exponent for the singular values to the right. (Not used for UniformMPS)
+
         Returns
         -------
         theta : :class:`~tenpy.linalg.np_conserved.Array`

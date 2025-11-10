@@ -159,6 +159,7 @@ def _ncon_input_checks(tensor_list, leg_links, sequence):
     tensor_list: list of Array
     leg_links: list of np.ndarray
     sequence: np.ndarray
+
     """
     tensor_list = list(tensor_list)
 

@@ -443,7 +443,7 @@ class Array:
         res : :class:`Array`
             An Array with data of `data_flat`.
 
-        See also
+        See Also
         --------
         detect_qtotal : used to detect ``qtotal`` if not given.
 
@@ -663,7 +663,7 @@ class Array:
         leg_index : int
             The index of the label.
 
-        See also
+        See Also
         --------
         get_leg_indices : calls get_leg_index for a list of labels.
         iset_leg_labels : set the labels of different legs.
@@ -695,7 +695,7 @@ class Array:
         leg_indices : list of int
             The translated labels.
 
-        See also
+        See Also
         --------
         get_leg_index : used to translate each of the single entries.
         iset_leg_labels : set the labels of different legs.
@@ -714,7 +714,7 @@ class Array:
             One label for each of the legs.
             An entry can be None for an anonymous leg.
 
-        See also
+        See Also
         --------
         get_leg: translate the labels to indices.
 
@@ -1022,7 +1022,7 @@ class Array:
         sliced_self : :class:`Array`
             A copy of self, equivalent to taking slices with indices inserted in axes.
 
-        See also
+        See Also
         --------
         add_leg : opposite action of inserting a new leg.
 
@@ -1119,7 +1119,7 @@ class Array:
             A copy of self with the new `leg` at axis `axis` , such that
             ``extended.take_slice(i, axis)`` returns a copy of `self`.
 
-        See also
+        See Also
         --------
         take_slice : opposite action reducing the number of legs.
 
@@ -1565,7 +1565,7 @@ class Array:
         reshaped : :class:`Array`
             A copy of self, with some legs combined into pipes as specified by the arguments.
 
-        See also
+        See Also
         --------
         split_legs : inverse reshaping splitting LegPipes.
 
@@ -1705,7 +1705,7 @@ class Array:
         reshaped : :class:`Array`
             A copy of self where the specified legs are splitted.
 
-        See also
+        See Also
         --------
         combine_legs : this is reversed by split_legs.
 
@@ -1981,7 +1981,7 @@ class Array:
             A copy of self with leg `axis` permuted, such that
             ``res[i, ...] = self[perm[i], ...]`` for ``i`` along `axis`.
 
-        See also
+        See Also
         --------
         sort_legcharge : can also be used to perform a general permutation.
             Preferable, since it is faster for permutations which don't mix charge blocks.
@@ -2094,7 +2094,7 @@ class Array:
         axis : str|int
             The leg label or index for the axis which should be scaled.
 
-        See also
+        See Also
         --------
         iproject : can be used to discard indices for which s is zero.
 
@@ -2512,7 +2512,7 @@ class Array:
         bunch : list of {True, False}
             One entry for each leg, whether the leg should be bunched.
 
-        See also
+        See Also
         --------
         sort_legcharge: public API calling this function.
 
@@ -2984,7 +2984,7 @@ def diag(s, leg, dtype=None, labels=None):
     diagonal : :class:`Array`
         A square matrix with diagonal entries `s`.
 
-    See also
+    See Also
     --------
     Array.scale_axis : similar as ``tensordot(diag(s), ...)``, but faster.
 
@@ -3027,7 +3027,7 @@ def concatenate(arrays, axis=0, copy=True):
     stacked : :class:`Array`
         Concatenation of the given `arrays` along the specified axis.
 
-    See also
+    See Also
     --------
     Array.sort_legcharge : can be used to block by charges along the axis.
 
@@ -3146,7 +3146,7 @@ def grid_concat(grid, axes, copy=True):
         >>> g.shape
         (4, 1, 2, 6)
 
-    See also
+    See Also
     --------
     Array.sort_legcharge : can be used to block by charges.
 
@@ -3210,7 +3210,7 @@ def grid_outer(grid, grid_legs, qtotal=None, grid_labels=None):
         Constructed such that ``res[idx] == grid[idx]`` for any index ``idx`` of the `grid`
         the `grid` entry is not trivial (``None``).
 
-    See also
+    See Also
     --------
     detect_grid_outer_legcharge : can calculate one missing :class:`LegCharge` of the grid.
 
@@ -3291,7 +3291,7 @@ def detect_grid_outer_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=Fal
         A copy of the given `grid_legs` with the ``None`` replaced by a compatible LegCharge.
         The new LegCharge is neither bunched nor sorted!
 
-    See also
+    See Also
     --------
     detect_legcharge : similar functionality for a flat numpy array instead of a grid.
 
@@ -3346,7 +3346,7 @@ def detect_qtotal(flat_array, legcharges, cutoff=None):
     qtotal : charge
         The total charge fo the first non-zero (i.e. > cutoff) charge block.
 
-    See also
+    See Also
     --------
     detect_legcharge : detects the charges of one missing LegCharge if `qtotal` is known.
     detect_grid_outer_legcharge : similar functionality if the flat array is given by a 'grid'.
@@ -3391,7 +3391,7 @@ def detect_legcharge(flat_array, chargeinfo, legcharges, qtotal=None, qconj=+1, 
         A copy of the given `legcharges` with the ``None`` replaced by a compatible LegCharge.
         The new legcharge is 'bunched', but not sorted!
 
-    See also
+    See Also
     --------
     detect_grid_outer_legcharge : similar functionality if the flat array is given by a 'grid'.
     detect_qtotal : detects the total charge, if all legs are known.

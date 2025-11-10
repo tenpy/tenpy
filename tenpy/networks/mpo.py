@@ -518,7 +518,7 @@ class MPO(MPSGeometry):
         unit_cell_width : int
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
-        See also
+        See Also
         --------
         grid_insert_ops : used to plug in `entries` of the grid.
         tenpy.linalg.np_conserved.grid_outer : used for final conversion.
@@ -786,7 +786,7 @@ class MPO(MPSGeometry):
         cp : :class:`MPO`
             A `copy` of self with "segment" boundary conditions.
 
-        See also
+        See Also
         --------
         tenpy.networks.mps.MPS.extract_segment : similar method for MPS.
 
@@ -2196,7 +2196,7 @@ class MPOGraph(MPSGeometry):
         graph : :class:`MPOGraph`
             Initialized with the given terms.
 
-        See also
+        See Also
         --------
         from_term_list :
             equivalent for representation by :class:`~tenpy.networks.terms.TermList`.
@@ -2232,7 +2232,7 @@ class MPOGraph(MPSGeometry):
         graph : :class:`MPOGraph`
             Initialized with the given terms.
 
-        See also
+        See Also
         --------
         from_terms : equivalent for other representation of terms.
 
@@ -3135,7 +3135,7 @@ class MPOEnvironmentBuilder:
             - `grid[j_site][j_virtual][0]` contains the partial contractions (including site j_site)
             - `grid[j_site][j_virtual][1]` contains the remaining ingoing indices not yet summed
 
-        Parameters:
+        Parameters
         ----------
         remove : list of int
             Remove edges from left nodes `LP[0]['wR'=j]=0 for j in remove` that are zero.

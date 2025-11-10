@@ -994,7 +994,7 @@ class CouplingModel(Model):
         plus_hc : bool
             If `True`, the hermitian conjugate of the terms is added automatically.
 
-        See also
+        See Also
         --------
         add_coupling : Add a terms acting on two sites.
         add_onsite_term : Add a single term without summing over :math:`vec{x}`.
@@ -1186,7 +1186,7 @@ class CouplingModel(Model):
 
         Note that the Jordan-Wigner strings for the fermions are added automatically!
 
-        See also
+        See Also
         --------
         add_onsite : Add terms acting on one site only.
         add_multi_coupling_term : for terms on more than two sites.
@@ -1401,7 +1401,7 @@ class CouplingModel(Model):
 
         >>> self.add_multi_coupling(np.conj(strength), [(hc('B'), dx, u2), (hc('A'), dx_0, u1)])  # doctest: +SKIP
 
-        See also
+        See Also
         --------
         add_onsite : Add terms acting on one site only.
         add_coupling : Add terms acting on two sites.
