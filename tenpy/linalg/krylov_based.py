@@ -658,7 +658,6 @@ class LanczosEvolution(LanczosGroundState):
 
     def _calc_result_krylov(self, k):
         """Calculate ``expm(delta h).dot(e0)`` for ``h = _h_krylov[:k+1, :k+1]``"""
-
         # self._result_krylov should be a normalized vector.
         h = self._h_krylov
         delta = self.delta

@@ -837,7 +837,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             return self._extract_segment_from_finite(psi0_alpha_Orig, psi0_beta_Orig, model_orig)
 
     def _extract_segment_from_finite(self, psi0_fin_alpha, psi0_fin_beta, model_fin):
-        """Extract segment from finite MPS. """
+        """Extract segment from finite MPS."""
         first = self.options.get('segment_first', 0, int)
         last = self.options.get('segment_last', None, int)
         # boundary should be defined in terms of the ORIGINAL MPS and NOT first.

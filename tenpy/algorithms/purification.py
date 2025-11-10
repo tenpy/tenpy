@@ -420,7 +420,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         self._update_index = None  # done
 
     def _swap_disentangle_bond(self, i, swap=True, disentangle=False):
-        """Swap sites (i-1, i) (if swap = True) """
+        """Swap sites (i-1, i) (if swap = True)"""
         # very similar to update_bond
         i0, i1 = i - 1, i
         # Construct the theta matrix

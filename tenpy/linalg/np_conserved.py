@@ -4270,7 +4270,6 @@ def lq(a,
 
     We simply transpose the original matrix, call :meth:`qr`, and then transpose the results.
     """
-
     q, r = qr(a.transpose(),
               mode=mode,
               inner_labels=inner_labels[::-1],

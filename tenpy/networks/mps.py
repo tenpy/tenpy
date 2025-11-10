@@ -7518,7 +7518,6 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
         does not equal the length of `states`.
 
     """
-
     random.seed(seed)
 
     # Do some safety checks

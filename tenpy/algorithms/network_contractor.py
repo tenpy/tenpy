@@ -90,7 +90,6 @@ def contract(tensor_list, tensor_names=None, leg_contractions=None, open_legs=No
         The number or tensor resulting from the contraction.
 
     """
-
     if leg_contractions is None:
         leg_contractions = []
     if open_legs is None:

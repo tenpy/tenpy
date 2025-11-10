@@ -283,7 +283,6 @@ class UniformMPS(MPS):
             The right-canonical form converted from the uniform MPS.
 
         """
-
         if self.diagonal_gauge is False:
             self.to_diagonal_gauge(cutoff=cutoff, check_overlap=check_overlap)
 
@@ -376,10 +375,7 @@ class UniformMPS(MPS):
         return U, VH
 
     def _diagonal_gauge_AC(self, U, VH, i0):
-        """
-        Given U and VH from diagonalizing the center matrix C compute the corresponding AC.
-        """
-
+        """Given U and VH from diagonalizing the center matrix C compute the corresponding AC."""
         theta = self.get_B(i0, 'AC')
         theta = npc.tensordot(U.conj(), theta, axes=(['vL*'], ['vL'])).ireplace_label('vR*', 'vL')
         self.set_B(i0, theta, 'AC')

@@ -400,7 +400,6 @@ def _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, mov
         If ``move_right=False``, the legs of Y0 are [(vL.p0), vR].
 
     """
-
     assert min_block_increase >= 0
     assert expand is not None and expand != 0
 
@@ -613,7 +612,6 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
         Factor, by which S was renormalized.
 
     """
-
     if compute_err:
         return_both_T = True
 

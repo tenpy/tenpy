@@ -148,7 +148,7 @@ def construct_orthogonal(M, left=True):
 
 
 class PlaneWaveExcitationEngine(Algorithm):
-    r""" Base engine to compute quasiparticle excitations for uniform MPS.
+    r"""Base engine to compute quasiparticle excitations for uniform MPS.
 
     Parameters are the same as for :class:`~tenpy.algorithms.algorithm.Algorithm`.
 
@@ -246,7 +246,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         logger.info("Norm of H|psi> projected into the tangent space on each site: %r.", strange)
 
     def run(self, p, qtotal_change=None, orthogonal_to=[], E_boosts=[], num_ev=1):
-        """ Run the plane-wave algorithm to find excited states of the given model.
+        """Run the plane-wave algorithm to find excited states of the given model.
 
         Parameters
         ----------
@@ -803,7 +803,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         logger.info("Norm of H|psi> projected into the tangent space on each site: %r.", strange)
 
     def run(self, p, qtotal_change=None, orthogonal_to=[], E_boosts=[], num_ev=1):
-        """ Run the plane-wave algorithm to find excited states of the given model.
+        """Run the plane-wave algorithm to find excited states of the given model.
 
         Parameters
         ----------

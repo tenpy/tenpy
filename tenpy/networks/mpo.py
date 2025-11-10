@@ -162,7 +162,7 @@ class MPO(MPSGeometry):
         self._cycles = None
 
     def _make_graph(self, norm_tol=1e-12):
-        """ Construct :attr:`_graph`
+        """Construct :attr:`_graph`
 
         This function builds the MPOGraph represented by `self` in a sligthly different format.
 
@@ -187,7 +187,7 @@ class MPO(MPSGeometry):
                         self._graph[i][(jL, jR)] = op
 
     def _order_graph(self):
-        """ Find an ordering for :attr:`_graph` if possible
+        """Find an ordering for :attr:`_graph` if possible
 
         Checks whether `self` can be brought into upper triangular form
         and updates :attr:`_outer_permutation` and :attr:`_cycles` accordingly.
@@ -324,7 +324,7 @@ class MPO(MPSGeometry):
         return [set(x) for x in outer_connections], set(j_cycles), cycles
 
     def _sort_connections(self, graph_connections):
-        """ Sort the outer virtual leg into blocks
+        """Sort the outer virtual leg into blocks
 
         Helper function for `self._order_graph()`
 
@@ -3075,7 +3075,7 @@ class MPOEnvironmentBuilder:
             k_s.leg.test_equal(H_s.leg)
 
     def _contract_cL(self, cL, i, op):
-        """ Partial contraction cL=(A-op-A*)= """
+        """Partial contraction cL=(A-op-A*)="""
         cL = npc.tensordot(self.ket.get_B(i, form='A'), cL, axes=('vL', 'vR'))
         cL = npc.tensordot(cL, op, axes=[self.ket._p_label, 'p*'])
         axes = (['p', 'vR*'], self.ket._get_p_label('*') + ['vL*'])
@@ -3083,7 +3083,7 @@ class MPOEnvironmentBuilder:
         return cL
 
     def _contract_cR(self, cR, i, op):
-        """ Contract =(B-op-B*)=cR """
+        """Contract =(B-op-B*)=cR"""
         cR = npc.tensordot(self.ket.get_B(i, form='B'), cR, axes=('vR', 'vL'))
         cR = npc.tensordot(cR, op, axes=[self.ket._p_label, 'p*'])
         axes = (['p', 'vL*'], self.ket._get_p_label('*') + ['vR*'])
@@ -3091,7 +3091,7 @@ class MPOEnvironmentBuilder:
         return cR
 
     def _determine_cycles(self, tol=1e-12):
-        """ Determine the cycles of `self.H` with norm 1
+        """Determine the cycles of `self.H` with norm 1
 
         .. note ::
             - Cycles are only allowed to contain identities with positive prefactor at the moment.
@@ -3169,7 +3169,7 @@ class MPOEnvironmentBuilder:
         return grid
 
     def _right_grid(self, remove=[]):
-        """ Same as left grid, but starting from `RP[self.L-1]`.
+        """Same as left grid, but starting from `RP[self.L-1]`.
 
         Note: Layers are always indexed from the left, meaning
             right_grid[j] <-> `RP[j-1]`
@@ -3249,7 +3249,7 @@ class MPOEnvironmentBuilder:
                              tol_c0=None,
                              gmres_options=None,
                              tol_id=1e-12):
-        """ Construct boundary environments for periodic MPO environments.
+        """Construct boundary environments for periodic MPO environments.
 
             See class docstring for an explanation.
 
@@ -3399,7 +3399,7 @@ class MPOEnvironmentBuilder:
         return {k: envs[k][0] for k in envs.keys()}, envs
 
     def _make_grids(self, name, ones):
-        """ Initialize grids for `self.init_LP_RP_iterative()`"""
+        """Initialize grids for `self.init_LP_RP_iterative()`"""
         js_loops = sorted([self.H._outer_permutation.index(j) for j in ones])
         if name == "init_LP":
             gs = [self._left_grid(self.H._outer_permutation[:j0]) for j0 in js_loops[:-1]]
@@ -3416,7 +3416,7 @@ class MPOEnvironmentBuilder:
         return gs
 
     def _contract_grid(self, grid, c0_outer, j_outer, name):
-        """ For `self.init_LP_RP_iterative()`"""
+        """For `self.init_LP_RP_iterative()`"""
         if name == 'init_LP':
             self._contract_left_grid(grid, c0_outer, j_outer)
         else:
@@ -3479,7 +3479,7 @@ class MPOEnvironmentBuilder:
         return c_loop
 
     def _c0_rho(self, name, legs_labels, tol_c0):
-        """ For `self.init_LP_RP_iterative()`
+        """For `self.init_LP_RP_iterative()`
 
         Determine dominant left and right eigenvectors of the `MPSTransferMatrix`
         associated with `self.ket`.
@@ -3546,7 +3546,7 @@ class MPOEnvironmentBuilder:
         return c0, c1
 
     def _solve_cj(self, loop, name, b, norm_one, options):
-        """ For `self._init_LP_RP_iterative()`: Solves c_gamma^j (1-TWjj) = b """
+        """For `self._init_LP_RP_iterative()`: Solves c_gamma^j (1-TWjj) = b"""
         if npc.norm(b) == 0.:
             # A has not full rank if Wjj=id, as Id(1-TWjj)=0
             # Contributions in the kernel are already subtracted though
@@ -4069,7 +4069,7 @@ def _mpo_graph_state_order(key):
 
 
 def _mpo_check_for_iter_LP_RP_infinite(mpo):
-    """ Check that :meth:`MPOEnvironmentBuilder.init_LP_RP_iterative` works for an MPO
+    """Check that :meth:`MPOEnvironmentBuilder.init_LP_RP_iterative` works for an MPO
 
     Initializes the respective attributes on the fly if needed
     """

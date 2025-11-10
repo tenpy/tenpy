@@ -58,7 +58,7 @@ __all__ = ['VUMPSEngine', 'SingleSiteVUMPSEngine', 'TwoSiteVUMPSEngine']
 
 
 class VUMPSEngine(IterativeSweeps):
-    """ VUMPS base class with common methods for the TwoSiteVUMPS and SingleSiteVUMPS.
+    """VUMPS base class with common methods for the TwoSiteVUMPS and SingleSiteVUMPS.
 
     This engine is implemented as a subclass of :class:`~tenpy.algorithms.mps_common.Sweep`.
     It contains all methods that are generic between :class:`SingleSiteVUMPSEngine` and
@@ -406,7 +406,6 @@ class VUMPSEngine(IterativeSweeps):
 
     def reset_stats(self, resume_data=None):
         """Reset the statistics, useful if you want to start a new sweep run."""
-
         super().reset_stats(resume_data)
         self.update_stats = {
             'i0': [],
@@ -840,7 +839,6 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
             entanglement entropy right of site ``i0+1``
 
         """
-
         U_ACL, _, _ = npc.polar(AC2.combine_legs(['vL', 'p'], qconj=[+1]), left=False)
         U_CL, _, s1 = npc.polar(C3, left=False)
         AL2 = npc.tensordot(U_ACL.split_legs(), U_CL.conj(),
