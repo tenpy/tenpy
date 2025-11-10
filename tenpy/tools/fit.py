@@ -188,7 +188,9 @@ def plot_alg_decay_fit(plot_module, x, y, fit_par, xfunc=None, kwargs={}, plot_f
         =================== ====== ========= =======================================================================
     """
     if xfunc is None:
-        xfunc = lambda x: x
+        def xfunc(x):
+            return x
+
     if plot_fit_args.get('show_data_points', True):
         plot_module.plot(xfunc(x), y, 'o', **kwargs)
     n_interp = plot_fit_args.get('n_interp', 30)
