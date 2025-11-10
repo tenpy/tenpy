@@ -61,7 +61,7 @@ def tdvp(Psi, W, dt, Rp_list=None, k=5, O=None):
 
     D = W[0].shape[0]
 
-    if Rp_list == None:
+    if Rp_list is None:
         Rp_list = [np.zeros([1, 1, D])]
         Rp_list[0][0, 0, D - 1] = 1
         for i in np.arange(L - 1, -1, -1):
