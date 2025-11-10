@@ -196,7 +196,7 @@ class KrylovBased:
     def iadd_prefactor_other(self, w, alpha, v):
         iadd_prefactor_other(w, alpha, v)
 
-class GMRES():
+class GMRES:
     def __init__(self, A, x, b, options):
         self.options = options = asConfig(options, self.__class__.__name__)
         self.N_min = options.get('N_min', 5, int)
