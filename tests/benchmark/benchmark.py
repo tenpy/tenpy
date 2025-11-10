@@ -13,8 +13,6 @@ Afterwards, you can plot the produced files::
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from __future__ import print_function  # (backwards compatibility to python 2)
-
 import timeit
 import time
 import numpy as np

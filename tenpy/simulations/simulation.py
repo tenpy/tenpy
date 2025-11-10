@@ -1699,7 +1699,7 @@ def output_filename_from_dict(options,
     """
     formatted_parts = [prefix]
     if parts_order is None:
-        if sys.version_info < (3, 7):
+        if sys.version_info < (3, 7):  # noqa UP036
             # dictionaries are not ordered -> sort keys alphabetically
             parts_order = sorted(parts.keys(), key=lambda x: x[0] if isinstance(x, tuple) else x)
         else:
