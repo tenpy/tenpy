@@ -1,5 +1,6 @@
-"""Simulations for (real) time evolution, time dependent correlation
-functions and spectral functions.
+"""Simulations for (real) time evolution.
+
+Also covers time dependent correlation functions and spectral functions.
 """
 # Copyright (C) TeNPy Developers, Apache license
 

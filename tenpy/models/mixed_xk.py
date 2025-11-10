@@ -334,9 +334,7 @@ class MixedXKLattice(Lattice):
         return A_res.reshape(A_res_reshape)
 
     def mps2lat_values_masked_k(self, A, axes=-1, mps_inds=None, include_u=None):
-        """Like :meth:`Lattice.mps2lat_values_masked`, but introduce `k` as separate lattice
-        index.
-        """
+        """Like :meth:`mps2lat_values_masked`, but introduce `k` as separate lattice index."""
         A_res = self.mps2lat_values_masked(A, axes, mps_inds, include_u)
         changed_axes = sorted([(ax + A.ndim if ax < 0 else ax) for ax in axes])
         A_res_u_axes = []

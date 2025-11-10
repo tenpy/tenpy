@@ -152,7 +152,11 @@ def contract(tensor_list, tensor_names=None, leg_contractions=None, open_legs=No
 
 
 def _ncon_input_checks(tensor_list, leg_links, sequence):
-    """Check inputs for consistency and convert to the following format
+    """Check inputs for consistency and convert to (list of) array.
+
+    Returns
+    -------
+    tensor_list: list of Array
     leg_links: list of np.ndarray
     sequence: np.ndarray
     """

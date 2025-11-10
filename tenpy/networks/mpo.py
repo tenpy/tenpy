@@ -273,10 +273,10 @@ class MPO(MPSGeometry):
             self._outer_permutation = False
 
     def _graph_connections(self):
-        """ Determine all connections of the outer virtual leg
-            outer_leg[i] -> {outer_leg[j] | i,j connected by MPO graph}
+        """Helper function for :meth:`_order_graph`.
 
-        Helper function for `self._order_graph()`
+        Determine all connections of the outer virtual leg
+            outer_leg[i] -> {outer_leg[j] | i,j connected by MPO graph}
 
         Returns
         -------
@@ -3195,8 +3195,10 @@ class MPOEnvironmentBuilder:
         return grid
 
     def _contract_left_grid(self, grid, c0_outer, j_outer):
-        """ Carry out all possible contractions starting from the initial node
-            `c0_outer` at the outer virtual index `j_outer`
+        """Helper function.
+
+        Carry out all possible contractions starting from the initial node `c0_outer` at the outer
+        virtual index `j_outer`
         """
         ready_nodes = [[c0_outer, j_outer]]
         for j_site in range(self.L):

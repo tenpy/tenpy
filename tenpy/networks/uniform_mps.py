@@ -39,7 +39,6 @@ __all__ = ['UniformMPS']
 class UniformMPS(MPS):
     r"""A Uniform Matrix Product State, only defined in the thermodynamic limit.
 
-
     Parameters
     ----------
     sites : list of :class:`~tenpy.networks.site.Site`

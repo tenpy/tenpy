@@ -1249,6 +1249,7 @@ class MultiCouplingTerms(CouplingTerms):
 
     def to_TermList(self):
         """Convert :attr:`coupling_terms` into a :class:`TermList`.
+
         Returns
         -------
         term_list : :class:`TermList`

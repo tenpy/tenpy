@@ -2708,7 +2708,9 @@ class Array:
         bsizes = [l.get_block_sizes() for l in self.legs]
 
         def part2self(part_qindices):
-            """Given `part_qindices` of ``res = self[inds]``,
+            """Helper function.
+
+            Given `part_qindices` of ``res = self[inds]``,
             return (`qindices`, `block_mask`) such that
             ``res.get_block(part_qindices) == self.get_block(qindices)``.
             """

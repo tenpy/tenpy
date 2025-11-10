@@ -327,8 +327,8 @@ class VUMPSEngine(IterativeSweeps):
             E, 1.)) < max_E_err and abs(Delta_S) < max_S_err and split_error < max_split_error
 
     def post_run_cleanup(self):
-        """
-        Perform any final steps or clean up after the main loop has terminated.
+        """Perform any final steps or clean up after the main loop has terminated.
+
         Try to convert uniform MPS back to iMPS.
 
         Options
@@ -473,8 +473,8 @@ class VUMPSEngine(IterativeSweeps):
         return (theta, C1, C2)
 
     def make_eff_H(self):
-        """
-        Create new instance of `self.EffectiveH` at `self.i0`.
+        """Create new instance of `self.EffectiveH` at `self.i0`.
+
         Also create zero-site Hamiltonians left of `self.i0` and right of `self.i0+self.n_optimize`.
         """
         self.eff_H0_1 = ZeroSiteH(self.env, self.i0)  # This saves more envs than optimal.
@@ -808,8 +808,8 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         return update_data
 
     def polar_max(self, AC1, AC2, C1, C3):
-        """
-        Polar decompositions on two sites:
+        """Polar decompositions on two sites
+
         Given AC1 and C1, find AR1 such that AC1 = C1 AR1
         and from AC2 and C3, find AL2 such that AC2 = AC2 C3
 

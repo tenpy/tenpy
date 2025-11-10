@@ -542,6 +542,7 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
                              use_eig_based_svd: bool, trunc_params: dict, compute_err: bool,
                              return_both_T: bool):
     r"""Performs a QR based decomposition of a matrix `theta` (= the wavefunction) and truncates it.
+
     The result is an approximation.
 
     The decomposition for ``use_eig_based_svd=False`` is::

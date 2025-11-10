@@ -92,8 +92,7 @@ def simple_linear_prediction_1d(x: np.ndarray,
 
 
 def get_lpc(x, p):
-    r"""Function to obtain the linear prediction coefficients (lpc) from the
-    (last p) correlations of a time series x.
+    r"""Obtain the linear prediction coefficients (lpc) from correlations.
 
     First, the last p correlations are obtained, then the system of equations R x = r (which is in toeplitz form)
     is solved.
@@ -134,8 +133,7 @@ def get_lpc(x, p):
 
 
 def get_alpha_and_c(x, lpc, truncation_mode='cutoff', epsilon=10e-07):
-    r"""Get the eigenvalues and coefficients from a vector of linear prediction
-    coefficients for the time series x.
+    r"""Get the eigenvalues and coefficients from a vector of linear prediction coefficients.
 
     This follows the approach taken in :arxiv:`0901.2342`. If necessary, the eigenvalues are truncated
     according to the `truncation_mode`

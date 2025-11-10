@@ -669,8 +669,10 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                              str_on_first=True,
                              hermitian=False,
                              autoJW=True):
-        r"""Correlation function  ``<bra|op1_i op2_j|ket>`` of single site operators,
-        sandwiched between bra and ket.
+        r"""Correlation function of single-site operators.
+
+        We evaluate ``<bra|op1_i op2_j|ket>``.
+
         For examples the contraction for a two-site operator on site `i` would look like::
 
             |          .--S--B[i]--B[i+1]--...--B[j]---.
