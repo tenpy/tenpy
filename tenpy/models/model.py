@@ -1581,7 +1581,7 @@ class CouplingModel(Model):
 
         For an infinite system, the sums are extensive, i.e. the sum over :math:`i` goes over all
         infinitely many unit cells, and all `subsites` within each unit cell.
-        The prefactor is 
+        The prefactor is
 
         .. math ::
             \Lambda_{i, j} := \prod_{n \in S, i <= n < j} \lambda_n

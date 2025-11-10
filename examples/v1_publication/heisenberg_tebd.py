@@ -129,7 +129,7 @@ def plot(folder):
     ax_mag.set_yticks([0, 12, 24, 36, 49])
     ax_mag.xaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda x, pos: str(int(dt_measure * int(x)))))
     im = ax_mag.pcolor(results[max_chi]['mag_z'].T[:, t_mask], cmap='inferno', edgecolor='face')
-    # cmap candidates: viridis, inferno, coolwarm, bwr, RdBu, 
+    # cmap candidates: viridis, inferno, coolwarm, bwr, RdBu,
     divider = make_axes_locatable(ax_mag)
     cax = divider.append_axes('right', size='5%', pad=0.05)
     cbar = plt.colorbar(im, cax=cax)

@@ -318,7 +318,7 @@ class ChargeInfo:
         Returns
         -------
         charges : 2D ndarray of dtype QTYPE
-            The mapped charges. Note that 
+            The mapped charges. Note that
         """
         return charges
 

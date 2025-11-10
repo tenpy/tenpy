@@ -48,7 +48,7 @@ def test_pickle(tmp_path):
 
 @pytest.mark.parametrize('fn', datadir_pkl)
 @pytest.mark.filterwarnings('ignore::FutureWarning')
-@pytest.mark.filterwarnings('ignore::DeprecationWarning')  
+@pytest.mark.filterwarnings('ignore::DeprecationWarning')
 # Deprecation appears when loading data with numpy 2.0 from data
 def test_import_from_datadir(fn):
     print("import ", fn)
