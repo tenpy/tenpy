@@ -311,8 +311,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         raise NotImplementedError()
 
     def energy(self, p, X):
-        """
-        Compute the energy of excited states
+        """Compute the energy of excited states
 
         Parameters
         ----------
@@ -335,8 +334,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         return E - self.energy_density * self.L - self.lambda_C1
 
     def infinite_sum_right(self, p, X):
-        """
-        Infinite sum to the right, see Eq. (194) in :cite:`vanderstraeten2019`
+        """Infinite sum to the right, see Eq. (194) in :cite:`vanderstraeten2019`
 
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
@@ -420,8 +418,7 @@ class PlaneWaveExcitationEngine(Algorithm):
             raise ValueError('Sum method', sum_method, 'not recognized!')
 
     def infinite_sum_left(self, p, X):
-        """
-        Infinite sum to the left, see Eq. (194) in :cite:`vanderstraeten2019`
+        """Infinite sum to the left, see Eq. (194) in :cite:`vanderstraeten2019`
 
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
@@ -652,8 +649,7 @@ class PlaneWaveExcitationEngine(Algorithm):
             return total
 
     def initial_guess(self, qtotal_change):
-        """
-        Initial guess for the `X` tensors within a fixed charge sector.
+        """Initial guess for the `X` tensors within a fixed charge sector.
 
         Parameters
         ----------
@@ -872,8 +868,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         raise NotImplementedError()
 
     def energy(self, p, X):
-        """
-        Compute the energy of excited states
+        """Compute the energy of excited states
 
         Parameters
         ----------
@@ -898,9 +893,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         return E - self.lambda_C1 - self.energy_density * (self.L * multiple_unit_cell)
 
     def attach_right(self, VL, X, As, R, Ws=None):
-        """
-        Attach excitation tensors to a right environment
-        """
+        """Attach excitation tensors to a right environment"""
         B = npc.tensordot(VL.replace_label('p', 'p0'), X, axes=(['vR'], ['vL']))
         RB = npc.tensordot(B, R, axes=(['vR'], ['vL']))
 
@@ -912,9 +905,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         return RB
 
     def _starting_right_TR(self, X):
-        """
-        Sum up all single-B environments from the right and fill with tensors to complete unit cell
-        """
+        """Sum up all single-B environments from the right and fill with tensors to complete unit cell"""
         i = 0
         RP = self.GS_env_R.get_RP(i + self.size - 1)
         RB = self.attach_right(self.VLs[i],
@@ -934,8 +925,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         return RW
 
     def infinite_sum_right(self, p, X):
-        """
-        Infinite sum to the right, see Eq. (194) in :cite:`vanderstraeten2019`
+        """Infinite sum to the right, see Eq. (194) in :cite:`vanderstraeten2019`
 
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
@@ -1013,9 +1003,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             raise ValueError('Sum method', sum_method, 'not recognized!')
 
     def attach_left(self, VL, X, As, L, Ws=None):
-        """
-        Attach excitation tensors to a left environment
-        """
+        """Attach excitation tensors to a left environment"""
         B = npc.tensordot(VL.replace_label('p', 'p0'), X, axes=(['vR'], ['vL']))
         LB = npc.tensordot(L, B, axes=(['vR'], ['vL']))
         for i in range(len(As)):
@@ -1026,9 +1014,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         return LB
 
     def _starting_left_TL(self, X):
-        """
-        Sum up all single-B environments from the left and fill with tensors to complete unit cell
-        """
+        """Sum up all single-B environments from the left and fill with tensors to complete unit cell"""
         multiple_unit_cell = int(np.ceil(
             (self.L - 1 + self.size) / self.L))  # number of extension of unit cells
         i = 0
@@ -1056,8 +1042,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         return LW
 
     def infinite_sum_left(self, p, X):
-        """
-        Infinite sum to the left, see Eq. (194) in :cite:`vanderstraeten2019`
+        """Infinite sum to the left, see Eq. (194) in :cite:`vanderstraeten2019`
 
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
@@ -1374,8 +1359,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             return total
 
     def initial_guess(self, qtotal_change):
-        """
-        Initial guess for the `X` tensors within a fixed charge sector.
+        """Initial guess for the `X` tensors within a fixed charge sector.
 
         Parameters
         ----------

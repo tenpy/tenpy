@@ -306,8 +306,7 @@ class UniformMPS(MPS):
         return MPS_B
 
     def to_diagonal_gauge(self, cutoff=1.e-16, check_overlap=False):
-        """
-        Convert a UniformMPS to diagonal gauge, i.e. where all of the bond matrices are diagonal.
+        """Convert a UniformMPS to diagonal gauge, i.e. where all of the bond matrices are diagonal.
 
         Parameters
         ----------
@@ -348,9 +347,7 @@ class UniformMPS(MPS):
             logger.info(f'Overlap of original UniformMPS with diagonal UniformMPS: {overlap:.10f}')
 
     def _diagonal_gauge_C(self, theta, i0, cutoff):
-        """
-        Diagonalize bond matrix theta and update ALs and ARs on sites on the boundary of the bond.
-        """
+        """Diagonalize bond matrix theta and update ALs and ARs on sites on the boundary of the bond."""
         U, S, VH = npc.svd(theta,
                            cutoff=cutoff,
                            qtotal_LR=[theta.qtotal, None],
@@ -431,8 +428,7 @@ class UniformMPS(MPS):
 
     @classmethod
     def from_MPS(cls, psi):
-        """
-        Convert an infinite MPS to a uniform MPS.
+        """Convert an infinite MPS to a uniform MPS.
 
         Parameters
         ----------
@@ -669,9 +665,7 @@ class UniformMPS(MPS):
             raise NotImplementedError(f"Form {form!r} is not valid for UniformMPS.")
 
     def get_AL(self, i, copy=False, label_p=None):
-        """
-        Return (view of) `AL` at site `i` in canonical form.
-        """
+        """Return (view of) `AL` at site `i` in canonical form."""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         AL = self.shift_Array_unit_cells(self._AL[i_in_unit_cell], num_unit_cells=num_unit_cells,
                                          inplace=not copy)
@@ -680,9 +674,7 @@ class UniformMPS(MPS):
         return AL
 
     def get_AR(self, i, copy=False, label_p=None):
-        """
-        Return (view of) `AR` at site `i` in canonical form.
-        """
+        """Return (view of) `AR` at site `i` in canonical form."""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         AR = self.shift_Array_unit_cells(self._AR[i_in_unit_cell], num_unit_cells=num_unit_cells,
                                          inplace=not copy)
@@ -691,9 +683,7 @@ class UniformMPS(MPS):
         return AR
 
     def get_AC(self, i, copy=False, label_p=None):
-        """
-        Return (view of) `AC` at site `i` in canonical form.
-        """
+        """Return (view of) `AC` at site `i` in canonical form."""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         AC = self.shift_Array_unit_cells(self._AC[i_in_unit_cell], num_unit_cells=num_unit_cells,
                                          inplace=not copy)
@@ -731,36 +721,28 @@ class UniformMPS(MPS):
             raise NotImplementedError(f"Form {list(form)!r} is not valid for UniformMPS.")
 
     def set_AL(self, i, AL):
-        """
-        Set `AL` at site `i`
-        """
+        """Set `AL` at site `i`"""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         AL = self.shift_Array_unit_cells(AL, -num_unit_cells)
         self.dtype = np.promote_types(self.dtype, AL.dtype)
         self._AL[i_in_unit_cell] = AL.itranspose(self._B_labels)
 
     def set_AR(self, i, AR):
-        """
-        Set `AR` at site `i`
-        """
+        """Set `AR` at site `i`"""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         AR = self.shift_Array_unit_cells(AR, -num_unit_cells)
         self.dtype = np.promote_types(self.dtype, AR.dtype)
         self._AR[i_in_unit_cell] = AR.itranspose(self._B_labels)
 
     def set_AC(self, i, AC):
-        """
-        Set `AC` at site `i`
-        """
+        """Set `AC` at site `i`"""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         AC = self.shift_Array_unit_cells(AC, -num_unit_cells)
         self.dtype = np.promote_types(self.dtype, AC.dtype)
         self._AC[i_in_unit_cell] = AC.itranspose(self._B_labels)
 
     def set_C(self, i, C):
-        """
-        Set `C` left of site `i`
-        """
+        """Set `C` left of site `i`"""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         C = self.shift_Array_unit_cells(C, -num_unit_cells)
         self.dtype = np.promote_types(self.dtype, C.dtype)

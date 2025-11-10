@@ -368,8 +368,7 @@ class VUMPSEngine(IterativeSweeps):
         return E, self.psi.to_MPS(check_overlap=check_overlap)
 
     def mixer_cleanup(self):
-        """For uniform MPS there is no need to clean up after the mixer.
-        """
+        """For uniform MPS there is no need to clean up after the mixer."""
         pass
 
     def run(self):
@@ -399,9 +398,7 @@ class VUMPSEngine(IterativeSweeps):
         return self.post_run_cleanup()
 
     def environment_sweeps(self, N_sweeps):
-        """
-        In VUMPS we don't want to do this as we regenerate the environment each time we do an update.
-        """
+        """In VUMPS we don't want to do this as we regenerate the environment each time we do an update."""
         pass
 
     def reset_stats(self, resume_data=None):
@@ -448,9 +445,7 @@ class VUMPSEngine(IterativeSweeps):
         return zip(i0s, move_right, update_LP_RP)
 
     def prepare_update_local(self):
-        """
-        For each update, we need to rebuild the environments from scratch using the most recent tensors
-        """
+        """For each update, we need to rebuild the environments from scratch using the most recent tensors"""
         i0 = self.i0
         H = self.model.H_MPO
         psi = self.psi
@@ -522,9 +517,7 @@ class VUMPSEngine(IterativeSweeps):
         raise NotImplementedError("TODO")
 
     def tangent_projector_test(self, env_data):
-        """
-        The ground state projector P_GS
-        """
+        """The ground state projector P_GS"""
         LW = env_data['init_LP']
         RW = env_data['init_RP']
 
@@ -659,8 +652,7 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
         return update_data
 
     def polar_max(self, AC, C1, C2):
-        """
-        Polar decompositions: Given AC and C, find AL and AR such that AL C = AC = C AR
+        """Polar decompositions: Given AC and C, find AL and AR such that AL C = AC = C AR
 
         Parameters
         ----------

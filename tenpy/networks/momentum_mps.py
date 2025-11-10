@@ -79,8 +79,7 @@ class MomentumMPS:
         self.n_sites = n_sites  # Number of sites of single excitation tensor.
 
     def copy(self):
-        """Returns a copy of `self`.
-        """
+        """Returns a copy of `self`."""
         # __init__ makes deep copies of B, S
         cp = self.__class__(self._X, self.uMPS_GS, self.p, self.n_sites)
         return cp
