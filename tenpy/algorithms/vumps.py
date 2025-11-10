@@ -460,7 +460,7 @@ class VUMPSEngine(IterativeSweeps):
         self.make_eff_H()
         theta = self.psi.get_theta(i0, n=self.n_optimize,
                                    cutoff=self.S_inv_cutoff)  #n_optimize will be 1
-        assert self.eff_H.combine == False
+        assert self.eff_H.combine is False
         theta = self.eff_H.combine_theta(theta)  #combine should be false.
         C1, C2 = self.psi.get_C(i0), self.psi.get_C(i0 + self.n_optimize)
 

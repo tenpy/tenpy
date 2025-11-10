@@ -2314,7 +2314,7 @@ class VariationalCompression(IterativeSweeps):
         B1 = VH.split_legs(['(p.vR)'])
         self.renormalize.append(renormalize)
         # first compare to old best guess to check convergence of the sweeps
-        if self._tol_theta_diff is not None and self.update_LP_RP[0] == False:
+        if self._tol_theta_diff is not None and self.update_LP_RP[0] is False:
             theta_old = new_psi.get_theta(i0)
             theta_new_trunc = npc.tensordot(A0.scale_axis(S, 'vR'), B1, ['vR', 'vL'])
             theta_new_trunc.iset_leg_labels(['vL', 'p0', 'p1', 'vR'])
@@ -2527,7 +2527,7 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
         self.renormalize.append(renormalize)
 
         # compare to old best guess to check convergence of the sweeps
-        if self._tol_theta_diff is not None and self.update_LP_RP[0] == False:
+        if self._tol_theta_diff is not None and self.update_LP_RP[0] is False:
             theta_old = new_psi.get_theta(i0)
             if use_eig_based_svd:
                 theta_new_trunc = npc.tensordot(T_L, T_R, ['vR', 'vL'])

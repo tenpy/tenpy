@@ -285,7 +285,7 @@ class UniformMPS(MPS):
             The right-canonical form converted from the uniform MPS.
         """
 
-        if self.diagonal_gauge == False:
+        if self.diagonal_gauge is False:
             self.to_diagonal_gauge(cutoff=cutoff, check_overlap=check_overlap)
 
         self.test_validity()
@@ -922,7 +922,7 @@ class UniformMPS(MPS):
         qtotal : charges
             The sum of the `qtotal` of the individual `B` tensors.
         """
-        assert only_physical_legs == False, "Not possible for UniformMPS"
+        assert not only_physical_legs, "Not possible for UniformMPS"
         # Assume self.segment_boundaries is None, None for UniformMPS
         tensors_AL = self._AL
         qtotal_AL = np.sum([AL.qtotal for AL in tensors_AL], axis=0)

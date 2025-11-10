@@ -3237,7 +3237,7 @@ class MPOEnvironmentBuilder:
         if not self.H.chinfo.trivial_shift:
             raise NotImplementedError('Iterative LP/RP initialization is not yet supported for '
                                       'shift-symmetry with infinite systems.')
-        if _mpo_check_for_iter_LP_RP_infinite(self.H) == False:
+        if _mpo_check_for_iter_LP_RP_infinite(self.H) is False:
             raise ValueError(
                 "Iterative environment initialization failed: Hamiltonian cannot be ordered.")
         assert which == 'LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
