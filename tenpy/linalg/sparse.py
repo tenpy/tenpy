@@ -426,7 +426,7 @@ class FlatLinearOperator(ScipyLinearOperator):
 
     @charge_sector.setter
     def charge_sector(self, value):
-        if type(value) == int and value == 0:
+        if type(value) is int and value == 0:
             value = self.leg.chinfo.make_valid()  # zero charges
         elif value is not None:
             value = self.leg.chinfo.make_valid(value)

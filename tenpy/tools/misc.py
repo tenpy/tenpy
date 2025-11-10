@@ -24,7 +24,7 @@ _not_set = object()  # sentinel
 
 def to_iterable(a):
     """If `a` is a not iterable or a string, return ``[a]``, else return ``a``."""
-    if type(a) == str:
+    if type(a) is str:
         return [a]
     try:
         iter(a)
@@ -39,7 +39,7 @@ def to_iterable_of_len(a, L):
 
     Raises ValueError if `a` is already an iterable of different length.
     """
-    if type(a) == str:
+    if type(a) is str:
         return [a] * L
     try:
         iter(a)

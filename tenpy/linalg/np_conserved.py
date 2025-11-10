@@ -2543,7 +2543,7 @@ class Array:
         inds : tuple, len=self.rank
             `inds`, where ``Ellipsis`` is replaced by the correct number of slice(None).
         """
-        if type(inds) != tuple:  # for rank 1
+        if type(inds) is not tuple:  # for rank 1
             inds = (inds, )
         i = next((i for i, idx in enumerate(inds) if idx is Ellipsis), None)
         # i is index of Ellipsis or None if we don't have one

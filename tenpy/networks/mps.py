@@ -7420,7 +7420,7 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
     for num in n_states:
         if ((num - round(num)) < 1e-12):
             num = int(round(num))
-        if type(num) != int and not num.is_integer():
+        if type(num) is not int and not num.is_integer():
             raise ValueError("Cannot create model of length {} with filling {}".format(
                 size, filling))
 
