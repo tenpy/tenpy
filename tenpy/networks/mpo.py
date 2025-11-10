@@ -3473,8 +3473,9 @@ class MPOEnvironmentBuilder:
                                labels=legs_labels[name][1][-1:-3:-1])
             # NOTE: iMPS should always be normalized s.t. npc.inner(c0,rho)=1
             return c0, rho
-        warnings.warn(f"Identity not dominant eigenvector of MPSTransferMatrix up to tol={tol_c0:.1e}." \
-                      " Computing explicitly...")
+        msg = (f"Identity not dominant eigenvector of MPSTransferMatrix up to tol={tol_c0:.1e}. "
+               f"Computing explicitly...")
+        warnings.warn(msg)
         c0 = _TM.eigenvectors()[1][0]
         c0 = c0.split_legs()
         c1 = TransferMatrix.from_Ns_Ms(self._Ns,

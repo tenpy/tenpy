@@ -153,8 +153,9 @@ class PlaneWaveExcitations(GroundStateSearch):
                 self.logger.info("call psi.canonical_form() on ground state")
                 self.psi.canonical_form()
             else:
-                raise ValueError('uMPS does not pass norm test. Run VUMPS to get ground state or \n' +
-                                 'convert to MPS and canonicalize.')
+                msg = ('uMPS does not pass norm test. Run VUMPS to get ground state or '
+                       'convert to MPS and canonicalize.')
+                raise ValueError(msg)
         if isinstance(self.psi, MPS):
             self.psi = UniformMPS.from_MPS(self.psi)
 

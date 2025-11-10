@@ -112,8 +112,8 @@ if __name__ == "__main__":
         '--limit',
         default=[50],
         nargs='*',
-        help="Limit for printing the stats. You can enter an in to limit the number of lines or" \
-             " a regex to match the function name."
+        help=("Limit for printing the stats. You can enter an in to limit the number of lines or"
+              " a regex to match the function name.")
     )
     parser.add_argument('--callees',
                         default=None,

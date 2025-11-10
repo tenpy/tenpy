@@ -824,11 +824,11 @@ class Array:
         else:
             captsparse = 1.
             bs_min = bs_max = bs_mean = bs_med = bs_var = 0
-        res = "{nonzero:d} of {total:d} entries (={nztotal:g}) nonzero,\n" \
-            "stored in {nblocks:d} blocks with {stored:d} entries.\n" \
-            "Captured sparsity: {captsparse:g}\n"  \
-            "Block sizes min:{bs_min:d} mean:{bs_mean:.2f} median:{bs_med:.1f} " \
-            "max:{bs_max:d} var:{bs_var:.2f}"
+        res = ("{nonzero:d} of {total:d} entries (={nztotal:g}) nonzero,\n"
+               "stored in {nblocks:d} blocks with {stored:d} entries.\n"
+               "Captured sparsity: {captsparse:g}\n"
+               "Block sizes min:{bs_min:d} mean:{bs_mean:.2f} median:{bs_med:.1f} "
+               "max:{bs_max:d} var:{bs_var:.2f}")
 
         return res.format(nonzero=nonzero,
                           total=total,

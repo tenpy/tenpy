@@ -119,7 +119,7 @@ target-version = "py310"
 exclude = ["doc/sphinx_ext/*", "doc/toycodes", "doc/notebooks"]
 
 [tool.ruff.lint]
-select = ["F", "E", "W", "I", "UP"]
+select = ["F", "E", "W", "I", "UP", "ISC"]
 ignore = [
     "F403", "F405",  # star imports
     "E741",  # ambiguous variable names like l

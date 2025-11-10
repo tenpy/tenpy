@@ -160,7 +160,7 @@ def include_command_line_help():
     fn = 'commandline-help.txt'
     with open(fn, 'w') as f:
         f.write(help_text)
-    tenpy.console_main.__doc__ = tenpy.console_main.__doc__ + '\n' '.. literalinclude:: /' + fn
+    tenpy.console_main.__doc__ = tenpy.console_main.__doc__ + '\n' + '.. literalinclude:: /' + fn
 
 
 include_command_line_help()

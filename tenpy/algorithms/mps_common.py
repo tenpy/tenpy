@@ -678,7 +678,7 @@ class Sweep(Algorithm):
 
         Set ``self.mixer=None`` and revert any other effects of :meth:`mixer_activate`.
         """
-        logger.info(f'deactivate {self.mixer.__class__.__name__} with final amplitude ' \
+        logger.info(f'deactivate {self.mixer.__class__.__name__} with final amplitude '
                     f'{self.mixer.amplitude}')
         self.mixer = None
 
