@@ -161,7 +161,6 @@ class Lattice:
         similar as `_mps2lat_vals_idx`, but for a fixed `u` picking a site from the unit cell.
     """
     Lu = None  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
-    dim = None  #: the dimension of the lattice
 
     def __init__(self,
                  Ls,

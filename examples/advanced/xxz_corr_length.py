@@ -41,7 +41,7 @@ def run(Jzs):
     corr_length = []
     for Jz in Jzs:
         print("-" * 80)
-        print("Jz = {Jz:.4f}".format(Jz))
+        print(f'{Jz=:.4f}')
         print("-" * 80)
         model_params['Jz'] = Jz
         M = SpinChain(model_params)

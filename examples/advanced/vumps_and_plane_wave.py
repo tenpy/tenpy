@@ -19,7 +19,6 @@ def tfi_vumps(g=1.5):
         'combine': False,
         'N_sweeps_check': 1,
         'mixer': False,
-        'N_sweeps_check': 1,
         'trunc_params': {
             'chi_max': 32,
             'svd_min': 1.e-14,
