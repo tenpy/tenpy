@@ -87,7 +87,7 @@ def setup_benchmark(mod_q=[1],
             b._qdata = b._qdata[b_subset, :]
             b._data = [b._data[i] for i in b_subset]
 
-    labs = ["l{i:d}".format(i=i) for i in range(2 * legs)]
+    labs = [f"l{i:d}" for i in range(2 * legs)]
     a.iset_leg_labels(labs[:a.rank])
     b.iset_leg_labels(labs[:b.rank])
     a.itranspose(rand_permutation(a.rank))

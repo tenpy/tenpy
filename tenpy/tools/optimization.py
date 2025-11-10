@@ -337,7 +337,7 @@ def use_cython(func=None, replacement=None, check_doc=True):
         # function signature, so the doc string starts only with the second line
         clean_cdoc2 = inspect.cleandoc(cdoc[cdoc.find("\n") + 1:])
         if clean_fdoc != clean_cdoc and clean_fdoc != clean_cdoc2:
-            msg = "cython version of {0!s} has different doc-string".format(func.__name__)
+            msg = f"cython version of {func.__name__!s} has different doc-string"
             raise ValueError(msg)
     return fast_func
 

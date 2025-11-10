@@ -29,7 +29,7 @@ Jxx, Jz = 1., 1.
 L = 20
 dt = 0.1
 cutoff = 1.e-10
-print("Jxx={Jxx}, Jz={Jz}, L={L:d}".format(Jxx=Jxx, Jz=Jz, L=L))
+print(f"Jxx={Jxx}, Jz={Jz}, L={L:d}")
 
 print("1) create Arrays for an Neel MPS")
 site = SpinHalfSite(conserve='Sz')  # predefined charges and Sp,Sm,Sz operators

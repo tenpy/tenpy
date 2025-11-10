@@ -162,14 +162,11 @@ class UniformMPS(MPS):
         for i, As in enumerate(zip(self._AL, self._AR, self._AC)):
             AL, AR, AC = As
             if AL.get_leg_labels() != self._B_labels:
-                raise ValueError("AL has wrong labels {0!r}, expected {1!r}".format(
-                    AL.get_leg_labels(), self._B_labels))
+                raise ValueError(f"AL has wrong labels {AL.get_leg_labels()!r}, expected {self._B_labels!r}")
             if AR.get_leg_labels() != self._B_labels:
-                raise ValueError("AR has wrong labels {0!r}, expected {1!r}".format(
-                    AR.get_leg_labels(), self._B_labels))
+                raise ValueError(f"AR has wrong labels {AR.get_leg_labels()!r}, expected {self._B_labels!r}")
             if AC.get_leg_labels() != self._B_labels:
-                raise ValueError("AC has wrong labels {0!r}, expected {1!r}".format(
-                    AC.get_leg_labels(), self._B_labels))
+                raise ValueError(f"AC has wrong labels {AC.get_leg_labels()!r}, expected {self._B_labels!r}")
             AR.get_leg('vL').test_contractible(self._C[i].get_leg('vR'))
             AR.get_leg('vL').test_contractible(self._AC[(i - 1) % self.L].get_leg('vR'))
             AL.get_leg('vR').test_contractible(self._C[(i + 1) % self.L].get_leg('vL'))

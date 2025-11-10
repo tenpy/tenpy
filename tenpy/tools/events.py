@@ -195,7 +195,7 @@ class EventHandler:
             if listener.listener_id == 0:
                 del self.listeners[i]
                 return
-        warnings.warn("No listener with listener_id {id_:d} found".format(id_=listener_id))
+        warnings.warn(f"No listener with listener_id {listener_id:d} found")
 
     def emit(self, *args, **kwargs):
         """Call the `callback` functions of all listeners.

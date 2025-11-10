@@ -111,7 +111,7 @@ def create_example_stubs():
             sentence = ("`on github <{base}/blob/main/{dirs!s}/{fn!s}>`_ "
                         "(`download <{base}/raw/main/{dirs!s}/{fn!s}>`_).")
             sentence = sentence.format(dirs=dirs, fn=fn, base=GITHUBBASE)
-            include = '.. literalinclude:: /../{dirs!s}/{fn!s}'.format(dirs=dirs, fn=fn)
+            include = f'.. literalinclude:: /../{dirs!s}/{fn!s}'
             text = '\n'.join([fn, '=' * len(fn), '', sentence, '', include, ''])
             with open(outfile, 'w') as f:
                 f.write(text)
@@ -138,7 +138,7 @@ def create_toycode_stubs():
         sentence = ("`on github <{base}/blob/main/tenpy_toycodes/{fn!s}>`_ "
                     "(`download <{base}/raw/main/tenpy_toycodes/{fn!s}>`_).")
         sentence = sentence.format(fn=fn, base=GITHUBTOYCODES)
-        include = '.. literalinclude:: /toycodes/tenpy_toycodes/{fn!s}'.format(fn=fn)
+        include = f'.. literalinclude:: /toycodes/tenpy_toycodes/{fn!s}'
         text = '\n'.join([fn, '=' * len(fn), '', sentence, '', include, ''])
         with open(outfile, 'w') as f:
             f.write(text)

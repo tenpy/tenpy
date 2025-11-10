@@ -97,7 +97,7 @@ def plot(results, filename):
             SxSx = results[key]
             max_j = SxSx.shape[1]
             for j in range(1, max_j):
-                label = "j= {j:d}".format(j=j) if j in [1, max_j - 1] else None
+                label = f"j= {j:d}" if j in [1, max_j - 1] else None
                 ax.plot(gs, SxSx[:, j], label=label, color=cm(j / max_j))
             ax.legend()
         else:

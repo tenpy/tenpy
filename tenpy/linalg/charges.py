@@ -340,7 +340,7 @@ class ChargeInfo:
 
     def __repr__(self):
         """Full string representation."""
-        return "ChargeInfo({0!s}, {1!s})".format(list(self.mod), self.names)
+        return f"ChargeInfo({list(self.mod)!s}, {self.names!s})"
 
     def __eq__(self, other):
         """Compare self.mod and self.names for equality, ignore missing names."""
@@ -1149,11 +1149,11 @@ class LegCharge:
         if flat_index < 0:
             flat_index += self.ind_len
             if flat_index < 0:
-                raise IndexError("flat index {0:d} too negative for leg with ind_len {1:d}".format(
-                    flat_index - self.ind_len, self.ind_len))
+                msg = (f"flat index {flat_index - self.ind_len:d} too negative for leg with "
+                       f"ind_len {self.ind_len:d}")
+                raise IndexError(msg)
         elif flat_index > self.ind_len:
-            raise IndexError("flat index {0:d} too large for leg with ind_len {1:d}".format(
-                flat_index, self.ind_len))
+            raise IndexError(f"flat index {flat_index:d} too large for leg with ind_len {self.ind_len:d}")
         qind = bisect.bisect(self.slices, flat_index) - 1
         return qind, flat_index - self.slices[qind]
 
@@ -1333,14 +1333,13 @@ class LegCharge:
 
     def __str__(self):
         """Return a string of nicely formatted slices & charges."""
-        qconj = " {0:+d}\n".format(self.qconj)
+        qconj = f" {self.qconj:+d}\n"
         slices = '\n'.join([str(s) for s in self.slices])
         return qconj + vert_join([slices, str(self.charges)], delim=' ')
 
     def __repr__(self):
         """Full string representation."""
-        return "LegCharge({0!r}, qconj={1:+d},\n{2!r}, {3!r})".format(
-            self.chinfo, self.qconj, self.slices, self.charges)
+        return f"LegCharge({self.chinfo!r}, qconj={self.qconj:+d},\n{self.slices!r}, {self.charges!r})"
 
     # TODO: property for this!
     def _set_charges(self, charges):
@@ -1699,10 +1698,10 @@ class LegPipe(LegCharge):
     def __str__(self):
         """Fairly short debug output."""
         res_lines = [
-            "LegPipe(shape {0!s}->{1:d}, ".format(self.subshape, self.ind_len),
+            f"LegPipe(shape {self.subshape!s}->{self.ind_len:d}, ",
             "    qconj {0}->{1:+1};".format(
                 '(' + ', '.join(['%+d' % l.qconj for l in self.legs]) + ')', self.qconj),
-            "    block numbers {0!s}->{1:d})".format(self.subqshape, self.block_number),
+            f"    block numbers {self.subqshape!s}->{self.block_number:d})",
             vert_join([str(l) for l in self.legs], delim=' | '), ')'
         ]
         return '\n'.join(res_lines)

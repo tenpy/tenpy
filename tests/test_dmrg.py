@@ -101,8 +101,8 @@ def test_dmrg(bc_MPS, combine, mixer, n, g=1.2):
         # compare exact solution for transverse field Ising model
         Edmrg = res['E']
         Eexact = e0_transverse_ising(g)
-        print("E_DMRG={Edmrg:.12f} vs E_exact={Eex:.12f}".format(Edmrg=Edmrg, Eex=Eexact))
-        print("relative energy error: {err:.2e}".format(err=abs((Edmrg - Eexact) / Eexact)))
+        print(f"E_DMRG={Edmrg:.12f} vs E_exact={Eexact:.12f}")
+        print(f"relative energy error: {abs((Edmrg - Eexact) / Eexact):.2e}")
         print("norm err:", psi.norm_test())
         Edmrg2 = np.mean(psi.expectation_value(M.H_bond))
         Edmrg3 = M.H_MPO.expectation_value(psi)
@@ -170,7 +170,7 @@ def test_dmrg_diag_method(engine, diag_method, tol=1.e-6):
     eng = DMRGEng(psi_Sz_4.copy(), M, dmrg_pars)
     E0, psi0 = eng.run()
     eng.options['lanczos_params'].touch('P_tol')
-    print("E0 = {0:.15f}".format(E0))
+    print(f"E0 = {E0:.15f}")
     assert abs(E_ED - E0) < tol
     ov = npc.inner(psi_ED, ED.mps_to_full(psi0), 'range', do_conj=True)
     assert abs(abs(ov) - 1) < tol

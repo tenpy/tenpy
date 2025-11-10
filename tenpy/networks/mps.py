@@ -295,7 +295,7 @@ class MPSGeometry:
             warnings.warn(msg, category=FutureWarning, stacklevel=3)
             num_unit_cells = 0
         if self.finite and num_unit_cells != 0:
-            raise ValueError("i = {0:d} out of bounds for finite MPS".format(i))
+            raise ValueError(f"i = {i:d} out of bounds for finite MPS")
         if return_num_unit_cells:
             return i_in_unit_cell, num_unit_cells
         return i_in_unit_cell
@@ -1652,8 +1652,7 @@ class MPS(BaseMPSExpectationValue):
                 assert len(f) == 2
         for i, B in enumerate(self._B):
             if B.get_leg_labels() != self._B_labels:
-                raise ValueError("B has wrong labels {0!r}, expected {1!r}".format(
-                    B.get_leg_labels(), self._B_labels))
+                raise ValueError(f"B has wrong labels {B.get_leg_labels()!r}, expected {self._B_labels!r}")
             i2 = (i + 1) if self.finite else (i + 1) % self.L
             if len(self._S[i2].shape) == 1:
                 if self._S[i].shape[-1] != B.get_leg('vL').ind_len or \
@@ -1864,8 +1863,8 @@ class MPS(BaseMPSExpectationValue):
             inds = tuple(lat.order.T) + (slice(None), )
             p_state_flat = p_state[inds]  # "advanced" numpy indexing
         else:
-            raise ValueError("wrong dimension of `p_state`. Expected {d:d}-dimensional array of "
-                             "(string, int, or 1D array)".format(d=lat.dim + 1))
+            raise ValueError(f"wrong dimension of `p_state`. Expected {lat.dim + 1:d}-dimensional array of "
+                             "(string, int, or 1D array)")
         from ..models.lattice import HelicalLattice
         if isinstance(lat, HelicalLattice):
             order = lat.regular_lattice.order
@@ -3821,7 +3820,7 @@ class MPS(BaseMPSExpectationValue):
             Labels ``'p0', 'p1', ..., 'pk', 'p0*', 'p1*', ..., 'pk*'`` with ``k=len(segment)``.
         """
         if len(segment) > 12:
-            warnings.warn("{0:d} sites in the segment, that's much!".format(len(segment)),
+            warnings.warn(f"{len(segment):d} sites in the segment, that's much!",
                           stacklevel=2)
         if len(segment) > 20:
             raise ValueError("too large segment; this is exponentially expensive!")
@@ -5618,7 +5617,7 @@ class MPS(BaseMPSExpectationValue):
         self.convert_form('B')
         norm_err = np.linalg.norm(self.norm_test())
         if norm_err > canonicalize:
-            warnings.warn("self.norm_test() = {0!s} ==> canonicalize".format(self.norm_test()))
+            warnings.warn(f"self.norm_test() = {self.norm_test()!s} ==> canonicalize")
             self.canonical_form()
         # get copy of self
         psi_t = self.copy()
@@ -5659,7 +5658,7 @@ class MPS(BaseMPSExpectationValue):
 
     def __str__(self):
         """Some status information about the MPS."""
-        res = ["MPS, L={L:d}, bc={bc!r}.".format(L=self.L, bc=self.bc)]
+        res = [f"MPS, L={self.L:d}, bc={self.bc!r}."]
         res.append("chi: " + str(self.chi))
         if self.L > 10:
             res.append("first two sites: " + repr(self.sites[0]) + " " + repr(self.sites[1]))
@@ -5826,7 +5825,7 @@ class MPS(BaseMPSExpectationValue):
                 xi = np.inf
             if xi > tol_xi:
                 raise ValueError("Degenerate spectrum of TransferMatrix "
-                                 "(corr length xi={xi:.3e})".format(xi=xi))
+                                 f"(corr length xi={xi:.3e})")
         eta, G = eta[0], V[0]
         G = G.split_legs()
         # note: the dominant eigenvector should be hermitian and positive
@@ -6047,8 +6046,8 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             bc = 'infinite'
         sites = self.ket.sites * (L // self.ket.L)
         super().__init__(sites=sites, bc=bc, unit_cell_width=ket.unit_cell_width * (L // ket.L))
-        self._LP_keys = ['LP_{0:d}'.format(i) for i in range(L)]
-        self._RP_keys = ['RP_{0:d}'.format(i) for i in range(L)]
+        self._LP_keys = [f'LP_{i:d}' for i in range(L)]
+        self._RP_keys = [f'RP_{i:d}' for i in range(L)]
         self._LP_age = [None] * L
         self._RP_age = [None] * L
         if cache is None:
@@ -7234,11 +7233,9 @@ class InitialStateBuilder:
             p, q = int(round(check_filling * N_total)), N_total
         if abs(p - check_filling * N_total) > 1.e-13:
             raise ValueError(
-                "check_filling={0:.5f} doesn't fit as integer in p_state.size = {1:d}".format(
-                    check_filling, N_total))
+                f"check_filling={check_filling:.5f} doesn't fit as integer in p_state.size = {N_total:d}")
         if N_filled * q != N_total * p:  # int-version of N_filled/N_total != p/q
-            raise ValueError("unexpected filling {0:.5f} != check_filling = {1:.5f}".format(
-                N_filled / N_total, check_filling))
+            raise ValueError(f"unexpected filling {N_filled / N_total:.5f} != check_filling = {check_filling:.5f}")
         # done
 
     def fill_where(self):
@@ -7437,8 +7434,7 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
         if ((num - round(num)) < 1e-12):
             num = int(round(num))
         if type(num) is not int and not num.is_integer():
-            raise ValueError("Cannot create model of length {} with filling {}".format(
-                size, filling))
+            raise ValueError(f"Cannot create model of length {size} with filling {filling}")
 
     # Randomly assign local states
     initial_state = [0] * size

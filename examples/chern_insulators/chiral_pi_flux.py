@@ -174,7 +174,7 @@ def plot_results(data):
             q = q[0]
             label = ""
             if q not in color_by_charge:
-                label = "{q:d}".format(q=q)
+                label = f"{q:d}"
                 color_by_charge[q] = colors[len(color_by_charge) % len(colors)]
             color = color_by_charge[q]
             ax.plot(phi_ext * np.ones(s.shape),

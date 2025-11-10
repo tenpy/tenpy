@@ -476,8 +476,8 @@ class Hdf5Saver:
             return h5gr
 
         warnings.warn(
-            "Hdf5Saver: object of type {t!r} without explicit HDF5 format; "
-            "fall back to pickle protocol".format(t=type(obj)), UserWarning)
+            f"Hdf5Saver: object of type {type(obj)!r} without explicit HDF5 format; "
+            "fall back to pickle protocol", UserWarning)
 
         obj_reduce = getattr(obj, "__reduce__", None)
         if obj_reduce is not None:
@@ -487,13 +487,13 @@ class Hdf5Saver:
                 h5gr = self.save_global(obj, REPR_GLOBAL)
                 return h5gr
             if not isinstance(rv, tuple) or not 2 <= len(rv) < 7:
-                raise Hdf5ExportError("Wrong return value of {0!r}".format(obj_reduce))
+                raise Hdf5ExportError(f"Wrong return value of {obj_reduce!r}")
 
             h5gr = self.save_reduce(*rv, obj=obj, path=path)
             return h5gr
 
         # unknown case
-        msg = "Don't know how to save object of type {0!r}:\n{1!r}".format(type(obj), obj)
+        msg = f"Don't know how to save object of type {type(obj)!r}:\n{obj!r}"
         raise Hdf5ExportError(msg)
 
     def create_group_for_obj(self, path, obj):
@@ -758,12 +758,11 @@ class Hdf5Saver:
             obj2 = find_global(module, qualname)
         except (ImportError, KeyError, AttributeError):
             raise Hdf5ExportError(
-                "Can't export `{0!r}`: it's not found as {1} in module {2}".format(
-                    obj, qualname, module)) from None
+                f"Can't export `{obj!r}`: it's not found as {qualname} in module {module}") from None
         else:
             if obj2 is not obj:
-                raise Hdf5ExportError("Can't export `{0!r}`: it's not the same object"
-                                      "as {1} in module {2}".format(obj, qualname, module))
+                raise Hdf5ExportError(f"Can't export `{obj!r}`: it's not the same object"
+                                      f"as {qualname} in module {module}")
         full_name = qualname + " in " + module
         self.h5group[path] = full_name  # save as string dataset
         h5gr = self.h5group[path]
@@ -835,7 +834,7 @@ class Hdf5Loader:
                     data = self.h5group[path]
                 except KeyError:
                     warnings.warn(
-                        "can't exclude {0!r} from loading: not existent in h5group".format(path))
+                        f"can't exclude {path!r} from loading: not existent in h5group")
                     continue
                 self.memorize_load(data, Hdf5Ignored(path))
 
@@ -1044,7 +1043,7 @@ class Hdf5Loader:
             return self.load_general_dict(h5gr, type_info, subpath)
         elif type_info == REPR_DICT_SIMPLE:
             return self.load_simple_dict(h5gr, type_info, subpath)
-        raise ValueError("can't interpret type_info {0!r}".format(type_info))
+        raise ValueError(f"can't interpret type_info {type_info!r}")
 
     def load_general_dict(self, h5gr, type_info, subpath):
         """Load a dictionary with general keys."""
@@ -1099,7 +1098,7 @@ class Hdf5Loader:
         try:
             cls = find_global(module_name, class_name)
         except (ImportError, AttributeError):
-            msg = "Can't import class {0!s} from {1!s}".format(class_name, module_name)
+            msg = f"Can't import class {class_name!s} from {module_name!s}"
             if self.ignore_unknown:
                 warnings.warn(msg, UserWarning)
                 return Hdf5Ignored(msg)
@@ -1122,7 +1121,7 @@ class Hdf5Loader:
         try:
             obj = find_global(module_name, class_name)
         except (ImportError, AttributeError):
-            msg = "Can't import global {0!s} from {1!s}".format(class_name, module_name)
+            msg = f"Can't import global {class_name!s} from {module_name!s}"
             if self.ignore_unknown:
                 warnings.warn(msg, UserWarning)
                 return Hdf5Ignored(msg)

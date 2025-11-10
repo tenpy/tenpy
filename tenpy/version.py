@@ -81,7 +81,7 @@ def _get_full_version():
     """obtain version from git."""
     full_version = version
     if not released:
-        full_version += '.dev{0:d}+{1!s}'.format(_get_git_description(), git_revision[:7])
+        full_version += f'.dev{_get_git_description():d}+{git_revision[:7]!s}'
     return full_version
 
 

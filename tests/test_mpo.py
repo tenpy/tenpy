@@ -110,9 +110,9 @@ def test_MPO_conversion():
     sites = []
     for i in range(L):
         s = site.Site(npc.LegCharge.from_trivial(2))
-        s.add_op("X_{i:d}".format(i=i), np.array([[0., 1.], [1., 0.]]))
-        s.add_op("Y_{i:d}".format(i=i), np.array([[0., 1.], [-1., 0.]]))
-        s.add_op("Z_{i:d}".format(i=i), np.array([[1., 0.], [0., -1.]]))
+        s.add_op(f"X_{i:d}", np.array([[0., 1.], [1., 0.]]))
+        s.add_op(f"Y_{i:d}", np.array([[0., 1.], [-1., 0.]]))
+        s.add_op(f"Z_{i:d}", np.array([[1., 0.], [0., -1.]]))
         sites.append(s)
     terms = [
         [("X_0", 0)],

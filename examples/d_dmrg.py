@@ -15,7 +15,7 @@ from tenpy.algorithms import dmrg
 
 def example_DMRG_tf_ising_finite(L, g):
     print("finite DMRG, transverse field Ising model")
-    print("L={L:d}, g={g:.2f}".format(L=L, g=g))
+    print(f"L={L:d}, g={g:.2f}")
     model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
@@ -33,23 +33,23 @@ def example_DMRG_tf_ising_finite(L, g):
     }
     info = dmrg.run(psi, M, dmrg_params)  # the main work...
     E = info['E']
-    print("E = {E:.13f}".format(E=E))
+    print(f"E = {E:.13f}")
     print("final bond dimensions: ", psi.chi)
     mag_x = np.sum(psi.expectation_value("Sigmax"))
     mag_z = np.sum(psi.expectation_value("Sigmaz"))
-    print("magnetization in X = {mag_x:.5f}".format(mag_x=mag_x))
-    print("magnetization in Z = {mag_z:.5f}".format(mag_z=mag_z))
+    print(f"magnetization in X = {mag_x:.5f}")
+    print(f"magnetization in Z = {mag_z:.5f}")
     if L < 20:  # compare to exact result
         from tfi_exact import finite_gs_energy
         E_exact = finite_gs_energy(L, 1., g)
-        print("Exact diagonalization: E = {E:.13f}".format(E=E_exact))
+        print(f"Exact diagonalization: E = {E_exact:.13f}")
         print("relative error: ", abs((E - E_exact) / E_exact))
     return E, psi, M
 
 
 def example_1site_DMRG_tf_ising_finite(L, g):
     print("single-site finite DMRG, transverse field Ising model")
-    print("L={L:d}, g={g:.2f}".format(L=L, g=g))
+    print(f"L={L:d}, g={g:.2f}")
     model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
@@ -68,23 +68,23 @@ def example_1site_DMRG_tf_ising_finite(L, g):
     }
     info = dmrg.run(psi, M, dmrg_params)
     E = info['E']
-    print("E = {E:.13f}".format(E=E))
+    print(f"E = {E:.13f}")
     print("final bond dimensions: ", psi.chi)
     mag_x = np.sum(psi.expectation_value("Sigmax"))
     mag_z = np.sum(psi.expectation_value("Sigmaz"))
-    print("magnetization in X = {mag_x:.5f}".format(mag_x=mag_x))
-    print("magnetization in Z = {mag_z:.5f}".format(mag_z=mag_z))
+    print(f"magnetization in X = {mag_x:.5f}")
+    print(f"magnetization in Z = {mag_z:.5f}")
     if L < 20:  # compare to exact result
         from tfi_exact import finite_gs_energy
         E_exact = finite_gs_energy(L, 1., g)
-        print("Exact diagonalization: E = {E:.13f}".format(E=E_exact))
+        print(f"Exact diagonalization: E = {E_exact:.13f}")
         print("relative error: ", abs((E - E_exact) / E_exact))
     return E, psi, M
 
 
 def example_DMRG_tf_ising_infinite(g):
     print("infinite DMRG, transverse field Ising model")
-    print("g={g:.2f}".format(g=g))
+    print(f"g={g:.2f}")
     model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
@@ -102,24 +102,24 @@ def example_DMRG_tf_ising_infinite(g):
     # Sometimes, we want to call a 'DMRG engine' explicitly
     eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
     E, psi = eng.run()  # equivalent to dmrg.run() up to the return parameters.
-    print("E = {E:.13f}".format(E=E))
+    print(f"E = {E:.13f}")
     print("final bond dimensions: ", psi.chi)
     mag_x = np.mean(psi.expectation_value("Sigmax"))
     mag_z = np.mean(psi.expectation_value("Sigmaz"))
-    print("<sigma_x> = {mag_x:.5f}".format(mag_x=mag_x))
-    print("<sigma_z> = {mag_z:.5f}".format(mag_z=mag_z))
+    print(f"<sigma_x> = {mag_x:.5f}")
+    print(f"<sigma_z> = {mag_z:.5f}")
     print("correlation length:", psi.correlation_length())
     # compare to exact result
     from tfi_exact import infinite_gs_energy
     E_exact = infinite_gs_energy(1., g)
-    print("Analytic result: E (per site) = {E:.13f}".format(E=E_exact))
+    print(f"Analytic result: E (per site) = {E_exact:.13f}")
     print("relative error: ", abs((E - E_exact) / E_exact))
     return E, psi, M
 
 
 def example_1site_DMRG_tf_ising_infinite(g):
     print("single-site infinite DMRG, transverse field Ising model")
-    print("g={g:.2f}".format(g=g))
+    print(f"g={g:.2f}")
     model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
@@ -137,23 +137,23 @@ def example_1site_DMRG_tf_ising_infinite(g):
     }
     eng = dmrg.SingleSiteDMRGEngine(psi, M, dmrg_params)
     E, psi = eng.run()  # equivalent to dmrg.run() up to the return parameters.
-    print("E = {E:.13f}".format(E=E))
+    print(f"E = {E:.13f}")
     print("final bond dimensions: ", psi.chi)
     mag_x = np.mean(psi.expectation_value("Sigmax"))
     mag_z = np.mean(psi.expectation_value("Sigmaz"))
-    print("<sigma_x> = {mag_x:.5f}".format(mag_x=mag_x))
-    print("<sigma_z> = {mag_z:.5f}".format(mag_z=mag_z))
+    print(f"<sigma_x> = {mag_x:.5f}")
+    print(f"<sigma_z> = {mag_z:.5f}")
     print("correlation length:", psi.correlation_length())
     # compare to exact result
     from tfi_exact import infinite_gs_energy
     E_exact = infinite_gs_energy(1., g)
-    print("Analytic result: E (per site) = {E:.13f}".format(E=E_exact))
+    print(f"Analytic result: E (per site) = {E_exact:.13f}")
     print("relative error: ", abs((E - E_exact) / E_exact))
 
 
 def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best'):
     print("infinite DMRG, Heisenberg XXZ chain")
-    print("Jz={Jz:.2f}, conserve={conserve!r}".format(Jz=Jz, conserve=conserve))
+    print(f"Jz={Jz:.2f}, conserve={conserve!r}")
     model_params = dict(
         L=2,
         S=0.5,  # spin 1/2
@@ -177,13 +177,11 @@ def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best'):
     }
     info = dmrg.run(psi, M, dmrg_params)
     E = info['E']
-    print("E = {E:.13f}".format(E=E))
+    print(f"E = {E:.13f}")
     print("final bond dimensions: ", psi.chi)
     Sz = psi.expectation_value("Sz")  # Sz instead of Sigma z: spin-1/2 operators!
     mag_z = np.mean(Sz)
-    print("<S_z> = [{Sz0:.5f}, {Sz1:.5f}]; mean ={mag_z:.5f}".format(Sz0=Sz[0],
-                                                                     Sz1=Sz[1],
-                                                                     mag_z=mag_z))
+    print(f"<S_z> = [{Sz[0]:.5f}, {Sz[1]:.5f}]; mean ={mag_z:.5f}")
     # note: it's clear that mean(<Sz>) is 0: the model has Sz conservation!
     print("correlation length:", psi.correlation_length())
     corrs = psi.correlation_function("Sz", "Sz", sites1=range(10))

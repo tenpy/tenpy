@@ -29,7 +29,7 @@ def helper_test_graph(H, name):
                 if npc.norm(op)<1e-12:
                     assert (jL,jR) not in H._graph[j], name+": entry of norm zero found in graph"
                 else:
-                    assert npc.norm(op-H._graph[j][(jL,jR)])<1e-12, name+": _graph[{0}][({1},{2})] wrong".format(j, jL, jR)
+                    assert npc.norm(op-H._graph[j][(jL,jR)])<1e-12, name+f": _graph[{j}][({jL},{jR})] wrong"
 
 def helper_test_init_env(psi, E, H, name, tol=1e-10):
     env_base, E_base, _ = MPOTransferMatrix.find_init_LP_RP(H, psi, 0, psi.L-1, calc_E=True)
@@ -116,7 +116,7 @@ def helper_test_enlarge_unit_cell(H, name):
                 if npc.norm(op)<1e-12:
                     assert (jL,jR) not in H._graph[j], name+": entry of norm zero found in graph after enlarge_unit_cell()"
                 else:
-                    assert npc.norm(op-H._graph[j][(jL,jR)])<1e-12, name+": _graph[{0}][({1},{2})] wrong after enlarge_unit_cell()".format(j, jL, jR)
+                    assert npc.norm(op-H._graph[j][(jL,jR)])<1e-12, name+f": _graph[{j}][({jL},{jR})] wrong after enlarge_unit_cell()"
 
 def helper_test_grid(psi, H, name):
     # ----- Test Grid from MPOEnvironmentBuilder -----
@@ -263,4 +263,4 @@ def test_init_LP_RP_iterative(test_case):
                 assert c[0]==c[-1], name+": invalid cycle encountered"
         if sort_charges==0 and test_case !=1: # explicit cycle check
             for j_cycle in cycle_indices:
-                assert H._cycles[j_cycle]==[j_cycle]*(H.L+1), name+": _cycles[{0}] not as expected".format(j_cycle)
+                assert H._cycles[j_cycle]==[j_cycle]*(H.L+1), name+f": _cycles[{j_cycle}] not as expected"

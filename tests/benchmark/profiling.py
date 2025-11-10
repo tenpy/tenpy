@@ -45,9 +45,9 @@ def perform_profiling(mod_name, repeat=1, seed=0, filename=fn_template, **kwargs
     setup_code = setup_code.format(mod_name=mod_name, kwargs=kwargs)
     namespace = {}
     exec(setup_code, namespace, namespace)
-    timing_code = "{mod_name}.benchmark(data)".format(mod_name=mod_name)
+    timing_code = f"{mod_name}.benchmark(data)"
     if repeat > 1:
-        timing_code = "for _ in range({repeat:d}): ".format(repeat=repeat) + timing_code
+        timing_code = f"for _ in range({repeat:d}): " + timing_code
     if sys.version_info > (3, 3):
         prof = cProfile.Profile(time.perf_counter)
     else:

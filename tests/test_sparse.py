@@ -28,7 +28,7 @@ def test_FlatLinearOperator(n=30, k=5, tol=1.e-14):
     E, psi = scipy.sparse.linalg.eigsh(H_sparse, k, v0=psi_init_flat, which='SA')
     E0, psi0 = E[0], psi[:, 0]
     print("full spectrum:", E_flat)
-    print("E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_flat))
+    print(f"E0 = {E0:.14f} vs exact {E0_flat:.14f}")
     print("|E0-E0_flat| / |E0_flat| =", abs((E0 - E0_flat) / E0_flat))
     assert (abs((E0 - E0_flat) / E0_flat) < tol)
     psi0_H_psi0 = np.inner(psi0.conj(), H_sparse.matvec(psi0)).item()
@@ -55,7 +55,7 @@ def test_FlatHermitianOperator(n=30, k=5, tol=1.e-14):
     E, psi = scipy.sparse.linalg.eigsh(H_sparse, k, v0=psi_init_flat, which='SA')
     E0, psi0 = E[0], psi[:, 0]
     print("full spectrum:", E_flat)
-    print("E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_flat))
+    print(f"E0 = {E0:.14f} vs exact {E0_flat:.14f}")
     print("|E0-E0_flat| / |E0_flat| =", abs((E0 - E0_flat) / E0_flat))
     assert (abs((E0 - E0_flat) / E0_flat) < tol)
     psi0_H_psi0 = np.inner(psi0.conj(), H_sparse.matvec(psi0)).item()
@@ -81,7 +81,7 @@ def test_FlatHermitianOperator(n=30, k=5, tol=1.e-14):
     E, psi = scipy.sparse.linalg.eigsh(H_sparse_split, k, v0=psi_init_split_flat, which='SA')
     E0, psi0 = E[0], psi[:, 0]
     print("full spectrum:", E_flat)
-    print("E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_flat))
+    print(f"E0 = {E0:.14f} vs exact {E0_flat:.14f}")
     print("|E0-E0_flat| / |E0_flat| =", abs((E0 - E0_flat) / E0_flat))
     assert (abs((E0 - E0_flat) / E0_flat) < tol)
     psi0_H_psi0 = np.inner(psi0.conj(), H_sparse.matvec(psi0)).item()

@@ -10,7 +10,7 @@ def example_function(example_pars, keys=['a', 'b', 'c']):
     """example function using a parameter dictionary."""
     for default, k in enumerate(keys):
         p_k = example_pars.get(k, default)
-        print("read out parameter {k!r} = {p_k!r}".format(k=k, p_k=p_k))
+        print(f"read out parameter {k!r} = {p_k!r}")
 
 
 def test_parameters():

@@ -48,7 +48,7 @@ def to_iterable_of_len(a, L):
         return [a] * L
     # else:
     if len(a) != L:
-        raise ValueError("wrong length: got {0:d}, expected {1:d}".format(len(a), L))
+        raise ValueError(f"wrong length: got {len(a):d}, expected {L:d}")
     return a
 
 
@@ -98,8 +98,7 @@ def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
                 crop[i] = slice(None, shape[i])
                 need_crop = True
             else:
-                raise ValueError("incommensurate len for tiling from {0:d} to {1:d}".format(
-                    a.shape[i], shape[i]))
+                raise ValueError(f"incommensurate len for tiling from {a.shape[i]:d} to {shape[i]:d}")
     a = np.tile(a, reps)
     if need_crop:
         a = a[tuple(crop)]

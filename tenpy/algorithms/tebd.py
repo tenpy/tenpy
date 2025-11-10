@@ -280,7 +280,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             steps = steps + [a1]
             return steps
         # else
-        raise ValueError("Unknown order {0!r} for Suzuki Trotter decomposition".format(order))
+        raise ValueError(f"Unknown order {order!r} for Suzuki Trotter decomposition")
 
     def prepare_evolve(self, dt):
         order = self.options.get('order', 2, int)

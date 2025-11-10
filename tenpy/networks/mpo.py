@@ -313,8 +313,7 @@ class MPO(MPSGeometry):
                         # NOTE: Paths with multiple branches that reconnect can work in principle,
                         #       but are not supported by MPOEnvironmentBuilder
                         raise ValueError(
-                            "Loop missing or multiple loops found for outer index {0}".format(
-                                j_outer))
+                            f"Loop missing or multiple loops found for outer index {j_outer}")
                     j_current = js_backward[0]
                     loop.append(j_current)
                 cycles.append(list(reversed(loop)))
@@ -358,7 +357,7 @@ class MPO(MPSGeometry):
             raise ValueError("Connection IdR -> IdR missing")
         for j, connection in enumerate(outer_connections):
             if j != j_IdL and j_IdL in connection:
-                raise ValueError("Outer index {0} -> IdL connection found ?!".format(j))
+                raise ValueError(f"Outer index {j} -> IdL connection found ?!")
         if (j_IdR is not None) and (len(outer_connections[j_IdR]) != 1):
             raise ValueError("IdR connects to different index ?!")
         # check loops and indices
@@ -376,7 +375,7 @@ class MPO(MPSGeometry):
                     j_lower.add(j)
                     if connection & other_cycles:  # existing connection label_j -> some loop
                         raise ValueError(
-                            "Connection I -> loop1 and loop2 -> I found for Index I={0}".format(j))
+                            f"Connection I -> loop1 and loop2 -> I found for Index I={j}")
 
                 else:  # Default: add to j_upper if not a lower index
                     j_upper.add(j)
@@ -1168,7 +1167,7 @@ class MPO(MPSGeometry):
                 if npc.norm(LP_converged) < tol:
                     break  # no more terms left
         else:  # no break
-            msg = "Tolerance {0:.2e} not reached within {1:d} sites".format(tol, max_range)
+            msg = f"Tolerance {tol:.2e} not reached within {max_range:d} sites"
             warnings.warn(msg, stacklevel=2)
         if self.explicit_plus_hc:
             current_value = current_value + np.conj(current_value)
@@ -1885,7 +1884,7 @@ class MPO(MPSGeometry):
             warnings.warn(msg, category=FutureWarning, stacklevel=3)
             i += self.L
         if i >= self.L + int(bond) or i < 0:
-            raise KeyError("i = {0:d} out of bounds for finite MPO".format(i))
+            raise KeyError(f"i = {i:d} out of bounds for finite MPO")
         return i
 
     @staticmethod
@@ -1898,7 +1897,7 @@ class MPO(MPSGeometry):
         except TypeError:
             return [Id] * (L + 1)
         if len(Id) != L + 1:
-            raise ValueError("expected list with L+1={0:d} entries".format(L + 1))
+            raise ValueError(f"expected list with L+1={L + 1:d} entries")
         return Id
 
     def __add__(self, other):
@@ -2249,7 +2248,7 @@ class MPOGraph(MPSGeometry):
         i = i % self.L
         if check_op:
             if not self.sites[i].valid_opname(opname):
-                raise ValueError("operator {0!r} not existent on site {1:d}".format(opname, i))
+                raise ValueError(f"operator {opname!r} not existent on site {i:d}")
         G = self.graph[i]
         if keyL not in self.states[i]:
             self.states[i].add(keyL)
@@ -2400,7 +2399,7 @@ class MPOGraph(MPSGeometry):
         return H
 
     def __repr__(self):
-        return "<MPOGraph L={L:d}>".format(L=self.L)
+        return f"<MPOGraph L={self.L:d}>"
 
     def __str__(self):
         """string showing the graph for debug output."""
@@ -3065,13 +3064,11 @@ class MPOEnvironmentBuilder:
                 # op == factor*id with factor>0
                 is_id = npc.norm(op - factor * npc.diag(1., op.get_leg("p")), ord=1) < tol
                 if not is_id:
-                    raise ValueError("W[{0}][{1},{2}] != a*Id with a>0".format(
-                        j, loop[j], loop[j + 1]))
+                    raise ValueError(f"W[{j}][{loop[j]},{loop[j + 1]}] != a*Id with a>0")
                 norm *= factor
             if norm >= 1. + tol:
                 raise ValueError(
-                    "self.H contains cycle with norm larger than one at outer index {0}".format(
-                        loop[0]))
+                    f"self.H contains cycle with norm larger than one at outer index {loop[0]}")
             if abs(norm - 1.) < 1e-13:
                 ones.append(j_outer)
         return ones
@@ -3242,7 +3239,7 @@ class MPOEnvironmentBuilder:
         if _mpo_check_for_iter_LP_RP_infinite(self.H) is False:
             raise ValueError(
                 "Iterative environment initialization failed: Hamiltonian cannot be ordered.")
-        assert which == 'LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
+        assert which == 'LP' or 'RP' or 'both', f'Invalid environment type "{which}"'
         ones = self._determine_cycles()
         n_terms = len(ones)
         # gmres defaults, set N_min=0 for states close to product states
@@ -3475,8 +3472,8 @@ class MPOEnvironmentBuilder:
                                labels=legs_labels[name][1][-1:-3:-1])
             # NOTE: iMPS should always be normalized s.t. npc.inner(c0,rho)=1
             return c0, rho
-        warnings.warn("Identity not dominant eigenvector of MPSTransferMatrix up to tol={:.1e}." \
-                      " Computing explicitly...".format(tol_c0))
+        warnings.warn(f"Identity not dominant eigenvector of MPSTransferMatrix up to tol={tol_c0:.1e}." \
+                      " Computing explicitly...")
         c0 = _TM.eigenvectors()[1][0]
         c0 = c0.split_legs()
         c1 = TransferMatrix.from_Ns_Ms(self._Ns,
@@ -3525,9 +3522,9 @@ class MPOEnvironmentBuilder:
         solver = GMRES(A, b, b, options=options)  # makes internal copy
         x_sol, res, _, _ = solver.run()
         if res > options['res']:
-            warnings.warn(
-                "GMRES converged within tol={0} in environment initialization, requested was tol={1}."
-                .format(res, options['res']))
+            msg = (f'GMRES converged within tol={res} in environment initialization, '
+                   f'requested was tol={options["res"]}.')
+            warnings.warn(msg)
         # fix legs
         legs = ['vR', 'vR*'] if name == 'init_LP' else ['vL', 'vL*']
         x_sol.split_legs()

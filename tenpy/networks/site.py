@@ -473,11 +473,11 @@ class Site(Hdf5Exportable):
         names = name.split()
         op = getattr(self, names[0], None)
         if op is None:
-            raise ValueError("{0!r} doesn't have the operator {1!r}".format(self, names[0]))
+            raise ValueError(f"{self!r} doesn't have the operator {names[0]!r}")
         for name2 in names[1:]:
             op2 = getattr(self, name2, None)
             if op2 is None:
-                raise ValueError("{0!r} doesn't have the operator {1!r}".format(self, name2))
+                raise ValueError(f"{self!r} doesn't have the operator {name2!r}")
             op = npc.tensordot(op, op2, axes=['p*', 'p'])
         return op
 
@@ -501,7 +501,7 @@ class Site(Hdf5Exportable):
         for name2 in reversed(names):
             hc_name_2 = self.hc_ops.get(name2)
             if hc_name_2 is None:
-                raise ValueError("hermitian conjugate of operator {0!s} unknown".format(name2))
+                raise ValueError(f"hermitian conjugate of operator {name2!s} unknown")
             hc_names.append(hc_name_2)
         return ' '.join(hc_names)
 
@@ -596,7 +596,7 @@ class Site(Hdf5Exportable):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "<Site, d={dim:d}, ops={ops!r}>".format(dim=self.dim, ops=self.opnames)
+        return f"<Site, d={self.dim:d}, ops={self.opnames!r}>"
 
     def charge_to_JW_signs(self, charges):
         """Convert charge values to Jordan-Wigner parity.
@@ -785,9 +785,7 @@ class GroupedSite(Site):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "GroupedSite({sites!r}, {labels!r}, {charges!r})".format(sites=self.sites,
-                                                                        labels=self.labels,
-                                                                        charges=self.charges)
+        return f"GroupedSite({self.sites!r}, {self.labels!r}, {self.charges!r})"
 
 
 def group_sites(sites, n=2, labels=None, charges='same'):
@@ -1256,7 +1254,7 @@ class SpinHalfSite(Site):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "SpinHalfSite({c!r})".format(c=self.conserve)
+        return f"SpinHalfSite({self.conserve!r})"
 
 
 class SpinSite(Site):
@@ -1356,7 +1354,7 @@ class SpinSite(Site):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "SpinSite(S={S!s}, {c!r})".format(S=self.S, c=self.conserve)
+        return f"SpinSite(S={self.S!s}, {self.conserve!r})"
 
 
 class FermionSite(Site):
@@ -1435,7 +1433,7 @@ class FermionSite(Site):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "FermionSite({c!r}, {f:f})".format(c=self.conserve, f=self.filling)
+        return f"FermionSite({self.conserve!r}, {self.filling:f})"
 
 
 class SpinHalfFermionSite(Site):
@@ -1610,9 +1608,7 @@ class SpinHalfFermionSite(Site):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "SpinHalfFermionSite({cN!r}, {cS!r}, {f:f})".format(cN=self.cons_N,
-                                                                   cS=self.cons_Sz,
-                                                                   f=self.filling)
+        return f"SpinHalfFermionSite({self.cons_N!r}, {self.cons_Sz!r}, {self.filling:f})"
 
 
 class SpinHalfHoleSite(Site):
@@ -1786,9 +1782,7 @@ class SpinHalfHoleSite(Site):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "SpinHalfHoleSite({cN!r}, {cS!r}, {f:f})".format(cN=self.cons_N,
-                                                                   cS=self.cons_Sz,
-                                                                   f=self.filling)
+        return f"SpinHalfHoleSite({self.cons_N!r}, {self.cons_Sz!r}, {self.filling:f})"
 
 
 class BosonSite(Site):
@@ -1882,9 +1876,7 @@ class BosonSite(Site):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "BosonSite({N:d}, {c!r}, {f:f})".format(N=self.Nmax,
-                                                       c=self.conserve,
-                                                       f=self.filling)
+        return f"BosonSite({self.Nmax:d}, {self.conserve!r}, {self.filling:f})"
 
 
 def spin_half_species(SpeciesSite, cons_N, cons_Sz, **kwargs):
