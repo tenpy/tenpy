@@ -1890,7 +1890,7 @@ class MPO(MPSGeometry):
 
     @staticmethod
     def _get_Id(Id, L):
-        """parse the IdL or IdR argument of __init__"""
+        """Parse the IdL or IdR argument of __init__"""
         if Id is None:
             return [None] * (L + 1)
         try:
@@ -1979,7 +1979,7 @@ class MPO(MPSGeometry):
                    mps_unit_cell_width=self.unit_cell_width)  # no graph
 
     def _get_block_projections(self, i):
-        """projections onto (IdL, other, IdR) on bond `i` in range(0, L+1)"""
+        """Projections onto (IdL, other, IdR) on bond `i` in range(0, L+1)"""
         if self.finite:  # allows i = L for finite bc
             if i < self.L:
                 length = self._W[i].get_leg('wL').ind_len
@@ -2403,7 +2403,7 @@ class MPOGraph(MPSGeometry):
         return f"<MPOGraph L={self.L:d}>"
 
     def __str__(self):
-        """string showing the graph for debug output."""
+        """String showing the graph for debug output."""
         res = []
         for i in range(self.L):
             G = self.graph[i]
@@ -2436,7 +2436,7 @@ class MPOGraph(MPSGeometry):
             res.append(d)
 
     def _build_grids(self):
-        """translate the graph dictionaries into grids for the `Ws`."""
+        """Translate the graph dictionaries into grids for the `Ws`."""
         states = self._ordered_states
         assert (states is not None)  # make sure that _set_ordered_states was called
         grids = []
@@ -3031,7 +3031,7 @@ class MPOEnvironmentBuilder:
             k_s.leg.test_equal(H_s.leg)
 
     def _contract_cL(self, cL, i, op):
-        """ partial contraction cL=(A-op-A*)= """
+        """ Partial contraction cL=(A-op-A*)= """
         cL = npc.tensordot(self.ket.get_B(i, form='A'), cL, axes=('vL', 'vR'))
         cL = npc.tensordot(cL, op, axes=[self.ket._p_label, 'p*'])
         axes = (['p', 'vR*'], self.ket._get_p_label('*') + ['vL*'])
@@ -3039,7 +3039,7 @@ class MPOEnvironmentBuilder:
         return cL
 
     def _contract_cR(self, cR, i, op):
-        """ contract =(B-op-B*)=cR """
+        """ Contract =(B-op-B*)=cR """
         cR = npc.tensordot(self.ket.get_B(i, form='B'), cR, axes=('vR', 'vL'))
         cR = npc.tensordot(cR, op, axes=[self.ket._p_label, 'p*'])
         axes = (['p', 'vL*'], self.ket._get_p_label('*') + ['vR*'])

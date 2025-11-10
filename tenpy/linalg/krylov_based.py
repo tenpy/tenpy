@@ -182,7 +182,7 @@ class KrylovBased:
         return psif
 
     def _to_cache(self, psi):
-        """add psi to cache, keep at most self.N_cache."""
+        """Add psi to cache, keep at most self.N_cache."""
         cache = self._cache
         cache.append(psi)
         if len(cache) > self.N_cache:
@@ -377,7 +377,7 @@ class Arnoldi(KrylovBased):
         return k + 1
 
     def _calc_result_krylov(self, k):
-        """calculate ground state of _h_krylov[:k+1, :k+1]"""
+        """Calculate ground state of _h_krylov[:k+1, :k+1]"""
         h = self._h_krylov
         if k == 0:
             self.Es[0, 0] = h[0, 0]
@@ -428,7 +428,7 @@ class Arnoldi(KrylovBased):
         return psis
 
     def _to_cache(self, psi):
-        """add psi to cache, keep at most self.N_cache."""
+        """Add psi to cache, keep at most self.N_cache."""
         cache = self._cache
         cache.append(psi)
         assert len(cache) <= self.N_cache
@@ -560,7 +560,7 @@ class LanczosGroundState(KrylovBased):
         # continue in _calc_result_full
 
     def _calc_result_krylov(self, k):
-        """calculate ground state of _h_krylov[:k+1, :k+1]"""
+        """Calculate ground state of _h_krylov[:k+1, :k+1]"""
         h = self._h_krylov
         if k == 0:
             self.Es[0, 0] = h[0, 0]
@@ -650,7 +650,7 @@ class LanczosEvolution(LanczosGroundState):
         return (self._psi0_norm * self._result_norm) * result_full, N
 
     def _calc_result_krylov(self, k):
-        """calculate ``expm(delta h).dot(e0)`` for ``h = _h_krylov[:k+1, :k+1]``"""
+        """Calculate ``expm(delta h).dot(e0)`` for ``h = _h_krylov[:k+1, :k+1]``"""
 
         # self._result_krylov should be a normalized vector.
         h = self._h_krylov

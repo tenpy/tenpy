@@ -90,7 +90,7 @@ exclude_patterns = [
 
 
 def create_example_stubs():
-    """create stub files for examples to include them in the documentation."""
+    """Create stub files for examples to include them in the documentation."""
     folders = [
         (['examples'], '.py', []),
         (['examples'], '.yml', []),
@@ -119,7 +119,7 @@ def create_example_stubs():
     # done
 
 def create_toycode_stubs():
-    """create stub files for examples to include them in the documentation."""
+    """Create stub files for examples to include them in the documentation."""
     outdir = os.path.join(os.path.dirname(__file__), 'toycode_stubs')
     if not os.path.isdir(outdir):
         os.mkdir(outdir)

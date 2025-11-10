@@ -518,7 +518,7 @@ class NearestNeighborModel(Model):
         return grouped_sites
 
     def _group_sites_Hb_to_onsite(self, gr_site, j, old_Hb):
-        """kroneckerproduct for H_bond term within a GroupedSite.
+        """Kroneckerproduct for H_bond term within a GroupedSite.
 
         `old_Hb` acts on sites (j-1, j) of `gr_sites`.
         """
@@ -1797,7 +1797,7 @@ class CouplingModel(Model):
             )
 
     def calc_H_bond(self, tol_zero=1.e-15):
-        """calculate `H_bond` from :attr:`coupling_terms` and :attr:`onsite_terms`.
+        """Calculate `H_bond` from :attr:`coupling_terms` and :attr:`onsite_terms`.
 
         Parameters
         ----------

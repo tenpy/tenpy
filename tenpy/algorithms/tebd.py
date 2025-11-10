@@ -103,7 +103,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
 
     @property
     def trunc_err_bonds(self):
-        """truncation error introduced on each non-trivial bond."""
+        """Truncation error introduced on each non-trivial bond."""
         return self._trunc_err_bonds[self.psi.nontrivial_bonds]
 
     # run() as defined in TimeEvolutionAlgorithm
@@ -656,7 +656,7 @@ class QRBasedTEBDEngine(TEBDEngine):
     """
 
     def _expansion_rate(self, i):
-        """get expansion rate for updating bond i"""
+        """Get expansion rate for updating bond i"""
         expand = self.options.get('cbe_expand', 0.1, 'real')
         expand_0 = self.options.get('cbe_expand_0', None, 'real')
 

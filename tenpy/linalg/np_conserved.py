@@ -174,7 +174,7 @@ class Array:
 
     """
     def __init__(self, legcharges, dtype=np.float64, qtotal=None, labels=None):
-        """see help(self)"""
+        """See help(self)"""
         self.legs = list(legcharges)
         if len(self.legs) == 0:
             raise ValueError("can't have 0-rank Tensor")
@@ -372,7 +372,7 @@ class Array:
 
     @classmethod
     def from_ndarray_trivial(cls, data_flat, dtype=None, labels=None):
-        """convert a flat numpy ndarray to an Array with trivial charge conservation.
+        """Convert a flat numpy ndarray to an Array with trivial charge conservation.
 
         Parameters
         ----------
@@ -411,7 +411,7 @@ class Array:
                      labels=None,
                      raise_wrong_sector=True,
                      warn_wrong_sector=True):
-        """convert a flat (numpy) ndarray to an Array.
+        """Convert a flat (numpy) ndarray to an Array.
 
         Parameters
         ----------
@@ -643,7 +643,7 @@ class Array:
     # labels ==================================================================
 
     def get_leg_index(self, label):
-        """translate a leg-index or leg-label to a leg-index.
+        """Translate a leg-index or leg-label to a leg-index.
 
         Parameters
         ----------
@@ -2193,7 +2193,7 @@ class Array:
         return np.linalg.norm(block_norms + [0], ord)
 
     def __neg__(self):
-        """return ``-self``"""
+        """Return ``-self``"""
         return self.unary_blockwise(np.negative)
 
     def ibinary_blockwise(self, func, other, *args, **kwargs):
@@ -4316,7 +4316,7 @@ def to_iterable_arrays(array_list):
 
 
 def _find_calc_dtype(a_dtype, b_dtype):
-    """return (calc_dtype, res_dtype) suitable for BLAS calculations."""
+    """Return (calc_dtype, res_dtype) suitable for BLAS calculations."""
     res_dtype = np.promote_types(a_dtype, b_dtype)
     _, calc_dtype, _ = BLAS.find_best_blas_type(dtype=res_dtype)
     return calc_dtype, res_dtype

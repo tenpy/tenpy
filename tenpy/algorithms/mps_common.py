@@ -453,7 +453,7 @@ class Sweep(Algorithm):
         return zip(i0s, move_right, update_LP_RP)
 
     def _cache_optimize(self):
-        """call ``env.cache_optimize`` to preload next env tensors and avoid unnecessary reads."""
+        """Call ``env.cache_optimize`` to preload next env tensors and avoid unnecessary reads."""
         i0 = self.i0
         move_right = self.move_right
         if self.n_optimize == 2:
@@ -2471,7 +2471,7 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
     """
 
     def _expansion_rate(self, i):
-        """get expansion rate for updating bond i"""
+        """Get expansion rate for updating bond i"""
         expand = self.options.get('cbe_expand', 0.1, 'real')
         expand_0 = self.options.get('cbe_expand_0', None, 'real')
 

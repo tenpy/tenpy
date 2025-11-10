@@ -646,7 +646,7 @@ class Lattice:
         self.test_sanity()
 
     def position(self, lat_idx):
-        """return 'space' position of one or multiple sites.
+        """Return 'space' position of one or multiple sites.
 
         Parameters
         ----------
@@ -673,7 +673,7 @@ class Lattice:
         return res
 
     def site(self, i):
-        """return :class:`~tenpy.networks.site.Site` instance corresponding to an MPS index `i`"""
+        """Return :class:`~tenpy.networks.site.Site` instance corresponding to an MPS index `i`"""
         if self._mps_sites_cache is None:
             _ = self.mps_sites()  # populate cache
         return self._mps_sites_cache[i]
@@ -755,7 +755,7 @@ class Lattice:
         return i
 
     def mps_idx_fix_u(self, u=None):
-        """return an index array of MPS indices for which the site within the unit cell is `u`.
+        """Return an index array of MPS indices for which the site within the unit cell is `u`.
 
         If you have multiple sites in your unit-cell, an onsite operator is in general not defined
         for all sites. This functions returns an index array of the mps indices which belong to
@@ -1214,7 +1214,7 @@ class Lattice:
             return mps_i[keep_nonzero], mps_j[keep_nonzero], strength_vals[keep_nonzero]
 
     def _keep_possible_couplings(self, lat_j, lat_j_shifted, u2):
-        """filter possible j sites of a coupling from :meth:`possible_couplings`"""
+        """Filter possible j sites of a coupling from :meth:`possible_couplings`"""
         return np.all(
             np.logical_or(
                 lat_j_shifted == lat_j,  # not across the boundary
@@ -1599,7 +1599,7 @@ class Lattice:
         return self._BZ
 
     def _asvalid_latidx(self, lat_idx):
-        """convert lat_idx to an ndarray with correct last dimension."""
+        """Convert lat_idx to an ndarray with correct last dimension."""
         lat_idx = np.asarray(lat_idx, dtype=np.intp)
         if lat_idx.shape[-1] != len(self.shape):
             raise ValueError("wrong len of last dimension of lat_idx: " + str(lat_idx.shape))
@@ -1698,7 +1698,7 @@ class SimpleLattice(Lattice):
         Lattice.__init__(self, Ls, [site], **kwargs)
 
     def mps2lat_values(self, A, axes=0, u=None):
-        """same as :meth:`Lattice.mps2lat_values`, but ignore ``u``, setting it to ``0``."""
+        """Same as :meth:`Lattice.mps2lat_values`, but ignore ``u``, setting it to ``0``."""
         return super().mps2lat_values(A, axes, 0)
 
 
@@ -2162,7 +2162,7 @@ class IrregularLattice(Lattice):
     # make possible_couplings and possible_multi_couplings work
 
     def _keep_possible_couplings(self, lat_j, lat_j_shifted, u2):
-        """filter possible j sites of a coupling from :meth:`possible_couplings`"""
+        """Filter possible j sites of a coupling from :meth:`possible_couplings`"""
         keep = super()._keep_possible_couplings(lat_j, lat_j_shifted, u2)
         lat_j_u = np.concatenate([lat_j, np.full([len(lat_j), 1], u2)], axis=1)
         i = np.sum(lat_j_u * self._strides, axis=-1)
@@ -2170,7 +2170,7 @@ class IrregularLattice(Lattice):
         return np.logical_and(keep, i != self._REMOVED)
 
     def _keep_possible_multi_couplings(self, lat_ijkl, lat_ijkl_shifted, u_ijkl):
-        """filter possible j sites of a coupling from :meth:`possible_couplings`"""
+        """Filter possible j sites of a coupling from :meth:`possible_couplings`"""
         keep = super()._keep_possible_multi_couplings(lat_ijkl, lat_ijkl_shifted, u_ijkl)
         u_ijkl = np.broadcast_to(u_ijkl, lat_ijkl.shape[:2] + (1, ))
         i = np.sum(np.concatenate([lat_ijkl, u_ijkl], axis=2) * self._strides, axis=-1)
@@ -2298,7 +2298,7 @@ class HelicalLattice(Lattice):
         return self._ordering_helical(order_reg)
 
     def _ordering_helical(self, order):
-        """extract relevant sites from the `order` of the full 2D lattice."""
+        """Extract relevant sites from the `order` of the full 2D lattice."""
         Lx, Ly, Lu = self.regular_lattice.shape
         N_sites = self._N_cells * Lu
         errmsg = ("order of regular lattice incompatible with tilting. "

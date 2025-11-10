@@ -110,17 +110,17 @@ def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
 if bottleneck is not None:
 
     def anynan(a):
-        """check whether any entry of a ndarray `a` is 'NaN'."""
+        """Check whether any entry of a ndarray `a` is 'NaN'."""
         return bottleneck.anynan(a)
 else:
 
     def anynan(a):
-        """check whether any entry of a ndarray `a` is 'NaN'."""
+        """Check whether any entry of a ndarray `a` is 'NaN'."""
         return np.isnan(np.sum(a))  # still faster than 'np.isnan(a).any()'
 
 
 def argsort(a, sort=None, **kwargs):
-    """wrapper around np.argsort to allow sorting ascending/descending and by magnitude.
+    """Wrapper around np.argsort to allow sorting ascending/descending and by magnitude.
 
     Parameters
     ----------
@@ -174,14 +174,14 @@ def argsort(a, sort=None, **kwargs):
 
 
 def lexsort(a, axis=-1):
-    """wrapper around ``np.lexsort``: allow for trivial case ``a.shape[0] = 0`` without sorting"""
+    """Wrapper around ``np.lexsort``: allow for trivial case ``a.shape[0] = 0`` without sorting"""
     if any([s == 0 for s in a.shape]):
         return np.arange(a.shape[axis], dtype=np.intp)
     return np.lexsort(a, axis=axis)
 
 
 def inverse_permutation(perm):
-    """reverse sorting indices.
+    """Reverse sorting indices.
 
     Sort functions (as :meth:`LegCharge.sort`) return a (1D) permutation `perm` array,
     such that ``sorted_array = old_array[perm]``.
@@ -309,7 +309,7 @@ def transpose_list_list(D, pad=None):
 
 
 def zero_if_close(a, tol=1.e-15):
-    """set real and/or imaginary part to 0 if their absolute value is smaller than `tol`.
+    """Set real and/or imaginary part to 0 if their absolute value is smaller than `tol`.
 
     Parameters
     ----------

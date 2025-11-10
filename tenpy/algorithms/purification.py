@@ -146,7 +146,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         return self._disent_iterations[self.psi.nontrivial_bonds]
 
     def calc_U(self, order, delta_t, type_evo='real', E_offset=None):
-        """see :meth:`~tenpy.algorithms.tebd.eng.calc_U`"""
+        """See :meth:`~tenpy.algorithms.tebd.eng.calc_U`"""
         super().calc_U(order, delta_t, type_evo, E_offset)
         self._guess_U_disent = [[None] * len(Us) for Us in self._U]
 
@@ -411,7 +411,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         self._update_index = None  # done
 
     def _swap_disentangle_bond(self, i, swap=True, disentangle=False):
-        """swap sites (i-1, i) (if swap = True) """
+        """Swap sites (i-1, i) (if swap = True) """
         # very similar to update_bond
         i0, i1 = i - 1, i
         # Construct the theta matrix

@@ -636,7 +636,7 @@ class PurificationMPS(MPS):
         return sigmas, total_probability
 
     def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
-        """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
+        """Correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
         # compared to MPS._corr_up_diag just perform additional contractions of the 'q'
         op1, _ = self.get_op(ops1, i)
         opstr1, _ = self.get_op(opstr, i)
@@ -672,11 +672,11 @@ class PurificationMPS(MPS):
         return A.replace_labels(self._p_label, self._get_p_label(s))
 
     def _get_p_label(self, s, star=False):
-        """return  self._p_label with additional string `s`."""
+        """Return  self._p_label with additional string `s`."""
         return ['p' + s, 'q' + s]
 
     def _get_p_labels(self, ks, star=False):
-        """join ``self._get_p_label(str(k) {+'*'} ) for k in range(ks)`` to a single list."""
+        """Join ``self._get_p_label(str(k) {+'*'} ) for k in range(ks)`` to a single list."""
         if star:
             return [lbl + str(k) + '*' for k in range(ks) for lbl in self._p_label]
         else:

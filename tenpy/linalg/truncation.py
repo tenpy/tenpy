@@ -698,7 +698,7 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
 
 
 def _combine_constraints(good1, good2, warn):
-    """return logical_and(good1, good2) if there remains at least one `True` entry.
+    """Return logical_and(good1, good2) if there remains at least one `True` entry.
 
     Otherwise print a warning and return just `good1`.
     """

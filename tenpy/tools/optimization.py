@@ -184,13 +184,13 @@ class temporary_level:
         self.temporary_level = temporary_level
 
     def __enter__(self):
-        """enter the context manager."""
+        """Enter the context manager."""
         self._old_level = get_level()
         if self.temporary_level is not None:
             set_level(self.temporary_level)
 
     def __exit__(self, exc_type, exc_value, traceback):
-        """exit the context manager."""
+        """Exit the context manager."""
         set_level(self._old_level)
 
 

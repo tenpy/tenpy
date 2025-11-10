@@ -1281,7 +1281,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         return ops, i_min + i_offset, (count_JW % 2 == 1)
 
     def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
-        """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
+        """Correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
         op1, _ = self.get_op(ops1, i)
         opstr1, _ = self.get_op(opstr, i)
         if opstr1 is not None and str_on_first:
@@ -1372,7 +1372,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         return C
 
     def _expectation_value_args(self, ops, sites, axes):
-        """parse the arguments of self.expectation_value()"""
+        """Parse the arguments of self.expectation_value()"""
         ops = npc.to_iterable_arrays(ops)
         if any(isinstance(op, str) for op in ops):
             n = 1
@@ -1398,7 +1398,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         return ops, sites, n, axes
 
     def _correlation_function_args(self, ops1, ops2, sites1, sites2, opstr):
-        """get default arguments of self.correlation_function()"""
+        """Get default arguments of self.correlation_function()"""
         if sites1 is None:
             sites1 = range(0, self.L)
         elif isinstance(sites1, int):
@@ -1425,7 +1425,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         #  return A.replace_labels(self._p_label, self._get_p_label(s))
 
     def _get_p_label(self, s):
-        """return  self._p_label with additional string `s`."""
+        """Return  self._p_label with additional string `s`."""
         return ['p' + s]
         #  return [lbl + s for lbl in self._p_label]
 
@@ -1503,14 +1503,14 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
     @abstractmethod
     def _contract_with_LP(self, C, i):
-        """contract `theta` with `self.get_LP(i)`.
+        """Contract `theta` with `self.get_LP(i)`.
 
         If `bra` = `ket`, this is a trivial relabeling of legs `vL` -> `vR*`."""
         ...
 
     @abstractmethod
     def _contract_with_RP(self, C, i):
-        """contract `C` with `self.get_RP(i)`.
+        """Contract `C` with `self.get_RP(i)`.
 
         If `bra` = `ket`, this is a trivial relabeling of legs `vR` -> `vL*`."""
         ...
@@ -3770,7 +3770,7 @@ class MPS(BaseMPSExpectationValue):
         return entropy(p, n)
 
     def entanglement_spectrum(self, by_charge=False):
-        r"""return entanglement energy spectrum.
+        r"""Return entanglement energy spectrum.
 
         Parameters
         ----------

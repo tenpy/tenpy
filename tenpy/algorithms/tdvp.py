@@ -286,7 +286,7 @@ class SingleSiteTDVPEngine(TDVPEngine):
     EffectiveH = OneSiteH
 
     def get_sweep_schedule(self):
-        """slightly different sweep schedule than DMRG"""
+        """Slightly different sweep schedule than DMRG"""
         L = self.psi.L
         if self.finite:
             i0s = list(range(0, L - 1)) + list(range(L - 1, -1, -1))

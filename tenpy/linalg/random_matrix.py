@@ -39,12 +39,12 @@ __all__ = [
 
 
 def box(size, W=1.):
-    """return random number uniform in (-W, W]."""
+    """Return random number uniform in (-W, W]."""
     return (0.5 - np.random.random(size)) * (2. * W)
 
 
 def standard_normal_complex(size):
-    """return ``(R + 1.j*I)`` for independent `R` and `I` from np.random.standard_normal."""
+    """Return ``(R + 1.j*I)`` for independent `R` and `I` from np.random.standard_normal."""
     return np.random.standard_normal(size) + 1.j * np.random.standard_normal(size)
 
 
@@ -153,7 +153,7 @@ def CUE(size):
 
 
 def O_close_1(size, a=0.01):
-    r"""return an random orthogonal matrix 'close' to the Identity.
+    r"""Return an random orthogonal matrix 'close' to the Identity.
 
     Parameters
     ----------
@@ -179,7 +179,7 @@ def O_close_1(size, a=0.01):
 
 
 def U_close_1(size, a=0.01):
-    r"""return an random orthogonal matrix 'close' to the identity.
+    r"""Return an random orthogonal matrix 'close' to the identity.
 
     Parameters
     ----------

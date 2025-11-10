@@ -642,7 +642,7 @@ class CouplingTerms(Hdf5Exportable):
             norm_angle = Normalize(vmin=-np.pi, vmax=np.pi)
 
             def style_map(i, j, op_i, op_string, op_j, strength):
-                """define the plot style for a given coupling."""
+                """Define the plot style for a given coupling."""
                 style = {}
                 style['linewidth'] = np.abs(strength) * matplotlib.rcParams['lines.linewidth']
                 style['color'] = hsv(norm_angle(np.angle(strength)))
@@ -1156,7 +1156,7 @@ class MultiCouplingTerms(CouplingTerms):
         return all_keys
 
     def _insert_to_graph_rec(self, graph, all_keys, d2, i, op_string_ij, key_from_i, from_left):
-        """recursive part for :meth:`_insert_to_graph`"""
+        """Recursive part for :meth:`_insert_to_graph`"""
         _connect = self._connect_left if from_left else self._connect_right
         for j, d3 in d2.items():
             if j == _connect:

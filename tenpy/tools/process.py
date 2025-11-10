@@ -92,7 +92,7 @@ def load_omp_library(libs=["libiomp5.so",
 
 
 def omp_get_nthreads():
-    """wrapper around OpenMP ``get_max_threads``.
+    """Wrapper around OpenMP ``get_max_threads``.
 
     Returns
     -------
@@ -107,7 +107,7 @@ def omp_get_nthreads():
 
 
 def omp_set_nthreads(n):
-    """wrapper around OpenMP ``set_nthreads``.
+    """Wrapper around OpenMP ``set_nthreads``.
 
     Parameters
     ----------
@@ -127,7 +127,7 @@ def omp_set_nthreads(n):
 
 
 def mkl_get_nthreads():
-    """wrapper around MKL ``get_max_threads``.
+    """Wrapper around MKL ``get_max_threads``.
 
     Returns
     -------
@@ -147,7 +147,7 @@ def mkl_get_nthreads():
 
 
 def mkl_set_nthreads(n):
-    """wrapper around MKL ``set_num_threads``.
+    """Wrapper around MKL ``set_num_threads``.
 
     Parameters
     ----------

@@ -108,7 +108,7 @@ def append_left_env(As, Bs, L, Ws=None):
 
 
 def construct_orthogonal(M, left=True):
-    """find (left) orthogonal complement of tensor M
+    """Find (left) orthogonal complement of tensor M
 
     It finds Q such that::
 
@@ -889,7 +889,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
 
     def attach_right(self, VL, X, As, R, Ws=None):
         """
-        attach excitation tensors to a right environment
+        Attach excitation tensors to a right environment
         """
         B = npc.tensordot(VL.replace_label('p', 'p0'), X, axes=(['vR'], ['vL']))
         RB = npc.tensordot(B, R, axes=(['vR'], ['vL']))
@@ -1003,7 +1003,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
 
     def attach_left(self, VL, X, As, L, Ws=None):
         """
-        attach excitation tensors to a left environment
+        Attach excitation tensors to a left environment
         """
         B = npc.tensordot(VL.replace_label('p', 'p0'), X, axes=(['vR'], ['vL']))
         LB = npc.tensordot(L, B, axes=(['vR'], ['vL']))

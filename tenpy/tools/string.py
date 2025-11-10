@@ -113,7 +113,7 @@ def join_as_many_as_possible(msgs: Sequence[str], separator: str, priorities: Se
 
 
 def to_mathematica_lists(a):
-    """convert nested `a` to string readable by mathematica using curly brackets '{...}'."""
+    """Convert nested `a` to string readable by mathematica using curly brackets '{...}'."""
     if isinstance(a, str):
         return '"' + str(a) + '"'
     try:

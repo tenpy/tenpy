@@ -25,7 +25,7 @@ LeviCivita3 = np.array([[np.cross(b, a) for a in _eye_I3] for b in _eye_I3])
 
 
 def matvec_to_array(H):
-    """transform an linear operator with a `matvec` method into a dense numpy array.
+    """Transform an linear operator with a `matvec` method into a dense numpy array.
 
     Parameters
     ----------
