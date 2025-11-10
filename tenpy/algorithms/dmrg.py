@@ -23,9 +23,10 @@ computationally expensive to run and has occasionally displayed some convergence
 Which one is preferred in the end is not obvious a priori and might depend on the used model.
 Just try both of them.
 
-A :class:`~tenpy.algorithms.mps_common.Mixer` should be used initially to avoid that the algorithm gets stuck in local energy
-minima, and then slowly turned off in the end. For :class:`SingleSiteDMRGEngine`, using a mixer is
-crucial, as the one-site algorithm cannot increase the MPS bond dimension by itself.
+A :class:`~tenpy.algorithms.mps_common.Mixer` should be used initially to avoid that the algorithm
+gets stuck in local energy minima, and then slowly turned off in the end.
+For :class:`SingleSiteDMRGEngine`, using a mixer is crucial, as the one-site algorithm cannot
+increase the MPS bond dimension by itself.
 
 A generic protocol for approaching a physics question using DMRG is given in
 :doc:`/intro/dmrg-protocol`.

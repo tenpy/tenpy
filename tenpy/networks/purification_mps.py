@@ -587,7 +587,9 @@ class PurificationMPS(MPS):
             Hence, the returned probability isn't really meaningful.
         """
         if complex_amplitude:
-            raise ValueError("Sampling a purification MPS only retuns the probability of the sampled string; rerun with 'complex_amplitude=False'.")
+            msg = ("Sampling a purification MPS only retuns the probability of the sampled string; "
+                   "rerun with 'complex_amplitude=False'.")
+            raise ValueError(msg)
 
         if last_site is None:
             last_site = self.L - 1
@@ -613,7 +615,8 @@ class PurificationMPS(MPS):
             # perform a projective measurement:
             # trace out rest except site `i`
             if not sample_q:
-                rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']]) # physical RDM on site i
+                # physical RDM on site i
+                rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']])
                 # probabilities p(sigma) = <sigma|rho|sigma>
                 rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
                 if abs(np.sum(rho_diag) - 1.) > norm_tol:
@@ -624,19 +627,23 @@ class PurificationMPS(MPS):
                 theta = theta.take_slice(sigma, 'p')  # project to sigma in theta; now has legs vL (trivial), q, vR
                 probability = rho_diag[sigma] # this is probability of seeing sigma conditioned on previous results.
                 # rho_diag[sigma] which should be the same as the norm of theta squared
-                # assert np.isclose(probability, npc.tensordot(theta.conj(), theta, axes=(['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q'])))
+                # expect_probability = npc.tensordot(theta.conj(), theta,
+                #                                    axes=(['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']))
+                # assert np.isclose(probability, expect_probability)
                 total_probability *= probability    # probability of p outcome
             else:
                 W2 = np.arange(site.dim)    # outcomes for q leg
                 # Sample p
-                rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']]) # physical RDM on site i
+                # physical RDM on site i
+                rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']])
                 # probabilities p(sigma) = <sigma|rho|sigma>
                 rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
                 if abs(np.sum(rho_diag) - 1.) > norm_tol:
                     raise ValueError("not normalized to `norm_tol`")
                 rho_diag /= np.sum(rho_diag)
                 sigma_1 = rng.choice(site.dim, p=rho_diag)  # randomly select index from probabilities
-                probability = rho_diag[sigma_1] # rho_diag[sigma_1] is probability of p outcome, conditioned on all previous outcomes
+                # rho_diag[sigma_1] is probability of p outcome, conditioned on all previous outcomes
+                probability = rho_diag[sigma_1]
                 # So by Bayes' rule, we now have the joint probability of all sampled outcomes.
                 theta = theta.take_slice([sigma_1], ['p'])  # project to sigma in theta; now has legs vL (trivial), vR
 
@@ -653,7 +660,8 @@ class PurificationMPS(MPS):
                 sigmas.append(W[sigma_1]) # For ancilla, we do not return the sampled index W[sigma_2] since the outcome
                 # is in an arbitrary basis.
                 # rho_diag[sigma] which should be the same as the norm of theta squared
-                # assert np.isclose(probability, npc.tensordot(theta.conj(), theta, axes=(['vL*', 'vR*'], ['vL', 'vR'])))
+                # expect_probability = npc.tensordot(theta.conj(), theta, axes=(['vL*', 'vR*'], ['vL', 'vR']))
+                # assert np.isclose(probability, expect_probability)
                 total_probability *= probability    # probability of q outcome
 
             if i != last_site:

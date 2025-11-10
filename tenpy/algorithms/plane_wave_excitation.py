@@ -349,7 +349,8 @@ class PlaneWaveExcitationEngine(Algorithm):
         .. cfg:config :: PlaneWaveExcitationEngine
 
             sum_method : ``explicit`` | ``GMRES``
-                Whether to explicitly sum the environment by applying the unit cell tensors until convergence (default) or solving the geometric series with the GMRES method.
+                Whether to explicitly sum the environment by applying the unit cell tensors until
+                convergence (default) or solving the geometric series with the GMRES method.
             sum_tol : float
                 Convergence criterion for the explicit summation.
             sum_iterations : int
@@ -432,7 +433,8 @@ class PlaneWaveExcitationEngine(Algorithm):
         .. cfg:config :: PlaneWaveExcitationEngine
 
             sum_method : ``explicit`` | ``GMRES``
-                Whether to explicitly sum the environment by applying the unit cell tensors until convergence (default) or solving the geometric series with the GMRES method.
+                Whether to explicitly sum the environment by applying the unit cell tensors until
+                convergence (default) or solving the geometric series with the GMRES method.
             sum_tol : float
                 Convergence criterion for the explicit summation.
             sum_iterations : int
@@ -532,8 +534,9 @@ class PlaneWaveExcitationEngine(Algorithm):
                 for j in range(i):
                     B = npc.tensordot(self.VLs[j], vec[j], axes=(['vR'], ['vL']))
                     if j > 0:
+                        # Does one extra multiplication when i = 0
                         LB = append_left_env([B], [self.ALs[j]], self.outer.GS_env_L.get_LP(j), Ws=[self.Ws[j]]) + \
-                             append_left_env([self.ARs[j]], [self.ALs[j]], LB, Ws=[self.Ws[j]]) # Does one extra multiplication when i = 0
+                             append_left_env([self.ARs[j]], [self.ALs[j]], LB, Ws=[self.Ws[j]])
                     else:
                         LB = append_left_env([B], [self.ALs[j]],
                                              self.outer.GS_env_L.get_LP(j),
@@ -570,7 +573,9 @@ class PlaneWaveExcitationEngine(Algorithm):
             return total_vec
 
     class Unaligned_Effective_H(NpcLinearOperator):
-        r"""Class defining the effective Hamiltonian for the excitation tensors `X`, where the `B` tensors are in left (LB) or right (RB) environment.
+        r"""Class defining the effective Hamiltonian for the excitation tensors `X`.
+
+        Where the `B` tensors are in left (LB) or right (RB) environment.
 
         For a single-site unit cell the effective Hamiltonian looks like this::
 
@@ -685,7 +690,9 @@ class PlaneWaveExcitationEngine(Algorithm):
 
 
 class MultiSitePlaneWaveExcitationEngine(Algorithm):
-    r""" Engine to compute quasiparticle excitations across multiple sites for uniform MPS. For each site in the unit cell one multi-site excitation tensor is computed.
+    r"""Engine to compute quasiparticle excitations across multiple sites for uniform MPS.
+
+    For each site in the unit cell one multi-site excitation tensor is computed.
 
     Parameters are the same as for :class:`~tenpy.algorithms.algorithm.Algorithm`.
 
@@ -702,7 +709,8 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             Dictionary as returned by ``self.env.get_initialization_data()`` from
             :meth:`~tenpy.networks.mpo.MPOEnvironment.get_initialization_data`.
         excitation_size : int
-            Number of sites of the excitation, i.e. how many sites in the uniform MPS are replaced with orthogonal tensors. This can be larger than the unit cell or incommensurate.
+            Number of sites of the excitation, i.e. how many sites in the uniform MPS are replaced
+            with orthogonal tensors. This can be larger than the unit cell or incommensurate.
 
     Attributes
     ----------
@@ -934,7 +942,8 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         .. cfg:config :: PlaneWaveExcitationEngine
 
             sum_method : ``explicit`` | ``GMRES``
-                Whether to explicitly sum the environment by applying the unit cell tensors until convergence (default) or solving the geometric series with the GMRES method.
+                Whether to explicitly sum the environment by applying the unit cell tensors until
+                convergence (default) or solving the geometric series with the GMRES method.
             sum_tol : float
                 Convergence criterion for the explicit summation.
             sum_iterations : int
@@ -1054,7 +1063,8 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         .. cfg:config :: PlaneWaveExcitationEngine
 
             sum_method : ``explicit`` | ``GMRES``
-                Whether to explicitly sum the environment by applying the unit cell tensors until convergence (default) or solving the geometric series with the GMRES method.
+                Whether to explicitly sum the environment by applying the unit cell tensors until
+                convergence (default) or solving the geometric series with the GMRES method.
             sum_tol : float
                 Convergence criterion for the explicit summation.
             sum_iterations : int
@@ -1122,7 +1132,10 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             raise ValueError('Sum method', sum_method, 'not recognized!')
 
     class Aligned_Effective_H(NpcLinearOperator):
-        r"""Class defining the effective Hamiltonian for the multi-site excitation tensors `X`, where there is overlap between `B` tensors and the unit cell we want to update.
+        r"""Class defining the effective Hamiltonian for the aligned case.
+
+        The alignred case is where there is overlap between `B` tensors and the unit cell we want
+        to update.
 
         Parameters
         ----------
@@ -1233,7 +1246,9 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             return total_vec
 
     class Unaligned_Effective_H(NpcLinearOperator):
-        r"""Class defining the effective Hamiltonian for the multi-site excitation tensors `X`, where the `B` tensors are in left (LB) or right (RB) environment.
+        r"""Class defining the effective Hamiltonian for the unaligned case.
+
+        The unaligned case is where `B` tensors are in left (LB) or right (RB) environment.
 
         Parameters
         ----------

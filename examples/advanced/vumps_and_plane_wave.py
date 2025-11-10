@@ -1,6 +1,7 @@
 """Excitations of the transverse field Ising model.
 
-This example uses VUMPS to find the ground state of the transverse field Ising model and uses the plane wave excitation ansatz to compute the first excited states.
+This example uses VUMPS to find the ground state of the transverse field Ising model and uses the
+plane wave excitation ansatz to compute the first excited states.
 """
 # Copyright (C) TeNPy Developers, Apache license
 

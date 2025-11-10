@@ -14,13 +14,15 @@ class tJModel(CouplingMPOModel):
     The Hamiltonian reads:
 
     .. math ::
-        H = - \sum_{\langle i, j \rangle, i < j, \sigma} 
+        H = - \sum_{\langle i, j \rangle, i < j, \sigma}
             t \mathcal{P}(c^{\dagger}_{\sigma, i} c_{\sigma j} + h.c.)\mathcal{P}
-            + \sum_{\langle i, j \rangle, i < j, \sigma}  
-            J (S^x_i S^x_j + S^y_i S^y_j + S^z_i S^z_j -\frac{1}{4}(n_{\uparrow,i} + n_{\downarrow,i})(n_{\uparrow,j} + n_{\downarrow,j}))
+            + \sum_{\langle i, j \rangle, i < j, \sigma}
+            J (S^x_i S^x_j + S^y_i S^y_j + S^z_i S^z_j)
+            - \frac{1}{4}(n_{\uparrow,i} + n_{\downarrow,i})(n_{\uparrow,j} + n_{\downarrow,j}))
 
 
-    Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs and :math:`\mathcal{P}` is the Gutzwiller projector on empty and singly occupied sites.
+    Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs and :math:`\mathcal{P}`
+    is the Gutzwiller projector on empty and singly occupied sites.
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 

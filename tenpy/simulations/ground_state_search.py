@@ -100,7 +100,9 @@ class PlaneWaveExcitations(GroundStateSearch):
         self.init_env_data = {}
         self._gs_data = gs_data
         self.initial_state_builder = None
-        assert 'group_sites' not in self.options.keys(), 'No grouping allowed for Plane Wave through simulations since we cannot ungroup.'
+        if 'group_sites' in self.options.keys():
+            msg = 'No grouping allowed for Plane Wave through simulations since we cannot ungroup.'
+            raise ValueError(msg)
 
     def run(self):
         self.load_groundstate()
@@ -712,8 +714,11 @@ class TopologicalExcitations(OrthogonalExcitations):
         # extract segments if necessary; get `init_env_data`.
         resume_data_alpha = gs_data_alpha.get('resume_data', {}) # TODO this is probably wrong
         resume_data_beta = gs_data_beta.get('resume_data', {}) # TODO this is probably wrong
-        #psi0_seg, write_back_left, write_back_right = self.extract_segment(psi0_alpha, psi0_beta, self.model, resume_data_alpha, resume_data_beta)
-        self.initial_state_seg, self.qtotal_diff, write_back_left, write_back_right = self.extract_segment(psi0_alpha, psi0_beta, self.model, resume_data_alpha, resume_data_beta)
+        # psi0_seg, write_back_left, write_back_right 
+        # = self.extract_segment(psi0_alpha, psi0_beta, self.model, resume_data_alpha, resume_data_beta)
+        self.initial_state_seg, self.qtotal_diff, write_back_left, write_back_right = self.extract_segment(
+            psi0_alpha, psi0_beta, self.model, resume_data_alpha, resume_data_beta
+        )
         ########################################
         if write_back_left:
             init_env_data = self.init_env_data
@@ -810,7 +815,9 @@ class TopologicalExcitations(OrthogonalExcitations):
             Whether :meth:`write_back_environments` should be called.
         """
         if psi0_alpha_Orig.bc == 'infinite':
-            return self._extract_segment_from_infinite(psi0_alpha_Orig, psi0_beta_Orig, model_orig, resume_data_alpha, resume_data_beta)
+            return self._extract_segment_from_infinite(
+                psi0_alpha_Orig, psi0_beta_Orig, model_orig, resume_data_alpha, resume_data_beta
+            )
         else:
             return self._extract_segment_from_finite(psi0_alpha_Orig, psi0_beta_Orig, model_orig)
 
@@ -832,7 +839,8 @@ class TopologicalExcitations(OrthogonalExcitations):
         first, last = self.model.lat.segment_first_last
 
         env = MPOEnvironment(psi0_fin_alpha, self.model_orig.H_MPO, psi0_fin_alpha)
-        self.env_data_alpha = env.get_initialization_data(first, last) # Found by contracting gauge fixed (rho, trace, dmrg)
+        self.env_data_alpha = env.get_initialization_data(first, last)
+        # Found by contracting gauge fixed (rho, trace, dmrg)
         # eigenvectors from unit cell boundary to the desired position).
         self.env_data_alpha_seg = env.get_initialization_data(first, boundary-1) # 2nd index included in segment
 
@@ -858,14 +866,17 @@ class TopologicalExcitations(OrthogonalExcitations):
                                   'age_LP': 0,
                                   'age_RP': 0}
 
-            #self.init_env_data = self._contract_segment_boundaries(self.init_env_data, *ground_state_seg.segment_boundaries)
+            #self.init_env_data = self._contract_segment_boundaries(
+            #     self.init_env_data, *ground_state_seg.segment_boundaries
+            #     )
         else:
             assert ground_state_seg_L.L + ground_state_seg_R.L == psi0_fin_L.L
             self.init_env_data = {}
         """
         return ground_state_seg, qtotal_diff, False, False
 
-    def _extract_segment_from_infinite(self, psi0_inf_alpha, psi0_inf_beta, model_inf, resume_data_alpha, resume_data_beta):
+    def _extract_segment_from_infinite(self, psi0_inf_alpha, psi0_inf_beta, model_inf,
+                                       resume_data_alpha, resume_data_beta):
         enlarge = self.options.get('segment_enlarge', None, int)
         first = self.options.get('segment_first', 0, int)
         if enlarge is not None:
@@ -898,7 +909,9 @@ class TopologicalExcitations(OrthogonalExcitations):
         else:
             self.logger.info("converge left ground state environments with MPOTransferMatrix")
             guess_init_env_data = resume_data_alpha.get('init_env_data', None)
-            self.init_env_data_alpha = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf_alpha, guess_init_env_data=guess_init_env_data, _subtraction_gauge=gauge)
+            self.init_env_data_alpha = MPOTransferMatrix.find_init_LP_RP(
+                H, psi0_inf_alpha, guess_init_env_data=guess_init_env_data, _subtraction_gauge=gauge
+            )
             # On bond 0 of the unit cell
 
             write_back_left = write_back
@@ -911,7 +924,9 @@ class TopologicalExcitations(OrthogonalExcitations):
         else:
             self.logger.info("converge right ground state environments with MPOTransferMatrix")
             guess_init_env_data = resume_data_beta.get('init_env_data', None)
-            self.init_env_data_beta = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf_beta, guess_init_env_data=guess_init_env_data, _subtraction_gauge=gauge)
+            self.init_env_data_beta = MPOTransferMatrix.find_init_LP_RP(
+                H, psi0_inf_beta, guess_init_env_data=guess_init_env_data, _subtraction_gauge=gauge
+            )
             # On bond 0 of the unit cell
 
             write_back_right = write_back
@@ -964,7 +979,12 @@ class TopologicalExcitations(OrthogonalExcitations):
             Qs_alpha, ps_alpha = seg_alpha.probability_per_charge(seg_alpha.L)
             Qs_beta, ps_beta = seg_beta.probability_per_charge(0)
 
-            side_by_side = string.vert_join(["left seg\n" + str(Qs_alpha), "prob\n" + str(np.array([ps_alpha]).T), "right seg\n" + str(Qs_beta),"prob\n" +str(np.array([ps_beta]).T)], delim=' | ')
+            side_by_side = string.vert_join(
+                ["left seg\n" + str(Qs_alpha),
+                 "prob\n" + str(np.array([ps_alpha]).T),
+                 "right seg\n" + str(Qs_beta),"prob\n" +str(np.array([ps_beta]).T)],
+                delim=' | '
+            )
             self.logger.info(side_by_side)
             # NOTE: chinfo.make_valid() turns charges into INT by discarding fractional part. Round first.
             if join_method == "average charge":
@@ -1011,18 +1031,26 @@ class TopologicalExcitations(OrthogonalExcitations):
                                   dtype=seg_alpha.dtype,
                                   qtotal=list(self.gluing_charge),
                                   labels=['vL', 'vR'])
-        lanczos_params = self.options.get("lanczos_params", {}) # See if lanczos_params is in yaml, if not use empty dictionary
+        # See if lanczos_params is in yaml, if not use empty dictionary
+        lanczos_params = self.options.get("lanczos_params", {})
         _, th0, _ = krylov_based.LanczosGroundState(H0, th0, lanczos_params).run()
 
         norm = npc.norm(th0)
         self.logger.info("Norm of theta guess: %.8f", norm)
         if np.isclose(norm, 0):
-            raise ValueError(f"Norm of inserted theta with charge {list(self.gluing_charge)} on site index {boundary:d} is zero.")
+            msg = (f"Norm of inserted theta with charge {list(self.gluing_charge)} on site index "
+                   f"{boundary:d} is zero.")
+            raise ValueError(msg)
 
         U, s, Vh = npc.svd(th0, inner_labels=['vR', 'vL'])
-        seg_alpha.set_B(seg_alpha.L-1, npc.tensordot(seg_alpha.get_B(seg_alpha.L-1, 'A'), U, axes=['vR', 'vL']), form='A') # Put AU into last site of left segment
+        # Put AU into last site of left segment
+        seg_alpha.set_B(
+            seg_alpha.L-1,
+            npc.tensordot(seg_alpha.get_B(seg_alpha.L-1, 'A'), U, axes=['vR', 'vL']),
+            form='A')
         seg_alpha.set_SR(seg_alpha.L-1, s)
-        seg_beta.set_B(0, npc.tensordot(Vh, seg_beta.get_B(0, 'B'), axes=['vR', 'vL']), form='B') # Put Vh B into first site of right segment
+        # Put Vh B into first site of right segment
+        seg_beta.set_B(0, npc.tensordot(Vh, seg_beta.get_B(0, 'B'), axes=['vR', 'vL']), form='B')
         seg_beta.set_SL(0, s)
 
         combined_seg = self._concatenate_segments(seg_alpha, seg_beta, inf_alpha)
@@ -1157,11 +1185,16 @@ class TopologicalExcitations(OrthogonalExcitations):
             self.logger.info("E_alpha, E_alpha2: %.14f, %.14f", E_alpha, E_alpha2)
             self.logger.info("epsilon_alpha, E0_alpha: %.14f, %.14f", epsilon_alpha, E0_alpha)
 
-            eta_R_alpha = self.arbitrary_shift_right(psi0_alpha.L-1, psi0_alpha, self.init_env_data_alpha['init_RP']).real
-            eta_R_beta = self.arbitrary_shift_right(psi0_alpha.L-1, psi0_beta, self.init_env_data_beta['init_RP']).real
+            eta_R_alpha = self.arbitrary_shift_right(
+                psi0_alpha.L-1, psi0_alpha, self.init_env_data_alpha['init_RP']
+            ).real
+            eta_R_beta = self.arbitrary_shift_right(
+                psi0_alpha.L-1, psi0_beta, self.init_env_data_beta['init_RP']
+            ).real
             self.logger.info("eta_R_alpha, eta_R_beta: %.14f, %.14f", eta_R_alpha, eta_R_beta)
 
-            correction = self.correction(psi0_alpha, psi0_beta, env_alpha, env_beta, last).real / psi0_alpha.L - eta_R_beta + eta_R_alpha
+            correction = self.correction(psi0_alpha, psi0_beta, env_alpha, env_beta, last).real \
+                / psi0_alpha.L - eta_R_beta + eta_R_alpha
             self.logger.info("Correction term for mismatched GSs: %.14f", correction)
             self.results['ground_state_energy'] = E_alpha - eta_R_alpha + eta_R_beta + correction
 
