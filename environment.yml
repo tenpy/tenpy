@@ -15,3 +15,4 @@ dependencies:
   - h5py
   - pyyaml
   - pytest>=6.0
+  - ruff

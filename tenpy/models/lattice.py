@@ -514,7 +514,7 @@ class Lattice:
             lattice. An integer means periodic boundary condition with a shift given by that number,
             see :attr:`bc_shift`.
         """
-        global bc_choices  # noqa: F824
+        global bc_choices
         bc_choices_reverse = dict([(v, k) for (k, v) in bc_choices.items()])
         bc = [bc_choices_reverse[bc] for bc in self.bc]
         if self.bc_shift is not None:
@@ -526,7 +526,7 @@ class Lattice:
 
     @boundary_conditions.setter
     def boundary_conditions(self, bc):
-        global bc_choices  # noqa: F824
+        global bc_choices
         if bc in list(bc_choices.keys()):
             bc = [bc_choices[bc]] * self.dim
             self.bc_shift = None

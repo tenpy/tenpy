@@ -48,17 +48,18 @@ io = ["h5py", "pyyaml"]
 memory = ["psutil"]
 extra = ["bottleneck"]
 docbuild = [
-    "Sphinx", 
-    "sphinx-rtd-theme", 
-    "sphinxcontrib-bibtex", 
-    "matplotlib", 
+    "Sphinx",
+    "sphinx-rtd-theme",
+    "sphinxcontrib-bibtex",
+    "matplotlib",
     "ipykernel",
     "nbsphinx",
     "pandoc",
     "sphinx_copybutton",
 ]
 test = ["pytest>=6.0", "physics_tenpy[io, memory]"]
-all = ["physics_tenpy[plot, io, test, extra, docbuild]"]
+lint = ["ruff"]
+all = ["physics_tenpy[plot, io, test, lint, extra, docbuild]"]
 
 
 [project.urls]
@@ -84,7 +85,8 @@ version = {attr = "tenpy.__version__"}
 [tool.cibuildwheel]
 # Disable building 32bit windows wheels (h5py does not support it)
 # Disable musllinux : would need to install BLAS/LAPACK
-# Disable free-threaded python 3.14 (h5py not yet supported), see issue 
+# Disable free-threaded python 3.14 (h5py not yet supported), see issue 570
+#   (https://github.com/tenpy/tenpy/issues/570)
 skip = "*-win32 *-musllinux_* cp314t-*"
 # Build separate wheels for macOS's different architectures.
 macos.archs = ["x86_64", "arm64"]
@@ -109,3 +111,33 @@ markers = [
 log_level = "INFO"
 log_format = "%(asctime)s %(levelname)-8s %(filename)-16s%(lineno)4d: %(message)s"
 testpaths = ["tests"]
+
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+exclude = ["doc/sphinx_ext/*", "doc/toycodes", "doc/notebooks"]
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "UP"]
+ignore = [
+    "F403", "F405",  # star imports
+    "E741",  # ambiguous variable names like l
+    "F541",  # f-string without any placeholders
+    "UP015",  # Unnecessary mode argument
+    "UP008",  # Use `super()` instead of `super(__class__, self)`
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = [
+    "F401",  # imported but unused
+]
+"tests/*.py" = [
+    "E501",  # line too long
+    "F841",  # Local variable is assigned to but never used
+]
+"doc/conf.py" = [
+    "E402",  # Module level import not at top of file
+    "E501",  # line too long
+    "UP009",  # UTF-8 encoding declaration is unnecessary
+]
