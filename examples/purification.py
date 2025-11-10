@@ -1,3 +1,6 @@
+"""An example for purification MPS."""
+# Copyright (C) TeNPy Developers, Apache license
+
 from tenpy.algorithms.purification import PurificationApplyMPO, PurificationTEBD
 from tenpy.models.tf_ising import TFIChain
 from tenpy.networks.purification_mps import PurificationMPS
