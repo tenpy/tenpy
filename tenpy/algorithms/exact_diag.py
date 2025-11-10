@@ -416,7 +416,7 @@ def get_scipy_sparse_Hamiltonian(model, undo_sort_charge: bool = True):
     """
     if model.lat.bc_MPS != 'finite':
         raise ValueError('Model must be defined on a finite lattice.')
-    
+
     if isinstance(model, CouplingModel):
         return _get_Hamiltonian_from_couplings(
             model=model, sparse=True, undo_sort_charge=undo_sort_charge

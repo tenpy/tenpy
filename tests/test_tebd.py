@@ -26,7 +26,7 @@ def test_trotter_decomposition():
                 evolved[k] += dt[j]
             npt.assert_array_almost_equal_nulp(evolved, N * np.ones([2]), N * 2)
 
-            
+
 @pytest.mark.slow
 @pytest.mark.parametrize('bc_MPS, which_engine, compute_err, use_eig_based_svd',
                          [('finite', 'standard', None, None),
@@ -70,7 +70,7 @@ def test_tebd(bc_MPS, which_engine, compute_err, use_eig_based_svd, g=0.5):
         engine = tebd.QRBasedTEBDEngine(psi, M, tebd_param)
     else:
         raise RuntimeError
-    
+
     engine.run_GS()
 
     if compute_err is False:
@@ -151,7 +151,7 @@ def test_RandomUnitaryEvolution():
 @pytest.mark.parametrize('S', [.5, 2.5, 5])
 def test_fixes_issue_220(S):
     L = 20
-    
+
     model = SpinChain(dict(S=S, conserve=None, sort_charge=True, Jx=1., Jy=1., Jz=1., L=L))
     neel = ['up', 'up'] * (L // 2) + ['up'] * (L % 2)
     psi_init = MPS.from_product_state(sites=model.lat.unit_cell * L, p_state=neel,

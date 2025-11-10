@@ -446,7 +446,7 @@ class LanczosGroundState(KrylovBased):
     """Lanczos algorithm to find the ground state.
 
     **Assumes** that `H` is hermitian.
-    
+
     Options
     -------
     .. cfg:config :: LanczosGroundState

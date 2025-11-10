@@ -398,7 +398,7 @@ def test_apply_op(bc, eps=1.e-13):
         psi_uud = mps.MPS.from_product_state([s] * 3, ['up', 'up', 'down'], bc=bc, unit_cell_width=3)
         ov = psi_uud.overlap(psi3, understood_infinite=True)
         assert abs(-ov / psi3.norm - 1.) < eps
-    
+
 
 def test_apply_local_op_JW_string(eps=1e-13):
     L = 6
@@ -693,7 +693,7 @@ def test_correlation_length():
     with pytest.warns(UserWarning, match='trimming speigs k to smaller matrix dimension d'):
         xi_p2 = psi_AKLT.correlation_length2(target=2, charge_sector=np.array([+2]), tol_ev0=None)
     assert abs(xi_p2[0] - xi_AKLT) < 1.e-13
-    
+
     assert abs(xi - xi_AKLT) < 1.e-13
 
 
