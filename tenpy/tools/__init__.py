@@ -40,6 +40,7 @@ from .cache import *
 from .thread import *
 from .spectral_function_tools import *
 from .prediction import *
+from .docs import *
 
 __all__ = [
     *events.__all__,
@@ -54,5 +55,6 @@ __all__ = [
     *cache.__all__,
     *thread.__all__,
     *spectral_function_tools.__all__,
-    *prediction.__all__
+    *prediction.__all__,
+    *docs.__all__
 ]

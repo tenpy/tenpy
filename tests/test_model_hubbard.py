@@ -8,7 +8,7 @@ from test_model import check_general_model
 def test_FermiHubbardModel():
     check_general_model(hubbard.FermiHubbardModel, {'lattice': "Square", 'Lx': 2, 'Ly': 3}, {'phi_ext': [None, 0.2]})
 
-def test_FermiHubbardModel():
+def test_FermiHubbardModel2():
     check_general_model(hubbard.FermiHubbardModel2, {'lattice': "Square", 'Lx': 2, 'Ly': 3}, {'phi_ext': [None, 0.2]})
 
 

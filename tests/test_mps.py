@@ -854,7 +854,6 @@ def test_InitialStateBuilder():
             'full_empty': ('up', 'down'),
             'fill_where': "x_ind % 2 == 0",
             'check_filling': 0.5,
-            'full_empty': ['up', 'down'],
         }).run()
     psi3.test_sanity()
     assert abs(psi1.overlap(psi3) - 1) < 1.e-14

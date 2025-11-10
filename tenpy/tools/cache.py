@@ -527,7 +527,7 @@ class _NpcArrayStorage(PickleStorage):
             raise ValueError("Trying to access closed storage")
         value = value.copy(deep=False)
         data = value._data
-        N = value._data = len(data)  # replace _data attribute with just the length
+        value._data = len(data)  # replace _data attribute with just the length
         with open(self.directory / (key + self.extension), 'wb') as f:
             np.save(f, value._qdata)
             for T in data:
