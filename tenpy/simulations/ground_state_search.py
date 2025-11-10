@@ -714,7 +714,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         # extract segments if necessary; get `init_env_data`.
         resume_data_alpha = gs_data_alpha.get('resume_data', {}) # TODO this is probably wrong
         resume_data_beta = gs_data_beta.get('resume_data', {}) # TODO this is probably wrong
-        # psi0_seg, write_back_left, write_back_right 
+        # psi0_seg, write_back_left, write_back_right
         # = self.extract_segment(psi0_alpha, psi0_beta, self.model, resume_data_alpha, resume_data_beta)
         self.initial_state_seg, self.qtotal_diff, write_back_left, write_back_right = self.extract_segment(
             psi0_alpha, psi0_beta, self.model, resume_data_alpha, resume_data_beta

@@ -5020,7 +5020,7 @@ class MPS(BaseMPSExpectationValue):
             current_vL_dim = current_Cs[0].get_leg('vL').ind_len
 
             # We want to ensure that the bond dimension after expansion is at most chi_max so that
-            # SingleSiteTDVP respects the maximum bond dimension. We know that the bond dimension 
+            # SingleSiteTDVP respects the maximum bond dimension. We know that the bond dimension
             # must respect the exponential bounds from the edge of the chain (2**i or (L-2)**i for
             # the two edges for spin-1/2 Hilbert spaces). However, I find that if we impose the
             # edge constraints, the first site is decoupled from the rest when using Krylov vectors
