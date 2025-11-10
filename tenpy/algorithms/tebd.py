@@ -840,7 +840,7 @@ class RandomUnitaryEvolution(TEBDEngine):
         super().run()
 
     def prepare_evolve(self, dt):
-        "Do nothing, as we call :meth:`calc_U` directly in :meth:`update`."
+        """Do nothing, as we call :meth:`calc_U` directly in :meth:`update`."""
         pass
 
     def calc_U(self):
