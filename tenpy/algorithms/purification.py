@@ -2,15 +2,17 @@
 
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import logging
-logger = logging.getLogger(__name__)
+
+import numpy as np
 
 from ..linalg import np_conserved as npc
+from ..linalg.truncation import TruncationError, svd_theta
 from . import tebd
-from .mps_common import VariationalApplyMPO, TwoSiteH
-from ..linalg.truncation import svd_theta, TruncationError
 from .disentangler import get_disentangler
+from .mps_common import TwoSiteH, VariationalApplyMPO
+
+logger = logging.getLogger(__name__)
 
 __all__ = ['PurificationTwoSiteU', 'PurificationApplyMPO', 'PurificationTEBD', 'PurificationTEBD2']
 
@@ -21,6 +23,7 @@ class PurificationTwoSiteU(TwoSiteH):
     The MPO gets only applied to the physical legs `p0`, `p1`, the ancilla legs `q0`, `q1` of
     `theta` are ignored.
     """
+
     length = 2
     acts_on = ['vL', 'p0', 'q0', 'p1', 'q1', 'vR']
 
@@ -34,6 +37,7 @@ class PurificationTwoSiteU(TwoSiteH):
 
 class PurificationApplyMPO(VariationalApplyMPO):
     """Variant of `VariationalApplyMPO` suitable for purification."""
+
     EffectiveH = PurificationTwoSiteU
 
     def update_local(self, _, optimize=True):
@@ -65,7 +69,7 @@ class PurificationApplyMPO(VariationalApplyMPO):
         A0 = U.split_legs(['(vL.p0.q0)'])
         B1 = VH.split_legs(['(p1.q1.vR)'])
         # first compare to old best guess to check convergence of the sweeps
-        if self._tol_theta_diff is not None and self.update_LP_RP[0] == False:
+        if self._tol_theta_diff is not None and self.update_LP_RP[0] is False:
             theta_old = new_psi.get_theta(i0)
             theta_new_trunc = npc.tensordot(A0.scale_axis(S, 'vR'), B1, ['vR', 'vL'])
             ov = npc.inner(theta_new_trunc, theta_old, do_conj=True, axes='labels')
@@ -105,7 +109,9 @@ class PurificationTEBD(tebd.TEBDEngine):
     _guess_U_disent : list of list of npc.Array
         Same index structure as `self._U`: for each two-site U of the physical time evolution
         the disentangler from the last application. Initialized to identities.
+
     """
+
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
         self._disent_iterations = np.zeros(psi.L)
@@ -126,6 +132,7 @@ class PurificationTEBD(tebd.TEBDEngine):
             The inverse temperature `beta` = 1/T, by which we should cool down.
             We evolve to the closest multiple of ``options['dt']``,
             see also :attr:`evolved_time`.
+
         """
         delta_t = self.options.get('dt', 0.1, 'real')
         TrotterOrder = 2  # currently, imaginary time evolution works only for second order.
@@ -144,7 +151,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         return self._disent_iterations[self.psi.nontrivial_bonds]
 
     def calc_U(self, order, delta_t, type_evo='real', E_offset=None):
-        """see :meth:`~tenpy.algorithms.tebd.eng.calc_U`"""
+        """See :meth:`~tenpy.algorithms.tebd.eng.calc_U`"""
         super().calc_U(order, delta_t, type_evo, E_offset)
         self._guess_U_disent = [[None] * len(Us) for Us in self._U]
 
@@ -176,6 +183,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced by the truncation
             during this update step.
+
         """
         i0, i1 = i - 1, i
         logger.debug("Update sites (%d, %d)", i0, i1)
@@ -239,6 +247,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced by the truncation
             during this update step.
+
         """
         i0, i1 = i - 1, i
         logger.debug("Update sites (%d, %d)", i0, i1)
@@ -286,6 +295,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         U : :class:`~tenpy.linalg.conserved.Array`
             The unitary used to disentangle `theta`, with labels ``'q0', 'q1', 'q0*', 'q1*'``.
             If no unitary was found/applied, it might also be ``None``.
+
         """
         theta, U = self.used_disentangler(theta)
         U_idx_dt, i = self._update_index
@@ -328,6 +338,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         ----------
         n: int
             maximal number of sites to disentangle at once.
+
         """
         for i in range(0, self.psi.L - n + 1):  # sweep left to right
             self._update_index = None, i
@@ -409,7 +420,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         self._update_index = None  # done
 
     def _swap_disentangle_bond(self, i, swap=True, disentangle=False):
-        """swap sites (i-1, i) (if swap = True) """
+        """Swap sites (i-1, i) (if swap = True)"""
         # very similar to update_bond
         i0, i1 = i - 1, i
         # Construct the theta matrix
@@ -451,6 +462,7 @@ class PurificationTEBD2(PurificationTEBD):
     for real-time evolution (similar as :meth:`~tenpy.algorithms.tebd.TEBDEngine.update_imag` does
     for imaginary time evolution).
     """
+
     def update(self, N_steps):
         """Evolve by ``N_steps * U_param['dt']``.
 
@@ -464,6 +476,7 @@ class PurificationTEBD2(PurificationTEBD):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced due to the truncation during
             this sequence of update steps.
+
         """
         trunc_err = TruncationError()
         order = self._U_param['order']
@@ -495,6 +508,7 @@ class PurificationTEBD2(PurificationTEBD):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced due to the truncation
             during this sequence of update steps.
+
         """
         Us = self._U[U_idx_dt]
         trunc_err = TruncationError()

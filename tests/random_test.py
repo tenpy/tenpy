@@ -1,13 +1,15 @@
 """Provide helper functions for test of random Arrays."""
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import itertools as it
+
+import numpy as np
+
 import tenpy.linalg.charges as charges
 import tenpy.linalg.np_conserved as npc
 import tenpy.linalg.random_matrix as randmat
-from tenpy.networks.site import Site
 from tenpy.networks.mps import MPS
+from tenpy.networks.site import Site
 
 # fix the random number generator such that tests are reproducible
 np.random.seed(3141592)  # (it should work for any seed)
@@ -31,7 +33,7 @@ def rand_distinct_int(a, b, n):
         raise ValueError
     if n > b - a + 1:
         raise ValueError
-    return np.sort((np.random.random_integers(a, b - n + 1, size=n))) + np.arange(n)
+    return np.sort(np.random.random_integers(a, b - n + 1, size=n)) + np.arange(n)
 
 
 def rand_partitions(a, b, n):

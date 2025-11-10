@@ -46,19 +46,20 @@ dependencies = [
 plot = ["matplotlib"]
 io = ["h5py", "pyyaml"]
 memory = ["psutil"]
-extra = ["bottleneck", "yapf==0.28.0", "docformatter==1.3.1"]
+extra = ["bottleneck"]
 docbuild = [
-    "Sphinx", 
-    "sphinx-rtd-theme", 
-    "sphinxcontrib-bibtex", 
-    "matplotlib", 
+    "Sphinx",
+    "sphinx-rtd-theme",
+    "sphinxcontrib-bibtex",
+    "matplotlib",
     "ipykernel",
     "nbsphinx",
     "pandoc",
     "sphinx_copybutton",
 ]
 test = ["pytest>=6.0", "physics_tenpy[io, memory]"]
-all = ["physics_tenpy[plot, io, test, extra, docbuild]"]
+lint = ["ruff"]
+all = ["physics_tenpy[plot, io, test, lint, extra, docbuild]"]
 
 
 [project.urls]
@@ -84,7 +85,8 @@ version = {attr = "tenpy.__version__"}
 [tool.cibuildwheel]
 # Disable building 32bit windows wheels (h5py does not support it)
 # Disable musllinux : would need to install BLAS/LAPACK
-# Disable free-threaded python 3.14 (h5py not yet supported), see issue 
+# Disable free-threaded python 3.14 (h5py not yet supported), see issue 570
+#   (https://github.com/tenpy/tenpy/issues/570)
 skip = "*-win32 *-musllinux_* cp314t-*"
 # Build separate wheels for macOS's different architectures.
 macos.archs = ["x86_64", "arm64"]
@@ -109,3 +111,54 @@ markers = [
 log_level = "INFO"
 log_format = "%(asctime)s %(levelname)-8s %(filename)-16s%(lineno)4d: %(message)s"
 testpaths = ["tests"]
+
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+exclude = ["doc/sphinx_ext/*", "doc/toycodes", "doc/notebooks"]
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "UP", "ISC", "LOG", "INP", "D"]
+ignore = [
+    "F403", "F405",  # star imports
+    "E741",  # ambiguous variable names like l
+    "F541",  # f-string without any placeholders
+    "UP015",  # Unnecessary mode argument
+    "UP008",  # Use `super()` instead of `super(__class__, self)`
+    "D101",  # Missing docstring in public class
+    "D102",  # Missing docstring in public method
+    "D103",  # Missing docstring in public function
+    "D105",  # Missing docstring in magic method
+    "D107",  # Missing docstring in __init__
+    "D400",  # First line should end with a period
+    "D401",  # First line of docstring should be in imperative mood
+    "D404",  # First word of the docstring should not be "This"
+    "D415",  # First line should end with a period, question mark, or exclamation point
+    "D417",  # Missing argument description
+    "D203",  # We use D211 instead (we put no blank line before class docstring)
+    "D213",  # We use D214 instead (our multi-line docs start in the first line)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"setup.py" = [
+    "D",  # docstrings
+]
+"__init__.py" = [
+    "F401",  # imported but unused
+]
+"examples/*.py" = [
+    "INP001",  # is part of an implicit namespace package
+]
+"tests/*.py" = [
+    "E501",  # line too long
+    "F841",  # Local variable is assigned to but never used
+    "INP001",  # is part of an implicit namespace package
+    "D",  # pydocstyle
+]
+"doc/conf.py" = [
+    "D",  # docstrings
+    "E402",  # Module level import not at top of file
+    "E501",  # line too long
+    "UP009",  # UTF-8 encoding declaration is unnecessary
+]

@@ -9,11 +9,11 @@ This class thus serves as an example how this can be done.
 import numpy as np
 
 from ..linalg import np_conserved as npc
-from ..networks.site import SpinSite, kron
 from ..networks.mps import MPS
-from .lattice import Chain
-from .model import NearestNeighborModel, MPOModel
+from ..networks.site import SpinSite, kron
 from ..tools.params import asConfig
+from .lattice import Chain
+from .model import MPOModel, NearestNeighborModel
 
 __all__ = ['AKLTChain']
 
@@ -31,6 +31,7 @@ class AKLTChain(NearestNeighborModel, MPOModel):
           = J \sum_i (\vec{S}_i \cdot \vec{S}_{i+1}
                      +\frac{1}{3} (\vec{S}_i \cdot \vec{S}_{i+1})^2)
     """
+
     def __init__(self, model_params):
         model_params = asConfig(model_params, "AKLTModel")
         L = model_params.get('L', 2, int)
@@ -72,6 +73,7 @@ class AKLTChain(NearestNeighborModel, MPOModel):
         -------
         psi_aklt : :class:`~tenpy.networks.mps.MPS`
             The AKLT groundstate
+
         """
         # build each B tensor of the MPS as contraction of
         #    --sR  sL--

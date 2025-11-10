@@ -119,11 +119,12 @@ see :cite:`hauschild2018`.
 # Copyright (C) TeNPy Developers, Apache license
 
 import copy
+
 import numpy as np
 
-from .mps import MPS
 from ..linalg import np_conserved as npc
 from ..tools.math import entropy
+from .mps import MPS
 
 __all__ = ['PurificationMPS', 'convert_model_purification_canonical_conserve_ancilla_charge']
 
@@ -161,53 +162,6 @@ class PurificationMPS(MPS):
         super().test_sanity()
 
     @classmethod
-    def from_density_matrix(cls, sites, rho, form=None, cutoff=1e-16, normalize=True):
-        r"""Construct a purification from a single tensor `rho` of the density matrix.
-
-        Given the mixed state :math:`\rho`, we diagonalize it :math:`\rho = U D U^\dagger`,
-        and define :math:`\psi = \sum_{ijk} U_{ik} \sqrt{D_k} \bar{U}_{jk} |i>_{phys} |j>_{anc}`.
-        This is one of many possible purifications of :math:`rho`, and is valid since
-        :math:`Tr_{anc} |\psi><\psi| = \rho`.
-        We then construct a purification MPS of :math:`\psi` using :meth:`from_full`.
-
-        Boundary conditions are always finite.
-
-        Parameters
-        ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
-            The sites defining the physical local Hilbert spaces.
-        rho : :class:`~tenpy.linalg.np_conserved.Array`
-            The full density matrix.
-            Should have labels ``'p0', 'p0*', 'p1', 'p1*, ...,  'p{L-1}', 'p{L-1}*`` (in any order).
-            Is assumed to be hermitian and positive semi-definite.
-        form  : ``'B' | 'A' | 'C' | 'G' | None``
-            The canonical form of the resulting MPS, see module doc-string.
-            ``None`` defaults to 'A' form on the first site and 'B' form on all following sites.
-        cutoff : float
-            Cutoff of singular values used in the SVDs.
-        normalize : bool
-            Whether the resulting MPS should have 'norm' 1.
-        """
-        L = len(sites)
-        rho = rho.combine_legs([[f'p{i}' for i in range(L)], [f'p{i}*' for i in range(L)]])  # [P, P*]
-        D, U = npc.eigh(rho)  # D[eig] , U[P, eig]
-
-        # fix negative eigenvalues
-        if np.any(D < -1e-12):
-            raise ValueError('Density matrix is not positive.')
-        D[D < 0] = 0
-
-        # [P, eig] * [eig] @ [P*, eig*] -> [P, P*]
-        psi = npc.tensordot(U.scale_axis(np.sqrt(D), axis=-1), U.conj(), (1, 1))
-
-        # [P, P*] -> [p0, p1, ..., p0*, p1*, ...]
-        psi = psi.split_legs()
-        # [p0, p1, ..., p0*, p1*, ...] -> [p0, p1, ..., q0, q1, ...]
-        psi.ireplace_labels([f'p{i}*' for i in range(L)], [f'q{i}' for i in range(L)])
-        return cls.from_full(sites, psi, form=form, cutoff=cutoff, normalize=normalize,
-                             bc='finite', outer_S=None)
-
-    @classmethod
     def from_density_matrix(cls, sites, rho, form=None, cutoff=1e-16, normalize=True,
                             unit_cell_width=None):
         r"""Construct a purification from a single tensor `rho` of the density matrix.
@@ -237,6 +191,7 @@ class PurificationMPS(MPS):
             Whether the resulting MPS should have 'norm' 1.
         unit_cell_width : int
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+
         """
         L = len(sites)
         rho = rho.combine_legs([[f'p{i}' for i in range(L)], [f'p{i}*' for i in range(L)]])  # [P, P*]
@@ -281,6 +236,7 @@ class PurificationMPS(MPS):
         infiniteT_MPS : :class:`PurificationMPS`
             Describes the infinite-temperature (grand canonical) ensemble,
             i.e. expectation values give a trace over all basis states.
+
         """
         sites = list(sites)
         L = len(sites)
@@ -426,6 +382,7 @@ class PurificationMPS(MPS):
         -------
         entropies : 1D ndarray
             ``entropies[i]`` contains the entropy for the the region ``A_i`` defined above.
+
         """
         segment = np.sort(segment)
         if first_site is None:
@@ -485,6 +442,7 @@ class PurificationMPS(MPS):
         mutinf : 1D array
             ``mutinf[k]`` is the mutual information :math:`I(i:j)` between the
             sites ``i, j = coords[k]``.
+
         """
         # Now same as MPS.mutinf_two_site(), but contract additionally over leg.
         if max_range is None:
@@ -585,9 +543,12 @@ class PurificationMPS(MPS):
             If `sample_q` == True, we return the probability of measuring a particular configuration
             on both physical and ancilla legs, even though we don't return the ancilla configuration.
             Hence, the returned probability isn't really meaningful.
+
         """
         if complex_amplitude:
-            raise ValueError("Sampling a purification MPS only retuns the probability of the sampled string; rerun with 'complex_amplitude=False'.")
+            msg = ("Sampling a purification MPS only retuns the probability of the sampled string; "
+                   "rerun with 'complex_amplitude=False'.")
+            raise ValueError(msg)
 
         if last_site is None:
             last_site = self.L - 1
@@ -613,7 +574,8 @@ class PurificationMPS(MPS):
             # perform a projective measurement:
             # trace out rest except site `i`
             if not sample_q:
-                rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']]) # physical RDM on site i
+                # physical RDM on site i
+                rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']])
                 # probabilities p(sigma) = <sigma|rho|sigma>
                 rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
                 if abs(np.sum(rho_diag) - 1.) > norm_tol:
@@ -624,19 +586,22 @@ class PurificationMPS(MPS):
                 theta = theta.take_slice(sigma, 'p')  # project to sigma in theta; now has legs vL (trivial), q, vR
                 probability = rho_diag[sigma] # this is probability of seeing sigma conditioned on previous results.
                 # rho_diag[sigma] which should be the same as the norm of theta squared
-                # assert np.isclose(probability, npc.tensordot(theta.conj(), theta, axes=(['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q'])))
+                # expect_probability = npc.tensordot(theta.conj(), theta,
+                #                                    axes=(['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']))
+                # assert np.isclose(probability, expect_probability)
                 total_probability *= probability    # probability of p outcome
             else:
-                W2 = np.arange(site.dim)    # outcomes for q leg
                 # Sample p
-                rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']]) # physical RDM on site i
+                # physical RDM on site i
+                rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']])
                 # probabilities p(sigma) = <sigma|rho|sigma>
                 rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
                 if abs(np.sum(rho_diag) - 1.) > norm_tol:
                     raise ValueError("not normalized to `norm_tol`")
                 rho_diag /= np.sum(rho_diag)
                 sigma_1 = rng.choice(site.dim, p=rho_diag)  # randomly select index from probabilities
-                probability = rho_diag[sigma_1] # rho_diag[sigma_1] is probability of p outcome, conditioned on all previous outcomes
+                # rho_diag[sigma_1] is probability of p outcome, conditioned on all previous outcomes
+                probability = rho_diag[sigma_1]
                 # So by Bayes' rule, we now have the joint probability of all sampled outcomes.
                 theta = theta.take_slice([sigma_1], ['p'])  # project to sigma in theta; now has legs vL (trivial), vR
 
@@ -653,7 +618,8 @@ class PurificationMPS(MPS):
                 sigmas.append(W[sigma_1]) # For ancilla, we do not return the sampled index W[sigma_2] since the outcome
                 # is in an arbitrary basis.
                 # rho_diag[sigma] which should be the same as the norm of theta squared
-                # assert np.isclose(probability, npc.tensordot(theta.conj(), theta, axes=(['vL*', 'vR*'], ['vL', 'vR'])))
+                # expect_probability = npc.tensordot(theta.conj(), theta, axes=(['vL*', 'vR*'], ['vL', 'vR']))
+                # assert np.isclose(probability, expect_probability)
                 total_probability *= probability    # probability of q outcome
 
             if i != last_site:
@@ -675,7 +641,7 @@ class PurificationMPS(MPS):
         return sigmas, total_probability
 
     def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
-        """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
+        """Correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
         # compared to MPS._corr_up_diag just perform additional contractions of the 'q'
         op1, _ = self.get_op(ops1, i)
         opstr1, _ = self.get_op(opstr, i)
@@ -711,11 +677,11 @@ class PurificationMPS(MPS):
         return A.replace_labels(self._p_label, self._get_p_label(s))
 
     def _get_p_label(self, s, star=False):
-        """return  self._p_label with additional string `s`."""
+        """Return  self._p_label with additional string `s`."""
         return ['p' + s, 'q' + s]
 
     def _get_p_labels(self, ks, star=False):
-        """join ``self._get_p_label(str(k) {+'*'} ) for k in range(ks)`` to a single list."""
+        """Join ``self._get_p_label(str(k) {+'*'} ) for k in range(ks)`` to a single list."""
         if star:
             return [lbl + str(k) + '*' for k in range(ks) for lbl in self._p_label]
         else:
@@ -736,6 +702,7 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
         Shallow copy of the `model` with charges of sites, `H_MPO` and `H_bond` adjusted
         to fit the doubled (with 0 extended) charges of the canonical ensemble of the
         :class:`PurificationMPS`. The number of
+
     """
     # cac := conserve_ancilla_charge
     model = model.copy()

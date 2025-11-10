@@ -9,14 +9,16 @@ For now, this is written for disentangling purifications; could be generalized t
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import logging
-logger = logging.getLogger(__name__)
+
+import numpy as np
 
 from ..linalg import np_conserved as npc
+from ..linalg import random_matrix as rand_mat
 from ..linalg.truncation import svd_theta
 from ..tools.math import entropy
-from ..linalg import random_matrix as rand_mat
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'Disentangler', 'BackwardDisentangler', 'RenyiDisentangler', 'NormDisentangler',
@@ -68,6 +70,7 @@ class Disentangler:
             :class:`NormDisentangler` and :class:`GradientDescentDisentangler`.
 
     """
+
     def __init__(self, parent):
         self.parent = parent
 
@@ -86,6 +89,7 @@ class Disentangler:
         U : :class:`~tenpy.linalg.conserved.Array` | None
             The unitary used to disentangle `theta`, with labels ``'q0', 'q1', 'q0*', 'q1*'``.
             If no unitary was found/applied, it might also be ``None``.
+
         """
         # do nothing
         return theta, None
@@ -105,6 +109,7 @@ class BackwardDisentangler(Disentangler):
 
     Arguments and return values are the same as for :class:`Disentangler`.
     """
+
     def __init__(self, parent):
         self.parent = parent
         from . import purification
@@ -127,6 +132,7 @@ class RenyiDisentangler(Disentangler):
 
     See :cite:`hauschild2018`.
     """
+
     def __init__(self, parent):
         self.max_iter = parent.options.get('disent_max_iter', 20, int)
         self.eps = parent.options.get('disent_eps', 1.e-10, float)
@@ -192,6 +198,7 @@ class RenyiDisentangler(Disentangler):
             Renyi entropy (n=2), :math:`S2 = \frac{1}{1-2} \log tr(\rho_L^2)` of `U theta`.
         new_U : :class:`~tenpy.linalg.np_conserved.Array`
             Unitary with legs ``'q0', 'q1', 'q0*', 'q1*'``, which should disentangle `theta`.
+
         """
         U_theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         # same legs as theta: 'vL', 'p0', 'q0', 'p1', 'q1', 'vR'
@@ -231,6 +238,7 @@ class NormDisentangler(Disentangler):
             with an extra power of `chi_max`, and thus worse than the rest of TEBD.
 
     """
+
     def __init__(self, parent):
         self.max_iter = parent.options.get('disent_max_iter', 20, int)
         self.eps = parent.options.get('disent_eps', 1.e-10, 'real')
@@ -282,6 +290,7 @@ class NormDisentangler(Disentangler):
         new_U : :class:`~tenpy.linalg.np_conserved.Array`
             Unitary with legs ``'q0', 'q1', 'q0*', 'q1*'``.
             Chosen such that ``new_U|theta>`` has maximal overlap with the truncated ``U|theta>``.
+
         """
         U_theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         lambda_ = U_theta.combine_legs([['vL', 'p0', 'q0'], ['vR', 'p1', 'q1']], qconj=[+1, -1])
@@ -312,6 +321,7 @@ class GradientDescentDisentangler(Disentangler):
             Only for :class:`GradientDescentDisentangler`, the step sizes for gradient descend.
 
     """
+
     def __init__(self, parent):
         self.max_iter = parent.options.get('disent_max_iter', 20, int)
         self.eps = parent.options.get('disent_eps', 1.e-10, 'real')
@@ -374,6 +384,7 @@ class GradientDescentDisentangler(Disentangler):
             The *disentangled* wave function ``new_U theta``.
         new_U : :class:`~tenpy.linalg.np_conserved.Array`
             Unitary with legs ``'q0', 'q1', 'q0*', 'q1*'``, which was used to disentangle `theta`.
+
         """
         theta2 = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
         X, Y, Z = npc.svd(theta2, inner_labels=['vR', 'vL'])
@@ -427,6 +438,7 @@ class NoiseDisentangler(Disentangler):
             If ``None``, the unitary is Haar random, i.e. adds maximal noise.
 
     """
+
     def __init__(self, parent):
         self.a = parent.options.get('disent_noiselevel', 0.01, 'real')
 
@@ -451,6 +463,7 @@ class LastDisentangler(Disentangler):
     Useful as a starting point in a :class:`CompositeDisentangler` to reduce the number of
     iterations for a following disentangler.
     """
+
     def __call__(self, theta):
         U = None
         U_idx_dt, i = self.parent._update_index
@@ -471,6 +484,7 @@ class DiagonalizeDisentangler(Disentangler):
 
     Arguments and return values are the same as for :class:`Disentangler`.
     """
+
     def __call__(self, theta):
         rho = npc.tensordot(theta,
                             theta.conj(),
@@ -505,7 +519,9 @@ class CompositeDisentangler(Disentangler):
     ----------
     disentanglers : list of :class:`Disentangler`
         The disentanglers to be used.
+
     """
+
     def __init__(self, disentanglers):
         self.disentanglers = disentanglers
 
@@ -549,6 +565,7 @@ class MinDisentangler(Disentangler):
             Default ``1.``.
 
     """
+
     def __init__(self, disentanglers, parent):
         self.disentanglers = disentanglers
         self.n = parent.options.get('disent_min_n', 1., 'real')
@@ -626,6 +643,7 @@ def get_disentangler(method, parent):
                         CompositeDisentangler([MinDisentangler([BackwardDisentangler(p),
                                                                 LastDisentangler(p)]),
                                                 GradientDescentDisentangler(p)], p), p)
+
     """
     try:
         disent, unparsed = _parse_composite(str(method), parent)

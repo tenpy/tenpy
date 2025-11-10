@@ -15,15 +15,16 @@ which does the same steps using a few predefined classes like MPS and MPO.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import tenpy.linalg.np_conserved as npc
 import numpy as np
+
+import tenpy.linalg.np_conserved as npc
 
 # model parameters
 Jxx, Jz = 1., 1.
 L = 20
 dt = 0.1
 cutoff = 1.e-10
-print("Jxx={Jxx}, Jz={Jz}, L={L:d}".format(Jxx=Jxx, Jz=Jz, L=L))
+print(f"Jxx={Jxx}, Jz={Jz}, L={L:d}")
 
 print("1) create Arrays for an Neel MPS")
 

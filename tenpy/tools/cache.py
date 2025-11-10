@@ -9,20 +9,22 @@ this is easiest done through a ``with`` statement, see the example in :class:`Di
 
 # Copyright (C) TeNPy Developers, Apache license
 
-import pickle
-import numpy as np
-import shutil
-import tempfile
 import collections
+import logging
 import os
 import pathlib
+import pickle
+import shutil
+import tempfile
 import warnings
-import logging
-logger = logging.getLogger(__name__)
 
+import numpy as np
+
+from .hdf5_io import load_from_hdf5, save_to_hdf5
 from .misc import find_subclass
 from .thread import Worker
-from .hdf5_io import load_from_hdf5, save_to_hdf5
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["DictCache", "CacheFile", "Storage", "PickleStorage", "Hdf5Storage", "ThreadedStorage"]
 
@@ -85,7 +87,9 @@ class DictCache(collections.abc.MutableMapping):
         >>> "c" in cache
         False
         >>> assert cache.get('c', default=None) is None
+
     """
+
     def __init__(self, storage):
         self.long_term_storage = storage
         self.long_term_keys = set()
@@ -116,6 +120,7 @@ class DictCache(collections.abc.MutableMapping):
         -------
         cache : :class:`DictCache`
             Another class instance of the same type as `self`.
+
         """
         return DictCache(self.long_term_storage.subcontainer(name))
 
@@ -174,6 +179,7 @@ class DictCache(collections.abc.MutableMapping):
         ----------
         *keys : str
             The keys for which data should be kept in RAM for quick short-term lookup.
+
         """
         self.short_term_keys = keys = set(keys)
         sc = self.short_term_cache
@@ -190,6 +196,7 @@ class DictCache(collections.abc.MutableMapping):
             The keys which should be pre-loaded. Are added to the :attr:`short_term_keys`.
         raise_missing : bool
             Whether to raise a KeyError if a given key does not exist in `self`.
+
         """
         for key in keys:
             self.short_term_keys.add(key)
@@ -208,6 +215,7 @@ class CacheFile(DictCache):
     and make sure that you call :meth:`close` after usage.
     The easiest way to ensure this is to use a ``with`` statement, see :meth:`open`.
     """
+
     @classmethod
     def open(cls,
              storage_class="Storage",
@@ -260,6 +268,7 @@ class CacheFile(DictCache):
         **storage_kwargs :
             Further keyword arguments given to the :meth:`Storage.open` method of the
             `storage_class`.
+
         """
         StorageClass = find_subclass(Storage, storage_class)
         if StorageClass == Storage:
@@ -292,6 +301,7 @@ class Storage:
     The vanilla :class:`Storage` class is "trivial" in the sense that it actually doesn't save
     the data to disk, but keeps explicit references in RAM.
     """
+
     #: Whether the storage is actually kept in memory, instead of saving to disk.
     trivial = True
 
@@ -383,7 +393,9 @@ class PickleStorage(Storage):
     ----------
     directory : path-like
         An existing directory within which pickle files will be saved for each `key`.
+
     """
+
     trivial = False
 
     #: filename extension
@@ -409,6 +421,7 @@ class PickleStorage(Storage):
             i.e., a temporary directory is created within this path.
         delete : bool
             Whether to automatically remove the directory in :meth:`close`.
+
         """
         if directory is None:
             directory = tempfile.mkdtemp(prefix='tenpy_cache_' + cls.__name__, dir=tmpdir)
@@ -477,7 +490,9 @@ class _NumpyStorage(PickleStorage):
     ----------
     directory : path-like
         An existing directory within which numpy files will be saved for each `key`.
+
     """
+
     extension = '.npy'
 
     def load(self, key):
@@ -502,6 +517,7 @@ class _NpcArrayStorage(PickleStorage):
     ----------
     directory : path-like
         An existing directory within which numpy files will be saved for each `key`.
+
     """
 
     extension = '.npy'
@@ -527,7 +543,7 @@ class _NpcArrayStorage(PickleStorage):
             raise ValueError("Trying to access closed storage")
         value = value.copy(deep=False)
         data = value._data
-        N = value._data = len(data)  # replace _data attribute with just the length
+        value._data = len(data)  # replace _data attribute with just the length
         with open(self.directory / (key + self.extension), 'wb') as f:
             np.save(f, value._qdata)
             for T in data:
@@ -554,7 +570,9 @@ class Hdf5Storage(Storage):
     h5group : :class:`Group`
         The hdf5 group in which data will be saved using
         :func:`~tenpy.tools.hdf5_io.save_to_hdf5` under the specified keys.
+
     """
+
     trivial = False
 
     def __init__(self, h5group):
@@ -579,6 +597,7 @@ class Hdf5Storage(Storage):
             Filemode for opening the Hdf5 file.
         delete : bool
             Whether to automatically remove the corresponding file when closing the cache.
+
         """
         warnings.warn("Benchmarks suggest that PickleStorage is faster than Hdf5Storage")
         import h5py
@@ -673,7 +692,9 @@ class ThreadedStorage(Storage):
         :func:`~tenpy.tools.hdf5_io.save_to_hdf5` under the specified keys.
     disk_storage : :class:`Storage`
         Instance of one of the other storage classes to wrap around.
+
     """
+
     def __init__(self, worker, disk_storage):
         if disk_storage.trivial:
             raise ValueError("ThreadedStorage with trivial `disk_storage` doesn't make sense")
@@ -692,6 +713,7 @@ class ThreadedStorage(Storage):
         ----------
         disk_storage : :class:`Storage`
             Instance with methods for the actual disk I/O handling.
+
         """
         worker = Worker(max_queue_size=max_queue_size)
         worker = worker.__enter__()

@@ -1,9 +1,10 @@
 # Copyright (C) TeNPy Developers, Apache license
 
+import os
+import tempfile
+
 import numpy as np
 import numpy.testing as npt
-import tempfile
-import os
 import pytest
 
 from tenpy.tools.cache import CacheFile
@@ -58,7 +59,7 @@ def test_Hdf5Cache():
         filename = os.path.join(tdir, 'tmp_Hdf5Cache.h5')
         with pytest.warns(UserWarning, match=warning_msg):
             test_DictCache(storage_class="Hdf5Storage", filename=filename)
-    
+
     with pytest.warns(UserWarning, match=warning_msg):
         test_DictCache(storage_class="Hdf5Storage")  # path = None -> tempfile in tenpy.tools.cache
     with pytest.warns(UserWarning, match=warning_msg):

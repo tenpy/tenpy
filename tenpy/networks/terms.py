@@ -7,13 +7,14 @@ prefactor when specifying e.g. a Hamiltonian.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
-import warnings
 import itertools
+import warnings
+
+import numpy as np
 
 from ..linalg import np_conserved as npc
-from ..tools.misc import add_with_None_0
 from ..tools.hdf5_io import Hdf5Exportable
+from ..tools.misc import add_with_None_0
 
 __all__ = [
     'TermList', 'OnsiteTerms', 'CouplingTerms', 'MultiCouplingTerms', 'ExponentiallyDecayingTerms',
@@ -90,7 +91,9 @@ class TermList(Hdf5Exportable):
         1.00000 * N_0 N_5
 
     The negative index -5 here indicates a tensor left of the current MPS unit cell.
+
     """
+
     def __init__(self, terms, strength=1.):
         self.terms = list(terms)
         self.strength = np.array(strength)
@@ -123,6 +126,7 @@ class TermList(Hdf5Exportable):
         -------
         term_list : :class:`TermList`
             Representation of the terms.
+
         """
         converted_terms = []
         if shift is None:
@@ -155,6 +159,7 @@ class TermList(Hdf5Exportable):
         coupling_terms :  :class:`CouplingTerms` | :class:`MultiCouplingTerms`
             Coupling terms. If `self` contains terms involving more than two operators, a
             :class:`MultiCouplingTerms` instance, otherwise just :class:`CouplingTerms`.
+
         """
         L = len(sites)
         ot = OnsiteTerms(L)
@@ -199,7 +204,7 @@ class TermList(Hdf5Exportable):
                     op = '[' + op + ']'
                 ops.append(f"{op!s}_{i:d}")
             term_str = ' '.join(ops)
-            res.append('{s:.5f} * {t}'.format(s=strength, t=term_str))
+            res.append(f'{strength:.5f} * {term_str}')
         return ' +\n'.join(res)
 
     def order_combine(self, sites):
@@ -212,9 +217,10 @@ class TermList(Hdf5Exportable):
             Used to check whether the operators anticommute
             (= whether they need Jordan-Wigner strings) and for multiplication rules.
 
-        See also
+        See Also
         --------
         order_and_combine_term : does it for a single term.
+
         """
         for idx, term in enumerate(self.terms):
             self.terms[idx], overall_sign = order_combine_term(term, sites)
@@ -267,6 +273,7 @@ def order_combine_term(term, sites):
         When the operators in `term` are multiplied from left to right, and
         then multiplied by `overall_sign`, the result is the same operator
         as the product of `combined_term` from left to right.
+
     """
     # Group all operators that are on the same site and get the corresponding sign
     L = len(sites)
@@ -313,7 +320,9 @@ class OnsiteTerms(Hdf5Exportable):
     onsite_terms : list of dict
         Filled by meth:`add_onsite_term`.
         For each index `i` a dictionary ``{'opname': strength}`` defining the onsite terms.
+
     """
+
     def __init__(self, L):
         assert L > 0
         self.L = L
@@ -338,6 +347,7 @@ class OnsiteTerms(Hdf5Exportable):
             We require ``0 <= i < L``.
         op : str
             Name of the involved operator.
+
         """
         term = self.onsite_terms[i]
         term[op] = term.get(op, 0) + strength
@@ -349,6 +359,7 @@ class OnsiteTerms(Hdf5Exportable):
         ----------
         graph : :class:`~tenpy.networks.mpo.MPOGraph`
             The graph into which the terms from :attr:`onsite_terms` should be added.
+
         """
         assert self.L == graph.L
         for i, terms in enumerate(self.onsite_terms):
@@ -370,6 +381,7 @@ class OnsiteTerms(Hdf5Exportable):
         -------
         onsite_arrays : list of :class:`~tenpy.linalg.np_conserved.Array`
             Onsite terms represented by `self`. Entry `i` of the list lives on ``sites[i]``.
+
         """
         if len(sites) != self.L:
             raise ValueError("Incompatible length")
@@ -390,6 +402,7 @@ class OnsiteTerms(Hdf5Exportable):
         tol_zero : float
             Entries in :attr:`onsite_terms` with `strength` < `tol_zero` are considered to be
             zero and removed.
+
         """
         for term in self.onsite_terms:
             for op in list(term.keys()):
@@ -416,6 +429,7 @@ class OnsiteTerms(Hdf5Exportable):
         finite : bool
             Boundary conditions of the MPS, :attr:`MPS.finite`.
             If finite, we distribute the onsite term of the
+
         """
         dist_L, dist_R = distribute
         if dist_L + dist_R != 1.:
@@ -452,6 +466,7 @@ class OnsiteTerms(Hdf5Exportable):
         -------
         term_list : :class:`TermList`
             Representation of the terms as a list of terms.
+
         """
         terms = []
         strength = []
@@ -476,7 +491,7 @@ class OnsiteTerms(Hdf5Exportable):
         for site, terms in zip(sites, self.onsite_terms):
             for opname, strength in terms.items():
                 if not site.valid_opname(opname):
-                    raise ValueError("Operator {op!r} not in site".format(op=opname))
+                    raise ValueError(f"Operator {opname!r} not in site")
 
 
 class CouplingTerms(Hdf5Exportable):
@@ -498,7 +513,9 @@ class CouplingTerms(Hdf5Exportable):
         Note that always ``i < j``, but entries with ``j >= L`` are allowed for
         ``bc_MPS == 'infinite'``, in which case they indicate couplings between different
         iMPS unit cells.
+
     """
+
     def __init__(self, L):
         assert L > 0
         self.L = L
@@ -511,6 +528,7 @@ class CouplingTerms(Hdf5Exportable):
         -------
         max_range : int
             The maximum of ``j - i`` for the `i`, `j` occurring in a term of :attr:`coupling_terms`.
+
         """
         max_range = 0
         for i, d1 in self.coupling_terms.items():
@@ -534,9 +552,10 @@ class CouplingTerms(Hdf5Exportable):
             Names of the involved operators.
         op_string : str
             The operator to be inserted between `i` and `j`.
+
         """
         if not 0 <= i < self.L:
-            raise ValueError("We need 0 <= i < N_sites, got i={i:d}".format(i=i))
+            raise ValueError(f"We need 0 <= i < N_sites, got i={i:d}")
         if not i < j:
             raise ValueError("need i < j")
         d1 = self.coupling_terms.setdefault(i, dict())
@@ -574,6 +593,7 @@ class CouplingTerms(Hdf5Exportable):
         strength, i, j, op_i, op_j, op_string:
             Arguments for :meth:`MultiCouplingTerms.add_multi_coupling_term` such that the added
             term corresponds to the parameters of this function.
+
         """
         L = self.L
         (op_i, i), (op_j, j) = term
@@ -627,9 +647,10 @@ class CouplingTerms(Hdf5Exportable):
             Specify where to put the text on the line between `i` (0.0) and `j` (1.0),
             e.g. `0.5` is exactly in the middle between `i` and `j`.
 
-        See also
+        See Also
         --------
         tenpy.models.lattice.Lattice.plot_sites : plot the sites of the lattice.
+
         """
         pos = lat.position(lat.order)  # row `i` gives position where to plot site `i`
         N_sites = lat.N_sites
@@ -641,8 +662,7 @@ class CouplingTerms(Hdf5Exportable):
             norm_angle = Normalize(vmin=-np.pi, vmax=np.pi)
 
             def style_map(i, j, op_i, op_string, op_j, strength):
-                """define the plot style for a given coupling."""
-                key = (op_i, op_string, op_j)
+                """Define the plot style for a given coupling."""
                 style = {}
                 style['linewidth'] = np.abs(strength) * matplotlib.rcParams['lines.linewidth']
                 style['color'] = hsv(norm_angle(np.angle(strength)))
@@ -697,6 +717,7 @@ class CouplingTerms(Hdf5Exportable):
         ----------
         graph : :class:`~tenpy.networks.mpo.MPOGraph`
             The graph into which the terms from :attr:`coupling_terms` should be added.
+
         """
         assert self.L == graph.L
         # structure of coupling terms:
@@ -727,6 +748,7 @@ class CouplingTerms(Hdf5Exportable):
             The :attr:`coupling_terms` rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
             ``H_bond[i]`` acts on sites ``(i-1, i)``, ``None`` represents 0.
             Legs of each ``H_bond[i]`` are ``['p0', 'p0*', 'p1', 'p1*']``.
+
         """
         L = self.L
         if len(sites) != L:
@@ -757,6 +779,7 @@ class CouplingTerms(Hdf5Exportable):
         tol_zero : float
             Entries in :attr:`coupling_terms` with `strength` < `tol_zero` are considered to be
             zero and removed.
+
         """
         for d1 in self.coupling_terms.values():
             # d1 = ``{('opname_i', 'opname_string'): {j: {'opname_j': strength}}}``
@@ -778,6 +801,7 @@ class CouplingTerms(Hdf5Exportable):
         -------
         term_list : :class:`TermList`
             Representation of the terms as a list of terms.
+
         """
         terms = []
         strength = []
@@ -818,13 +842,13 @@ class CouplingTerms(Hdf5Exportable):
             site_i = sites[i]
             for (op_i, opstring), d2 in d1.items():
                 if not site_i.valid_opname(op_i):
-                    raise ValueError("Operator {op!r} not in site".format(op=op_i))
+                    raise ValueError(f"Operator {op_i!r} not in site")
                 for j, d3 in d2.items():
                     if not i < j:
                         raise ValueError("wrong order of indices in coupling terms")
                     for op_j in d3.keys():
                         if not sites[j % L].valid_opname(op_j):
-                            raise ValueError("Operator {op!r} not in site".format(op=op_j))
+                            raise ValueError(f"Operator {op_j!r} not in site")
         # done
 
 
@@ -898,7 +922,9 @@ class MultiCouplingTerms(CouplingTerms):
         The `counter` provides the index to ``connections`` for the given term.
         The `shift` for the `terms_right` is a multiple of `L` such that
         ``0 <= ijkl[-1] - shift < L``.
+
     """
+
     def __init__(self, L):
         assert L > 0
         self.L = L
@@ -917,6 +943,7 @@ class MultiCouplingTerms(CouplingTerms):
         -------
         max_range : int
             The maximum of ``j - i`` for the `i`, `j` occurring in a term of :attr:`coupling_terms`.
+
         """
         return self._max_range
 
@@ -954,6 +981,7 @@ class MultiCouplingTerms(CouplingTerms):
                 The index of the middle operator ``ijkl[len(ijkl) // 2]``.
                 This is for example a good choice if you have combinations
                 ``A[i] B[i+1] C[i+j] + A[i] B[i+j-1] C[i+j]`` for large `j` and various `B`.
+
         """
         L = self.L
         if len(ijkl) < 2:
@@ -1053,6 +1081,7 @@ class MultiCouplingTerms(CouplingTerms):
         strength, ijkl, ops_ijkl, op_string :
             Arguments for :meth:`MultiCouplingTerms.add_multi_coupling_term` such that the added
             term corresponds to the parameters of this function.
+
         """
         L = self.L
         number_ops = len(term)
@@ -1107,9 +1136,10 @@ class MultiCouplingTerms(CouplingTerms):
             Names of the involved operators.
         op_string : str
             The operator to be inserted between `i` and `j`.
+
         """
         if not 0 <= i < self.L:
-            raise ValueError("We need 0 <= i < N_sites, got i={i:d}".format(i=i))
+            raise ValueError(f"We need 0 <= i < N_sites, got i={i:d}")
         if not i < j:
             raise ValueError("need i < j")
         ijkl = [i, j]
@@ -1123,6 +1153,7 @@ class MultiCouplingTerms(CouplingTerms):
         ----------
         graph : :class:`~tenpy.networks.mpo.MPOGraph`
             The graph into which the terms from :attr:`coupling_terms` should be added.
+
         """
         assert self.L == graph.L
         keys_left = self._insert_to_graph(graph, True)
@@ -1156,7 +1187,7 @@ class MultiCouplingTerms(CouplingTerms):
         return all_keys
 
     def _insert_to_graph_rec(self, graph, all_keys, d2, i, op_string_ij, key_from_i, from_left):
-        """recursive part for :meth:`_insert_to_graph`"""
+        """Recursive part for :meth:`_insert_to_graph`"""
         _connect = self._connect_left if from_left else self._connect_right
         for j, d3 in d2.items():
             if j == _connect:
@@ -1189,6 +1220,7 @@ class MultiCouplingTerms(CouplingTerms):
         tol_zero : float
             Entries in :attr:`terms_left` and :attr:`terms_right`
             with `strength` < `tol_zero` are considered to be zero and removed.
+
         """
         assert self._max_range is not None
         for c, connection in enumerate(self.connections):
@@ -1217,10 +1249,12 @@ class MultiCouplingTerms(CouplingTerms):
 
     def to_TermList(self):
         """Convert :attr:`coupling_terms` into a :class:`TermList`.
+
         Returns
         -------
         term_list : :class:`TermList`
             Representation of the terms as a list of terms.
+
         """
         term_list_left = self._fill_term_list(self.terms_left, self._connect_left)
         term_list_right = self._fill_term_list(self.terms_right, self._connect_right)
@@ -1341,7 +1375,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
     An easy example would be a ladder, where we want the long-range interactions on the first rung
     only, ``subsites = lat.mps_idx_fix_u(u=0)``, see :meth:`~tenpy.models.lattice.mps_idx_fix_u`.
 
-    Suppose we want long-range (LR) couplings between all sites on a strip of width Ly. The 
+    Suppose we want long-range (LR) couplings between all sites on a strip of width Ly. The
     `subsites` parameters allows us to implement LR couplings along each leg of the strip. We want
     LR couplings between sites that have both vertical and horizontal offset according to the
     Euclidean distance. To do this, we use `subsites_start`. For each site in
@@ -1349,7 +1383,8 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
     in one leg can be coupled to all sites with larger index in another leg.
 
     .. math ::
-        strength sum_{subsites_start[i] < subsites[j]} lambda^{|j-argmin(subsites>subsites_start[i])|} A_{subsites_start[i]} B_{subsites[j]}
+        strength sum_{subsites_start[i] < subsites[j]} \
+            lambda^{|j-argmin(subsites>subsites_start[i])|} A_{subsites_start[i]} B_{subsites[j]}
 
     Parameters
     ----------
@@ -1367,7 +1402,9 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
     centered_terms : list of tuples
         Each tuple ``(strength, opname_i, opname_j, lambda_, subsites, opname_string)`` represents
         one of the centered terms as described in :meth:`add_centered_exponentially_decaying_term`.
+
     """
+
     def __init__(self, L):
         assert L > 0
         self.L = L
@@ -1410,6 +1447,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
             in :class:`~tenpy.models.model.CouplingModel.add_exponentially_decaying_coupling`.
         op_string : string
             The operator to be inserted between `A` and `B`; for Fermions this should be ``"JW"``.
+
         """
         assert (np.isscalar(lambda_) or len(lambda_) == self.L)
         if subsites is None:
@@ -1420,7 +1458,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                 raise ValueError("subsites needs to be sorted; choose a different MPS ordering!")
             assert subsites[0] >= 0
             assert subsites[-1] < self.L
-        
+
         if subsites_start is None:
             subsites_start = subsites
         else:
@@ -1466,6 +1504,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
             Key to distinguish from other `states` in the :class:`~tenpy.networks.mpo.MPOGraph`.
             We find integers `key_nr` and use ``(key_nr, key)`` as `state` for the different
             entries in :attr:`exp_decaying_terms`.
+
         """
         assert self.L == graph.L
         # get set of states with `key` to find unique `key_nr` for each of the terms
@@ -1475,7 +1514,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                 try:
                     if label[1] == key:
                         all_states += label
-                except:  # not a tuple / wrong types
+                except Exception:  # not a tuple / wrong types
                     pass
         key_nr = 1000  # start with high value such that they get added in the end of the MPO
         finite = (graph.bc == 'finite')
@@ -1582,13 +1621,14 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
         term_list : :class:`TermList`
             Representation of the terms as a list of terms.
             For "infinite" `bc`, only terms starting in the first MPS unit cell are included.
+
         """
         terms = []
         strengths = []
         L = self.L
         for term in self.exp_decaying_terms:
             strength, lambda_, op_i, op_j, subsites, subsites_start, op_string = term
-            if np.isscalar(lambda_): 
+            if np.isscalar(lambda_):
                 lambda_ = np.full(self.L, lambda_)
             N1 = len(subsites)
             if bc == 'finite':
@@ -1600,7 +1640,9 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                         for d, j in enumerate(subsites[i3:]):
                             # First decay term is from subsites_start[i2].
                             # Then we go to subsites[i3]
-                            pref = strength * np.prod([lambda_[subsites_start[i2]]] + list(lambda_[subsites[i3:i3 + d]]))
+                            pref = strength * np.prod(
+                                [lambda_[subsites_start[i2]]] + list(lambda_[subsites[i3:i3 + d]])
+                            )
                             if abs(pref) < cutoff:
                                 break
                             terms.append([(op_i, i), (op_j, j)])
@@ -1617,7 +1659,9 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                         j2 = i3 + d
                         j = subsites[j2 % N1] + (j2 // N1) * L
                         # See finite case for reasoning about decay constants
-                        pref = strength * np.prod([lambda_[subsites_start[i2]]] + list(lambda_[subsites[np.arange(i3, j2) % N1]]))
+                        pref = strength * np.prod(
+                            [lambda_[subsites_start[i2]]] + list(lambda_[subsites[np.arange(i3, j2) % N1]])
+                        )
                         if abs(pref) < cutoff:
                             break
                         terms.append([(op_i, i), (op_j, j)])
@@ -1665,16 +1709,15 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
 
     def _test_terms(self, sites):
         """Check the format of self.exp_decaying_terms."""
-        L = self.L
         for term in self.exp_decaying_terms:
             strength, lambda_, op_i, op_j, subsites, subsites_start, op_string = term
             for i in subsites_start:
                 if not sites[i].valid_opname(op_i):
-                    raise ValueError("Operator {op!r} not in site {i:d}".format(op=op_i, i=i))
-                
+                    raise ValueError(f"Operator {op_i!r} not in site {i:d}")
+
             for j in subsites:
                 if not sites[j].valid_opname(op_j):
-                    raise ValueError("Operator {op!r} not in site {i:d}".format(op=op_j, i=j))
+                    raise ValueError(f"Operator {op_j!r} not in site {j:d}")
 
         for strength, lambda_, op_i, op_j, i, subsites, op_string in self.centered_terms:
             if not sites[i].valid_opname(op_i):

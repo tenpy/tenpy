@@ -12,12 +12,12 @@ system in the thermodynamic limit.
 
 import numpy as np
 
+from tenpy.algorithms import dmrg
+from tenpy.models.lattice import Chain
+from tenpy.models.model import MPOModel
 from tenpy.networks.mpo import MPO
 from tenpy.networks.mps import MPS
 from tenpy.networks.site import SpinHalfSite
-from tenpy.models.model import MPOModel
-from tenpy.models.lattice import Chain
-from tenpy.algorithms import dmrg
 from tenpy.tools.params import asConfig
 
 
@@ -47,7 +47,9 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
         What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
     sort_charge : bool
         Whether to sort by charges of physical legs. `True` by default.
+
     """
+
     def __init__(self, model_params):
         # model parameters
         model_params = asConfig(model_params, "ExponentiallyDecayingHeisenberg")
@@ -104,7 +106,10 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
         # Generate the MPO from the grid. Note that it is not necessary to specify
         # the physical legs and their charges, since the from_grids method can extract
         # this information from the position of the operators inside the grid.
-        H = MPO.from_grids(lat.mps_sites(), grids, bc='infinite', IdL=0, IdR=-1, mps_unit_cell_width=lat.mps_unit_cell_width)
+        H = MPO.from_grids(
+            lat.mps_sites(), grids, bc='infinite', IdL=0, IdR=-1,
+            mps_unit_cell_width=lat.mps_unit_cell_width
+        )
         MPOModel.__init__(self, lat, H)
 
 

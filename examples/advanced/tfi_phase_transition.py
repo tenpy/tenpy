@@ -6,12 +6,12 @@ It plots a few observables in the end.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import matplotlib.pyplot as plt
 import numpy as np
 
+from tenpy.algorithms import dmrg
 from tenpy.models.tf_ising import TFIChain
 from tenpy.networks.mps import MPS
-from tenpy.algorithms import dmrg
-import matplotlib.pyplot as plt
 
 
 def run(gs):
@@ -97,7 +97,7 @@ def plot(results, filename):
             SxSx = results[key]
             max_j = SxSx.shape[1]
             for j in range(1, max_j):
-                label = "j= {j:d}".format(j=j) if j in [1, max_j - 1] else None
+                label = f"j= {j:d}" if j in [1, max_j - 1] else None
                 ax.plot(gs, SxSx[:, j], label=label, color=cm(j / max_j))
             ax.legend()
         else:
@@ -111,8 +111,8 @@ def plot(results, filename):
 
 if __name__ == "__main__":
     filename = 'tfi_phase_transition.pkl'
-    import pickle
     import os.path
+    import pickle
     if not os.path.exists(filename):
         gs = sorted(set(np.linspace(0.5, 1.5, 11)).union(set(np.linspace(0.95, 1.05, 11))))[::-1]
         results = run(gs)

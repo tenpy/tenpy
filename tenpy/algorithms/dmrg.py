@@ -23,29 +23,32 @@ computationally expensive to run and has occasionally displayed some convergence
 Which one is preferred in the end is not obvious a priori and might depend on the used model.
 Just try both of them.
 
-A :class:`~tenpy.algorithms.mps_common.Mixer` should be used initially to avoid that the algorithm gets stuck in local energy
-minima, and then slowly turned off in the end. For :class:`SingleSiteDMRGEngine`, using a mixer is
-crucial, as the one-site algorithm cannot increase the MPS bond dimension by itself.
+A :class:`~tenpy.algorithms.mps_common.Mixer` should be used initially to avoid that the algorithm
+gets stuck in local energy minima, and then slowly turned off in the end.
+For :class:`SingleSiteDMRGEngine`, using a mixer is crucial, as the one-site algorithm cannot
+increase the MPS bond dimension by itself.
 
 A generic protocol for approaching a physics question using DMRG is given in
 :doc:`/intro/dmrg-protocol`.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
+import logging
 import time
 import warnings
-import logging
-logger = logging.getLogger(__name__)
+
+import numpy as np
 
 from ..linalg import np_conserved as npc
-from ..linalg.krylov_based import lanczos_arpack, LanczosGroundState
+from ..linalg.krylov_based import LanczosGroundState, lanczos_arpack
 from ..linalg.truncation import svd_theta
-from ..tools.params import asConfig
 from ..tools.math import entropy
+from ..tools.params import asConfig
 from ..tools.process import memory_usage
-from .mps_common import IterativeSweeps, OneSiteH, TwoSiteH
 from . import mps_common
+from .mps_common import IterativeSweeps, OneSiteH, TwoSiteH
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'run',
@@ -96,7 +99,7 @@ def run(psi, model, options, **kwargs):
     elif active_sites == 2:
         engine = TwoSiteDMRGEngine(psi, model, options, **kwargs)
     else:
-        raise ValueError("For DMRG, can only use 1 or 2 active sites, not {}".format(active_sites))
+        raise ValueError(f"For DMRG, can only use 1 or 2 active sites, not {active_sites}")
     E, _ = engine.run()
     return {
         'E': E,
@@ -184,7 +187,9 @@ class DMRGEngine(IterativeSweeps):
         While the mixer is on, the `S` stored in the MPS is a non-diagonal 2D array.
         To check convergence, we use the approximate singular values based on which we truncated
         instead to calculate the entanglement entropy and store it inside this list.
+
     """
+
     EffectiveH = None
 
     def __init__(self, psi, model, options, **kwargs):
@@ -260,6 +265,7 @@ class DMRGEngine(IterativeSweeps):
             The energy of the current ground state approximation.
         psi : :class:`~tenpy.networks.mps.MPS`
             The current ground state approximation, i.e. just a reference to :attr:`psi`.
+
         """
         options = self.options
         # parameters for lanczos
@@ -439,6 +445,7 @@ class DMRGEngine(IterativeSweeps):
         psi : :class:`~tenpy.networks.mps.MPS`
             The MPS representing the ground state after the simulation,
             i.e. just a reference to :attr:`psi`.
+
         """
         return super().run()
 
@@ -544,6 +551,7 @@ class DMRGEngine(IterativeSweeps):
             ov_change: float
                 Change in the wave function ``1. - abs(<theta_guess|theta>)``
                 induced by :meth:`diag`, *not* including the truncation!
+
         """
         i0 = self.i0
         n_opt = self.n_optimize
@@ -576,6 +584,7 @@ class DMRGEngine(IterativeSweeps):
         ----------
         **update_data : dict
             What was returned by :meth:`update_local`.
+
         """
         E0 = E0
         i0 = self.i0
@@ -717,6 +726,7 @@ class DMRGEngine(IterativeSweeps):
             Number of Lanczos iterations used. ``-1`` if unknown.
         ov_change : float
             Change in the wave function ``1. - abs(<theta_guess|theta_diag>)``
+
         """
         N = -1  # (unknown)
 
@@ -759,12 +769,12 @@ class DMRGEngine(IterativeSweeps):
             If given, plot ``abs((y-y_exact)/y_exact)`` on a log-scale yaxis.
         **kwargs :
             Further keyword arguments given to ``axes.plot(...)``.
+
         """
         if axes is None:
             import matplotlib.pyplot as plt
             axes = plt.gca()
         stats = self.update_stats
-        L = self.psi.L
         kwargs.setdefault('marker', 'x')
         kwargs.setdefault('linestyle', '-')
 
@@ -811,12 +821,12 @@ class DMRGEngine(IterativeSweeps):
             If given, plot ``abs((y-y_exact)/y_exact)`` on a log-scale yaxis.
         **kwargs :
             Further keyword arguments given to ``axes.plot(...)``.
+
         """
         if axes is None:
             import matplotlib.pyplot as plt
             axes = plt.gca()
         stats = self.sweep_stats
-        L = self.psi.L
         kwargs.setdefault('marker', 'x')
         kwargs.setdefault('linestyle', '-')
 
@@ -848,6 +858,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         :include: DMRGEngine
 
     """
+
     EffectiveH = TwoSiteH
     DefaultMixer = mps_common.DensityMatrixMixer
     use_mixer_by_default = False
@@ -895,6 +906,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         S_approx : ndarray
             Just the `S` if a 1D ndarray, or an approximation of the correct S (which was used for
             truncation) in case `S` is 2D Array.
+
         """
         i0 = self.i0
         update_LP, update_RP = self.update_LP_RP
@@ -929,6 +941,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         S : 1D array | 2D :class:`~tenpy.linalg.np_conserved.Array`
             The middle part returned by the SVD, ``theta = U S VH``.
             Without a mixer just the singular values, with enabled `mixer` a 2D array.
+
         """
         B0 = U.split_legs(['(vL.p)'])
         B1 = VH.split_legs(['(p.vR)'])
@@ -957,6 +970,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         :include: DMRGEngine
 
     """
+
     EffectiveH = OneSiteH
     DefaultMixer = mps_common.SubspaceExpansion
     use_mixer_by_default = True
@@ -1022,6 +1036,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         S_approx : ndarray
             Just the `S` if a 1D ndarray, or an approximation of the correct S (which was used for
             truncation) in case `S` is 2D Array.
+
         """
         mixer = self.mixer
         move_right = self.move_right
@@ -1111,6 +1126,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         S : 1D array | 2D :class:`~tenpy.linalg.np_conserved.Array`
             The middle part returned by the SVD, ``theta = U S VH``.
             Without a mixer just the singular values, with enabled `mixer` a 2D array.
+
         """
         i_L, i_R = self._update_env_inds()  # left and right updated sites
         A0 = U.split_legs(['(vL.p)'])
@@ -1122,7 +1138,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
     def mixer_activate(self):
         super().mixer_activate()
-        if not (self.mixer is None) and not self.mixer.can_decompose_1site:
+        if self.mixer is not None and not self.mixer.can_decompose_1site:
             msg = (f'Using {self.mixer.__class__.__name__} with single-site DMRG is inefficient. '
                    f'The resulting algorithm has two-site costs!')
             warnings.warn(msg)
@@ -1148,6 +1164,7 @@ def chi_list(chi_max, dchi=20, nsweeps=20):
     chi_list : dict
         To be used as `chi_list` parameter for DMRG, see :func:`run`.
         Keys increase by `nsweeps`, values by `dchi`, until a maximum of `chi_max` is reached.
+
     """
     chi_max = int(chi_max)
     nsweeps = int(nsweeps)
@@ -1173,6 +1190,7 @@ def full_diag_effH(effH, theta_guess, keep_sector=True):
         The effective Hamiltonian.
     theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
         Current guess to select the charge sector. Labels as specified by ``effH.acts_on``.
+
     """
     theta_guess = theta_guess.combine_legs(effH.acts_on, qconj=+1)
     fullH = effH.to_matrix()

@@ -3,7 +3,6 @@
 
 import numpy as np
 import tensordot_npc
-
 from combine_numpy import combine_legs
 
 

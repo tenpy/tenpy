@@ -13,12 +13,11 @@ Afterwards, you can plot the produced files::
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from __future__ import print_function  # (backwards compatibility to python 2)
-
-import timeit
-import time
-import numpy as np
 import sys
+import time
+import timeit
+
+import numpy as np
 
 fn_template = '{mod_name!s}_benchmark_s_{sectors:d}_l_{legs:d}_mod_q_{mod_q_str}.txt'
 
@@ -75,7 +74,7 @@ def perform_benchmark(mod_name,
     print("-" * 80)
     print("module ", mod_name)
     namespace = {}
-    exec("import {mod_name} as benchmark_mod".format(mod_name=mod_name), namespace, namespace)
+    exec(f"import {mod_name} as benchmark_mod", namespace, namespace)
     benchmark_mod = namespace['benchmark_mod']
     used_sizes = []
     results = []
@@ -88,13 +87,13 @@ def perform_benchmark(mod_name,
             np.random.seed(seed)
             setup_code = "import {mod_name!s}\ndata = {mod_name!s}.setup_benchmark(**{kwargs!r})"
             setup_code = setup_code.format(mod_name=mod_name, kwargs=kwargs_cpy)
-            timing_code = "{mod_name}.benchmark(data)".format(mod_name=mod_name)
+            timing_code = f"{mod_name}.benchmark(data)"
             T = timeit.Timer(timing_code, setup_code)
             res = T.repeat(repeat_bestof, repeat_average)
             results_seeds.append(min(res) / repeat_average)
         used_sizes.append(size)
         results.append(np.mean(results_seeds))
-        print("size {size: 4d}: {res:.2e}".format(size=size, res=results[-1]))
+        print(f"size {size: 4d}: {results[-1]:.2e}")
         count = repeat_bestof * repeat_average * len(seeds)
         if (results[-1] > max_time or  # benchmark time
                 time.time() - t0 >
@@ -179,7 +178,7 @@ def plot_many_results(filenames, fn_beg_until="_", fn_end_from="_l_", save=True)
         import matplotlib.lines as mlines
         for key in sorted(linestyle_map):
             patches.append(mlines.Line2D([], [], linestyle=linestyle_map[key], color='k'))
-            labels.append("{s:d} sectors".format(s=key))
+            labels.append(f"{key:d} sectors")
         ax.legend(patches, labels)
     if save:
         for key, (fig, _, _) in figs.items():

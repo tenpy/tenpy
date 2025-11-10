@@ -1,14 +1,14 @@
 """A collection of tests for tenpy.linalg.krylov_based."""
 # Copyright (C) TeNPy Developers, Apache license
 
-import tenpy.linalg.np_conserved as npc
 import numpy as np
-
-from random_test import gen_random_legcharge
-from tenpy.linalg import krylov_based, sparse
-import tenpy.linalg.random_matrix as rmat
-from scipy.linalg import expm
 import pytest
+from random_test import gen_random_legcharge
+from scipy.linalg import expm
+
+import tenpy.linalg.np_conserved as npc
+import tenpy.linalg.random_matrix as rmat
+from tenpy.linalg import krylov_based, sparse
 
 ch = npc.ChargeInfo([2])
 
@@ -44,7 +44,7 @@ def test_lanczos_gs(n, N_cache, tol=5.e-14):
 
     E0, psi0, N = krylov_based.LanczosGroundState(H_Op, psi_init, {'N_cache': N_cache}).run()
     print("full spectrum:", E_flat)
-    print("E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_flat))
+    print(f"E0 = {E0:.14f} vs exact {E0_flat:.14f}")
     print("|E0-E0_flat| / |E0_flat| =", abs((E0 - E0_flat) / E0_flat))
     psi0_H_psi0 = npc.inner(psi0, npc.tensordot(H, psi0, axes=[1, 0]), 'range', do_conj=True)
     print("<psi0|H|psi0> / E0 = 1. + ", psi0_H_psi0 / E0 - 1.)
@@ -57,7 +57,7 @@ def test_lanczos_gs(n, N_cache, tol=5.e-14):
 
     print("version with arpack")
     E0a, psi0a = krylov_based.lanczos_arpack(H_Op, psi_init, {})
-    print("E0a = {E0a:.14f} vs exact {E0_flat:.14f}".format(E0a=E0a, E0_flat=E0_flat))
+    print(f"E0a = {E0a:.14f} vs exact {E0_flat:.14f}")
     print("|E0a-E0_flat| / |E0_flat| =", abs((E0a - E0_flat) / E0_flat))
     psi0a_H_psi0a = npc.inner(psi0a, npc.tensordot(H, psi0a, axes=[1, 0]), 'range', do_conj=True)
     print("<psi0a|H|psi0a> / E0a = 1. + ", psi0a_H_psi0a / E0a - 1.)
@@ -83,7 +83,7 @@ def test_lanczos_gs(n, N_cache, tol=5.e-14):
             sparse.OrthogonalNpcLinearOperator(H_Op, ortho_to),
             psi_init, lanczos_params
         ).run()
-        print("E1 = {E1:.14f} vs exact {E1_flat:.14f}".format(E1=E1, E1_flat=E1_flat))
+        print(f"E1 = {E1:.14f} vs exact {E1_flat:.14f}")
         print("|E1-E1_flat| / |E1_flat| =", abs((E1 - E1_flat) / E1_flat))
         psi1_H_psi1 = npc.inner(psi1, npc.tensordot(H, psi1, axes=[1, 0]), 'range', do_conj=True)
         print("<psi1|H|psi1> / E1 = 1 + ", psi1_H_psi1 / E1 - 1.)
@@ -151,7 +151,7 @@ def test_arnoldi(n, which):
     eng = krylov_based.Arnoldi(H_Op, psi_init, {'which': which, 'num_ev': 1, 'N_max': 20})
     (E0,), (psi0,), N = eng.run()
     print("full spectrum:", E_flat)
-    print("E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_flat))
+    print(f"E0 = {E0:.14f} vs exact {E0_flat:.14f}")
     print("|E0-E0_flat| / |E0_flat| =", abs((E0 - E0_flat) / E0_flat))
     assert abs((E0 - E0_flat) / E0_flat) < tol
     psi0_H_psi0 = npc.inner(psi0, npc.tensordot(H, psi0, axes=[1, 0]), 'range', do_conj=True)

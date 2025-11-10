@@ -8,12 +8,11 @@ Based on the model in [Yang2012]_
 import numpy as np
 
 from tenpy.algorithms import dmrg
-from tenpy.networks.mps import MPS
-from tenpy.networks import site
-
-from tenpy.models.model import CouplingMPOModel
-from tenpy.networks.site import FermionSite, GroupedSite
 from tenpy.models import lattice
+from tenpy.models.model import CouplingMPOModel
+from tenpy.networks import site
+from tenpy.networks.mps import MPS
+from tenpy.networks.site import FermionSite, GroupedSite
 
 
 class TripartiteTriangular(lattice.Lattice):
@@ -193,7 +192,7 @@ def plot_results(data):
             q = q[0]
             label = ""
             if q not in color_by_charge:
-                label = "{q:d}".format(q=q)
+                label = f"{q:d}"
                 color_by_charge[q] = colors[len(color_by_charge) % len(colors)]
             color = color_by_charge[q]
             ax.plot(phi_ext * np.ones(s.shape),

@@ -7,8 +7,8 @@ established name for this model...
 
 import numpy as np
 
-from .lattice import Lattice, get_order, _parse_sites
 from ..networks.site import SpinHalfSite
+from .lattice import Lattice, _parse_sites, get_order
 from .model import CouplingMPOModel
 
 __all__ = ['DualSquare', 'ToricCode']
@@ -47,7 +47,9 @@ class DualSquare(Lattice):
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `pairs` are set accordingly.
+
     """
+
     dim = 2  #: the dimension of the lattice
 
     def __init__(self, Lx, Ly, sites, **kwargs):
@@ -134,7 +136,9 @@ class ToricCode(CouplingMPOModel):
             *not* use "periodic" boundary conditions:
             The MPS is still "open", so this will introduce long-range couplings between the
             first and last sites of the MPS, and require **squared** MPS bond-dimensions.
+
     """
+
     default_lattice = DualSquare
     force_default_lattice = True
 

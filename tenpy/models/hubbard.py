@@ -3,10 +3,10 @@
 
 import numpy as np
 
-from .model import CouplingMPOModel, NearestNeighborModel
-from .lattice import Chain
+from ..networks.site import BosonSite, FermionSite, SpinHalfFermionSite, spin_half_species
 from ..tools.params import asConfig
-from ..networks.site import FermionSite, BosonSite, SpinHalfFermionSite, spin_half_species
+from .lattice import Chain
+from .model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = ['BoseHubbardModel', 'BoseHubbardChain', 'FermiHubbardModel', 'FermiHubbardChain',
            'FermiHubbardModel2', 'DipolarBoseHubbardChain']
@@ -50,7 +50,9 @@ class BoseHubbardModel(CouplingMPOModel):
             External magnetic flux 'threaded' through the cylinder. Hopping amplitudes for bonds
             'across' the periodic boundary are modified such that particles hopping around the
             circumference of the cylinder acquire a phase ``2 pi phi_ext``.
+
     """
+
     def init_sites(self, model_params):
         n_max = model_params.get('n_max', 3, int)
         filling = model_params.get('filling', 0.5, 'real')
@@ -85,6 +87,7 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
 
     See the :class:`BoseHubbardModel` for the documentation of parameters.
     """
+
     def __init__(self, model_params):
         model_params = asConfig(model_params, self.__class__.__name__)
         model_params.setdefault('lattice', "Chain")
@@ -165,7 +168,9 @@ class FermiHubbardModel(CouplingMPOModel):
             External magnetic flux 'threaded' through the cylinder. Hopping amplitudes for bonds
             'across' the periodic boundary are modified such that particles hopping around the
             circumference of the cylinder acquire a phase ``2 pi phi_ext``.
+
     """
+
     def init_sites(self, model_params):
         cons_N = model_params.get('cons_N', 'N', str)
         cons_Sz = model_params.get('cons_Sz', 'Sz', str)
@@ -198,6 +203,7 @@ class FermiHubbardChain(FermiHubbardModel, NearestNeighborModel):
 
     See the :class:`FermiHubbardModel` for the documentation of parameters.
     """
+
     default_lattice = Chain
     force_default_lattice = True
 
@@ -287,6 +293,7 @@ class DipolarBoseHubbardChain(CouplingMPOModel):
             What should be conserved. See :class:`~tenpy.networks.site.BosonSite`.
         t, t4, U, mu : float | array
             Couplings as defined in the Hamiltonian above. Note the signs!
+
     """
 
     def init_lattice(self, model_params):
@@ -306,7 +313,6 @@ class DipolarBoseHubbardChain(CouplingMPOModel):
 
     def init_terms(self, model_params):
         """Add the onsite and coupling terms to the model"""
-        L = model_params.get('L', 64)
         U = model_params.get('U', 1)
         t = model_params.get('t', 1)
         t4 = model_params.get('t4', 0)

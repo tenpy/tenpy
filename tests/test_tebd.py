@@ -1,19 +1,18 @@
 """A collection of tests to check the functionality of `tenpy.tebd`"""
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy.testing as npt
-import tenpy.linalg.np_conserved as npc
 import numpy as np
-
-from tenpy.networks.mps import MPS
-from tenpy.models.model import NearestNeighborModel
-from tenpy.models.spins import SpinChain, DipolarSpinChain
-import tenpy.algorithms.tebd as tebd
-from tenpy.networks.site import SpinHalfSite
-from tenpy.algorithms.exact_diag import ExactDiag
+import numpy.testing as npt
 import pytest
-
 from test_dmrg import e0_transverse_ising
+
+import tenpy.algorithms.tebd as tebd
+import tenpy.linalg.np_conserved as npc
+from tenpy.algorithms.exact_diag import ExactDiag
+from tenpy.models.model import NearestNeighborModel
+from tenpy.models.spins import DipolarSpinChain, SpinChain
+from tenpy.networks.mps import MPS
+from tenpy.networks.site import SpinHalfSite
 
 
 def test_trotter_decomposition():
@@ -26,7 +25,7 @@ def test_trotter_decomposition():
                 evolved[k] += dt[j]
             npt.assert_array_almost_equal_nulp(evolved, N * np.ones([2]), N * 2)
 
-            
+
 @pytest.mark.slow
 @pytest.mark.parametrize('bc_MPS, which_engine, compute_err, use_eig_based_svd',
                          [('finite', 'standard', None, None),
@@ -70,7 +69,7 @@ def test_tebd(bc_MPS, which_engine, compute_err, use_eig_based_svd, g=0.5):
         engine = tebd.QRBasedTEBDEngine(psi, M, tebd_param)
     else:
         raise RuntimeError
-    
+
     engine.run_GS()
 
     if compute_err is False:
@@ -87,7 +86,7 @@ def test_tebd(bc_MPS, which_engine, compute_err, use_eig_based_svd, g=0.5):
         ED.full_diagonalization()
         E_ED, psi_ED = ED.groundstate()
         Etebd = np.sum(M.bond_energies(psi))
-        print("E_TEBD={Etebd:.14f} vs E_exact={Eex:.14f}".format(Etebd=Etebd, Eex=E_ED))
+        print(f"E_TEBD={Etebd:.14f} vs E_exact={E_ED:.14f}")
         assert (abs((Etebd - E_ED) / E_ED) < 1.e-7)
         ov = npc.inner(psi_ED, ED.mps_to_full(psi), 'range', do_conj=True)
         print("compare with ED: overlap = ", abs(ov)**2)
@@ -113,7 +112,7 @@ def test_tebd(bc_MPS, which_engine, compute_err, use_eig_based_svd, g=0.5):
             )
         Etebd = np.average(M.bond_energies(psi))
         Eexact = e0_transverse_ising(g)
-        print("E_TEBD={Etebd:.14f} vs E_exact={Eex:.14f}".format(Etebd=Etebd, Eex=Eexact))
+        print(f"E_TEBD={Etebd:.14f} vs E_exact={Eexact:.14f}")
 
         Sold = np.average(psi.entanglement_entropy())
         for i in range(2):
@@ -151,7 +150,7 @@ def test_RandomUnitaryEvolution():
 @pytest.mark.parametrize('S', [.5, 2.5, 5])
 def test_fixes_issue_220(S):
     L = 20
-    
+
     model = SpinChain(dict(S=S, conserve=None, sort_charge=True, Jx=1., Jy=1., Jz=1., L=L))
     neel = ['up', 'up'] * (L // 2) + ['up'] * (L % 2)
     psi_init = MPS.from_product_state(sites=model.lat.unit_cell * L, p_state=neel,

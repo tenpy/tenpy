@@ -32,8 +32,7 @@ def spectral_function(time_dep_corr,
                       rel_split: float = 0,
                       axis_time: int = 0,
                       axis_space: int = 1):
-    r"""Given a time dependent correlation function C(t, r), calculate its
-    Spectral Function.
+    r"""Given a time dependent correlation function C(t, r), calculate its Spectral Function.
 
     After a run of :class:`~tenpy.simulations.time_evolution.TimeDependentCorrelation`, a :class:`DataLoader` instance
     should be passed, from which the underlying lattice and additional parameters (e.g. ``dt``) can be extracted.
@@ -79,6 +78,7 @@ def spectral_function(time_dep_corr,
     .. math ::
 
         S(w, \mathbf{k}) = \int dt e^{-iwt} \int d\mathbf{r} e^{i \mathbf{k} \mathbf{r} C(t, \mathbf{r})
+
     """
     # first we fourier transform in space C(r, t) -> C(k, t)
     ft_space, k = fourier_transform_space(lat, time_dep_corr, axis=axis_space)
@@ -157,6 +157,7 @@ def apply_gaussian_windowing(a, sigma: float = 0.4, axis=0):
     Returns
     -------
     np.ndarray
+
     """
     # extract number of time-steps
     n_tsteps = a.shape[axis]
@@ -218,6 +219,7 @@ def plot_correlations_on_lattice(ax,
     zorder: float
         zorder of lines defining the correlations (set a higher order to display them above
         the couplings)
+
     """
     from matplotlib.collections import LineCollection
 

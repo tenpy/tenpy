@@ -10,11 +10,10 @@ Afterwards, you can print the produced statistics::
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import cProfile
 import pstats
-import sys
-import time
+
+import numpy as np
 
 fn_template = '{mod_name!s}_profile_S_{size:d}_s_{sectors:d}_l_{legs:d}_mod_q_{mod_q_str}.prof'
 
@@ -45,13 +44,10 @@ def perform_profiling(mod_name, repeat=1, seed=0, filename=fn_template, **kwargs
     setup_code = setup_code.format(mod_name=mod_name, kwargs=kwargs)
     namespace = {}
     exec(setup_code, namespace, namespace)
-    timing_code = "{mod_name}.benchmark(data)".format(mod_name=mod_name)
+    timing_code = f"{mod_name}.benchmark(data)"
     if repeat > 1:
-        timing_code = "for _ in range({repeat:d}): ".format(repeat=repeat) + timing_code
-    if sys.version_info > (3, 3):
-        prof = cProfile.Profile(time.perf_counter)
-    else:
-        prof = cProfile.Profile()
+        timing_code = f"for _ in range({repeat:d}): " + timing_code
+    prof = cProfile.Profile()
     prof.runctx(timing_code, namespace, namespace)
     prof.dump_stats(filename)
 
@@ -116,8 +112,8 @@ if __name__ == "__main__":
         '--limit',
         default=[50],
         nargs='*',
-        help="Limit for printing the stats. You can enter an in to limit the number of lines or" \
-             " a regex to match the function name."
+        help=("Limit for printing the stats. You can enter an in to limit the number of lines or"
+              " a regex to match the function name.")
     )
     parser.add_argument('--callees',
                         default=None,
@@ -140,7 +136,7 @@ if __name__ == "__main__":
         for i in range(len(limits)):
             try:
                 limits[i] = int(limits[i])
-            except:
+            except Exception:
                 pass
         for fn in files + args.print_stats:
             print_profiling(fn, args.sort, limits, args.callees, args.callers)

@@ -3,15 +3,16 @@
 
 import itertools
 
-from tenpy.models import model, lattice
-from tenpy.models.xxz_chain import XXZChain
-from tenpy.models.spins import DipolarSpinChain
-import tenpy.networks.site
-import tenpy.linalg.np_conserved as npc
-from tenpy.algorithms.exact_diag import ExactDiag, get_numpy_Hamiltonian
 import numpy as np
 import numpy.testing as npt
 import pytest
+
+import tenpy.linalg.np_conserved as npc
+import tenpy.networks.site
+from tenpy.algorithms.exact_diag import ExactDiag, get_numpy_Hamiltonian
+from tenpy.models import lattice, model
+from tenpy.models.spins import DipolarSpinChain
+from tenpy.models.xxz_chain import XXZChain
 
 spin_half_site = tenpy.networks.site.SpinHalfSite('Sz', sort_charge=False)
 
@@ -32,7 +33,7 @@ def check_model_sanity(M, hermitian=True):
                     err = npc.norm(H - H.conj().transpose(H.get_leg_labels()))
                     if err > 1.e-14:
                         print(H)
-                        raise ValueError("H on bond {i:d} not hermitian".format(i=i))
+                        raise ValueError(f"H on bond {i:d} not hermitian")
     if isinstance(M, model.MPOModel):
         model.MPOModel.test_sanity(M)
         if hermitian:

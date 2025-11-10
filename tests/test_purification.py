@@ -3,15 +3,15 @@
 
 import numpy as np
 import numpy.testing as npt
+import pytest
 import scipy
-from tenpy.models.xxz_chain import XXZChain
 
+import tenpy.linalg.np_conserved as npc
+import tenpy.linalg.random_matrix as rmat
+from tenpy.algorithms.purification import PurificationApplyMPO, PurificationTEBD
+from tenpy.models.xxz_chain import XXZChain
 from tenpy.networks import purification_mps, site
 from tenpy.networks.mps import MPS
-from tenpy.algorithms.purification import PurificationTEBD, PurificationApplyMPO
-import tenpy.linalg.random_matrix as rmat
-import tenpy.linalg.np_conserved as npc
-import pytest
 
 spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 ferm = site.FermionSite(conserve='N')
@@ -161,9 +161,9 @@ def test_renyi_disentangler(L=4, eps=1.e-15):
         S, U = eng.used_disentangler.iter(theta, U)
         if i == 0:
             S_0 = S
-        print("iteration {i:d}: S={S:.5f}, DS={DS:.4e} ".format(i=i, S=S, DS=Sold - S))
+        print(f"iteration {i:d}: S={S:.5f}, DS={Sold - S:.4e} ")
         if abs(Sold - S) < eps:
-            print("break: S converged down to {eps:.1e}".format(eps=eps))
+            print(f"break: S converged down to {eps:.1e}")
             break
         Sold, S = S, Sold
     else:

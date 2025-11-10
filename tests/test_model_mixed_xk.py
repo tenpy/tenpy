@@ -1,12 +1,13 @@
 # Copyright (C) TeNPy Developers, Apache license
-from tenpy.models.mixed_xk import SpinlessMixedXKSquare, HubbardMixedXKSquare
+import numpy as np
+import pytest
 from test_model import check_general_model
+
+from tenpy.algorithms import dmrg
 from tenpy.models.fermions_spinless import FermionModel
 from tenpy.models.hubbard import FermiHubbardModel
+from tenpy.models.mixed_xk import HubbardMixedXKSquare, SpinlessMixedXKSquare
 from tenpy.networks.mps import MPS
-from tenpy.algorithms import dmrg
-import pytest
-import numpy as np
 
 
 @pytest.mark.parametrize('model_class', [SpinlessMixedXKSquare, HubbardMixedXKSquare])

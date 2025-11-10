@@ -39,12 +39,12 @@ __all__ = [
 
 
 def box(size, W=1.):
-    """return random number uniform in (-W, W]."""
+    """Return random number uniform in (-W, W]."""
     return (0.5 - np.random.random(size)) * (2. * W)
 
 
 def standard_normal_complex(size):
-    """return ``(R + 1.j*I)`` for independent `R` and `I` from np.random.standard_normal."""
+    """Return ``(R + 1.j*I)`` for independent `R` and `I` from np.random.standard_normal."""
     return np.random.standard_normal(size) + 1.j * np.random.standard_normal(size)
 
 
@@ -61,6 +61,7 @@ def GOE(size):
     H : ndarray
         Real, symmetric numpy matrix drawn from the GOE, i.e.
         :math:`p(H) = 1/Z exp(-n/4 tr(H^2))`
+
     """
     A = np.random.standard_normal(size)
     return (A + A.T) * 0.5
@@ -79,6 +80,7 @@ def GUE(size):
     H : ndarray
         Hermitian (complex) numpy matrix drawn from the GUE, i.e.
         :math:`p(H) = 1/Z exp(-n/4 tr(H^2))`.
+
     """
     A = standard_normal_complex(size)
     return (A + A.T.conj()) * 0.5
@@ -96,6 +98,7 @@ def CRE(size):
     -------
     U : ndarray
         Orthogonal matrix drawn from the CRE (=Haar measure on O(n)).
+
     """
     # almost same code as for CUE
     n, m = size
@@ -121,6 +124,7 @@ def COE(size):
     -------
     U : ndarray
         Unitary, symmetric (complex) matrix drawn from the COE (=Haar measure on this space).
+
     """
     U = CUE(size)
     return np.dot(U.T, U)
@@ -138,6 +142,7 @@ def CUE(size):
     -------
     U : ndarray
         Unitary matrix drawn from the CUE (=Haar measure on U(n)).
+
     """
     # almost same code as for CRE
     n, m = size
@@ -153,7 +158,7 @@ def CUE(size):
 
 
 def O_close_1(size, a=0.01):
-    r"""return an random orthogonal matrix 'close' to the Identity.
+    r"""Return an random orthogonal matrix 'close' to the Identity.
 
     Parameters
     ----------
@@ -167,6 +172,7 @@ def O_close_1(size, a=0.01):
     -------
     O : ndarray
         Orthogonal matrix close to the identity (for small `a`).
+
     """
     n, m = size
     assert n == m
@@ -179,7 +185,7 @@ def O_close_1(size, a=0.01):
 
 
 def U_close_1(size, a=0.01):
-    r"""return an random orthogonal matrix 'close' to the identity.
+    r"""Return an random orthogonal matrix 'close' to the identity.
 
     Parameters
     ----------
@@ -194,6 +200,7 @@ def U_close_1(size, a=0.01):
     U : ndarray
         Unitary matrix close to the identity (for small `a`).
         Eigenvalues are chosen i.i.d. as ``exp(1.j*a*x)`` with `x` uniform in [-1, 1].
+
     """
     n, m = size
     assert n == m

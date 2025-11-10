@@ -7,8 +7,8 @@ we look for the optimal ground state in the manifold of fixed bond dimensionMPS 
 
 The VUMPS algorithm was introduced in 2017 :cite:`zauner-stauber2018`, where it was shown
 that VUMPS outperforms both iTEBD and iDMRG as ground state search algorithms for both
-1D and quasi-1D models. The VUMPS algorithm uses the network :class:`~tenpy.networks.uniform_mps.UniformMPS` to represent
-the current state of the uniform MPS during optimization. On each site, left canonical AL,
+1D and quasi-1D models. The VUMPS algorithm uses the network :class:`~tenpy.networks.uniform_mps.UniformMPS`
+to represent the current state of the uniform MPS during optimization. On each site, left canonical AL,
 right canonical AR, and single-site orthogonality center AC is stored; on each bond a center
 matrix C is stored. During the algorithm, the canonical form equality AL_i C_{i+1} = C_i AR_i = AC_i
 is not necessarily respected, yet in the ground state, we expect this to be restored. The
@@ -33,32 +33,32 @@ the single-site algorithm, which is the more principled algorithm.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
-import time
 import logging
+import time
 import warnings
 
-logger = logging.getLogger(__name__)
+import numpy as np
 
 from ..linalg import np_conserved as npc
+from ..linalg.krylov_based import LanczosGroundState
+from ..linalg.sparse import SumNpcLinearOperator
+from ..linalg.truncation import svd_theta
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS
 from ..networks.uniform_mps import UniformMPS
-from ..linalg.sparse import SumNpcLinearOperator
-from .mps_common import DensityMatrixMixer, SubspaceExpansion
-from ..linalg.krylov_based import LanczosGroundState
 from ..tools.math import entropy
-from ..tools.process import memory_usage
 from ..tools.params import asConfig
-from .mps_common import IterativeSweeps, ZeroSiteH, OneSiteH, TwoSiteH
-from ..linalg.truncation import svd_theta
-from .plane_wave_excitation import append_right_env, append_left_env, construct_orthogonal
+from ..tools.process import memory_usage
+from .mps_common import DensityMatrixMixer, IterativeSweeps, OneSiteH, SubspaceExpansion, TwoSiteH, ZeroSiteH
+from .plane_wave_excitation import append_left_env, append_right_env, construct_orthogonal
+
+logger = logging.getLogger(__name__)
 
 __all__ = ['VUMPSEngine', 'SingleSiteVUMPSEngine', 'TwoSiteVUMPSEngine']
 
 
 class VUMPSEngine(IterativeSweeps):
-    """ VUMPS base class with common methods for the TwoSiteVUMPS and SingleSiteVUMPS.
+    """VUMPS base class with common methods for the TwoSiteVUMPS and SingleSiteVUMPS.
 
     This engine is implemented as a subclass of :class:`~tenpy.algorithms.mps_common.Sweep`.
     It contains all methods that are generic between :class:`SingleSiteVUMPSEngine` and
@@ -144,6 +144,7 @@ class VUMPSEngine(IterativeSweeps):
         instead to calculate the entanglement entropy and store it inside this list.
 
     """
+
     EffectiveH = None
 
     def __init__(self, psi, model, options, **kwargs):
@@ -205,6 +206,7 @@ class VUMPSEngine(IterativeSweeps):
             The energy of the current ground state approximation.
         psi : :class:`~tenpy.networks.uniform_mps.UniformMPS`
             The current ground state approximation, i.e. just a reference to :attr:`psi`.
+
         """
         options = self.options
         cutoff = options.get('cutoff', 0., 'real')
@@ -261,8 +263,11 @@ class VUMPSEngine(IterativeSweeps):
         # self.psi.test_validity()
         # logger.info(f"VUMPS finished after {self.sweeps} sweeps, max chi={max(self.psi.chi)}")
 
-        # # psi.norm_test() is sometimes > 1.e-10 for paramagnetic TFI. More VUMPS (>10) fixes this even though the energy is already saturated for 10 sweeps.
-        # self.guess_init_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(self.model.H_MPO, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data)
+        # # psi.norm_test() is sometimes > 1.e-10 for paramagnetic TFI. More VUMPS (>10) fixes this
+        # even though the energy is already saturated for 10 sweeps.
+        # self.guess_init_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(
+        #     self.model.H_MPO, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data
+        # )
         # self.tangent_projector_test(self.guess_init_env_data)
         # return (Es[0] + Es[1])/2, self.psi.to_MPS(check_overlap=check_overlap)
 
@@ -322,8 +327,8 @@ class VUMPSEngine(IterativeSweeps):
             E, 1.)) < max_E_err and abs(Delta_S) < max_S_err and split_error < max_split_error
 
     def post_run_cleanup(self):
-        """
-        Perform any final steps or clean up after the main loop has terminated.
+        """Perform any final steps or clean up after the main loop has terminated.
+
         Try to convert uniform MPS back to iMPS.
 
         Options
@@ -363,8 +368,7 @@ class VUMPSEngine(IterativeSweeps):
         return E, self.psi.to_MPS(check_overlap=check_overlap)
 
     def mixer_cleanup(self):
-        """For uniform MPS there is no need to clean up after the mixer.
-        """
+        """For uniform MPS there is no need to clean up after the mixer."""
         pass
 
     def run(self):
@@ -377,9 +381,10 @@ class VUMPSEngine(IterativeSweeps):
         psi : :class:`~tenpy.networks.mps.MPS`
             The MPS representing the ground state after the simulation,
             i.e. just a reference to :attr:`psi`.
+
         """
         self.shelve = False
-        result = self.pre_run_initialize()
+        _ = self.pre_run_initialize()  # note: vumps computes result only in post_run_cleanup
         is_first_sweep = True
         while True:
             iteration_start_time = time.time()
@@ -387,20 +392,17 @@ class VUMPSEngine(IterativeSweeps):
                 break
             if not is_first_sweep:
                 self.checkpoint.emit(self)
-            result = self.run_iteration()
+            _ = self.run_iteration()  # note: vumps computes result only in post_run_cleanup
             self.status_update(iteration_start_time=iteration_start_time)
             is_first_sweep = False
         return self.post_run_cleanup()
 
     def environment_sweeps(self, N_sweeps):
-        """
-        In VUMPS we don't want to do this as we regenerate the environment each time we do an update.
-        """
+        """In VUMPS we don't want to do this as we regenerate the environment each time we do an update."""
         pass
 
     def reset_stats(self, resume_data=None):
         """Reset the statistics, useful if you want to start a new sweep run."""
-
         super().reset_stats(resume_data)
         self.update_stats = {
             'i0': [],
@@ -443,9 +445,7 @@ class VUMPSEngine(IterativeSweeps):
         return zip(i0s, move_right, update_LP_RP)
 
     def prepare_update_local(self):
-        """
-        For each update, we need to rebuild the environments from scratch using the most recent tensors
-        """
+        """For each update, we need to rebuild the environments from scratch using the most recent tensors"""
         i0 = self.i0
         H = self.model.H_MPO
         psi = self.psi
@@ -460,15 +460,15 @@ class VUMPSEngine(IterativeSweeps):
         self.make_eff_H()
         theta = self.psi.get_theta(i0, n=self.n_optimize,
                                    cutoff=self.S_inv_cutoff)  #n_optimize will be 1
-        assert self.eff_H.combine == False
+        assert self.eff_H.combine is False
         theta = self.eff_H.combine_theta(theta)  #combine should be false.
         C1, C2 = self.psi.get_C(i0), self.psi.get_C(i0 + self.n_optimize)
 
         return (theta, C1, C2)
 
     def make_eff_H(self):
-        """
-        Create new instance of `self.EffectiveH` at `self.i0`.
+        """Create new instance of `self.EffectiveH` at `self.i0`.
+
         Also create zero-site Hamiltonians left of `self.i0` and right of `self.i0+self.n_optimize`.
         """
         self.eff_H0_1 = ZeroSiteH(self.env, self.i0)  # This saves more envs than optimal.
@@ -496,6 +496,7 @@ class VUMPSEngine(IterativeSweeps):
         ----------
         **update_data : dict
             What was returned by :meth:`update_local`.
+
         """
         self.update_stats['i0'].append(self.i0)
         self.update_stats['e_L'].append(e_L)
@@ -516,9 +517,7 @@ class VUMPSEngine(IterativeSweeps):
         raise NotImplementedError("TODO")
 
     def tangent_projector_test(self, env_data):
-        """
-        The ground state projector P_GS
-        """
+        """The ground state projector P_GS"""
         LW = env_data['init_LP']
         RW = env_data['init_RP']
 
@@ -566,7 +565,9 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
     -------
     .. cfg:config :: SingleSiteDMRGEngine
         :include: DMRGEngine
+
     """
+
     EffectiveH = OneSiteH
 
     def __init__(self, psi, model, options, **kwargs):
@@ -606,6 +607,7 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
         -------
         update_data : dict
             Data computed during the local update.
+
         """
         psi = self.psi
         i0 = self.i0
@@ -650,8 +652,7 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
         return update_data
 
     def polar_max(self, AC, C1, C2):
-        """
-        Polar decompositions: Given AC and C, find AL and AR such that AL C = AC = C AR
+        """Polar decompositions: Given AC and C, find AL and AR such that AL C = AC = C AR
 
         Parameters
         ----------
@@ -676,6 +677,7 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
             entanglement entropy left of site ``i0``
         entropy_right : float
             entanglement entropy right of site ``i0``
+
         """
         U_ACL, _, _ = npc.polar(AC.combine_legs(['vL', 'p'], qconj=[+1]), left=False)
         U_CL, _, s1 = npc.polar(C2, left=False)
@@ -712,7 +714,9 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
     -------
     .. cfg:config :: TwoSiteDMRGEngine
         :include: DMRGEngine
+
     """
+
     EffectiveH = TwoSiteH
     DefaultMixer = SubspaceExpansion
     use_mixer_by_default = False
@@ -742,6 +746,7 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         -------
         update_data : dict
             Data computed during the local update.
+
         """
         psi = self.psi
         i0 = self.i0
@@ -794,8 +799,8 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         return update_data
 
     def polar_max(self, AC1, AC2, C1, C3):
-        """
-        Polar decompositions on two sites:
+        """Polar decompositions on two sites
+
         Given AC1 and C1, find AR1 such that AC1 = C1 AR1
         and from AC2 and C3, find AL2 such that AC2 = AC2 C3
 
@@ -824,8 +829,8 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
             entanglement entropy left of site ``i0``
         entropy_right : float
             entanglement entropy right of site ``i0+1``
-        """
 
+        """
         U_ACL, _, _ = npc.polar(AC2.combine_legs(['vL', 'p'], qconj=[+1]), left=False)
         U_CL, _, s1 = npc.polar(C3, left=False)
         AL2 = npc.tensordot(U_ACL.split_legs(), U_CL.conj(),
@@ -878,6 +883,7 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         S_approx : ndarray
             Just the `S` if a 1D ndarray, or an approximation of the correct S (which was used for
             truncation) in case `S` is 2D Array.
+
         """
         i0 = self.i0
         mixer = self.mixer

@@ -9,34 +9,45 @@ See :doc:`/intro/simulations` for an overview and
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import os
-import sys
-from pathlib import Path
-import time
-import importlib
-import signal
-import warnings
-import traceback
-import numpy as np
-import logging
 import copy
+import importlib
+import logging
+import os
+import signal
+import sys
+import time
+import traceback
+import warnings
+from pathlib import Path
 
-from ..models.model import Model
+import numpy as np
+
+from .. import version
 from ..algorithms.algorithm import Algorithm
 from ..linalg.truncation import TruncationError
+from ..models.model import Model, NearestNeighborModel
 from ..networks.mps import InitialStateBuilder
-from ..models.model import NearestNeighborModel
 from ..tools import hdf5_io
 from ..tools.cache import CacheFile
-from ..tools.params import asConfig
 from ..tools.events import EventHandler
-from ..tools.misc import find_subclass, convert_memory_units
-from ..tools.misc import update_recursive, get_recursive, set_recursive, merge_recursive
+from ..tools.misc import (
+    convert_memory_units,
+    find_subclass,
+    get_recursive,
+    merge_recursive,
+    set_recursive,
+    update_recursive,
+)
 from ..tools.misc import setup_logging as setup_logging_
-from .. import version
+from ..tools.params import asConfig
+from .measurement import (
+    _m_model_method,
+    _m_model_method_wrapped,
+    _m_psi_method,
+    _m_psi_method_wrapped,
+    measurement_wrapper,
+)
 from .post_processing import DataLoader
-from .measurement import (measurement_wrapper, _m_psi_method, _m_psi_method_wrapped,
-                          _m_model_method, _m_model_method_wrapped)
 
 __all__ = [
     'Simulation',
@@ -175,7 +186,9 @@ class Simulation:
     received_signal_sigint : bool
         Flag to indicate that the user pressed ctrl-c and want's the process to terminate.
         See :meth:`handle_ctrl_c_sigint` for details.
+
     """
+
     #: name of the default algorithm `engine` class
     default_algorithm = 'TwoSiteDMRGEngine'
 
@@ -300,6 +313,7 @@ class Simulation:
         -------
         RAM : int
             The expected RAM usage in kB.
+
         """
         self.init_model()       # model, required for algorithm
         self.init_state()       # psi, required for algorithm
@@ -315,6 +329,7 @@ class Simulation:
         -------
         results : dict
             The :attr:`results` as returned by :meth:`prepare_results_for_save`.
+
         """
         if self.loaded_from_checkpoint:
             warnings.warn("called `run()` on a simulation loaded from checkpoint. "
@@ -356,6 +371,7 @@ class Simulation:
             data dictionary saved at a simulation checkpoint.
         **kwargs :
             Further keyword arguments given to the `Simulation.__init__`.
+
         """
         if filename is not None:
             if checkpoint_results is not None:
@@ -385,6 +401,7 @@ class Simulation:
         -------
         results : dict
             The :attr:`results` as returned by :meth:`prepare_results_for_save`.
+
         """
         if not self.loaded_from_checkpoint:
             warnings.warn("called `resume_run()` on a simulation *not* loaded from checkpoint. "
@@ -571,6 +588,7 @@ class Simulation:
                 `kwargs` can specify extra keyword-arguments for the function,
                 `priority` allows to tune the order in which the measurement functions get called.
                 See :meth:`~tenpy.tools.events.EventHandler.connect_by_name` for more details.
+
         """
         alg_class_name = self.options.get("algorithm_class", self.default_algorithm)
         AlgorithmClass = find_subclass(Algorithm, alg_class_name)
@@ -746,6 +764,7 @@ class Simulation:
         -------
         results : dict
             The results from calling the measurement functions.
+
         """
         # in case of a failed measurement, we should raise the exception at the end of the
         # simulation?
@@ -801,6 +820,7 @@ class Simulation:
             The psi suitable as argument for generic measurement functions.
         model :
             Model matching `psi` (in terms of indexing, MPS order, grouped sites, ...)
+
         """
         if self.options.get("canonicalize_before_measurement", False, bool):
             if psi is self.psi:
@@ -942,6 +962,7 @@ class Simulation:
             Filename for output; None disables any writing to files.
             Relative to :cfg:option:`Simulation.directory`, if specified.
             The file ending determines the output format.
+
         """
         # note: this function shouldn't use logging: it's called before setup_logging()
         output_filename_params = self.options.setdefault('output_filename_params', None)
@@ -1032,6 +1053,7 @@ class Simulation:
         -------
         backup_filename : pathlib.Path
             The filename where to keep a backup while writing files to avoid.
+
         """
         # note: this function shouldn't use logging
         if self.options.setdefault("safe_write", True):
@@ -1050,6 +1072,7 @@ class Simulation:
         results : dict | None
             The results to be saved. If not specified, call :meth:`prepare_results_for_save`
             to allow last-minute adjustments to the saved :attr:`results`.
+
         """
         if results is None:
             results = self.prepare_results_for_save()
@@ -1101,6 +1124,7 @@ class Simulation:
         results : dict
             A copy of :attr:`results` containing everything to be saved.
             Measurement results are converted into a numpy array (if possible).
+
         """
         results = self.results.copy()
         if len(self.errors_during_run) > 0:
@@ -1120,12 +1144,12 @@ class Simulation:
                                 del data[k]
                                 data[k + "_eps"] = np.array(v_err)
                                 data[k + "_ov"] = np.array(v_ov)
-                            except:
+                            except Exception:
                                 pass
                             continue
                         try:
                             v = np.array(v)
-                        except:
+                        except Exception:
                             continue
                         if v.dtype != np.dtype(object):
                             data[k] = v
@@ -1165,6 +1189,7 @@ class Simulation:
                 To avoid unnecessary, slow disk input/output, the value will be increased if
                 saving takes longer than 10% of `save_every_x_seconds`.
                 Use ``0.`` to force saving at each checkpoint.
+
         """
         save_every = self.options.get('save_every_x_seconds', None, 'real')
         now = time.time()
@@ -1196,6 +1221,7 @@ class Simulation:
         -------
         seconds : float
             Elapsed (wall clock) time in seconds since the initialization of the simulation.
+
         """
         return time.time() - self._init_walltime
 
@@ -1209,7 +1235,9 @@ class Skip(ValueError):
         Error message.
     filename : str
         Filename of the existing output file due to which the simulation is skipped.
+
     """
+
     def __init__(self, msg, filename):
         filename = str(filename)
         super().__init__(msg + '\n' + filename)
@@ -1243,6 +1271,7 @@ def init_simulation(simulation_class='GroundStateSearch',
     results : dict
         The results of the Simulation, i.e., what
         :meth:`~tenpy.simulations.simulation.Simulation.run()` returned.
+
     """
     SimClass = find_subclass(Simulation, simulation_class)
     if simulation_class_kwargs is None:
@@ -1272,6 +1301,7 @@ def run_simulation(simulation_class='GroundStateSearch',
     results : dict
         The results of the Simulation, i.e., what
         :meth:`~tenpy.simulations.simulation.Simulation.run()` returned.
+
     """
     sim = init_simulation(simulation_class, simulation_class_kwargs, **simulation_params)
     with sim:
@@ -1322,6 +1352,7 @@ def init_simulation_from_checkpoint(*,
     directory during initialization. Hence, either resume the simulation from the same directory
     where you originally started, or update the :cfg:option:`Simulation.directory`
     (and :cfg:option`Simulation.output_filename`) parameter with `update_sim_params`.
+
     """
     if filename is not None:
         if checkpoint_results is not None:
@@ -1383,6 +1414,7 @@ def resume_from_checkpoint(*,
     directory during initialization. Hence, either resume the simulation from the same directory
     where you originally started, or update the :cfg:option:`Simulation.directory`
     (and :cfg:option`Simulation.output_filename`) parameter with `update_sim_params`.
+
     """
     sim = init_simulation_from_checkpoint(filename=filename,
                                           checkpoint_results=checkpoint_results,
@@ -1480,6 +1512,7 @@ def run_seq_simulations(sequential,
     results: list | dict
         If `collect_results_in_memory`, a list of dictionaries with the results for each
         simulation. Otherwise just the results of the last simulation run.
+
     """
     sequential = asConfig(sequential, 'sequential')
     separator = sequential.get('separator', '.')
@@ -1595,10 +1628,11 @@ def estimate_simulation_RAM(*,
     unit : str
         Unit of the estimate
 
-    See also
+    See Also
     --------
     Simulation.estimate_RAM : Corresponding simulation method
     tenpy.algorithms.algorithm.Algorithm.estimate_RAM : corresponding algorithm method.
+
     """
     offset_val, offset_unit = estimate_RAM_const_offset
     offset_MB, _ = convert_memory_units(offset_val, offset_unit, 'MB')
@@ -1696,10 +1730,11 @@ def output_filename_from_dict(options,
     ...         'model_params.Lx': '_{0:d}',
     ...         'model_params.Ly': 'x{0:d}'}, joint='')
     'result_dt_0.010_3x4.h5'
+
     """
     formatted_parts = [prefix]
     if parts_order is None:
-        if sys.version_info < (3, 7):
+        if sys.version_info < (3, 7):  # noqa UP036
             # dictionaries are not ordered -> sort keys alphabetically
             parts_order = sorted(parts.keys(), key=lambda x: x[0] if isinstance(x, tuple) else x)
         else:

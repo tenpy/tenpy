@@ -7,18 +7,20 @@ of the classes defined in tenpy.
 
 import numpy as np
 
-from tenpy.networks.mps import MPS
-from tenpy.models.tf_ising import TFIChain
 from tenpy.algorithms import tebd
+from tenpy.models.tf_ising import TFIChain
+from tenpy.networks.mps import MPS
 
 
 def example_TEBD_gs_tf_ising_finite(L, g):
     print("finite TEBD, imaginary time evolution, transverse field Ising")
-    print("L={L:d}, g={g:.2f}".format(L=L, g=g))
+    print(f"L={L:d}, g={g:.2f}")
     model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
-    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
+    psi = MPS.from_product_state(
+        M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+    )
     tebd_params = {
         'order': 2,
         'delta_tau_list': [0.1, 0.01, 0.001, 1.e-4, 1.e-5],
@@ -35,27 +37,29 @@ def example_TEBD_gs_tf_ising_finite(L, g):
     # expectation values
     E = np.sum(M.bond_energies(psi))  # M.bond_energies() works only a for NearestNeighborModel
     # alternative: directly measure E2 = np.sum(psi.expectation_value(M.H_bond[1:]))
-    print("E = {E:.13f}".format(E=E))
+    print(f"E = {E:.13f}")
     print("final bond dimensions: ", psi.chi)
     mag_x = np.sum(psi.expectation_value("Sigmax"))
     mag_z = np.sum(psi.expectation_value("Sigmaz"))
-    print("magnetization in X = {mag_x:.5f}".format(mag_x=mag_x))
-    print("magnetization in Z = {mag_z:.5f}".format(mag_z=mag_z))
+    print(f"magnetization in X = {mag_x:.5f}")
+    print(f"magnetization in Z = {mag_z:.5f}")
     if L < 20:  # compare to exact result
         from tfi_exact import finite_gs_energy
         E_exact = finite_gs_energy(L, 1., g)
-        print("Exact diagonalization: E = {E:.13f}".format(E=E_exact))
+        print(f"Exact diagonalization: E = {E_exact:.13f}")
         print("relative error: ", abs((E - E_exact) / E_exact))
     return E, psi, M
 
 
 def example_TEBD_gs_tf_ising_infinite(g):
     print("infinite TEBD, imaginary time evolution, transverse field Ising")
-    print("g={g:.2f}".format(g=g))
+    print(f"g={g:.2f}")
     model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
-    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
+    psi = MPS.from_product_state(
+        M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+    )
     tebd_params = {
         'order': 2,
         'delta_tau_list': [0.1, 0.01, 0.001, 1.e-4, 1.e-5],
@@ -70,24 +74,24 @@ def example_TEBD_gs_tf_ising_infinite(g):
     eng.run_GS()  # the main work...
     E = np.mean(M.bond_energies(psi))  # M.bond_energies() works only a for NearestNeighborModel
     # alternative: directly measure E2 = np.mean(psi.expectation_value(M.H_bond))
-    print("E (per site) = {E:.13f}".format(E=E))
+    print(f"E (per site) = {E:.13f}")
     print("final bond dimensions: ", psi.chi)
     mag_x = np.mean(psi.expectation_value("Sigmax"))
     mag_z = np.mean(psi.expectation_value("Sigmaz"))
-    print("<sigma_x> = {mag_x:.5f}".format(mag_x=mag_x))
-    print("<sigma_z> = {mag_z:.5f}".format(mag_z=mag_z))
+    print(f"<sigma_x> = {mag_x:.5f}")
+    print(f"<sigma_z> = {mag_z:.5f}")
     print("correlation length:", psi.correlation_length())
     # compare to exact result
     from tfi_exact import infinite_gs_energy
     E_exact = infinite_gs_energy(1., g)
-    print("Analytic result: E (per site) = {E:.13f}".format(E=E_exact))
+    print(f"Analytic result: E (per site) = {E_exact:.13f}")
     print("relative error: ", abs((E - E_exact) / E_exact))
     return E, psi, M
 
 
 def example_TEBD_tf_ising_lightcone(L, g, tmax, dt):
     print("finite TEBD, real time evolution")
-    print("L={L:d}, g={g:.2f}, tmax={tmax:.2f}, dt={dt:.3f}".format(L=L, g=g, tmax=tmax, dt=dt))
+    print(f"L={L:d}, g={g:.2f}, tmax={tmax:.2f}, dt={dt:.3f}")
     # find ground state with TEBD or DMRG
     #  E, psi, M = example_TEBD_gs_tf_ising_finite(L, g)
     from d_dmrg import example_DMRG_tf_ising_finite
@@ -126,16 +130,16 @@ def example_TEBD_tf_ising_lightcone(L, g, tmax, dt):
     plt.ylabel('time $t/J$')
     plt.ylim(0., tmax)
     plt.colorbar().set_label('entropy $S$')
-    filename = 'c_tebd_lightcone_{g:.2f}.pdf'.format(g=g)
+    filename = f'c_tebd_lightcone_{g:.2f}.pdf'
     plt.savefig(filename)
     print("saved " + filename)
 
 
 def example_TEBD_gs_tf_ising_next_nearest_neighbor(L, g, Jp):
-    from tenpy.models.spins_nnn import SpinChainNNN2
     from tenpy.models.model import NearestNeighborModel
+    from tenpy.models.spins_nnn import SpinChainNNN2
     print("finite TEBD, imaginary time evolution, transverse field Ising next-nearest neighbor")
-    print("L={L:d}, g={g:.2f}, Jp={Jp:.2f}".format(L=L, g=g, Jp=Jp))
+    print(f"L={L:d}, g={g:.2f}, Jp={Jp:.2f}")
     model_params = dict(
         L=L,
         Jx=1.,
@@ -151,7 +155,9 @@ def example_TEBD_gs_tf_ising_next_nearest_neighbor(L, g, Jp):
     # we start with the non-grouped sites, but next-nearest neighbor interactions, building the MPO
     M = SpinChainNNN2(model_params)
     product_state = ["up"] * M.lat.N_sites
-    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
+    psi = MPS.from_product_state(
+        M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+    )
 
     # now we group each to sites ...
     psi.group_sites(n=2)  # ... in the state
@@ -176,14 +182,14 @@ def example_TEBD_gs_tf_ising_next_nearest_neighbor(L, g, Jp):
 
     # expectation values:
     E = np.sum(M_nn.bond_energies(psi))  # bond_energies() works only a for NearestNeighborModel
-    print("E = {E:.13f}".format(E=E))
+    print(f"E = {E:.13f}")
     print("final bond dimensions: ", psi.chi)
     # we can split the sites of the state again for an easier evaluation of expectation values
     psi.group_split()
     mag_x = 2. * np.sum(psi.expectation_value("Sx"))  # factor of 2 for Sx vs Sigmax
     mag_z = 2. * np.sum(psi.expectation_value("Sz"))
-    print("magnetization in X = {mag_x:.5f}".format(mag_x=mag_x))
-    print("magnetization in Z = {mag_z:.5f}".format(mag_z=mag_z))
+    print(f"magnetization in X = {mag_x:.5f}")
+    print(f"magnetization in Z = {mag_z:.5f}")
     return E, psi, M
 
 

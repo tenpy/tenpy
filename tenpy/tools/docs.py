@@ -15,7 +15,7 @@ def amend_parent_docstring(parent, insert_at: str = 'Parameters\n', insert_befor
         defined in the amending part, i.e. the explicit docstring of the decorated function in the code
 
     Parameters
-    ==========
+    ----------
     parent
         The parent "function" (or really any object that has a ``__doc__`` attribute).
     insert_at : str | None
@@ -26,6 +26,7 @@ def amend_parent_docstring(parent, insert_at: str = 'Parameters\n', insert_befor
         Note that an empty string can be used to achieve insertion at the very beginning.
     insert_before : bool
         If the amending part will be inserted before ``insert_at``. Otherwise, after.
+
     """
     parent_doc = getattr(parent, '__doc__', None)
     if parent_doc is None:

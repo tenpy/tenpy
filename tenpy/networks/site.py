@@ -5,13 +5,14 @@ The :class:`Site` is the prototype, read it's docstring.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
-import itertools
 import copy
+import itertools
+
+import numpy as np
 
 from ..linalg import np_conserved as npc
-from ..tools.misc import inverse_permutation, find_subclass
 from ..tools.hdf5_io import Hdf5Exportable
+from ..tools.misc import find_subclass, inverse_permutation
 
 __all__ = [
     'Site',
@@ -119,7 +120,7 @@ class Site(Hdf5Exportable):
         from tenpy.networks.site import Site
 
     .. doctest :: Site
-    
+
         >>> chinfo = npc.ChargeInfo([1], ['2 * Sz'])
         >>> ch = npc.LegCharge.from_qflat(chinfo, [1, -1])
         >>> Sp = [[0, 1.], [0, 0]]
@@ -135,7 +136,7 @@ class Site(Hdf5Exportable):
         >>> print(site.get_op('Splus Sminus').to_ndarray())
         [[0. 0.]
          [0. 1.]]
-     
+
     Note that sorting the charges (which happens by default!) may lead to unintuitive
     matrix representations of the operators, because physicists are typically not used to
     writing them in the sorted basis (in this case ``['down', 'up']``);
@@ -209,6 +210,7 @@ class Site(Hdf5Exportable):
         Returns
         -------
         The modified ``self``.
+
         """
         if new_leg_charge is None:
             new_leg_charge = npc.LegCharge.from_trivial(self.dim)
@@ -244,6 +246,7 @@ class Site(Hdf5Exportable):
         -------
         perm : 1D ndarray
             The permutation
+
         """
         if self.leg.sorted and (not bunch or self.leg.bunched):
             return np.arange(self.dim, dtype=np.intp)  # nothing to do
@@ -329,6 +332,7 @@ class Site(Hdf5Exportable):
             If True, the operator is permuted with :attr:`perm` to account for permutations
             induced by sorting charges; False disables the permutations.
             By default (``None``), the value of :attr:`used_sort_charge` is used.
+
         """
         name = str(name)
         if not name.isidentifier():
@@ -366,7 +370,7 @@ class Site(Hdf5Exportable):
         if need_JW:
             self.need_JW_string.add(name)
         # keep track of h.c. operators
-        if hc is None and not name in self.hc_ops:
+        if hc is None and name not in self.hc_ops:
             if op.conj().transpose() == op:
                 hc = name
             else:
@@ -390,6 +394,7 @@ class Site(Hdf5Exportable):
             The old name of the operator.
         new_name : str
             The new name of the operator.
+
         """
         if old_name == new_name:
             return
@@ -398,7 +403,6 @@ class Site(Hdf5Exportable):
         old_hc_name = self.hc_ops.get(old_name, None)
         op = getattr(self, old_name)
         need_JW = old_name in self.need_JW_string
-        hc_op_name = self.get_hc_op_name(old_name)
         self.remove_op(old_name)
         setattr(self, new_name, op)
         self.opnames.add(new_name)
@@ -420,6 +424,7 @@ class Site(Hdf5Exportable):
         ----------
         name : str
             The name of the operator to be removed.
+
         """
         hc_name = self.hc_ops.get(name, None)
         if hc_name is not None:
@@ -442,6 +447,7 @@ class Site(Hdf5Exportable):
         -------
         state_index : int
             the index of the basis state associated with the label.
+
         """
         res = self.state_labels.get(label, label)
         try:
@@ -470,15 +476,16 @@ class Site(Hdf5Exportable):
         op : :class:`~tenpy.linalg.np_conserved`
             The operator given by `name`, with labels ``'p', 'p*'``.
             If name already was an npc Array, it's directly returned.
+
         """
         names = name.split()
         op = getattr(self, names[0], None)
         if op is None:
-            raise ValueError("{0!r} doesn't have the operator {1!r}".format(self, names[0]))
+            raise ValueError(f"{self!r} doesn't have the operator {names[0]!r}")
         for name2 in names[1:]:
             op2 = getattr(self, name2, None)
             if op2 is None:
-                raise ValueError("{0!r} doesn't have the operator {1!r}".format(self, name2))
+                raise ValueError(f"{self!r} doesn't have the operator {name2!r}")
             op = npc.tensordot(op, op2, axes=['p*', 'p'])
         return op
 
@@ -496,13 +503,14 @@ class Site(Hdf5Exportable):
         -------
         hc_op_name : str
             Operator name for the hermitian conjugate operator.
+
         """
         names = name.split()
         hc_names = []
         for name2 in reversed(names):
             hc_name_2 = self.hc_ops.get(name2)
             if hc_name_2 is None:
-                raise ValueError("hermitian conjugate of operator {0!s} unknown".format(name2))
+                raise ValueError(f"hermitian conjugate of operator {name2!s} unknown")
             hc_names.append(hc_name_2)
         return ' '.join(hc_names)
 
@@ -518,6 +526,7 @@ class Site(Hdf5Exportable):
         -------
         needs_JW : bool
             Whether the operator needs a Jordan-Wigner string, judging from :attr:`need_JW_string`.
+
         """
         names = name.split()
         need_JW = bool(names[0] in self.need_JW_string)
@@ -539,6 +548,7 @@ class Site(Hdf5Exportable):
         -------
         valid : bool
             ``True`` if `name` is a valid argument to :meth:`get_op`.
+
         """
         for name2 in name.split():
             if name2 not in self.opnames:
@@ -561,6 +571,7 @@ class Site(Hdf5Exportable):
         combined_opname : str
             A valid operator name
             Operator name representing the product of operators in `names`.
+
         """
         if len(names) == 0:
             return 'Id'
@@ -583,6 +594,7 @@ class Site(Hdf5Exportable):
             usual mathematical convention. For example, if ``operators=['Sz', 'Sp', 'Sx']``,
             the final operator is equivalent to ``site.get_op('Sz Sp Sx')``, with the ``'Sx'``
             operator acting first on any physical state.
+
         """
         if len(operators) == 0:
             return self.Id
@@ -597,7 +609,7 @@ class Site(Hdf5Exportable):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "<Site, d={dim:d}, ops={ops!r}>".format(dim=self.dim, ops=self.opnames)
+        return f"<Site, d={self.dim:d}, ops={self.opnames!r}>"
 
     def charge_to_JW_signs(self, charges):
         """Convert charge values to Jordan-Wigner parity.
@@ -621,6 +633,7 @@ class Site(Hdf5Exportable):
         -------
         JW_signs :
             Should only have values +1 or -1.
+
         """
         charge_to_JW_parity = getattr(self, 'charge_to_JW_parity', None)
         if charge_to_JW_parity is not None:
@@ -674,6 +687,7 @@ class GroupedSite(Site):
         The sites grouped together into self.
     labels: list of str
         The labels using which the single-site operators are added during construction.
+
     """
 
     def __init__(self, sites, labels=None, charges='same'):
@@ -775,8 +789,8 @@ class GroupedSite(Site):
         prod : :class:`~tenpy.linalg.np_conserved.Array`
             Kronecker product :math:`ops[0] \otimes ops[1] \otimes \cdots`,
             with labels ``['p', 'p*']``.
+
         """
-        sites = self.sites
         op = ops[0].transpose(['p', 'p*'])
         for op2 in ops[1:]:
             op = npc.outer(op, op2.transpose(['p', 'p*']))
@@ -787,9 +801,7 @@ class GroupedSite(Site):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "GroupedSite({sites!r}, {labels!r}, {charges!r})".format(sites=self.sites,
-                                                                        labels=self.labels,
-                                                                        charges=self.charges)
+        return f"GroupedSite({self.sites!r}, {self.labels!r}, {self.charges!r})"
 
 
 def group_sites(sites, n=2, labels=None, charges='same'):
@@ -808,6 +820,7 @@ def group_sites(sites, n=2, labels=None, charges='same'):
     -------
     grouped_sites : list of :class:`GroupedSite`
         The grouped sites. Has length ``(len(sites)-1)//n + 1``.
+
     """
     grouped_sites = []
     if labels is None:
@@ -1006,6 +1019,7 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None, 
         >>> set_common_charges([ferm, spin], new_charges='drop')
         [array([0, 1, 2, 3]), array([0, 1, 2])]
         >>> assert ferm.leg.chinfo.qnumber == spin.leg.chinfo.qnumber == 0  # trivial: no charges
+
     """
     for s, site in enumerate(sites):
         for site2 in sites[s + 1:]:
@@ -1164,6 +1178,7 @@ def kron(*ops, group=True):
     product : :class:`~tenpy.linalg.np_conserved.Array`
         Outer product of the `ops`, with legs ``'p0', 'p0*', 'p1', 'p1*', ...`` (grouped=False)
         or combined legs ``'(p0.p1...)', '(p0*.p1*...)'`` (grouped=True).
+
     """
     if len(ops) <= 1:
         raise ValueError("need at least 2 ops")
@@ -1220,6 +1235,7 @@ class SpinHalfSite(Site):
     ----------
     conserve : str
         Defines what is conserved, see table above.
+
     """
 
     def __init__(self, conserve='Sz', sort_charge=True):
@@ -1258,7 +1274,7 @@ class SpinHalfSite(Site):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "SpinHalfSite({c!r})".format(c=self.conserve)
+        return f"SpinHalfSite({self.conserve!r})"
 
 
 class SpinSite(Site):
@@ -1303,6 +1319,7 @@ class SpinSite(Site):
         The 2S+1 states range from m = -S, -S+1, ... +S.
     conserve : str
         Defines what is conserved, see table above.
+
     """
 
     def __init__(self, S=0.5, conserve='Sz', sort_charge=True):
@@ -1358,7 +1375,7 @@ class SpinSite(Site):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "SpinSite(S={S!s}, {c!r})".format(S=self.S, c=self.conserve)
+        return f"SpinSite(S={self.S!s}, {self.conserve!r})"
 
 
 class FermionSite(Site):
@@ -1404,6 +1421,7 @@ class FermionSite(Site):
         Defines what is conserved, see table above.
     filling : float
         Average filling. Used to define ``dN``.
+
     """
 
     def __init__(self, conserve='N', filling=0.5):
@@ -1437,7 +1455,7 @@ class FermionSite(Site):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "FermionSite({c!r}, {f:f})".format(c=self.conserve, f=self.filling)
+        return f"FermionSite({self.conserve!r}, {self.filling:f})"
 
 
 class SpinHalfFermionSite(Site):
@@ -1518,6 +1536,7 @@ class SpinHalfFermionSite(Site):
         Whether spin is conserved, c.f. table above.
     filling : float
         Average filling. Used to define ``dN``.
+
     """
 
     def __init__(self, cons_N='N', cons_Sz='Sz', filling=1.):
@@ -1612,9 +1631,7 @@ class SpinHalfFermionSite(Site):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "SpinHalfFermionSite({cN!r}, {cS!r}, {f:f})".format(cN=self.cons_N,
-                                                                   cS=self.cons_Sz,
-                                                                   f=self.filling)
+        return f"SpinHalfFermionSite({self.cons_N!r}, {self.cons_Sz!r}, {self.filling:f})"
 
 
 class SpinHalfHoleSite(Site):
@@ -1693,6 +1710,7 @@ class SpinHalfHoleSite(Site):
         Whether spin is conserved, c.f. table above.
     filling : float
         Average filling. Used to define ``dN``.
+
     """
 
     def __init__(self, cons_N='N', cons_Sz='Sz', filling=1.):
@@ -1788,9 +1806,7 @@ class SpinHalfHoleSite(Site):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "SpinHalfHoleSite({cN!r}, {cS!r}, {f:f})".format(cN=self.cons_N,
-                                                                   cS=self.cons_Sz,
-                                                                   f=self.filling)
+        return f"SpinHalfHoleSite({self.cons_N!r}, {self.cons_Sz!r}, {self.filling:f})"
 
 
 class BosonSite(Site):
@@ -1839,6 +1855,7 @@ class BosonSite(Site):
         Defines what is conserved, see table above.
     filling : float
         Average filling. Used to define ``dN``.
+
     """
 
     def __init__(self, Nmax=1, conserve='N', filling=0.):
@@ -1884,9 +1901,7 @@ class BosonSite(Site):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "BosonSite({N:d}, {c!r}, {f:f})".format(N=self.Nmax,
-                                                       c=self.conserve,
-                                                       f=self.filling)
+        return f"BosonSite({self.Nmax:d}, {self.conserve!r}, {self.filling:f})"
 
 
 def spin_half_species(SpeciesSite, cons_N, cons_Sz, **kwargs):
@@ -1917,6 +1932,7 @@ def spin_half_species(SpeciesSite, cons_N, cons_Sz, **kwargs):
         Always ``['up', 'down']``. Included such that a ``return spin_half_species(...)``
         in :meth:`~tenpy.models.model.CouplingMPOModel.init_sites` triggers the use of the
         :class:`~tenpy.models.lattice.MultiSpeciesLattice`.
+
     """
     SpeciesSite = find_subclass(Site, SpeciesSite)
     if not cons_N:
@@ -1997,7 +2013,9 @@ class ClockSite(Site):
         Number of states per site
     conserve : str
         Defines what is conserved, see table above.
+
     """
+
     def __init__(self, q, conserve='Z', sort_charge=True):
         if not (isinstance(q, int) and q > 1):
             raise ValueError(f'invalid q: {q}')

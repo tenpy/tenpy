@@ -5,9 +5,8 @@
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from ..tools.thread import Worker
-
 from ..linalg import np_conserved as npc
+from ..tools.thread import Worker
 from .dmrg import TwoSiteDMRGEngine
 from .mps_common import TwoSiteH
 
@@ -20,6 +19,7 @@ class TwoSiteHThreadPlusHC(TwoSiteH):
     Using threads instead of e.g. MPI parallelization means we don't need to make explicit copies
     of (at least one of) the environment tensors and communication is much cheaper.
     """
+
     def __init__(self, *args, plus_hc_worker=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._plus_hc_worker = plus_hc_worker

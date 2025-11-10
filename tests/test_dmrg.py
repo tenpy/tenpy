@@ -2,18 +2,20 @@
 # Copyright (C) TeNPy Developers, Apache license
 
 import warnings
+
+import numpy as np
+import pytest
+from scipy import integrate
+
 import tenpy.linalg.np_conserved as npc
-from tenpy.models.model import CouplingModel, MPOModel
-from tenpy.networks.site import SpinHalfSite
-from tenpy.models.tf_ising import TFIChain
-from tenpy.models.spins import SpinChain, DipolarSpinChain
-from tenpy.models.lattice import Chain
 from tenpy.algorithms import dmrg, dmrg_parallel
 from tenpy.algorithms.exact_diag import ExactDiag
+from tenpy.models.lattice import Chain
+from tenpy.models.model import CouplingModel, MPOModel
+from tenpy.models.spins import DipolarSpinChain, SpinChain
+from tenpy.models.tf_ising import TFIChain
 from tenpy.networks import mps
-import pytest
-import numpy as np
-from scipy import integrate
+from tenpy.networks.site import SpinHalfSite
 
 
 def e0_transverse_ising(g=0.5):
@@ -101,8 +103,8 @@ def test_dmrg(bc_MPS, combine, mixer, n, g=1.2):
         # compare exact solution for transverse field Ising model
         Edmrg = res['E']
         Eexact = e0_transverse_ising(g)
-        print("E_DMRG={Edmrg:.12f} vs E_exact={Eex:.12f}".format(Edmrg=Edmrg, Eex=Eexact))
-        print("relative energy error: {err:.2e}".format(err=abs((Edmrg - Eexact) / Eexact)))
+        print(f"E_DMRG={Edmrg:.12f} vs E_exact={Eexact:.12f}")
+        print(f"relative energy error: {abs((Edmrg - Eexact) / Eexact):.2e}")
         print("norm err:", psi.norm_test())
         Edmrg2 = np.mean(psi.expectation_value(M.H_bond))
         Edmrg3 = M.H_MPO.expectation_value(psi)
@@ -170,7 +172,7 @@ def test_dmrg_diag_method(engine, diag_method, tol=1.e-6):
     eng = DMRGEng(psi_Sz_4.copy(), M, dmrg_pars)
     E0, psi0 = eng.run()
     eng.options['lanczos_params'].touch('P_tol')
-    print("E0 = {0:.15f}".format(E0))
+    print(f"E0 = {E0:.15f}")
     assert abs(E_ED - E0) < tol
     ov = npc.inner(psi_ED, ED.mps_to_full(psi0), 'range', do_conj=True)
     assert abs(abs(ov) - 1) < tol
@@ -358,10 +360,10 @@ def test_dmrg_mixer_cleanup(L, bc_MPS):
     old_psi = engine.psi.copy()
     old_LP = [engine.env.get_LP(i) for i in range(psi.L)]
     old_RP = [engine.env.get_RP(i) for i in range(psi.L)]
-    
+
     print(f'Checking consistency of old environments...')
     old_contractions = [engine.env.full_contraction(i) for i in range(L)]
-    
+
     print('Calling mixer_cleanup()...')
     engine.mixer_deactivate()
     engine.mixer_cleanup()
@@ -377,11 +379,11 @@ def test_dmrg_mixer_cleanup(L, bc_MPS):
             assert new_LP[i] is not old_LP[i]
         if not (bc_MPS == 'finite' and i == L - 1):
             assert new_RP[i] is not old_RP[i]
-    
+
     print(f'Checking consistency of new environments...')
     for i in range(L):
         assert np.allclose(engine.env.full_contraction(i), old_contractions[i])
-    
+
     print(f'Check that expectation values have not changed...')
     for op in ['Sx', 'Sz']:
         assert np.allclose(engine.psi.expectation_value(op), old_psi.expectation_value(op))

@@ -3,18 +3,17 @@
 
 import numpy as np
 import numpy.testing as npt
-from tenpy.models.xxz_chain import XXZChain
-from tenpy.models.aklt import AKLTChain
-from tenpy.models.lattice import Square, Chain, MultiSpeciesLattice
+import pytest
+from random_test import rand_permutation, random_MPS
 
-from tenpy.tools import misc
+import tenpy.linalg.np_conserved as npc
 from tenpy.algorithms import tebd
+from tenpy.models.aklt import AKLTChain
+from tenpy.models.lattice import Chain, MultiSpeciesLattice, Square
+from tenpy.models.xxz_chain import XXZChain
 from tenpy.networks import mps, site
 from tenpy.networks.terms import TermList
-from random_test import rand_permutation, random_MPS
-import tenpy.linalg.np_conserved as npc
-
-import pytest
+from tenpy.tools import misc
 
 spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 
@@ -398,7 +397,7 @@ def test_apply_op(bc, eps=1.e-13):
         psi_uud = mps.MPS.from_product_state([s] * 3, ['up', 'up', 'down'], bc=bc, unit_cell_width=3)
         ov = psi_uud.overlap(psi3, understood_infinite=True)
         assert abs(-ov / psi3.norm - 1.) < eps
-    
+
 
 def test_apply_local_op_JW_string(eps=1e-13):
     L = 6
@@ -693,7 +692,7 @@ def test_correlation_length():
     with pytest.warns(UserWarning, match='trimming speigs k to smaller matrix dimension d'):
         xi_p2 = psi_AKLT.correlation_length2(target=2, charge_sector=np.array([+2]), tol_ev0=None)
     assert abs(xi_p2[0] - xi_AKLT) < 1.e-13
-    
+
     assert abs(xi - xi_AKLT) < 1.e-13
 
 
@@ -854,7 +853,6 @@ def test_InitialStateBuilder():
             'full_empty': ('up', 'down'),
             'fill_where': "x_ind % 2 == 0",
             'check_filling': 0.5,
-            'full_empty': ['up', 'down'],
         }).run()
     psi3.test_sanity()
     assert abs(psi1.overlap(psi3) - 1) < 1.e-14

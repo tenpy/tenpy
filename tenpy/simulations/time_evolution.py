@@ -1,15 +1,18 @@
-"""Simulations for (real) time evolution, time dependent correlation
-functions and spectral functions."""
+"""Simulations for (real) time evolution.
+
+Also covers time dependent correlation functions and spectral functions.
+"""
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import warnings
 
+import numpy as np
+
+from ..networks.mps import MPS, MPSEnvironment
+from ..tools import hdf5_io
+from ..tools.misc import consistency_check, to_iterable
 from . import simulation
 from .simulation import *  # noqa F403
-from ..networks.mps import MPSEnvironment, MPS
-from ..tools.misc import to_iterable, consistency_check
-from ..tools import hdf5_io
 
 __all__ = simulation.__all__ + [
     'RealTimeEvolution', 'SpectralSimulation', 'TimeDependentCorrelation',
@@ -35,7 +38,9 @@ class RealTimeEvolution(Simulation):
             Mandatory. Perform time evolution until ``engine.evolved_time`` reaches this value.
             Note that we can go (slightly) beyond this time if it is not a multiple of
             the individual time steps.
+
     """
+
     default_algorithm = 'TEBDEngine'
     default_measurements = Simulation.default_measurements + [
         ('tenpy.simulations.measurement', 'm_evolved_time'),
@@ -103,6 +108,7 @@ class RealTimeEvolution(Simulation):
         -------
         eps : float
             Accumulated eps error (sum of the discarded Schmidt values) since the start of the time-evolution.
+
         """
         return self.engine.trunc_err.eps
 
@@ -115,6 +121,7 @@ class RealTimeEvolution(Simulation):
         -------
         ov : float
             Total ov error since the start of the time-evolution.
+
         """
         return self.engine.trunc_err.ov
 
@@ -151,7 +158,9 @@ class TimeDependentCorrelation(RealTimeEvolution):
         ground_state_filename : str
             a filename of a given ground state search (ideally a hdf5 file coming from a finished
             run of a :class:`~tenpy.simulations.ground_state_search.GroundStateSearch`)
+
     """
+
     default_measurements = RealTimeEvolution.default_measurements + [
         ('simulation_method', 'm_correlation_function'),
     ]

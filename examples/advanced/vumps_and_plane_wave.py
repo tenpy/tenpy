@@ -1,13 +1,15 @@
 """Excitations of the transverse field Ising model.
 
-This example uses VUMPS to find the ground state of the transverse field Ising model and uses the plane wave excitation ansatz to compute the first excited states.
+This example uses VUMPS to find the ground state of the transverse field Ising model and uses the
+plane wave excitation ansatz to compute the first excited states.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from tenpy.models.tf_ising import TFIChain
-from tenpy.algorithms import vumps, plane_wave_excitation
-from tenpy.networks import mps
 import numpy as np
+
+from tenpy.algorithms import plane_wave_excitation, vumps
+from tenpy.models.tf_ising import TFIChain
+from tenpy.networks import mps
 
 
 def tfi_vumps(g=1.5):
@@ -18,7 +20,6 @@ def tfi_vumps(g=1.5):
         'combine': False,
         'N_sweeps_check': 1,
         'mixer': False,
-        'N_sweeps_check': 1,
         'trunc_params': {
             'chi_max': 32,
             'svd_min': 1.e-14,
@@ -29,8 +30,8 @@ def tfi_vumps(g=1.5):
         'max_E_err': 1.e-12,
         'max_S_err': 1.e-8,
     }
-   
-    
+
+
     eng = vumps.TwoSiteVUMPSEngine(psi, M, vumps_pars)
     E, psi = eng.run()
     print(f"ground state energy: {E:.5f}")
@@ -69,7 +70,7 @@ if __name__ == "__main__":
     momenta, dispersions = tfi_excitations(psi, M)
 
     # plot and compare to exact results
-    import matplotlib.pyplot as plt 
+    import matplotlib.pyplot as plt
 
     plt.plot(momenta, dispersions, 'x', label='plane wave ansatz')
     plt.plot(np.arange(0, np.pi, 0.1), tfi_dispersion(np.arange(0, np.pi, 0.1), 1.5), ':', label='exact', c='black')

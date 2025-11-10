@@ -20,22 +20,23 @@ implemented here also directly use the :class:`Sweep` class.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from ..linalg import np_conserved as npc
-from .algorithm import Algorithm
-from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
-from ..networks.mpo import MPOEnvironment
-from ..networks.mps import MPSEnvironment
-from ..linalg.truncation import truncate, svd_theta, decompose_theta_qr_based, TruncationError
-from ..linalg import np_conserved as npc
-from ..tools.params import asConfig
-from ..tools.misc import find_subclass, consistency_check
-from ..tools.process import memory_usage
-import numpy as np
-import time
-import warnings
 import copy
 import itertools
 import logging
+import time
+import warnings
+
+import numpy as np
+
+from ..linalg import np_conserved as npc
+from ..linalg.sparse import NpcLinearOperator, OrthogonalNpcLinearOperator, SumNpcLinearOperator
+from ..linalg.truncation import TruncationError, decompose_theta_qr_based, svd_theta, truncate
+from ..networks.mpo import MPOEnvironment
+from ..networks.mps import MPSEnvironment
+from ..tools.misc import consistency_check, find_subclass
+from ..tools.params import asConfig
+from ..tools.process import memory_usage
+from .algorithm import Algorithm
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +129,9 @@ class Sweep(Algorithm):
         See :cfg:option:`Sweep.chi_list`
     mixer : :class:`Mixer` | ``None``
         If ``None``, no mixer is used (anymore), otherwise the mixer instance.
+
     """
+
     DefaultMixer = None
     use_mixer_by_default = False  # The default for the "mixer" config option
 
@@ -228,6 +231,7 @@ class Sweep(Algorithm):
         ValueError
             If the engine is re-initialized with a new model, which legs are incompatible with
             those of hte old model.
+
         """
         H = model.H_MPO if model is not None else self.env.H
         # extract `init_env_data` from options or previous env
@@ -306,6 +310,7 @@ class Sweep(Algorithm):
                 20 sweeps and ``chi_max=100`` afterwards.
                 A value of `None` is initialized to the current value of
                 ``trunc_params['chi_max']`` at algorithm initialization.
+
         """
         self.sweeps = 0
         if resume_data is not None and 'sweeps' in resume_data:
@@ -331,6 +336,7 @@ class Sweep(Algorithm):
         ----------
         N_sweeps : int
             Number of sweeps to run without optimization
+
         """
         if N_sweeps <= 0:
             return
@@ -362,6 +368,7 @@ class Sweep(Algorithm):
         -------
         max_trunc_err : float
             Maximal truncation error introduced.
+
         """
         self._resume_psi = None  # if we had a separate _resume_psi previously, it's now invalid!
         self.E_trunc_list = []
@@ -425,6 +432,7 @@ class Sweep(Algorithm):
             right (`True`), left (`False`) or equal (`None`) of the current one, and `update_LP`,
             `update_RP` indicate whether it is necessary to update the `LP` and `RP` of the
             environments.
+
         """
         # warning: set only those `LP` and `RP` to True, which can/will be used later again
         # otherwise, the assumptions in :meth:`free_no_longer_needed_envs` will not hold,
@@ -452,7 +460,7 @@ class Sweep(Algorithm):
         return zip(i0s, move_right, update_LP_RP)
 
     def _cache_optimize(self):
-        """call ``env.cache_optimize`` to preload next env tensors and avoid unnecessary reads."""
+        """Call ``env.cache_optimize`` to preload next env tensors and avoid unnecessary reads."""
         i0 = self.i0
         move_right = self.move_right
         if self.n_optimize == 2:
@@ -498,6 +506,7 @@ class Sweep(Algorithm):
             Current best guess for the ground state, which is to be optimized.
             Labels are ``'vL', 'p0', 'p1', 'vR'``, or combined versions of it (if `self.combine`).
             For single-site DMRG, the ``'p1'`` label is missing.
+
         """
         self.make_eff_H()  # self.eff_H represents tensors LP, W0, RP
         # make theta
@@ -555,6 +564,7 @@ class Sweep(Algorithm):
             Data to be processed by :meth:`update_env` and :meth:`post_update_local`,
             e.g. containing the truncation error as `err`.
             If :attr:`combine` is set, it should also contain the `U` and `VH` from the SVD.
+
         """
         raise NotImplementedError("needs to be overridden by subclass")
 
@@ -565,6 +575,7 @@ class Sweep(Algorithm):
         ----------
         **update_data :
             Whatever is returned by :meth:`update_local`.
+
         """
         i_L, i_R = self._update_env_inds()  # left and right updated sites
         all_envs = self._all_envs
@@ -611,7 +622,6 @@ class Sweep(Algorithm):
         """
         i_L, i_R = self._update_env_inds()  # left and right updated site
         # envs between `i_L` and `i_R` where already deleted and updated in `update_env`
-        i0 = self.i0
         n = self.n_optimize
         update_LP, update_RP = self.update_LP_RP
         all_envs = self._all_envs
@@ -661,6 +671,7 @@ class Sweep(Algorithm):
         See Also
         --------
         mixer_deactivate
+
         """
         Mixer_class = self.options.get('mixer', self.use_mixer_by_default)
         if not Mixer_class:
@@ -678,7 +689,7 @@ class Sweep(Algorithm):
 
         Set ``self.mixer=None`` and revert any other effects of :meth:`mixer_activate`.
         """
-        logger.info(f'deactivate {self.mixer.__class__.__name__} with final amplitude ' \
+        logger.info(f'deactivate {self.mixer.__class__.__name__} with final amplitude '
                     f'{self.mixer.amplitude}')
         self.mixer = None
 
@@ -810,6 +821,7 @@ class IterativeSweeps(Sweep):
         result
             The object to be returned by :meth:`run` in case of immediate convergence, i.e.
             if no iterations are performed.
+
         """
         self.mixer_activate()
         return None
@@ -822,6 +834,7 @@ class IterativeSweeps(Sweep):
         result
             The object to be returned by :meth:`run` if the main loop terminates after this
             iteration
+
         """
         raise NotImplementedError("Subclasses should implement this.")
 
@@ -832,6 +845,7 @@ class IterativeSweeps(Sweep):
         ----------
         iteration_start_time: float
             The ``time.time()`` at the start of the last iteration
+
         """
         # only print the bare bones information that is guaranteed to be available
         # subclasses should overwrite this
@@ -873,6 +887,7 @@ class IterativeSweeps(Sweep):
         -------
         should_break : bool
             If ``True``, the main loop in :meth:`run` is broken.
+
         """
         min_sweeps = self.options.get('min_sweeps', 1, int)
         max_sweeps = self.options.get('max_sweeps', 1000, int)
@@ -955,7 +970,9 @@ class EffectiveH(NpcLinearOperator):
     combine : bool
         Whether to combine legs into pipes as far as possible. This reduces the overhead of
         calculating charge combinations in the contractions.
+
     """
+
     length = None
     acts_on = None
 
@@ -974,6 +991,7 @@ class EffectiveH(NpcLinearOperator):
         -------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Wave function with labels as given by `self.acts_on`.
+
         """
         raise NotImplementedError("This function should be implemented in derived classes")
 
@@ -990,6 +1008,7 @@ class EffectiveH(NpcLinearOperator):
         U : None | :class:`~tenpy.linalg.np_conserved.Array`
             The tensor on the left-most site `self` acts on, with combined legs after SVD.
             Only used if trying to optimize.
+
         """
         # non-optimized case
         env.get_LP(i, store=True)
@@ -1007,6 +1026,7 @@ class EffectiveH(NpcLinearOperator):
         U : None | :class:`~tenpy.linalg.np_conserved.Array`
             The tensor on the right-most site `self` acts on, with combined legs after SVD.
             Only used if trying to optimize.
+
         """
         # non-optimized case
         env.get_RP(i, store=True)
@@ -1057,7 +1077,9 @@ class OneSiteH(EffectiveH):
         for bra, MPO, ket; otherwise `RHeff` is set with labels ``'(p0*.vL)', 'wL', '(p0, vL*)'``
     LP, W0, RP : :class:`~tenpy.linalg.np_conserved.Array`
         Tensors making up the network of `self`.
+
     """
+
     length = 1
     acts_on = ['vL', 'p0', 'vR']
 
@@ -1103,6 +1125,7 @@ class OneSiteH(EffectiveH):
         -------
         theta :class:`~tenpy.linalg.np_conserved.Array`
             Product of `theta` and the effective Hamiltonian.
+
         """
         labels = theta.get_leg_labels()
         if self.combine:
@@ -1134,6 +1157,7 @@ class OneSiteH(EffectiveH):
         ----------
         env : :class:`~tenpy.networks.mpo.MPOEnvironment`
             Environment for contraction ``<psi|H|psi>``.
+
         """
         if self.move_right:
             self.LHeff = env._contract_LHeff(self.i0, 'p0')
@@ -1156,6 +1180,7 @@ class OneSiteH(EffectiveH):
         -------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Wave function with labels ``'(vL.p0)', 'vR'``
+
         """
         if self.combine:
             if self.move_right:
@@ -1267,7 +1292,9 @@ class TwoSiteH(EffectiveH):
         Labels ``'(p1*.vL)', 'wL', '(p1.vL*)'`` for ket, MPO, bra.
     LP, W0, W1, RP : :class:`~tenpy.linalg.np_conserved.Array`
         Tensors making up the network of `self`.
+
     """
+
     length = 2
     acts_on = ['vL', 'p0', 'p1', 'vR']
 
@@ -1298,6 +1325,7 @@ class TwoSiteH(EffectiveH):
         -------
         theta :class:`~tenpy.linalg.np_conserved.Array`
             Product of `theta` and the effective Hamiltonian.
+
         """
         labels = theta.get_leg_labels()
         if self.combine:
@@ -1328,6 +1356,7 @@ class TwoSiteH(EffectiveH):
             The mixer might need only one of LHeff/RHeff after the Lanczos optimization even for
             `combine=True`.
             These flags allow to calculate them specifically.
+
         """
         if left:
             self.LHeff = env._contract_LHeff(self.i0, 'p0')
@@ -1349,6 +1378,7 @@ class TwoSiteH(EffectiveH):
         -------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Wave function with labels ``'vL', 'p0', 'p1', 'vR'``
+
         """
         if self.combine:
             theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']],
@@ -1439,7 +1469,9 @@ class ZeroSiteH(EffectiveH):
         for bra, MPO, ket; otherwise `RHeff` is set with labels ``'(p0*.vL)', 'wL', '(p0, vL*)'``
     LP, W0, RP : :class:`~tenpy.linalg.np_conserved.Array`
         Tensors making up the network of `self`.
+
     """
+
     length = 0
     acts_on = ['vL', 'vR']
 
@@ -1472,6 +1504,7 @@ class ZeroSiteH(EffectiveH):
         -------
         theta :class:`~tenpy.linalg.np_conserved.Array`
             Product of `theta` and the effective Hamiltonian.
+
         """
         labels = theta.get_leg_labels()
         theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
@@ -1499,6 +1532,7 @@ class DummyTwoSiteH(EffectiveH):
 
     This allows to base the :class:`VariationalCompression` on the :class:`Sweep` class.
     """
+
     length = 2
 
     def __init__(self, *args, **kwargs):
@@ -1572,6 +1606,7 @@ class Mixer:
         ``None`` means to never disable the mixer.
 
     """
+
     can_decompose_1site = False
     _default_amplitude = 1.e-5
     _default_decay = 2.
@@ -1599,6 +1634,7 @@ class Mixer:
         mixer : :class:`Mixer` | None
             Returns `self` if we should continue mixing, or ``None``, if the mixer
             should be disabled.
+
         """
         if self.disable_after is None:
             should_disable = False
@@ -1664,6 +1700,7 @@ class Mixer:
         See Also
         --------
         mix_and_decompose_2site
+
         """
         raise NotImplementedError(f'{self.__class__.__name__} does not implement mixed_svd_2site')
 
@@ -1716,6 +1753,7 @@ class Mixer:
             for a right move or ``'(vL.p)', 'vR'`` for a left move.
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
+
         """
         msg = f'{self.__class__.__name__} does not implement mix_and_decompose_1site'
         raise NotImplementedError(msg)
@@ -1824,6 +1862,7 @@ def _mix_LR(H, i0, amplitude):
         MPO indices representing "only identities to the left (right)".
     explicit_plus_hc : bool
         :attr:`~tenpy.networks.mpo.MPO.explicit_plus_hc` attribute of the MPO.
+
     """
     chi_MPO = H.get_W(i0).get_leg('wR').ind_len
     IdL, IdR = H.get_IdL(i0 + 1), H.get_IdR(i0)
@@ -1913,6 +1952,7 @@ class DensityMatrixMixer(Mixer):
     for the `IdL` and `IdR` indices of the MPO, where the entries are 1. and 0., respectively.
 
     The right density matrix `rho_R` is mirrored accordingly.
+
     """
 
     def __init__(self, options, sweep_activated=0):
@@ -1948,6 +1988,7 @@ class DensityMatrixMixer(Mixer):
         rho_R : :class:`~tenpy.linalg.np_conserved.Array`
             Reduced density matrix on the right site or a perturbation thereof.
             Hermitian square array with labels ``'(p1.vR)', '(p1*.vR*)'``.
+
         """
         mix_L, mix_R, IdL, IdR, explicit_plus_hc = _mix_LR(engine.env.H, i0, self.amplitude)
 
@@ -1994,6 +2035,7 @@ class DensityMatrixMixer(Mixer):
         -------
         U, S, VH, err, S_approx:
             As defined in :meth:`mixed_svd_2site`.
+
         """
         qtotal_L, qtotal_R = self.determine_qtotal_L_R(theta.qtotal, qtotal_LR)
 
@@ -2075,7 +2117,9 @@ class SubspaceExpansion(Mixer):
     In other words, the :meth:`mix_and_decompose_2site` methods of :class:`SubspaceExpansion` and
     :class:`DensityMatrixMixer` should produce equivalent results; they only differ in the way
     they calculate `U` and `V` internally.
+
     """
+
     can_decompose_1site = True
 
     def __init__(self, options, sweep_activated=0):
@@ -2191,7 +2235,9 @@ class VariationalCompression(IterativeSweeps):
     ----------
     renormalize : list
         Used to keep track of renormalization in the last sweep for `psi.norm`.
+
     """
+
     EffectiveH = DummyTwoSiteH
 
     def __init__(self, psi, options, resume_data=None):
@@ -2243,6 +2289,7 @@ class VariationalCompression(IterativeSweeps):
         -------
         max_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The maximal truncation error of a two-site wave function.
+
         """
         return super().run()
 
@@ -2255,6 +2302,7 @@ class VariationalCompression(IterativeSweeps):
             Ignored, only there for compatibility with the :class:`Sweep` class.
         resume_data : dict
             May contain `init_env_data`.
+
         """
         if resume_data is None:
             resume_data = {}
@@ -2314,7 +2362,7 @@ class VariationalCompression(IterativeSweeps):
         B1 = VH.split_legs(['(p.vR)'])
         self.renormalize.append(renormalize)
         # first compare to old best guess to check convergence of the sweeps
-        if self._tol_theta_diff is not None and self.update_LP_RP[0] == False:
+        if self._tol_theta_diff is not None and self.update_LP_RP[0] is False:
             theta_old = new_psi.get_theta(i0)
             theta_new_trunc = npc.tensordot(A0.scale_axis(S, 'vR'), B1, ['vR', 'vL'])
             theta_new_trunc.iset_leg_labels(['vL', 'p0', 'p1', 'vR'])
@@ -2386,7 +2434,9 @@ class VariationalApplyMPO(VariationalCompression):
     ----------
     renormalize : list
         Used to keep track of renormalization in the last sweep for `psi.norm`.
+
     """
+
     EffectiveH = TwoSiteH
 
     def __init__(self, psi, U_MPO, options, **kwargs):
@@ -2404,6 +2454,7 @@ class VariationalApplyMPO(VariationalCompression):
             May contain `init_env_data`.
         orthogonal_to :
             Ignored.
+
         """
         if resume_data is None:
             resume_data = {}
@@ -2471,7 +2522,7 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
     """
 
     def _expansion_rate(self, i):
-        """get expansion rate for updating bond i"""
+        """Get expansion rate for updating bond i"""
         expand = self.options.get('cbe_expand', 0.1, 'real')
         expand_0 = self.options.get('cbe_expand_0', None, 'real')
 
@@ -2527,7 +2578,7 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
         self.renormalize.append(renormalize)
 
         # compare to old best guess to check convergence of the sweeps
-        if self._tol_theta_diff is not None and self.update_LP_RP[0] == False:
+        if self._tol_theta_diff is not None and self.update_LP_RP[0] is False:
             theta_old = new_psi.get_theta(i0)
             if use_eig_based_svd:
                 theta_new_trunc = npc.tensordot(T_L, T_R, ['vR', 'vL'])

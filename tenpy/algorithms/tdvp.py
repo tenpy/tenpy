@@ -32,15 +32,16 @@ Much of the code is very similar to DMRG, and also based on the
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from ..linalg.krylov_based import LanczosEvolution
-from ..linalg.truncation import svd_theta, TruncationError
-from .mps_common import Sweep, ZeroSiteH, OneSiteH, TwoSiteH
-from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
-from ..linalg import np_conserved as npc
-from ..tools.misc import consistency_check
-from ..tools.params import asConfig
 import logging
 import warnings
+
+from ..linalg import np_conserved as npc
+from ..linalg.krylov_based import LanczosEvolution
+from ..linalg.truncation import TruncationError, svd_theta
+from ..tools.misc import consistency_check
+from ..tools.params import asConfig
+from .algorithm import TimeDependentHAlgorithm, TimeEvolutionAlgorithm
+from .mps_common import OneSiteH, Sweep, TwoSiteH, ZeroSiteH
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,9 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
     ----------
     Krylov_params : :class:`~tenpy.tools.params.Config`
         Parameters for subspace expansion in :meth:`prepare_evolve`.
+
     """
+
     EffectiveH = None
 
     def __init__(self, psi, model, options, **kwargs):
@@ -122,13 +125,13 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
             Krylov_expansion_dim: int
                 How many additional vectors do we use to expand the basis; > 1 is sufficient for random extension.
                 Defaults to 0, which does no expansion.
-            mpo: 
+            mpo:
                 What MPO do we use for expanion? If none is specified, we use the Hamiltonian.
-                If 'None' is specified, we do random extension. 
+                If 'None' is specified, we do random extension.
                 If a list is given, one applies multiple MPOs to get the next Krylov vector,
                  e.g. with WII and a higher order time step.
             trunc_params: dict
-                Standard dictionary for truncation settings, e.g. 
+                Standard dictionary for truncation settings, e.g.
                 chi_max=max number of states that are added on each site.
                 svd_min=cutoff for kept sqrt(eigenvalues) of the RDM.
             apply_mpo_options: dict
@@ -146,7 +149,7 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
             # We might want to use the WII MPO or (1 - itH) rather than H
             Krylov_mpo = self.Krylov_params.get('mpo', self.model.H_MPO)
             # How do we truncate the RDMs when extending?
-            Krylov_trunc_params = self.Krylov_params.subconfig('trunc_params', self.trunc_params) 
+            Krylov_trunc_params = self.Krylov_params.subconfig('trunc_params', self.trunc_params)
             if Krylov_mpo is None:  # Random expansion
                 extension_err = self.psi.subspace_expansion(expand_into=[], trunc_par=Krylov_trunc_params)
             else:                   # Expansion by MPO application
@@ -161,8 +164,10 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
                     for krylov_mpo in Krylov_mpo:
                         krylov_mpo.apply(new_psi, Krylov_apply_mpo_options)
                     Krylov_extended_basis.append(new_psi.copy())
-                extension_err = self.psi.subspace_expansion(expand_into=Krylov_extended_basis, trunc_par=Krylov_trunc_params)
-            logger.info(f"Extended bond dimension: {self.psi.chi}.")
+                extension_err = self.psi.subspace_expansion(
+                    expand_into=Krylov_extended_basis, trunc_par=Krylov_trunc_params
+                )
+            logger.info(f"Extended bond dimension: {self.psi.chi}. Extension error: {extension_err}")
         return
 
     def evolve(self, N_steps, dt):
@@ -172,6 +177,7 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
         ----------
         N_steps : int
             The number of steps to evolve.
+
         """
         consistency_check(dt, self.options, 'max_dt', 1.,
                           'dt > ``max_dt`` is unreasonably large for TDVP.',
@@ -200,6 +206,7 @@ class TwoSiteTDVPEngine(TDVPEngine):
         :include: TDVPEngine
 
     """
+
     EffectiveH = TwoSiteH
 
     def __init__(self, psi, model, options, **kwargs):
@@ -280,10 +287,11 @@ class SingleSiteTDVPEngine(TDVPEngine):
         :include: TDVPEngine
 
     """
+
     EffectiveH = OneSiteH
 
     def get_sweep_schedule(self):
-        """slightly different sweep schedule than DMRG"""
+        """Slightly different sweep schedule than DMRG"""
         L = self.psi.L
         if self.finite:
             i0s = list(range(0, L - 1)) + list(range(L - 1, -1, -1))
@@ -374,6 +382,7 @@ class TimeDependentSingleSiteTDVP(TimeDependentHAlgorithm,SingleSiteTDVPEngine):
 
     See details in :class:`~tenpy.algorithms.algorithm.TimeDependentHAlgorithm` as well.
     """
+
     def reinit_model(self):
         # recreate model
         TimeDependentHAlgorithm.reinit_model(self)

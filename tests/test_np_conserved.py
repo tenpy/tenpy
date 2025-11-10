@@ -1,13 +1,14 @@
 """A collection of tests for tenpy.linalg.np_conserved."""
 # Copyright (C) TeNPy Developers, Apache license
 
-import tenpy.linalg.np_conserved as npc
+import itertools as it
+
 import numpy as np
 import numpy.testing as npt
-import itertools as it
-from tenpy.tools.misc import inverse_permutation
-
 from random_test import gen_random_legcharge, random_Array
+
+import tenpy.linalg.np_conserved as npc
+from tenpy.tools.misc import inverse_permutation
 
 chinfo = npc.ChargeInfo([1, 2], ['number', 'parity'])
 # parity can be derived from number. Yet, this should all work...
@@ -223,13 +224,13 @@ def test_npc_Array_itemacces():
         try:
             for i, ax in zip(idx, axes):
                 sl[ax] = i
-        except:
+        except Exception:
             sl[axes] = idx
         sl = tuple(sl)
         npt.assert_equal(a_sl.to_ndarray(), aflat[sl])
         npt.assert_equal(a[sl].to_ndarray(), aflat[sl])
         # NOTE: interally uses advanced indexing notation, but only with slices.
-        if type(axes) == int:
+        if type(axes) is int:
             a_ext = a_sl.add_leg(a.legs[axes], idx, axes)
             npt.assert_equal(a.qtotal, a_ext.qtotal)
             npt.assert_equal(a_ext.to_ndarray()[sl], aflat[sl])

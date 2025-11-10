@@ -1,16 +1,18 @@
 """This module contains some base classes for algorithms."""
 # Copyright (C) TeNPy Developers, Apache license
 
-import time
-import numpy as np
 import logging
-logger = logging.getLogger(__name__)
+import time
+
+import numpy as np
 
 from ..linalg.truncation import TruncationError
-from ..tools.misc import consistency_check
-from ..tools.events import EventHandler
-from ..tools.params import asConfig
 from ..tools.cache import DictCache
+from ..tools.events import EventHandler
+from ..tools.misc import consistency_check
+from ..tools.params import asConfig
+
+logger = logging.getLogger(__name__)
 
 __all__ = ['Algorithm', 'TimeEvolutionAlgorithm', 'TimeDependentHAlgorithm']
 __deprecated_submodules__ = [
@@ -75,7 +77,9 @@ class Algorithm:
         Data given as parameter `resume_data` and/or to be returned by :meth:`get_resume_data`.
     _resume_psi :
         Possibly a copy of `psi` to be used for :meth:`get_resume_data`.
+
     """
+
     def __init__(self, psi, model, options, *, resume_data=None, cache=None):
         self.options = asConfig(options, self.__class__.__name__)
         self.trunc_params = self.options.subconfig('trunc_params')
@@ -128,6 +132,7 @@ class Algorithm:
         **kwargs :
             Further keyword arguments for class initialization.
             If not defined, `resume_data` is collected with :meth:`get_resume_data`.
+
         """
         # If `resume_data` is defined in the kwargs, use that.
         # This allows subclasses to overwrite instead of calling :meth:`get_resume_data`.
@@ -187,6 +192,7 @@ class Algorithm:
             Dictionary with necessary data (apart from copies of `psi`, `model`, `options`)
             that allows to continue the algorithm run from where we are now.
             It might contain an explicit copy of `psi`.
+
         """
         psi = self._resume_psi
         if psi is not None:
@@ -220,9 +226,10 @@ class Algorithm:
         usage : float
             Required RAM in MB.
 
-        See also
+        See Also
         --------
         tenpy.simulations.simulation.estimate_simulation_RAM: global function calling this.
+
         """
         # first get memory per tensor entry in bytes
         dtypes = [self.psi.dtype]
@@ -268,8 +275,8 @@ class Algorithm:
 
         logger.debug("Extracted MPS RAM usage as             %10.0f entries", psi_entries)
 
-        from .mps_common import Sweep
         from .mpo_evolution import ExpMPOEvolution
+        from .mps_common import Sweep
 
         if isinstance(self, (Sweep, ExpMPOEvolution)):
             # need to sweep -> MPO environments are often biggest contribution!
@@ -363,7 +370,9 @@ class TimeEvolutionAlgorithm(Algorithm):
     trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
         Upper bound for the accumulated error of the represented state,
         which is introduced due to the truncation during the sequence of update steps.
+
     """
+
     time_dependent_H = False  #: whether the algorithm supports time-dependent H
 
     def __init__(self, psi, model, options, **kwargs):
@@ -439,6 +448,7 @@ class TimeEvolutionAlgorithm(Algorithm):
         ----------
         dt : float
             The time step to be used.
+
         """
         # this function can e.g. calculate an approximation
         raise NotImplementedError("Subclasses should implement this.")
@@ -469,6 +479,7 @@ class TimeEvolutionAlgorithm(Algorithm):
         -------
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             Sum of truncation errors introduced during evolution.
+
         """
         trunc_err = TruncationError()
 
@@ -507,6 +518,7 @@ class TimeDependentHAlgorithm(TimeEvolutionAlgorithm):
     .. todo ::
         This is still under development and lacks rigorous tests.
     """
+
     time_dependent_H = True
 
     def __init__(self, psi, model, options, **kwargs):

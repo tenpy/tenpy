@@ -43,10 +43,12 @@ is the discarded part (orthogonal to the kept part) and the
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import warnings
+
 import numpy as np
+
 from ..linalg import np_conserved as npc
 from ..tools.hdf5_io import Hdf5Exportable
-import warnings
 from ..tools.params import asConfig
 
 __all__ = ['TruncationError', 'truncate', 'svd_theta', 'decompose_theta_qr_based',
@@ -80,7 +82,9 @@ class TruncationError(Hdf5Exportable):
         This is probably the quantity you are actually interested in.
         Takes into account the factor 2 explained in the section on Errors in the
         `TEBD Wikipedia article <https://en.wikipedia.org/wiki/Time-evolving_block_decimation>`.
+
     """
+
     def __init__(self, eps=0., ov=1.):
         self.eps = eps
         self.ov = ov
@@ -100,6 +104,7 @@ class TruncationError(Hdf5Exportable):
             (before re-normalization).
         norm_old : float
             Norm of all Schmidt values before truncation, :math:`\sqrt{\sum_{a} \lambda_a^2}`.
+
         """
         eps = 1. - norm_new**2 / norm_old**2  # = (norm_old**2 - norm_new**2)/norm_old**2
         return cls(eps, 1. - 2. * eps)
@@ -115,6 +120,7 @@ class TruncationError(Hdf5Exportable):
         norm_old : float
             Norm of all Schmidt values before truncation, :math:`\sqrt{\sum_{a} \lambda_a^2}`.
             Default (``None``) is 1.
+
         """
         eps = np.sum(np.square(S_discarded))
         if norm_old:
@@ -134,7 +140,7 @@ class TruncationError(Hdf5Exportable):
 
     def __repr__(self):
         if self.eps != 0 or self.ov != 1.:
-            return "TruncationError(eps={eps:.4e}, ov={ov:.10f})".format(eps=self.eps, ov=self.ov)
+            return f"TruncationError(eps={self.eps:.4e}, ov={self.ov:.10f})"
         else:
             return "TruncationError()"
 
@@ -184,6 +190,7 @@ def truncate(S, options):
         Useful for re-normalization.
     err : :class:`TruncationError`
         The error of the represented state which is introduced due to the truncation.
+
     """
     options = asConfig(options, "truncation")
     # by default, only truncate values which are much closer to zero than machine precision.
@@ -282,6 +289,7 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
         The truncation error introduced.
     renormalization : float
         Factor, by which S was renormalized.
+
     """
     U, S, VH = npc.svd(theta,
                        full_matrices=False,
@@ -294,12 +302,12 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
     new_len_S = np.sum(piv, dtype=np.int_)
     if new_len_S * 100 < len(S) and (trunc_par['chi_max'] is None
                                      or new_len_S != trunc_par['chi_max']):
-        msg = "Catastrophic reduction in chi: {0:d} -> {1:d}".format(len(S), new_len_S)
+        msg = f"Catastrophic reduction in chi: {len(S):d} -> {new_len_S:d}"
         # NANs are excluded in npc.svd
         UHU = npc.tensordot(U.conj(), U, axes=[[0], [0]])
-        msg += " |U^d U - 1| = {0:f}".format(npc.norm(UHU - npc.eye_like(UHU)))
+        msg += f" |U^d U - 1| = {npc.norm(UHU - npc.eye_like(UHU)):f}"
         VHV = npc.tensordot(VH, VH.conj(), axes=[[1], [1]])
-        msg += " |V V - 1| = {0:f}".format(npc.norm(VHV - npc.eye_like(VHV)))
+        msg += f" |V V - 1| = {npc.norm(VHV - npc.eye_like(VHV)):f}"
         warnings.warn(msg, stacklevel=2)
     S = S[piv] / new_norm
     renormalization *= new_norm
@@ -340,6 +348,7 @@ def eigh_rho(rho, trunc_par, UPLO='L', sort=None):
         The first label is inherited from `A`, the second label is ``'eig'``.
     err : :class:`TruncationError`
         The truncation error introduced.
+
     """
     W, V = npc.eigh(rho, UPLO=UPLO, sort=sort)
     W[W<1.e-14] = 0     # set small eigenvalues to zero
@@ -352,18 +361,21 @@ def eigh_rho(rho, trunc_par, UPLO='L', sort=None):
     new_len_W = np.sum(piv, dtype=np.int_)
     if new_len_W * 100 < len(W) and (trunc_par['chi_max'] is None
                                      or new_len_W != trunc_par['chi_max']):
-        msg = "Catastrophic reduction in chi: {0:d} -> {1:d}".format(len(W), new_len_W)
+        msg = f"Catastrophic reduction in chi: {len(W):d} -> {new_len_W:d}"
         # NANs are excluded in npc.svd
         VHV = npc.tensordot(V.conj(), V, axes=[[0], [0]])
-        msg += " |V^d V - 1| = {0:f}".format(npc.norm(VHV - npc.eye_like(VHV)))
+        msg += f" |V^d V - 1| = {npc.norm(VHV - npc.eye_like(VHV)):f}"
         warnings.warn(msg, stacklevel=2)
     W = W[piv] / new_norm**2 * renormalization
     V.iproject(piv, axes=1)  # V = V[:, piv]
     return W, V, err
 
 
-def _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, move_right: bool, expand: float, min_block_increase: int):
-    """Generate the initial guess `Y0` for the (left) right isometry for the QR based theta decomposition `decompose_theta_qr_based()`.
+def _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, move_right: bool,
+                 expand: float, min_block_increase: int):
+    """Generate the initial guess `Y0` for the (left) right isometry.
+
+    Helper function for the QR based theta decomposition `decompose_theta_qr_based()`.
 
     Parameters
     ----------
@@ -386,8 +398,8 @@ def _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, mov
     Y0 : Array with legs [vL, (p1.vR)] or [(vL.p0), vR]
         If ``move_right=True``, the legs of Y0 are [vL, (p1.vR)].
         If ``move_right=False``, the legs of Y0 are [(vL.p0), vR].
-    """
 
+    """
     assert min_block_increase >= 0
     assert expand is not None and expand != 0
 
@@ -529,6 +541,7 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
                              use_eig_based_svd: bool, trunc_params: dict, compute_err: bool,
                              return_both_T: bool):
     r"""Performs a QR based decomposition of a matrix `theta` (= the wavefunction) and truncates it.
+
     The result is an approximation.
 
     The decomposition for ``use_eig_based_svd=False`` is::
@@ -597,33 +610,39 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
     trunc_err : TruncationError
     renormalization : float
         Factor, by which S was renormalized.
-    """
 
+    """
     if compute_err:
         return_both_T = True
 
     if move_right:
         # Get initial guess for the left isometry
-        Y0 = _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta, move_right, expand, min_block_increase) # Y0: [(vL.p0), vR]
+        # Y0: [(vL.p0), vR]
+        Y0 = _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta, move_right, expand, min_block_increase)
 
         # QR based updates
-        theta_i1 = npc.tensordot(Y0.conj(), theta, ['(vL*.p0*)', '(vL.p0)']).ireplace_label('vR*', 'vL') # theta_i1: [vL,(p1.vR)]
+        # theta_i1: [vL,(p1.vR)]
+        theta_i1 = npc.tensordot(Y0.conj(), theta, ['(vL*.p0*)', '(vL.p0)']).ireplace_label('vR*', 'vL')
         theta_i1.itranspose(['(p1.vR)', 'vL']) # theta_i1: [(p1.vR),vL]
         B_R, _ = npc.qr(theta_i1, inner_labels=['vL', 'vR'], inner_qconj=-1) # B_R: [(p1.vR),vL]
         B_R.itranspose(['vL', '(p1.vR)']) # B_R: [vL,(p1.vR)]
 
-        theta_i0 = npc.tensordot(theta, B_R.conj(), ['(p1.vR)', '(p1*.vR*)']).ireplace_label('vL*', 'vR') # theta_i0: [(vL.p0),vR]
+        # theta_i0: [(vL.p0),vR]
+        theta_i0 = npc.tensordot(theta, B_R.conj(), ['(p1.vR)', '(p1*.vR*)']).ireplace_label('vL*', 'vR')
         A_L, Xi = npc.qr(theta_i0, inner_labels=['vR', 'vL']) # A_L: [(vL.p0), vR]
 
     else:
         # Get initial guess for the right isometry
-        Y0 = _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta, move_right, expand, min_block_increase) # Y0: [vL, (p1.vR)]
+        # Y0: [vL, (p1.vR)]
+        Y0 = _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta, move_right, expand, min_block_increase)
 
         # QR based updates
-        theta_i0 = npc.tensordot(theta, Y0.conj(), ['(p1.vR)', '(p1*.vR*)']).ireplace_label('vL*', 'vR') # theta_i0: [(vL.p0),vR]
+        # theta_i0: [(vL.p0),vR]
+        theta_i0 = npc.tensordot(theta, Y0.conj(), ['(p1.vR)', '(p1*.vR*)']).ireplace_label('vL*', 'vR')
         A_L, _ = npc.qr(theta_i0, inner_labels=['vR', 'vL']) # A_L: [(vL.p0), vR]
 
-        theta_i1 = npc.tensordot(A_L.conj(), theta, ['(vL*.p0*)', '(vL.p0)']).ireplace_label('vR*', 'vL') # theta_i1: [vL,(p1.vR)]
+        # theta_i1: [vL,(p1.vR)]
+        theta_i1 = npc.tensordot(A_L.conj(), theta, ['(vL*.p0*)', '(vL.p0)']).ireplace_label('vR*', 'vL')
         theta_i1.itranspose(['(p1.vR)', 'vL']) # theta_i1: [(p1.vR),vL]
         B_R, Xi = npc.qr(theta_i1, inner_labels=['vL', 'vR'], inner_qconj=-1)
         B_R.itranspose(['vL', '(p1.vR)'])
@@ -687,7 +706,7 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
 
 
 def _combine_constraints(good1, good2, warn):
-    """return logical_and(good1, good2) if there remains at least one `True` entry.
+    """Return logical_and(good1, good2) if there remains at least one `True` entry.
 
     Otherwise print a warning and return just `good1`.
     """

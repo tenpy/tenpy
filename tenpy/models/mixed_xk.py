@@ -64,15 +64,16 @@ The Jordan-Wigner strings follow the *final* DMRG snake.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import itertools as it
 
-from .lattice import Lattice
-from .model import CouplingMPOModel
+import numpy as np
+
+from ..linalg import np_conserved as npc
 from ..networks.site import FermionSite
 from ..networks.terms import TermList
-from ..tools.misc import to_array, inverse_permutation, to_iterable
-from ..linalg import np_conserved as npc
+from ..tools.misc import inverse_permutation, to_array, to_iterable
+from .lattice import Lattice
+from .model import CouplingMPOModel
 
 __all__ = ["MixedXKLattice", "MixedXKModel", "SpinlessMixedXKSquare", "HubbardMixedXKSquare"]
 
@@ -132,7 +133,9 @@ class MixedXKLattice(Lattice):
         Names for the orbitals, e.g. ``['spin', 'valley', 'ky']``
     orbital_values : None | array, shape (len(sites), len(orbital_names))
         Values for the orbitals, one row for each site in the *unit cell*.
+
     """
+
     def __init__(self,
                  N_rings,
                  Ly,
@@ -213,6 +216,7 @@ class MixedXKLattice(Lattice):
         lat : cls
             Instance of this class, with the sites initialized according to the charges of the
             orbitals defined above.
+
         """
         # initialize sites of the unit cell with given charges
         assert len(charges) == N_orb
@@ -255,6 +259,7 @@ class MixedXKLattice(Lattice):
             HDF5 group which is supposed to represent `self`.
         subpath : str
             The `name` of `h5gr` with a ``'/'`` in the end.
+
         """
         super().save_hdf5(hdf5_saver, h5gr, subpath)
         h5gr.attrs["Ly"] = self.Ly
@@ -282,6 +287,7 @@ class MixedXKLattice(Lattice):
         -------
         obj : cls
             Newly generated class instance containing the required data.
+
         """
         obj = super().from_hdf5(hdf5_loader, h5gr, subpath)
         Ly = hdf5_loader.get_attr(h5gr, "Ly")
@@ -309,7 +315,8 @@ class MixedXKLattice(Lattice):
     def get_exp_ik(self, ky):
         r"""Return :math:`\exp(\frac{2 pi i }{L_y} ky)`.
 
-        If you need the factor for given `k` and `y`, just give ``k*y`` as argument."""
+        If you need the factor for given `k` and `y`, just give ``k*y`` as argument.
+        """
         return self._exp_2pi_Ly[np.mod(ky, self.Ly)]
 
     def mps2lat_values_k(self, A, axes=0):
@@ -327,8 +334,7 @@ class MixedXKLattice(Lattice):
         return A_res.reshape(A_res_reshape)
 
     def mps2lat_values_masked_k(self, A, axes=-1, mps_inds=None, include_u=None):
-        """Like :meth:`Lattice.mps2lat_values_masked`, but introduce `k` as separate lattice
-        index."""
+        """Like :meth:`mps2lat_values_masked`, but introduce `k` as separate lattice index."""
         A_res = self.mps2lat_values_masked(A, axes, mps_inds, include_u)
         changed_axes = sorted([(ax + A.ndim if ax < 0 else ax) for ax in axes])
         A_res_u_axes = []
@@ -392,6 +398,7 @@ class MixedXKModel(CouplingMPOModel):
         charges : array_like of shape (N_orb, chinfo.qnumber)
             For each of the orbitals the value of each charges (except ``"ky"``),
             when the orbital is occupied.
+
         """
         xy_lattice = model_params.get('xy_lattice', "Square")
         if xy_lattice != "Square":
@@ -425,6 +432,7 @@ class MixedXKModel(CouplingMPOModel):
             Should fulfill ``couplings[x, k1, l1, k2, l2] == conj(couplings[x, k2, l2, k1, l1])``
             to make the Hamiltonian hermitian.
             The x dependence (and corresponding dimension in `couplings`) can be omitted.
+
         """
         N_orb = self.lat.N_orb
         Lx = self.lat.N_rings
@@ -454,6 +462,7 @@ class MixedXKModel(CouplingMPOModel):
             The x dependence (and corresponding dimension in `couplings`) can be omitted.
         dx : int
             Distance between the rings; use dx > 1 for long-range hoppings.
+
         """
         assert dx != 0
         N_orb = self.lat.N_orb
@@ -484,6 +493,7 @@ class MixedXKModel(CouplingMPOModel):
         operators: tuple of 4 str
             The 4 operators `A,B,C,D` to be used, 'Cd' for (fermionic) creation and 'C' for
             annihilation operators of given ring, momentum and orbital.
+
         """
         N_orb = self.lat.N_orb
         Lx = self.lat.N_rings
@@ -524,6 +534,7 @@ class MixedXKModel(CouplingMPOModel):
         operators: tuple of 4 str
             The 4 operators `A,B,C,D` to be used, 'Cd' for (fermionic) creation and 'C' for
             annihilation operators of given ring, momentum and orbital.
+
         """
         assert dx != 0
         Nx = self.lat.N_rings - int(self.lat.bc[0]) * abs(dx)
@@ -564,6 +575,7 @@ class MixedXKModel(CouplingMPOModel):
         -------
         terms : :class:`~tenpy.networks.terms.TermList`
             Terms representing the operator `A` in x-k-space.
+
         """
         xk_lat = self.lat
         N_orb = xk_lat.N_orb
@@ -616,6 +628,7 @@ class MixedXKModel(CouplingMPOModel):
         -------
         terms : :class:`~tenpy.networks.terms.TermList`
             Terms representing the correlation function in x-k-space.
+
         """
         return self.real_to_mixed_n_site([A, B], [A_coord, B_coord])
 
@@ -640,13 +653,13 @@ class MixedXKModel(CouplingMPOModel):
         -------
         terms : :class:`~tenpy.networks.terms.TermList`
             Terms representing the correlation function in x-k-space.
+
         """
         num_ops = len(orbital_coeffs)
         orbital_coeffs = [np.asarray(op) for op in orbital_coeffs]
         assert num_ops == len(rs_coords)
         num_c_cd = num_ops * 2
         xk_lat = self.lat
-        N_orb = xk_lat.N_orb
         Ly = xk_lat.Ly
         conserve_k = 'ky' in xk_lat.site(0).leg.chinfo.names
         terms = []
@@ -700,6 +713,7 @@ class MixedXKModel(CouplingMPOModel):
         -------
         terms : :class:`~tenpy.networks.terms.TermList`
             Terms representing the correlation function in x-k-space.
+
         """
         num_ops = len(ops)
         assert num_ops == len(rs_coords)
@@ -707,7 +721,6 @@ class MixedXKModel(CouplingMPOModel):
         #TODO: add support for 'N' and '1-N' by splitting them
         # Currently supported by use of orbital_coeffs
         xk_lat = self.lat
-        N_orb = xk_lat.N_orb
         Ly = xk_lat.Ly
         conserve_k = 'ky' in xk_lat.site(0).leg.chinfo.names
         terms = []
@@ -747,6 +760,7 @@ class SpinlessMixedXKSquare(MixedXKModel):
         t, V : float | array
             Couplings as defined for the Hamiltonian above.
     """
+
     def init_lattice(self, model_params):
         N_orb = 1  # simplest case possible
         chinfo = npc.ChargeInfo([1], ["Charge"])
@@ -802,6 +816,7 @@ class HubbardMixedXKSquare(MixedXKModel):
         t, U : float | array
             Couplings as defined for the Hamiltonian above.
     """
+
     def init_lattice(self, model_params):
         N_orb = 2  # for spin up (l=0) and down (l=1)
         chinfo = npc.ChargeInfo([1, 1], ["Charge", "Spin"])

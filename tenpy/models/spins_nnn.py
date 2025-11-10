@@ -16,8 +16,8 @@ An example for such a case is given in the file ``examples/c_tebd.py``.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+from ..networks.site import GroupedSite, SpinSite
 from .lattice import Chain
-from ..networks.site import SpinSite, GroupedSite
 from .model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = ['SpinChainNNN', 'SpinChainNNN2']
@@ -65,6 +65,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
             MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
 
     """
+
     default_lattice = Chain
     force_default_lattice = True
 
@@ -159,7 +160,9 @@ class SpinChainNNN2(CouplingMPOModel):
             Whether to sort by charges of physical legs. `True` by default.
         Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
             Coupling as defined for the Hamiltonian above.
+
     """
+
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5, 'real')
         conserve = model_params.get('conserve', 'best', str)

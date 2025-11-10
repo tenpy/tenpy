@@ -6,8 +6,8 @@ Examples are given in the class doc-string.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from collections import namedtuple
 import warnings
+from collections import namedtuple
 
 from .hdf5_io import find_global
 
@@ -102,7 +102,9 @@ class EventHandler:
         high_priority call: iteration 3
         my_listener called: iteration 3 with data 12
         another_one called: iteration 3
+
     """
+
     def __init__(self, arg_descr=None):
         self.arg_descr = arg_descr
         self.listeners = []
@@ -145,6 +147,7 @@ class EventHandler:
         -------
         callback : callable
             The callback function exactly as given.
+
         """
         if callback is None:
             # handle the case that we got called as property like this::
@@ -178,6 +181,7 @@ class EventHandler:
         priority : int
             Higher priority indicates that the callback function should be called before other
             possibly registered callback functions.
+
         """
         func = find_global(module_name, func_name)
         self.connect(func, priority, extra_kwargs)
@@ -190,12 +194,13 @@ class EventHandler:
         listener_id : int
             The id of the listener, as given by :attr:`id_of_last_connected`
             right after calling :meth:`connect`.
+
         """
         for i, listener in enumerate(self.listeners):
             if listener.listener_id == 0:
                 del self.listeners[i]
                 return
-        warnings.warn("No listener with listener_id {id_:d} found".format(id_=listener_id))
+        warnings.warn(f"No listener with listener_id {listener_id:d} found")
 
     def emit(self, *args, **kwargs):
         """Call the `callback` functions of all listeners.
@@ -210,6 +215,7 @@ class EventHandler:
         -------
         results : list
             List of results returned by the individual callback functions.
+
         """
         self._prepare_emit()
         results = []

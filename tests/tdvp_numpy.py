@@ -4,8 +4,8 @@
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from scipy.linalg import expm
 import numpy as np
+from scipy.linalg import expm
 
 
 def tdvp(Psi, W, dt, Rp_list=None, k=5, O=None):
@@ -61,7 +61,7 @@ def tdvp(Psi, W, dt, Rp_list=None, k=5, O=None):
 
     D = W[0].shape[0]
 
-    if Rp_list == None:
+    if Rp_list is None:
         Rp_list = [np.zeros([1, 1, D])]
         Rp_list[0][0, 0, D - 1] = 1
         for i in np.arange(L - 1, -1, -1):
@@ -93,7 +93,7 @@ def tdvp(Psi, W, dt, Rp_list=None, k=5, O=None):
 #    if chi0<chi
 
 
-class H0_mixed(object):
+class H0_mixed:
     def __init__(self, Lp, Rp, dtype=float):
         self.Lp = Lp  # a,ap,m
         self.Rp = Rp  # b,bp,n
@@ -110,7 +110,7 @@ class H0_mixed(object):
         return (x)
 
 
-class H1_mixed(object):
+class H1_mixed:
     def __init__(self, Lp, Rp, M, dtype=float):
         self.Lp = Lp  # a,ap,m
         self.Rp = Rp  # b,bp,n
@@ -168,7 +168,7 @@ def evolve_lanczos(H, psiI, dt, krylovDim):
             subspaceFinal = np.dot(expm(dt * Tmatrix), unitVector)
 
             psiF = np.dot(Vmatrix, subspaceFinal)
-        except:
+        except Exception:
             M = np.zeros([Dim, Dim], dtype=complex)
             for i in range(Dim):
                 for j in range(Dim):

@@ -12,9 +12,9 @@ The version is provided in the standard python format ``major.minor.revision`` a
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import sys
-import subprocess
 import os
+import subprocess
+import sys
 
 __all__ = [
     "version", "released", "short_version", "git_revision", "full_version", "version_summary"
@@ -44,6 +44,7 @@ def _get_git_revision(cwd=None):
     -------
     revision : str
         Revision hash of the git HEAD, i.e, the last git commit to which git compares everything.
+
     """
     if cwd is None:
         cwd = os.path.dirname(os.path.abspath(__file__))
@@ -68,7 +69,7 @@ def _get_git_description():
                                         cwd=os.path.dirname(os.path.abspath(__file__)),
                                         stderr=subprocess.STDOUT).decode().strip()
         n_commits = int(descr.split('-')[1])
-    except:
+    except Exception:
         n_commits = 0
     return n_commits
 
@@ -78,10 +79,10 @@ git_revision = _get_git_revision()
 
 
 def _get_full_version():
-    """obtain version from git."""
+    """Obtain version from git."""
     full_version = version
     if not released:
-        full_version += '.dev{0:d}+{1!s}'.format(_get_git_description(), git_revision[:7])
+        full_version += f'.dev{_get_git_description():d}+{git_revision[:7]!s}'
     return full_version
 
 
@@ -90,9 +91,10 @@ full_version = _get_full_version()
 
 
 def _get_version_summary():
-    from .tools.optimization import have_cython_functions, compiled_with_MKL
     import numpy
     import scipy
+
+    from .tools.optimization import compiled_with_MKL, have_cython_functions
 
     if have_cython_functions:
         cython_info = "compiled"

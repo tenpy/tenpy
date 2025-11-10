@@ -5,9 +5,9 @@
 # Copyright (C) TeNPy Developers, Apache license
 
 
-from .model import CouplingMPOModel, NearestNeighborModel
 from ..networks.site import FermionSite
 from .lattice import Chain
+from .model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = ['FermionModel', 'FermionChain']
 
@@ -52,7 +52,9 @@ class FermionModel(CouplingMPOModel):
             External magnetic flux 'threaded' through the cylinder.
             Hopping amplitudes for bonds 'across' the periodic boundary are modified such that
             particles hopping around the circumference of the cylinder acquire a phase `phi_ext`.
+
     """
+
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N', str)
         if conserve == 'best':
@@ -82,5 +84,6 @@ class FermionChain(FermionModel, NearestNeighborModel):
 
     See the :class:`FermionModel` for the documentation of parameters.
     """
+
     default_lattice = Chain
     force_default_lattice = True

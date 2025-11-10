@@ -20,13 +20,15 @@ The idea is that you just import the `svd` from this module and use it as replac
 
 >>> from tenpy.linalg.svd_robust import svd
 >>> U, S, VT = svd([[1., 1.], [0., 1.]])
+
 """
 # Copyright (C) TeNPy Developers, Apache license
+
+import warnings
 
 import numpy as np
 import scipy
 import scipy.linalg
-import warnings
 
 __all__ = ['svd']
 
@@ -64,6 +66,7 @@ def svd(a,
     -------
     U, S, Vh : ndarray
         As described in doc-string of :func:`scipy.linalg.svd`.
+
     """
     if lapack_driver == 'gesdd':
         try:

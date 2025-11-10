@@ -39,18 +39,20 @@ If one chooses imaginary :math:`dt`, the exponential projects
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
+import logging
 import time
 import typing
 import warnings
-import logging
-logger = logging.getLogger(__name__)
 
-from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
+import numpy as np
+
 from ..linalg import np_conserved as npc
-from ..linalg.truncation import svd_theta, decompose_theta_qr_based, TruncationError
 from ..linalg import random_matrix
+from ..linalg.truncation import TruncationError, decompose_theta_qr_based, svd_theta
 from ..tools.misc import consistency_check
+from .algorithm import TimeDependentHAlgorithm, TimeEvolutionAlgorithm
+
+logger = logging.getLogger(__name__)
 
 __all__ = ['TEBDEngine', 'QRBasedTEBDEngine', 'RandomUnitaryEvolution', 'TimeDependentTEBD']
 
@@ -91,7 +93,9 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         The `i`-th entry is left of site `i`.
     _update_index : None | (int, int)
         The indices ``i_dt,i_bond`` of ``U_bond = self._U[i_dt][i_bond]`` during update_step.
+
     """
+
     def __init__(self, psi, model, options, **kwargs):
         TimeEvolutionAlgorithm.__init__(self, psi, model, options, **kwargs)
         self._trunc_err_bonds = [TruncationError() for i in range(psi.L + 1)]
@@ -101,7 +105,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
 
     @property
     def trunc_err_bonds(self):
-        """truncation error introduced on each non-trivial bond."""
+        """Truncation error introduced on each non-trivial bond."""
         return self._trunc_err_bonds[self.psi.nontrivial_bonds]
 
     # run() as defined in TimeEvolutionAlgorithm
@@ -188,6 +192,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         -------
         time_steps : list of float
             We need ``U = exp(-i H_{even/odd} delta_t * dt)`` for the `dt` returned in this list.
+
         """
         if order == 1:
             return [1.]
@@ -206,7 +211,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             # a1 b1 a2 b2 a3 b3 2*a1
             return [a1, b1, a2, b2, 0.5 - a1 - a2, 1. - 2 * (b1 + b2), 2 * a1]
         # else
-        raise ValueError("Unknown order %r for Suzuki Trotter decomposition" % order)
+        raise ValueError(f"Unknown order {order} for Suzuki Trotter decomposition")
 
     @staticmethod
     def suzuki_trotter_decomposition(order, N_steps):
@@ -233,6 +238,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             the decomposition of `H`.
             They are chosen such that a subsequent application of ``exp(d[j] t H[k])`` to a given
             state ``|psi>`` yields ``(exp(N_steps t H[k]) + O(N_steps t^{order+1}))|psi>``.
+
         """
         even, odd = 0, 1
         if N_steps == 0:
@@ -279,7 +285,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             steps = steps + [a1]
             return steps
         # else
-        raise ValueError("Unknown order {0!r} for Suzuki Trotter decomposition".format(order))
+        raise ValueError(f"Unknown order {order!r} for Suzuki Trotter decomposition")
 
     def prepare_evolve(self, dt):
         order = self.options.get('order', 2, int)
@@ -307,6 +313,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             Determines whether we perform real or imaginary time-evolution.
         E_offset : None | list of float
             Possible offset added to `H_bond` for real-time evolution.
+
         """
         U_param = dict(order=order, delta_t=delta_t, type_evo=type_evo, E_offset=E_offset)
         if type_evo == 'real':
@@ -346,6 +353,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced due to the truncation during
             this sequence of evolution steps.
+
         """
         if dt is not None:
             assert dt == self._U_param['delta_t']
@@ -388,6 +396,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced due to the truncation
             during this sequence of update steps.
+
         """
         Us = self._U[U_idx_dt]
         trunc_err = TruncationError()
@@ -423,6 +432,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced by the truncation
             during this update step.
+
         """
         i0, i1 = i - 1, i
         logger.debug("Update sites (%d, %d)", i0, i1)
@@ -496,6 +506,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced due to the truncation during
             this sequence of update steps.
+
         """
         trunc_err = TruncationError()
         order = self._U_param['order']
@@ -549,6 +560,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced by the truncation
             during this update step.
+
         """
         i0, i1 = i - 1, i
         logger.debug("Update sites (%d, %d)", i0, i1)
@@ -654,7 +666,7 @@ class QRBasedTEBDEngine(TEBDEngine):
     """
 
     def _expansion_rate(self, i):
-        """get expansion rate for updating bond i"""
+        """Get expansion rate for updating bond i"""
         expand = self.options.get('cbe_expand', 0.1, 'real')
         expand_0 = self.options.get('cbe_expand_0', None, 'real')
 
@@ -813,6 +825,7 @@ class RandomUnitaryEvolution(TEBDEngine):
         >>> eng2.run()  # random unitaries respect Sz conservation -> we stay in all-up sector
         >>> print(psi2.chi)  # still a product state, not really random!!!
         [1, 1, 1, 1, 1, 1, 1]
+
     """
 
     def __init__(self, psi, options, **kwargs):
@@ -827,7 +840,7 @@ class RandomUnitaryEvolution(TEBDEngine):
         super().run()
 
     def prepare_evolve(self, dt):
-        "Do nothing, as we call :meth:`calc_U` directly in :meth:`update`."
+        """Do nothing, as we call :meth:`calc_U` directly in :meth:`update`."""
         pass
 
     def calc_U(self):
@@ -882,6 +895,7 @@ class RandomUnitaryEvolution(TEBDEngine):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced due to the truncation during
             this sequence of update steps.
+
         """
         trunc_err = TruncationError()
         for _ in range(N_steps):

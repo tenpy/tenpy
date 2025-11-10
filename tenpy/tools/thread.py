@@ -2,9 +2,10 @@
 
 # Copyright (C) TeNPy Developers, Apache license
 
-import threading
-import queue
 import logging
+import queue
+import threading
+
 logger = logging.getLogger(__name__)
 
 __all__ = ["WorkerDied", "Worker"]
@@ -12,6 +13,7 @@ __all__ = ["WorkerDied", "Worker"]
 
 class WorkerDied(Exception):
     """Exception thrown if the main thread detects that the worker subthread died."""
+
     pass
 
 
@@ -57,7 +59,9 @@ class Worker:
         ...    assert "3+4" in results   # now we can be sure that we got all results
         >>> results
         {'2+2': 4, '3+4': 7}
+
     """
+
     def __init__(self, name="tenpy worker", max_queue_size=0, daemon=None):
         self.name = name
         self.tasks = queue.Queue(maxsize=max_queue_size)
@@ -100,7 +104,7 @@ class Worker:
                         return_dict[return_key] = res
                 finally:
                     self.tasks.task_done()
-        except:
+        except Exception:
             self.exit.set()
             logger.exception("%s thread dies with following exception", self.name)
         finally:

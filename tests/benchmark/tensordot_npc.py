@@ -1,11 +1,12 @@
 """To be used in the `-m` argument of benchmark.py."""
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
-import tenpy.linalg.np_conserved as npc
-
-import tenpy.tools.optimization as optimization
 import itertools as it
+
+import numpy as np
+
+import tenpy.linalg.np_conserved as npc
+import tenpy.tools.optimization as optimization
 
 
 def rand_permutation(n):
@@ -21,7 +22,7 @@ def rand_distinct_int(a, b, n):
         raise ValueError
     if n > b - a + 1:
         raise ValueError
-    return np.sort((np.random.random_integers(a, b - n + 1, size=n))) + np.arange(n)
+    return np.sort(np.random.random_integers(a, b - n + 1, size=n)) + np.arange(n)
 
 
 def rand_partitions(a, b, n):
@@ -87,7 +88,7 @@ def setup_benchmark(mod_q=[1],
             b._qdata = b._qdata[b_subset, :]
             b._data = [b._data[i] for i in b_subset]
 
-    labs = ["l{i:d}".format(i=i) for i in range(2 * legs)]
+    labs = [f"l{i:d}" for i in range(2 * legs)]
     a.iset_leg_labels(labs[:a.rank])
     b.iset_leg_labels(labs[:b.rank])
     a.itranspose(rand_permutation(a.rank))

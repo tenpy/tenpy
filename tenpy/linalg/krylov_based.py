@@ -1,14 +1,16 @@
 """Lanczos algorithm for np_conserved arrays."""
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
-from .sparse import FlatHermitianOperator, OrthogonalNpcLinearOperator, ShiftNpcLinearOperator
 import logging
-logger = logging.getLogger(__name__)
 
-from . import np_conserved as npc
-from ..tools.params import asConfig
+import numpy as np
+
 from ..tools.misc import argsort
+from ..tools.params import asConfig
+from . import np_conserved as npc
+from .sparse import FlatHermitianOperator, OrthogonalNpcLinearOperator, ShiftNpcLinearOperator
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'KrylovBased', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution', 'GMRES', 'lanczos_arpack',
@@ -108,6 +110,7 @@ class KrylovBased:
     http://web.eecs.utk.edu/~dongarra/etemplates/node103.html#estimate_residual.
     Given the gap, the Ritz residual gives a bound on the error in the wavefunction,
     ``err < (RitzRes/gap)**2``. The gap is estimated from the full Lanczos spectrum.
+
     """
 
     _dtype_h_krylov = np.complex128
@@ -180,7 +183,7 @@ class KrylovBased:
         return psif
 
     def _to_cache(self, psi):
-        """add psi to cache, keep at most self.N_cache."""
+        """Add psi to cache, keep at most self.N_cache."""
         cache = self._cache
         cache.append(psi)
         if len(cache) > self.N_cache:
@@ -195,7 +198,7 @@ class KrylovBased:
     def iadd_prefactor_other(self, w, alpha, v):
         iadd_prefactor_other(w, alpha, v)
 
-class GMRES():
+class GMRES:
     def __init__(self, A, x, b, options):
         self.options = options = asConfig(options, self.__class__.__name__)
         self.N_min = options.get('N_min', 5, int)
@@ -232,14 +235,14 @@ class GMRES():
                 self.apply_givens_rotation(k)
                 self.e1[k+1] = -self.sine[k] * self.e1[k]
                 self.e1[k] = self.cosine[k] * self.e1[k]
-                error = np.abs(self.e1[k+1]) / self.b_norm # The residual is just the last element of $\beta$ vector (see Wikipedia) since $y$ is found exactly.
+                # The residual is just the last element of $\beta$ vector (see Wikipedia) since $y$ is found exactly.
+                error = np.abs(self.e1[k+1]) / self.b_norm
                 self.total_error[-1].append(error)
                 if error < self.res and k >= self.N_min:
                     converged=True
                     break
             self.total_iters.append(k+1)
             self.backsolve(k+1)
-            Q_mat = npc.concatenate(self.qs[:k+1], axis=1)
             for i in range(k+1):
                 self.x.iadd_prefactor_other(self.y[i], self.qs[i])
             if not converged:
@@ -325,6 +328,7 @@ class Arnoldi(KrylovBased):
             Number of eigenvectors to look for/return in `run`.
 
     """
+
     def __init__(self, H, psi0, options):
         super().__init__(H, psi0, options)
         self.E_tol = self.options.get('E_tol', np.inf, 'real')
@@ -343,6 +347,7 @@ class Arnoldi(KrylovBased):
             Corresponding best eigenvectors (estimates).
         N : int
             Used dimension of the Krylov space, i.e., how many iterations where performed.
+
         """
         assert self.N_cache >= self.N_max
         N = self._build_krylov()
@@ -375,7 +380,7 @@ class Arnoldi(KrylovBased):
         return k + 1
 
     def _calc_result_krylov(self, k):
-        """calculate ground state of _h_krylov[:k+1, :k+1]"""
+        """Calculate ground state of _h_krylov[:k+1, :k+1]"""
         h = self._h_krylov
         if k == 0:
             self.Es[0, 0] = h[0, 0]
@@ -426,7 +431,7 @@ class Arnoldi(KrylovBased):
         return psis
 
     def _to_cache(self, psi):
-        """add psi to cache, keep at most self.N_cache."""
+        """Add psi to cache, keep at most self.N_cache."""
         cache = self._cache
         cache.append(psi)
         assert len(cache) <= self.N_cache
@@ -445,7 +450,7 @@ class LanczosGroundState(KrylovBased):
     """Lanczos algorithm to find the ground state.
 
     **Assumes** that `H` is hermitian.
-    
+
     Options
     -------
     .. cfg:config :: LanczosGroundState
@@ -482,6 +487,7 @@ class LanczosGroundState(KrylovBased):
             Ground state vector (estimate).
         N : int
             Used dimension of the Krylov space, i.e., how many iterations where performed.
+
         """
         N = self._build_krylov()
         E0 = self.Es[N - 1, 0]
@@ -558,7 +564,7 @@ class LanczosGroundState(KrylovBased):
         # continue in _calc_result_full
 
     def _calc_result_krylov(self, k):
-        """calculate ground state of _h_krylov[:k+1, :k+1]"""
+        """Calculate ground state of _h_krylov[:k+1, :k+1]"""
         h = self._h_krylov
         if k == 0:
             self.Es[0, 0] = h[0, 0]
@@ -601,7 +607,9 @@ class LanczosEvolution(LanczosGroundState):
         Prefactor of H in the exponential.
     _result_norm : float
         Norm of the resulting vector.
+
     """
+
     def __init__(self, H, psi0, options):
         super().__init__(H, psi0, options)
         self._result_norm = 1.
@@ -627,6 +635,7 @@ class LanczosEvolution(LanczosGroundState):
             ``expm(delta (H + E_shift)).dot(psi)``.
         N : int
             Krylov space dimension used.
+
         """
         self.delta = delta
         N = self._build_krylov()
@@ -648,8 +657,7 @@ class LanczosEvolution(LanczosGroundState):
         return (self._psi0_norm * self._result_norm) * result_full, N
 
     def _calc_result_krylov(self, k):
-        """calculate ``expm(delta h).dot(e0)`` for ``h = _h_krylov[:k+1, :k+1]``"""
-
+        """Calculate ``expm(delta h).dot(e0)`` for ``h = _h_krylov[:k+1, :k+1]``"""
         # self._result_krylov should be a normalized vector.
         h = self._h_krylov
         delta = self.delta
@@ -698,6 +706,7 @@ def lanczos_arpack(H, psi, options={}):
         Ground state energy.
     psi0 : :class:`~tenpy.linalg.np_conserved.Array`
         Ground state vector.
+
     """
     options = asConfig(options, "Lanczos")
     H_flat, psi_flat = FlatHermitianOperator.from_guess_with_pipe(H.matvec, psi, dtype=H.dtype)
@@ -724,6 +733,7 @@ def gram_schmidt(vecs, rcond=1.e-14):
     -------
     vecs : list of Array
         The ortho-normalized vectors (without any ``None``).
+
     """
     res = []
     for vec in vecs:
@@ -760,6 +770,7 @@ def plot_stats(ax, Es):
         The axes on which we should plot.
     Es : list of ndarray.
         The energies :attr:`Lanczos.Es`.
+
     """
     ks = [[k] * len(E) for k, E in enumerate(Es)]
     ks = np.array(sum(ks, []))

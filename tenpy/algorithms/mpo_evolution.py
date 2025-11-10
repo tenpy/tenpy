@@ -4,11 +4,11 @@
 
 import logging
 
-logger = logging.getLogger(__name__)
-
-from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg.truncation import TruncationError
 from ..tools.misc import consistency_check
+from .algorithm import TimeDependentHAlgorithm, TimeEvolutionAlgorithm
+
+logger = logging.getLogger(__name__)
 
 __all__ = ['ExpMPOEvolution', 'TimeDependentExpMPOEvolution']
 
@@ -49,7 +49,9 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
     _U_param : dict
         A dictionary containing the information of the latest created `_U`.
         We won't recalculate `_U` if those parameters didn't change.
+
     """
+
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
         options = self.options
@@ -79,6 +81,7 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
             The order of the algorithm. Only 1 and 2 are allowed.
         approximation : 'I' or 'II'
             Type of approximation for the time evolution operator.
+
         """
         U_param = dict(dt=dt, order=order, approximation=approximation)
         if self._U_param == U_param and not self.force_prepare_evolve:
@@ -97,7 +100,7 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
             U2 = H_MPO.make_U(-(1. - 1j) / 2. * dt * 1j, approximation=approximation)
             self._U_MPO = [U1, U2]
         else:
-            raise ValueError("order {0:d} not implemented".format(order=order))
+            raise ValueError(f'order {order} not implemented')
         self.force_prepare_evolve = False
 
     def evolve_step(self, dt):

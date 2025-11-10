@@ -1,16 +1,17 @@
-"""Provides exact ground state energies for the transverse field ising model for comparison.
+r"""Provides exact ground state energies for the transverse field ising model for comparison.
 
 The Hamiltonian reads
 .. math ::
-    H = - J \\sum_{i} \\sigma^x_i \\sigma^x_{i+1} - g \\sum_{i} \\sigma^z_i
+    H = - J \sum_{i} \sigma^x_i \sigma^x_{i+1} - g \sum_{i} \sigma^z_i
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import warnings
+
 import numpy as np
+import scipy.integrate
 import scipy.sparse as sparse
 from scipy.sparse.linalg import eigsh
-import warnings
-import scipy.integrate
 
 
 def finite_gs_energy(L, J, g):

@@ -8,8 +8,8 @@
 
 import numpy as np
 
-from .lattice import Square
 from ..networks.site import BosonSite, FermionSite
+from .lattice import Square
 from .model import CouplingMPOModel
 
 __all__ = ['HofstadterBosons', 'HofstadterFermions', 'gauge_hopping', 'hopping_phases']
@@ -71,6 +71,7 @@ def hopping_phases(p: int, q: int, Lx: int, Ly: int, pbc_x: bool, pbc_y: bool, g
         Complexes phases :math:`\mathtt{phases_j[x, y]} = e^{2 \pi i a_j(x, y)}``.
         Shape matches the bonds of the orientation in the given system, i.e. ``(lx, ly)`` or
         reduced by one at open boundaries.
+
     """
     assert isinstance(p, int) and p != 0, f'Expected non-zero integer. Got {p=}'
     assert isinstance(q, int) and q > 0, f'Expected positive integer. Got {q=}'
@@ -191,6 +192,7 @@ class HofstadterFermions(CouplingMPOModel):
             the allowed MPS unit cell sizes. See :func:`hopping_phases` for details.
 
     """
+
     default_lattice = Square
     force_default_lattice = True
 
@@ -284,7 +286,9 @@ class HofstadterBosons(CouplingMPOModel):
             Choice of the gauge used for the magnetic field. This affects the size and shape of
             the magnetic unit cell (the unit cell for the hopping phases), which in turn restricts
             the allowed MPS unit cell sizes. See :func:`hopping_phases` for details.
+
     """
+
     default_lattice = Square
     force_default_lattice = True
 

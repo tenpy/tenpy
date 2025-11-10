@@ -3,9 +3,9 @@
 
 import numpy as np
 
-from .model import CouplingMPOModel
 from ..networks.site import BosonSite, FermionSite
 from .lattice import Honeycomb
+from .model import CouplingMPOModel
 
 __all__ = ['BosonicHaldaneModel', 'FermionicHaldaneModel']
 
@@ -49,7 +49,9 @@ class BosonicHaldaneModel(CouplingMPOModel):
             External magnetic flux 'threaded' through the cylinder. Hopping amplitudes for bonds
             'across' the periodic boundary are modified such that particles hopping around the
             circumference of the cylinder acquire a phase ``2 pi phi_ext``.
+
     """
+
     default_lattice = Honeycomb
     force_default_lattice = True
 
@@ -124,7 +126,9 @@ class FermionicHaldaneModel(CouplingMPOModel):
             External magnetic flux 'threaded' through the cylinder. Hopping amplitudes for bonds
             'across' the periodic boundary are modified such that particles hopping around the
             circumference of the cylinder acquire a phase ``2 pi phi_ext``.
+
     """
+
     default_lattice = Honeycomb
     force_default_lattice = True
 

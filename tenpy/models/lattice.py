@@ -18,17 +18,19 @@ Further, an overview with plots of the predefined models is given in
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import copy
+import itertools
+import logging
+
 import numpy as np
 from scipy.spatial import ConvexHull, Voronoi
-import itertools
-import copy
-import logging
-logger = logging.getLogger(__name__)
 
 from ..linalg.charges import DipolarChargeInfo
-from ..networks.site import Site
-from ..tools.misc import to_iterable, to_array, inverse_permutation, get_close, find_subclass
 from ..networks.mps import MPS  # only to check boundary conditions
+from ..networks.site import Site
+from ..tools.misc import find_subclass, get_close, inverse_permutation, to_array, to_iterable
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'Lattice', 'TrivialLattice', 'SimpleLattice', 'MultiSpeciesLattice', 'IrregularLattice',
@@ -158,9 +160,10 @@ class Lattice:
         for each site of the unit cell an index array selecting the mps indices of that site.
     _mps2lat_vals_idx_fix_u : tuple of ndarray of shape `Ls`
         similar as `_mps2lat_vals_idx`, but for a fixed `u` picking a site from the unit cell.
+
     """
+
     Lu = None  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
-    dim = None  #: the dimension of the lattice
 
     def __init__(self,
                  Ls,
@@ -298,6 +301,7 @@ class Lattice:
             HDF5 group which is supposed to represent `self`.
         subpath : str
             The `name` of `h5gr` with a ``'/'`` in the end.
+
         """
         hdf5_saver.save(self.unit_cell, subpath + "unit_cell")
         hdf5_saver.save(np.array(self.Ls, int), subpath + "lengths")
@@ -337,6 +341,7 @@ class Lattice:
         -------
         obj : cls
             Newly generated class instance containing the required data.
+
         """
         obj = cls.__new__(cls)  # create class instance, no __init__() call
         hdf5_loader.memorize_load(h5gr, obj)
@@ -469,11 +474,12 @@ class Lattice:
         order : array, shape (N, D+1), dtype np.intp
             the order to be used for :attr:`order`.
 
-        See also
+        See Also
         --------
         get_order : generates the `order` from equivalent `priority` and `snake_winding`.
         get_order_grouped : variant of `get_order`.
         plot_order : visualizes the resulting `order`.
+
         """
         if isinstance(order, str):
             if order in ["default", "Cstyle"]:
@@ -512,8 +518,9 @@ class Lattice:
             List of ``"open"`` or ``"periodic"`` or integer, one entry for each direction of the
             lattice. An integer means periodic boundary condition with a shift given by that number,
             see :attr:`bc_shift`.
+
         """
-        global bc_choices  # noqa: F824
+        global bc_choices
         bc_choices_reverse = dict([(v, k) for (k, v) in bc_choices.items()])
         bc = [bc_choices_reverse[bc] for bc in self.bc]
         if self.bc_shift is not None:
@@ -525,7 +532,7 @@ class Lattice:
 
     @boundary_conditions.setter
     def boundary_conditions(self, bc):
-        global bc_choices  # noqa: F824
+        global bc_choices
         if bc in list(bc_choices.keys()):
             bc = [bc_choices[bc]] * self.dim
             self.bc_shift = None
@@ -581,6 +588,7 @@ class Lattice:
         -------
         copy : :class:`Lattice`
             A copy of `self` with "segment" :attr:`bc_MPS` and :attr:`segment_first_last` set.
+
         """
         cp = self.copy()
         L = cp.N_sites # Size of finite MPS or unit cell
@@ -625,6 +633,7 @@ class Lattice:
             ``factor*N_sites``. Since MPS unit cells are repeated in the `x`-direction
             in our convention, the lattice shape goes from
             ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
+
         """
         if self.bc_MPS != "infinite":
             raise ValueError("can only enlarge the MPS unit cell for infinite MPS.")
@@ -645,7 +654,7 @@ class Lattice:
         self.test_sanity()
 
     def position(self, lat_idx):
-        """return 'space' position of one or multiple sites.
+        """Return 'space' position of one or multiple sites.
 
         Parameters
         ----------
@@ -657,6 +666,7 @@ class Lattice:
         pos : ndarray, ``(..., Dim)``
             The position of the lattice sites specified by `lat_idx` in real-space.
             If :attr:`position_disorder` is non-trivial, it can shift the positions!
+
         """
         idx = self._asvalid_latidx(lat_idx)
         res = np.take(self.unit_cell_positions, idx[..., -1], axis=0)
@@ -672,7 +682,7 @@ class Lattice:
         return res
 
     def site(self, i):
-        """return :class:`~tenpy.networks.site.Site` instance corresponding to an MPS index `i`"""
+        """Return :class:`~tenpy.networks.site.Site` instance corresponding to an MPS index `i`"""
         if self._mps_sites_cache is None:
             _ = self.mps_sites()  # populate cache
         return self._mps_sites_cache[i]
@@ -712,6 +722,7 @@ class Lattice:
             indices ``(x_0, ..., x_{dim-1}, u)`` corresponding to `i`.
             For `i` across the MPS unit cell and "infinite" or "segment" `bc_MPS`,
             we shift `x_0` accordingly.
+
         """
         if self.bc_MPS != 'finite':
             # allow `i` outside of MPS unit cell for bc_MPS infinite
@@ -740,6 +751,7 @@ class Lattice:
         i : array_like
             MPS index/indices corresponding to `lat_idx`.
             Has the same shape as `lat_idx` without the last dimension.
+
         """
         idx = self._asvalid_latidx(lat_idx)
         if self.bc_MPS != 'finite':
@@ -754,7 +766,7 @@ class Lattice:
         return i
 
     def mps_idx_fix_u(self, u=None):
-        """return an index array of MPS indices for which the site within the unit cell is `u`.
+        """Return an index array of MPS indices for which the site within the unit cell is `u`.
 
         If you have multiple sites in your unit-cell, an onsite operator is in general not defined
         for all sites. This functions returns an index array of the mps indices which belong to
@@ -769,6 +781,7 @@ class Lattice:
         -------
         mps_idx : array
             MPS indices for which ``self.site(i) is self.unit_cell[u]``. Ordered ascending.
+
         """
         if u is not None:
             return self._mps_fix_u[u]
@@ -788,6 +801,7 @@ class Lattice:
             MPS indices `i` for which ``self.site(i) is self.unit_cell[u]``.
         lat_idx : 2D array
             The row `j` contains the lattice index (without `u`) corresponding to ``mps_idx[j]``.
+
         """
         mps_idx = self.mps_idx_fix_u(u)
         return mps_idx, self.order[mps_idx, :-1]
@@ -861,6 +875,7 @@ class Lattice:
             (10, 3)
             >>> bool(np.all(A_res[:, :, u] == A_u_res[:, :]))
             True
+
         """
         axes = to_iterable(axes)
         if len(axes) > 1:
@@ -906,6 +921,7 @@ class Lattice:
             Reshaped and reordered copy of A. Such that MPS indices along the specified axes
             are replaced by lattice indices, i.e., if MPS index `j` maps to lattice site
             `(x0, x1, x2)`, then ``res_A[..., x0, x1, x2, ...] = A[..., mps_inds[j], ...]``.
+
         """
         try:
             iter(axes)
@@ -948,7 +964,6 @@ class Lattice:
             new_shapes.append(shape)
             lat_inds.append(lat_inds_ax)
 
-        res_A_ndim = A.ndim - len(axes) + sum([len(s) for s in new_shapes])
         res_A_shape = []
         res_A_inds = []
         dim_before = 0
@@ -956,7 +971,6 @@ class Lattice:
         for ax in range(A.ndim):
             if ax in axes:
                 i = axes.index(ax)
-                inds_ax = lat_inds[i].T
                 res_A_shape.extend(new_shapes[i])
                 for inds in lat_inds[i].T:
                     inds = inds.reshape([1] * dim_before + [len(inds)] + [1] * dim_after)
@@ -994,6 +1008,7 @@ class Lattice:
             Number of nearest neighbors (or whatever `key` specified) for the `u`-th site in the
             unit cell, somewhere in the bulk of the lattice. Note that it might not be the correct
             value at the edges of a lattice with open boundary conditions.
+
         """
         pairs = self.pairs[key]
         count = 0
@@ -1038,6 +1053,7 @@ class Lattice:
                 for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
                     dist = self.lat.distance(u1, u2, dx)
                     self.add_coupling(J/dist, u1, 'Sz', u2, 'Sz', dx)
+
         """
         vec_dist = self.unit_cell_positions[u2] - self.unit_cell_positions[u1]
         for ax in range(self.dim):
@@ -1086,6 +1102,7 @@ class Lattice:
         coupling_pairs : dict
             Keys are distances of nearest-neighbors, next-nearest-neighbors etc.
             Values are ``[(u1, u2, dx), ...]`` as in :attr:`pairs`.
+
         """
         if cutoff is None:
             cutoff = max_dx - eps
@@ -1128,6 +1145,7 @@ class Lattice:
             `lat_indices` has only rows within this shape.
         shift_lat_indices : array
             Translation vector from origin to the lower left corner of box spanned by `dx`.
+
         """
         shape = [La - abs(dxa) * int(bca) for La, dxa, bca in zip(self.Ls, dx, self.bc)]
         shift_strength = [min(0, dxa) for dxa in dx]
@@ -1169,6 +1187,7 @@ class Lattice:
             (Only returned if `strength` is None.)
             Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
             `lat_indices` has only rows within this shape.
+
         """
         coupling_shape, shift_lat_indices = self.coupling_shape(dx)
         if any([s == 0 for s in coupling_shape]):
@@ -1215,7 +1234,7 @@ class Lattice:
             return mps_i[keep_nonzero], mps_j[keep_nonzero], strength_vals[keep_nonzero]
 
     def _keep_possible_couplings(self, lat_j, lat_j_shifted, u2):
-        """filter possible j sites of a coupling from :meth:`possible_couplings`"""
+        """Filter possible j sites of a coupling from :meth:`possible_couplings`"""
         return np.all(
             np.logical_or(
                 lat_j_shifted == lat_j,  # not across the boundary
@@ -1240,6 +1259,7 @@ class Lattice:
         shift_lat_indices : array
             Translation vector from origin to the lower left corner of box spanned by `dx`.
             (Unlike for :meth:`coupling_shape` it can also contain entries > 0)
+
         """
         # coupling_shape(dx) is equivalent to
         # multi_coupling_shape(np.array([[0]*self.dim, dx]))
@@ -1282,6 +1302,7 @@ class Lattice:
             (Only returned if `strength` is None.)
             Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
             `lat_indices` has only rows within this shape.
+
         """
         D = self.dim
         Nops = len(ops)
@@ -1347,6 +1368,7 @@ class Lattice:
             Labels for the different sites in the unit cell.
         **kwargs :
             Further keyword arguments given to ``ax.plot()``.
+
         """
         kwargs.setdefault("linestyle", 'None')
         use_marker = ('marker' not in kwargs)
@@ -1376,6 +1398,7 @@ class Lattice:
             can contain keyword arguments for ``ax.text()``.
         **kwargs :
             Further keyword arguments given to ``ax.plot()``.
+
         """
         if order is None:
             order = self.order
@@ -1410,6 +1433,7 @@ class Lattice:
             If ``False``, plot the couplings as dangling lines.
         **kwargs :
             Further keyword arguments given to ``ax.plot()``.
+
         """
         if coupling is None:
             coupling = self.pairs['nearest_neighbors']
@@ -1451,6 +1475,7 @@ class Lattice:
             The axes on which we should plot.
         **kwargs :
             Keyword arguments for ``ax.arrow``.
+
         """
         kwargs.setdefault("length_includes_head", True)
         kwargs.setdefault("width", 0.03)
@@ -1486,6 +1511,7 @@ class Lattice:
             coordinates of the origin
         **kwargs :
             Keyword arguments for ``ax.arrow``.
+
         """
         kwargs.setdefault("length_includes_head", True)
         kwargs.setdefault("width", 0.05)
@@ -1526,6 +1552,7 @@ class Lattice:
             Defaults to the first entry of :attr:`unit_cell_positions`.
         **kwargs :
             Keyword arguments for the used ``ax.plot``.
+
         """
         if direction is None:
             dirs = [i for i in range(self.dim) if not self.bc[i]]
@@ -1572,6 +1599,7 @@ class Lattice:
             arguments for :meth:`plot_brillouin_zone` of :class:``self.BZ.__class__``.
         **kwargs :
             Keyword arguments for :meth:`plot_brillouin_zone` of :class:``self.BZ.__class__``.
+
         """
         self.BZ.plot_brillouin_zone(ax, *args, **kwargs)
 
@@ -1600,7 +1628,7 @@ class Lattice:
         return self._BZ
 
     def _asvalid_latidx(self, lat_idx):
-        """convert lat_idx to an ndarray with correct last dimension."""
+        """Convert lat_idx to an ndarray with correct last dimension."""
         lat_idx = np.asarray(lat_idx, dtype=np.intp)
         if lat_idx.shape[-1] != len(self.shape):
             raise ValueError("wrong len of last dimension of lat_idx: " + str(lat_idx.shape))
@@ -1634,6 +1662,7 @@ class Lattice:
         -------
         :class:`~tenpy.models.lattice.TrivialLattice`
             A trivial lattice with the `grouped_sites` as sites and the same :attr:`bc_MPS` as `self`.
+
         """
         res = TrivialLattice(grouped_sites, bc_MPS=self.bc_MPS, bc='periodic')
         res._mps_sites_cache = grouped_sites[:]
@@ -1654,7 +1683,9 @@ class TrivialLattice(Lattice):
         The sites making up a unit cell of the lattice.
     **kwargs :
         Further keyword arguments given to :class:`Lattice`.
+
     """
+
     def __init__(self, mps_sites, **kwargs):
         Lattice.__init__(self, [1], mps_sites, **kwargs)
 
@@ -1683,7 +1714,9 @@ class SimpleLattice(Lattice):
         If `order` is specified in the form ``('standard', snake_winding, priority)``,
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
+
     """
+
     Lu = 1  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
 
     def __init__(self, Ls, site, **kwargs):
@@ -1699,7 +1732,7 @@ class SimpleLattice(Lattice):
         Lattice.__init__(self, Ls, [site], **kwargs)
 
     def mps2lat_values(self, A, axes=0, u=None):
-        """same as :meth:`Lattice.mps2lat_values`, but ignore ``u``, setting it to ``0``."""
+        """Same as :meth:`Lattice.mps2lat_values`, but ignore ``u``, setting it to ``0``."""
         return super().mps2lat_values(A, axes, 0)
 
 
@@ -1800,7 +1833,9 @@ class MultiSpeciesLattice(Lattice):
         >>> spinful_fermion_Honeycomb = MultiSpeciesLattice(simple_lat, sites, ['up', 'down'])
 
     In this case, you could also call :func:`tenpy.networks.site.spin_half_species`.
+
     """
+
     Lu = None  #: unknown number of sites in the unit cell
 
     def __init__(self, simple_lattice, species_sites, species_names=None):
@@ -1904,6 +1939,7 @@ class MultiSpeciesLattice(Lattice):
         -------
         simple_u : int
             Unit cell index `u` in the :attr:`simple_lattice`.
+
         """
         return self_u // self.N_species
 
@@ -1919,6 +1955,7 @@ class MultiSpeciesLattice(Lattice):
         -------
         simple_u : int
             Unit cell index `u` in the :attr:`simple_lattice`.
+
         """
         return self_u % self.N_species
 
@@ -1936,6 +1973,7 @@ class MultiSpeciesLattice(Lattice):
         -------
         self_u : int
             Unit cell index `u` in `self`.
+
         """
         return simple_u * self.N_species + species_idx
 
@@ -2026,7 +2064,9 @@ class IrregularLattice(Lattice):
         ...                            add_unit_cell=['S'])
         >>> irr_lat.mps_sites()
         ['F', 'F', 'S', 'F', 'F']
+
     """
+
     _REMOVED = -123456  # value in self._perm indicating removed sites.
 
     def __init__(self,
@@ -2099,6 +2139,7 @@ class IrregularLattice(Lattice):
         order : array, shape (N, D+1)
             The order to be used for :attr:`order`, i.e. `order` with added/removed sites
             as specified by :attr:`remove` and :attr:`add`.
+
         """
         order_reg = self.regular_lattice.ordering(order)
         return self._ordering_irreg(order_reg)
@@ -2163,7 +2204,7 @@ class IrregularLattice(Lattice):
     # make possible_couplings and possible_multi_couplings work
 
     def _keep_possible_couplings(self, lat_j, lat_j_shifted, u2):
-        """filter possible j sites of a coupling from :meth:`possible_couplings`"""
+        """Filter possible j sites of a coupling from :meth:`possible_couplings`"""
         keep = super()._keep_possible_couplings(lat_j, lat_j_shifted, u2)
         lat_j_u = np.concatenate([lat_j, np.full([len(lat_j), 1], u2)], axis=1)
         i = np.sum(lat_j_u * self._strides, axis=-1)
@@ -2171,7 +2212,7 @@ class IrregularLattice(Lattice):
         return np.logical_and(keep, i != self._REMOVED)
 
     def _keep_possible_multi_couplings(self, lat_ijkl, lat_ijkl_shifted, u_ijkl):
-        """filter possible j sites of a coupling from :meth:`possible_couplings`"""
+        """Filter possible j sites of a coupling from :meth:`possible_couplings`"""
         keep = super()._keep_possible_multi_couplings(lat_ijkl, lat_ijkl_shifted, u_ijkl)
         u_ijkl = np.broadcast_to(u_ijkl, lat_ijkl.shape[:2] + (1, ))
         i = np.sum(np.concatenate([lat_ijkl, u_ijkl], axis=2) * self._strides, axis=-1)
@@ -2227,7 +2268,9 @@ class HelicalLattice(Lattice):
     N_unit_cells : int
         Number of *lattice* unit cells to include into the MPS unit cell.
         The total number of sites will be ``N_unit_cells * len(regular_lattice.unit_cell)``.
+
     """
+
     _REMOVED = IrregularLattice._REMOVED
 
     def __init__(self, regular_lattice, N_unit_cells):
@@ -2294,12 +2337,13 @@ class HelicalLattice(Lattice):
         order : array, shape (N, D+1)
             The order to be used for :attr:`order`, i.e. `order` with added/removed sites
             as specified by :attr:`remove` and :attr:`add`.
+
         """
         order_reg = self.regular_lattice.ordering(order)
         return self._ordering_helical(order_reg)
 
     def _ordering_helical(self, order):
-        """extract relevant sites from the `order` of the full 2D lattice."""
+        """Extract relevant sites from the `order` of the full 2D lattice."""
         Lx, Ly, Lu = self.regular_lattice.shape
         N_sites = self._N_cells * Lu
         errmsg = ("order of regular lattice incompatible with tilting. "
@@ -2359,6 +2403,7 @@ class HelicalLattice(Lattice):
             Enlarge the number of sites in the MPS unit cell by this factor.
             We only enlarge the shape (and the underlying :attr:`regular_lattice`)
             if the new number of sites wouldn't fit into it any more.
+
         """
         if (self._N_cells * factor > self.regular_lattice.N_cells
                 or self.regular_lattice.N_cells % (self._N_cells * factor) != 0):
@@ -2484,7 +2529,9 @@ class Chain(SimpleLattice):
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
         `pairs` are set accordingly.
+
     """
+
     dim = 1  #: the dimension of the lattice
 
     def __init__(self, L, site, **kwargs):
@@ -2597,7 +2644,9 @@ class Ladder(Lattice):
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `pairs` are set accordingly.
+
     """
+
     Lu = 2  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
     dim = 1  #: the dimension of the lattice
 
@@ -2722,6 +2771,7 @@ class NLegLadder(Lattice):
             Number of legs for a NLegLadder lattice (ignored for other lattices). Default ``3``.
 
     """
+
     dim = 1  #: the dimension of the lattice
 
     def __init__(self, L, N, sites, **kwargs):
@@ -2847,7 +2897,9 @@ class Square(SimpleLattice):
         If `order` is specified in the form ``('standard', snake_winding, priority)``,
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
+
     """
+
     dim = 2  #: the dimension of the lattice
 
     def __init__(self, Lx, Ly, site, **kwargs):
@@ -2918,7 +2970,9 @@ class Triangular(SimpleLattice):
         If `order` is specified in the form ``('standard', snake_winding, priority)``,
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
+
     """
+
     dim = 2  #: the dimension of the lattice
 
     def __init__(self, Lx, Ly, site, **kwargs):
@@ -2993,7 +3047,9 @@ class Honeycomb(Lattice):
         `basis`, `pos` and `pairs` are set accordingly.
         For the Honeycomb lattice ``'fourth_nearest_neighbors', 'fifth_nearest_neighbors'``
         are set in :attr:`pairs`.
+
     """
+
     dim = 2  #: the dimension of the lattice
     Lu = 2  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
 
@@ -3090,7 +3146,9 @@ class Kagome(Lattice):
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `pairs` are set accordingly.
+
     """
+
     dim = 2  #: the dimension of the lattice
     Lu = 3  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
 
@@ -3153,7 +3211,9 @@ class SimpleBZ:
         the reciprocal basis of the real space lattice, i.e. the basis in reciprocal space
     dim : int
         dimension of the Brillouin Zone
+
     """
+
     def __init__(self, vertices, basis, dim: int):
         assert dim == 1 or dim == 2, 'SimpleBZ is only defined for dimensions 1 and 2'
         self.dim = dim
@@ -3215,6 +3275,7 @@ class SimpleBZ:
         LatticeClass : :class:`SimpleBZ`
             an instance of the :class:`SimpleBZ` instantiated from a list of points (vertices)
             (in ordered counterclockwise direction) defining the BZ
+
         """
         # make sure given lattice basis is reasonable orthogonal and short
         b1, b2 = cls.lagrange_lattice_reduction(basis)
@@ -3260,6 +3321,7 @@ class SimpleBZ:
         ndarray :
             boolean array of shape ``points.shape[:-1]`` if 2D or points.shape if 1D, indicating
             whether the corresponding point in ``points`` is contained in the Brillouin Zone
+
         """
         points = np.array(points).astype(float)  # accept also lists and tuples as input
         if self.dim == 1:
@@ -3293,6 +3355,7 @@ class SimpleBZ:
         -------
         reduced_points : ndarray
             of shape ``points.shape`` the array of the points now reduced to the 1st BZ
+
         """
         all_points = np.array(points).astype(float)
         not_in_BZ = np.invert(self.contains_points(all_points))
@@ -3366,6 +3429,7 @@ class SimpleBZ:
             draw edges of the polygon (BZ high symmetry points)
         **kwargs :
             Keyword arguments for ``matplotlib.axes.vlines``.
+
         """
         kwargs.setdefault("ls", "--")
         kwargs.setdefault("color", "black")
@@ -3386,6 +3450,7 @@ class SimpleBZ:
             call to :meth:`autoscale_view` of :class:`matplotlib.axes.Axes`
         **kwargs :
             Keyword arguments for ``matplotlib.patches.Polygon``.
+
         """
         from matplotlib.patches import Polygon
         kwargs.setdefault("edgecolor", "black")
@@ -3416,6 +3481,7 @@ class SimpleBZ:
             lattice L,
             the reduced basis vectors will generate the same lattice, albeit being the shortest
             and "most orthogonal" ones to define the lattice
+
         """
         # shorthand to compute norm
         norm = np.linalg.norm
@@ -3446,6 +3512,7 @@ def get_lattice(lattice_name):
     -------
     LatticeClass : :class:`Lattice`
         The lattice class (type, not instance) specified by `lattice_name`.
+
     """
     return find_subclass(Lattice, lattice_name)
 
@@ -3479,11 +3546,12 @@ def get_order(shape, snake_winding, priority=None):
     order : ndarray (np.prod(shape), len(shape))
         An order of the sites for :attr:`Lattice.order` in the specified `ordering`.
 
-    See also
+    See Also
     --------
     Lattice.ordering : method in :class:`Lattice` to obtain the order from parameters.
     Lattice.plot_order : visualizes the resulting order in a :class:`Lattice`.
     get_order_grouped : a variant grouping sites of the unit cell.
+
     """
     if priority is not None:
         # reduce this case to C-style order and a few permutations
@@ -3588,10 +3656,11 @@ def get_order_grouped(shape, groups, priority=None):
     order : ndarray (np.prod(shape), len(shape))
         An order of the sites for :attr:`Lattice.order` in the specified `ordering`.
 
-    See also
+    See Also
     --------
     :meth:`Lattice.ordering` : method in :class:`Lattice` to obtain the order from parameters.
     :meth:`Lattice.plot_order` : visualizes the resulting order in a :class:`Lattice`.
+
     """
     if priority is not None:
         # reduce this case to C-style order and a few permutations
@@ -3634,6 +3703,5 @@ def _parse_sites(sites, expected_number):
     except TypeError:
         return [sites] * expected_number
     if len(sites) != expected_number:
-        raise ValueError("need to specify a single site or exactly {0:d}, got {1:d}".format(
-            expected_number, len(sites)))
+        raise ValueError(f"need to specify a single site or exactly {expected_number:d}, got {len(sites):d}")
     return sites

@@ -1,16 +1,18 @@
 """A test for tenpy.tools.params."""
 # Copyright (C) TeNPy Developers, Apache license
 
-from tenpy.tools.params import Config, asConfig
 import copy
+
 import pytest
+
+from tenpy.tools.params import Config, asConfig
 
 
 def example_function(example_pars, keys=['a', 'b', 'c']):
     """example function using a parameter dictionary."""
     for default, k in enumerate(keys):
         p_k = example_pars.get(k, default)
-        print("read out parameter {k!r} = {p_k!r}".format(k=k, p_k=p_k))
+        print(f"read out parameter {k!r} = {p_k!r}")
 
 
 def test_parameters():

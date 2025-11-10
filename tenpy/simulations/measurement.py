@@ -12,9 +12,10 @@ Full description and details in :doc:`/intro/measurements`.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
-import warnings
 import functools
+import warnings
+
+import numpy as np
 
 from ..networks.mpo import MPOEnvironment
 from ..tools.misc import get_recursive
@@ -88,6 +89,7 @@ def m_measurement_index(results, psi, model, simulation, results_key='measuremen
     **kwargs :
         Other optional keyword arguments for individual measurement functions.
         Those are documented inside each measurement function.
+
     """
     index = len(simulation.results.get('measurements', {}).get(results_key, []))
     results[results_key] = index
@@ -100,6 +102,7 @@ def m_bond_dimension(results, psi, model, simulation, results_key='bond_dimensio
     ----------
     results, psi, model, simulation, results_key :
         See :func:`~tenpy.simulation.measurement.measurement_index`.
+
     """
     results[results_key] = psi.chi
 
@@ -111,6 +114,7 @@ def m_bond_energies(results, psi, model, simulation, results_key='bond_energies'
     ----------
     results, psi, model, simulation, results_key :
         See :func:`~tenpy.simulation.measurement.measurement_index`.
+
     """
     # use simulation.psi and simulation.model since default 'energy' measurement is
     # obtained from model.get_extra_default_measurements() in _connect_measurements() after regrouping
@@ -130,6 +134,7 @@ def m_simulation_parameter(results, psi, model, simulation, recursive_key, resul
         Recursive key of the simulation parameter to be read out.
     default, separators :
         Remaining arguments of :func:`~tenpy.tools.misc.get_recursive`.
+
     """
     if results_key is None:
         results_key = recursive_key
@@ -143,6 +148,7 @@ def m_energy_MPO(results, psi, model, simulation, results_key='energy_MPO'):
     ----------
     results, psi, model, simulation, results_key :
         See :func:`~tenpy.simulation.measurement.measurement_index`.
+
     """
     psi = simulation.psi  # take original psi, possibly grouped, but compatible with simulation.model
     if psi.bc == 'segment':
@@ -160,6 +166,7 @@ def m_entropy(results, psi, model, simulation, results_key='entropy'):
     ----------
     results, psi, simulation, results_key :
         See :func:`~tenpy.simulation.measurement.measurement_index`.
+
     """
     results[results_key] = psi.entanglement_entropy()
 
@@ -183,6 +190,7 @@ def m_onsite_expectation_value(results, psi, model, simulation, opname, results_
         Passed on to :meth:`~tenpy.networks.mps.MPS.expectation_value`.
     fix_u : None | int
         Select a (lattice) unit cell index to restrict measurements to.
+
     """
     if results_key is None:
         if not isinstance(opname, str):
@@ -231,6 +239,7 @@ def m_correlation_length(results, psi, model, simulation, results_key='correlati
 
     **kwargs :
         Further keyword arguments given to :meth:`~tenpy.networks.mps.MPS.correlation_length`.
+
     """
     corr = psi.correlation_length(**kwargs)
     if unit is None:
@@ -265,6 +274,7 @@ def m_evolved_time(results, psi, model, simulation, results_key='evolved_time'):
     ----------
     results, psi, model, simulation, results_key:
         See :func:`~tenpy.simulation.measurement.measurement_index`.
+
     """
     results[results_key] = simulation.engine.evolved_time
 

@@ -12,17 +12,18 @@ the simulation class in a post-processing step. They follow the syntax
 # Copyright (C) TeNPy Developers, Apache license
 
 
+import logging
 import os
 import warnings
 from pathlib import Path
-import numpy as np
-import logging
 
-from ..tools.spectral_function_tools import spectral_function, plot_correlations_on_lattice
-from ..tools import hdf5_io
-from ..tools.misc import to_iterable, get_recursive, set_recursive, find_subclass
-from ..tools.params import Config
+import numpy as np
+
 from ..models import Model
+from ..tools import hdf5_io
+from ..tools.misc import find_subclass, get_recursive, set_recursive, to_iterable
+from ..tools.params import Config
+from ..tools.spectral_function_tools import plot_correlations_on_lattice, spectral_function
 
 try:
     import h5py
@@ -57,7 +58,9 @@ class DataLoader:
 
     .. todo ::
         Include an Option for saving data into a ``.hdf5`` file without overwriting any results.
+
     """
+
     logger = logging.getLogger(__name__ + ".DataLoader")
 
     def __init__(self, filename=None, simulation=None, data=None):
@@ -138,6 +141,7 @@ class DataLoader:
         -------
         dict
             data loaded from paths as dictionary
+
         """
         paths = to_iterable(paths)
         res = dict()
@@ -165,6 +169,7 @@ class DataLoader:
         -------
         res :
             data corresponding to path
+
         """
         key = prefix + path
         try:
@@ -261,7 +266,9 @@ class DataFiles:
         DataLoader(filename='results/output_1.h5')
         >>> data_files['results/output_2.h5']
         loading results/output_2.h5 ... successful
+
     """
+
     def __init__(self, files=None, folder=None):
         self._open_files = {} # filename -> DataLoader
         self._resolve_filenames = {}
@@ -346,7 +353,7 @@ class DataFiles:
             print(f"loading {file!s}", end=' ')
             try:
                 _ = self[file]
-            except OSError as e:
+            except OSError:
                 print("... FAILED! Ignoring.")
             else:
                 print("... successful")
@@ -377,6 +384,7 @@ def pp_spectral_function(DL: DataLoader,
     conjugate_correlation : bool | False
     **kwargs
         keyword arguments to :func:`~tenpy.tools.spectral_function_tools.spectral_function`
+
     """
     dt: float = DL.sim_params['algorithm_params']['dt']
     N_steps = DL.sim_params['algorithm_params'].get('N_steps', None)
@@ -422,6 +430,7 @@ def pp_plot_correlations_on_lattice(DL: DataLoader,
         default (sub-) directory under which to save the plot
     kwargs :
         kwargs to :func:`~tenpy.tools.spectral_function_tools.plot_correlations_on_lattice`
+
     """
     import matplotlib.pyplot as plt
     if not os.path.exists(default_dir):

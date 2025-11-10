@@ -5,8 +5,8 @@ Uniform lattice of spin-S sites, coupled by nearest-neighbor interactions.
 # Copyright (C) TeNPy Developers, Apache license
 
 from ..networks.site import SpinSite
-from .model import CouplingMPOModel, NearestNeighborModel
 from .lattice import Chain
+from .model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = ['SpinModel', 'SpinChain', 'DipolarSpinChain']
 
@@ -47,7 +47,9 @@ class SpinModel(CouplingMPOModel):
         Jx, Jy, Jz, hx, hy, hz, muJ, D, E  : float | array
             Coupling as defined for the Hamiltonian above.
             Defaults to Heisenberg ``Jx=Jy=Jz=1.`` with other couplings 0.
+
     """
+
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5, 'real')
         conserve = model_params.get('conserve', 'best', str)
@@ -100,6 +102,7 @@ class SpinChain(SpinModel, NearestNeighborModel):
 
     See the :class:`SpinModel` for the documentation of parameters.
     """
+
     default_lattice = Chain
     force_default_lattice = True
 
@@ -135,6 +138,7 @@ class DipolarSpinChain(CouplingMPOModel):
             See change comment in :class:`~tenpy.networks.site.Site`.
         J3, J4 : float | array
             Coupling as defined for the Hamiltonian above.
+
     """
 
     def init_lattice(self, model_params):

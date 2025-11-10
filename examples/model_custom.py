@@ -7,12 +7,13 @@ or somewhere in the ``PYTHON_PATH``. Then you can use it with the parameters fil
     tenpy-run -i model_custom simulation_custom.yml
 """
 
-from tenpy.networks.site import SpinSite
-from tenpy.networks.mps import TransferMatrix
-from tenpy.models.model import CouplingMPOModel, NearestNeighborModel
-from tenpy.models.lattice import Chain
-from tenpy.linalg import np_conserved as npc
 import numpy as np
+
+from tenpy.linalg import np_conserved as npc
+from tenpy.models.lattice import Chain
+from tenpy.models.model import CouplingMPOModel, NearestNeighborModel
+from tenpy.networks.mps import TransferMatrix
+from tenpy.networks.site import SpinSite
 
 
 class AnisotropicSpin1Chain(CouplingMPOModel, NearestNeighborModel):
@@ -21,11 +22,11 @@ class AnisotropicSpin1Chain(CouplingMPOModel, NearestNeighborModel):
     .. math ::
         H = J \sum_i \vec{S}_i \cdot \vec{S}_{i+1} + B \sum_i S^x_i + D \sum_i (S^z_i)^2
     """
+
     default_lattice = Chain
     force_default_lattice = True
 
     def init_sites(self, model_params):
-        B = model_params.get('B', 0.)
         conserve = model_params.get('conserve', 'best')
         if conserve == 'best':
             conserve = 'Sz' if not model_params.any_nonzero(['B']) else None

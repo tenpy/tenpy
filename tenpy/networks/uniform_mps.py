@@ -22,22 +22,22 @@ account for the additional type of tensor structure.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import logging
 import warnings
-from ..tools.misc import BetaWarning
 
-logger = logging.getLogger(__name__)
+import numpy as np
 
 from ..linalg import np_conserved as npc
+from ..tools.misc import BetaWarning
 from .mps import MPS
+
+logger = logging.getLogger(__name__)
 
 __all__ = ['UniformMPS']
 
 
 class UniformMPS(MPS):
     r"""A Uniform Matrix Product State, only defined in the thermodynamic limit.
-
 
     Parameters
     ----------
@@ -93,6 +93,7 @@ class UniformMPS(MPS):
         the necessity of re-implementations for derived classes like the
         :class:`~tenpy.networks.purification_mps.Purification_MPS` if just the number of physical
         legs changed.
+
     """
 
     # valid boundary conditions. Don't overwrite this!
@@ -162,14 +163,11 @@ class UniformMPS(MPS):
         for i, As in enumerate(zip(self._AL, self._AR, self._AC)):
             AL, AR, AC = As
             if AL.get_leg_labels() != self._B_labels:
-                raise ValueError("AL has wrong labels {0!r}, expected {1!r}".format(
-                    AL.get_leg_labels(), self._B_labels))
+                raise ValueError(f"AL has wrong labels {AL.get_leg_labels()!r}, expected {self._B_labels!r}")
             if AR.get_leg_labels() != self._B_labels:
-                raise ValueError("AR has wrong labels {0!r}, expected {1!r}".format(
-                    AR.get_leg_labels(), self._B_labels))
+                raise ValueError(f"AR has wrong labels {AR.get_leg_labels()!r}, expected {self._B_labels!r}")
             if AC.get_leg_labels() != self._B_labels:
-                raise ValueError("AC has wrong labels {0!r}, expected {1!r}".format(
-                    AC.get_leg_labels(), self._B_labels))
+                raise ValueError(f"AC has wrong labels {AC.get_leg_labels()!r}, expected {self._B_labels!r}")
             AR.get_leg('vL').test_contractible(self._C[i].get_leg('vR'))
             AR.get_leg('vL').test_contractible(self._AC[(i - 1) % self.L].get_leg('vR'))
             AL.get_leg('vR').test_contractible(self._C[(i + 1) % self.L].get_leg('vL'))
@@ -246,6 +244,7 @@ class UniformMPS(MPS):
             HDF5 group which is supposed to represent `self`.
         subpath : str
             The `name` of `h5gr` with a ``'/'`` in the end.
+
         """
         hdf5_saver.save(self.sites, subpath + "sites")
         hdf5_saver.save(self._AL, subpath + "tensors_AL")
@@ -253,7 +252,6 @@ class UniformMPS(MPS):
         hdf5_saver.save(self._AC, subpath + "tensors_AC")
         hdf5_saver.save(self._C, subpath + "tensors_C")
         hdf5_saver.save(self.chinfo, subpath + "chinfo")
-        segment_boundaries = getattr(self, "segment_boundaries", (None, None))
         hdf5_saver.save(self.segment_boundaries, subpath + "segment_boundaries")
         h5gr.attrs["valid_umps"] = self.valid_umps
         h5gr.attrs["norm"] = self.norm
@@ -283,9 +281,9 @@ class UniformMPS(MPS):
         -------
         psi : :class:`~tenpy.networks.mps.MPS`
             The right-canonical form converted from the uniform MPS.
-        """
 
-        if self.diagonal_gauge == False:
+        """
+        if self.diagonal_gauge is False:
             self.to_diagonal_gauge(cutoff=cutoff, check_overlap=check_overlap)
 
         self.test_validity()
@@ -308,8 +306,7 @@ class UniformMPS(MPS):
         return MPS_B
 
     def to_diagonal_gauge(self, cutoff=1.e-16, check_overlap=False):
-        """
-        Convert a UniformMPS to diagonal gauge, i.e. where all of the bond matrices are diagonal.
+        """Convert a UniformMPS to diagonal gauge, i.e. where all of the bond matrices are diagonal.
 
         Parameters
         ----------
@@ -317,6 +314,7 @@ class UniformMPS(MPS):
             Cutoff for the singular values.
         check_overlap: bool
             Check the overlap between the state before and after changing to diagonal gauge.
+
         """
         if check_overlap:
             old_uMPS = self.copy()
@@ -349,9 +347,7 @@ class UniformMPS(MPS):
             logger.info(f'Overlap of original UniformMPS with diagonal UniformMPS: {overlap:.10f}')
 
     def _diagonal_gauge_C(self, theta, i0, cutoff):
-        """
-        Diagonalize bond matrix theta and update ALs and ARs on sites on the boundary of the bond.
-        """
+        """Diagonalize bond matrix theta and update ALs and ARs on sites on the boundary of the bond."""
         U, S, VH = npc.svd(theta,
                            cutoff=cutoff,
                            qtotal_LR=[theta.qtotal, None],
@@ -376,10 +372,7 @@ class UniformMPS(MPS):
         return U, VH
 
     def _diagonal_gauge_AC(self, U, VH, i0):
-        """
-        Given U and VH from diagonalizing the center matrix C compute the corresponding AC.
-        """
-
+        """Given U and VH from diagonalizing the center matrix C compute the corresponding AC."""
         theta = self.get_B(i0, 'AC')
         theta = npc.tensordot(U.conj(), theta, axes=(['vL*'], ['vL'])).ireplace_label('vR*', 'vL')
         self.set_B(i0, theta, 'AC')
@@ -407,6 +400,7 @@ class UniformMPS(MPS):
         -------
         obj : cls
             Newly generated class instance containing the required data.
+
         """
         obj = cls.__new__(cls)  # create class instance, no __init__() call
         hdf5_loader.memorize_load(h5gr, obj)
@@ -434,8 +428,7 @@ class UniformMPS(MPS):
 
     @classmethod
     def from_MPS(cls, psi):
-        """
-        Convert an infinite MPS to a uniform MPS.
+        """Convert an infinite MPS to a uniform MPS.
 
         Parameters
         ----------
@@ -446,6 +439,7 @@ class UniformMPS(MPS):
         -------
         psi : :class:`UniformMPS`
             The resulting uniform MPS.
+
         """
         # make copies of 4 types of tensors
         dtype = psi.dtype
@@ -525,6 +519,7 @@ class UniformMPS(MPS):
         -------
         mps : :class:`UniformMPS`
             An MPS with the `flat` matrices converted to npc arrays.
+
         """
         sites = list(sites)
         L = len(sites)
@@ -656,6 +651,7 @@ class UniformMPS(MPS):
             The MPS 'matrix' `B` at site `i` with leg labels ``'vL', 'p', 'vR'``.
             May be a view of the matrix (if ``copy=False``),
             or a copy (if the form changed or ``copy=True``).
+
         """
         if form is None:
             return self.get_AR(i, copy=copy, label_p=label_p)
@@ -669,9 +665,7 @@ class UniformMPS(MPS):
             raise NotImplementedError(f"Form {form!r} is not valid for UniformMPS.")
 
     def get_AL(self, i, copy=False, label_p=None):
-        """
-        Return (view of) `AL` at site `i` in canonical form.
-        """
+        """Return (view of) `AL` at site `i` in canonical form."""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         AL = self.shift_Array_unit_cells(self._AL[i_in_unit_cell], num_unit_cells=num_unit_cells,
                                          inplace=not copy)
@@ -680,9 +674,7 @@ class UniformMPS(MPS):
         return AL
 
     def get_AR(self, i, copy=False, label_p=None):
-        """
-        Return (view of) `AR` at site `i` in canonical form.
-        """
+        """Return (view of) `AR` at site `i` in canonical form."""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         AR = self.shift_Array_unit_cells(self._AR[i_in_unit_cell], num_unit_cells=num_unit_cells,
                                          inplace=not copy)
@@ -691,9 +683,7 @@ class UniformMPS(MPS):
         return AR
 
     def get_AC(self, i, copy=False, label_p=None):
-        """
-        Return (view of) `AC` at site `i` in canonical form.
-        """
+        """Return (view of) `AC` at site `i` in canonical form."""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         AC = self.shift_Array_unit_cells(self._AC[i_in_unit_cell], num_unit_cells=num_unit_cells,
                                          inplace=not copy)
@@ -719,6 +709,7 @@ class UniformMPS(MPS):
             Should have leg labels ``'vL', 'p', 'vR'`` (not necessarily in that order).
         form : ``'B'/'AR' | 'A'/'AL' | 'Th'/'AC'`` | tuple(float, float)
             The (canonical) form of the `B` to set.
+
         """
         if form == 'A' or form == (1., 0.) or form == 'AL':
             return self.set_AL(i, B)
@@ -730,36 +721,28 @@ class UniformMPS(MPS):
             raise NotImplementedError(f"Form {list(form)!r} is not valid for UniformMPS.")
 
     def set_AL(self, i, AL):
-        """
-        Set `AL` at site `i`
-        """
+        """Set `AL` at site `i`"""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         AL = self.shift_Array_unit_cells(AL, -num_unit_cells)
         self.dtype = np.promote_types(self.dtype, AL.dtype)
         self._AL[i_in_unit_cell] = AL.itranspose(self._B_labels)
 
     def set_AR(self, i, AR):
-        """
-        Set `AR` at site `i`
-        """
+        """Set `AR` at site `i`"""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         AR = self.shift_Array_unit_cells(AR, -num_unit_cells)
         self.dtype = np.promote_types(self.dtype, AR.dtype)
         self._AR[i_in_unit_cell] = AR.itranspose(self._B_labels)
 
     def set_AC(self, i, AC):
-        """
-        Set `AC` at site `i`
-        """
+        """Set `AC` at site `i`"""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         AC = self.shift_Array_unit_cells(AC, -num_unit_cells)
         self.dtype = np.promote_types(self.dtype, AC.dtype)
         self._AC[i_in_unit_cell] = AC.itranspose(self._B_labels)
 
     def set_C(self, i, C):
-        """
-        Set `C` left of site `i`
-        """
+        """Set `C` left of site `i`"""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         C = self.shift_Array_unit_cells(C, -num_unit_cells)
         self.dtype = np.promote_types(self.dtype, C.dtype)
@@ -797,12 +780,14 @@ class UniformMPS(MPS):
             Exponent for the singular values to the left. (Not used for UniformMPS)
         formR : float
             Exponent for the singular values to the right. (Not used for UniformMPS)
+
         Returns
         -------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             The n-site wave function with leg labels ``vL, p0, p1, .... p{n-1}, vR``.
             In Vidal's notation (with s=lambda, G=Gamma):
             ``theta = s**form_L G_i s G_{i+1} s ... G_{i+n-1} s**form_R``.
+
         """
         if n == 1:
             return self.get_B(i, (1., 1.), True, cutoff, '0')
@@ -825,6 +810,7 @@ class UniformMPS(MPS):
         ----------
         factor : int
             The new number of sites in the unit cell will be increased from `L` to ``factor*L``.
+
         """
         if int(factor) != factor:
             raise ValueError("`factor` should be integer!")
@@ -851,6 +837,7 @@ class UniformMPS(MPS):
         ----------
         shift : int
             By how many sites to move the tensors to the right.
+
         """
         if self.finite:
             raise ValueError("makes only sense for infinite boundary conditions")
@@ -921,8 +908,9 @@ class UniformMPS(MPS):
         -------
         qtotal : charges
             The sum of the `qtotal` of the individual `B` tensors.
+
         """
-        assert only_physical_legs == False, "Not possible for UniformMPS"
+        assert not only_physical_legs, "Not possible for UniformMPS"
         # Assume self.segment_boundaries is None, None for UniformMPS
         tensors_AL = self._AL
         qtotal_AL = np.sum([AL.qtotal for AL in tensors_AL], axis=0)
@@ -991,6 +979,7 @@ class UniformMPS(MPS):
             (i.e., taking into account the :attr:`norm` of both MPS).
             For an infinite MPS, ``<self|other>`` is the overlap per unit cell, i.e.,
             the largest eigenvalue of the TransferMatrix.
+
         """
         assert not ignore_form, "UniformMPS have both forms. Use one."
         return super().overlap(other,

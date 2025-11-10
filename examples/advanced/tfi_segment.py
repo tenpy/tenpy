@@ -10,15 +10,14 @@ but this example might be helpful to see the general idea.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import matplotlib.pyplot as plt
 import numpy as np
 
+import tenpy.linalg.np_conserved as npc
+from tenpy.algorithms import dmrg
 from tenpy.models.tf_ising import TFIChain
 from tenpy.networks.mps import MPS
-from tenpy.algorithms import dmrg
-import matplotlib.pyplot as plt
 from tenpy.tools.params import Config
-
-import tenpy.linalg.np_conserved as npc
 
 
 def calc_infinite_groundstates(dmrg_params, g=0.1):
@@ -96,7 +95,7 @@ def calc_segment_groundstate(psi, model, dmrg_params):
 def plot(psi, filename):
     x = np.arange(psi.L)
     meas = psi.expectation_value("Sigmax")
-    fig = plt.figure()
+    fig = plt.figure()  # noqa F841
     ax = plt.gca()
     ax.plot(x, meas)
     ax.set_ylabel("<sigma_x>")

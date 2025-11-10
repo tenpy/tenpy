@@ -1,10 +1,11 @@
 """This module contains functions for linear prediction."""
 # Copyright (C) TeNPy Developers, Apache license
 
+import logging
+
 import numpy as np
 from scipy.linalg import solve_toeplitz
 from scipy.signal import correlate
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ def linear_prediction(x, *args, axis=0, **kwargs):
     -------
     np.ndarray
         Predictions along the given axis (default 0), concatenated with the original input
+
     """
     pred_along_axis = np.apply_along_axis(simple_linear_prediction_1d, axis, x, *args, **kwargs)
     pred_along_axis_concat = np.concatenate([x, pred_along_axis], axis=axis)
@@ -61,6 +63,7 @@ def simple_linear_prediction_1d(x: np.ndarray,
     Returns
     -------
     np.ndarray
+
     """
     assert x.ndim == 1, "This version assumes a one-dimensional time series"
     assert 0 <= rel_split < 1, "rel_split must be between 0 and 1"
@@ -89,8 +92,7 @@ def simple_linear_prediction_1d(x: np.ndarray,
 
 
 def get_lpc(x, p):
-    r"""Function to obtain the linear prediction coefficients (lpc) from the
-    (last p) correlations of a time series x.
+    r"""Obtain the linear prediction coefficients (lpc) from correlations.
 
     First, the last p correlations are obtained, then the system of equations R x = r (which is in toeplitz form)
     is solved.
@@ -114,6 +116,7 @@ def get_lpc(x, p):
     ..math ::
 
         [E\{x(n)*x(n-0)\}, E\{x(n)*x(n-1)\}, ..., E\{x(n)*x(n-p)\}]
+
     """
     N = len(x)
     correlations = correlate(x, x, mode='full')[N - 1:N + p]
@@ -130,8 +133,7 @@ def get_lpc(x, p):
 
 
 def get_alpha_and_c(x, lpc, truncation_mode='cutoff', epsilon=10e-07):
-    r"""Get the eigenvalues and coefficients from a vector of linear prediction
-    coefficients for the time series x.
+    r"""Get the eigenvalues and coefficients from a vector of linear prediction coefficients.
 
     This follows the approach taken in :arxiv:`0901.2342`. If necessary, the eigenvalues are truncated
     according to the `truncation_mode`
@@ -154,6 +156,7 @@ def get_alpha_and_c(x, lpc, truncation_mode='cutoff', epsilon=10e-07):
     -------
     evals : ndarray
     c : ndarray
+
     """
     A = np.diag(np.ones(len(lpc) - 1), -1).astype(lpc.dtype)
     A[0] = lpc

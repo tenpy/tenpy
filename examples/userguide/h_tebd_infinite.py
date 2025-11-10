@@ -1,8 +1,8 @@
 """Call of (infinite) TEBD."""
 
-from tenpy.networks.mps import MPS
-from tenpy.models.tf_ising import TFIChain
 from tenpy.algorithms import tebd
+from tenpy.models.tf_ising import TFIChain
+from tenpy.networks.mps import MPS
 
 M = TFIChain({"L": 2, "J": 1., "g": 1.5, "bc_MPS": "infinite"})
 psi = MPS.from_product_state(M.lat.mps_sites(), [0] * 2, "infinite", unit_cell_width=M.lat.mps_unit_cell_width)

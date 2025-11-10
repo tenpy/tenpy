@@ -78,9 +78,9 @@ knobs you can turn to tweak the most out of this library, explained in the follo
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from enum import IntEnum
-import warnings
 import os
+import warnings
+from enum import IntEnum
 
 __all__ = [
     'bottleneck', 'have_cython_functions', 'OptimizationFlag', 'temporary_level',
@@ -89,7 +89,7 @@ __all__ = [
 
 try:
     import bottleneck
-except:
+except ImportError:
     bottleneck = None
     #: None, or the `bottleneck` module, if installed.
 
@@ -136,6 +136,7 @@ class OptimizationFlag(IntEnum):
         Enable this optimization only during the parts of the code where it is really necessary.
         Check whether it actually helps - if it doesn't, keep the optimization disabled!
     """
+
     none = 0
     default = 1
     safe = 2
@@ -179,18 +180,20 @@ class temporary_level:
             set_level(OptimizationFlag.skip_args_check)
             do_some_really_heavy_stuff()
         # here we are back to the optimization level as before the ``with ...`` statement
+
     """
+
     def __init__(self, temporary_level):
         self.temporary_level = temporary_level
 
     def __enter__(self):
-        """enter the context manager."""
+        """Enter the context manager."""
         self._old_level = get_level()
         if self.temporary_level is not None:
             set_level(self.temporary_level)
 
     def __exit__(self, exc_type, exc_value, traceback):
-        """exit the context manager."""
+        """Exit the context manager."""
         set_level(self._old_level)
 
 
@@ -217,6 +220,7 @@ def set_level(level=1):
     level : int | OptimizationFlag | str | None
         The new global optimization level to be set.
         ``None`` defaults to keeping the current level.
+
     """
     global _level
     _level = to_OptimizationFlag(level)
@@ -224,7 +228,7 @@ def set_level(level=1):
 
 def get_level():
     """Return the global optimization level."""
-    global _level  # noqa: F824
+    global _level
     return _level
 
 
@@ -241,8 +245,9 @@ def optimize(level_compare=OptimizationFlag.default):
     optimize : bool
         True if the algorithms should try to optimize, i.e., whether the global
         "optimization level" is equal or higher than the level to compare to.
+
     """
-    global _level  # noqa: F824
+    global _level
     return (_level >= level_compare)
 
 
@@ -293,6 +298,7 @@ def use_cython(func=None, replacement=None, check_doc=True):
         The function replacing the decorated function `func`.
         If the cython code can not be loaded, this is just `func`,
         otherwise it's the cython version specified by `replacement`.
+
     """
     if func is None:
         # someone used ``@use_cython(replacement=...)``
@@ -337,7 +343,7 @@ def use_cython(func=None, replacement=None, check_doc=True):
         # function signature, so the doc string starts only with the second line
         clean_cdoc2 = inspect.cleandoc(cdoc[cdoc.find("\n") + 1:])
         if clean_fdoc != clean_cdoc and clean_fdoc != clean_cdoc2:
-            msg = "cython version of {0!s} has different doc-string".format(func.__name__)
+            msg = f"cython version of {func.__name__!s} has different doc-string"
             raise ValueError(msg)
     return fast_func
 

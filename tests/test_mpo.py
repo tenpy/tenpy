@@ -3,14 +3,14 @@
 
 import numpy as np
 import pytest
-from tenpy.models.xxz_chain import XXZChain
-from tenpy.models.spins import SpinChain
-from tenpy.linalg import np_conserved as npc
-from tenpy.algorithms.exact_diag import ExactDiag
-from tenpy.networks import mps, mpo, site
-from tenpy.networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms, TermList
-
 from random_test import random_MPS
+
+from tenpy.algorithms.exact_diag import ExactDiag
+from tenpy.linalg import np_conserved as npc
+from tenpy.models.spins import SpinChain
+from tenpy.models.xxz_chain import XXZChain
+from tenpy.networks import mpo, mps, site
+from tenpy.networks.terms import CouplingTerms, MultiCouplingTerms, OnsiteTerms, TermList
 
 spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 
@@ -110,9 +110,9 @@ def test_MPO_conversion():
     sites = []
     for i in range(L):
         s = site.Site(npc.LegCharge.from_trivial(2))
-        s.add_op("X_{i:d}".format(i=i), np.array([[0., 1.], [1., 0.]]))
-        s.add_op("Y_{i:d}".format(i=i), np.array([[0., 1.], [-1., 0.]]))
-        s.add_op("Z_{i:d}".format(i=i), np.array([[1., 0.], [0., -1.]]))
+        s.add_op(f"X_{i:d}", np.array([[0., 1.], [1., 0.]]))
+        s.add_op(f"Y_{i:d}", np.array([[0., 1.], [-1., 0.]]))
+        s.add_op(f"Z_{i:d}", np.array([[1., 0.], [0., -1.]]))
         sites.append(s)
     terms = [
         [("X_0", 0)],

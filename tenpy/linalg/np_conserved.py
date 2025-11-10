@@ -84,23 +84,24 @@ Overview
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import itertools
+import warnings
+from numbers import Integral
+
 import numpy as np
 import scipy.linalg
 from scipy.linalg import blas as BLAS  # python interface to BLAS
-import warnings
-import itertools
-from numbers import Integral
+
+from ..tools.math import qr_li
+from ..tools.math import speigs as _sp_speigs
+from ..tools.misc import anynan, argsort, inverse_permutation, list_to_dict_list, to_iterable
+from ..tools.optimization import OptimizationFlag, optimize, use_cython
+from ..tools.string import is_non_string_iterable, vert_join
+from . import charges  # for private functions
 
 # import public API from charges
 from .charges import ChargeInfo, DipolarChargeInfo, LegCharge, LegPipe
-from . import charges  # for private functions
 from .svd_robust import svd as svd_flat
-
-from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation, list_to_dict_list
-from ..tools.math import speigs as _sp_speigs
-from ..tools.math import qr_li
-from ..tools.string import vert_join, is_non_string_iterable
-from ..tools.optimization import optimize, OptimizationFlag, use_cython
 
 __all__ = [
     'QCUTOFF', 'ChargeInfo', 'DipolarChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'ones', 'eye_like', 'diag',
@@ -172,8 +173,9 @@ class Array:
         but *must* be set to `False` by algorithms changing _qdata.
 
     """
+
     def __init__(self, legcharges, dtype=np.float64, qtotal=None, labels=None):
-        """see help(self)"""
+        """See help(self)"""
         self.legs = list(legcharges)
         if len(self.legs) == 0:
             raise ValueError("can't have 0-rank Tensor")
@@ -200,16 +202,15 @@ class Array:
             raise ValueError("We don't allow rank-0 tensors without legs")
         for l in self.legs:
             if l.chinfo != self.chinfo:
-                raise ValueError("leg has different ChargeInfo:\n{0!s}\n vs {1!s}".format(
-                    l.chinfo, self.chinfo))
+                raise ValueError(f"leg has different ChargeInfo:\n{l.chinfo!s}\n vs {self.chinfo!s}")
         if self.shape != tuple([lc.ind_len for lc in self.legs]):
-            raise ValueError("shape mismatch with LegCharges\n self.shape={0!s} != {1!s}".format(
-                self.shape, tuple([lc.ind_len for lc in self.legs])))
+            msg = (f"shape mismatch with LegCharges\n"
+                   f"self.shape={self.shape!s} != {tuple([lc.ind_len for lc in self.legs])!s}")
+            raise ValueError(msg)
         for l in self.legs:
             l.test_sanity()
         if any([self.dtype != d.dtype for d in self._data]):
-            raise ValueError("wrong dtype: {0!s} vs\n {1!s}".format(
-                self.dtype, [self.dtype != d.dtype for d in self._data]))
+            raise ValueError(f"wrong dtype: {self.dtype!s} vs\n {[self.dtype != d.dtype for d in self._data]!s}")
         if self._qdata.shape != (self.stored_blocks, self.rank):
             raise ValueError("_qdata shape wrong")
         if self._qdata.dtype != np.intp:
@@ -274,6 +275,7 @@ class Array:
 
             >>> a *= 2  # has no effect on `b`
             >>> b.iconj()  # nor does this change `a`
+
         """
         cp = Array.__new__(Array)
         cp.__setstate__(self.__getstate__())
@@ -324,6 +326,7 @@ class Array:
             HDF5 group which is supposed to represent `self`.
         subpath : str
             The `name` of `h5gr` with a ``'/'`` in the end.
+
         """
         hdf5_saver.save(self.chinfo, subpath + "chinfo")
         hdf5_saver.save(self.legs, subpath + "legs")
@@ -355,6 +358,7 @@ class Array:
         -------
         obj : cls
             Newly generated class instance containing the required data.
+
         """
         obj = cls.__new__(cls)  # create class instance, no __init__() call
         hdf5_loader.memorize_load(h5gr, obj)
@@ -372,7 +376,7 @@ class Array:
 
     @classmethod
     def from_ndarray_trivial(cls, data_flat, dtype=None, labels=None):
-        """convert a flat numpy ndarray to an Array with trivial charge conservation.
+        """Convert a flat numpy ndarray to an Array with trivial charge conservation.
 
         Parameters
         ----------
@@ -387,6 +391,7 @@ class Array:
         -------
         res : :class:`Array`
             An Array with data of data_flat.
+
         """
         data_flat = np.asarray(data_flat)  # unspecified dtype
         if dtype is None:
@@ -411,7 +416,7 @@ class Array:
                      labels=None,
                      raise_wrong_sector=True,
                      warn_wrong_sector=True):
-        """convert a flat (numpy) ndarray to an Array.
+        """Convert a flat (numpy) ndarray to an Array.
 
         Parameters
         ----------
@@ -438,9 +443,10 @@ class Array:
         res : :class:`Array`
             An Array with data of `data_flat`.
 
-        See also
+        See Also
         --------
         detect_qtotal : used to detect ``qtotal`` if not given.
+
         """
         if cutoff is None:
             cutoff = QCUTOFF
@@ -451,8 +457,7 @@ class Array:
         data_flat = data_flat.astype(dtype, copy=True)
         res = cls(legcharges, dtype, qtotal, labels)  # without any data
         if res.shape != data_flat.shape:
-            raise ValueError("Incompatible shapes: legcharges {0!s} vs flat {1!s} ".format(
-                res.shape, data_flat.shape))
+            raise ValueError(f"Incompatible shapes: legcharges {res.shape!s} vs flat {data_flat.shape!s} ")
         if qtotal is None:
             res.qtotal = qtotal = detect_qtotal(data_flat, legcharges, cutoff)
         data = []
@@ -523,6 +528,7 @@ class Array:
         -------
         res : :class:`Array`
             An Array with blocks filled using `func`.
+
         """
         if dtype is None:
             # create a small test block to derive the dtype
@@ -604,6 +610,7 @@ class Array:
         -------
         res : :class:`Array`
             An Array with blocks filled using `func`.
+
         """
         blocked = leg.is_blocked()
         if not blocked:
@@ -644,7 +651,7 @@ class Array:
     # labels ==================================================================
 
     def get_leg_index(self, label):
-        """translate a leg-index or leg-label to a leg-index.
+        """Translate a leg-index or leg-label to a leg-index.
 
         Parameters
         ----------
@@ -656,22 +663,23 @@ class Array:
         leg_index : int
             The index of the label.
 
-        See also
+        See Also
         --------
         get_leg_indices : calls get_leg_index for a list of labels.
         iset_leg_labels : set the labels of different legs.
+
         """
         if not isinstance(label, Integral):
             try:
                 label = self._labels.index(label)
             except ValueError:  # not in List
-                msg = "Label not found: {0!r}, current labels: {1!r}".format(label, self._labels)
+                msg = f"Label not found: {label!r}, current labels: {self._labels!r}"
                 raise KeyError(msg) from None
         else:
             if label < 0:
                 label += self.rank
             if label > self.rank or label < 0:
-                raise ValueError("axis {0:d} out of rank {1:d}".format(label, self.rank))
+                raise ValueError(f"axis {label:d} out of rank {self.rank:d}")
         return label
 
     def get_leg_indices(self, labels):
@@ -687,10 +695,11 @@ class Array:
         leg_indices : list of int
             The translated labels.
 
-        See also
+        See Also
         --------
         get_leg_index : used to translate each of the single entries.
         iset_leg_labels : set the labels of different legs.
+
         """
         return [self.get_leg_index(l) for l in labels]
 
@@ -705,9 +714,10 @@ class Array:
             One label for each of the legs.
             An entry can be None for an anonymous leg.
 
-        See also
+        See Also
         --------
         get_leg: translate the labels to indices.
+
         """
         if len(labels) != self.rank:
             raise ValueError("Need one leg label for each of the legs, got: " + str(list(labels)))
@@ -743,7 +753,7 @@ class Array:
         labels[old_index] = None
         new_label = str(new_label)
         if new_label in labels:
-            msg = "Duplicate label: trying to set {0!r} in {1!r}".format(new_label, labels)
+            msg = f"Duplicate label: trying to set {new_label!r} in {labels!r}"
             raise ValueError(msg)
         labels[old_index] = new_label
         self._labels = labels
@@ -762,7 +772,7 @@ class Array:
         for i, new_label in zip(old_inds, new_labels):
             new_label = str(new_label)
             if new_label in labels:
-                msg = "Duplicate label: trying to set {0!r} in {1!r}".format(new_label, labels)
+                msg = f"Duplicate label: trying to set {new_label!r} in {labels!r}"
                 raise ValueError(msg)
             labels[i] = new_label
         self._labels = labels
@@ -780,6 +790,7 @@ class Array:
         old_labels : list of str|int
             The leg labels/indices for which the label should be removed.
             By default (None), remove all labels.
+
         """
         if old_labels is None:
             self._labels = [None] * self.rank
@@ -794,7 +805,7 @@ class Array:
     # string output ===========================================================
 
     def __repr__(self):
-        return "<npc.Array shape={0!s} labels={1!s}>".format(self.shape, self.get_leg_labels())
+        return f"<npc.Array shape={self.shape!s} labels={self.get_leg_labels()!s}>"
 
     def __str__(self):
         res = [
@@ -825,11 +836,11 @@ class Array:
         else:
             captsparse = 1.
             bs_min = bs_max = bs_mean = bs_med = bs_var = 0
-        res = "{nonzero:d} of {total:d} entries (={nztotal:g}) nonzero,\n" \
-            "stored in {nblocks:d} blocks with {stored:d} entries.\n" \
-            "Captured sparsity: {captsparse:g}\n"  \
-            "Block sizes min:{bs_min:d} mean:{bs_mean:.2f} median:{bs_med:.1f} " \
-            "max:{bs_max:d} var:{bs_var:.2f}"
+        res = ("{nonzero:d} of {total:d} entries (={nztotal:g}) nonzero,\n"
+               "stored in {nblocks:d} blocks with {stored:d} entries.\n"
+               "Captured sparsity: {captsparse:g}\n"
+               "Block sizes min:{bs_min:d} mean:{bs_mean:.2f} median:{bs_med:.1f} "
+               "max:{bs_max:d} var:{bs_var:.2f}")
 
         return res.format(nonzero=nonzero,
                           total=total,
@@ -865,6 +876,7 @@ class Array:
             the charge value(s) for each of the legs (taking `qconj` into account)
         qdat : ndarray
             the qindex for each of the legs
+
         """
         for block, qdat in zip(self._data, self._qdata):
             blockslices = []
@@ -911,6 +923,7 @@ class Array:
         IndexError
             If the number of indices is too large, or
             if an index is out of range.
+
         """
         int_only, inds = self._pre_indexing(inds)
         if int_only:
@@ -975,6 +988,7 @@ class Array:
         ------
         IndexError
             If `qindices` are incompatible with charge and `raise_incomp_q`.
+
         """
         if not np.all(self._get_block_charge(qindices) == self.qtotal):
             raise IndexError("trying to get block for qindices incompatible with charges")
@@ -1008,9 +1022,10 @@ class Array:
         sliced_self : :class:`Array`
             A copy of self, equivalent to taking slices with indices inserted in axes.
 
-        See also
+        See Also
         --------
         add_leg : opposite action of inserting a new leg.
+
         """
         axes = self.get_leg_indices(to_iterable(axes))
         indices = np.asarray(to_iterable(indices), dtype=np.intp)
@@ -1064,6 +1079,7 @@ class Array:
         -------
         extended : :class:`Array`
             A (possibly) *shallow* copy of self with an additional leg of ind_len 1 and charge 0.
+
         """
         if axis < 0:
             axis += self.rank
@@ -1103,9 +1119,10 @@ class Array:
             A copy of self with the new `leg` at axis `axis` , such that
             ``extended.take_slice(i, axis)`` returns a copy of `self`.
 
-        See also
+        See Also
         --------
         take_slice : opposite action reducing the number of legs.
+
         """
         if axis < 0:
             axis += self.rank
@@ -1140,6 +1157,7 @@ class Array:
         -------
         extended : :class:`Array`
             A copy of self with the specified axis increased.
+
         """
         extended = self.copy(deep=True)
         ax = self.get_leg_index(axis)
@@ -1176,6 +1194,7 @@ class Array:
         copy : :class:`Array`
             A shallow copy of self with ``copy.qtotal == newqtotal`` and new ``copy.legs[leg]``.
             The new leg will be a :class`LegCharge`, even if the old leg was a :class:`LegPipe`.
+
         """
         res = self.copy(deep=False)
         ax = self.get_leg_index(axis)
@@ -1213,6 +1232,7 @@ class Array:
             A copy of `self`, where the LegCharges `add_legs` where added to `self.legs`.
             Note that the LegCharges are neither bunched or sorted;
             you might want to use :meth:`sort_legcharge`.
+
         """
         if len(add_legs) != self.rank:
             raise ValueError("wrong number of legs in `add_legs`")
@@ -1260,6 +1280,7 @@ class Array:
             A copy of `self`, where the specified `charge` has been removed.
             Note that the LegCharges are neither bunched or sorted;
             you might want to use :meth:`sort_legcharge`.
+
         """
         chinfo2 = ChargeInfo.drop(self.chinfo, charge)
         if chinfo is not None:
@@ -1303,6 +1324,7 @@ class Array:
             A copy of `self`, where the `qmod` of the specified `charge` has been changed.
             Note that the LegCharges are neither bunched or sorted;
             you might want to use :meth:`sort_legcharge`.
+
         """
         chinfo2 = ChargeInfo.change(self.chinfo, charge, new_qmod, new_name)
         if chinfo is not None:
@@ -1344,6 +1366,7 @@ class Array:
             ``cp.to_ndarray() = self.to_ndarray()[np.ix_(*perm)]``.
         result : Array
             A shallow copy of self, with legs sorted/bunched.
+
         """
         if sort is False or sort is True:  # ``sort in [False, True]`` doesn't work
             sort = [sort] * self.rank
@@ -1399,7 +1422,7 @@ class Array:
 
         The resulting Array is a shallow copy with the same block structure and the same numerical
         entries, but the charges, i.e. the labels of the different blocks, are changed.
-        
+
         The mapping needs to be compatible with charge rules, i.e. applying the mapping must
         commute with charge fusion::
 
@@ -1426,6 +1449,7 @@ class Array:
         Returns
         -------
         Shallow copy with mapped charges (or the modified instance if `inplace`)
+
         """
         if inplace:
             res = self
@@ -1453,6 +1477,7 @@ class Array:
         mapped : Array
             The mapped array. Note that if either the mapping trivial or if ``inplace=True``,
             this is the unmodified (trivial mapping) or modified (inplace) original instance!
+
         """
         if self.chinfo.trivial_shift or np.all(np.equal(dx, 0)):
             return self
@@ -1478,6 +1503,7 @@ class Array:
         mapped : Array
             The mapped array. Note that if either the mapping trivial or if ``inplace=True``,
             this is the unmodified (trivial mapping) or modified (inplace) original instance!
+
         """
         if self.chinfo.trivial_shift or dx_0 == 0:
             return self
@@ -1501,6 +1527,7 @@ class Array:
         -------
         pipe : :class:`~tenpy.linalg.charges.LegPipe`
             A pipe of the legs specified by axes.
+
         """
         axes = self.get_leg_indices(axes)
         legs = [self.legs[a] for a in axes]
@@ -1538,7 +1565,7 @@ class Array:
         reshaped : :class:`Array`
             A copy of self, with some legs combined into pipes as specified by the arguments.
 
-        See also
+        See Also
         --------
         split_legs : inverse reshaping splitting LegPipes.
 
@@ -1575,6 +1602,7 @@ class Array:
             ...                            pipes=[c2.legs[0], c2.legs[2]])
             >>> c3.get_leg_labels()
             ['c', '(e.b)', '(a.d)']
+
         """
         # bring arguments into a standard form
         combine_legs = list(combine_legs)  # convert iterable to list
@@ -1677,7 +1705,7 @@ class Array:
         reshaped : :class:`Array`
             A copy of self where the specified legs are splitted.
 
-        See also
+        See Also
         --------
         combine_legs : this is reversed by split_legs.
 
@@ -1701,6 +1729,7 @@ class Array:
             ['a', 'd', 'b', 'c', 'e']
             >>> float(npc.norm(split_array.transpose(orig_array.get_leg_labels()) - orig_array))
             0.0
+
         """
         if axes is None:
             axes = [i for i, l in enumerate(self.legs) if isinstance(l, LegPipe)]
@@ -1710,7 +1739,7 @@ class Array:
                 raise ValueError("can't split a leg multiple times!")
         for ax in axes:
             if not isinstance(self.legs[ax], LegPipe):
-                raise ValueError("can't split leg {ax:d} which is not a LegPipe".format(ax=ax))
+                raise ValueError(f"can't split leg {ax:d} which is not a LegPipe")
         if len(axes) == 0:
             return self.copy(deep=True)
         elif self.stored_blocks == 0:
@@ -1754,6 +1783,7 @@ class Array:
         blocked_self : :class:`Array`
             Self (if ``len(encapsulated_axes) = 0``) or a copy of self,
             which is completely blocked.
+
         """
         enc_axes = [a for a, l in enumerate(self.legs) if not l.is_blocked()]
         if len(enc_axes) == 0:
@@ -1777,6 +1807,7 @@ class Array:
         squeezed : :class:Array | scalar
             A scalar of ``self.dtype``, if all axes were squeezed.
             Else a copy of ``self`` with reduced ``rank`` as specified by `axes`.
+
         """
         if axes is None:
             axes = tuple([a for a in range(self.rank) if self.shape[a] == 1])
@@ -1823,6 +1854,7 @@ class Array:
         -------
         copy : :class:`Array`
             Deep copy of self with new dtype.
+
         """
         cp = self.copy(deep=False)  # manual deep copy: don't copy every block twice
         cp._qdata = cp._qdata.copy()
@@ -1845,6 +1877,7 @@ class Array:
             Default ``None`` gives the Frobenius norm/2-norm for matrices/everything else.
             Note that this differs from other methods, e.g. :meth:`from_ndarray`,
             which use the maximum norm.
+
         """
         if len(self._data) == 0:
             return self
@@ -1885,6 +1918,7 @@ class Array:
         block_masks: list of lists of 1D bool arrays
             ``block_masks[a][qind]`` is a boolean mask which indices to keep
             in block ``qindex`` of ``axes[a]``.
+
         """
         if axes is not to_iterable(axes):
             mask = [mask]
@@ -1947,10 +1981,11 @@ class Array:
             A copy of self with leg `axis` permuted, such that
             ``res[i, ...] = self[perm[i], ...]`` for ``i`` along `axis`.
 
-        See also
+        See Also
         --------
         sort_legcharge : can also be used to perform a general permutation.
             Preferable, since it is faster for permutations which don't mix charge blocks.
+
         """
         axis = self.get_leg_index(axis)
         perm = np.asarray(perm, dtype=np.intp)
@@ -2003,6 +2038,7 @@ class Array:
         ----------
         axes: iterable (int|string), len ``rank`` | None
             The new order of the axes. By default (None), reverse axes.
+
         """
         if axes is None:
             axes = tuple(reversed(range(self.rank)))
@@ -2058,9 +2094,10 @@ class Array:
         axis : str|int
             The leg label or index for the axis which should be scaled.
 
-        See also
+        See Also
         --------
         iproject : can be used to discard indices for which s is zero.
+
         """
         axis = self.get_leg_index(axis)
         s = np.asarray(s)
@@ -2118,6 +2155,7 @@ class Array:
             array([1.-0.j, 0.-2.j])
             >>> a.iunary_blockwise(np.real).to_ndarray()  # get real part
             array([1., 0.])
+
         """
         if len(args) == 0 == len(kwargs):
             self._data = [func(t) for t in self._data]
@@ -2153,6 +2191,7 @@ class Array:
             Whether the data should be complex conjugated.
         inplace : bool
             Whether to apply changes to `self`, or to return a *deep* copy.
+
         """
         if complex_conj and self.dtype.kind == 'c':
             if inplace:
@@ -2194,7 +2233,7 @@ class Array:
         return np.linalg.norm(block_norms + [0], ord)
 
     def __neg__(self):
-        """return ``-self``"""
+        """Return ``-self``"""
         return self.unary_blockwise(np.negative)
 
     def ibinary_blockwise(self, func, other, *args, **kwargs):
@@ -2235,6 +2274,7 @@ class Array:
             array([4., 3.])
             >>> a.ibinary_blockwise(np.add, b).to_ndarray()  # roughly ``a += b``
             array([8., 5.])
+
         """
         other = other._transpose_same_labels(self._labels)
         if len(args) > 0 or len(kwargs) > 0:
@@ -2316,8 +2356,7 @@ class Array:
         other gets **transposed** before the action.
         """
         if not isinstance(other, Array) or not np.isscalar(prefactor):
-            raise ValueError("wrong argument types: {0!r}, {1!r}".format(
-                type(prefactor), type(other)))
+            raise ValueError(f"wrong argument types: {type(prefactor)!r}, {type(other)!r}")
         self.ibinary_blockwise(np.add, other.__mul__(prefactor))
         return self
 
@@ -2328,7 +2367,7 @@ class Array:
         Note that we allow the type of `self` to change if necessary.
         """
         if not np.isscalar(prefactor):
-            raise ValueError("prefactor is not scalar: {0!r}".format(type(prefactor)))
+            raise ValueError(f"prefactor is not scalar: {type(prefactor)!r}")
         if prefactor == 0.:
             self._data = []
             self._qdata = np.empty((0, self.rank), np.intp)
@@ -2365,7 +2404,8 @@ class Array:
     def __mul__(self, other):
         """Return ``self * other`` for scalar ``other``.
 
-        Use explicit functions for matrix multiplication etc."""
+        Use explicit functions for matrix multiplication etc.
+        """
         if np.isscalar(other):
             res = self.copy(deep=True)
             return res.iscale_prefactor(other)
@@ -2388,8 +2428,7 @@ class Array:
         """Return ``self / other`` for scalar `other`."""
         if np.isscalar(other):
             if other == 0.:
-                raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
-                    type(self), type(other)))
+                raise ZeroDivisionError(f"a/b for b=0. Types: {type(self)!s}, {type(other)!s}")
             res = self.copy(deep=True)
             return res.iscale_prefactor(1. / other)
         return NotImplemented
@@ -2398,8 +2437,7 @@ class Array:
         """``self /= other`` for scalar `other`."""
         if np.isscalar(other):
             if other == 0.:
-                raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
-                    type(self), type(other)))
+                raise ZeroDivisionError(f"a/b for b=0. Types: {type(self)!s}, {type(other)!s}")
             return self.iscale_prefactor(1. / other)
         return NotImplemented
 
@@ -2413,10 +2451,12 @@ class Array:
             Has to have the same compatible legcharges with `self`.
         eps : float
             Precision up to which the arrays need to agree in each entry.
+
         """
         if self is other:
             return True
-        if not isinstance(other, Array): return NotImplemented
+        if not isinstance(other, Array):
+            return NotImplemented
         if other.chinfo != self.chinfo:
             raise ValueError("other array has different charges!")
         other = other._transpose_same_labels(self._labels)
@@ -2440,6 +2480,7 @@ class Array:
         ------
         qindices : tuple of int
             A qindex for each of the legs.
+
         """
         for block_inds in itertools.product(*[range(l.block_number) for l in reversed(self.legs)]):
             # loop over all charge sectors in lex order (last leg most significant)
@@ -2471,9 +2512,10 @@ class Array:
         bunch : list of {True, False}
             One entry for each leg, whether the leg should be bunched.
 
-        See also
+        See Also
         --------
         sort_legcharge: public API calling this function.
+
         """
         cp = self.copy(deep=False)
         # lists for each leg:
@@ -2542,8 +2584,9 @@ class Array:
             Whether all of `inds` are (convertible to) np.intp.
         inds : tuple, len=self.rank
             `inds`, where ``Ellipsis`` is replaced by the correct number of slice(None).
+
         """
-        if type(inds) != tuple:  # for rank 1
+        if type(inds) is not tuple:  # for rank 1
             inds = (inds, )
         i = next((i for i, idx in enumerate(inds) if idx is Ellipsis), None)
         # i is index of Ellipsis or None if we don't have one
@@ -2560,7 +2603,7 @@ class Array:
         try:
             only_int = np.array(inds, dtype=np.intp)
             assert (only_int.shape == (len(inds), ))
-        except:
+        except Exception:
             return False, inds
         else:
             return True, inds
@@ -2594,6 +2637,7 @@ class Array:
             Collects (axes, permutation) applied to `res` *after* `take_slice` and `iproject`.
         res : :class:`Array`
             A copy with the data ``self[inds]``.
+
         """
         # non-integer inds -> slicing / projection
         slice_inds = []  # arguments for `take_slice`
@@ -2614,7 +2658,7 @@ class Array:
             else:
                 try:
                     iter(i)
-                except:  # not iterable: single index
+                except TypeError:  # not iterable: single index
                     slice_inds.append(int(i))
                     slice_axes.append(a)
                 else:  # iterable
@@ -2664,7 +2708,9 @@ class Array:
         bsizes = [l.get_block_sizes() for l in self.legs]
 
         def part2self(part_qindices):
-            """Given `part_qindices` of ``res = self[inds]``,
+            """Helper function.
+
+            Given `part_qindices` of ``res = self[inds]``,
             return (`qindices`, `block_mask`) such that
             ``res.get_block(part_qindices) == self.get_block(qindices)``.
             """
@@ -2691,7 +2737,8 @@ class Array:
     def _advanced_setitem_npc(self, inds, other):
         """Self[inds] = other for non-integer `inds` and :class:`Array` `other`.
 
-        This function is called by self.__setitem__(inds, other)."""
+        This function is called by self.__setitem__(inds, other).
+        """
         # suppress warning if we project a pipe
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -2790,6 +2837,7 @@ class Array:
         --------
         >>> self._combine_leg_labels(['a', 'b', '(c.d)'])
         '(a.b.(c.d))'
+
         """
         return '(' + '.'.join(labels) + ')'
 
@@ -2804,6 +2852,7 @@ class Array:
         --------
         >>> self._split_leg_label('(a.b.(c.d))', 3)
         ['a', 'b', '(c.d)']
+
         """
         if label is None:
             return [None] * count
@@ -2842,6 +2891,7 @@ class Array:
         'a'
         >>> self._conj_leg_labels('(a.(b*.c))')
         '(a*.(b.c*))'
+
         """
         # first insert '*' after each label, taking into account recursion of LegPipes
         res = []
@@ -2934,14 +2984,15 @@ def diag(s, leg, dtype=None, labels=None):
     diagonal : :class:`Array`
         A square matrix with diagonal entries `s`.
 
-    See also
+    See Also
     --------
     Array.scale_axis : similar as ``tensordot(diag(s), ...)``, but faster.
+
     """
     s = np.asarray(s, dtype)
     scalar = (s.ndim == 0)
     if not scalar and len(s) != leg.ind_len:
-        raise ValueError("len(s)={0:d} not equal to leg.ind_len={1:d}".format(len(s), leg.ind_len))
+        raise ValueError(f"len(s)={len(s):d} not equal to leg.ind_len={leg.ind_len:d}")
     res = Array((leg, leg.conj()), s.dtype, labels=labels)  # default charge is 0
     # qdata = [[0, 0], [1, 1], ....]
     res._qdata = np.arange(leg.block_number, dtype=np.intp)[:, np.newaxis] * np.ones(2, np.intp)
@@ -2976,9 +3027,10 @@ def concatenate(arrays, axis=0, copy=True):
     stacked : :class:`Array`
         Concatenation of the given `arrays` along the specified axis.
 
-    See also
+    See Also
     --------
     Array.sort_legcharge : can be used to block by charges along the axis.
+
     """
     arrays = list(arrays)
     res = arrays[0].zeros_like()
@@ -3094,9 +3146,10 @@ def grid_concat(grid, axes, copy=True):
         >>> g.shape
         (4, 1, 2, 6)
 
-    See also
+    See Also
     --------
     Array.sort_legcharge : can be used to block by charges.
+
     """
     grid = np.asarray(grid, dtype=object)
     if grid.ndim < 1 or grid.ndim != len(axes):
@@ -3157,7 +3210,7 @@ def grid_outer(grid, grid_legs, qtotal=None, grid_labels=None):
         Constructed such that ``res[idx] == grid[idx]`` for any index ``idx`` of the `grid`
         the `grid` entry is not trivial (``None``).
 
-    See also
+    See Also
     --------
     detect_grid_outer_legcharge : can calculate one missing :class:`LegCharge` of the grid.
 
@@ -3186,6 +3239,7 @@ def grid_outer(grid, grid_legs, qtotal=None, grid_labels=None):
     (5, 5, 2, 2)
     >>> W_mpo.get_leg_labels()
     ['wL', 'wR', 'p', 'p*']
+
     """
     grid_shape, entries = _nontrivial_grid_entries(grid)
     if len(grid_shape) != len(grid_legs):
@@ -3237,9 +3291,10 @@ def detect_grid_outer_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=Fal
         A copy of the given `grid_legs` with the ``None`` replaced by a compatible LegCharge.
         The new LegCharge is neither bunched nor sorted!
 
-    See also
+    See Also
     --------
     detect_legcharge : similar functionality for a flat numpy array instead of a grid.
+
     """
     grid_shape, entries = _nontrivial_grid_entries(grid)
     if len(grid_shape) != len(grid_legs):
@@ -3291,10 +3346,11 @@ def detect_qtotal(flat_array, legcharges, cutoff=None):
     qtotal : charge
         The total charge fo the first non-zero (i.e. > cutoff) charge block.
 
-    See also
+    See Also
     --------
     detect_legcharge : detects the charges of one missing LegCharge if `qtotal` is known.
     detect_grid_outer_legcharge : similar functionality if the flat array is given by a 'grid'.
+
     """
     if cutoff is None:
         cutoff = QCUTOFF
@@ -3335,10 +3391,11 @@ def detect_legcharge(flat_array, chargeinfo, legcharges, qtotal=None, qconj=+1, 
         A copy of the given `legcharges` with the ``None`` replaced by a compatible LegCharge.
         The new legcharge is 'bunched', but not sorted!
 
-    See also
+    See Also
     --------
     detect_grid_outer_legcharge : similar functionality if the flat array is given by a 'grid'.
     detect_qtotal : detects the total charge, if all legs are known.
+
     """
     flat_array = np.asarray(flat_array)
     legs = list(legcharges)
@@ -3383,10 +3440,11 @@ def trace(a, leg1=0, leg2=1):
     traced : :class:`Array` | ``a.dtype``
         A scalar if ``a.rank == 2``, else an :class:`Array` of rank ``a.rank - 2``.
         Equivalent to ``sum([a.take_slice([i, i], [leg1, leg2]) for i in range(a.shape[leg1])])``.
+
     """
     ax1, ax2 = a.get_leg_indices([leg1, leg2])
     if ax1 == ax2:
-        raise ValueError("leg1 = {0!r} == leg2 = {1!r} ???".format(leg1, leg2))
+        raise ValueError(f"leg1 = {leg1!r} == leg2 = {leg2!r} ???")
     a.legs[ax1].test_contractible(a.legs[ax2])
     if a.rank == 2:
         # full contraction: ax1, ax2 = 0, 1 or vice versa
@@ -3436,6 +3494,7 @@ def outer(a, b):
         Array of rank ``a.rank + b.rank`` such that (for ``Ra = a.rank; Rb = b.rank``)::
 
             c[i_1, ..., i_Ra, j_1, ... j_R] = a[i_1, ..., i_Ra] * b[j_1, ..., j_rank_b]
+
     """
     if a.chinfo != b.chinfo:
         raise ValueError("different ChargeInfo")
@@ -3493,6 +3552,7 @@ def inner(a, b, axes='labels', do_conj=False):
     -------
     inner_product : dtype
         A scalar (of common dtype of `a` and `b`) giving the full contraction of `a` and `b`.
+
     """
     if isinstance(a, list) and isinstance(b, list):
         return np.sum([inner(w, v, axes=axes, do_conj=do_conj) for w, v in zip(a, b)])
@@ -3562,6 +3622,7 @@ def tensordot(a, b, axes=2):
     a_dot_b : :class:`Array`
         The tensorproduct of `a` and `b`, summed over the specified axes.
         Returns a scalar in case of a full contraction.
+
     """
     # for details on the implementation, see _tensordot_worker.
     a, b, axes = _tensordot_transpose_axes(a, b, axes)
@@ -3651,6 +3712,7 @@ def svd(a,
     VH : :class:`Array`
         Matrix with right singular vectors as rows.
         Shape ``(N, N)`` or ``(K, N)`` depending on `full_matrices`.
+
     """
     # check arguments
     if a.rank != 2:
@@ -3693,8 +3755,9 @@ def svd(a,
 def polar(a, cutoff=1.e-16, left=False, inner_labels=[None, None]):
     """Polar decomposition of an Array `a`.
 
-    Factorizes ``u * p = a`` (left=False) or ``p * u = a`` (left=True), such that ``a = U*diag(S)*VH`` (where ``*`` stands for
-    a :func:`tensordot` and `diag` creates an correctly shaped Array with `S` on the diagonal).
+    Factorizes ``u * p = a`` (left=False) or ``p * u = a`` (left=True), such that
+    ``a = U * diag(S) * VH`` (where ``*`` stands for a :func:`tensordot` and `diag` creates a
+    correctly shaped Array with `S` on the diagonal).
     For a non-zero `cutoff` this holds only approximately.
 
     There is a gauge freedom regarding the charges, see also :meth:`Array.gauge_total_charge`.
@@ -3713,6 +3776,7 @@ def polar(a, cutoff=1.e-16, left=False, inner_labels=[None, None]):
     -------
     B : (N, M) :class:`Array`
         The pseudo-inverse of `a`.
+
     """
     # check arguments
     if a.rank != 2:
@@ -3756,6 +3820,7 @@ def pinv(a, cutoff=1.e-15):
     -------
     B : (N, M) :class:`Array`
         The pseudo-inverse of `a`.
+
     """
     if cutoff <= 0.:
         raise ValueError("invalid cutoff")
@@ -3799,6 +3864,7 @@ def norm(a, ord=None, convert_to_float=True):
     -------
     norm : float
         The norm over the *flat* data of the array.
+
     """
     if isinstance(a, Array):
         return a.norm(ord, convert_to_float)
@@ -3844,6 +3910,7 @@ def eigh(a, UPLO='L', sort=None):
     :math:`a' =  P a P^{-1} = V' W' (V')^{\dagger}`.
     The eigenvectors `V` are then obtained by the reverse permutation,
     :math:`V = P^{-1} V'` such that :math:`a = V W V^{\dagger}`.
+
     """
     w, v = _eig_worker(True, a, sort, UPLO)  # hermitian
     v.iset_leg_labels([a._labels[0], 'eig'])
@@ -3878,6 +3945,7 @@ def eig(a, sort=None):
     :math:`a' =  P a P^{-1} = V' W' (V')^{\dagger}`.
     The eigenvectors `V` are then obtained by the reverse permutation,
     :math:`V = P^{-1} V'` such that :math:`a = V W V^{\dagger}`.
+
     """
     w, v = _eig_worker(False, a, sort)  # non-hermitian
     v.iset_leg_labels([a._labels[0], 'eig'])
@@ -3907,6 +3975,7 @@ def eigvalsh(a, UPLO='L', sort=None):
     Notes
     -----
     The eigenvalues are sorted within blocks of the completely blocked legs.
+
     """
     return _eigvals_worker(True, a, sort, UPLO)
 
@@ -3930,6 +3999,7 @@ def eigvals(a, sort=None):
     Notes
     -----
     The eigenvalues are sorted within blocks of the completely blocked legs.
+
     """
     return _eigvals_worker(False, a, sort)
 
@@ -3962,6 +4032,7 @@ def speigs(a, charge_sector, k, *args, **kwargs):
         `k` (or less) right eigenvectors of `A` with total charge `charge_sector`.
         Note that when interpreted as a matrix,
         this is the transpose of what ``np.eigs`` normally gives.
+
     """
     charge_sector = a.chinfo.make_valid(charge_sector).reshape((a.chinfo.qnumber, ))
     if a.rank != 2 or a.shape[0] != a.shape[1]:
@@ -4026,6 +4097,7 @@ def expm(a):
     exp_a : :class:`Array`
         The matrix exponential ``expm(a)``, calculated using scipy.linalg.expm.
         Same legs/labels as `a`.
+
     """
     if a.rank != 2 or a.shape[0] != a.shape[1]:
         raise ValueError("expect a square matrix!")
@@ -4090,6 +4162,7 @@ def qr(a,
         Upper triangular matrix if both legs of A are sorted by charges;
         Otherwise a simple transposition (performed when sorting by charges) brings it to
         upper triangular form.
+
     """
     if a.rank != 2:
         raise ValueError("expect a matrix!")
@@ -4197,7 +4270,6 @@ def lq(a,
 
     We simply transpose the original matrix, call :meth:`qr`, and then transpose the results.
     """
-
     q, r = qr(a.transpose(),
               mode=mode,
               inner_labels=inner_labels[::-1],
@@ -4237,6 +4309,7 @@ def orthogonal_columns(a, new_label=None):
     ortho : :class:`Array`
         Isometry in the sense ``ortho^dagger @ orhto == eye``, i.e. has orthonormal columns.
         Further, all columns are orthonormal to the columns of `a`.
+
     """
     if a.rank != 2:
         raise ValueError("expect a matrix!")
@@ -4318,7 +4391,7 @@ def to_iterable_arrays(array_list):
 
 
 def _find_calc_dtype(a_dtype, b_dtype):
-    """return (calc_dtype, res_dtype) suitable for BLAS calculations."""
+    """Return (calc_dtype, res_dtype) suitable for BLAS calculations."""
     res_dtype = np.promote_types(a_dtype, b_dtype)
     _, calc_dtype, _ = BLAS.find_best_blas_type(dtype=res_dtype)
     return calc_dtype, res_dtype
@@ -4349,6 +4422,7 @@ def _combine_legs_worker(self, res, combine_legs, non_combined_legs, new_axes, n
         ``[i for i in range(res.rank) if i not in new_axes]``
     pipes : list of :class:`LegPipe`
         All the correct output pipes, already generated.
+
     """
     # non_combined_legs: axes of self which are not in combine_legs
     # map `self._qdata[:, combine_leg]` to `pipe.q_map` indices for each new pipe
@@ -4674,6 +4748,7 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     res_dtype : np.dtype
         The data type which should be chosen for the result.
         (The `dtype` of the ``s`` above might differ from `res_dtype`!).
+
     """
     # convert qindices over which we sum to a 1D array for faster lookup/iteration
     # F-style strides to preserve sorting
@@ -4818,6 +4893,7 @@ def _tensordot_worker(a, b, axes):
     How many multiplications :math:`A_{i,k} B_{k,j}` we actually have to perform
     depends on the sparseness. In the ideal case, if ``k`` (i.e. a LegPipe of the legs summed over)
     is completely blocked by charge, the 'sum' over ``k`` will contain at most one term!
+
     """
     chinfo = a.chinfo
     if a.stored_blocks == 0 or b.stored_blocks == 0:  # special case: `a` or `b` is 0
@@ -4896,8 +4972,7 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
                                           check_finite=True,
                                           lapack_driver='gesvd')
                 if anynan(U_b) or anynan(VH_b) or anynan(S_b):
-                    raise ValueError("NaN in U_b {0:d} and/or VH_b: {1:d}".format(
-                        np.sum(np.isnan(U_b)), np.sum(np.isnan(VH_b))))
+                    raise ValueError(f"NaN in U_b {np.sum(np.isnan(U_b)):d} and/or VH_b: {np.sum(np.isnan(VH_b)):d}")
         else:
             S_b = svd_flat(block, False, False, overwrite_a, check_finite=True)
         if anynan(S_b):

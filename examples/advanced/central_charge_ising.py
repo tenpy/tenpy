@@ -8,19 +8,23 @@ For the theoretical background why :math:`S = c/6 log(xi)`, see :cite:`pollmann2
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
-import tenpy
 import time
-from tenpy.networks.mps import MPS
-from tenpy.models.tf_ising import TFIChain
+
+import numpy as np
+
+import tenpy
 from tenpy.algorithms import dmrg
+from tenpy.models.tf_ising import TFIChain
+from tenpy.networks.mps import MPS
 
 
 def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
     model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve='best')
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
-    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
+    psi = MPS.from_product_state(
+        M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+    )
     dmrg_params = {
         'start_env': 10,
         'mixer': False,
@@ -42,8 +46,11 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
     for chi in chi_list:
 
         t0 = time.time()
-        eng.reset_stats(
-        )  # necessary if you for example have a fixed number of sweeps, if you don't set this you option your simulation stops after initial number of sweeps!
+
+        eng.reset_stats()
+        # necessary if you for example have a fixed number of sweeps, if you don't set this you
+        # option your simulation stops after initial number of sweeps!
+
         eng.trunc_params['chi_max'] = chi
         ##   DMRG Calculation    ##
         print("Start iDMRG CALCULATION")
@@ -101,7 +108,7 @@ def fit_plot_central_charge(s_list, xi_list, filename):
              fitFunc(Xi, fitParams[0], fitParams[1]),
              linewidth=1.5,
              c='black',
-             label='fit c={c:.2f}'.format(c=fitParams[0]))
+             label=f'fit c={fitParams[0]:.2f}')
 
     plt.xlabel(r'$\log{\,}\xi_{\chi}$', fontsize=16)
     plt.ylabel(r'$S$', fontsize=16)

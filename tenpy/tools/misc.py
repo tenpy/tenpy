@@ -1,14 +1,17 @@
 """Miscellaneous tools, somewhat random mix yet often helpful."""
 # Copyright (C) TeNPy Developers, Apache license
 
+import logging
 import operator
-import numpy as np
-from .optimization import bottleneck
-from .params import Config
-from collections.abc import Mapping
 import os.path
 import warnings
-import logging
+from collections.abc import Mapping
+
+import numpy as np
+
+from .optimization import bottleneck
+from .params import Config
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -24,7 +27,7 @@ _not_set = object()  # sentinel
 
 def to_iterable(a):
     """If `a` is a not iterable or a string, return ``[a]``, else return ``a``."""
-    if type(a) == str:
+    if type(a) is str:
         return [a]
     try:
         iter(a)
@@ -39,7 +42,7 @@ def to_iterable_of_len(a, L):
 
     Raises ValueError if `a` is already an iterable of different length.
     """
-    if type(a) == str:
+    if type(a) is str:
         return [a] * L
     try:
         iter(a)
@@ -47,7 +50,7 @@ def to_iterable_of_len(a, L):
         return [a] * L
     # else:
     if len(a) != L:
-        raise ValueError("wrong length: got {0:d}, expected {1:d}".format(len(a), L))
+        raise ValueError(f"wrong length: got {len(a):d}, expected {L:d}")
     return a
 
 
@@ -77,6 +80,7 @@ def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
     -------
     a_array : ndarray
         A copy of `a` converted to a numpy ndarray of desired dimension and shape.
+
     """
     a = np.array(a, dtype=dtype)  # copy
     if a.ndim != len(shape):
@@ -97,8 +101,7 @@ def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
                 crop[i] = slice(None, shape[i])
                 need_crop = True
             else:
-                raise ValueError("incommensurate len for tiling from {0:d} to {1:d}".format(
-                    a.shape[i], shape[i]))
+                raise ValueError(f"incommensurate len for tiling from {a.shape[i]:d} to {shape[i]:d}")
     a = np.tile(a, reps)
     if need_crop:
         a = a[tuple(crop)]
@@ -108,17 +111,17 @@ def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
 if bottleneck is not None:
 
     def anynan(a):
-        """check whether any entry of a ndarray `a` is 'NaN'."""
+        """Check whether any entry of a ndarray `a` is 'NaN'."""
         return bottleneck.anynan(a)
 else:
 
     def anynan(a):
-        """check whether any entry of a ndarray `a` is 'NaN'."""
+        """Check whether any entry of a ndarray `a` is 'NaN'."""
         return np.isnan(np.sum(a))  # still faster than 'np.isnan(a).any()'
 
 
 def argsort(a, sort=None, **kwargs):
-    """wrapper around np.argsort to allow sorting ascending/descending and by magnitude.
+    """Wrapper around np.argsort to allow sorting ascending/descending and by magnitude.
 
     Parameters
     ----------
@@ -152,6 +155,7 @@ def argsort(a, sort=None, **kwargs):
     -------
     index_array : ndarray, int
         Same shape as `a`, such that ``a[index_array]`` is sorted in the specified way.
+
     """
     if sort is not None:
         if sort == 'm<' or sort == 'SM':
@@ -172,14 +176,14 @@ def argsort(a, sort=None, **kwargs):
 
 
 def lexsort(a, axis=-1):
-    """wrapper around ``np.lexsort``: allow for trivial case ``a.shape[0] = 0`` without sorting"""
+    """Wrapper around ``np.lexsort``: allow for trivial case ``a.shape[0] = 0`` without sorting"""
     if any([s == 0 for s in a.shape]):
         return np.arange(a.shape[axis], dtype=np.intp)
     return np.lexsort(a, axis=axis)
 
 
 def inverse_permutation(perm):
-    """reverse sorting indices.
+    """Reverse sorting indices.
 
     Sort functions (as :meth:`LegCharge.sort`) return a (1D) permutation `perm` array,
     such that ``sorted_array = old_array[perm]``.
@@ -196,6 +200,7 @@ def inverse_permutation(perm):
     -------
     inv_perm : 1D array (int)
         The inverse permutation of `perm` such that ``inv_perm[perm[j]] = j = perm[inv_perm[j]]``.
+
     """
     perm = np.asarray(perm, dtype=np.intp)
     inv_perm = np.empty_like(perm)
@@ -220,6 +225,7 @@ def list_to_dict_list(l):
         A dictionary with (key, value) pairs ``(key):[i1,i2,...]``
         where ``i1, i2, ...`` are the indices where `key` is found in `l`:
         i.e. ``key == tuple(l[i1]) == tuple(l[i2]) == ...``
+
     """
     d = {}
     for i, r in enumerate(l):
@@ -259,6 +265,7 @@ def atleast_2d_pad(a, pad_item=0):
     >>> atleast_2d_pad([[3, 4], [1, 6, 7]])
     array([[3., 4., 0.],
            [1., 6., 7.]])
+
     """
     iter(a)  # check that a is at least 1D iterable
     if len(a) == 0:
@@ -294,6 +301,7 @@ def transpose_list_list(D, pad=None):
     T : list of lists
         transposed, rectangular version of `D`.
         constructed such that ``T[i][j] = D[j][i] if i < len(D[j]) else pad``
+
     """
     nRow = len(D)
     if nRow == 0:
@@ -307,7 +315,7 @@ def transpose_list_list(D, pad=None):
 
 
 def zero_if_close(a, tol=1.e-15):
-    """set real and/or imaginary part to 0 if their absolute value is smaller than `tol`.
+    """Set real and/or imaginary part to 0 if their absolute value is smaller than `tol`.
 
     Parameters
     ----------
@@ -315,6 +323,7 @@ def zero_if_close(a, tol=1.e-15):
         numpy array to be rounded
     tol : float
         the threshold which values to consider as '0'.
+
     """
     if a.dtype == np.complex128 or a.dtype == np.complex64:
         ar = np.choose(np.abs(a.real) < tol, [a.real, np.zeros(a.shape)])
@@ -346,6 +355,7 @@ def pad(a, w_l=0, v_l=0, w_r=0, v_r=0, axis=0):
     -------
     padded : ndarray
         a copy of `a` with enlarged `axis`, padded with the given values.
+
     """
     shp = list(a.shape)
     shp[axis] += w_r + w_l
@@ -376,6 +386,7 @@ def add_with_None_0(a, b):
     -------
     sum :
         ``a + b``, except if `a` or `b` is `None`, in which case the other variable is returned.
+
     """
     if a is None:
         return b
@@ -417,6 +428,7 @@ def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
     [(0, 2), (1, 4), (3, 6), (5,)]
     >>> group_by_degeneracy(E, k, cutoff=0.001)  # k and E need to be close
     [(0,), (1, 4), (2,), (3,), (5,), (6,)]
+
     """
     assert cutoff >= 0.
     E = np.asarray(E)
@@ -455,6 +467,7 @@ def get_close(values, target, default=None, eps=1.e-13):
     -------
     value : float
         An entry of `values`, if one close to `target` is found, otherwise `default`.
+
     """
     for v in values:
         if abs(v - target) < eps:
@@ -483,6 +496,7 @@ def find_subclass(base_class, subclass_name):
     Raises
     ------
     ValueError: When no or multiple subclasses of `base_class` exists with that `subclass_name`.
+
     """
     if not isinstance(subclass_name, str):
         subclass = subclass_name
@@ -542,10 +556,11 @@ def get_recursive(nested_data, recursive_key, separator=".", default=_UNSET):
         For example, ``recursive_key="some.sub.key"`` will result in extracting
         ``nested_data["some"]["sub"]["key"]``.
 
-    See also
+    See Also
     --------
     set_recursive : same for changing/setting a value.
     flatten : Get a completely flat structure.
+
     """
     if recursive_key.startswith(separator):
         recursive_key = recursive_key[len(separator):]
@@ -598,6 +613,7 @@ def merge_recursive(*nested_data, conflict='error', path=None):
     merged: dict of dict
         A single nested dictionary with the keys/values of the `nested_data` merged.
         Dictionary values appearing in multiple of the `nested_data` get merged recursively.
+
     """
     if len(nested_data) == 0:
         raise ValueError("need at least one nested_data")
@@ -670,9 +686,10 @@ def flatten(mapping, separator='.'):
     'topentry' : 1
 
 
-    See also
+    See Also
     --------
     get_recursive : Useful to obtain a single entry from a nested data structure.
+
     """
     if isinstance(mapping, Config):
         mapping = mapping.as_dict()
@@ -791,6 +808,7 @@ def setup_logging(output_filename=None,
             If used, all other options except `skip_setup` and `capture_warnings` are ignored.
         capture_warnings : bool
             Whether to call :func:`logging.captureWarnings` to include the warnings into the log.
+
     """
     import logging.config
     if filename is _not_set:
@@ -882,6 +900,7 @@ def convert_memory_units(value, unit_from='bytes', unit_to=None):
         The value in the unit `unit_to`.
     unit_to : str
         The unit to which `value` was converted.
+
     """
     units = ['bytes', 'KB', 'MB', 'GB', 'TB']
     factors = [1024**i for i in range(len(units))]
@@ -898,14 +917,18 @@ def convert_memory_units(value, unit_from='bytes', unit_to=None):
 class TenpyInconsistencyError(Exception):
     """Error class that is raised when a consistency check fails.
 
-    See :meth:`consistency_check`."""
+    See :meth:`consistency_check`.
+    """
+
     pass
 
 
 class TenpyInconsistencyWarning(UserWarning):
     """Warning category that is emitted when a consistency check fails.
 
-    See :meth:`consistency_check`."""
+    See :meth:`consistency_check`.
+    """
+
     pass
 
 
@@ -919,6 +942,7 @@ class BetaWarning(UserWarning):
     Rather, it's appropriate to test robustness, ideally by cross-checking with another
     well-tested algorithm.
     """
+
     pass
 
 
@@ -983,6 +1007,7 @@ def consistency_check(value, options, threshold_key, threshold_default, msg, com
         By default, we check if ``value <= threshold`` and raise otherwise.
         This allows other comparison operations.
         A callable means we check ``compare(value, threshold)``.
+
     """
     threshold = options.get(threshold_key, threshold_default)
     warn_instead = False
@@ -993,7 +1018,7 @@ def consistency_check(value, options, threshold_key, threshold_default, msg, com
 
     try:
         check_passed = compare_func(value, threshold)
-    except Exception as e:
+    except Exception:
         # note: logger.exception adds traceback info
         logger.exception("Error during consistency_check for ``%s``. This is likely due to a bug "
                          "like incompatible types in the consistency check. "

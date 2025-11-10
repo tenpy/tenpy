@@ -1,7 +1,8 @@
 """Tools for handling strings."""
 # Copyright (C) TeNPy Developers, Apache license
 
-from typing import Sequence
+from collections.abc import Sequence
+
 import numpy as np
 
 __all__ = ['is_non_string_iterable', 'vert_join', 'to_mathematica_lists', 'format_like_list',
@@ -47,6 +48,7 @@ def vert_join(strlist, valign='t', halign='l', delim=' '):
     sample    |  [3 4 5]
     multiline |  [6 7 8]]
     string    |
+
     """
     # expand tabs, split to newlines
     strlist = [str(s).expandtabs().split('\n') for s in strlist]
@@ -112,7 +114,7 @@ def join_as_many_as_possible(msgs: Sequence[str], separator: str, priorities: Se
 
 
 def to_mathematica_lists(a):
-    """convert nested `a` to string readable by mathematica using curly brackets '{...}'."""
+    """Convert nested `a` to string readable by mathematica using curly brackets '{...}'."""
     if isinstance(a, str):
         return '"' + str(a) + '"'
     try:
@@ -128,5 +130,6 @@ def to_mathematica_lists(a):
 def format_like_list(it) -> str:
     """Format elements of an iterable as if it were a plain list.
 
-    This means surrounding them with brackets and separating them by `', '`."""
+    This means surrounding them with brackets and separating them by `', '`.
+    """
     return f'[{", ".join(map(str, it))}]'

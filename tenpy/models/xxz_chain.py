@@ -5,11 +5,11 @@ this module is more to serve as a pedagogical example for a model.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from .lattice import Site, Chain
-from .model import CouplingModel, NearestNeighborModel, MPOModel, CouplingMPOModel
 from ..linalg import np_conserved as npc
-from ..tools.params import asConfig
 from ..networks.site import SpinHalfSite  # if you want to use the predefined site
+from ..tools.params import asConfig
+from .lattice import Chain, Site
+from .model import CouplingModel, CouplingMPOModel, MPOModel, NearestNeighborModel
 
 __all__ = ['XXZChain', 'XXZChain2']
 
@@ -50,6 +50,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
             Whether to sort by charges of physical legs. `True` by default.
 
     """
+
     def __init__(self, model_params):
         # 0) read out/set default parameters
         model_params = asConfig(model_params, "XXZChain")
@@ -111,7 +112,9 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
     ----------
     model_params : dict | :class:`~tenpy.tools.params.Config`
         See :cfg:config:`XXZChain`
+
     """
+
     default_lattice = "Chain"
     force_default_lattice = True
 

@@ -6,8 +6,9 @@ should not be executed as part of the tests.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import sys
 import os
+import sys
+
 import pytest
 
 # get directory where the examples can be found

@@ -15,10 +15,10 @@ you might also try the equivalent :func:`mkl_get_nthreads` and :func:`mkl_set_nt
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import warnings
 import ctypes
-from ctypes.util import find_library
 import sys
+import warnings
+from ctypes.util import find_library
 
 __all__ = [
     'memory_usage', 'load_omp_library', 'omp_get_nthreads', 'omp_set_nthreads', 'mkl_get_nthreads',
@@ -37,6 +37,7 @@ def memory_usage():
     -------
     mem : float
         Currently used memory in megabytes. ``-1.`` if no way to read out.
+
     """
     try:
         import resource  # linux-only
@@ -73,6 +74,7 @@ def load_omp_library(libs=["libiomp5.so",
     omp : CDLL | None
         OpenMP shared library if found, otherwise None.
         Once it was successfully imported, no re-imports are tried.
+
     """
     global _omp_lib
     if _omp_lib is None:
@@ -92,13 +94,14 @@ def load_omp_library(libs=["libiomp5.so",
 
 
 def omp_get_nthreads():
-    """wrapper around OpenMP ``get_max_threads``.
+    """Wrapper around OpenMP ``get_max_threads``.
 
     Returns
     -------
     max_threads : int
         The maximum number of threads used by OpenMP (and thus MKL).
         ``-1`` if unable to read out.
+
     """
     omp = load_omp_library()
     if omp is not None:
@@ -107,7 +110,7 @@ def omp_get_nthreads():
 
 
 def omp_set_nthreads(n):
-    """wrapper around OpenMP ``set_nthreads``.
+    """Wrapper around OpenMP ``set_nthreads``.
 
     Parameters
     ----------
@@ -118,6 +121,7 @@ def omp_set_nthreads(n):
     -------
     success : bool
         whether the shared library was found and set.
+
     """
     omp = load_omp_library()
     if omp is not None:
@@ -127,12 +131,13 @@ def omp_set_nthreads(n):
 
 
 def mkl_get_nthreads():
-    """wrapper around MKL ``get_max_threads``.
+    """Wrapper around MKL ``get_max_threads``.
 
     Returns
     -------
     max_threads : int
         The maximum number of threads used by MKL. ``-1`` if unable to read out.
+
     """
     try:
         import mkl  # available in conda MKL
@@ -147,7 +152,7 @@ def mkl_get_nthreads():
 
 
 def mkl_set_nthreads(n):
-    """wrapper around MKL ``set_num_threads``.
+    """Wrapper around MKL ``set_num_threads``.
 
     Parameters
     ----------
@@ -158,6 +163,7 @@ def mkl_set_nthreads(n):
     -------
     success : bool
         whether the shared library was found and set.
+
     """
     try:
         import mkl  # available in conda MKL

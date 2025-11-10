@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) TeNPy Developers, Apache license
 #
-import sys
-import os
 import inspect
-import sphinx_rtd_theme
-import io
+import os
+import sys
 import warnings
 from datetime import datetime
+
+import sphinx_rtd_theme  # noqa F401
 
 # ensure parent folder is in sys.path to allow import of tenpy
 REPO_PREFIX = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -25,7 +25,7 @@ if not sys.version_info >= (3, 5):
 os.environ["TENPY_NO_CYTHON"] = "true"
 try:
     import tenpy
-except:
+except ImportError:
     print("ERROR: can't import tenpy.")
     sys.exit(1)
 
@@ -90,7 +90,7 @@ exclude_patterns = [
 
 
 def create_example_stubs():
-    """create stub files for examples to include them in the documentation."""
+    """Create stub files for examples to include them in the documentation."""
     folders = [
         (['examples'], '.py', []),
         (['examples'], '.yml', []),
@@ -112,14 +112,14 @@ def create_example_stubs():
             sentence = ("`on github <{base}/blob/main/{dirs!s}/{fn!s}>`_ "
                         "(`download <{base}/raw/main/{dirs!s}/{fn!s}>`_).")
             sentence = sentence.format(dirs=dirs, fn=fn, base=GITHUBBASE)
-            include = '.. literalinclude:: /../{dirs!s}/{fn!s}'.format(dirs=dirs, fn=fn)
+            include = f'.. literalinclude:: /../{dirs!s}/{fn!s}'
             text = '\n'.join([fn, '=' * len(fn), '', sentence, '', include, ''])
             with open(outfile, 'w') as f:
                 f.write(text)
     # done
 
 def create_toycode_stubs():
-    """create stub files for examples to include them in the documentation."""
+    """Create stub files for examples to include them in the documentation."""
     outdir = os.path.join(os.path.dirname(__file__), 'toycode_stubs')
     if not os.path.isdir(outdir):
         os.mkdir(outdir)
@@ -139,7 +139,7 @@ def create_toycode_stubs():
         sentence = ("`on github <{base}/blob/main/tenpy_toycodes/{fn!s}>`_ "
                     "(`download <{base}/raw/main/tenpy_toycodes/{fn!s}>`_).")
         sentence = sentence.format(fn=fn, base=GITHUBTOYCODES)
-        include = '.. literalinclude:: /toycodes/tenpy_toycodes/{fn!s}'.format(fn=fn)
+        include = f'.. literalinclude:: /toycodes/tenpy_toycodes/{fn!s}'
         text = '\n'.join([fn, '=' * len(fn), '', sentence, '', include, ''])
         with open(outfile, 'w') as f:
             f.write(text)
@@ -160,7 +160,7 @@ def include_command_line_help():
     fn = 'commandline-help.txt'
     with open(fn, 'w') as f:
         f.write(help_text)
-    tenpy.console_main.__doc__ = tenpy.console_main.__doc__ + '\n' '.. literalinclude:: /' + fn
+    tenpy.console_main.__doc__ = tenpy.console_main.__doc__ + '\n' + '.. literalinclude:: /' + fn
 
 
 include_command_line_help()
@@ -365,7 +365,7 @@ def linkcode_resolve(domain, info):
         lineno = None
 
     if lineno:
-        linespec = "#L%d-L%d" % (lineno, lineno + len(source) - 1)
+        linespec = f"#L{lineno}-L{lineno + len(source) + 1}"
     else:
         linespec = ""
     fn = os.path.relpath(fn, start=os.path.dirname(tenpy.__file__))
@@ -373,9 +373,9 @@ def linkcode_resolve(domain, info):
         return None
 
     if tenpy.version.released:
-        return "%s/blob/v%s/tenpy/%s%s" % (GITHUBBASE, tenpy.__version__, fn, linespec)
+        return f"{GITHUBBASE}/blob/v{tenpy.__version__}/tenpy/{fn}{linespec}"
     else:
-        return "%s/blob/main/tenpy/%s%s" % (GITHUBBASE, fn, linespec)
+        return f"{GITHUBBASE}/blob/main/tenpy/{fn}{linespec}"
 
 
 # -- sphinx_cfg_options ---------------------------------------------------
@@ -391,10 +391,10 @@ bibtex_bibfiles = ['literature.bib', 'papers_using_tenpy.bib', 'theses.bib']
 # https://www.zotero.org/groups/2569413/tenpy/library
 # with the `betterbibtex` add-on, sorting by bibtex key (can be changed in addon settings).
 
+from pybtex.plugin import register_plugin
 from pybtex.style.formatting.unsrt import Style as UnsrtStyle
 from pybtex.style.labels import BaseLabelStyle
 from pybtex.style.sorting.author_year_title import SortingStyle
-from pybtex.plugin import register_plugin
 
 
 class CustomBibtexStyle1(UnsrtStyle):
