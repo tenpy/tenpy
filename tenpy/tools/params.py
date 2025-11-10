@@ -12,9 +12,10 @@ from collections.abc import MutableMapping
 import pprint
 import os
 import logging
-logger = logging.getLogger(__name__)
 
 from .hdf5_io import ATTR_FORMAT
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["Config", "asConfig", "load_yaml_with_py_eval"]
 

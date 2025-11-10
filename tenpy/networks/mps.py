@@ -154,8 +154,6 @@ import copy
 from collections.abc import Iterable
 import logging
 
-logger = logging.getLogger(__name__)
-
 from ..linalg import np_conserved as npc
 from ..linalg import sparse
 from ..linalg.charges import DipolarChargeInfo
@@ -169,6 +167,8 @@ from ..tools.math import lcm, entropy
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
 from ..tools import hdf5_io
+
+logger = logging.getLogger(__name__)
 
 __all__ = ['MPSGeometry', 'BaseMPSExpectationValue', 'MPS', 'BaseEnvironment', 'MPSEnvironment', 'TransferMatrix',
            'InitialStateBuilder', 'build_initial_state']

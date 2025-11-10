@@ -35,7 +35,6 @@ import inspect
 from functools import wraps
 import copy
 import logging
-logger = logging.getLogger(__name__)
 
 from .lattice import (get_lattice, Lattice, MultiSpeciesLattice, HelicalLattice, IrregularLattice)
 from ..linalg import np_conserved as npc
@@ -47,6 +46,8 @@ from ..networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..networks.terms import ExponentiallyDecayingTerms, order_combine_term
 from ..networks.site import Site, group_sites
 from ..tools.hdf5_io import Hdf5Exportable
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'CouplingMPOModel'

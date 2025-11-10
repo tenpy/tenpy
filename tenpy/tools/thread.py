@@ -5,6 +5,7 @@
 import threading
 import queue
 import logging
+
 logger = logging.getLogger(__name__)
 
 __all__ = ["WorkerDied", "Worker"]

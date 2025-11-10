@@ -27,10 +27,10 @@ import logging
 import warnings
 from ..tools.misc import BetaWarning
 
-logger = logging.getLogger(__name__)
-
 from ..linalg import np_conserved as npc
 from .mps import MPS
+
+logger = logging.getLogger(__name__)
 
 __all__ = ['UniformMPS']
 

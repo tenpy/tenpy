@@ -43,8 +43,6 @@ import warnings
 import copy
 import logging
 
-logger = logging.getLogger(__name__)
-
 from ..linalg import np_conserved as npc
 from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator, ShiftNpcLinearOperator
 from ..linalg.truncation import TruncationError, svd_theta
@@ -56,6 +54,8 @@ from ..tools.misc import to_iterable, add_with_None_0, inverse_permutation
 from ..tools.math import lcm
 from ..tools.params import asConfig
 from ..linalg.krylov_based import GMRES
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'MPO', 'make_W_II', 'MPOGraph', 'MPOEnvironment', 'MPOEnvironmentBuilder', 'MPOTransferMatrix',

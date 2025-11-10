@@ -4,11 +4,12 @@
 import numpy as np
 from .sparse import FlatHermitianOperator, OrthogonalNpcLinearOperator, ShiftNpcLinearOperator
 import logging
-logger = logging.getLogger(__name__)
 
 from . import np_conserved as npc
 from ..tools.params import asConfig
 from ..tools.misc import argsort
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'KrylovBased', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution', 'GMRES', 'lanczos_arpack',
