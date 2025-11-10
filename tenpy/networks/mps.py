@@ -1259,7 +1259,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         term = list(term)
         i_min = min([t[1] for t in term])
         i_max = max([t[1] for t in term])
-        ops = [[] for i in range((i_max - i_min + 1))]
+        ops = [[] for i in range(i_max - i_min + 1)]
         count_JW = 0
         for op, i in term:
             j = i - i_min  # index in ops
@@ -5820,7 +5820,7 @@ class MPS(BaseMPSExpectationValue):
         self._transfermatrix_keep = len(eta)
         if len(eta) > 1:
             if np.abs(eta[0]) > np.abs(eta[1]):
-                xi = -self.L / np.log(np.abs((eta[1] / eta[0])))
+                xi = -self.L / np.log(np.abs(eta[1] / eta[0]))
             else:
                 xi = np.inf
             if xi > tol_xi:

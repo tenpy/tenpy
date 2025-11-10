@@ -1167,8 +1167,8 @@ class CouplingModel(Model):
             return  # nothing to do: can even accept non-defined onsite operators
         for op, u in [(op1, u1), (op2, u2)]:
             if not self.lat.unit_cell[u].valid_opname(op):
-                raise ValueError((f"unknown onsite operator {op!r} for u={u:d}\n"
-                                  f"{self.lat.unit_cell[u]!r}"))
+                raise ValueError(f"unknown onsite operator {op!r} for u={u:d}\n"
+                                 f"{self.lat.unit_cell[u]!r}")
         site1 = self.lat.unit_cell[u1]
         site2 = self.lat.unit_cell[u2]
         if op_string is None:

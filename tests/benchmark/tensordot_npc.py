@@ -21,7 +21,7 @@ def rand_distinct_int(a, b, n):
         raise ValueError
     if n > b - a + 1:
         raise ValueError
-    return np.sort((np.random.random_integers(a, b - n + 1, size=n))) + np.arange(n)
+    return np.sort(np.random.random_integers(a, b - n + 1, size=n)) + np.arange(n)
 
 
 def rand_partitions(a, b, n):
