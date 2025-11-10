@@ -917,7 +917,8 @@ def convert_memory_units(value, unit_from='bytes', unit_to=None):
 class TenpyInconsistencyError(Exception):
     """Error class that is raised when a consistency check fails.
 
-    See :meth:`consistency_check`."""
+    See :meth:`consistency_check`.
+    """
 
     pass
 
@@ -925,7 +926,8 @@ class TenpyInconsistencyError(Exception):
 class TenpyInconsistencyWarning(UserWarning):
     """Warning category that is emitted when a consistency check fails.
 
-    See :meth:`consistency_check`."""
+    See :meth:`consistency_check`.
+    """
 
     pass
 

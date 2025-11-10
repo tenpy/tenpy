@@ -1518,14 +1518,16 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
     def _contract_with_LP(self, C, i):
         """Contract `theta` with `self.get_LP(i)`.
 
-        If `bra` = `ket`, this is a trivial relabeling of legs `vL` -> `vR*`."""
+        If `bra` = `ket`, this is a trivial relabeling of legs `vL` -> `vR*`.
+        """
         ...
 
     @abstractmethod
     def _contract_with_RP(self, C, i):
         """Contract `C` with `self.get_RP(i)`.
 
-        If `bra` = `ket`, this is a trivial relabeling of legs `vR` -> `vL*`."""
+        If `bra` = `ket`, this is a trivial relabeling of legs `vR` -> `vL*`.
+        """
         ...
 
     @abstractmethod

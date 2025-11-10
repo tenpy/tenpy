@@ -2404,7 +2404,8 @@ class Array:
     def __mul__(self, other):
         """Return ``self * other`` for scalar ``other``.
 
-        Use explicit functions for matrix multiplication etc."""
+        Use explicit functions for matrix multiplication etc.
+        """
         if np.isscalar(other):
             res = self.copy(deep=True)
             return res.iscale_prefactor(other)
@@ -2734,7 +2735,8 @@ class Array:
     def _advanced_setitem_npc(self, inds, other):
         """Self[inds] = other for non-integer `inds` and :class:`Array` `other`.
 
-        This function is called by self.__setitem__(inds, other)."""
+        This function is called by self.__setitem__(inds, other).
+        """
         # suppress warning if we project a pipe
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")

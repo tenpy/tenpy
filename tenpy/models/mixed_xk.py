@@ -315,7 +315,8 @@ class MixedXKLattice(Lattice):
     def get_exp_ik(self, ky):
         r"""Return :math:`\exp(\frac{2 pi i }{L_y} ky)`.
 
-        If you need the factor for given `k` and `y`, just give ``k*y`` as argument."""
+        If you need the factor for given `k` and `y`, just give ``k*y`` as argument.
+        """
         return self._exp_2pi_Ly[np.mod(ky, self.Ly)]
 
     def mps2lat_values_k(self, A, axes=0):
@@ -334,7 +335,8 @@ class MixedXKLattice(Lattice):
 
     def mps2lat_values_masked_k(self, A, axes=-1, mps_inds=None, include_u=None):
         """Like :meth:`Lattice.mps2lat_values_masked`, but introduce `k` as separate lattice
-        index."""
+        index.
+        """
         A_res = self.mps2lat_values_masked(A, axes, mps_inds, include_u)
         changed_axes = sorted([(ax + A.ndim if ax < 0 else ax) for ax in axes])
         A_res_u_axes = []
