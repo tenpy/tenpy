@@ -262,7 +262,7 @@ class Config(MutableMapping):
                 'array': ``[list, numpy.ndarray]``
                 'real_or_array`: ``[numbers.Real, list, numpy.ndarray]``
                 'complex_or_array`: ``[numbers.Complex, list, numpy.ndarray]``
-        
+
         Returns
         -------
         val :

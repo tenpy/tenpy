@@ -152,12 +152,12 @@ def test_outer_product():
     expected_result = expected_result.transpose([1, 3, 0, 2])
 
     assert np.linalg.norm(res.to_ndarray() - expected_result) < 1.e-10
-    
-    
+
+
 def test_fixes_issue131():
     no_charge = npc.Array.from_ndarray_trivial(np.random.rand(8, 2, 4))
     with_charge = random_Array((20, 15, 10), npc.ChargeInfo([1, 3, 1, 2]), sort=False)
-    
+
     for A in [no_charge, with_charge]:
 
         links1 = [[1, -1, -3], [1, -2, -4]]
@@ -165,7 +165,7 @@ def test_fixes_issue131():
         expect1 = npc.tensordot(A, A.conj(), (0, 0)).transpose([0, 2, 1, 3])
         res1 = ncon([A, A.conj()], links1)
         assert npc.norm(expect1 - res1) < 1e-10
-        
+
         links2 = [[1, -1, -2], [1, -3, -4]]
         # sum_x A[x, a, b] A[x, c, d] = result[a, b, c, d]
         expect2 = npc.tensordot(A, A.conj(), (0, 0))

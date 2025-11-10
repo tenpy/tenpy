@@ -557,7 +557,7 @@ def test_exp_non_uniform_decaying_terms_subsites_start(bc):
     G.add_missing_IdL_IdR()
     H2 = G.build_MPO()
     assert H1.is_equal(H2, eps=1e-10 if bc == 'finite' else cutoff)
-    
+
     # check term list
     ts_desired = []
     strength_desired = []

@@ -358,10 +358,10 @@ def test_dmrg_mixer_cleanup(L, bc_MPS):
     old_psi = engine.psi.copy()
     old_LP = [engine.env.get_LP(i) for i in range(psi.L)]
     old_RP = [engine.env.get_RP(i) for i in range(psi.L)]
-    
+
     print(f'Checking consistency of old environments...')
     old_contractions = [engine.env.full_contraction(i) for i in range(L)]
-    
+
     print('Calling mixer_cleanup()...')
     engine.mixer_deactivate()
     engine.mixer_cleanup()
@@ -377,11 +377,11 @@ def test_dmrg_mixer_cleanup(L, bc_MPS):
             assert new_LP[i] is not old_LP[i]
         if not (bc_MPS == 'finite' and i == L - 1):
             assert new_RP[i] is not old_RP[i]
-    
+
     print(f'Checking consistency of new environments...')
     for i in range(L):
         assert np.allclose(engine.env.full_contraction(i), old_contractions[i])
-    
+
     print(f'Check that expectation values have not changed...')
     for op in ['Sx', 'Sz']:
         assert np.allclose(engine.psi.expectation_value(op), old_psi.expectation_value(op))

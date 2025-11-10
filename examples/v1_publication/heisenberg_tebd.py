@@ -51,16 +51,16 @@ def main():
 def run(chi: int):
     psi = tenpy.MPS.from_lat_product_state(model.lat, [['up'], ['down']])
     # Selects Sz=0 sector
-    
+
     engine_params['trunc_params'].update(chi_max=chi)
     engine = tenpy.TEBDEngine(psi, model, engine_params)
     # engine = tenpy.TDVPEngine(psi, model, engine_params)
-    
+
     t = [0]
     S = [psi.entanglement_entropy()]
     mag_z = [psi.expectation_value('Sz')]
     err = [0]
-    
+
     for n in range(200):
         print(f'n={n}')
         engine.run()
@@ -68,7 +68,7 @@ def run(chi: int):
         S.append(psi.entanglement_entropy())
         mag_z.append(psi.expectation_value('Sz'))
         err.append(engine.trunc_err.eps)
-    
+
     t = np.array(t)
     S = np.array(S)
     mag_z = np.array(mag_z)
@@ -92,7 +92,7 @@ def plot(folder):
             res = pickle.load(f)
         results[chi] = res
 
-    
+
     fontsize = 10
     linewidth = 5.90666  # inches
     L = model_params['L']

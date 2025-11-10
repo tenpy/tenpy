@@ -1420,7 +1420,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                 raise ValueError("subsites needs to be sorted; choose a different MPS ordering!")
             assert subsites[0] >= 0
             assert subsites[-1] < self.L
-        
+
         if subsites_start is None:
             subsites_start = subsites
         else:
@@ -1674,7 +1674,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
             for i in subsites_start:
                 if not sites[i].valid_opname(op_i):
                     raise ValueError("Operator {op!r} not in site {i:d}".format(op=op_i, i=i))
-                
+
             for j in subsites:
                 if not sites[j].valid_opname(op_j):
                     raise ValueError("Operator {op!r} not in site {i:d}".format(op=op_j, i=j))

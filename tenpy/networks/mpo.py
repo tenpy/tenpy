@@ -686,7 +686,7 @@ class MPO(MPSGeometry):
         # The convention for the order of IdR is incompatible with something like
         #  self.IdR[self._to_valid_bond_index(i, is_left=False)]
         return self.IdR[self._to_valid_site_index(i) + 1]
-        
+
 
     def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
