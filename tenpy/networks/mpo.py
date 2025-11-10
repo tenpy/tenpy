@@ -3001,59 +3001,59 @@ class MPOEnvironment(BaseEnvironment):
 class MPOEnvironmentBuilder:
     r"""Construct boundary environments for periodic MPOEnvironments.
 
-        This class implement the construction scheme from :cite:`phien2012` to construct
-        `LP[0]` and `RP[self.L-1]` for a periodic :class:`MPOEnvironment`::
+    This class implement the construction scheme from :cite:`phien2012` to construct
+    `LP[0]` and `RP[self.L-1]` for a periodic :class:`MPOEnvironment`::
 
-            |             - - > - - - - - 'vR*'
-            |            |          |
-            |   LP[0] = E[0] ->- T_H**n - 'wR' (index `j`)
-            |            |          |
-            |             - - > - - - - - 'vR'
+        |             - - > - - - - - 'vR*'
+        |            |          |
+        |   LP[0] = E[0] ->- T_H**n - 'wR' (index `j`)
+        |            |          |
+        |             - - > - - - - - 'vR'
 
-        where T_H has the structure of a corresponding :class:`MPOTransferMatrix`
-        and the limit :math:`n → \infty` has to be taken.
+    where T_H has the structure of a corresponding :class:`MPOTransferMatrix`
+    and the limit :math:`n → \infty` has to be taken.
 
-        The above equation does generally not converge to a fixpoint due to the
-        extensive energy contribution of the Hamiltonian.
+    The above equation does generally not converge to a fixpoint due to the
+    extensive energy contribution of the Hamiltonian.
 
-        However, for an MPO `H` that is upper triangular up to permutations,
-        `LP[0]` can be constructed iteratively in index `j`::
+    However, for an MPO `H` that is upper triangular up to permutations,
+    `LP[0]` can be constructed iteratively in index `j`::
 
-            E[n+1][:,j,:] = \sum_{i<=j} E[n][:,i,:]T_H[:,i,:][:,j,:]
+        E[n+1][:,j,:] = \sum_{i<=j} E[n][:,i,:]T_H[:,i,:][:,j,:]
 
-        with::
+    with::
 
-            E[n][:,j=IdL,:]=Id
+        E[n][:,j=IdL,:]=Id
 
-        The last environment E[n][:,j=IdR,:] requires solving the geometric series::
+    The last environment E[n][:,j=IdR,:] requires solving the geometric series::
 
-            E[n+1][:,j=D-1,:] = \sum_{k=0,...,n-1} T_H[:,j,:][:,j,:]**k (C)
+        E[n+1][:,j=D-1,:] = \sum_{k=0,...,n-1} T_H[:,j,:][:,j,:]**k (C)
 
-        which is singular due to the identity and density matrix as eigenvector
-        pair with eigenvalue 1. To avoid this,::
+    which is singular due to the identity and density matrix as eigenvector
+    pair with eigenvalue 1. To avoid this,::
 
-            E[n+1][:,j=D-1,:] = c0_j + epsilon * n * Id
+        E[n+1][:,j=D-1,:] = c0_j + epsilon * n * Id
 
-        can be decomposed into a constant term and an extensive contribution. The
-        latter captures the energy per site of the environment.
+    can be decomposed into a constant term and an extensive contribution. The
+    latter captures the energy per site of the environment.
 
-        Here, we also generalize the scheme to higher powers of MPOs, where
-        the environment more generally is decomposed into terms proportional
-        to different powers of `n`::
+    Here, we also generalize the scheme to higher powers of MPOs, where
+    the environment more generally is decomposed into terms proportional
+    to different powers of `n`::
 
-            LP[0] = e_0 * n**0 * LP[0][0] + e_1 * n**1 LP[0][1] + ...
+        LP[0] = e_0 * n**0 * LP[0][0] + e_1 * n**1 LP[0][1] + ...
 
-        The largest needed `n` is given by the number of identities on the diagonal
-        of the MPO.
+    The largest needed `n` is given by the number of identities on the diagonal
+    of the MPO.
 
-        .. todo ::
+    .. todo ::
 
-            - Currently, we only allow simple loops. E.g. a double loop
-              Outer[j] -> A1 -> Outer[j] AND Outer[j] -> A2 -> Outer[j] is not allowed.
-              This can in principle be adjusted by grouping nodes of the graph.
-            - Currently, we assume identities along the loops. In principle, we can allow
-              arbitrary operators if we compute the dominant eigenvectors explicitly.
-        """
+        - Currently, we only allow simple loops. E.g. a double loop
+            Outer[j] -> A1 -> Outer[j] AND Outer[j] -> A2 -> Outer[j] is not allowed.
+            This can in principle be adjusted by grouping nodes of the graph.
+        - Currently, we assume identities along the loops. In principle, we can allow
+            arbitrary operators if we compute the dominant eigenvectors explicitly.
+    """
 
     def __init__(self, H, psi):
         self.H = H
@@ -3096,7 +3096,7 @@ class MPOEnvironmentBuilder:
         .. note ::
             - Cycles are only allowed to contain identities with positive prefactor at the moment.
             - Can be generalized to allow arbitrary operators. Requires adjusting self._c0_rho
-       """
+        """
         ones = []
         for j_outer, loop in self.H._cycles.items():
             norm = 1.
