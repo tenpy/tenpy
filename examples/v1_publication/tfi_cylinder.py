@@ -1,9 +1,11 @@
 """An example determining the phase diagram of the 2D transverse field Ising model."""
 # Copyright (C) TeNPy Developers, Apache license
-import pickle
-import numpy as np
-import os
 import argparse
+import os
+import pickle
+
+import numpy as np
+
 #
 import tenpy
 
@@ -222,8 +224,8 @@ def make_plot(folder):
             assert conserve == 'None'
             results_None[Ly, chi] = res
 
-    import matplotlib.pyplot as plt
     import matplotlib as mpl
+    import matplotlib.pyplot as plt
     linewidth = 5.90666
     mpl.rcParams.update({'font.size': 10})
     mpl.rcParams.update({'legend.fontsize': 8})

@@ -14,75 +14,143 @@ import logging
 
 # load and provide sub packages on first input
 # note that the order matters!
-from . import tools
-from . import linalg
-from . import networks
-from . import models
-from . import algorithms
-from . import simulations
-from . import version  # needs to be after linalg!
+from . import (
+    algorithms,
+    linalg,
+    models,
+    networks,
+    simulations,
+    tools,
+    version,  # needs to be after linalg!
+)
+from .algorithms.dmrg import SingleSiteDMRGEngine, TwoSiteDMRGEngine
 
 # provide the more important functions and classes directly from the main namespace:
 from .algorithms.dmrg_parallel import DMRGThreadPlusHC
-from .algorithms.dmrg import SingleSiteDMRGEngine, TwoSiteDMRGEngine
 from .algorithms.exact_diag import ExactDiag
 from .algorithms.mpo_evolution import ExpMPOEvolution, TimeDependentExpMPOEvolution
-from .algorithms.mps_common import VariationalCompression, VariationalApplyMPO, QRBasedVariationalApplyMPO
-from .algorithms.network_contractor import ncon, contract
+from .algorithms.mps_common import QRBasedVariationalApplyMPO, VariationalApplyMPO, VariationalCompression
+from .algorithms.network_contractor import contract, ncon
 from .algorithms.purification import PurificationApplyMPO, PurificationTEBD, PurificationTEBD2
-from .algorithms.tdvp import (SingleSiteTDVPEngine, TwoSiteTDVPEngine, TimeDependentSingleSiteTDVP,
-                              TimeDependentTwoSiteTDVP)
+from .algorithms.tdvp import (
+    SingleSiteTDVPEngine,
+    TimeDependentSingleSiteTDVP,
+    TimeDependentTwoSiteTDVP,
+    TwoSiteTDVPEngine,
+)
+from .algorithms.tebd import QRBasedTEBDEngine, RandomUnitaryEvolution, TEBDEngine, TimeDependentTEBD
 from .algorithms.vumps import SingleSiteVUMPSEngine, TwoSiteVUMPSEngine
-from .algorithms.tebd import TEBDEngine, QRBasedTEBDEngine, RandomUnitaryEvolution, TimeDependentTEBD
-from .linalg.truncation import TruncationError, truncate, svd_theta, decompose_theta_qr_based
 from .linalg.charges import ChargeInfo, LegCharge, LegPipe
-from .linalg.krylov_based import Arnoldi, LanczosGroundState, LanczosEvolution, lanczos_arpack
-from .linalg.np_conserved import (Array, zeros, ones, eye_like, diag,
-                                  concatenate, grid_concat, grid_outer, detect_grid_outer_legcharge,
-                                  detect_qtotal, detect_legcharge, trace, outer, inner, tensordot,
-                                  svd, pinv, norm, eigh, eig, eigvalsh, eigvals, speigs, expm, qr)
-from .models.lattice import (Lattice, TrivialLattice, SimpleLattice, MultiSpeciesLattice,
-                             IrregularLattice, HelicalLattice, Chain, Ladder, NLegLadder, Square,
-                             Triangular, Honeycomb, Kagome, get_lattice)
-from .models.model import (Model, NearestNeighborModel, MPOModel, CouplingModel, CouplingMPOModel)
-from .models.tf_ising import TFIModel, TFIChain
-from .models.xxz_chain import XXZChain, XXZChain2
-from .models.spins import SpinModel, SpinChain
-from .models.spins_nnn import SpinChainNNN, SpinChainNNN2
-from .models.fermions_spinless import FermionModel, FermionChain
-from .models.tj_model import tJModel, tJChain
-from .models.hofstadter import HofstadterBosons, HofstadterFermions
-from .models.clock import ClockModel, ClockChain
-from .models.hubbard import (BoseHubbardModel, BoseHubbardChain, FermiHubbardModel,
-                             FermiHubbardChain, FermiHubbardModel2)
-from .models.haldane import BosonicHaldaneModel, FermionicHaldaneModel
-from .models.molecular import MolecularModel
-from .models.toric_code import ToricCode
+from .linalg.krylov_based import Arnoldi, LanczosEvolution, LanczosGroundState, lanczos_arpack
+from .linalg.np_conserved import (
+    Array,
+    concatenate,
+    detect_grid_outer_legcharge,
+    detect_legcharge,
+    detect_qtotal,
+    diag,
+    eig,
+    eigh,
+    eigvals,
+    eigvalsh,
+    expm,
+    eye_like,
+    grid_concat,
+    grid_outer,
+    inner,
+    norm,
+    ones,
+    outer,
+    pinv,
+    qr,
+    speigs,
+    svd,
+    tensordot,
+    trace,
+    zeros,
+)
+from .linalg.truncation import TruncationError, decompose_theta_qr_based, svd_theta, truncate
 from .models.aklt import AKLTChain
-from .models.mixed_xk import (MixedXKLattice, MixedXKModel, SpinlessMixedXKSquare,
-                              HubbardMixedXKSquare)
-from .networks.site import (Site, GroupedSite, group_sites, SpinHalfSite, SpinSite, FermionSite,
-                            SpinHalfFermionSite, SpinHalfHoleSite, BosonSite, ClockSite,
-                            spin_half_species, kron)
-from .networks.mps import (MPS, MPSEnvironment, TransferMatrix, InitialStateBuilder,
-                           build_initial_state)
-from .networks.mpo import MPO, MPOEnvironment, MPOTransferMatrix
-from .networks.purification_mps import PurificationMPS
-from .networks.uniform_mps import UniformMPS
+from .models.clock import ClockChain, ClockModel
+from .models.fermions_spinless import FermionChain, FermionModel
+from .models.haldane import BosonicHaldaneModel, FermionicHaldaneModel
+from .models.hofstadter import HofstadterBosons, HofstadterFermions
+from .models.hubbard import BoseHubbardChain, BoseHubbardModel, FermiHubbardChain, FermiHubbardModel, FermiHubbardModel2
+from .models.lattice import (
+    Chain,
+    HelicalLattice,
+    Honeycomb,
+    IrregularLattice,
+    Kagome,
+    Ladder,
+    Lattice,
+    MultiSpeciesLattice,
+    NLegLadder,
+    SimpleLattice,
+    Square,
+    Triangular,
+    TrivialLattice,
+    get_lattice,
+)
+from .models.mixed_xk import HubbardMixedXKSquare, MixedXKLattice, MixedXKModel, SpinlessMixedXKSquare
+from .models.model import CouplingModel, CouplingMPOModel, Model, MPOModel, NearestNeighborModel
+from .models.molecular import MolecularModel
+from .models.spins import SpinChain, SpinModel
+from .models.spins_nnn import SpinChainNNN, SpinChainNNN2
+from .models.tf_ising import TFIChain, TFIModel
+from .models.tj_model import tJChain, tJModel
+from .models.toric_code import ToricCode
+from .models.xxz_chain import XXZChain, XXZChain2
 from .networks.momentum_mps import MomentumMPS
-from .simulations.simulation import (Simulation, Skip, init_simulation, run_simulation,
-                                     init_simulation_from_checkpoint, resume_from_checkpoint,
-                                     run_seq_simulations, estimate_simulation_RAM)
-from .simulations.ground_state_search import (GroundStateSearch, OrthogonalExcitations,
-                                              ExcitationInitialState)
+from .networks.mpo import MPO, MPOEnvironment, MPOTransferMatrix
+from .networks.mps import MPS, InitialStateBuilder, MPSEnvironment, TransferMatrix, build_initial_state
+from .networks.purification_mps import PurificationMPS
+from .networks.site import (
+    BosonSite,
+    ClockSite,
+    FermionSite,
+    GroupedSite,
+    Site,
+    SpinHalfFermionSite,
+    SpinHalfHoleSite,
+    SpinHalfSite,
+    SpinSite,
+    group_sites,
+    kron,
+    spin_half_species,
+)
+from .networks.uniform_mps import UniformMPS
+from .simulations.ground_state_search import ExcitationInitialState, GroundStateSearch, OrthogonalExcitations
+from .simulations.measurement import (
+    m_bond_dimension,
+    m_bond_energies,
+    m_correlation_length,
+    m_energy_MPO,
+    m_entropy,
+    m_evolved_time,
+    m_measurement_index,
+    m_onsite_expectation_value,
+    m_simulation_parameter,
+)
+from .simulations.simulation import (
+    Simulation,
+    Skip,
+    estimate_simulation_RAM,
+    init_simulation,
+    init_simulation_from_checkpoint,
+    resume_from_checkpoint,
+    run_seq_simulations,
+    run_simulation,
+)
 from .simulations.time_evolution import RealTimeEvolution
-from .simulations.measurement import (m_measurement_index, m_bond_dimension, m_bond_energies,
-                                      m_simulation_parameter, m_energy_MPO, m_entropy,
-                                      m_onsite_expectation_value, m_correlation_length,
-                                      m_evolved_time)
-from .tools.hdf5_io import save, load, save_to_hdf5, load_from_hdf5
-from .tools.misc import (setup_logging, consistency_check, TenpyInconsistencyError,
-                         TenpyInconsistencyWarning, BetaWarning)
+from .tools.hdf5_io import load, load_from_hdf5, save, save_to_hdf5
+from .tools.misc import (
+    BetaWarning,
+    TenpyInconsistencyError,
+    TenpyInconsistencyWarning,
+    consistency_check,
+    setup_logging,
+)
 from .tools.params import Config, asConfig, load_yaml_with_py_eval
 
 # main logger for tenpy
@@ -170,10 +238,11 @@ def console_main(*command_line_args):
     ..
         Sphinx includes the output of ``tenpy-run --help`` here, setup in doc/conf.py.
     """
+    import importlib
+    import sys
+
     import numpy as np
     import scipy
-    import sys
-    import importlib
     parser = _setup_arg_parser()
 
     args = parser.parse_args(args=command_line_args if command_line_args else None)

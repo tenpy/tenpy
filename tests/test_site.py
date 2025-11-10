@@ -1,16 +1,16 @@
 """A collection of tests for :mod:`tenpy.models.site`."""
 # Copyright (C) TeNPy Developers, Apache license
 
+import copy
+import itertools as it
+
 import numpy as np
 import numpy.testing as npt
-import itertools as it
-import copy
+from random_test import gen_random_legcharge
 
 import tenpy.linalg.np_conserved as npc
 from tenpy.networks import site
 from tenpy.tools.misc import inverse_permutation
-
-from random_test import gen_random_legcharge
 
 
 def commutator(A, B):

@@ -5,11 +5,10 @@ Sorry that this is not well documented! ED is meant to be used for debugging onl
 # Copyright (C) TeNPy Developers, Apache license
 
 import tenpy.linalg.np_conserved as npc
+from tenpy.algorithms import dmrg
+from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.networks.mps import MPS
-
-from tenpy.algorithms.exact_diag import ExactDiag
-from tenpy.algorithms import dmrg
 
 
 def example_exact_diagonalization(L, Jz):

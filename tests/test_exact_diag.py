@@ -1,16 +1,17 @@
 """A collection of tests to check the functionality of algorithms.exact_diagonalization."""
 # Copyright (C) TeNPy Developers, Apache license
 
-import pytest
-import numpy as np
-from functools import reduce
 import copy
+from functools import reduce
+
+import numpy as np
+import pytest
 
 import tenpy.linalg.np_conserved as npc
-from tenpy.networks import MPS, SpinHalfSite
-from tenpy.models import TFIChain, XXZChain
 from tenpy.algorithms import exact_diag
 from tenpy.linalg.krylov_based import LanczosGroundState
+from tenpy.models import TFIChain, XXZChain
+from tenpy.networks import MPS, SpinHalfSite
 
 
 def test_ED():

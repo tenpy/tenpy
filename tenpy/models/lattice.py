@@ -18,16 +18,17 @@ Further, an overview with plots of the predefined models is given in
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
-from scipy.spatial import ConvexHull, Voronoi
-import itertools
 import copy
+import itertools
 import logging
 
+import numpy as np
+from scipy.spatial import ConvexHull, Voronoi
+
 from ..linalg.charges import DipolarChargeInfo
-from ..networks.site import Site
-from ..tools.misc import to_iterable, to_array, inverse_permutation, get_close, find_subclass
 from ..networks.mps import MPS  # only to check boundary conditions
+from ..networks.site import Site
+from ..tools.misc import find_subclass, get_close, inverse_permutation, to_array, to_iterable
 
 logger = logging.getLogger(__name__)
 

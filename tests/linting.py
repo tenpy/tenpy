@@ -6,10 +6,11 @@ We therefore consider them part of a linting routine and do *not* call them from
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import tenpy
-import os
 import inspect
+import os
 import pkgutil
+
+import tenpy
 
 
 def main():

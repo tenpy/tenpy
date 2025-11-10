@@ -3,15 +3,15 @@
 
 import numpy as np
 import numpy.testing as npt
+import pytest
 import scipy
-from tenpy.models.xxz_chain import XXZChain
 
+import tenpy.linalg.np_conserved as npc
+import tenpy.linalg.random_matrix as rmat
+from tenpy.algorithms.purification import PurificationApplyMPO, PurificationTEBD
+from tenpy.models.xxz_chain import XXZChain
 from tenpy.networks import purification_mps, site
 from tenpy.networks.mps import MPS
-from tenpy.algorithms.purification import PurificationTEBD, PurificationApplyMPO
-import tenpy.linalg.random_matrix as rmat
-import tenpy.linalg.np_conserved as npc
-import pytest
 
 spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 ferm = site.FermionSite(conserve='N')

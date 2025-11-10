@@ -7,9 +7,9 @@ of the classes defined in tenpy.
 
 import numpy as np
 
-from tenpy.networks.mps import MPS
-from tenpy.models.tf_ising import TFIChain
 from tenpy.algorithms import tebd
+from tenpy.models.tf_ising import TFIChain
+from tenpy.networks.mps import MPS
 
 
 def example_TEBD_gs_tf_ising_finite(L, g):
@@ -136,8 +136,8 @@ def example_TEBD_tf_ising_lightcone(L, g, tmax, dt):
 
 
 def example_TEBD_gs_tf_ising_next_nearest_neighbor(L, g, Jp):
-    from tenpy.models.spins_nnn import SpinChainNNN2
     from tenpy.models.model import NearestNeighborModel
+    from tenpy.models.spins_nnn import SpinChainNNN2
     print("finite TEBD, imaginary time evolution, transverse field Ising next-nearest neighbor")
     print(f"L={L:d}, g={g:.2f}, Jp={Jp:.2f}")
     model_params = dict(

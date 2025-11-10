@@ -1,11 +1,13 @@
 """A collection of tests for tenpy.linalg.charges."""
 # Copyright (C) TeNPy Developers, Apache license
 
-import tenpy.linalg.charges as charges
+import itertools as it
+
 import numpy as np
 import numpy.testing as npt
-import itertools as it
 from random_test import gen_random_legcharge
+
+import tenpy.linalg.charges as charges
 
 # charges for comparison, unsorted (*_us) and sorted (*_s)
 qflat_us = np.array([  #   v  v  <-- note the missing minus below

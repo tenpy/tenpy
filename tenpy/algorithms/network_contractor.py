@@ -12,6 +12,7 @@ by Robert N. C. Pfeifer, Glen Evenbly, Sukhwinder Singh, Guifre Vidal, see :arxi
 # Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
+
 from ..linalg import np_conserved as npc
 
 __all__ = ['contract', 'ncon']

@@ -9,11 +9,11 @@ This class thus serves as an example how this can be done.
 import numpy as np
 
 from ..linalg import np_conserved as npc
-from ..networks.site import SpinSite, kron
 from ..networks.mps import MPS
-from .lattice import Chain
-from .model import NearestNeighborModel, MPOModel
+from ..networks.site import SpinSite, kron
 from ..tools.params import asConfig
+from .lattice import Chain
+from .model import MPOModel, NearestNeighborModel
 
 __all__ = ['AKLTChain']
 

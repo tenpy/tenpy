@@ -3,9 +3,9 @@
 
 import numpy as np
 
-from tenpy.networks.mps import MPS
-from tenpy.models.spins import SpinChain
 from tenpy.algorithms import tebd
+from tenpy.models.spins import SpinChain
+from tenpy.networks.mps import MPS
 from tenpy.tools import optimization
 
 

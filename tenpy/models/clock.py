@@ -5,10 +5,10 @@ Generalization of transverse field Ising model to higher dimensional on-site Hil
 # Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
-from .model import CouplingMPOModel, NearestNeighborModel
-from .lattice import Chain
-from ..networks.site import ClockSite
 
+from ..networks.site import ClockSite
+from .lattice import Chain
+from .model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = ['ClockModel', 'ClockChain']
 

@@ -67,13 +67,15 @@ Names for the ``ATTR_TYPE`` attribute:
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import pickle
 import gzip
-import types
-import numpy as np
 import importlib
-import warnings
+import pickle
 import sys
+import types
+import warnings
+
+import numpy as np
+
 try:
     from packaging.version import parse as parse_version
 except (ImportError, AttributeError):

@@ -12,9 +12,10 @@ Full description and details in :doc:`/intro/measurements`.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
-import warnings
 import functools
+import warnings
+
+import numpy as np
 
 from ..networks.mpo import MPOEnvironment
 from ..tools.misc import get_recursive

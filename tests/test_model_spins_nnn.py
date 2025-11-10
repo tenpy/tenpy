@@ -1,9 +1,9 @@
 # Copyright (C) TeNPy Developers, Apache license
-from tenpy.models import spins_nnn
 from test_model import check_general_model
-from tenpy.models.model import NearestNeighborModel
 
 from tenpy.algorithms.exact_diag import ExactDiag
+from tenpy.models import spins_nnn
+from tenpy.models.model import NearestNeighborModel
 
 
 def test_SpinChainNNN():

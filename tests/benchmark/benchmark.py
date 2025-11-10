@@ -13,10 +13,11 @@ Afterwards, you can plot the produced files::
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import timeit
-import time
-import numpy as np
 import sys
+import time
+import timeit
+
+import numpy as np
 
 fn_template = '{mod_name!s}_benchmark_s_{sectors:d}_l_{legs:d}_mod_q_{mod_q_str}.txt'
 

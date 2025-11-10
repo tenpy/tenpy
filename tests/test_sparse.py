@@ -1,12 +1,12 @@
 # Copyright (C) TeNPy Developers, Apache license
-import tenpy.linalg.np_conserved as npc
 import numpy as np
-
-from random_test import gen_random_legcharge
-from tenpy.linalg import sparse
-import tenpy.linalg.random_matrix as rmat
-import scipy.sparse.linalg
 import scipy.linalg
+import scipy.sparse.linalg
+from random_test import gen_random_legcharge
+
+import tenpy.linalg.np_conserved as npc
+import tenpy.linalg.random_matrix as rmat
+from tenpy.linalg import sparse
 
 ch = npc.ChargeInfo([2])
 

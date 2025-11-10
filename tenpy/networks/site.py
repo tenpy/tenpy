@@ -5,13 +5,14 @@ The :class:`Site` is the prototype, read it's docstring.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
-import itertools
 import copy
+import itertools
+
+import numpy as np
 
 from ..linalg import np_conserved as npc
-from ..tools.misc import inverse_permutation, find_subclass
 from ..tools.hdf5_io import Hdf5Exportable
+from ..tools.misc import find_subclass, inverse_permutation
 
 __all__ = [
     'Site',

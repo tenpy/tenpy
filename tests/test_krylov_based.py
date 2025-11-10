@@ -1,14 +1,14 @@
 """A collection of tests for tenpy.linalg.krylov_based."""
 # Copyright (C) TeNPy Developers, Apache license
 
-import tenpy.linalg.np_conserved as npc
 import numpy as np
-
-from random_test import gen_random_legcharge
-from tenpy.linalg import krylov_based, sparse
-import tenpy.linalg.random_matrix as rmat
-from scipy.linalg import expm
 import pytest
+from random_test import gen_random_legcharge
+from scipy.linalg import expm
+
+import tenpy.linalg.np_conserved as npc
+import tenpy.linalg.random_matrix as rmat
+from tenpy.linalg import krylov_based, sparse
 
 ch = npc.ChargeInfo([2])
 

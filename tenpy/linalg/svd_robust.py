@@ -23,10 +23,11 @@ The idea is that you just import the `svd` from this module and use it as replac
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import warnings
+
 import numpy as np
 import scipy
 import scipy.linalg
-import warnings
 
 __all__ = ['svd']
 

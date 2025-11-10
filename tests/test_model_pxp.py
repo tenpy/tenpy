@@ -1,8 +1,9 @@
 
 # Copyright (C) TeNPy Developers, Apache license
 import pytest
-from tenpy.models.pxp import PXPChain
 from test_model import check_general_model
+
+from tenpy.models.pxp import PXPChain
 
 
 @pytest.mark.parametrize('conserve', ['best', 'parity', 'None'])

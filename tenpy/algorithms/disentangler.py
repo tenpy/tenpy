@@ -9,13 +9,14 @@ For now, this is written for disentangling purifications; could be generalized t
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import logging
 
+import numpy as np
+
 from ..linalg import np_conserved as npc
+from ..linalg import random_matrix as rand_mat
 from ..linalg.truncation import svd_theta
 from ..tools.math import entropy
-from ..linalg import random_matrix as rand_mat
 
 logger = logging.getLogger(__name__)
 

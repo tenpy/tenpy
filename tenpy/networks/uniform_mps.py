@@ -22,12 +22,13 @@ account for the additional type of tensor structure.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import logging
 import warnings
-from ..tools.misc import BetaWarning
+
+import numpy as np
 
 from ..linalg import np_conserved as npc
+from ..tools.misc import BetaWarning
 from .mps import MPS
 
 logger = logging.getLogger(__name__)

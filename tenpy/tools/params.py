@@ -4,14 +4,15 @@ See the doc-string of :class:`Config` for details.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import logging
+import numbers
+import os
+import pprint
 import warnings
+from collections.abc import MutableMapping
+
 import numpy
 import numpy as np
-import numbers
-from collections.abc import MutableMapping
-import pprint
-import os
-import logging
 
 from .hdf5_io import ATTR_FORMAT
 

@@ -1,8 +1,8 @@
 """Call of (finite) DMRG."""
 
-from tenpy.networks.mps import MPS
-from tenpy.models.tf_ising import TFIChain
 from tenpy.algorithms import dmrg
+from tenpy.models.tf_ising import TFIChain
+from tenpy.networks.mps import MPS
 
 N = 16  # number of sites
 model = TFIChain({"L": N, "J": 1., "g": 1., "bc_MPS": "finite"})

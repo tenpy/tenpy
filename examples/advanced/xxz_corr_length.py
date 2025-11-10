@@ -7,12 +7,12 @@ state, and plots it vs. hz in the end.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import matplotlib.pyplot as plt
 import numpy as np
 
+from tenpy.algorithms import dmrg
 from tenpy.models.spins import SpinChain
 from tenpy.networks.mps import MPS
-from tenpy.algorithms import dmrg
-import matplotlib.pyplot as plt
 
 
 def run(Jzs):
@@ -76,8 +76,8 @@ def plot(results, filename):
 
 if __name__ == "__main__":
     filename = 'xxz_corrlength.pkl'
-    import pickle
     import os.path
+    import pickle
     if not os.path.exists(filename):
         results = run(list(np.arange(4.0, 1.5, -0.25)) + list(np.arange(1.5, 0.8, -0.05)))
         with open(filename, 'wb') as f:

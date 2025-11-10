@@ -4,9 +4,9 @@
 
 import logging
 
-from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg.truncation import TruncationError
 from ..tools.misc import consistency_check
+from .algorithm import TimeDependentHAlgorithm, TimeEvolutionAlgorithm
 
 logger = logging.getLogger(__name__)
 

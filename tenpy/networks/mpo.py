@@ -36,24 +36,25 @@ i.e. between sites ``i-1`` and ``i``.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import copy
+import logging
+import warnings
+
 import numpy as np
 from scipy.linalg import expm
 from scipy.special import comb
-import warnings
-import copy
-import logging
 
 from ..linalg import np_conserved as npc
-from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator, ShiftNpcLinearOperator
+from ..linalg.krylov_based import GMRES
+from ..linalg.sparse import FlatLinearOperator, NpcLinearOperator, ShiftNpcLinearOperator
 from ..linalg.truncation import TruncationError, svd_theta
-from .site import group_sites
+from ..tools.math import lcm
+from ..tools.misc import add_with_None_0, inverse_permutation, to_iterable
+from ..tools.params import asConfig
 from ..tools.string import vert_join
 from .mps import BaseEnvironment, MPSGeometry, TransferMatrix
+from .site import group_sites
 from .terms import TermList
-from ..tools.misc import to_iterable, add_with_None_0, inverse_permutation
-from ..tools.math import lcm
-from ..tools.params import asConfig
-from ..linalg.krylov_based import GMRES
 
 logger = logging.getLogger(__name__)
 

@@ -22,9 +22,11 @@ always orthogonal to the initial uniform MPS. `X` parametrizes the excited state
 
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import logging
 import warnings
+
+import numpy as np
+
 from ..tools.misc import BetaWarning
 
 logger = logging.getLogger(__name__)

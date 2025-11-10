@@ -7,12 +7,13 @@ or somewhere in the ``PYTHON_PATH``. Then you can use it with the parameters fil
     tenpy-run -i model_custom simulation_custom.yml
 """
 
-from tenpy.networks.site import SpinSite
-from tenpy.networks.mps import TransferMatrix
-from tenpy.models.model import CouplingMPOModel, NearestNeighborModel
-from tenpy.models.lattice import Chain
-from tenpy.linalg import np_conserved as npc
 import numpy as np
+
+from tenpy.linalg import np_conserved as npc
+from tenpy.models.lattice import Chain
+from tenpy.models.model import CouplingMPOModel, NearestNeighborModel
+from tenpy.networks.mps import TransferMatrix
+from tenpy.networks.site import SpinSite
 
 
 class AnisotropicSpin1Chain(CouplingMPOModel, NearestNeighborModel):

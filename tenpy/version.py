@@ -12,9 +12,9 @@ The version is provided in the standard python format ``major.minor.revision`` a
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import sys
-import subprocess
 import os
+import subprocess
+import sys
 
 __all__ = [
     "version", "released", "short_version", "git_revision", "full_version", "version_summary"
@@ -90,9 +90,10 @@ full_version = _get_full_version()
 
 
 def _get_version_summary():
-    from .tools.optimization import have_cython_functions, compiled_with_MKL
     import numpy
     import scipy
+
+    from .tools.optimization import compiled_with_MKL, have_cython_functions
 
     if have_cython_functions:
         cython_info = "compiled"

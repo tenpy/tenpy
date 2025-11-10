@@ -5,8 +5,8 @@ Uniform lattice of spin-S sites, coupled by nearest-neighbor interactions.
 # Copyright (C) TeNPy Developers, Apache license
 
 from ..networks.site import SpinSite
-from .model import CouplingMPOModel, NearestNeighborModel
 from .lattice import Chain
+from .model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = ['SpinModel', 'SpinChain', 'DipolarSpinChain']
 

@@ -10,9 +10,9 @@ We choose the field along z to allow to conserve the parity, if desired.
 
 import numpy as np
 
-from .model import CouplingMPOModel, NearestNeighborModel
-from .lattice import Chain
 from ..networks.site import SpinHalfSite
+from .lattice import Chain
+from .model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = ['TFIModel', 'TFIChain']
 

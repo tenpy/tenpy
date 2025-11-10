@@ -3,9 +3,9 @@
 
 import numpy as np
 
-from .model import CouplingMPOModel
 from ..networks.site import BosonSite, FermionSite
 from .lattice import Honeycomb
+from .model import CouplingMPOModel
 
 __all__ = ['BosonicHaldaneModel', 'FermionicHaldaneModel']
 

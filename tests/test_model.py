@@ -3,15 +3,16 @@
 
 import itertools
 
-from tenpy.models import model, lattice
-from tenpy.models.xxz_chain import XXZChain
-from tenpy.models.spins import DipolarSpinChain
-import tenpy.networks.site
-import tenpy.linalg.np_conserved as npc
-from tenpy.algorithms.exact_diag import ExactDiag, get_numpy_Hamiltonian
 import numpy as np
 import numpy.testing as npt
 import pytest
+
+import tenpy.linalg.np_conserved as npc
+import tenpy.networks.site
+from tenpy.algorithms.exact_diag import ExactDiag, get_numpy_Hamiltonian
+from tenpy.models import lattice, model
+from tenpy.models.spins import DipolarSpinChain
+from tenpy.models.xxz_chain import XXZChain
 
 spin_half_site = tenpy.networks.site.SpinHalfSite('Sz', sort_charge=False)
 

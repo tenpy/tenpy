@@ -1,11 +1,13 @@
 # Copyright (C) TeNPy Developers, Apache license
 import itertools
+
 import numpy as np
-import scipy as sp
 import pytest
+import scipy as sp
+from test_model import check_general_model
+
 from tenpy.models.molecular import MolecularModel
 from tenpy.tools.params import Config
-from test_model import check_general_model
 
 
 class MolecularModelTest(MolecularModel):

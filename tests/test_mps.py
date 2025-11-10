@@ -3,18 +3,17 @@
 
 import numpy as np
 import numpy.testing as npt
-from tenpy.models.xxz_chain import XXZChain
-from tenpy.models.aklt import AKLTChain
-from tenpy.models.lattice import Square, Chain, MultiSpeciesLattice
+import pytest
+from random_test import rand_permutation, random_MPS
 
-from tenpy.tools import misc
+import tenpy.linalg.np_conserved as npc
 from tenpy.algorithms import tebd
+from tenpy.models.aklt import AKLTChain
+from tenpy.models.lattice import Chain, MultiSpeciesLattice, Square
+from tenpy.models.xxz_chain import XXZChain
 from tenpy.networks import mps, site
 from tenpy.networks.terms import TermList
-from random_test import rand_permutation, random_MPS
-import tenpy.linalg.np_conserved as npc
-
-import pytest
+from tenpy.tools import misc
 
 spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 

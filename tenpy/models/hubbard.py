@@ -3,10 +3,10 @@
 
 import numpy as np
 
-from .model import CouplingMPOModel, NearestNeighborModel
-from .lattice import Chain
+from ..networks.site import BosonSite, FermionSite, SpinHalfFermionSite, spin_half_species
 from ..tools.params import asConfig
-from ..networks.site import FermionSite, BosonSite, SpinHalfFermionSite, spin_half_species
+from .lattice import Chain
+from .model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = ['BoseHubbardModel', 'BoseHubbardChain', 'FermiHubbardModel', 'FermiHubbardChain',
            'FermiHubbardModel2', 'DipolarBoseHubbardChain']

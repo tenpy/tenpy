@@ -1,6 +1,6 @@
+from tenpy.algorithms.purification import PurificationApplyMPO, PurificationTEBD
 from tenpy.models.tf_ising import TFIChain
 from tenpy.networks.purification_mps import PurificationMPS
-from tenpy.algorithms.purification import PurificationTEBD, PurificationApplyMPO
 
 
 def imag_tebd(L=30, beta_max=3., dt=0.05, order=2, bc="finite"):

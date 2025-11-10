@@ -15,10 +15,10 @@ you might also try the equivalent :func:`mkl_get_nthreads` and :func:`mkl_set_nt
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import warnings
 import ctypes
-from ctypes.util import find_library
 import sys
+import warnings
+from ctypes.util import find_library
 
 __all__ = [
     'memory_usage', 'load_omp_library', 'omp_get_nthreads', 'omp_set_nthreads', 'mkl_get_nthreads',

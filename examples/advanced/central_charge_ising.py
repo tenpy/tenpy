@@ -8,12 +8,14 @@ For the theoretical background why :math:`S = c/6 log(xi)`, see :cite:`pollmann2
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
-import tenpy
 import time
-from tenpy.networks.mps import MPS
-from tenpy.models.tf_ising import TFIChain
+
+import numpy as np
+
+import tenpy
 from tenpy.algorithms import dmrg
+from tenpy.models.tf_ising import TFIChain
+from tenpy.networks.mps import MPS
 
 
 def example_DMRG_tf_ising_infinite_S_xi_scaling(g):

@@ -1,10 +1,11 @@
 """Test import and output with pickle."""
 
-import io_test
 import os
 import pickle
-import pytest
 import time
+
+import io_test
+import pytest
 
 import tenpy
 

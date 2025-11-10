@@ -1,15 +1,15 @@
 """A collection of tests for tenpy.models.lattice."""
 # Copyright (C) TeNPy Developers, Apache license
 
-from tenpy.models import lattice
-import tenpy.linalg.np_conserved as npc
-from tenpy.networks import site
-from tenpy.networks.mps import MPS
 import numpy as np
 import numpy.testing as npt
 import pytest
-
 from random_test import gen_random_legcharge
+
+import tenpy.linalg.np_conserved as npc
+from tenpy.models import lattice
+from tenpy.networks import site
+from tenpy.networks.mps import MPS
 
 
 def test_bc_choices():

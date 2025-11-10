@@ -7,13 +7,14 @@ prefactor when specifying e.g. a Hamiltonian.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
-import warnings
 import itertools
+import warnings
+
+import numpy as np
 
 from ..linalg import np_conserved as npc
-from ..tools.misc import add_with_None_0
 from ..tools.hdf5_io import Hdf5Exportable
+from ..tools.misc import add_with_None_0
 
 __all__ = [
     'TermList', 'OnsiteTerms', 'CouplingTerms', 'MultiCouplingTerms', 'ExponentiallyDecayingTerms',

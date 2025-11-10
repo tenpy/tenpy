@@ -2,14 +2,15 @@
 functions and spectral functions."""
 # Copyright (C) TeNPy Developers, Apache license
 
-import numpy as np
 import warnings
 
+import numpy as np
+
+from ..networks.mps import MPS, MPSEnvironment
+from ..tools import hdf5_io
+from ..tools.misc import consistency_check, to_iterable
 from . import simulation
 from .simulation import *  # noqa F403
-from ..networks.mps import MPSEnvironment, MPS
-from ..tools.misc import to_iterable, consistency_check
-from ..tools import hdf5_io
 
 __all__ = simulation.__all__ + [
     'RealTimeEvolution', 'SpectralSimulation', 'TimeDependentCorrelation',

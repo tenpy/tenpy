@@ -5,10 +5,11 @@ plane wave excitation ansatz to compute the first excited states.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from tenpy.models.tf_ising import TFIChain
-from tenpy.algorithms import vumps, plane_wave_excitation
-from tenpy.networks import mps
 import numpy as np
+
+from tenpy.algorithms import plane_wave_excitation, vumps
+from tenpy.models.tf_ising import TFIChain
+from tenpy.networks import mps
 
 
 def tfi_vumps(g=1.5):

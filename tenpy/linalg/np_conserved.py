@@ -84,23 +84,24 @@ Overview
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import itertools
+import warnings
+from numbers import Integral
+
 import numpy as np
 import scipy.linalg
 from scipy.linalg import blas as BLAS  # python interface to BLAS
-import warnings
-import itertools
-from numbers import Integral
+
+from ..tools.math import qr_li
+from ..tools.math import speigs as _sp_speigs
+from ..tools.misc import anynan, argsort, inverse_permutation, list_to_dict_list, to_iterable
+from ..tools.optimization import OptimizationFlag, optimize, use_cython
+from ..tools.string import is_non_string_iterable, vert_join
+from . import charges  # for private functions
 
 # import public API from charges
 from .charges import ChargeInfo, DipolarChargeInfo, LegCharge, LegPipe
-from . import charges  # for private functions
 from .svd_robust import svd as svd_flat
-
-from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation, list_to_dict_list
-from ..tools.math import speigs as _sp_speigs
-from ..tools.math import qr_li
-from ..tools.string import vert_join, is_non_string_iterable
-from ..tools.optimization import optimize, OptimizationFlag, use_cython
 
 __all__ = [
     'QCUTOFF', 'ChargeInfo', 'DipolarChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'ones', 'eye_like', 'diag',
