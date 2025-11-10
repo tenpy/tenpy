@@ -611,7 +611,6 @@ class Sweep(Algorithm):
         """
         i_L, i_R = self._update_env_inds()  # left and right updated site
         # envs between `i_L` and `i_R` where already deleted and updated in `update_env`
-        i0 = self.i0
         n = self.n_optimize
         update_LP, update_RP = self.update_LP_RP
         all_envs = self._all_envs

@@ -1418,7 +1418,6 @@ class CouplingModel(Model):
             self.coupling_terms[category] = new_ct = MultiCouplingTerms(self.lat.N_sites)
             new_ct += ct
             ct = new_ct
-        N_sites = self.lat.N_sites
         sites = self.lat.mps_sites()
         # loop to perform the sum over {x_0, x_1, ...}
         for ijkl, current_strength in zip(mps_ijkl, strength_vals):

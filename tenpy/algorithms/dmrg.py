@@ -766,7 +766,6 @@ class DMRGEngine(IterativeSweeps):
             import matplotlib.pyplot as plt
             axes = plt.gca()
         stats = self.update_stats
-        L = self.psi.L
         kwargs.setdefault('marker', 'x')
         kwargs.setdefault('linestyle', '-')
 
@@ -818,7 +817,6 @@ class DMRGEngine(IterativeSweeps):
             import matplotlib.pyplot as plt
             axes = plt.gca()
         stats = self.sweep_stats
-        L = self.psi.L
         kwargs.setdefault('marker', 'x')
         kwargs.setdefault('linestyle', '-')
 

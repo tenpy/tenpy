@@ -646,7 +646,6 @@ class MixedXKModel(CouplingMPOModel):
         assert num_ops == len(rs_coords)
         num_c_cd = num_ops * 2
         xk_lat = self.lat
-        N_orb = xk_lat.N_orb
         Ly = xk_lat.Ly
         conserve_k = 'ky' in xk_lat.site(0).leg.chinfo.names
         terms = []
@@ -707,7 +706,6 @@ class MixedXKModel(CouplingMPOModel):
         #TODO: add support for 'N' and '1-N' by splitting them
         # Currently supported by use of orbital_coeffs
         xk_lat = self.lat
-        N_orb = xk_lat.N_orb
         Ly = xk_lat.Ly
         conserve_k = 'ky' in xk_lat.site(0).leg.chinfo.names
         terms = []

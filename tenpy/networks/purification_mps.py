@@ -632,7 +632,6 @@ class PurificationMPS(MPS):
                 # assert np.isclose(probability, expect_probability)
                 total_probability *= probability    # probability of p outcome
             else:
-                W2 = np.arange(site.dim)    # outcomes for q leg
                 # Sample p
                 # physical RDM on site i
                 rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']])

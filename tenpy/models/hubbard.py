@@ -306,7 +306,6 @@ class DipolarBoseHubbardChain(CouplingMPOModel):
 
     def init_terms(self, model_params):
         """Add the onsite and coupling terms to the model"""
-        L = model_params.get('L', 64)
         U = model_params.get('U', 1)
         t = model_params.get('t', 1)
         t4 = model_params.get('t4', 0)

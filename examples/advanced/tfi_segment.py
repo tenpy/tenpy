@@ -96,7 +96,7 @@ def calc_segment_groundstate(psi, model, dmrg_params):
 def plot(psi, filename):
     x = np.arange(psi.L)
     meas = psi.expectation_value("Sigmax")
-    fig = plt.figure()
+    fig = plt.figure()  # noqa F841
     ax = plt.gca()
     ax.plot(x, meas)
     ax.set_ylabel("<sigma_x>")

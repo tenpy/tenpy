@@ -949,7 +949,6 @@ class Lattice:
             new_shapes.append(shape)
             lat_inds.append(lat_inds_ax)
 
-        res_A_ndim = A.ndim - len(axes) + sum([len(s) for s in new_shapes])
         res_A_shape = []
         res_A_inds = []
         dim_before = 0
@@ -957,7 +956,6 @@ class Lattice:
         for ax in range(A.ndim):
             if ax in axes:
                 i = axes.index(ax)
-                inds_ax = lat_inds[i].T
                 res_A_shape.extend(new_shapes[i])
                 for inds in lat_inds[i].T:
                     inds = inds.reshape([1] * dim_before + [len(inds)] + [1] * dim_after)

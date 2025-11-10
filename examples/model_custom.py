@@ -25,7 +25,6 @@ class AnisotropicSpin1Chain(CouplingMPOModel, NearestNeighborModel):
     force_default_lattice = True
 
     def init_sites(self, model_params):
-        B = model_params.get('B', 0.)
         conserve = model_params.get('conserve', 'best')
         if conserve == 'best':
             conserve = 'Sz' if not model_params.any_nonzero(['B']) else None
