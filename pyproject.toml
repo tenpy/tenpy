@@ -119,7 +119,7 @@ target-version = "py310"
 exclude = ["doc/sphinx_ext/*", "doc/toycodes", "doc/notebooks"]
 
 [tool.ruff.lint]
-select = ["F", "E", "W", "I", "UP", "ISC", "LOG"]
+select = ["F", "E", "W", "I", "UP", "ISC", "LOG", "INP"]
 ignore = [
     "F403", "F405",  # star imports
     "E741",  # ambiguous variable names like l
@@ -132,9 +132,13 @@ ignore = [
 "__init__.py" = [
     "F401",  # imported but unused
 ]
+"examples/*.py" = [
+    "INP001",  # is part of an implicit namespace package
+]
 "tests/*.py" = [
     "E501",  # line too long
     "F841",  # Local variable is assigned to but never used
+    "INP001",  # is part of an implicit namespace package
 ]
 "doc/conf.py" = [
     "E402",  # Module level import not at top of file
