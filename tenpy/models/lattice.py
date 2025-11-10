@@ -23,12 +23,13 @@ from scipy.spatial import ConvexHull, Voronoi
 import itertools
 import copy
 import logging
-logger = logging.getLogger(__name__)
 
 from ..linalg.charges import DipolarChargeInfo
 from ..networks.site import Site
 from ..tools.misc import to_iterable, to_array, inverse_permutation, get_close, find_subclass
 from ..networks.mps import MPS  # only to check boundary conditions
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'Lattice', 'TrivialLattice', 'SimpleLattice', 'MultiSpeciesLattice', 'IrregularLattice',

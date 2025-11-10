@@ -38,8 +38,6 @@ import time
 import logging
 import warnings
 
-logger = logging.getLogger(__name__)
-
 from ..linalg import np_conserved as npc
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS
@@ -53,6 +51,8 @@ from ..tools.params import asConfig
 from .mps_common import IterativeSweeps, ZeroSiteH, OneSiteH, TwoSiteH
 from ..linalg.truncation import svd_theta
 from .plane_wave_excitation import append_right_env, append_left_env, construct_orthogonal
+
+logger = logging.getLogger(__name__)
 
 __all__ = ['VUMPSEngine', 'SingleSiteVUMPSEngine', 'TwoSiteVUMPSEngine']
 

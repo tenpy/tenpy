@@ -37,7 +37,6 @@ import numpy as np
 import time
 import warnings
 import logging
-logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from ..linalg.krylov_based import lanczos_arpack, LanczosGroundState
@@ -47,6 +46,8 @@ from ..tools.math import entropy
 from ..tools.process import memory_usage
 from .mps_common import IterativeSweeps, OneSiteH, TwoSiteH
 from . import mps_common
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'run',

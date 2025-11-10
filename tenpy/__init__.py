@@ -12,9 +12,6 @@ and yet powerful enough for day-to-day research.
 # Note: all external packages that are imported should be `del`-ed at the end of the file!
 import logging
 
-# main logger for tenpy
-logger = logging.getLogger(__name__)
-
 # load and provide sub packages on first input
 # note that the order matters!
 from . import tools
@@ -88,6 +85,8 @@ from .tools.misc import (setup_logging, consistency_check, TenpyInconsistencyErr
                          TenpyInconsistencyWarning, BetaWarning)
 from .tools.params import Config, asConfig, load_yaml_with_py_eval
 
+# main logger for tenpy
+logger = logging.getLogger(__name__)
 
 
 #: hard-coded version string

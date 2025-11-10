@@ -4,13 +4,14 @@
 import time
 import numpy as np
 import logging
-logger = logging.getLogger(__name__)
 
 from ..linalg.truncation import TruncationError
 from ..tools.misc import consistency_check
 from ..tools.events import EventHandler
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
+
+logger = logging.getLogger(__name__)
 
 __all__ = ['Algorithm', 'TimeEvolutionAlgorithm', 'TimeDependentHAlgorithm']
 __deprecated_submodules__ = [

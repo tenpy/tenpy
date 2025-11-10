@@ -27,8 +27,6 @@ numerical costs scale exponentially with the number of exciting sites.
 import numpy as np
 import logging
 
-logger = logging.getLogger(__name__)
-
 from ..linalg import np_conserved as npc
 from ..linalg.charges import LegPipe
 from ..networks.momentum_mps import MomentumMPS
@@ -37,6 +35,8 @@ from ..linalg.krylov_based import GMRES, LanczosGroundState, Arnoldi
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, BoostNpcLinearOperator
 from ..algorithms.algorithm import Algorithm
 from ..algorithms.mps_common import ZeroSiteH
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'append_right_env', 'append_left_env', 'construct_orthogonal', 'PlaneWaveExcitationEngine',
