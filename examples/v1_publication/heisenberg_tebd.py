@@ -1,4 +1,5 @@
 """An example simulating the dynamics of the Neel state under Heisenberg evolution, using TEBD."""
+
 # Copyright (C) TeNPy Developers, Apache license
 import argparse
 import os
@@ -13,7 +14,9 @@ import tenpy
 
 model_params = dict(
     L=50,
-    Jx=1, Jy=1, Jz=1,
+    Jx=1,
+    Jy=1,
+    Jz=1,
 )
 model = tenpy.SpinChain(model_params)
 
@@ -24,20 +27,22 @@ engine_params = dict(
     trunc_params=dict(
         chi_max=None,  # to be set in loop
         svd_min=1e-10,
-    )
+    ),
 )
 dt_measure = engine_params['dt'] * engine_params['N_steps']
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description='Either run simulation at fixed chi, or plot results.'
-    )
+    parser = argparse.ArgumentParser(description='Either run simulation at fixed chi, or plot results.')
     parser.add_argument('--chi', type=int, default=50, help='MPS bond dimension. Default 50.')
-    parser.add_argument('--outfolder', default='./',
-                        help='Folder to write results to. Default is CWD.')
-    parser.add_argument('--plot', type=str, metavar='FOLDER', default=None,
-                        help='Plot results in the given folder instead of running the simulation.')
+    parser.add_argument('--outfolder', default='./', help='Folder to write results to. Default is CWD.')
+    parser.add_argument(
+        '--plot',
+        type=str,
+        metavar='FOLDER',
+        default=None,
+        help='Plot results in the given folder instead of running the simulation.',
+    )
     args = parser.parse_args()
 
     if args.plot is not None:
@@ -74,7 +79,7 @@ def run(chi: int):
     S = np.array(S)
     mag_z = np.array(mag_z)
     err = np.array(err)
-    imbalance = .5 * np.average(mag_z[:, ::2] - mag_z[:, 1::2], axis=1),
+    imbalance = (0.5 * np.average(mag_z[:, ::2] - mag_z[:, 1::2], axis=1),)
     return dict(t=t, S=S, mag_z=mag_z, imbalance=imbalance, err=err, chi=chi)
 
 
@@ -93,7 +98,6 @@ def plot(folder):
             res = pickle.load(f)
         results[chi] = res
 
-
     fontsize = 10
     linewidth = 5.90666  # inches
     L = model_params['L']
@@ -109,18 +113,15 @@ def plot(folder):
     assert len(chis) == 5
     plot_styles = {
         (chi, which): dict(
-            color=c,
-            label=rf'$\chi={chi}$',
-            ls=ls,
-            lw=2 if chi == max_chi else (1 if chi == min(chis) else 1.5)
+            color=c, label=rf'$\chi={chi}$', ls=ls, lw=2 if chi == max_chi else (1 if chi == min(chis) else 1.5)
         )
-        for chi, c, ls in zip(chis,
-                              ['tab:blue', 'tab:orange', 'tab:green', 'tab:purple', 'tab:red'],
-                              ['-', ':', '--', '-.', '-'])
+        for chi, c, ls in zip(
+            chis, ['tab:blue', 'tab:orange', 'tab:green', 'tab:purple', 'tab:red'], ['-', ':', '--', '-.', '-']
+        )
         for which in [None, 'S', 'Imb', 'err']
     }
 
-    aspect = .7
+    aspect = 0.7
     fig, ((ax_mag, ax_S), (ax_Imb, ax_err)) = plt.subplots(2, 2, figsize=(linewidth, aspect * linewidth))
 
     # magnetization profile

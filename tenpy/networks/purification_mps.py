@@ -158,12 +158,11 @@ class PurificationMPS(MPS):
         """Sanity check, raises ValueErrors, if something is wrong."""
         for B in self._B:
             if not set(['vL', 'vR', 'p', 'q']) <= set(B.get_leg_labels()):
-                raise ValueError("B has wrong labels " + repr(B.get_leg_labels()))
+                raise ValueError('B has wrong labels ' + repr(B.get_leg_labels()))
         super().test_sanity()
 
     @classmethod
-    def from_density_matrix(cls, sites, rho, form=None, cutoff=1e-16, normalize=True,
-                            unit_cell_width=None):
+    def from_density_matrix(cls, sites, rho, form=None, cutoff=1e-16, normalize=True, unit_cell_width=None):
         r"""Construct a purification from a single tensor `rho` of the density matrix.
 
         Given the mixed state :math:`\rho`, we diagonalize it :math:`\rho = U D U^\dagger`,
@@ -209,8 +208,16 @@ class PurificationMPS(MPS):
         psi = psi.split_legs()
         # [p0, p1, ..., p0*, p1*, ...] -> [p0, p1, ..., q0, q1, ...]
         psi.ireplace_labels([f'p{i}*' for i in range(L)], [f'q{i}' for i in range(L)])
-        return cls.from_full(sites, psi, form=form, cutoff=cutoff, normalize=normalize,
-                             bc='finite', outer_S=None, unit_cell_width=unit_cell_width)
+        return cls.from_full(
+            sites,
+            psi,
+            form=form,
+            cutoff=cutoff,
+            normalize=normalize,
+            bc='finite',
+            outer_S=None,
+            unit_cell_width=unit_cell_width,
+        )
 
     @classmethod
     def from_infiniteT(cls, sites, bc='finite', form='B', dtype=np.float64, unit_cell_width=None):
@@ -240,11 +247,11 @@ class PurificationMPS(MPS):
         """
         sites = list(sites)
         L = len(sites)
-        S = [[1.]] * (L + 1)  # trivial S: product state
+        S = [[1.0]] * (L + 1)  # trivial S: product state
         Bs = [None] * L
         for i in range(L):
             p_leg = sites[i].leg
-            B = npc.diag(1., p_leg, dtype, ['p', 'q']) / sites[i].dim**0.5
+            B = npc.diag(1.0, p_leg, dtype, ['p', 'q']) / sites[i].dim ** 0.5
             # leg `q` has the physical leg with opposite `qconj`
             B = B.add_trivial_leg(0, label='vL', qconj=+1).add_trivial_leg(1, label='vR', qconj=-1)
             Bs[i] = B
@@ -252,8 +259,9 @@ class PurificationMPS(MPS):
         return res
 
     @classmethod
-    def from_infiniteT_canonical(cls, sites, charge_sector, dtype=np.float64,
-                                 conserve_ancilla_charge=False, unit_cell_width=None):
+    def from_infiniteT_canonical(
+        cls, sites, charge_sector, dtype=np.float64, conserve_ancilla_charge=False, unit_cell_width=None
+    ):
         """Initial state corresponding to *canonical* infinite-temperature ensemble.
 
         Works only for finite boundary conditions, following the idea outlined in
@@ -290,7 +298,7 @@ class PurificationMPS(MPS):
         L = len(sites)
         assert L > 0
         chinfo = sites[0].leg.chinfo
-        assert all(s.leg.chinfo == chinfo for s in sites), "Charge Info for all sites must be identical"
+        assert all(s.leg.chinfo == chinfo for s in sites), 'Charge Info for all sites must be identical'
         # get a 'charge_tree', (list of sets with possible charges for each site, including 0 to the left)
         charge_tree = cls.get_charge_tree_for_given_charge_sector(sites, charge_sector)
         # get charges from charge_tree in correct array form
@@ -307,8 +315,7 @@ class PurificationMPS(MPS):
         if not conserve_ancilla_charge:  # cac := conserve ancilla charges
             leg_R = npc.LegCharge.from_qflat(chinfo, Q_R, qconj=-1)
         else:
-            chinfo_cac = npc.ChargeInfo(list(chinfo.mod) * 2,
-                                        chinfo.names + [n + ' ancilla' for n in chinfo.names])
+            chinfo_cac = npc.ChargeInfo(list(chinfo.mod) * 2, chinfo.names + [n + ' ancilla' for n in chinfo.names])
             Q_R_cac = chinfo_cac.make_valid(np.hstack([Q_R, -Q_R]))
             leg_R = npc.LegCharge.from_qflat(chinfo_cac, Q_R_cac, qconj=-1)
             sites_cac = []
@@ -316,8 +323,8 @@ class PurificationMPS(MPS):
             leg_p = sites[i].leg
             Q_p = leg_p.to_qflat()
             Q_L = Q_L_arrays[i]
-            Q_R = Q_L_arrays[i+1]
-            Q_R_map = dict((tuple(q),i) for i, q in enumerate(Q_R))
+            Q_R = Q_L_arrays[i + 1]
+            Q_R_map = dict((tuple(q), i) for i, q in enumerate(Q_R))
 
             leg_L = leg_R.conj()
             if not conserve_ancilla_charge:
@@ -333,16 +340,14 @@ class PurificationMPS(MPS):
                 s_cac = copy.copy(sites[i])
                 s_cac.change_charge(leg_p)  # note: if Q_p is sorted, so are Q_{p,q}_cac
                 sites_cac.append(s_cac)
-            B = npc.zeros([leg_L, leg_R, leg_p, leg_q],
-                          dtype=dtype,
-                          labels=['vL', 'vR', 'p', 'q'])
+            B = npc.zeros([leg_L, leg_R, leg_p, leg_q], dtype=dtype, labels=['vL', 'vR', 'p', 'q'])
             for j in range(leg_p.ind_len):
                 Q_p_j = Q_p[j]
                 for vL, Q_L_vL in enumerate(Q_L):
                     Q_R_vR = tuple(chinfo.make_valid(Q_L_vL + Q_p_j))
                     vR = Q_R_map.get(Q_R_vR, None)
                     if vR is not None:
-                        B[vL, vR, j, j] = 1.  # add an entry in the tensor
+                        B[vL, vR, j, j] = 1.0  # add an entry in the tensor
                     # else: dropped Q_R_vR since it can't reach charge_sector on the right any more
             Bs.append(B)
             Ss.append(np.ones(B.shape[1], np.float64))
@@ -465,7 +470,8 @@ class PurificationMPS(MPS):
             comb_legs = labels(['q'])
         contr_rho = (
             ['vR*'] + self._get_p_label('1'),  # 'vL', 'p1'
-            ['vL*'] + self._get_p_label('1*'))  # 'vL*', 'p1*'
+            ['vL*'] + self._get_p_label('1*'),
+        )  # 'vL*', 'p1*'
         mutinf = []
         coord = []
         for i in range(self.L):
@@ -491,14 +497,9 @@ class PurificationMPS(MPS):
     def swap_sites(self, i, swapOP='auto', trunc_par={}):
         raise NotImplementedError()
 
-    def sample_measurements(self,
-                            sample_q,
-                            first_site=0,
-                            last_site=None,
-                            ops=None,
-                            rng=None,
-                            norm_tol=1.e-12,
-                            complex_amplitude=True):
+    def sample_measurements(
+        self, sample_q, first_site=0, last_site=None, ops=None, rng=None, norm_tol=1.0e-12, complex_amplitude=True
+    ):
         """Sample measurement results in the computational basis.
 
         See :meth:`tenpy.networks.mps.MPS.sample_measurements` for documentation of the function.
@@ -546,8 +547,10 @@ class PurificationMPS(MPS):
 
         """
         if complex_amplitude:
-            msg = ("Sampling a purification MPS only retuns the probability of the sampled string; "
-                   "rerun with 'complex_amplitude=False'.")
+            msg = (
+                'Sampling a purification MPS only retuns the probability of the sampled string; '
+                "rerun with 'complex_amplitude=False'."
+            )
             raise ValueError(msg)
 
         if last_site is None:
@@ -555,7 +558,7 @@ class PurificationMPS(MPS):
         if rng is None:
             rng = np.random.default_rng()
         sigmas = []
-        total_probability = 1.
+        total_probability = 1.0
         theta = self.get_theta(first_site, n=1).replace_labels(['p0', 'q0'], ['p', 'q'])
         for i in range(first_site, last_site + 1):
             # theta = wave function in basis vL [sigmas...] p q vR
@@ -565,8 +568,8 @@ class PurificationMPS(MPS):
             if ops is not None:
                 op_name = ops[(i - first_site) % len(ops)]
                 op = site.get_op(op_name).transpose(['p', 'p*'])
-                if npc.norm(op - op.conj().transpose()) > 1.e-13:
-                    raise ValueError(f"measurement operator {op_name!r} not hermitian")
+                if npc.norm(op - op.conj().transpose()) > 1.0e-13:
+                    raise ValueError(f'measurement operator {op_name!r} not hermitian')
                 W, V = npc.eigh(op)
                 theta = npc.tensordot(V.conj(), theta, axes=['p*', 'p']).replace_label('eig*', 'p')
             else:
@@ -578,26 +581,26 @@ class PurificationMPS(MPS):
                 rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']])
                 # probabilities p(sigma) = <sigma|rho|sigma>
                 rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
-                if abs(np.sum(rho_diag) - 1.) > norm_tol:
-                    raise ValueError("not normalized to `norm_tol`")
+                if abs(np.sum(rho_diag) - 1.0) > norm_tol:
+                    raise ValueError('not normalized to `norm_tol`')
                 rho_diag /= np.sum(rho_diag)
                 sigma = rng.choice(site.dim, p=rho_diag)  # randomly select index from probabilities
-                sigmas.append(W[sigma]) # return eigenvalue if an op was specified
+                sigmas.append(W[sigma])  # return eigenvalue if an op was specified
                 theta = theta.take_slice(sigma, 'p')  # project to sigma in theta; now has legs vL (trivial), q, vR
-                probability = rho_diag[sigma] # this is probability of seeing sigma conditioned on previous results.
+                probability = rho_diag[sigma]  # this is probability of seeing sigma conditioned on previous results.
                 # rho_diag[sigma] which should be the same as the norm of theta squared
                 # expect_probability = npc.tensordot(theta.conj(), theta,
                 #                                    axes=(['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']))
                 # assert np.isclose(probability, expect_probability)
-                total_probability *= probability    # probability of p outcome
+                total_probability *= probability  # probability of p outcome
             else:
                 # Sample p
                 # physical RDM on site i
                 rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']])
                 # probabilities p(sigma) = <sigma|rho|sigma>
                 rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
-                if abs(np.sum(rho_diag) - 1.) > norm_tol:
-                    raise ValueError("not normalized to `norm_tol`")
+                if abs(np.sum(rho_diag) - 1.0) > norm_tol:
+                    raise ValueError('not normalized to `norm_tol`')
                 rho_diag /= np.sum(rho_diag)
                 sigma_1 = rng.choice(site.dim, p=rho_diag)  # randomly select index from probabilities
                 # rho_diag[sigma_1] is probability of p outcome, conditioned on all previous outcomes
@@ -606,37 +609,40 @@ class PurificationMPS(MPS):
                 theta = theta.take_slice([sigma_1], ['p'])  # project to sigma in theta; now has legs vL (trivial), vR
 
                 # Sample q
-                rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*'], ['vL', 'vR']]) # physical RDM on site i
+                rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*'], ['vL', 'vR']])  # physical RDM on site i
                 # probabilities p(sigma) = <sigma|rho|sigma>
                 rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
                 # rho_diag will nothave trace = 1 since we didn't normalize theta after slicing.
                 rho_diag /= np.sum(rho_diag)
                 sigma_2 = rng.choice(site.dim, p=rho_diag)  # randomly select index from probabilities
-                probability *= rho_diag[sigma_2] # probabilty of all outcomes seen so far.
+                probability *= rho_diag[sigma_2]  # probabilty of all outcomes seen so far.
                 theta = theta.take_slice([sigma_2], ['q'])  # project to sigma in theta; now has legs vL (trivial), vR
 
-                sigmas.append(W[sigma_1]) # For ancilla, we do not return the sampled index W[sigma_2] since the outcome
+                sigmas.append(
+                    W[sigma_1]
+                )  # For ancilla, we do not return the sampled index W[sigma_2] since the outcome
                 # is in an arbitrary basis.
                 # rho_diag[sigma] which should be the same as the norm of theta squared
                 # expect_probability = npc.tensordot(theta.conj(), theta, axes=(['vL*', 'vR*'], ['vL', 'vR']))
                 # assert np.isclose(probability, expect_probability)
-                total_probability *= probability    # probability of q outcome
+                total_probability *= probability  # probability of q outcome
 
             if i != last_site:
                 # Move orthogonality center to the next site
-                theta = theta / npc.norm(theta) # renormalize
+                theta = theta / npc.norm(theta)  # renormalize
                 B = self.get_B(i + 1)
                 if sample_q:
                     theta = npc.tensordot(theta, B, axes=['vR', 'vL'])
                 else:
-                    Q, R = npc.qr(theta.combine_legs(['vL', 'q']),
-                                  inner_labels=['vR', 'vL'],
-                                  pos_diag_R=True,
-                                  )
+                    Q, R = npc.qr(
+                        theta.combine_legs(['vL', 'q']),
+                        inner_labels=['vR', 'vL'],
+                        pos_diag_R=True,
+                    )
                     theta = npc.tensordot(R, B, axes=['vR', 'vL'])
                 # B is right-canonical -> theta still normalized
             elif self.bc == 'finite' and first_site == 0 and last_site == self.L - 1 and sample_q:
-                assert theta.shape == (1,1) # This contains the phase; but we don't want this since
+                assert theta.shape == (1, 1)  # This contains the phase; but we don't want this since
                 # we are returning the probability, not the weight.
         return sigmas, total_probability
 
@@ -660,9 +666,7 @@ class PurificationMPS(MPS):
             if r == js[-1]:
                 op2, _ = self.get_op(ops2, r)
                 Cij = npc.tensordot(op2, C, axes=['p*', 'p'])
-                Cij = npc.inner(B.conj(),
-                                Cij,
-                                axes=[['vL*', 'p*', 'q*', 'vR*'], ['vR*', 'p', 'q', 'vR']])
+                Cij = npc.inner(B.conj(), Cij, axes=[['vL*', 'p*', 'q*', 'vR*'], ['vR*', 'p', 'q', 'vR']])
                 res.append(Cij)
                 js.pop()
             if len(js) > 0:
@@ -707,10 +711,10 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
     # cac := conserve_ancilla_charge
     model = model.copy()
     chinfo = model.lat.unit_cell[0].leg.chinfo
-    chinfo_cac = npc.ChargeInfo(list(chinfo.mod) * 2,
-                                chinfo.names + [n + ' ancilla' for n in chinfo.names])
+    chinfo_cac = npc.ChargeInfo(list(chinfo.mod) * 2, chinfo.names + [n + ' ancilla' for n in chinfo.names])
 
     converted_sites_cache = {}
+
     def _convert_site(site):
         s = converted_sites_cache.get(site, None)
         if s is not None:
@@ -742,10 +746,7 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
                     Q = np.hstack([leg.charges, -leg.charges])  # wL, wR
                 else:
                     Q = np.hstack([leg.charges, np.zeros_like(leg.charges)])  # p
-                W.legs[i] = npc.LegCharge.from_qind(chinfo_cac,
-                                                    leg.slices,
-                                                    chinfo_cac.make_valid(Q),
-                                                    leg.qconj)
+                W.legs[i] = npc.LegCharge.from_qind(chinfo_cac, leg.slices, chinfo_cac.make_valid(Q), leg.qconj)
             W.qtotal = np.hstack([W.qtotal, np.zeros_like(W.qtotal)])
             W.legs[3] = W.legs[2].conj()
             new_W.append(W)
@@ -759,7 +760,7 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
         for i, H in enumerate(H_bond):
             if H is None:
                 continue
-            leg_p0 = sites[(i-1) % L].leg
+            leg_p0 = sites[(i - 1) % L].leg
             leg_p1 = sites[i].leg
             H = H.transpose(['p0', 'p1', 'p0*', 'p1*'])  # copy!
             H.chinfo = chinfo_cac

@@ -14,15 +14,15 @@ import sphinx_rtd_theme  # noqa F401
 REPO_PREFIX = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, REPO_PREFIX)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'sphinx_ext')))
-GITHUBBASE = "https://github.com/tenpy/tenpy"
-GITHUBTOYCODES = "https://github.com/tenpy/tenpy_toycodes"
+GITHUBBASE = 'https://github.com/tenpy/tenpy'
+GITHUBTOYCODES = 'https://github.com/tenpy/tenpy_toycodes'
 
 if not sys.version_info >= (3, 5):
-    print("ERROR: old python version, called by python version\n" + sys.version)
+    print('ERROR: old python version, called by python version\n' + sys.version)
     sys.exit(1)
 
 # don't use compiled version to avoid problems with doc-strings of compiled functions
-os.environ["TENPY_NO_CYTHON"] = "true"
+os.environ['TENPY_NO_CYTHON'] = 'true'
 try:
     import tenpy
 except ImportError:
@@ -68,7 +68,7 @@ language = None  # no translations
 pygments_style = 'sphinx'  # syntax highlighting style
 
 # If true, keep warnings as "system message" paragraphs in the built documents.
-#keep_warnings = False
+# keep_warnings = False
 
 # General information about the project.
 project = 'TeNPy'
@@ -82,9 +82,7 @@ language = 'en'
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This patterns also effect to html_static_path and html_extra_path
-exclude_patterns = [
-    'sphinx_build', 'Thumbs.db', '.DS_Store', 'notebooks/README.rst', 'notebooks/_template.ipynb'
-]
+exclude_patterns = ['sphinx_build', 'Thumbs.db', '.DS_Store', 'notebooks/README.rst', 'notebooks/_template.ipynb']
 
 # -- example stubs  -=-----------------------------------------------------
 
@@ -109,14 +107,16 @@ def create_example_stubs():
             if os.path.exists(outfile):
                 continue
             dirs = '/'.join(subfolders)
-            sentence = ("`on github <{base}/blob/main/{dirs!s}/{fn!s}>`_ "
-                        "(`download <{base}/raw/main/{dirs!s}/{fn!s}>`_).")
+            sentence = (
+                '`on github <{base}/blob/main/{dirs!s}/{fn!s}>`_ (`download <{base}/raw/main/{dirs!s}/{fn!s}>`_).'
+            )
             sentence = sentence.format(dirs=dirs, fn=fn, base=GITHUBBASE)
             include = f'.. literalinclude:: /../{dirs!s}/{fn!s}'
             text = '\n'.join([fn, '=' * len(fn), '', sentence, '', include, ''])
             with open(outfile, 'w') as f:
                 f.write(text)
     # done
+
 
 def create_toycode_stubs():
     """Create stub files for examples to include them in the documentation."""
@@ -125,9 +125,11 @@ def create_toycode_stubs():
         os.mkdir(outdir)
     folder = os.path.join(os.path.dirname(__file__), 'toycodes', 'tenpy_toycodes')
     if not os.path.isdir(folder):
-        warnings.warn(f"didn't clone git submodule doc/toycodes from {GITHUBTOYCODES} \n"
-                      "Use `git clone --recursive` or after cloning "
-                      "`git submodule init && git submodule update`.")
+        warnings.warn(
+            f"didn't clone git submodule doc/toycodes from {GITHUBTOYCODES} \n"
+            'Use `git clone --recursive` or after cloning '
+            '`git submodule init && git submodule update`.'
+        )
         return
     files = os.listdir(folder)
     excludes = ['__init__.py']
@@ -136,8 +138,10 @@ def create_toycode_stubs():
         outfile = os.path.join(outdir, os.path.splitext(fn)[0] + '.rst')
         if os.path.exists(outfile):
             continue
-        sentence = ("`on github <{base}/blob/main/tenpy_toycodes/{fn!s}>`_ "
-                    "(`download <{base}/raw/main/tenpy_toycodes/{fn!s}>`_).")
+        sentence = (
+            '`on github <{base}/blob/main/tenpy_toycodes/{fn!s}>`_ '
+            '(`download <{base}/raw/main/tenpy_toycodes/{fn!s}>`_).'
+        )
         sentence = sentence.format(fn=fn, base=GITHUBTOYCODES)
         include = f'.. literalinclude:: /toycodes/tenpy_toycodes/{fn!s}'
         text = '\n'.join([fn, '=' * len(fn), '', sentence, '', include, ''])
@@ -187,8 +191,7 @@ def stitch_changelog_latest():
         '.. only :: comment\n',
         '\n',
         '    Contents are modified by ``stitch_changelog_latest`` in ``doc/conf.py``\n',
-        '    Any ``.txt`` file in ``doc/changelog/latest/`` is included verbatim.\n'
-        '\n',
+        '    Any ``.txt`` file in ``doc/changelog/latest/`` is included verbatim.\n\n',
         '\n',
     ]
 
@@ -212,21 +215,21 @@ stitch_changelog_latest()
 
 html_theme = 'sphinx_rtd_theme'
 
-html_logo = "images/logo.png"
-html_favicon = "images/logo.ico"
+html_logo = 'images/logo.png'
+html_favicon = 'images/logo.ico'
 html_static_path = ['_static']
 html_last_updated_fmt = '%b %d, %Y'
 
 html_css_files = [
-    "custom.css",  # to highlight targets
+    'custom.css',  # to highlight targets
 ]
 
 html_context = {
-    "display_github": True,  # Integrate GitHub
-    "github_user": "tenpy",  # Username
-    "github_repo": "tenpy",  # Repo name
-    "github_version": "main",  # Version
-    "conf_py_path": "/doc/",  # Path in the checkout to the docs root
+    'display_github': True,  # Integrate GitHub
+    'github_user': 'tenpy',  # Username
+    'github_repo': 'tenpy',  # Repo name
+    'github_version': 'main',  # Version
+    'conf_py_path': '/doc/',  # Path in the checkout to the docs root
 }
 
 html_theme_options = {
@@ -301,7 +304,7 @@ napoleon_custom_sections = ['Options']
 # -- sphinx.ext.inheritance_diagram ---------------------------------------
 
 inheritance_graph_attrs = {
-    'rankdir': "TB",  # top-to-bottom
+    'rankdir': 'TB',  # top-to-bottom
     'fontsize': 14,
     'ratio': 'compress',
 }
@@ -324,8 +327,7 @@ extlinks = {
     'doi': ('https://dx.doi.org/%s', 'doi:%s'),
     'issue': (GITHUBBASE + '/issues/%s', 'issue #%s'),
     'pull': (GITHUBBASE + '/pulls/%s', 'PR #%s'),
-    'forum': ('https://tenpy.johannes-hauschild.de/viewtopic.php?t=%s',
-              'community forum (topic %s)')
+    'forum': ('https://tenpy.johannes-hauschild.de/viewtopic.php?t=%s', 'community forum (topic %s)'),
 }
 
 
@@ -365,24 +367,24 @@ def linkcode_resolve(domain, info):
         lineno = None
 
     if lineno:
-        linespec = f"#L{lineno}-L{lineno + len(source) + 1}"
+        linespec = f'#L{lineno}-L{lineno + len(source) + 1}'
     else:
-        linespec = ""
+        linespec = ''
     fn = os.path.relpath(fn, start=os.path.dirname(tenpy.__file__))
     if fn.startswith('..'):
         return None
 
     if tenpy.version.released:
-        return f"{GITHUBBASE}/blob/v{tenpy.__version__}/tenpy/{fn}{linespec}"
+        return f'{GITHUBBASE}/blob/v{tenpy.__version__}/tenpy/{fn}{linespec}'
     else:
-        return f"{GITHUBBASE}/blob/main/tenpy/{fn}{linespec}"
+        return f'{GITHUBBASE}/blob/main/tenpy/{fn}{linespec}'
 
 
 # -- sphinx_cfg_options ---------------------------------------------------
 
 cfg_options_default_in_summary_table = False
 cfg_options_parse_comma_sep_names = True
-cfg_options_always_include = ["Config"]
+cfg_options_always_include = ['Config']
 
 # -- sphinxcontrib.bibtex -------------------------------------------------
 

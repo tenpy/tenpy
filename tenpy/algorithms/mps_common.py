@@ -136,8 +136,8 @@ class Sweep(Algorithm):
     use_mixer_by_default = False  # The default for the "mixer" config option
 
     def __init__(self, psi, model, options, *, orthogonal_to=None, **kwargs):
-        if not hasattr(self, "EffectiveH"):
-            raise NotImplementedError("Subclass needs to set EffectiveH")
+        if not hasattr(self, 'EffectiveH'):
+            raise NotImplementedError('Subclass needs to set EffectiveH')
         super().__init__(psi, model, options, **kwargs)
         options = self.options
 
@@ -161,7 +161,7 @@ class Sweep(Algorithm):
     def S_inv_cutoff(self):
         # high cutoff for regular inverse of S, higher cutoff if we need to (pseudo-) invert
         # a matrix (S can be 2D while the mixer is on)
-        return 1.e-8 if any(isinstance(S, npc.Array) for S in self.psi._S) else 1.e-15
+        return 1.0e-8 if any(isinstance(S, npc.Array) for S in self.psi._S) else 1.0e-15
 
     def get_resume_data(self, sequential_simulations=False):
         data = super().get_resume_data(sequential_simulations)
@@ -173,8 +173,7 @@ class Sweep(Algorithm):
                     data['orthogonal_to'] = [e.ket for e in self.ortho_to_envs]
                 else:
                     # need the environments as well
-                    data['orthogonal_to'] = [e.get_initialization_data(include_ket=True)
-                                            for e in self.ortho_to_envs]
+                    data['orthogonal_to'] = [e.get_initialization_data(include_ket=True) for e in self.ortho_to_envs]
         return data
 
     @property
@@ -243,9 +242,8 @@ class Sweep(Algorithm):
             # if legs are incompatible, MPOEnvironment.init_first_LP_last_RP will regenerate
             init_env_data = self.env.get_initialization_data()
         init_env_data = resume_data.get('init_env_data', init_env_data)
-        if not self.psi.finite and init_env_data and \
-                self.options.get('chi_list', None) is not None:
-            warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
+        if not self.psi.finite and init_env_data and self.options.get('chi_list', None) is not None:
+            warnings.warn('Re-using environment with `chi_list` set! Do you want this?')
 
         # actually initialize the environment
         self._init_mpo_env(H, init_env_data)
@@ -274,7 +272,7 @@ class Sweep(Algorithm):
         if orthogonal_to:
             if not self.finite:
                 raise ValueError("Can't orthogonalize for infinite MPS: overlap not well defined.")
-            logger.info("got %d states to orthogonalize against", len(orthogonal_to))
+            logger.info('got %d states to orthogonalize against', len(orthogonal_to))
             self.ortho_to_envs = []
             for i, ortho in enumerate(orthogonal_to):
                 if isinstance(ortho, dict):
@@ -321,12 +319,12 @@ class Sweep(Algorithm):
             for k, v in self.chi_list.items():
                 if v is None:
                     self.chi_list[k] = chi_max = self.trunc_params['chi_max']
-                    logger.info("Setting chi_list[%d]=%d", k, chi_max)
+                    logger.info('Setting chi_list[%d]=%d', k, chi_max)
             done = [k for k in self.chi_list.keys() if k < self.sweeps]
             if len(done) > 0:
                 chi_max = self.chi_list[max(done)]
                 self.trunc_params['chi_max'] = chi_max
-                logger.info("Setting chi_max=%d", chi_max)
+                logger.info('Setting chi_max=%d', chi_max)
         self.time0 = time.time()
 
     def environment_sweeps(self, N_sweeps):
@@ -340,7 +338,7 @@ class Sweep(Algorithm):
         """
         if N_sweeps <= 0:
             return
-        logger.info("start environment_sweep")
+        logger.info('start environment_sweep')
         for k in range(N_sweeps):
             self.sweep(optimize=False)
 
@@ -378,7 +376,7 @@ class Sweep(Algorithm):
         if optimize and self.chi_list is not None:
             new_chi_max = self.chi_list.get(self.sweeps, None)
             if new_chi_max is not None:
-                logger.info("Setting chi_max=%d", new_chi_max)
+                logger.info('Setting chi_max=%d', new_chi_max)
                 self.trunc_params['chi_max'] = new_chi_max
                 if self.options.get('chi_list_reactivates_mixer', True, bool):
                     self.mixer_activate()
@@ -389,7 +387,7 @@ class Sweep(Algorithm):
             chi_max = self.trunc_params.get('chi_max', None, int)
             if chi_max is None:
                 chi_max = int(np.max(self.psi.chi))
-                logger.info("Setting chi_max for env sweeps=%d", chi_max)
+                logger.info('Setting chi_max for env sweeps=%d', chi_max)
                 self.trunc_params['chi_max'] = chi_max
 
         # the actual sweep
@@ -398,7 +396,7 @@ class Sweep(Algorithm):
             self.move_right = move_right
             self.update_LP_RP = update_LP_RP
             self._cache_optimize()
-            logger.debug("in sweep: i0 =%d", i0)
+            logger.debug('in sweep: i0 =%d', i0)
             # --------- the main work --------------
             theta = self.prepare_update_local()
             update_data = self.update_local(theta, optimize=optimize)
@@ -448,15 +446,15 @@ class Sweep(Algorithm):
             assert L >= 2
             i0s = list(range(0, L)) + list(range(L, 0, -1))
             move_right = [True] * L + [False] * L
-            update_LP_RP = [[True, True]] * 2 + [[True, False]] * (L-2) + \
-                           [[True, True]] * 2 + [[False, True]] * (L-2)
+            update_LP_RP = (
+                [[True, True]] * 2 + [[True, False]] * (L - 2) + [[True, True]] * 2 + [[False, True]] * (L - 2)
+            )
         elif n == 1:
             i0s = list(range(0, L)) + list(range(L, 0, -1))
             move_right = [True] * L + [False] * L
-            update_LP_RP = [[True, True]] + [[True, False]] * (L-1) + \
-                           [[True, True]] + [[False, True]] * (L-1)
+            update_LP_RP = [[True, True]] + [[True, False]] * (L - 1) + [[True, True]] + [[False, True]] * (L - 1)
         else:
-            assert False, "n_optimize is neither 1 nor 2!?"
+            assert False, 'n_optimize is neither 1 nor 2!?'
         return zip(i0s, move_right, update_LP_RP)
 
     def _cache_optimize(self):
@@ -493,7 +491,7 @@ class Sweep(Algorithm):
                     'preload_LP': i0 - 1,
                 }
         else:
-            raise ValueError(f"unexpected `n_optimize` = {self.n_optimize!r}")
+            raise ValueError(f'unexpected `n_optimize` = {self.n_optimize!r}')
         for env in self._all_envs:
             env.cache_optimize(**kwargs)
 
@@ -566,7 +564,7 @@ class Sweep(Algorithm):
             If :attr:`combine` is set, it should also contain the `U` and `VH` from the SVD.
 
         """
-        raise NotImplementedError("needs to be overridden by subclass")
+        raise NotImplementedError('needs to be overridden by subclass')
 
     def update_env(self, **update_data):
         """Update the left and right environments after an update of the state.
@@ -648,7 +646,7 @@ class Sweep(Algorithm):
                 for env in all_envs:
                     env.del_RP(i_R)
         else:
-            assert False, "n_optimize != 1, 2"
+            assert False, 'n_optimize != 1, 2'
         self.eff_H = None  # free references to environments held by eff_H
         # done
 
@@ -689,8 +687,7 @@ class Sweep(Algorithm):
 
         Set ``self.mixer=None`` and revert any other effects of :meth:`mixer_activate`.
         """
-        logger.info(f'deactivate {self.mixer.__class__.__name__} with final amplitude '
-                    f'{self.mixer.amplitude}')
+        logger.info(f'deactivate {self.mixer.__class__.__name__} with final amplitude {self.mixer.amplitude}')
         self.mixer = None
 
     def mixer_cleanup(self):
@@ -731,23 +728,24 @@ class Sweep(Algorithm):
             B_L = self.psi.get_B(i - 1, form=None)
             B_R = self.psi.get_B(i, form=None)
             # Update psi._B to the left and right
-            if form_L == 0.:  # A or Gamma to the left
+            if form_L == 0.0:  # A or Gamma to the left
                 B_L = npc.tensordot(B_L, U, ['vR', 'vL'])
-            elif form_L == 1.:  # B or C to the left
+            elif form_L == 1.0:  # B or C to the left
                 X_L = V.conj().replace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                 B_L = npc.tensordot(B_L, X_L, ['vR', 'vL'])
             else:
-                msg = (f'Array S are only supported in A, B, Th or G form. '
-                       f'Got form {self.psi.form[self.psi._to_valid_site_index(i - 1)]} on site {i - 1}.')
+                msg = (
+                    f'Array S are only supported in A, B, Th or G form. '
+                    f'Got form {self.psi.form[self.psi._to_valid_site_index(i - 1)]} on site {i - 1}.'
+                )
                 raise RuntimeError(msg)
-            if form_R == 0.:  # B or Gamma to the right
+            if form_R == 0.0:  # B or Gamma to the right
                 B_R = npc.tensordot(V, B_R, ['vR', 'vL'])
-            elif form_R == 1.:  # A or C to the left
+            elif form_R == 1.0:  # A or C to the left
                 X_R = U.conj().replace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                 B_R = npc.tensordot(X_R, B_R, ['vR', 'vL'])
             else:
-                msg = (f'Array S are only supported in A, B, Th or G form. '
-                       f'Got form {self.psi.form[i]} on site {i}.')
+                msg = f'Array S are only supported in A, B, Th or G form. Got form {self.psi.form[i]} on site {i}.'
                 raise RuntimeError(msg)
             self.psi.set_B(i - 1, B_L, form=self.psi.form[i - 1])
             self.psi.set_SL(i, S)
@@ -755,7 +753,7 @@ class Sweep(Algorithm):
 
             # Update environment LP and RP
             assert self.env.bra is self.psi
-            update_env_ket_leg = (self.env.ket is self.psi)
+            update_env_ket_leg = self.env.ket is self.psi
             if self.env.has_LP(i):
                 LP = self.env.get_LP(i)
                 LP = npc.tensordot(LP, U.conj(), ['vR*', 'vL*'])
@@ -809,8 +807,13 @@ class IterativeSweeps(Sweep):
             self.status_update(iteration_start_time=iteration_start_time)
             is_first_sweep = False
         self.post_run_cleanup()
-        consistency_check(np.max(self.trunc_err_list), self.options, 'max_trunc_err', 1e-4,
-                          'Maximum truncation error (``max_trunc_err``) exceeded.')
+        consistency_check(
+            np.max(self.trunc_err_list),
+            self.options,
+            'max_trunc_err',
+            1e-4,
+            'Maximum truncation error (``max_trunc_err``) exceeded.',
+        )
         return result
 
     def pre_run_initialize(self):
@@ -836,7 +839,7 @@ class IterativeSweeps(Sweep):
             iteration
 
         """
-        raise NotImplementedError("Subclasses should implement this.")
+        raise NotImplementedError('Subclasses should implement this.')
 
     def status_update(self, iteration_start_time: float):
         """Emits a status message to the logging system after an iteration.
@@ -850,16 +853,17 @@ class IterativeSweeps(Sweep):
         # only print the bare bones information that is guaranteed to be available
         # subclasses should overwrite this
         logger.info(
-            "checkpoint after sweep %(sweeps)d\n"
-            "Current memory usage %(mem).1fMB, wall time: %(wall_time).1fs\n"
-            "chi: %(chi)s\n"
-            "%(sep)s", {
+            'checkpoint after sweep %(sweeps)d\n'
+            'Current memory usage %(mem).1fMB, wall time: %(wall_time).1fs\n'
+            'chi: %(chi)s\n'
+            '%(sep)s',
+            {
                 'sweeps': self.sweeps,
                 'mem': memory_usage(),
                 'wall_time': time.time() - iteration_start_time,
                 'chi': self.psi.chi if self.psi.L < 40 else max(self.psi.chi),
-                'sep': "=" * 80,
-            }
+                'sep': '=' * 80,
+            },
         )
 
     def stopping_criterion(self, iteration_start_time: float) -> bool:
@@ -903,14 +907,15 @@ class IterativeSweeps(Sweep):
             if self.mixer is None:
                 return True
             else:
-                logger.info(f"{self.__class__.__name__}: Convergence criterion reached with "
-                            "enabled mixer. Disable mixer and continue.")
+                logger.info(
+                    f'{self.__class__.__name__}: Convergence criterion reached with '
+                    'enabled mixer. Disable mixer and continue.'
+                )
                 self.mixer_deactivate()
                 return False
         if iteration_start_time - self.time0 > max_seconds:
             self.shelve = True
-            logger.warning(f'{self.__class__.__name__}: maximum time limit reached. '
-                           f'Shelve simulation.')
+            logger.warning(f'{self.__class__.__name__}: maximum time limit reached. Shelve simulation.')
             return True
         return False
 
@@ -920,7 +925,7 @@ class IterativeSweeps(Sweep):
         Does not cover any other reasons to abort, such as reaching a time limit.
         Such checks are covered by :meth:`stopping_criterion`.
         """
-        raise NotImplementedError("Subclasses should implement this.")
+        raise NotImplementedError('Subclasses should implement this.')
 
     def post_run_cleanup(self):
         """Perform any final steps or clean up after the main loop has terminated."""
@@ -977,7 +982,7 @@ class EffectiveH(NpcLinearOperator):
     acts_on = None
 
     def __init__(self, env, i0, combine=False, move_right=True):
-        raise NotImplementedError("This function should be implemented in derived classes")
+        raise NotImplementedError('This function should be implemented in derived classes')
 
     def combine_theta(self, theta):
         """Combine the legs of `theta`, such that it fits to how we combined the legs of `self`.
@@ -993,7 +998,7 @@ class EffectiveH(NpcLinearOperator):
             Wave function with labels as given by `self.acts_on`.
 
         """
-        raise NotImplementedError("This function should be implemented in derived classes")
+        raise NotImplementedError('This function should be implemented in derived classes')
 
     def update_LP(self, env, i, U=None):
         """Equivalent to ``env.get_LP(i, store=True)``; optimized for `combine`.
@@ -1091,8 +1096,7 @@ class OneSiteH(EffectiveH):
         self.dtype = env.H.dtype
         self.combine = combine
         self.move_right = move_right
-        self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
-                  self.RP.get_leg('vL').ind_len)
+        self.N = self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len * self.RP.get_leg('vL').ind_len
         if combine:
             self.combine_Heff(env)
 
@@ -1108,8 +1112,7 @@ class OneSiteH(EffectiveH):
         self.dtype = LP.dtype
         self.combine = combine
         self.move_right = move_right
-        self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
-                  self.RP.get_leg('vL').ind_len)
+        self.N = self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len * self.RP.get_leg('vL').ind_len
         return self
 
     def matvec(self, theta):
@@ -1194,12 +1197,10 @@ class OneSiteH(EffectiveH):
         if self.combine:
             if self.move_right:
                 contr = npc.tensordot(self.LHeff, self.RP, axes=['wR', 'wL'])
-                contr = contr.combine_legs([['(vR*.p0)', 'vL*'], ['(vR.p0*)', 'vL']],
-                                           qconj=[+1, -1])
+                contr = contr.combine_legs([['(vR*.p0)', 'vL*'], ['(vR.p0*)', 'vL']], qconj=[+1, -1])
             else:
                 contr = npc.tensordot(self.LP, self.RHeff, axes=['wR', 'wL'])
-                contr = contr.combine_legs([['vR*', '(p0.vL*)'], ['vR', '(p0*.vL)']],
-                                           qconj=[+1, -1])
+                contr = contr.combine_legs([['vR*', '(p0.vL*)'], ['vR', '(p0*.vL)']], qconj=[+1, -1])
         else:
             contr = npc.tensordot(self.LP, self.W0, axes=['wR', 'wL'])
             contr = npc.tensordot(contr, self.RP, axes=['wR', 'wL'])
@@ -1308,8 +1309,12 @@ class TwoSiteH(EffectiveH):
         # 'wL', 'wR', 'p1', 'p1*'
         self.dtype = env.H.dtype
         self.combine = combine
-        self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
-                  self.W1.get_leg('p1').ind_len * self.RP.get_leg('vL').ind_len)
+        self.N = (
+            self.LP.get_leg('vR').ind_len
+            * self.W0.get_leg('p0').ind_len
+            * self.W1.get_leg('p1').ind_len
+            * self.RP.get_leg('vL').ind_len
+        )
         if combine:
             self.combine_Heff(env)
 
@@ -1381,22 +1386,19 @@ class TwoSiteH(EffectiveH):
 
         """
         if self.combine:
-            theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']],
-                                       pipes=[self.pipeL, self.pipeR])
+            theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[self.pipeL, self.pipeR])
         return theta.itranspose(self.acts_on)
 
     def to_matrix(self):
         """Contract `self` to a matrix."""
         if self.combine:
             contr = npc.tensordot(self.LHeff, self.RHeff, axes=['wR', 'wL'])
-            contr = contr.combine_legs([['(vR*.p0)', '(p1.vL*)'], ['(vR.p0*)', '(p1*.vL)']],
-                                       qconj=[+1, -1])
+            contr = contr.combine_legs([['(vR*.p0)', '(p1.vL*)'], ['(vR.p0*)', '(p1*.vL)']], qconj=[+1, -1])
         else:
             contr = npc.tensordot(self.LP, self.W0, axes=['wR', 'wL'])
             contr = npc.tensordot(contr, self.W1, axes=['wR', 'wL'])
             contr = npc.tensordot(contr, self.RP, axes=['wR', 'wL'])
-            contr = contr.combine_legs([['vR*', 'p0', 'p1', 'vL*'], ['vR', 'p0*', 'p1*', 'vL']],
-                                       qconj=[+1, -1])
+            contr = contr.combine_legs([['vR*', 'p0', 'p1', 'vL*'], ['vR', 'p0*', 'p1*', 'vL']], qconj=[+1, -1])
         return contr
 
     def adjoint(self):
@@ -1608,15 +1610,15 @@ class Mixer:
     """
 
     can_decompose_1site = False
-    _default_amplitude = 1.e-5
-    _default_decay = 2.
+    _default_amplitude = 1.0e-5
+    _default_decay = 2.0
     _default_disable_after = 15
 
     def __init__(self, options, sweep_activated=0):
         self.options = options = asConfig(options, 'Mixer')
         self.amplitude = options.get('amplitude', self._default_amplitude, 'real')
         self.decay = decay = options.get('decay', self._default_decay, 'real')
-        assert decay is None or decay >= 1.
+        assert decay is None or decay >= 1.0
         self.disable_after = disable_after = options.get('disable_after', self._default_disable_after, int)
         assert disable_after is None or disable_after > 0
         self.sweep_activated = sweep_activated
@@ -1639,7 +1641,7 @@ class Mixer:
         if self.disable_after is None:
             should_disable = False
         else:
-            should_disable = (sweeps >= self.sweep_activated + self.disable_after)
+            should_disable = sweeps >= self.sweep_activated + self.disable_after
         if self.amplitude is not None and self.decay is not None:
             # otherwise the mixer has no amplitude or it should not decay
             self.amplitude /= self.decay
@@ -1650,8 +1652,9 @@ class Mixer:
             return None
         return self
 
-    def mixed_svd_2site(self, engine: Sweep, theta: npc.Array, i0: int, mix_left: bool,
-                        mix_right: bool, qtotal_LR=[None, None]):
+    def mixed_svd_2site(
+        self, engine: Sweep, theta: npc.Array, i0: int, mix_left: bool, mix_right: bool, qtotal_LR=[None, None]
+    ):
         """Mix and SVD-like decompose a two-site wavefunction.
 
         The goal is to split theta as follows::
@@ -1758,8 +1761,9 @@ class Mixer:
         msg = f'{self.__class__.__name__} does not implement mix_and_decompose_1site'
         raise NotImplementedError(msg)
 
-    def mix_and_decompose_2site(self, engine: Sweep, theta: npc.Array, i0: int, mix_left: bool,
-                                mix_right: bool, qtotal_LR=None):
+    def mix_and_decompose_2site(
+        self, engine: Sweep, theta: npc.Array, i0: int, mix_left: bool, mix_right: bool, qtotal_LR=None
+    ):
         """Decompose two-site wavefunction and expand/mix enclosed bond(s).
 
         This is a weaker version of :meth:`mixed_svd_2site`. The decomposition is also::
@@ -1866,14 +1870,14 @@ def _mix_LR(H, i0, amplitude):
     """
     chi_MPO = H.get_W(i0).get_leg('wR').ind_len
     IdL, IdR = H.get_IdL(i0 + 1), H.get_IdR(i0)
-    mix_L = np.full((chi_MPO, ), amplitude)
-    mix_R = np.full((chi_MPO, ), amplitude)
-    one = 1. if not H.explicit_plus_hc else 0.5
+    mix_L = np.full((chi_MPO,), amplitude)
+    mix_R = np.full((chi_MPO,), amplitude)
+    one = 1.0 if not H.explicit_plus_hc else 0.5
     if IdL is not None:
         mix_L[IdL] = one
-        mix_R[IdL] = 0.
+        mix_R[IdL] = 0.0
     if IdR is not None:
-        mix_L[IdR] = 0.
+        mix_L[IdR] = 0.0
         mix_R[IdR] = one
     return mix_L, mix_R, IdL, IdR, H.explicit_plus_hc
 
@@ -1957,10 +1961,11 @@ class DensityMatrixMixer(Mixer):
 
     def __init__(self, options, sweep_activated=0):
         super().__init__(options, sweep_activated)
-        assert self.amplitude <= 1.
+        assert self.amplitude <= 1.0
 
-    def mixed_svd_2site(self, engine: Sweep, theta: npc.Array, i0: int, mix_left: bool,
-                        mix_right: bool, qtotal_LR=[None, None]):
+    def mixed_svd_2site(
+        self, engine: Sweep, theta: npc.Array, i0: int, mix_left: bool, mix_right: bool, qtotal_LR=[None, None]
+    ):
         rho_L, rho_R = self.mix_rho(engine, theta, i0, mix_left, mix_right)
         return self.svd_from_rho(engine, rho_L, rho_R, theta, qtotal_LR)
 
@@ -2021,8 +2026,7 @@ class DensityMatrixMixer(Mixer):
             rho_R = npc.tensordot(theta.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])
         return rho_L, rho_R
 
-    def svd_from_rho(self, engine: Sweep, rho_L: npc.Array, rho_R: npc.Array, theta: npc.Array,
-                     qtotal_LR):
+    def svd_from_rho(self, engine: Sweep, rho_L: npc.Array, rho_R: npc.Array, theta: npc.Array, qtotal_LR):
         r"""Diagonalize ``rho_L, rho_R`` to rewrite `theta` as ``U S V`` with isometric U/V.
 
         If `rho_L` and `rho_R` were the actual density matrices of `theta`, this function
@@ -2047,7 +2051,7 @@ class DensityMatrixMixer(Mixer):
         # eigenvalues are S^2.
         val_L, U = npc.eigh(rho_L)
         U.iset_leg_labels(['(vL.p0)', 'vR'])
-        val_L[val_L < 0.] = 0.  # for stability reasons
+        val_L[val_L < 0.0] = 0.0  # for stability reasons
         val_L /= np.sum(val_L)
         S_a = np.sqrt(val_L)
         keep_L, _, err_L = truncate(S_a, engine.trunc_params)
@@ -2058,7 +2062,7 @@ class DensityMatrixMixer(Mixer):
         val_R, Vc = npc.eigh(rho_R)
         Vc.iset_leg_labels(['(p1.vR)', 'vL'])
         VH = Vc.itranspose(['vL', '(p1.vR)'])
-        val_R[val_R < 0.] = 0.  # for stability reasons
+        val_R[val_R < 0.0] = 0.0  # for stability reasons
         val_R /= np.sum(val_R)
         keep_R, _, err_R = truncate(np.sqrt(val_R), engine.trunc_params)
         VH.iproject(keep_R, axes='vL')
@@ -2124,7 +2128,7 @@ class SubspaceExpansion(Mixer):
 
     def __init__(self, options, sweep_activated=0):
         super().__init__(options, sweep_activated)
-        assert self.amplitude <= 1.
+        assert self.amplitude <= 1.0
 
     def mix_and_decompose_1site(self, engine: Sweep, theta: npc.Array, i0: int, move_right: bool):
         bond = i0 if move_right else i0 - 1
@@ -2137,8 +2141,7 @@ class SubspaceExpansion(Mixer):
             LHeff = _get_LHeff(env=engine.env, i=i0, eff_H=engine.eff_H)
             LHeff = LHeff.transpose(['(vR*.p0)', 'wR', '(vR.p0*)'])
             if not explicit_plus_hc and IdL is not None:
-                theta_expand = npc.tensordot(LHeff.iscale_axis(mix_L, 'wR'), theta,
-                                             ['(vR.p0*)', '(vL.p0)'])
+                theta_expand = npc.tensordot(LHeff.iscale_axis(mix_L, 'wR'), theta, ['(vR.p0*)', '(vL.p0)'])
                 theta_expand.ireplace_label('(vR*.p0)', '(vL.p0)')
             else:
                 # need to stack different parts of the wR leg
@@ -2159,8 +2162,9 @@ class SubspaceExpansion(Mixer):
                 theta_expand = npc.concatenate(stack, axis='wR')
                 IdL = 0  # of the new, concatenated leg.
             theta_expand = theta_expand.combine_legs(['wR', 'vR'], qconj=-1)
-            U, S, VH, err, _ = svd_theta(theta_expand, engine.trunc_params,
-                                         qtotal_LR=[theta.qtotal, None], inner_labels=['vR', 'vL'])
+            U, S, VH, err, _ = svd_theta(
+                theta_expand, engine.trunc_params, qtotal_LR=[theta.qtotal, None], inner_labels=['vR', 'vL']
+            )
             VH = VH.split_legs('(wR.vR)')
             VH = VH.take_slice(IdL, 'wR')  # project back such that U-S-VH is original theta
         else:  # move left
@@ -2168,8 +2172,7 @@ class SubspaceExpansion(Mixer):
             # RHeff is on site i0, but has p1 label
             RHeff = RHeff.transpose(['(p1*.vL)', 'wL', '(p1.vL*)'])
             if not explicit_plus_hc and IdR is not None:
-                theta_expand = npc.tensordot(theta, RHeff.iscale_axis(mix_R, 'wL'),
-                                             ['(p0.vR)', '(p1*.vL)'])
+                theta_expand = npc.tensordot(theta, RHeff.iscale_axis(mix_R, 'wL'), ['(p0.vR)', '(p1*.vL)'])
                 theta_expand.ireplace_label('(p1.vL*)', '(p0.vR)')
             else:
                 # need to stack different parts of the wR leg
@@ -2189,8 +2192,9 @@ class SubspaceExpansion(Mixer):
                 theta_expand = npc.concatenate(stack, axis='wR')
                 IdR = 0  # of the new, concatenated leg.
             theta_expand = theta_expand.combine_legs(['vL', 'wL'], qconj=+1)
-            U, S, VH, err, _ = svd_theta(theta_expand, engine.trunc_params,
-                                         qtotal_LR=[None, theta.qtotal], inner_labels=['vR', 'vL'])
+            U, S, VH, err, _ = svd_theta(
+                theta_expand, engine.trunc_params, qtotal_LR=[None, theta.qtotal], inner_labels=['vR', 'vL']
+            )
             U = U.split_legs('(vL.wL)')
             U = U.take_slice(IdR, 'wL')  # project back such that U-S-VH is original theta
 
@@ -2248,26 +2252,27 @@ class VariationalCompression(IterativeSweeps):
 
     def pre_run_initialize(self):
         super().pre_run_initialize()
-        max_sweeps = self._max_sweeps = self.options.get("max_sweeps", 2, int)
-        min_sweeps = self._min_sweeps = self.options.get("min_sweeps", 1, int)
-        tol_diff = self._tol_theta_diff = self.options.get("tol_theta_diff", 1.e-8, 'real')
+        max_sweeps = self._max_sweeps = self.options.get('max_sweeps', 2, int)
+        min_sweeps = self._min_sweeps = self.options.get('min_sweeps', 1, int)
+        tol_diff = self._tol_theta_diff = self.options.get('tol_theta_diff', 1.0e-8, 'real')
         if min_sweeps == max_sweeps and tol_diff is not None:
-            warnings.warn("VariationalCompression with min_sweeps=max_sweeps: "
-                          "we recommend to set tol_theta_diff=None to avoid overhead")
+            warnings.warn(
+                'VariationalCompression with min_sweeps=max_sweeps: '
+                'we recommend to set tol_theta_diff=None to avoid overhead'
+            )
         return TruncationError()
 
     def run_iteration(self):
         self.renormalize = []
         self._theta_diff = []
         max_trunc_err = self.sweep()
-        return TruncationError(max_trunc_err, 1. - 2. * max_trunc_err)
+        return TruncationError(max_trunc_err, 1.0 - 2.0 * max_trunc_err)
 
     def is_converged(self):
         if self.sweeps >= self._min_sweeps and self._tol_theta_diff is not None:
-            max_diff = max(self._theta_diff[-(self.psi.L - self.n_optimize):])
+            max_diff = max(self._theta_diff[-(self.psi.L - self.n_optimize) :])
             if max_diff < self._tol_theta_diff:
-                logger.debug(f'VariationalCompression converged after {self.sweeps} sweeps '
-                             f'with theta_diff={max_diff}')
+                logger.debug(f'VariationalCompression converged after {self.sweeps} sweeps with theta_diff={max_diff}')
                 return True
         return False
 
@@ -2306,7 +2311,7 @@ class VariationalCompression(IterativeSweeps):
         """
         if resume_data is None:
             resume_data = {}
-        init_env_data = resume_data.get("init_env_data", {})
+        init_env_data = resume_data.get('init_env_data', {})
         old_psi = self.psi.copy()
         start_env_sites = self.options.get('start_env_sites', 2, int)
         if start_env_sites is not None and not self.psi.finite:
@@ -2352,10 +2357,9 @@ class VariationalCompression(IterativeSweeps):
         i0 = self.i0
         new_psi = self.psi
         old_A0 = new_psi.get_B(i0, form='A')
-        U, S, VH, err, renormalize = svd_theta(theta,
-                                               self.trunc_params,
-                                               qtotal_LR=[old_A0.qtotal, None],
-                                               inner_labels=['vR', 'vL'])
+        U, S, VH, err, renormalize = svd_theta(
+            theta, self.trunc_params, qtotal_LR=[old_A0.qtotal, None], inner_labels=['vR', 'vL']
+        )
         U.ireplace_label('(vL.p0)', '(vL.p)')
         VH.ireplace_label('(p1.vR)', '(p.vR)')
         A0 = U.split_legs(['(vL.p)'])
@@ -2367,7 +2371,7 @@ class VariationalCompression(IterativeSweeps):
             theta_new_trunc = npc.tensordot(A0.scale_axis(S, 'vR'), B1, ['vR', 'vL'])
             theta_new_trunc.iset_leg_labels(['vL', 'p0', 'p1', 'vR'])
             ov = npc.inner(theta_new_trunc, theta_old, do_conj=True, axes='labels')
-            theta_diff = 1. - abs(ov)
+            theta_diff = 1.0 - abs(ov)
             self._theta_diff.append(theta_diff)
         # now set the new tensors to the MPS
         new_psi.set_B(i0, A0, form='A')  # left-canonical
@@ -2458,10 +2462,10 @@ class VariationalApplyMPO(VariationalCompression):
         """
         if resume_data is None:
             resume_data = {}
-        init_env_data = resume_data.get("init_env_data", {})
+        init_env_data = resume_data.get('init_env_data', {})
         old_psi = self.psi.copy()
         start_env_sites = 0 if self.psi.finite else self.psi.L
-        start_env_sites = self.options.get("start_env_sites", start_env_sites, int)
+        start_env_sites = self.options.get('start_env_sites', start_env_sites, int)
         if start_env_sites is not None:
             init_env_data['start_env_sites'] = start_env_sites
         # note: we need explicit `start_env_sites` since `bra` != `ket`, so we can't converge
@@ -2543,25 +2547,29 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
 
         if self.move_right:
             old_T_L = new_psi.get_B(i0, 'Th')
-            old_T_R = new_psi.get_B(i0+1, 'B')
+            old_T_R = new_psi.get_B(i0 + 1, 'B')
             old_bond_leg = old_T_R.get_leg('vL')
             # for old_T_L `'B'` form fine as well, but i0 in `'Th'` form if ``use_eig_based_svd=True``
         else:
             old_T_L = new_psi.get_B(i0, 'A')
-            old_T_R = new_psi.get_B(i0+1, 'Th')
+            old_T_R = new_psi.get_B(i0 + 1, 'Th')
             old_bond_leg = old_T_L.get_leg('vR')
             # for old_T_R `'A'` form fine as well, but i0+1 in `'Th'` form if ``use_eig_based_svd=True``
         expand = self._expansion_rate(i0)
         use_eig_based_svd = self.options.get('use_eig_based_svd', False, bool)
 
         T_Lc, S, T_Rc, form, err, renormalize = decompose_theta_qr_based(
-            old_qtotal_L=old_T_L.qtotal, old_qtotal_R=old_T_R.qtotal, old_bond_leg=old_bond_leg,
-            theta=theta, move_right=self.move_right,
-            expand=expand, min_block_increase = self.options.get('cbe_min_block_increase', 1, int),
+            old_qtotal_L=old_T_L.qtotal,
+            old_qtotal_R=old_T_R.qtotal,
+            old_bond_leg=old_bond_leg,
+            theta=theta,
+            move_right=self.move_right,
+            expand=expand,
+            min_block_increase=self.options.get('cbe_min_block_increase', 1, int),
             use_eig_based_svd=use_eig_based_svd,
             trunc_params=self.trunc_params,
             compute_err=self.options.get('compute_err', True, bool),
-            return_both_T=True
+            return_both_T=True,
         )
 
         if self.move_right:
@@ -2586,11 +2594,11 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
                 theta_new_trunc = npc.tensordot(T_L.scale_axis(S, 'vR'), T_R, ['vR', 'vL'])
             theta_new_trunc.iset_leg_labels(['vL', 'p0', 'p1', 'vR'])
             ov = npc.inner(theta_new_trunc, theta_old, do_conj=True, axes='labels')
-            theta_diff = 1. - abs(ov)
+            theta_diff = 1.0 - abs(ov)
             self._theta_diff.append(theta_diff)
 
         # set the new tensors to the MPS
         new_psi.set_B(i0, T_L, form=form[0])
-        new_psi.set_B(i0+1, T_R, form=form[1])
+        new_psi.set_B(i0 + 1, T_R, form=form[1])
         new_psi.set_SR(i0, S)
         return {'U': U, 'VH': VH, 'err': err}

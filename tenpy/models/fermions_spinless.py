@@ -4,7 +4,6 @@
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-
 from ..networks.site import FermionSite
 from .lattice import Chain
 from .model import CouplingMPOModel, NearestNeighborModel
@@ -59,14 +58,14 @@ class FermionModel(CouplingMPOModel):
         conserve = model_params.get('conserve', 'N', str)
         if conserve == 'best':
             conserve = 'N'
-            self.logger.info("%s: set conserve to %s", self.name, conserve)
+            self.logger.info('%s: set conserve to %s', self.name, conserve)
         site = FermionSite(conserve=conserve)
         return site
 
     def init_terms(self, model_params):
-        J = model_params.get('J', 1., 'real_or_array')
-        V = model_params.get('V', 1., 'real_or_array')
-        mu = model_params.get('mu', 0., 'real_or_array')
+        J = model_params.get('J', 1.0, 'real_or_array')
+        V = model_params.get('V', 1.0, 'real_or_array')
+        mu = model_params.get('mu', 0.0, 'real_or_array')
         phi_ext = model_params.get('phi_ext', None, 'real')
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu, u, 'N')

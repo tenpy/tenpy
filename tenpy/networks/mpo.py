@@ -59,8 +59,13 @@ from .terms import TermList
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    'MPO', 'make_W_II', 'MPOGraph', 'MPOEnvironment', 'MPOEnvironmentBuilder', 'MPOTransferMatrix',
-    'grid_insert_ops'
+    'MPO',
+    'make_W_II',
+    'MPOGraph',
+    'MPOEnvironment',
+    'MPOEnvironmentBuilder',
+    'MPOTransferMatrix',
+    'grid_insert_ops',
 ]
 
 
@@ -132,15 +137,17 @@ class MPO(MPSGeometry):
 
     """
 
-    def __init__(self,
-                 sites,
-                 Ws,
-                 bc='finite',
-                 IdL=None,
-                 IdR=None,
-                 max_range=None,
-                 explicit_plus_hc=False,
-                 mps_unit_cell_width=None):
+    def __init__(
+        self,
+        sites,
+        Ws,
+        bc='finite',
+        IdL=None,
+        IdR=None,
+        max_range=None,
+        explicit_plus_hc=False,
+        mps_unit_cell_width=None,
+    ):
         super().__init__(sites, bc, unit_cell_width=mps_unit_cell_width)
         self.dtype = dtype = np.result_type(*[W.dtype for W in Ws])
         self._W = [W.astype(dtype, copy=True) for W in Ws]
@@ -205,10 +212,12 @@ class MPO(MPSGeometry):
         """
         # check whether ordering the graph makes sense
         if self._outer_permutation is not None and not self._outer_permutation:
-            warnings.warn("Ordering the MPO was already tried and failed. "
-                          "If intentional, make sure that the MPO satisfies the requirements.")
+            warnings.warn(
+                'Ordering the MPO was already tried and failed. '
+                'If intentional, make sure that the MPO satisfies the requirements.'
+            )
             return
-        if self.bc == "finite":
+        if self.bc == 'finite':
             warnings.warn("_order_graph() called for 'finite' MPO. This does not make sense.")
             self._outer_permutation = False
             return
@@ -218,9 +227,11 @@ class MPO(MPSGeometry):
             try:
                 self._W[0].get_leg('wL').test_contractible(self._W[-1].get_leg('wR'))
             except ValueError:
-                warnings.warn("_order_graph() called for 'segment' MPO with different "
-                              "left and right outer virtual leg. If intentional, "
-                              "ensure that outer virtual legs are contractible.")
+                warnings.warn(
+                    "_order_graph() called for 'segment' MPO with different "
+                    'left and right outer virtual leg. If intentional, '
+                    'ensure that outer virtual legs are contractible.'
+                )
                 self._outer_permutation = False
                 return
         # attempting to order the graph makes sense
@@ -240,16 +251,19 @@ class MPO(MPSGeometry):
             # cycles
             for j, j_cycle in enumerate(j_other_cycles):
                 perm[offsets[0] + j] = j_cycle
+
             # order j_upper / j_lower by iteratively removing all indices that do not couple to the block
             def sort_block(block):
                 ordering = []
                 while block:  # still indices left
                     js_step = [j for j in block if not outer_connections[j] & block]
                     if len(js_step) == 0:  # Illegal cycle
-                        raise ValueError("Index ordering failed: "
-                                         "Illegal cycle A1 -> A2 -> ... -> A1 over multiple "
-                                         "unit cells found. "
-                                         "Increasing the unit cell might fix this problem.")
+                        raise ValueError(
+                            'Index ordering failed: '
+                            'Illegal cycle A1 -> A2 -> ... -> A1 over multiple '
+                            'unit cells found. '
+                            'Increasing the unit cell might fix this problem.'
+                        )
                     # reverse: order indices with same depth in ascending order
                     for j in reversed(js_step):
                         ordering.append(j)
@@ -269,7 +283,7 @@ class MPO(MPSGeometry):
             self._outer_permutation = perm
         except ValueError as e:
             # graph cannot be ordered
-            warnings.warn("Ordering the MPO failed: " + str(e))
+            warnings.warn('Ordering the MPO failed: ' + str(e))
             self._outer_permutation = False
 
     def _graph_connections(self):
@@ -309,15 +323,12 @@ class MPO(MPSGeometry):
                 j_current = j_outer
                 # backward propagation
                 for j_right in range(self.L - 1, -1, -1):
-                    js_backward = [
-                        i for i, j in self._graph[j_right] if j == j_current and i in grid[j_right]
-                    ]
+                    js_backward = [i for i, j in self._graph[j_right] if j == j_current and i in grid[j_right]]
                     if len(js_backward) != 1:
                         # only simple paths supported
                         # NOTE: Paths with multiple branches that reconnect can work in principle,
                         #       but are not supported by MPOEnvironmentBuilder
-                        raise ValueError(
-                            f"Loop missing or multiple loops found for outer index {j_outer}")
+                        raise ValueError(f'Loop missing or multiple loops found for outer index {j_outer}')
                     j_current = js_backward[0]
                     loop.append(j_current)
                 cycles.append(list(reversed(loop)))
@@ -357,30 +368,27 @@ class MPO(MPSGeometry):
         if (j_IdR is not None) and (j_IdR < 0):
             j_IdR = self.chi[-1] + j_IdR
         if (j_IdL is not None) and (j_IdL not in j_cycles):
-            raise ValueError("Connection IdL -> IdL missing")
+            raise ValueError('Connection IdL -> IdL missing')
         if (j_IdR is not None) and (j_IdR not in j_cycles):
-            raise ValueError("Connection IdR -> IdR missing")
+            raise ValueError('Connection IdR -> IdR missing')
         for j, connection in enumerate(outer_connections):
             if j != j_IdL and j_IdL in connection:
-                raise ValueError(f"Outer index {j} -> IdL connection found ?!")
+                raise ValueError(f'Outer index {j} -> IdL connection found ?!')
         if (j_IdR is not None) and (len(outer_connections[j_IdR]) != 1):
-            raise ValueError("IdR connects to different index ?!")
+            raise ValueError('IdR connects to different index ?!')
         # check loops and indices
         other_cycles = set(j for j in j_cycles if j != j_IdL and j != j_IdR)
         if not other_cycles:  # only loops are IdL, IdR
-            return j_IdL, j_IdR, set(), set(j for j in range(self.chi[0])
-                                            if j not in j_cycles), set()
+            return j_IdL, j_IdR, set(), set(j for j in range(self.chi[0]) if j not in j_cycles), set()
         j_upper = set()
         j_lower = set()
-        other_cycle_connections = set().union(*(outer_connections[j_loop]
-                                                for j_loop in other_cycles))
+        other_cycle_connections = set().union(*(outer_connections[j_loop] for j_loop in other_cycles))
         for j, connection in enumerate(outer_connections):
             if j not in j_cycles:
                 if j in other_cycle_connections:  # existing connection some_loop -> label_j
                     j_lower.add(j)
                     if connection & other_cycles:  # existing connection label_j -> some loop
-                        raise ValueError(
-                            f"Connection I -> loop1 and loop2 -> I found for Index I={j}")
+                        raise ValueError(f'Connection I -> loop1 and loop2 -> I found for Index I={j}')
 
                 else:  # Default: add to j_upper if not a lower index
                     j_upper.add(j)
@@ -417,18 +425,18 @@ class MPO(MPSGeometry):
             The `name` of `h5gr` with a ``'/'`` in the end.
 
         """
-        hdf5_saver.save(self.sites, subpath + "sites")
-        hdf5_saver.save(self.chinfo, subpath + "chinfo")
-        hdf5_saver.save(self._W, subpath + "tensors")
-        hdf5_saver.save(self.IdL, subpath + "index_identity_left")
-        hdf5_saver.save(self.IdR, subpath + "index_identity_right")
-        h5gr.attrs["grouped"] = self.grouped
-        hdf5_saver.save(self.bc, subpath + "boundary_condition")
-        hdf5_saver.save(self.max_range, subpath + "max_range")
-        hdf5_saver.save(self.unit_cell_width, subpath + "unit_cell_width")
-        h5gr.attrs["explicit_plus_hc"] = self.explicit_plus_hc
-        h5gr.attrs["L"] = self.L  # not needed for loading, but still useful metadata
-        h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
+        hdf5_saver.save(self.sites, subpath + 'sites')
+        hdf5_saver.save(self.chinfo, subpath + 'chinfo')
+        hdf5_saver.save(self._W, subpath + 'tensors')
+        hdf5_saver.save(self.IdL, subpath + 'index_identity_left')
+        hdf5_saver.save(self.IdR, subpath + 'index_identity_right')
+        h5gr.attrs['grouped'] = self.grouped
+        hdf5_saver.save(self.bc, subpath + 'boundary_condition')
+        hdf5_saver.save(self.max_range, subpath + 'max_range')
+        hdf5_saver.save(self.unit_cell_width, subpath + 'unit_cell_width')
+        h5gr.attrs['explicit_plus_hc'] = self.explicit_plus_hc
+        h5gr.attrs['L'] = self.L  # not needed for loading, but still useful metadata
+        h5gr.attrs['max_bond_dimension'] = np.max(self.chi)  # same
         # building the graph / ordering it takes <1s for reasonable MPOs, so not worth saving it
 
     @classmethod
@@ -455,17 +463,17 @@ class MPO(MPSGeometry):
         obj = cls.__new__(cls)  # create class instance, no __init__() call
         hdf5_loader.memorize_load(h5gr, obj)
 
-        obj.sites = hdf5_loader.load(subpath + "sites")
-        obj.chinfo = hdf5_loader.load(subpath + "chinfo")
-        obj._W = hdf5_loader.load(subpath + "tensors")
+        obj.sites = hdf5_loader.load(subpath + 'sites')
+        obj.chinfo = hdf5_loader.load(subpath + 'chinfo')
+        obj._W = hdf5_loader.load(subpath + 'tensors')
         obj.dtype = np.result_type(*[W.dtype for W in obj._W])
-        obj.IdL = hdf5_loader.load(subpath + "index_identity_left")
-        obj.IdR = hdf5_loader.load(subpath + "index_identity_right")
-        obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
-        obj.bc = hdf5_loader.load(subpath + "boundary_condition")
-        obj.max_range = hdf5_loader.load(subpath + "max_range")
-        obj.unit_cell_width = hdf5_loader.load(subpath + "unit_cell_width")
-        obj.explicit_plus_hc = h5gr.attrs.get("explicit_plus_hc", False)
+        obj.IdL = hdf5_loader.load(subpath + 'index_identity_left')
+        obj.IdR = hdf5_loader.load(subpath + 'index_identity_right')
+        obj.grouped = hdf5_loader.get_attr(h5gr, 'grouped')
+        obj.bc = hdf5_loader.load(subpath + 'boundary_condition')
+        obj.max_range = hdf5_loader.load(subpath + 'max_range')
+        obj.unit_cell_width = hdf5_loader.load(subpath + 'unit_cell_width')
+        obj.explicit_plus_hc = h5gr.attrs.get('explicit_plus_hc', False)
         obj._graph = None
         obj._outer_permutation = None
         obj._cycles = None
@@ -473,17 +481,19 @@ class MPO(MPSGeometry):
         return obj
 
     @classmethod
-    def from_grids(cls,
-                   sites,
-                   grids,
-                   bc='finite',
-                   IdL=None,
-                   IdR=None,
-                   Ws_qtotal=None,
-                   legs=None,
-                   max_range=None,
-                   explicit_plus_hc=False,
-                   mps_unit_cell_width=None):
+    def from_grids(
+        cls,
+        sites,
+        grids,
+        bc='finite',
+        IdL=None,
+        IdR=None,
+        Ws_qtotal=None,
+        legs=None,
+        max_range=None,
+        explicit_plus_hc=False,
+        mps_unit_cell_width=None,
+    ):
         """Initialize an MPO from `grids`.
 
         Parameters
@@ -564,7 +574,7 @@ class MPO(MPSGeometry):
         return cls(sites, Ws, bc, IdL, IdR, max_range, explicit_plus_hc, mps_unit_cell_width)
 
     @classmethod
-    def from_wavepacket(cls, sites, coeff, op, eps=1.e-15, unit_cell_width=None):
+    def from_wavepacket(cls, sites, coeff, op, eps=1.0e-15, unit_cell_width=None):
         r"""Create a (finite) MPO wave packet representing ``sum_i coeff[i] op_i``.
 
         Note that we define it only for finite systems; a generalization to infinite systems
@@ -598,9 +608,14 @@ class MPO(MPSGeometry):
 
         .. doctest :: from_wavepacket
 
-            >>> L, k0, x0, sigma, = 50, np.pi/8., 10., 5.
+            >>> (
+            ...     L,
+            ...     k0,
+            ...     x0,
+            ...     sigma,
+            ... ) = 50, np.pi / 8.0, 10.0, 5.0
             >>> x = np.arange(L)
-            >>> coeff = np.exp(-1.j * k0 * x) * np.exp(- 0.5 * (x - x0)**2 / sigma**2)
+            >>> coeff = np.exp(-1.0j * k0 * x) * np.exp(-0.5 * (x - x0) ** 2 / sigma**2)
             >>> coeff /= np.linalg.norm(coeff)
             >>> site = FermionSite(conserve='N')
             >>> wp = MPO.from_wavepacket([site] * L, coeff, 'Cd')
@@ -616,12 +631,12 @@ class MPO(MPSGeometry):
             TruncationError()
             >>> C = psi.correlation_function('Cd', 'C')
             >>> C_expected = np.conj(coeff)[:, np.newaxis] * coeff[np.newaxis, :]
-            >>> bool(np.max(np.abs(C - C_expected) ) < 1.e-10)
+            >>> bool(np.max(np.abs(C - C_expected)) < 1.0e-10)
             True
 
         """
         coeff = np.asarray(coeff)
-        assert coeff.shape == (len(sites), )
+        assert coeff.shape == (len(sites),)
         L = len(sites)
         assert L >= 2
         first_nonzero = np.nonzero(coeff)[0][0]
@@ -658,7 +673,7 @@ class MPO(MPSGeometry):
                 W2 = self.get_W(i + 1)
                 W.get_leg('wR').test_contractible(W2.get_leg('wL'))
         if not (len(self.IdL) == len(self.IdR) == self.L + 1):
-            raise ValueError("wrong len of `IdL`/`IdR`")
+            raise ValueError('wrong len of `IdL`/`IdR`')
 
     @property
     def chi(self):
@@ -695,7 +710,6 @@ class MPO(MPSGeometry):
         #  self.IdR[self._to_valid_bond_index(i, is_left=False)]
         return self.IdR[self._to_valid_site_index(i) + 1]
 
-
     def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
@@ -706,7 +720,7 @@ class MPO(MPSGeometry):
 
         """
         if int(factor) != factor:
-            raise ValueError("`factor` should be integer!")
+            raise ValueError('`factor` should be integer!')
         if factor <= 1:
             raise ValueError("can't shrink!")
         if self.finite:
@@ -722,10 +736,7 @@ class MPO(MPSGeometry):
             self._graph = factor * self._graph
         # can keep self._ordering_checked, outer_permutations
         if self._outer_permutation:
-            self._cycles = {
-                i0: factor * cycle[:-1] + [cycle[-1]]
-                for i0, cycle in self._cycles.items()
-            }
+            self._cycles = {i0: factor * cycle[:-1] + [cycle[-1]] for i0, cycle in self._cycles.items()}
         self.test_sanity()
 
     def group_sites(self, n=2, grouped_sites=None):
@@ -803,8 +814,9 @@ class MPO(MPSGeometry):
         IdL.append(self.IdL[last % L + 1])
         IdR = [self.IdR[i % L] for i in range(first, last + 1)]
         IdR.append(self.IdR[last % L + 1])
-        cp = self.__class__(sites, W, 'segment', IdL, IdR, self.max_range, self.explicit_plus_hc,
-                            unit_cell_width)  # no graph
+        cp = self.__class__(
+            sites, W, 'segment', IdL, IdR, self.max_range, self.explicit_plus_hc, unit_cell_width
+        )  # no graph
         cp.grouped = self.grouped
         return cp
 
@@ -846,17 +858,15 @@ class MPO(MPSGeometry):
             new_graph = [{} for _ in range(self.L)]
             for j_site, layer in enumerate(self._graph):
                 for i, j in layer:
-                    new_graph[j_site][(inv_perms[j_site][i],
-                                       inv_perms[j_site + 1][j])] = self._graph[j_site][(i, j)]
+                    new_graph[j_site][(inv_perms[j_site][i], inv_perms[j_site + 1][j])] = self._graph[j_site][(i, j)]
             self._graph = new_graph
             if self._outer_permutation:
                 self._outer_permutation = [inv_perms[0][j] for j in self._outer_permutation]
                 perm_cycles = []
                 for j_outer in self._cycles:
-                    perm_cycles.append([
-                        inv_perms[j_bond][j_cycle]
-                        for j_bond, j_cycle in enumerate(self._cycles[j_outer])
-                    ])
+                    perm_cycles.append(
+                        [inv_perms[j_bond][j_cycle] for j_bond, j_cycle in enumerate(self._cycles[j_outer])]
+                    )
                 self._cycles = {cycle[0]: cycle for cycle in perm_cycles}
         # done
 
@@ -883,7 +893,7 @@ class MPO(MPSGeometry):
             return self.make_U_II(dt)
         elif approximation == 'I':
             return self.make_U_I(dt)
-        raise ValueError(repr(approximation) + " not implemented")
+        raise ValueError(repr(approximation) + ' not implemented')
 
     def make_U_I(self, dt):
         r"""Creates the :math:`U_I` propagator with `W_I` tensors.
@@ -901,12 +911,13 @@ class MPO(MPSGeometry):
 
         """
         if self.explicit_plus_hc:
-            raise NotImplementedError("MPO.make_U_I() assumes hermitian H, you can't use "
-                                      "the `explicit_plus_hc=True` flag!\n"
-                                      "See also https://github.com/tenpy/tenpy/issues/265")
+            raise NotImplementedError(
+                "MPO.make_U_I() assumes hermitian H, you can't use "
+                'the `explicit_plus_hc=True` flag!\n'
+                'See also https://github.com/tenpy/tenpy/issues/265'
+            )
         U = [
-            self.get_W(i).astype(np.result_type(dt, self.dtype),
-                                 copy=True).itranspose(['wL', 'wR', 'p', 'p*'])
+            self.get_W(i).astype(np.result_type(dt, self.dtype), copy=True).itranspose(['wL', 'wR', 'p', 'p*'])
             for i in range(self.L)
         ]
 
@@ -941,8 +952,7 @@ class MPO(MPSGeometry):
             IdLR_0 = IdL
         IdLR = [IdLR_0] + IdLR
 
-        return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf,
-                   mps_unit_cell_width=self.unit_cell_width)  # no graph
+        return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf, mps_unit_cell_width=self.unit_cell_width)  # no graph
 
     def make_U_II(self, dt):
         r"""Creates the :math:`U_{II}` propagator.
@@ -959,9 +969,11 @@ class MPO(MPSGeometry):
 
         """
         if self.explicit_plus_hc:
-            raise NotImplementedError("MPO.make_U_II() assumes hermitian H, you can't use "
-                                      "the `explicit_plus_hc=True` flag!\n"
-                                      "See also https://github.com/tenpy/tenpy/issues/265")
+            raise NotImplementedError(
+                "MPO.make_U_II() assumes hermitian H, you can't use "
+                'the `explicit_plus_hc=True` flag!\n'
+                'See also https://github.com/tenpy/tenpy/issues/265'
+            )
         dtype = np.result_type(dt, self.dtype)
         IdL = self.IdL
         IdR = self.IdR
@@ -982,7 +994,7 @@ class MPO(MPSGeometry):
             proj_R[IdL[i + 1]] = False
             proj_R[IdR[i + 1]] = False
 
-            #Extract (A, B, C, D)
+            # Extract (A, B, C, D)
             D = Wflat[IdL[i], IdR[i + 1], :, :]
             C = Wflat[IdL[i], proj_R, :, :]
             B = Wflat[proj_L, IdR[i + 1], :, :]
@@ -1006,10 +1018,11 @@ class MPO(MPSGeometry):
             # TODO: could sort by charges.
             U.append(W_II)
         Id = [0] * (self.L + 1)
-        return MPO(self.sites, U, self.bc, Id, Id, max_range=self.max_range,
-                   mps_unit_cell_width=self.unit_cell_width)  # no graph
+        return MPO(
+            self.sites, U, self.bc, Id, Id, max_range=self.max_range, mps_unit_cell_width=self.unit_cell_width
+        )  # no graph
 
-    def expectation_value(self, psi, tol=1.e-10, max_range=100, init_env_data={}):
+    def expectation_value(self, psi, tol=1.0e-10, max_range=100, init_env_data={}):
         """Calculate ``<psi|self|psi>/<psi|psi>`` (or density for infinite).
 
         For infinite MPS, it **assumes** that `self` is extensive, e.g. a Hamiltonian
@@ -1062,14 +1075,16 @@ class MPO(MPSGeometry):
         if psi.bc == 'segment':
             if len(init_env_data) == 0:
                 init_env_data['start_env_sites'] = 0
-                warnings.warn("MPO.expectation_value(psi) with segment psi needs environments! "
-                              "Can only estimate value completely ignoring contributions "
-                              "across segment boundaries!")
+                warnings.warn(
+                    'MPO.expectation_value(psi) with segment psi needs environments! '
+                    'Can only estimate value completely ignoring contributions '
+                    'across segment boundaries!'
+                )
         env = MPOEnvironment(psi, self, psi, **init_env_data)
         val = env.full_contraction(0)  # handles explicit_plus_hc
         return np.real_if_close(val)
 
-    def expectation_value_TM(self, psi, tol=1.e-10, init_env_data={}):
+    def expectation_value_TM(self, psi, tol=1.0e-10, init_env_data={}):
         """Calculate ``<psi|self|psi>/<psi|psi> / L`` from the MPOTransferMatrix.
 
         Only for infinite MPS, and **assumes** that the Hamiltonian is an extensive sum of
@@ -1095,19 +1110,19 @@ class MPO(MPSGeometry):
 
         """
         if psi.finite:
-            raise ValueError("not infinite MPS")
+            raise ValueError('not infinite MPS')
         if np.linalg.norm(psi.norm_test()) > tol:
             psi = psi.copy()
             psi.canonical_form()
         guess = init_env_data.get('init_RP', None)
         TM = MPOTransferMatrix(self, psi, transpose=False, guess=guess)
         val, vec = TM.dominant_eigenvector(tol=tol)
-        if abs(1. - val) > tol * 10.:
-            logger.warning("MPOTransferMatrix eigenvalue not 1: got 1. - %.3e", 1. - val)
+        if abs(1.0 - val) > tol * 10.0:
+            logger.warning('MPOTransferMatrix eigenvalue not 1: got 1. - %.3e', 1.0 - val)
         E = TM.energy(vec)  #  handles explicit_plus_hc
         return np.real_if_close(E)
 
-    def expectation_value_power(self, psi, tol=1.e-10, max_range=100):
+    def expectation_value_power(self, psi, tol=1.0e-10, max_range=100):
         """Calculate ``<psi|self|psi>/<psi|psi>`` with a power-method.
 
         Only for infinite MPS, and **assumes** that the Hamiltonian is an extensive sum of
@@ -1140,7 +1155,7 @@ class MPO(MPSGeometry):
 
         """
         if psi.finite:
-            raise ValueError("not infinite MPS")
+            raise ValueError('not infinite MPS')
         env = MPOEnvironment(psi, self, psi, start_env_sites=0)
         L = lcm(self.L, psi.L)
         LP0 = env.init_LP(0)
@@ -1176,16 +1191,13 @@ class MPO(MPSGeometry):
 
             if i >= L - 1:
                 RP = env.init_RP(i)
-                current_value = npc.inner(LP,
-                                          RP,
-                                          axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']],
-                                          do_conj=False)
+                current_value = npc.inner(LP, RP, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
                 LP_converged = LP.copy()
                 LP_converged.iproject(masks_R_no_IdRL[i0], 'wR')
                 if npc.norm(LP_converged) < tol:
                     break  # no more terms left
         else:  # no break
-            msg = f"Tolerance {tol:.2e} not reached within {max_range:d} sites"
+            msg = f'Tolerance {tol:.2e} not reached within {max_range:d} sites'
             warnings.warn(msg, stacklevel=2)
         if self.explicit_plus_hc:
             current_value = current_value + np.conj(current_value)
@@ -1193,7 +1205,7 @@ class MPO(MPSGeometry):
 
     def _expectation_value_environment(self, psi, *args):
         # TODO: Might be worth implementing?
-        raise NotImplementedError("Could be implemented using MPOEnvironmentBuilder")
+        raise NotImplementedError('Could be implemented using MPOEnvironmentBuilder')
 
     def variance(self, psi, exp_val=None):
         """Calculate ``<psi|self^2|psi> - <psi|self|psi>^2``.
@@ -1216,13 +1228,13 @@ class MPO(MPSGeometry):
 
         """
         if self.bc != 'finite':
-            raise ValueError("works only for finite systems")
+            raise ValueError('works only for finite systems')
         if self.L != psi.L:
-            raise ValueError("expect same L")
+            raise ValueError('expect same L')
         if psi._p_label != ['p']:
-            raise NotImplementedError("not adjusted for non-standard MPS.")
+            raise NotImplementedError('not adjusted for non-standard MPS.')
         if self.explicit_plus_hc:
-            raise NotImplementedError("not implemented for explicit_plus_hc flag")
+            raise NotImplementedError('not implemented for explicit_plus_hc flag')
         assert self.L >= 1
         if exp_val is None:
             exp_val = self.expectation_value(psi)
@@ -1236,12 +1248,8 @@ class MPO(MPSGeometry):
             B = psi.get_B(i, form='B')
             W = self.get_W(i)
             contr = npc.tensordot(contr, B, axes=['vR', 'vL'])
-            contr = npc.tensordot(contr,
-                                  W.replace_label('wR', 'wR1'),
-                                  axes=[['wR1', 'p'], ['wL', 'p*']])
-            contr = npc.tensordot(contr,
-                                  W.replace_label('wR', 'wR2'),
-                                  axes=[['wR2', 'p'], ['wL', 'p*']])
+            contr = npc.tensordot(contr, W.replace_label('wR', 'wR1'), axes=[['wR1', 'p'], ['wL', 'p*']])
+            contr = npc.tensordot(contr, W.replace_label('wR', 'wR2'), axes=[['wR2', 'p'], ['wL', 'p*']])
             contr = npc.tensordot(contr, B.conj(), axes=[['vR*', 'p'], ['vL*', 'p*']])
         contr = contr.take_slice([self.get_IdR(self.L - 1)] * 2, ['wR1', 'wR2'])
         contr = npc.trace(contr, 'vR', 'vR*')
@@ -1270,7 +1278,7 @@ class MPO(MPSGeometry):
         IdL = self.get_IdL(i)
         IdR_final = self.get_IdR(i + len(ops) - 1)
         if IdL is None or IdR_final is None:
-            return 0.
+            return 0.0
         contr = None
         for k, opname in enumerate(ops):
             j = i + k
@@ -1282,9 +1290,9 @@ class MPO(MPSGeometry):
                 IdL = self.get_IdL(j)
                 IdR = self.get_IdR(j - 1)
                 if IdL is not None:
-                    proj[IdL] = 0.
+                    proj[IdL] = 0.0
                 if IdR is not None:
-                    proj[IdR] = 0.
+                    proj[IdR] = 0.0
                 contr.iscale_axis(proj, 0)
                 contr = npc.tensordot(contr, W, axes=['wR', 'wL'])
             site = self.sites[j % len(self.sites)]
@@ -1294,12 +1302,7 @@ class MPO(MPSGeometry):
         contr = contr[IdR_final]
         return contr
 
-    def to_TermList(self,
-                    op_basis,
-                    start=None,
-                    max_range=None,
-                    cutoff=1.e-12,
-                    ignore=['Id', 'JW']):
+    def to_TermList(self, op_basis, start=None, max_range=None, cutoff=1.0e-12, ignore=['Id', 'JW']):
         """Obtain a `TermList` represented by self.
 
         This function is meant for debugging MPOs to make sure they have the terms one expects.
@@ -1350,7 +1353,7 @@ class MPO(MPSGeometry):
             partial_L = [None] * self.get_W(i).get_leg('wL').ind_len
             if self.get_IdL(i) is None:
                 continue
-            partial_L[self.get_IdL(i)] = [([], 1.)]
+            partial_L[self.get_IdL(i)] = [([], 1.0)]
             if self.finite:
                 max_range = min(max_range, L - i - 1)
             for k in range(max_range + 1):
@@ -1372,14 +1375,14 @@ class MPO(MPSGeometry):
                     op_norm = npc.tensordot(op, op_dagger, axes=[['p', 'p*'], ['p*', 'p']])
                     op_W = npc.tensordot(W, op_dagger, axes=[['p', 'p*'], ['p*', 'p']])
                     op_W = op_W.to_ndarray() / op_norm
-                    op_W[np.abs(op_W) < cutoff] = 0.
+                    op_W[np.abs(op_W) < cutoff] = 0.0
                     for x, y in zip(*np.nonzero(op_W)):
                         if partial_L[x] is None:
                             continue
                         pref_j = op_W[x, y]
                         if y == IdR:
                             # finish terms
-                            for (term, pref) in partial_L[x]:
+                            for term, pref in partial_L[x]:
                                 if abs(pref * pref_j) < cutoff:
                                     continue
                                 all_terms.append(term + [(opname, j)])
@@ -1389,10 +1392,10 @@ class MPO(MPSGeometry):
                                 partial_R[y] = []
                             new_partial = partial_R[y]
                             if k > 0 and opname in ignore:
-                                for (term, pref) in partial_L[x]:
+                                for term, pref in partial_L[x]:
                                     new_partial.append((term, pref * pref_j))
                             else:
-                                for (term, pref) in partial_L[x]:
+                                for term, pref in partial_L[x]:
                                     new_partial.append((term + [(opname, j)], pref * pref_j))
                 partial_L = partial_R
                 if all(t is None for t in partial_L):
@@ -1420,10 +1423,11 @@ class MPO(MPSGeometry):
             Ws[0].legs[0] = wR.conj()
         # could keep graph in principle and only conjugate the operators
         # but its probably not worth the effort since building it is very fast
-        return MPO(self.sites, Ws, self.bc, self.IdL, self.IdR, self.max_range,
-                   mps_unit_cell_width=self.unit_cell_width)
+        return MPO(
+            self.sites, Ws, self.bc, self.IdL, self.IdR, self.max_range, mps_unit_cell_width=self.unit_cell_width
+        )
 
-    def is_hermitian(self, eps=1.e-10, max_range=None):
+    def is_hermitian(self, eps=1.0e-10, max_range=None):
         """Check if `self` is a hermitian MPO.
 
         Shorthand for ``self.is_equal(self.dagger(), eps, max_range)``.
@@ -1432,7 +1436,7 @@ class MPO(MPSGeometry):
             return True
         return self.is_equal(self.dagger(), eps, max_range)
 
-    def is_equal(self, other, eps=1.e-10, max_range=None):
+    def is_equal(self, other, eps=1.0e-10, max_range=None):
         """Check if `self` and `other` represent the same MPO to precision `eps`.
 
         To compare them efficiently we view `self` and `other` as MPS and compare the overlaps
@@ -1497,7 +1501,7 @@ class MPO(MPSGeometry):
             See above.
 
         """
-        options = asConfig(options, "ApplyMPO")
+        options = asConfig(options, 'ApplyMPO')
         method = options['compression_method']
         trunc_params = options.subconfig('trunc_params')
         if method == 'SVD':
@@ -1505,16 +1509,18 @@ class MPO(MPSGeometry):
             return psi.compress_svd(trunc_params)
         elif method == 'variational':
             from ..algorithms.mps_common import VariationalApplyMPO
+
             return VariationalApplyMPO(psi, self, options).run()
         elif method == 'zip_up':
             trunc_err = self.apply_zipup(psi, options)
             return trunc_err + psi.compress_svd(trunc_params)
         elif method == 'variationalQR':
             from ..algorithms.mps_common import QRBasedVariationalApplyMPO
+
             return QRBasedVariationalApplyMPO(psi, self, options).run()
 
         # TODO: zipup method infinite?
-        raise ValueError("Unknown compression method: " + repr(method))
+        raise ValueError('Unknown compression method: ' + repr(method))
 
     def apply_naively(self, psi):
         """Applies an MPO to an MPS (in place) naively, without compression.
@@ -1536,9 +1542,9 @@ class MPO(MPSGeometry):
         """
         bc = psi.bc
         if bc != self.bc:
-            raise ValueError("Boundary conditions of MPS and MPO are not the same")
+            raise ValueError('Boundary conditions of MPS and MPO are not the same')
         if psi.L != self.L:
-            raise ValueError("Length of MPS and MPO not the same")
+            raise ValueError('Length of MPS and MPO not the same')
         if self.explicit_plus_hc:
             raise NotImplementedError("Can't use explicit_plus_hc with apply_naively")
         for i in range(psi.L):
@@ -1563,14 +1569,14 @@ class MPO(MPSGeometry):
         # fix right leg of last tensor (reason: combine_legs sorts charges)
         if not psi.finite:
             left_leg = psi.get_B(psi.L).get_leg('vL')
-            right_leg = psi.get_B(psi.L-1).get_leg('vR')
+            right_leg = psi.get_B(psi.L - 1).get_leg('vR')
             perm, _ = left_leg.sort()
             inv_perm = inverse_permutation(perm)
             inv_perm_flat = right_leg.perm_flat_from_perm_qind(inv_perm)
             # TODO: Do it without using `permute`. We do not need to touch the
             # blocks anyway, so we can just re-order B._qdata and the leg charges.
-            B = psi.get_B(psi.L-1).permute(inv_perm_flat, axis='vR')
-            psi.set_B(psi.L-1, B, 'B')
+            B = psi.get_B(psi.L - 1).permute(inv_perm_flat, axis='vR')
+            psi.set_B(psi.L - 1, B, 'B')
 
         if bc == 'infinite':
             # calculate (rather arbitrary) guess for S[0] (no we don't like it either)
@@ -1619,9 +1625,9 @@ class MPO(MPSGeometry):
                 reduces cut for Schmidt values to `trunc_weight * svd_min`
 
         """
-        options = asConfig(options, "zip_up")
+        options = asConfig(options, 'zip_up')
         m_temp = options.get('m_temp', 2, int)
-        trunc_weight = options.get('trunc_weight', 1., 'real')
+        trunc_weight = options.get('trunc_weight', 1.0, 'real')
         trunc_params = options.subconfig('trunc_params')
         relax_trunc = trunc_params.copy()  # relaxed truncation criteria
         relax_trunc['chi_max'] *= m_temp
@@ -1630,11 +1636,11 @@ class MPO(MPSGeometry):
         trunc_err = TruncationError()
         bc = psi.bc
         if bc != self.bc:
-            raise ValueError("Boundary conditions of MPS and MPO are not the same")
+            raise ValueError('Boundary conditions of MPS and MPO are not the same')
         if psi.L != self.L:
-            raise ValueError("Length of MPS and MPO not the same")
+            raise ValueError('Length of MPS and MPO not the same')
         if bc != 'finite':
-            raise ValueError("Only finite boundary conditions implemented")
+            raise ValueError('Only finite boundary conditions implemented')
         if self.explicit_plus_hc:
             raise NotImplementedError("Can't use explicit_plus_hc with apply_zipup")
         for i in range(psi.L):
@@ -1709,20 +1715,19 @@ class MPO(MPSGeometry):
 
         """
         if self.bc != 'finite':
-            raise NotImplementedError("MPO.add_identity only works for finite MPO.")
+            raise NotImplementedError('MPO.add_identity only works for finite MPO.')
         if self.explicit_plus_hc:
             raise NotImplementedError
 
         N = len(sites)
         assert N <= self.L
         if not set(sites).issubset(set(list(range(self.L)))):
-            raise ValueError(
-                f'The sites {sites} are not strictly contained in {{1, ..., {self.L-1}}}.')
+            raise ValueError(f'The sites {sites} are not strictly contained in {{1, ..., {self.L - 1}}}.')
         if sorted(sites) != [*range(min(sites), max(sites) + 1)]:
             # test fails for non-contiguous sites. not sure why
             raise NotImplementedError
 
-        t_beta = beta**(1 / N)
+        t_beta = beta ** (1 / N)
         t_alpha = alpha / N
 
         IdL = self.IdL
@@ -1751,20 +1756,20 @@ class MPO(MPSGeometry):
                 d = 1 if counter != N - 1 else beta
                 counter = counter + 1
             else:
-                b = g = d = 1.
-                a = 0.
+                b = g = d = 1.0
+                a = 0.0
 
             # First Row - only this is modified
             dW[0, 0] = d * Id_npc
             for i in range(0, DR - 2):
-                dW[0, i + 1] = b**(counter) * C_npc[0, i]
+                dW[0, i + 1] = b ** (counter) * C_npc[0, i]
             dW[0, -1] = (b**N) * D_npc + a * Id_npc
             # Middle Rows
             for i in range(0, DL - 2):
                 for j in range(0, DR - 2):
                     dW[i + 1, j + 1] = b * A_npc[i, j]
-                dW[i + 1, -1] = b**(N - counter + 1) * B_npc[i, 0]
-            #Bottom Rows
+                dW[i + 1, -1] = b ** (N - counter + 1) * B_npc[i, 0]
+            # Bottom Rows
             dW[-1, -1] = g * Id_npc
             U.append(dW)
 
@@ -1772,9 +1777,16 @@ class MPO(MPSGeometry):
         # Sajant: We have enforced that the MPO look upper block triangular without any permutations
         IdL = [0] * (self.L + 1)
         IdR = [-1] * (self.L + 1)
-        return MPO.from_grids(self.sites, U, self.bc, IdL, IdR, max_range=self.max_range,
-                              explicit_plus_hc=self.explicit_plus_hc,
-                              mps_unit_cell_width=self.unit_cell_width)
+        return MPO.from_grids(
+            self.sites,
+            U,
+            self.bc,
+            IdL,
+            IdR,
+            max_range=self.max_range,
+            explicit_plus_hc=self.explicit_plus_hc,
+            mps_unit_cell_width=self.unit_cell_width,
+        )
 
     def overlap(self, other, understood_infinite: bool = False, num_sites: int = None):
         """Overlap between two MPOs.
@@ -1817,9 +1829,11 @@ class MPO(MPSGeometry):
                 num_sites = max(self.L + 2 * self_max_range, other.L + 2 * other.max_range)
             assert num_sites >= self.L
             if not understood_infinite:
-                msg = ('The overlap between infinite MPOs has an unusual definition. Make sure '
-                       'you understand it, then set `understood_infinite=True` to suppress '
-                       'this warning.')
+                msg = (
+                    'The overlap between infinite MPOs has an unusual definition. Make sure '
+                    'you understand it, then set `understood_infinite=True` to suppress '
+                    'this warning.'
+                )
                 warnings.warn(msg, stacklevel=2)
         else:
             raise ValueError('cant take overlap between finite and infinite MPO')
@@ -1900,18 +1914,19 @@ class MPO(MPSGeometry):
         For infinite systems, we return the index *within* the MPS unit cell that is equivalent to
         ``i``, by adding a suitable multiple of ``self.L``.
         """
-        msg = ('_to_valid_index methods have been deprecated. '
-               'Use _to_valid_site_index or _to_valid_bond_index instead.')
+        msg = '_to_valid_index methods have been deprecated. Use _to_valid_site_index or _to_valid_bond_index instead.'
         warnings.warn(msg, category=FutureWarning, stacklevel=2)
         if not self.finite:
             return i % self.L
         if i < 0:
-            msg = ('Negative site indices for open boundary conditions are deprecated and will '
-                   'raise a ValueError in the future')
+            msg = (
+                'Negative site indices for open boundary conditions are deprecated and will '
+                'raise a ValueError in the future'
+            )
             warnings.warn(msg, category=FutureWarning, stacklevel=3)
             i += self.L
         if i >= self.L + int(bond) or i < 0:
-            raise KeyError(f"i = {i:d} out of bounds for finite MPO")
+            raise KeyError(f'i = {i:d} out of bounds for finite MPO')
         return i
 
     @staticmethod
@@ -1924,7 +1939,7 @@ class MPO(MPSGeometry):
         except TypeError:
             return [Id] * (L + 1)
         if len(Id) != L + 1:
-            raise ValueError(f"expected list with L+1={L + 1:d} entries")
+            raise ValueError(f'expected list with L+1={L + 1:d} entries')
         return Id
 
     def __add__(self, other):
@@ -2002,8 +2017,16 @@ class MPO(MPSGeometry):
             max_range = max(self.max_range, other.max_range)
         else:
             max_range = None
-        return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range, self.explicit_plus_hc,
-                   mps_unit_cell_width=self.unit_cell_width)  # no graph
+        return MPO(
+            self.sites,
+            Ws,
+            self.bc,
+            IdL,
+            IdR,
+            max_range,
+            self.explicit_plus_hc,
+            mps_unit_cell_width=self.unit_cell_width,
+        )  # no graph
 
     def _get_block_projections(self, i):
         """Projections onto (IdL, other, IdR) on bond `i` in range(0, L+1)"""
@@ -2058,28 +2081,32 @@ def make_W_II(t, A, B, C, D):
         Legs ``'wL', 'wR', 'p', 'p*'``; legs projected to a single IdL/IdR can be dropped.
 
     """
-    tC = np.sqrt(np.abs(t))  #spread time step across B, C
+    tC = np.sqrt(np.abs(t))  # spread time step across B, C
     tB = t / tC
     d = D.shape[0]
 
-    #The virtual size of W is  (1+Nr, 1+Nc)
+    # The virtual size of W is  (1+Nr, 1+Nc)
     Nr = A.shape[0]
     Nc = A.shape[1]
     W = np.zeros((1 + Nr, 1 + Nc, d, d), dtype=np.result_type(D, t))
 
-    Id_ = np.array([[1, 0], [0, 1]])  #2x2 operators in a hard-core boson space
+    Id_ = np.array([[1, 0], [0, 1]])  # 2x2 operators in a hard-core boson space
     b = np.array([[0, 0], [1, 0]])
 
-    Id = np.kron(Id_, Id_)  #4x4 operators in the 2x hard core boson space
+    Id = np.kron(Id_, Id_)  # 4x4 operators in the 2x hard core boson space
     Br = np.kron(b, Id_)
     Bc = np.kron(Id_, b)
     Brc = np.kron(b, b)
-    for r in range(Nr):  #double loop over row / column of A
+    for r in range(Nr):  # double loop over row / column of A
         for c in range(Nc):
-            #Select relevant part of virtual space and extend by hardcore bosons
-            h = np.kron(Brc, A[r, c, :, :]) + np.kron(Br, tB * B[r, :, :]) + np.kron(
-                Bc, tC * C[c, :, :]) + t * np.kron(Id, D)
-            w = expm(h)  #Exponentiate in the extended Hilbert space
+            # Select relevant part of virtual space and extend by hardcore bosons
+            h = (
+                np.kron(Brc, A[r, c, :, :])
+                + np.kron(Br, tB * B[r, :, :])
+                + np.kron(Bc, tC * C[c, :, :])
+                + t * np.kron(Id, D)
+            )
+            w = expm(h)  # Exponentiate in the extended Hilbert space
             w = w.reshape((2, 2, d, 2, 2, d))
             w = w[:, :, :, 0, 0, :]
             W[1 + r, 1 + c, :, :] = w[1, 1]  # extracts relevant parts according to Eqn 11
@@ -2089,7 +2116,7 @@ def make_W_II(t, A, B, C, D):
                 W[0, 1 + c] = w[0, 1]
                 if c == 0:
                     W[0, 0] = w[0, 0]
-        if Nc == 0:  #technically only need one boson
+        if Nc == 0:  # technically only need one boson
             h = np.kron(Br, tB * B[r, :, :]) + t * np.kron(Id, D)
             w = expm(h)
             w = w.reshape((2, 2, d, 2, 2, d))
@@ -2246,7 +2273,7 @@ class MPOGraph(MPSGeometry):
         assert len(self.graph) == self.L
         assert len(self.states) == self.L + 1
         for i, site in enumerate(self.sites):
-            stL, stR = self.states[i:i + 2]
+            stL, stR = self.states[i : i + 2]
             # check graph
             gr = self.graph[i]
             for keyL in gr:
@@ -2281,7 +2308,7 @@ class MPOGraph(MPSGeometry):
         i = i % self.L
         if check_op:
             if not self.sites[i].valid_opname(opname):
-                raise ValueError(f"operator {opname!r} not existent on site {i:d}")
+                raise ValueError(f'operator {opname!r} not existent on site {i:d}')
         G = self.graph[i]
         if keyL not in self.states[i]:
             self.states[i].add(keyL)
@@ -2323,7 +2350,7 @@ class MPOGraph(MPSGeometry):
 
         """
         if j <= i:
-            raise ValueError("j <= i not allowed")
+            raise ValueError('j <= i not allowed')
         keyL = keyR = key
         for k in range(i + 1, j):
             if (k - i) % self.L == 0:
@@ -2332,7 +2359,7 @@ class MPOGraph(MPSGeometry):
                 # (i, op_i, op_str_right_of_i) e.g. in MultiCouplingTerms.add_to_graph
             k = k % self.L
             if not self.has_edge(k, keyL, keyR):
-                self.add(k, keyL, keyR, opname, 1., check_op=check_op, skip_existing=skip_existing)
+                self.add(k, keyL, keyR, opname, 1.0, check_op=check_op, skip_existing=skip_existing)
             keyL = keyR
         return keyL
 
@@ -2361,7 +2388,7 @@ class MPOGraph(MPSGeometry):
 
         """
         if j <= i:
-            raise ValueError("j <= i not allowed")
+            raise ValueError('j <= i not allowed')
         keyL = keyR = key
         for k in range(j - 1, i, -1):
             if (j - k) % self.L == 0:
@@ -2369,7 +2396,7 @@ class MPOGraph(MPSGeometry):
                 keyL = keyR + (k, opname, opname)
             k = k % self.L
             if not self.has_edge(k, keyL, keyR):
-                self.add(k, keyL, keyR, opname, 1., check_op=check_op, skip_existing=skip_existing)
+                self.add(k, keyL, keyR, opname, 1.0, check_op=check_op, skip_existing=skip_existing)
             keyR = keyL
         return keyR
 
@@ -2397,10 +2424,10 @@ class MPOGraph(MPSGeometry):
             min_IdR = min([self.L] + [i for i, s in enumerate(self.states[:-1]) if 'IdR' in s])
         for k in range(0, max_IdL):
             if not self.has_edge(k, 'IdL', 'IdL'):
-                self.add(k, 'IdL', 'IdL', 'Id', 1.)
+                self.add(k, 'IdL', 'IdL', 'Id', 1.0)
         for k in range(min_IdR, self.L):
             if not self.has_edge(k, 'IdR', 'IdR'):
-                self.add(k, 'IdR', 'IdR', 'Id', 1.)
+                self.add(k, 'IdR', 'IdR', 'Id', 1.0)
         # done
 
     def has_edge(self, i, keyL, keyR):
@@ -2431,12 +2458,21 @@ class MPOGraph(MPSGeometry):
         IdL = [s.get('IdL', None) for s in self._ordered_states]
         IdR = [s.get('IdR', None) for s in self._ordered_states]
         legs, Ws_qtotal = self._calc_legcharges(Ws_qtotal)
-        H = MPO.from_grids(self.sites, grids, self.bc, IdL, IdR, Ws_qtotal, legs, self.max_range,
-                           mps_unit_cell_width=self.unit_cell_width)
+        H = MPO.from_grids(
+            self.sites,
+            grids,
+            self.bc,
+            IdL,
+            IdR,
+            Ws_qtotal,
+            legs,
+            self.max_range,
+            mps_unit_cell_width=self.unit_cell_width,
+        )
         return H
 
     def __repr__(self):
-        return f"<MPOGraph L={self.L:d}>"
+        return f'<MPOGraph L={self.L:d}>'
 
     def __str__(self):
         """String showing the graph for debug output."""
@@ -2446,13 +2482,13 @@ class MPOGraph(MPSGeometry):
             strs = []
             for keyL in self.states[i]:
                 s = [repr(keyL)]
-                s.append("-" * len(s[-1]))
+                s.append('-' * len(s[-1]))
                 D = G.get(keyL, [])
                 for keyR in D:
-                    s.append(repr(keyR) + ":")
+                    s.append(repr(keyR) + ':')
                     for optuple in D[keyR]:
-                        s.append("  " + repr(optuple))
-                strs.append("\n".join(s))
+                        s.append('  ' + repr(optuple))
+                strs.append('\n'.join(s))
             res.append(vert_join(strs, delim='|'))
             res.append('')
         # & states on last MPO bond
@@ -2474,10 +2510,10 @@ class MPOGraph(MPSGeometry):
     def _build_grids(self):
         """Translate the graph dictionaries into grids for the `Ws`."""
         states = self._ordered_states
-        assert (states is not None)  # make sure that _set_ordered_states was called
+        assert states is not None  # make sure that _set_ordered_states was called
         grids = []
         for i in range(self.L):
-            stL, stR = states[i:i + 2]
+            stL, stR = states[i : i + 2]
             graph = self.graph[i]  # ``{keyL: {keyR: [(opname, strength)]}}``
             grid = [None] * len(stL)
             for keyL, a in stL.items():
@@ -2513,7 +2549,7 @@ class MPOGraph(MPSGeometry):
         L = self.L
         states = self._ordered_states
         sites = self.sites
-        infinite = (self.bc == 'infinite')
+        infinite = self.bc == 'infinite'
         chinfo = self.chinfo
 
         if Ws_qtotal is None:
@@ -2667,14 +2703,16 @@ class MPOEnvironment(BaseEnvironment):
         super().__init__(bra, ket, cache, **init_env_data)
         self.dtype = np.result_type(bra.dtype, ket.dtype, H.dtype)
 
-    def init_first_LP_last_RP(self,
-                              init_LP=None,
-                              init_RP=None,
-                              age_LP=0,
-                              age_RP=0,
-                              start_env_sites=None,
-                              force_init_method="iter",
-                              gmres_options=None):
+    def init_first_LP_last_RP(
+        self,
+        init_LP=None,
+        init_RP=None,
+        age_LP=0,
+        age_RP=0,
+        start_env_sites=None,
+        force_init_method='iter',
+        gmres_options=None,
+    ):
         """(Re)initialize first LP and last RP from the given data.
 
         If `init_LP` and `init_RP` are not given, we try to find sensible initial values.
@@ -2712,12 +2750,18 @@ class MPOEnvironment(BaseEnvironment):
             Only relevant for **infinite** MPS if method 'iter' is used to get `init_LP`/`init_RP`.
 
         """
-        if not self.finite  and (init_LP is None or init_RP is None) and \
-                start_env_sites is None and self.bra is self.ket:
+        if (
+            not self.finite
+            and (init_LP is None or init_RP is None)
+            and start_env_sites is None
+            and self.bra is self.ket
+        ):
             norm_err = np.linalg.norm(self.ket.norm_test())
-            if norm_err > 1.e-10:
-                warnings.warn("call psi.canonical_form() to regenerate MPO environments from psi"
-                              f" with current norm error {norm_err:.2e}")
+            if norm_err > 1.0e-10:
+                warnings.warn(
+                    'call psi.canonical_form() to regenerate MPO environments from psi'
+                    f' with current norm error {norm_err:.2e}'
+                )
                 self.ket.canonical_form()
 
             # select method for initialization
@@ -2725,24 +2769,26 @@ class MPOEnvironment(BaseEnvironment):
                 if force_init_method is None:
                     force_init_method = 'TM'
                 if force_init_method == 'iter':
-                    msg = ('force_init_method="iter" is not yet supported with shift symmetry. '
-                           'use force_init_method="TM" in the meantime.')
+                    msg = (
+                        'force_init_method="iter" is not yet supported with shift symmetry. '
+                        'use force_init_method="TM" in the meantime.'
+                    )
                     warnings.warn(msg, stacklevel=4)
                     force_init_method = 'TM'
             if force_init_method is None:
                 if (max(self.ket.chi) <= 150) or (not _mpo_check_for_iter_LP_RP_infinite(self.H)):
-                    force_init_method = "TM"
+                    force_init_method = 'TM'
                 else:
-                    force_init_method = "iter"
+                    force_init_method = 'iter'
 
             # call that method
-            if force_init_method == "iter":
+            if force_init_method == 'iter':
                 _env_init = MPOEnvironmentBuilder(self.H, self.ket)
                 env_data, _ = _env_init.init_LP_RP_iterative('both', gmres_options=gmres_options)
-            elif force_init_method == "TM":
+            elif force_init_method == 'TM':
                 env_data = MPOTransferMatrix.find_init_LP_RP(self.H, self.ket, 0, self.L - 1)
             else:
-                raise ValueError(f"Invalid {force_init_method=}")
+                raise ValueError(f'Invalid {force_init_method=}')
 
             init_LP = env_data['init_LP']
             init_RP = env_data['init_RP']
@@ -2750,11 +2796,11 @@ class MPOEnvironment(BaseEnvironment):
         if start_env_sites is None:
             start_env_sites = 0 if self.finite else self.L
         if self.finite and start_env_sites != 0:
-            warnings.warn("setting `start_env_sites` to 0 for finite MPS")
+            warnings.warn('setting `start_env_sites` to 0 for finite MPS')
             start_env_sites = 0
         init_LP, init_RP = self._check_compatible_legs(init_LP, init_RP, start_env_sites)
         if self.ket.bc == 'segment' and (init_LP is None or init_RP is None):
-            raise ValueError("Environments with segment b.c. need explicit environments!")
+            raise ValueError('Environments with segment b.c. need explicit environments!')
         super().init_first_LP_last_RP(init_LP, init_RP, age_LP, age_RP, start_env_sites)
 
     def _check_compatible_legs(self, init_LP, init_RP, start_env_sites):
@@ -2763,21 +2809,21 @@ class MPOEnvironment(BaseEnvironment):
                 i = -start_env_sites
                 init_LP.get_leg('wR').test_contractible(self.H.get_W(i).get_leg('wL'))
             except ValueError:
-                warnings.warn("dropping `init_LP` with incompatible MPO legs")
+                warnings.warn('dropping `init_LP` with incompatible MPO legs')
                 init_LP = None
         if init_RP is not None:
             try:
                 j = self.L - 1 + start_env_sites
                 init_RP.get_leg('wL').test_contractible(self.H.get_W(j).get_leg('wR'))
             except ValueError:
-                warnings.warn("dropping `init_RP` with incompatible MPO legs")
+                warnings.warn('dropping `init_RP` with incompatible MPO legs')
                 init_RP = None
         return super()._check_compatible_legs(init_LP, init_RP, start_env_sites)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
         super().test_sanity()
-        assert (self.bra.finite == self.ket.finite == self.H.finite == self.finite)
+        assert self.bra.finite == self.ket.finite == self.H.finite == self.finite
         # check that the physical legs are contractable
         for b_s, H_s, k_s in zip(self.bra.sites, self.H.sites, self.ket.sites):
             b_s.leg.test_equal(k_s.leg)
@@ -2980,9 +3026,7 @@ class MPOEnvironment(BaseEnvironment):
         if pipe is None:
             pipe = LHeff.make_pipe(['vR*', p], qconj=+1)
 
-        LHeff = LHeff.combine_legs([['vR*', p], ['vR', ps]],
-                                   pipes=[pipe, pipe.conj()],
-                                   new_axes=[0, 2])
+        LHeff = LHeff.combine_legs([['vR*', p], ['vR', ps]], pipes=[pipe, pipe.conj()], new_axes=[0, 2])
         return LHeff
 
     def _contract_RHeff(self, i, label_p='p1', pipe=None):
@@ -2992,9 +3036,7 @@ class MPOEnvironment(BaseEnvironment):
         RHeff = npc.tensordot(W, RP, axes=['wR', 'wL'])
         if pipe is None:
             pipe = RHeff.make_pipe([p, 'vL*'], qconj=-1)
-        RHeff = RHeff.combine_legs([[p, 'vL*'], [ps, 'vL']],
-                                   pipes=[pipe, pipe.conj()],
-                                   new_axes=[2, 1])
+        RHeff = RHeff.combine_legs([[p, 'vL*'], [ps, 'vL']], pipes=[pipe, pipe.conj()], new_axes=[2, 1])
         return RHeff
 
 
@@ -3068,9 +3110,9 @@ class MPOEnvironmentBuilder:
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
-        assert (self.ket.bc == self.H.bc == 'infinite')
+        assert self.ket.bc == self.H.bc == 'infinite'
         # check that the physical legs are contractable
-        assert (self.L == self.ket.L == self.H.L)
+        assert self.L == self.ket.L == self.H.L
         for H_s, k_s in zip(self.H.sites, self.ket.sites):
             k_s.leg.test_equal(H_s.leg)
 
@@ -3099,22 +3141,21 @@ class MPOEnvironmentBuilder:
         """
         ones = []
         for j_outer, loop in self.H._cycles.items():
-            norm = 1.
+            norm = 1.0
             for j in range(self.H.L):
                 op = self.H._graph[j][(loop[j], loop[j + 1])]  # (i,j)
                 factor = npc.norm(op, ord=1) / op.shape[0]
                 if norm * factor < tol:
-                    norm = 0.
+                    norm = 0.0
                     break  # norm close to zero
                 # op == factor*id with factor>0
-                is_id = npc.norm(op - factor * npc.diag(1., op.get_leg("p")), ord=1) < tol
+                is_id = npc.norm(op - factor * npc.diag(1.0, op.get_leg('p')), ord=1) < tol
                 if not is_id:
-                    raise ValueError(f"W[{j}][{loop[j]},{loop[j + 1]}] != a*Id with a>0")
+                    raise ValueError(f'W[{j}][{loop[j]},{loop[j + 1]}] != a*Id with a>0')
                 norm *= factor
-            if norm >= 1. + tol:
-                raise ValueError(
-                    f"self.H contains cycle with norm larger than one at outer index {loop[0]}")
-            if abs(norm - 1.) < 1e-13:
+            if norm >= 1.0 + tol:
+                raise ValueError(f'self.H contains cycle with norm larger than one at outer index {loop[0]}')
+            if abs(norm - 1.0) < 1e-13:
                 ones.append(j_outer)
         return ones
 
@@ -3243,12 +3284,7 @@ class MPOEnvironmentBuilder:
                     del grid[j_site + 1][jR][0]  # won't be accessed anymore
             ready_nodes = finished_nodes
 
-    def init_LP_RP_iterative(self,
-                             which='both',
-                             calc_E=False,
-                             tol_c0=None,
-                             gmres_options=None,
-                             tol_id=1e-12):
+    def init_LP_RP_iterative(self, which='both', calc_E=False, tol_c0=None, gmres_options=None, tol_id=1e-12):
         """Construct boundary environments for periodic MPO environments.
 
             See class docstring for an explanation.
@@ -3283,11 +3319,11 @@ class MPOEnvironmentBuilder:
 
         """
         if not self.H.chinfo.trivial_shift:
-            raise NotImplementedError('Iterative LP/RP initialization is not yet supported for '
-                                      'shift-symmetry with infinite systems.')
+            raise NotImplementedError(
+                'Iterative LP/RP initialization is not yet supported for shift-symmetry with infinite systems.'
+            )
         if _mpo_check_for_iter_LP_RP_infinite(self.H) is False:
-            raise ValueError(
-                "Iterative environment initialization failed: Hamiltonian cannot be ordered.")
+            raise ValueError('Iterative environment initialization failed: Hamiltonian cannot be ordered.')
         assert which == 'LP' or 'RP' or 'both', f'Invalid environment type "{which}"'
         ones = self._determine_cycles()
         n_terms = len(ones)
@@ -3298,20 +3334,26 @@ class MPOEnvironmentBuilder:
             gmres_options['N_min'] = gmres_options.get('N_min', 0)
             gmres_options['res'] = gmres_options.get('res', 1e-11)
         legs_labels = {
-            "init_LP": ([
-                self.H.get_W(0).get_leg('wL').conj(),
-                self.ket.get_B(0).get_leg('vL').conj(),
-                self.ket.get_B(0).get_leg('vL')
-            ], ['wR', 'vR', 'vR*']),
-            "init_RP": ([
-                self.H.get_W(self.L - 1).get_leg('wR').conj(),
-                self.ket.get_B(self.L - 1).get_leg('vR').conj(),
-                self.ket.get_B(self.L - 1).get_leg('vR')
-            ], ['wL', 'vL', 'vL*'])
+            'init_LP': (
+                [
+                    self.H.get_W(0).get_leg('wL').conj(),
+                    self.ket.get_B(0).get_leg('vL').conj(),
+                    self.ket.get_B(0).get_leg('vL'),
+                ],
+                ['wR', 'vR', 'vR*'],
+            ),
+            'init_RP': (
+                [
+                    self.H.get_W(self.L - 1).get_leg('wR').conj(),
+                    self.ket.get_B(self.L - 1).get_leg('vR').conj(),
+                    self.ket.get_B(self.L - 1).get_leg('vR'),
+                ],
+                ['wL', 'vL', 'vL*'],
+            ),
         }
         envs = {}
         # only for MPOEnvironments of extensive Hamiltonians, i.e. len(n_terms)==2
-        Es = [1., 1.]  # per unit cell
+        Es = [1.0, 1.0]  # per unit cell
 
         # NOTE: main work starts here
         for name in ['init_LP', 'init_RP'] if which == 'both' else ['init_' + which]:
@@ -3320,8 +3362,7 @@ class MPOEnvironmentBuilder:
             self._Ms = [self.ket.get_B(i, form=form) for i in range(self.L)]
             self._Ns = [self.ket.get_B(i, form=form).conj() for i in range(self.L)]
             envs[name] = [
-                npc.Array(legs_labels[name][0], dtype=self.dtype, labels=legs_labels[name][1])
-                for _ in range(n_terms)
+                npc.Array(legs_labels[name][0], dtype=self.dtype, labels=legs_labels[name][1]) for _ in range(n_terms)
             ]
             grids = self._make_grids(name, ones)
             last_site = self.L - 1 if name == 'init_LP' else 0
@@ -3332,8 +3373,7 @@ class MPOEnvironmentBuilder:
             c0_base, rho = self._c0_rho(name, legs_labels, tol_c0)
 
             m = 0
-            for j_outer in (self.H._outer_permutation
-                            if name == 'init_LP' else reversed(self.H._outer_permutation)):
+            for j_outer in self.H._outer_permutation if name == 'init_LP' else reversed(self.H._outer_permutation):
                 cs = []
                 eps_temp = []
                 # NOTE: contributions ~ c0
@@ -3353,8 +3393,7 @@ class MPOEnvironmentBuilder:
                         self._contract_grid(grids[m], c0, j_outer, name)
                     # compute c0 contributions for lower envs and adjust epsilons
                     for gamma in range(m - 1, 0, -1):
-                        Ctot_gamma = self._ctot_loop(grids[gamma - 1], self.H._cycles[j_outer],
-                                                     name)
+                        Ctot_gamma = self._ctot_loop(grids[gamma - 1], self.H._cycles[j_outer], name)
                         eps_gamma = np.real(npc.inner(Ctot_gamma, rho))
                         for j_eps, alpha in enumerate(range(gamma + 1, m + 1)):
                             # print("eps_temp j_eps:",eps_temp[j_eps],comb(alpha,gamma-1))
@@ -3371,26 +3410,25 @@ class MPOEnvironmentBuilder:
                     else:
                         Ctot = grids[gamma][last_site][j_outer][0]
                         if Ctot is None:  # nothing to sum up
-                            Ctot = npc.zeros(legs_labels[name][0][1:],
-                                             dtype=self.dtype,
-                                             labels=legs_labels[name][1][1:])
+                            Ctot = npc.zeros(
+                                legs_labels[name][0][1:], dtype=self.dtype, labels=legs_labels[name][1][1:]
+                            )
                     for j_cs, alpha in enumerate(range(gamma + 1, m)):
                         Ctot -= comb(alpha, gamma) * cs[j_cs]
                     if j_outer in self.H._cycles:
-                        res = self._solve_cj(self.H._cycles[j_outer], name, Ctot, offset,
-                                             gmres_options)
+                        res = self._solve_cj(self.H._cycles[j_outer], name, Ctot, offset, gmres_options)
                         if offset == 1 and gamma != 0:
                             res += (eps_temp[gamma - 1] / eps_temp[-1]) * cs[-1]
                         cs.insert(0, res)
                         with warnings.catch_warnings():
-                            warnings.simplefilter("ignore")
+                            warnings.simplefilter('ignore')
                             # ignore complex warning when self.dtype=float since GMRES internally uses complex
                             envs[name][gamma][j_outer] = res
                         self._contract_grid(grids[gamma], res, j_outer, name)
                     else:
                         cs.insert(0, Ctot)
                         with warnings.catch_warnings():
-                            warnings.simplefilter("ignore")
+                            warnings.simplefilter('ignore')
                             # ignore complex warning when self.dtype=float since GMRES internally uses complex
                             envs[name][gamma][j_outer] = Ctot
                         self._contract_grid(grids[gamma], Ctot, j_outer, name)
@@ -3401,18 +3439,15 @@ class MPOEnvironmentBuilder:
     def _make_grids(self, name, ones):
         """Initialize grids for `self.init_LP_RP_iterative()`"""
         js_loops = sorted([self.H._outer_permutation.index(j) for j in ones])
-        if name == "init_LP":
+        if name == 'init_LP':
             gs = [self._left_grid(self.H._outer_permutation[:j0]) for j0 in js_loops[:-1]]
             # last norm 1 cycle not on last index
             if self.H._outer_permutation[-1] not in ones:
-                gs += [self._left_grid(self.H._outer_permutation[:js_loops[-1]])]
+                gs += [self._left_grid(self.H._outer_permutation[: js_loops[-1]])]
         else:
-            gs = [
-                self._right_grid(self.H._outer_permutation[j0 + 1:])
-                for j0 in reversed(js_loops[1:])
-            ]
+            gs = [self._right_grid(self.H._outer_permutation[j0 + 1 :]) for j0 in reversed(js_loops[1:])]
             if self.H._outer_permutation[0] not in ones:
-                gs += [self._right_grid(self.H._outer_permutation[js_loops[0] + 1:])]
+                gs += [self._right_grid(self.H._outer_permutation[js_loops[0] + 1 :])]
         return gs
 
     def _contract_grid(self, grid, c0_outer, j_outer, name):
@@ -3437,21 +3472,17 @@ class MPOEnvironmentBuilder:
         c_loop = None
         for j_site in range(self.L):
             # double check, should not trigger
-            assert len(
-                grid[j_site][cycle[j_site +
-                                   1]][1]) == 1 and cycle[j_site] in grid[j_site][cycle[j_site +
-                                                                                        1]][1]
+            assert len(grid[j_site][cycle[j_site + 1]][1]) == 1 and cycle[j_site] in grid[j_site][cycle[j_site + 1]][1]
         for j_site in range(self.L):
             if grid[j_site][cycle[j_site + 1]][0] is not None:
                 c_loop = grid[j_site][cycle[j_site + 1]][0]
                 j_start = j_site
                 break
         # unlikely but not accounted for beforehand
-        assert c_loop is not None, "Hamiltonian contains cycle that does not connect to other indices"
+        assert c_loop is not None, 'Hamiltonian contains cycle that does not connect to other indices'
         # do contractions
         for j_site in range(j_start + 1, self.L):
-            c_loop = self._contract_cL(c_loop, j_site,
-                                       self.H._graph[j_site][(cycle[j_site], cycle[j_site + 1])])
+            c_loop = self._contract_cL(c_loop, j_site, self.H._graph[j_site][(cycle[j_site], cycle[j_site + 1])])
             if grid[j_site][cycle[j_site + 1]][0] is not None:
                 c_loop += grid[j_site][cycle[j_site + 1]][0]
         return c_loop
@@ -3461,19 +3492,16 @@ class MPOEnvironmentBuilder:
         c_loop = None
         for j_site in range(self.L - 1, -1, -1):
             # double check, should not trigger
-            assert len(
-                grid[j_site][cycle[j_site]][1]) == 1 and cycle[j_site +
-                                                               1] in grid[j_site][cycle[j_site]][1]
+            assert len(grid[j_site][cycle[j_site]][1]) == 1 and cycle[j_site + 1] in grid[j_site][cycle[j_site]][1]
         for j_site in range(self.L - 1, -1, -1):
             if grid[j_site][cycle[j_site]][0] is not None:
                 c_loop = grid[j_site][cycle[j_site]][0]
                 j_start = j_site
                 break
-        assert c_loop is not None, "Hamiltonian contains cycle that does not connect to other indices"
+        assert c_loop is not None, 'Hamiltonian contains cycle that does not connect to other indices'
         # do contractions
         for j_site in range(j_start - 1, -1, -1):
-            c_loop = self._contract_cR(c_loop, j_site,
-                                       self.H._graph[j_site][(cycle[j_site], cycle[j_site + 1])])
+            c_loop = self._contract_cR(c_loop, j_site, self.H._graph[j_site][(cycle[j_site], cycle[j_site + 1])])
             if grid[j_site][cycle[j_site]][0] is not None:
                 c_loop += grid[j_site][cycle[j_site]][0]
         return c_loop
@@ -3485,69 +3513,61 @@ class MPOEnvironmentBuilder:
         associated with `self.ket`.
         """
         # Identity
-        c0 = npc.diag(1.,
-                      legs_labels[name][0][1],
-                      dtype=self.dtype,
-                      labels=legs_labels[name][1][1:])
+        c0 = npc.diag(1.0, legs_labels[name][0][1], dtype=self.dtype, labels=legs_labels[name][1][1:])
         if tol_c0 is None:  # ignore canonical form errors
             S = self.ket.get_SR(self.L - 1) if name == 'init_LP' else self.ket.get_SL(0)
             if isinstance(S, npc.Array):
-                rho = npc.tensordot(S,
-                                    S.conj(),
-                                    axes=['vR', 'vR*'] if name == "init_LP" else ['vL', 'vL*'])
+                rho = npc.tensordot(S, S.conj(), axes=['vR', 'vR*'] if name == 'init_LP' else ['vL', 'vL*'])
                 rho.iset_leg_labels(legs_labels[name][1][1:])
             else:
-                rho = npc.diag(S**2,
-                               legs_labels[name][0][1].conj(),
-                               labels=legs_labels[name][1][-1:-3:-1])
+                rho = npc.diag(S**2, legs_labels[name][0][1].conj(), labels=legs_labels[name][1][-1:-3:-1])
             return c0, rho
         # Compute dominant eigenvector pair if needed
-        _TM = TransferMatrix.from_Ns_Ms(self._Ns,
-                                        self._Ms,
-                                        transpose=True if name == 'init_LP' else False,
-                                        charge_sector=None,
-                                        p_label=self._p_label,
-                                        conjugate_Ns=False)
+        _TM = TransferMatrix.from_Ns_Ms(
+            self._Ns,
+            self._Ms,
+            transpose=True if name == 'init_LP' else False,
+            charge_sector=None,
+            p_label=self._p_label,
+            conjugate_Ns=False,
+        )
         if npc.norm(_TM.matvec(c0) - c0) < tol_c0:
-            S = self.ket.get_SR(self.L - 1)**2 if name == 'init_LP' else self.ket.get_SL(0)**2
+            S = self.ket.get_SR(self.L - 1) ** 2 if name == 'init_LP' else self.ket.get_SL(0) ** 2
             if isinstance(S, npc.Array):
-                rho = npc.tensordot(S,
-                                    S.conj(),
-                                    axes=['vR', 'vR*'] if name == "init_LP" else ['vL', 'vL*'])
+                rho = npc.tensordot(S, S.conj(), axes=['vR', 'vR*'] if name == 'init_LP' else ['vL', 'vL*'])
                 rho.iset_leg_labels(legs_labels[name][1][1:])
             else:
-                rho = npc.diag(S**2,
-                               legs_labels[name][0][1].conj(),
-                               labels=legs_labels[name][1][-1:-3:-1])
+                rho = npc.diag(S**2, legs_labels[name][0][1].conj(), labels=legs_labels[name][1][-1:-3:-1])
             # NOTE: iMPS should always be normalized s.t. npc.inner(c0,rho)=1
             return c0, rho
-        msg = (f"Identity not dominant eigenvector of MPSTransferMatrix up to tol={tol_c0:.1e}. "
-               f"Computing explicitly...")
+        msg = f'Identity not dominant eigenvector of MPSTransferMatrix up to tol={tol_c0:.1e}. Computing explicitly...'
         warnings.warn(msg)
         c0 = _TM.eigenvectors()[1][0]
         c0 = c0.split_legs()
-        c1 = TransferMatrix.from_Ns_Ms(self._Ns,
-                                       self._Ms,
-                                       transpose=False if name == 'init_LP' else True,
-                                       charge_sector=None,
-                                       p_label=self._p_label,
-                                       conjugate_Ns=False).eigenvectors()[1][0]
+        c1 = TransferMatrix.from_Ns_Ms(
+            self._Ns,
+            self._Ms,
+            transpose=False if name == 'init_LP' else True,
+            charge_sector=None,
+            p_label=self._p_label,
+            conjugate_Ns=False,
+        ).eigenvectors()[1][0]
         c1 = c1.split_legs()
         if name == 'init_LP':
-            if npc.trace(c1) < 0.:
-                c1 *= -1.  # fix possible negative sign
+            if npc.trace(c1) < 0.0:
+                c1 *= -1.0  # fix possible negative sign
             c1._labels = legs_labels[name][1][-1:-3:-1]
             c0 /= npc.inner(c0, c1)  # normalization
             return c0, c1
         if npc.trace(c1) < 0:  # init_RP
-            c1 *= -1.
+            c1 *= -1.0
         c1._labels = legs_labels[name][1][-1:-3:-1]
         c0 /= npc.inner(c1, c0)
         return c0, c1
 
     def _solve_cj(self, loop, name, b, norm_one, options):
         """For `self._init_LP_RP_iterative()`: Solves c_gamma^j (1-TWjj) = b"""
-        if npc.norm(b) == 0.:
+        if npc.norm(b) == 0.0:
             # A has not full rank if Wjj=id, as Id(1-TWjj)=0
             # Contributions in the kernel are already subtracted though
             # we can thus assume norm(b)==0 => x=npc.zeros()
@@ -3559,21 +3579,24 @@ class MPOEnvironmentBuilder:
         else:
             ops = [self.H._graph[j][(loop[j], loop[j + 1])] for j in range(self.L)]
             ket_M = [
-                npc.tensordot(self._Ms[j],
-                              ops[j],
-                              axes=[self.ket._p_label,
-                                    self.ket._get_p_label('*')]) for j in range(self.L)
+                npc.tensordot(self._Ms[j], ops[j], axes=[self.ket._p_label, self.ket._get_p_label('*')])
+                for j in range(self.L)
             ]
-        TWjj = TransferMatrix.from_Ns_Ms(self._Ns, ket_M, transpose=transpose, charge_sector=None,
-                                         p_label=self.ket._p_label, conjugate_Ns=False,
-                                         unit_cell_width=self.ket.unit_cell_width)
+        TWjj = TransferMatrix.from_Ns_Ms(
+            self._Ns,
+            ket_M,
+            transpose=transpose,
+            charge_sector=None,
+            p_label=self.ket._p_label,
+            conjugate_Ns=False,
+            unit_cell_width=self.ket.unit_cell_width,
+        )
         # GMRES solver
-        A = ShiftNpcLinearOperator(TWjj, -1.)
+        A = ShiftNpcLinearOperator(TWjj, -1.0)
         solver = GMRES(A, b, b, options=options)  # makes internal copy
         x_sol, res, _, _ = solver.run()
         if res > options['res']:
-            msg = (f'GMRES converged within tol={res} in environment initialization, '
-                   f'requested was tol={options["res"]}.')
+            msg = f'GMRES converged within tol={res} in environment initialization, requested was tol={options["res"]}.'
             warnings.warn(msg)
         # fix legs
         legs = ['vR', 'vR*'] if name == 'init_LP' else ['vL', 'vL*']
@@ -3629,12 +3652,12 @@ class MPOTransferMatrix(NpcLinearOperator):
 
     def __init__(self, H, psi, transpose=False, guess=None, _subtraction_gauge='rho'):
         if psi.finite or H.bc != 'infinite':
-            raise ValueError("Only makes sense for infinite MPS")
+            raise ValueError('Only makes sense for infinite MPS')
         self.L = L = lcm(H.L, psi.L)
-        if np.linalg.norm(psi.norm_test()) > 1.e-10:
-            raise ValueError("psi should be in canonical form!")
+        if np.linalg.norm(psi.norm_test()) > 1.0e-10:
+            raise ValueError('psi should be in canonical form!')
         if psi._p_label != ['p']:
-            raise NotImplementedError("What would the MPO act on...?")
+            raise NotImplementedError('What would the MPO act on...?')
         self.dtype = dtype = np.promote_types(psi.dtype, H.dtype)
         self.transpose = transpose
         self._M = []
@@ -3644,7 +3667,7 @@ class MPOTransferMatrix(NpcLinearOperator):
         self.IdR = H.get_IdR(-1)  # on bond between MPS unit cells
         self.unit_cell_width = H.unit_cell_width * (L // H.L)
         if self.IdL is None or self.IdR is None:
-            raise ValueError("MPO needs to have structure with IdL/IdR")
+            raise ValueError('MPO needs to have structure with IdL/IdR')
         S = psi.get_SL(0)
         if not transpose:  # right to left
             wR = H.get_W(self.L - 1).get_leg('wR')
@@ -3665,9 +3688,9 @@ class MPOTransferMatrix(NpcLinearOperator):
                 self._W.append(H.get_W(i).transpose(['p*', 'wR', 'p', 'wL']).astype(dtype, False))
                 self._M_conj.append(B.conj().itranspose(['vR*', 'p*', 'vL*']))
 
-            #vR = self._M[0].get_leg('vR')
+            # vR = self._M[0].get_leg('vR')
             self._chi0 = chi0 = vR.ind_len
-            eye_R = npc.diag(1., vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
+            eye_R = npc.diag(1.0, vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
             self._E_shift = eye_R.add_leg(wL, self.IdL, axis=1, label='wL')  # vL wL vL*
             self._proj_trace = self._E_shift.conj().iset_leg_labels(['vR', 'wR', 'vR*']) / chi0
             self._proj_norm = eye_R.add_leg(wL, self.IdR, axis=1, label='wL').conj()  # vL* wL* vL
@@ -3690,9 +3713,9 @@ class MPOTransferMatrix(NpcLinearOperator):
                 self._W.append(H.get_W(i).transpose(['wR', 'p', 'wL', 'p*']).astype(dtype, False))
                 self._M_conj.append(A.conj().itranspose(['vR*', 'p*', 'vL*']))
 
-            #vL = self._M[0].get_leg('vL')
+            # vL = self._M[0].get_leg('vL')
             self._chi0 = chi0 = vL.ind_len
-            eye_L = npc.diag(1., vL, dtype=dtype, labels=['vR*', 'vR'])
+            eye_L = npc.diag(1.0, vL, dtype=dtype, labels=['vR*', 'vR'])
             self._E_shift = eye_L.add_leg(wR, self.IdR, axis=1, label='wR')  # vR* wR vR
             self._proj_trace = self._E_shift.conj().iset_leg_labels(['vL*', 'wL', 'vL']) / chi0
             self._proj_norm = eye_L.add_leg(wR, self.IdL, axis=1, label='wR').conj()  # vR wR* vR*
@@ -3702,7 +3725,7 @@ class MPOTransferMatrix(NpcLinearOperator):
         elif _subtraction_gauge == 'rho':
             self._proj_subtr = self._proj_rho
         else:
-            raise ValueError(f"unknown _subtraction_gauge={_subtraction_gauge!r}")
+            raise ValueError(f'unknown _subtraction_gauge={_subtraction_gauge!r}')
         # check guess for correctness
         if guess is not None:
             try:
@@ -3715,7 +3738,7 @@ class MPOTransferMatrix(NpcLinearOperator):
                     guess.get_leg('vR').test_contractible(vL)
                     guess.get_leg('vR*').test_equal(vL)
             except ValueError:
-                logger.warning("dropping guess for MPOTransferMatrix with incompatible legs")
+                logger.warning('dropping guess for MPOTransferMatrix with incompatible legs')
                 guess = None
         if guess is None:
             if not transpose:
@@ -3730,9 +3753,7 @@ class MPOTransferMatrix(NpcLinearOperator):
                 guess = guess.transpose(['vR*', 'wR', 'vR'])  # copy!
             self._project(guess)
         self.guess = guess
-        self.flat_linop, self.flat_guess = FlatLinearOperator.from_guess_with_pipe(self.matvec,
-                                                                                   self.guess,
-                                                                                   dtype=dtype)
+        self.flat_linop, self.flat_guess = FlatLinearOperator.from_guess_with_pipe(self.matvec, self.guess, dtype=dtype)
         self._explicit_plus_hc = H.explicit_plus_hc
 
     def matvec(self, vec, project=True):
@@ -3825,16 +3846,18 @@ class MPOTransferMatrix(NpcLinearOperator):
         return E
 
     @classmethod
-    def find_init_LP_RP(cls,
-                        H,
-                        psi,
-                        first=0,
-                        last=None,
-                        guess_init_env_data=None,
-                        calc_E=False,
-                        tol_ev0=1.e-8,
-                        _subtraction_gauge='rho',
-                        **kwargs):
+    def find_init_LP_RP(
+        cls,
+        H,
+        psi,
+        first=0,
+        last=None,
+        guess_init_env_data=None,
+        calc_E=False,
+        tol_ev0=1.0e-8,
+        _subtraction_gauge='rho',
+        **kwargs,
+    ):
         """Find the initial LP and RP.
 
         .. note ::
@@ -3881,17 +3904,13 @@ class MPOTransferMatrix(NpcLinearOperator):
             guess_init_env_data = {}
         for transpose in [False, True]:
             guess = guess_init_env_data.get('init_LP' if transpose else 'init_RP', None)
-            TM = cls(H,
-                     psi,
-                     transpose=transpose,
-                     guess=guess,
-                     _subtraction_gauge=_subtraction_gauge)
+            TM = cls(H, psi, transpose=transpose, guess=guess, _subtraction_gauge=_subtraction_gauge)
             val, vec = TM.dominant_eigenvector(**kwargs)
-            if abs(1. - val) > tol_ev0:
-                logger.warning("MPOTransferMatrix eigenvalue not 1: got %s", val)
+            if abs(1.0 - val) > tol_ev0:
+                logger.warning('MPOTransferMatrix eigenvalue not 1: got %s', val)
             envs.append(vec)
             if calc_E:
-                Es.append(TM.energy(vec))  #E_R, E_L
+                Es.append(TM.energy(vec))  # E_R, E_L
             L = TM.L
             del TM
         init_env_data = {'init_LP': envs[1], 'init_RP': envs[0], 'age_LP': 0, 'age_RP': 0}
@@ -3905,21 +3924,16 @@ class MPOTransferMatrix(NpcLinearOperator):
             # We need this for segment excitation energies.
             # TODO: this doesn't work for non-default first/last!?
             if first != 0 or last is not None:
-                assert (
-                    last + 1
-                ) % L == first % L, "Need to have an integer number of unit cells for the bond to be the same."
+                assert (last + 1) % L == first % L, (
+                    'Need to have an integer number of unit cells for the bond to be the same.'
+                )
             SL = psi.get_SL(first)
             if not isinstance(SL, npc.Array):
                 vL = init_env_data['init_LP'].get_leg('vR').conj()
-                SL = npc.diag(SL,
-                              vL,
-                              dtype=np.promote_types(psi.dtype, H.dtype),
-                              labels=['vL', 'vR'])
+                SL = npc.diag(SL, vL, dtype=np.promote_types(psi.dtype, H.dtype), labels=['vL', 'vR'])
             E0 = npc.tensordot(init_env_data['init_LP'], SL, axes=(['vR'], ['vL']))
             E0 = npc.tensordot(E0, SL.conj(), axes=(['vR*'], ['vL*']))
-            E0 = npc.tensordot(E0,
-                               init_env_data['init_RP'],
-                               axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
+            E0 = npc.tensordot(E0, init_env_data['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
             # E0 = LP * s^2 * RP on site 0
             return init_env_data, Es, E0
         # else:
@@ -3974,17 +3988,13 @@ def _calc_grid_legs_finite(chinfo, grids, Ws_qtotal, leg0):
     """
     if leg0 is None:
         if len(grids[0]) != 1:
-            raise ValueError("finite MPO with len of first bond != 1")
+            raise ValueError('finite MPO with len of first bond != 1')
         q = chinfo.make_valid()
         leg0 = npc.LegCharge.from_qflat(chinfo, [q], qconj=+1)
     legs = [leg0]
     for i, gr in enumerate(grids):
         gr_legs = [legs[-1], None]
-        gr_legs = npc.detect_grid_outer_legcharge(gr,
-                                                  gr_legs,
-                                                  qtotal=Ws_qtotal[i],
-                                                  qconj=-1,
-                                                  bunch=False)
+        gr_legs = npc.detect_grid_outer_legcharge(gr, gr_legs, qtotal=Ws_qtotal[i], qconj=-1, bunch=False)
         legs.append(gr_legs[1].conj())
     return legs
 
@@ -4017,7 +4027,7 @@ def _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, leg0, IdL_0):
     for _ in range(1000 * L):  # I don't expect interactions with larger range than that...
         for i in range(L):
             grid = grids[i]
-            QsL, QsR = charges[i:i + 2]
+            QsL, QsR = charges[i : i + 2]
             for vL, row in enumerate(grid):
                 qL = QsL[vL]
                 if qL is None:
@@ -4030,7 +4040,7 @@ def _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, leg0, IdL_0):
                     if QsR[vR] is None:
                         QsR[vR] = qR
                     elif np.any(QsR[vR] != qR):
-                        raise ValueError("incompatible charges while creating the MPO")
+                        raise ValueError('incompatible charges while creating the MPO')
         if not any(q is None for Qs in charges for q in Qs):
             break
     else:  # no `break` in the for loop, i.e. we are unable to determine all grid legcharges.
@@ -4053,16 +4063,16 @@ def _mpo_graph_state_order(key):
     The goal is to ensure that standard TeNPy MPOs yield an upper-right W for the MPO.
     """
     if isinstance(key, tuple):
-        if key[0] == "left":  #left states first
+        if key[0] == 'left':  # left states first
             return (-1, len(key)) + key[1:]
-        elif key[0] == "right":  #right states afterwards
+        elif key[0] == 'right':  # right states afterwards
             return (1, -len(key)) + key[1:]
         return key
     if isinstance(key, str):
         if key == 'IdL':  # should be first
-            return (-2, )
+            return (-2,)
         if key == 'IdR':  # should be last
-            return (2, )
+            return (2,)
         # fallback: compare strings
         return (0, key)
     return (0, str(key))
@@ -4096,7 +4106,7 @@ def _partition_W(W, IdL_L, IdR_L, IdL_R, IdR_R):
     proj_R[IdL_R] = False
     proj_R[IdR_R] = False
 
-    #Extract (A, B, C, D)
+    # Extract (A, B, C, D)
     D_npc = W.copy()
     D_npc.iproject([IdL_L, IdR_R], ['wL', 'wR'])
     D_npc = D_npc.squeeze()  # remove dummy wL, wR legs

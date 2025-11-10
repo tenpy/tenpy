@@ -27,7 +27,7 @@ class DummyAlgorithmSleep(tenpy.algorithms.algorithm.Algorithm):
 
 
 def export_to_datadir():
-    filename = io_test.get_datadir_filename("exported_from_tenpy_{0}.pkl")
+    filename = io_test.get_datadir_filename('exported_from_tenpy_{0}.pkl')
     data = io_test.gen_example_data()
     with open(filename, 'wb') as f:
         pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
@@ -37,7 +37,7 @@ def export_to_datadir():
 def test_pickle(tmp_path):
     """Try subsequent export and import to pickle."""
     data = io_test.gen_example_data()
-    io_test.assert_event_handler_example_works(data)  #if this fails, it's not import/export
+    io_test.assert_event_handler_example_works(data)  # if this fails, it's not import/export
     filename = tmp_path / 'test.pkl'
     with filename.open('wb') as f:
         pickle.dump(data, f)
@@ -52,7 +52,7 @@ def test_pickle(tmp_path):
 @pytest.mark.filterwarnings('ignore::DeprecationWarning')
 # Deprecation appears when loading data with numpy 2.0 from data
 def test_import_from_datadir(fn):
-    print("import ", fn)
+    print('import ', fn)
     filename = os.path.join(io_test.datadir, fn)
     with open(filename, 'rb') as f:
         data = pickle.load(f)
@@ -67,27 +67,18 @@ def test_import_from_datadir(fn):
 def test_simulation_export_import(tmp_path):
     """Try subsequent export and import to pickle."""
     sim_params = {
-        'model_class':
-        'XXZChain',
+        'model_class': 'XXZChain',
         'model_params': {
             'bc_MPS': 'infinite',
             'L': 2,
             'sort_charge': False,
         },
-        'algorithm_class':
-        'DummyAlgorithmSleep',
-        'algorithm_params': {
-            'N_steps': 3
-        },  # only one step
+        'algorithm_class': 'DummyAlgorithmSleep',
+        'algorithm_params': {'N_steps': 3},  # only one step
         # 'initial_state_builder': 'KagomeInitialStateBuilder',
-        'initial_state_params': {
-            'method': 'lat_product_state',
-            'product_state': [['up'], ['down']]
-        },
+        'initial_state_params': {'method': 'lat_product_state', 'product_state': [['up'], ['down']]},
         'connect_measurements': [
-            ('tenpy.simulations.measurement', 'm_onsite_expectation_value', {
-                'opname': 'Sz'
-            }),
+            ('tenpy.simulations.measurement', 'm_onsite_expectation_value', {'opname': 'Sz'}),
         ],
     }
     sim_params['directory'] = tmp_path  # go into temporary directory to avoid leaving data behind
@@ -99,8 +90,8 @@ def test_simulation_export_import(tmp_path):
     assert 'psi' in data_direct
     assert '<Sz>' in data_direct['measurements']
     io_test.assert_equal_data(data_imported, data_direct)
-    #TODO test shelving and resuming the simulation
+    # TODO test shelving and resuming the simulation
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     export_to_datadir()

@@ -13,7 +13,7 @@ from .hdf5_io import find_global
 
 __all__ = ['Listener', 'EventHandler']
 
-Listener = namedtuple('Listener', "listener_id, callback, priority, extra_kwargs")
+Listener = namedtuple('Listener', 'listener_id, callback, priority, extra_kwargs')
 
 
 class EventHandler:
@@ -50,11 +50,12 @@ class EventHandler:
 
         >>> class MyAlgorithm:
         ...     def __init__(self):
-        ...         self.checkpoint = EventHandler("algorithm, iteration")
+        ...         self.checkpoint = EventHandler('algorithm, iteration')
         ...         self.data = 0
+        ...
         ...     def run(self):
         ...         for i in range(4):
-        ...             self.data += i # do some complicated stuff
+        ...             self.data += i  # do some complicated stuff
         ...             self.checkpoint.emit(self, i)
 
     Other code with access to the event can then connect a `listener` to the event, i.e.,
@@ -64,7 +65,7 @@ class EventHandler:
 
         >>> my_alg = MyAlgorithm()
         >>> def my_listener(algorithm, iteration):
-        ...     print("my_listener called: iteration", iteration, "with data", algorithm.data)
+        ...     print('my_listener called: iteration', iteration, 'with data', algorithm.data)
         >>> my_alg.checkpoint.connect(my_listener)  # doctest: +ELLIPSIS
         <function my_listener at 0x...>
         >>> my_alg.run()
@@ -85,10 +86,10 @@ class EventHandler:
 
         >>> @my_alg.checkpoint.connect
         ... def another_one(algorithm, iteration):
-        ...     print("another_one called: iteration", iteration)
+        ...     print('another_one called: iteration', iteration)
         >>> @my_alg.checkpoint.connect(priority=5)
         ... def high_priority(algorithm, iteration):
-        ...     print("high_priority call: iteration", iteration)
+        ...     print('high_priority call: iteration', iteration)
         >>> my_alg.run()
         high_priority call: iteration 0
         my_listener called: iteration 0 with data 6
@@ -200,7 +201,7 @@ class EventHandler:
             if listener.listener_id == 0:
                 del self.listeners[i]
                 return
-        warnings.warn(f"No listener with listener_id {listener_id:d} found")
+        warnings.warn(f'No listener with listener_id {listener_id:d} found')
 
     def emit(self, *args, **kwargs):
         """Call the `callback` functions of all listeners.

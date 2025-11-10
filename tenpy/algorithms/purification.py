@@ -60,10 +60,9 @@ class PurificationApplyMPO(VariationalApplyMPO):
         i0 = self.i0
         new_psi = self.psi
         qtotal_i0 = new_psi.get_B(i0, form=None).qtotal
-        U, S, VH, err, renormalize = svd_theta(theta,
-                                               self.trunc_params,
-                                               qtotal_LR=[qtotal_i0, None],
-                                               inner_labels=['vR', 'vL'])
+        U, S, VH, err, renormalize = svd_theta(
+            theta, self.trunc_params, qtotal_LR=[qtotal_i0, None], inner_labels=['vR', 'vL']
+        )
         self.renormalize.append(renormalize)
         # TODO: up to the `renormalize`, we could use `new_psi.set_svd_theta`.
         A0 = U.split_legs(['(vL.p0.q0)'])
@@ -73,7 +72,7 @@ class PurificationApplyMPO(VariationalApplyMPO):
             theta_old = new_psi.get_theta(i0)
             theta_new_trunc = npc.tensordot(A0.scale_axis(S, 'vR'), B1, ['vR', 'vL'])
             ov = npc.inner(theta_new_trunc, theta_old, do_conj=True, axes='labels')
-            theta_diff = 1. - abs(ov)
+            theta_diff = 1.0 - abs(ov)
             self._theta_diff.append(theta_diff)
         A0.ireplace_labels(['p0', 'q0'], ['p', 'q'])
         B1.ireplace_labels(['p1', 'q1'], ['p', 'q'])
@@ -139,11 +138,13 @@ class PurificationTEBD(tebd.TEBDEngine):
         self.calc_U(TrotterOrder, delta_t, type_evo='imag')
         self.update_imag(N_steps=int(beta / delta_t + 0.5), call_canonical_form=True)
         logger.info(
-            "--> beta=%(beta).6f, E_bond=%(E).10f, max(S)=%(S).10f", {
+            '--> beta=%(beta).6f, E_bond=%(E).10f, max(S)=%(S).10f',
+            {
                 'beta': -self.evolved_time.imag,
                 'E': np.average(self.model.bond_energies(self.psi)),
-                'S': np.max(self.psi.entanglement_entropy())
-            })
+                'S': np.max(self.psi.entanglement_entropy()),
+            },
+        )
 
     @property
     def disent_iterations(self):
@@ -186,7 +187,7 @@ class PurificationTEBD(tebd.TEBDEngine):
 
         """
         i0, i1 = i - 1, i
-        logger.debug("Update sites (%d, %d)", i0, i1)
+        logger.debug('Update sites (%d, %d)', i0, i1)
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1', 'q0', 'q1'
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
@@ -196,9 +197,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
 
         # Perform the SVD and truncate the wavefunction
-        U, S, V, trunc_err, renormalize = svd_theta(theta,
-                                                    self.trunc_params,
-                                                    inner_labels=['vR', 'vL'])
+        U, S, V, trunc_err, renormalize = svd_theta(theta, self.trunc_params, inner_labels=['vR', 'vL'])
 
         # bring back to right-canonical 'B' form and update matrices
         B_R = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['p', 'q'])
@@ -210,15 +209,15 @@ class PurificationTEBD(tebd.TEBDEngine):
         # However, the inverse of SL is problematic, as it might contain very small singular
         # values.  Instead, we calculate ``C == SL**-1 theta == SL**-1 U S V``,
         # such that we obtain ``B_L = SL**-1 U S = SL**-1 U S V V^dagger = C V^dagger``
-        C = self.psi.get_theta(i0, n=2, formL=0.)
+        C = self.psi.get_theta(i0, n=2, formL=0.0)
         # here, C is the same as theta, but without the `S` on the very left
         # (Note: this requires no inverse if the MPS is initially in 'B' canonical form)
         C = npc.tensordot(U_bond, C, axes=(['p0*', 'p1*'], ['p0', 'p1']))  # apply U as for theta
         if U_disent is not None:
             C = npc.tensordot(U_disent, C, axes=[['q0*', 'q1*'], ['q0', 'q1']])
-        B_L = npc.tensordot(C.combine_legs(('vR', 'p1', 'q1'), pipes=theta.legs[1]),
-                            V.conj(),
-                            axes=['(vR.p1.q1)', '(vR*.p1*.q1*)'])
+        B_L = npc.tensordot(
+            C.combine_legs(('vR', 'p1', 'q1'), pipes=theta.legs[1]), V.conj(), axes=['(vR.p1.q1)', '(vR*.p1*.q1*)']
+        )
         B_L.ireplace_labels(['vL*', 'p0', 'q0'], ['vR', 'p', 'q'])
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         self.psi.set_SR(i0, S)
@@ -250,15 +249,13 @@ class PurificationTEBD(tebd.TEBDEngine):
 
         """
         i0, i1 = i - 1, i
-        logger.debug("Update sites (%d, %d)", i0, i1)
+        logger.debug('Update sites (%d, %d)', i0, i1)
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'q0', 'p1', 'q1'
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
         theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
         # Perform the SVD and truncate the wavefunction
-        U, S, V, trunc_err, renormalize = svd_theta(theta,
-                                                    self.trunc_params,
-                                                    inner_labels=['vR', 'vL'])
+        U, S, V, trunc_err, renormalize = svd_theta(theta, self.trunc_params, inner_labels=['vR', 'vL'])
         # Split legs and update matrices
         B_R = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['p', 'q'])
         A_L = U.split_legs(0).ireplace_labels(['p0', 'q0'], ['p', 'q'])
@@ -358,7 +355,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         Recursively proceed to disentangle left and right parts afterwards.
         Scales (for even `n`) as :math:`O(\chi^3 d^n d^{n/2})`.
         """
-        assert (n >= 2)
+        assert n >= 2
         n1 = n // 2
         n2 = n - n1
         p = ['p' + str(j) for j in range(n)]  # labels of theta to be separated
@@ -372,9 +369,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
 
         # Perform the SVD and truncate the wavefunction
-        U, S, V, trunc_err, renormalize = svd_theta(theta,
-                                                    self.trunc_params,
-                                                    inner_labels=['vR', 'vL'])
+        U, S, V, trunc_err, renormalize = svd_theta(theta, self.trunc_params, inner_labels=['vR', 'vL'])
         self.psi.set_SL(i + n1, S)  # update S
         if n1 == 1:
             # save U as left B in psi
@@ -403,7 +398,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         on_way = self.options.get('disent_gl_on_swap', False, bool)
         if not self.psi.finite:
             raise NotImplementedError  # adjust: what's the shortest path?
-        assert (i < j)
+        assert i < j
         for j0 in range(j, i + 1, -1):  # j0 = current site of `j`
             # original leg `j` is at j0
             self._update_index = None, j0
@@ -432,20 +427,18 @@ class PurificationTEBD(tebd.TEBDEngine):
         theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
 
         # Perform the SVD and truncate the wavefunction
-        U, S, V, trunc_err, renormalize = svd_theta(theta,
-                                                    self.trunc_params,
-                                                    inner_labels=['vR', 'vL'])
+        U, S, V, trunc_err, renormalize = svd_theta(theta, self.trunc_params, inner_labels=['vR', 'vL'])
 
         # bring back to right-canonical 'B' form and update matrices
         B_R = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['p', 'q'])
-        C = self.psi.get_theta(i0, n=2, formL=0.)
+        C = self.psi.get_theta(i0, n=2, formL=0.0)
         if swap:
             C.ireplace_labels(['p0', 'q0', 'p1', 'q1'], ['p1', 'q1', 'p0', 'q0'])
         if disentangle and U_disent is not None:
             C = npc.tensordot(U_disent, C, axes=[['q0*', 'q1*'], ['q0', 'q1']])
-        B_L = npc.tensordot(C.combine_legs(('vR', 'p1', 'q1'), pipes=theta.legs[1]),
-                            V.conj(),
-                            axes=['(vR.p1.q1)', '(vR*.p1*.q1*)'])
+        B_L = npc.tensordot(
+            C.combine_legs(('vR', 'p1', 'q1'), pipes=theta.legs[1]), V.conj(), axes=['(vR.p1.q1)', '(vR*.p1*.q1*)']
+        )
         B_L.ireplace_labels(['vL*', 'p0', 'q0'], ['vR', 'p', 'q'])
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         self.psi.set_SR(i0, S)
@@ -480,7 +473,7 @@ class PurificationTEBD2(PurificationTEBD):
         """
         trunc_err = TruncationError()
         order = self._U_param['order']
-        assert (order == 2 and self.psi.finite)
+        assert order == 2 and self.psi.finite
         for i in range(N_steps):
             trunc_err += self.update_step(0, False)
             trunc_err += self.update_step(0, True)

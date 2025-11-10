@@ -14,20 +14,25 @@ datadir_hdf5 = [f for f in io_test.datadir_files if f.endswith('.hdf5')]
 
 
 def export_to_datadir():
-    filename = io_test.get_datadir_filename("exported_from_tenpy_{0}.hdf5")
+    filename = io_test.get_datadir_filename('exported_from_tenpy_{0}.hdf5')
     data = io_test.gen_example_data()
     with warnings.catch_warnings(record=True) as caught:
-        #warnings.filterwarnings("ignore", category=UserWarning)
+        # warnings.filterwarnings("ignore", category=UserWarning)
         with h5py.File(filename, 'w') as f:
             hdf5_io.save_to_hdf5(f, data)
     for w in caught:
         msg = str(w.message)
-        expected = "without explicit HDF5 format" in msg
+        expected = 'without explicit HDF5 format' in msg
         if expected:
-            expected = any(t in msg for t in ['io_test.DummyClass',
-                                              'tenpy.tools.events.EventHandler',
-                                              'tenpy.tools.events.Listener',
-                                              'method'])
+            expected = any(
+                t in msg
+                for t in [
+                    'io_test.DummyClass',
+                    'tenpy.tools.events.EventHandler',
+                    'tenpy.tools.events.Listener',
+                    'method',
+                ]
+            )
         if not expected:
             warnings.showwarning(w.message, w.category, w.filename, w.lineno, w.file, w.line)
 
@@ -36,7 +41,7 @@ def export_to_datadir():
 def test_hdf5_export_import(tmp_path):
     """Try subsequent export and import to pickle."""
     data = io_test.gen_example_data()
-    io_test.assert_event_handler_example_works(data)  #if this fails, it's not import/export
+    io_test.assert_event_handler_example_works(data)  # if this fails, it's not import/export
     filename = tmp_path / 'test.hdf5'
     with h5py.File(str(filename), 'w') as f:
         hdf5_io.save_to_hdf5(f, data)
@@ -49,7 +54,7 @@ def test_hdf5_export_import(tmp_path):
 @pytest.mark.parametrize('fn', datadir_hdf5)
 @pytest.mark.filterwarnings('ignore::FutureWarning')
 def test_import_from_datadir(fn):
-    print("import ", fn)
+    print('import ', fn)
     filename = os.path.join(io_test.datadir, fn)
     with h5py.File(filename, 'r') as f:
         data = hdf5_io.load_from_hdf5(f)
@@ -61,5 +66,5 @@ def test_import_from_datadir(fn):
     io_test.assert_event_handler_example_works(data)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     export_to_datadir()

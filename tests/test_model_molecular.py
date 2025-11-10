@@ -15,17 +15,17 @@ class MolecularModelTest(MolecularModel):
 
     def init_terms(self, params: Config) -> None:
         """Initialize terms."""
-        params.touch("one_body_tensor")  # suppress unused key warning
+        params.touch('one_body_tensor')  # suppress unused key warning
         two_body_tensor = params.get(
-            "two_body_tensor",
+            'two_body_tensor',
             np.zeros((self.norb, self.norb, self.norb, self.norb)),
-            expect_type="array",
+            expect_type='array',
         )
-        constant = params.get("constant", 0, expect_type="real")
+        constant = params.get('constant', 0, expect_type='real')
 
         # constant
         for p in range(self.norb):
-            self.add_onsite(constant / self.norb, p, "Id")
+            self.add_onsite(constant / self.norb, p, 'Id')
 
         # one-body terms
         for p, q in itertools.product(range(self.norb), repeat=2):
@@ -38,36 +38,36 @@ class MolecularModelTest(MolecularModel):
     def _add_one_body(self, coeff: complex, i: int, j: int) -> None:
         dx0 = np.zeros(2)
         if i == j:
-            self.add_onsite(coeff, i, "Ntot")
+            self.add_onsite(coeff, i, 'Ntot')
         else:
-            self.add_coupling(coeff, i, "Cdu", j, "Cu", dx0)
-            self.add_coupling(coeff, i, "Cdd", j, "Cd", dx0)
+            self.add_coupling(coeff, i, 'Cdu', j, 'Cu', dx0)
+            self.add_coupling(coeff, i, 'Cdd', j, 'Cd', dx0)
 
     def _add_two_body(self, coeff: complex, i: int, j: int, k: int, ell: int) -> None:
         dx0 = np.zeros(2)
         if i == j == k == ell:
-            self.add_onsite(2 * coeff, i, "Nu Nd")
+            self.add_onsite(2 * coeff, i, 'Nu Nd')
         else:
             self.add_multi_coupling(
                 coeff,
-                [("Cdu", dx0, i), ("Cdu", dx0, k), ("Cu", dx0, ell), ("Cu", dx0, j)],
+                [('Cdu', dx0, i), ('Cdu', dx0, k), ('Cu', dx0, ell), ('Cu', dx0, j)],
             )
             self.add_multi_coupling(
                 coeff,
-                [("Cdu", dx0, i), ("Cdd", dx0, k), ("Cd", dx0, ell), ("Cu", dx0, j)],
+                [('Cdu', dx0, i), ('Cdd', dx0, k), ('Cd', dx0, ell), ('Cu', dx0, j)],
             )
             self.add_multi_coupling(
                 coeff,
-                [("Cdd", dx0, i), ("Cdu", dx0, k), ("Cu", dx0, ell), ("Cd", dx0, j)],
+                [('Cdd', dx0, i), ('Cdu', dx0, k), ('Cu', dx0, ell), ('Cd', dx0, j)],
             )
             self.add_multi_coupling(
                 coeff,
-                [("Cdd", dx0, i), ("Cdd", dx0, k), ("Cd", dx0, ell), ("Cd", dx0, j)],
+                [('Cdd', dx0, i), ('Cdd', dx0, k), ('Cd', dx0, ell), ('Cd', dx0, j)],
             )
 
 
 @pytest.mark.parametrize(
-    "cons_N, cons_Sz, norb",
+    'cons_N, cons_Sz, norb',
     [
         ('N', 'Sz', 3),
         ('N', 'parity', 3),
@@ -101,10 +101,10 @@ def test_MolecularModel(cons_N, cons_Sz, norb):
     rank = norb * (norb + 1) // 2
     cholesky_vecs = rng.standard_normal((rank, norb, norb)).astype(complex, copy=False)
     cholesky_vecs += cholesky_vecs.transpose((0, 2, 1))
-    two_body_tensor = np.einsum("ipr,iqs->prqs", cholesky_vecs, cholesky_vecs)
+    two_body_tensor = np.einsum('ipr,iqs->prqs', cholesky_vecs, cholesky_vecs)
     orbital_rotation = sp.stats.unitary_group.rvs(norb)
     two_body_tensor = np.einsum(
-        "abcd,aA,bB,cC,dD->ABCD",
+        'abcd,aA,bB,cC,dD->ABCD',
         two_body_tensor,
         orbital_rotation,
         orbital_rotation.conj(),
@@ -122,7 +122,7 @@ def test_MolecularModel(cons_N, cons_Sz, norb):
         'cons_Sz': cons_Sz,
         'one_body_tensor': one_body_tensor,
         'two_body_tensor': two_body_tensor,
-        'constant': constant
+        'constant': constant,
     }
     check_general_model(MolecularModel, model_params)
 
