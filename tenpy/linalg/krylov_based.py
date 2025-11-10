@@ -232,7 +232,8 @@ class GMRES():
                 self.apply_givens_rotation(k)
                 self.e1[k+1] = -self.sine[k] * self.e1[k]
                 self.e1[k] = self.cosine[k] * self.e1[k]
-                error = np.abs(self.e1[k+1]) / self.b_norm # The residual is just the last element of $\beta$ vector (see Wikipedia) since $y$ is found exactly.
+                # The residual is just the last element of $\beta$ vector (see Wikipedia) since $y$ is found exactly.
+                error = np.abs(self.e1[k+1]) / self.b_norm
                 self.total_error[-1].append(error)
                 if error < self.res and k >= self.N_min:
                     converged=True

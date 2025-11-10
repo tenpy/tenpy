@@ -121,9 +121,11 @@ class MPO(MPSGeometry):
         Ordering of the outer virtual legs such that `self` is upper triangular w.r.t. the whole unit cell.
         Follows the constraint `_outer_permutation[0] = self.IdL[0]`, `_outer_permutation[-1] = self.IdR[-1]`
         Defaults to `None` if the ordering has not yet been checked of False if ordering the MPO is not possible
-        **Note:** This ordering is valid only with respect to the **whole unit cell**, not for internal `'wL'/'wR'` legs.
+        **Note:** This ordering is valid only with respect to the **whole unit cell**, not for
+        internal `'wL'/'wR'` legs.
     _cycles : None | dict {int: list of int}
-        Contains one entry `_cycles[i0] = [i0, i1, ..., iL = i0]` for each index `i0` of the outer virtual leg that connects to itself.
+        Contains one entry `_cycles[i0] = [i0, i1, ..., iL = i0]` for each index `i0` of the outer
+        virtual leg that connects to itself.
         The cycle is `_W[0][i0, i1] * _W[1][i1, i2] * ... * _W[L-1][iL-1, iL]`
         Defaults to None if :attr:`_outer_permutation` does not exist.
     """

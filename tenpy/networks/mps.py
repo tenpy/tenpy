@@ -1854,7 +1854,8 @@ class MPS(BaseMPSExpectationValue):
         kwargs.setdefault("bc", lat.bc_MPS)
         p_state = np.array(p_state, dtype=object)
         if p_state.ndim == len(lat.shape):  # == lat.dim + 1
-            p_state = to_array(p_state, shape=lat.shape, allow_incommensurate=allow_incommensurate)  # tile to lattice shape
+            # tile to lattice shape
+            p_state = to_array(p_state, shape=lat.shape, allow_incommensurate=allow_incommensurate)
             p_state_flat = p_state[tuple(lat.order.T)]  # "advanced" numpy indexing
         elif p_state.ndim == len(lat.shape) + 1:
             # extra dimension could be from purely 1D array entries
@@ -1936,7 +1937,9 @@ class MPS(BaseMPSExpectationValue):
             >>> L = 10
             >>> M = tenpy.models.tf_ising.TFIChain({'L': L})
             >>> p_state = ["up", "down"] * (L//2)  # repeats entries L/2 times
-            >>> psi = MPS.from_product_state(M.lat.mps_sites(), p_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
+            >>> psi = MPS.from_product_state(M.lat.mps_sites(), p_state, bc=M.lat.bc_MPS,
+            ...     unit_cell_width=M.lat.mps_unit_cell_width
+            ... )
 
         The meaning of the labels ``"up","down"`` is defined by the :class:`~tenpy.networks.Site`,
         in this example a :class:`~tenpy.networks.site.SpinHalfSite`.
@@ -1954,7 +1957,9 @@ class MPS(BaseMPSExpectationValue):
             >>> theta, phi = np.pi/4, np.pi/6
             >>> bloch_sphere_state = np.array([np.cos(theta/2), np.exp(1.j*phi)*np.sin(theta/2)])
             >>> p_state[L//2] = bloch_sphere_state   # replace one spin in center
-            >>> psi = MPS.from_product_state([spin]*L, p_state, bc=M.lat.bc_MPS, dtype=complex, unit_cell_width=M.lat.mps_unit_cell_width)
+            >>> psi = MPS.from_product_state([spin]*L, p_state, bc=M.lat.bc_MPS, dtype=complex,
+            ...     unit_cell_width=M.lat.mps_unit_cell_width
+            ... )
 
         Note that for the more general :class:`~tenpy.models.spins.SpinChain`,
         the order of the two entries for the ``bloch_sphere_state`` would be *exactly the opposite*
@@ -2073,7 +2078,9 @@ class MPS(BaseMPSExpectationValue):
                                     chargeL=None,
                                     unit_cell_width=None,
                                     understood_shift_symmetry: bool = False):
-        """Construct a matrix product state with given bond dimensions from random matrices (no charge conservation).
+        """Construct a matrix product state with given bond dimensions from random matrices.
+
+        Note: no charge conservation
 
         Parameters
         ----------
@@ -2082,7 +2089,8 @@ class MPS(BaseMPSExpectationValue):
         chis : (list of) {int}
             Desired bond dimensions. For a single int, the same bond dimension is used on every bond.
         bc : {'infinite', 'finite'}
-            MPS boundary conditions. See docstring of :class:`MPS`. For 'finite' chi is capped to the maximum possible at each bond.
+            MPS boundary conditions. See docstring of :class:`MPS`. For 'finite' chi is capped to
+            the maximum possible at each bond.
         dtype : type or string
             The data type of the array entries.
         permute : bool
@@ -4959,7 +4967,8 @@ class MPS(BaseMPSExpectationValue):
             Bs.append(npc.grid_concat(grid, [0, 1]))
         Bs.append(npc.grid_concat([[last_B_self], [last_B_other]], axes=[0, 1]))
         Ss = [np.ones(Bs[0].shape[0])] + [np.ones(B.shape[1]) for B in Bs]
-        psi = self.__class__(self.sites, Bs, Ss, self.bc, form=None, unit_cell_width=self.unit_cell_width)  # new class instance
+        # new class instance
+        psi = self.__class__(self.sites, Bs, Ss, self.bc, form=None, unit_cell_width=self.unit_cell_width)
         # bring to canonical form, calculate Ss
         psi.canonical_form_finite(renormalize=False, cutoff=cutoff)
         return psi
@@ -5014,12 +5023,13 @@ class MPS(BaseMPSExpectationValue):
         for j in reversed(range(1, L)):
             current_vL_dim = current_Cs[0].get_leg('vL').ind_len
 
-            # We want to ensure that the bond dimension after expansion is at most chi_max so that SingleSiteTDVP respects
-            # the maximum bond dimension. We know that the bond dimension must respect the exponential bounds from the edge
-            # of the chain (2**i or (L-2)**i for the two edges for spin-1/2 Hilbert spaces). However, I find that if we
-            # impose the edge constraints, the first site is decoupled from the rest when using Krylov vectors (random expansion
-            # works, however). So instead, we just force the bond dimension to be less than chi_max and then the SVDs will
-            # enforce the edge constraints.
+            # We want to ensure that the bond dimension after expansion is at most chi_max so that
+            # SingleSiteTDVP respects the maximum bond dimension. We know that the bond dimension 
+            # must respect the exponential bounds from the edge of the chain (2**i or (L-2)**i for
+            # the two edges for spin-1/2 Hilbert spaces). However, I find that if we impose the
+            # edge constraints, the first site is decoupled from the rest when using Krylov vectors
+            # (random expansion works, however). So instead, we just force the bond dimension to be
+            # less than chi_max and then the SVDs will enforce the edge constraints.
             # site_chi_max = int(np.min([chi_max, np.prod(site_dims[:j]), np.prod(site_dims[j:])])) - current_vL_dim
             site_chi_max = int(chi_max - current_vL_dim)  # How much do we allow vL to grow?
             site_trunc_par['chi_max'] = site_chi_max
@@ -5041,10 +5051,17 @@ class MPS(BaseMPSExpectationValue):
                     # Generate a random (hermitian) density matrix that will provide random vectors
                     # in the orthogonal subspace.
                     leg = proj.legs[0]
-                    rho = npc.Array.from_func_square(GUE if proj.dtype.kind == 'c' else GOE, leg, labels=proj.get_leg_labels())
+                    rho = npc.Array.from_func_square(
+                        GUE if proj.dtype.kind == 'c' else GOE,
+                        leg, labels=proj.get_leg_labels()
+                    )
                     rho = npc.tensordot(rho.conj(), rho, axes=(['(p.vR)'], ['(p*.vR*)'])) # Make this positive
                 rho /= npc.norm(rho) # Normalize the density matrix
-                proj_rho = npc.tensordot(npc.tensordot(proj, rho, axes=(['(p.vR)'], ['(p*.vR*)'])), proj, axes=(['(p.vR)'], ['(p*.vR*)']))
+                proj_rho = npc.tensordot(
+                    npc.tensordot(proj, rho, axes=(['(p.vR)'], ['(p*.vR*)'])),
+                    proj,
+                    axes=(['(p.vR)'], ['(p*.vR*)'])
+                )
                 if npc.norm(proj_rho) < 1.e-12:
                     new_B = exact_B.split_legs()
                 else:
@@ -5055,13 +5072,18 @@ class MPS(BaseMPSExpectationValue):
             old_Cs = current_Cs
             current_Cs = []
             for i, oC in enumerate(old_Cs):
-                current_Cs.append(npc.tensordot(psis[i].get_B(j-1, form='A'),
-                                                npc.tensordot(oC, new_B.conj(), axes=(['p', 'vR'], ['p*', 'vR*'])).replace_label('vL*', 'vR'),
-                                                axes=(['vR'], ['vL'])))
-             # Set new_B and padded SVs on site j AFTER we've gotten tensors on site j-1
+                Ci = npc.tensordot(
+                    psis[i].get_B(j-1, form='A'),
+                    npc.tensordot(oC, new_B.conj(), axes=(['p', 'vR'], ['p*', 'vR*'])).replace_label('vL*', 'vR'),
+                    axes=(['vR'], ['vL'])
+                )
+                current_Cs.append(Ci)
+            # Set new_B and padded SVs on site j AFTER we've gotten tensors on site j-1
             self.set_B(j, new_B, form='B')
             # Need to handle edge case if SVs are not 1D array but instead are npc matrices?
-            self.set_SL(j, np.pad(self.get_SL(j), (0, new_B.get_leg('vL').ind_len - current_vL_dim), mode='constant', constant_values=0.0))
+            Sj = np.pad(self.get_SL(j), (0, new_B.get_leg('vL').ind_len - current_vL_dim),
+                        mode='constant', constant_values=0.0)
+            self.set_SL(j, Sj)
 
         self.set_B(0, current_Cs[0], form='B')
         self.test_sanity()

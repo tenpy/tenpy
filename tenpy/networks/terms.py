@@ -1349,7 +1349,8 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
     in one leg can be coupled to all sites with larger index in another leg.
 
     .. math ::
-        strength sum_{subsites_start[i] < subsites[j]} lambda^{|j-argmin(subsites>subsites_start[i])|} A_{subsites_start[i]} B_{subsites[j]}
+        strength sum_{subsites_start[i] < subsites[j]} \
+            lambda^{|j-argmin(subsites>subsites_start[i])|} A_{subsites_start[i]} B_{subsites[j]}
 
     Parameters
     ----------
@@ -1600,7 +1601,9 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                         for d, j in enumerate(subsites[i3:]):
                             # First decay term is from subsites_start[i2].
                             # Then we go to subsites[i3]
-                            pref = strength * np.prod([lambda_[subsites_start[i2]]] + list(lambda_[subsites[i3:i3 + d]]))
+                            pref = strength * np.prod(
+                                [lambda_[subsites_start[i2]]] + list(lambda_[subsites[i3:i3 + d]])
+                            )
                             if abs(pref) < cutoff:
                                 break
                             terms.append([(op_i, i), (op_j, j)])
@@ -1617,7 +1620,9 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                         j2 = i3 + d
                         j = subsites[j2 % N1] + (j2 // N1) * L
                         # See finite case for reasoning about decay constants
-                        pref = strength * np.prod([lambda_[subsites_start[i2]]] + list(lambda_[subsites[np.arange(i3, j2) % N1]]))
+                        pref = strength * np.prod(
+                            [lambda_[subsites_start[i2]]] + list(lambda_[subsites[np.arange(i3, j2) % N1]])
+                        )
                         if abs(pref) < cutoff:
                             break
                         terms.append([(op_i, i), (op_j, j)])

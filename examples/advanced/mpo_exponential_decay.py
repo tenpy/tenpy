@@ -104,7 +104,10 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
         # Generate the MPO from the grid. Note that it is not necessary to specify
         # the physical legs and their charges, since the from_grids method can extract
         # this information from the position of the operators inside the grid.
-        H = MPO.from_grids(lat.mps_sites(), grids, bc='infinite', IdL=0, IdR=-1, mps_unit_cell_width=lat.mps_unit_cell_width)
+        H = MPO.from_grids(
+            lat.mps_sites(), grids, bc='infinite', IdL=0, IdR=-1,
+            mps_unit_cell_width=lat.mps_unit_cell_width
+        )
         MPOModel.__init__(self, lat, H)
 
 

@@ -161,7 +161,9 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
                     for krylov_mpo in Krylov_mpo:
                         krylov_mpo.apply(new_psi, Krylov_apply_mpo_options)
                     Krylov_extended_basis.append(new_psi.copy())
-                extension_err = self.psi.subspace_expansion(expand_into=Krylov_extended_basis, trunc_par=Krylov_trunc_params)
+                extension_err = self.psi.subspace_expansion(
+                    expand_into=Krylov_extended_basis, trunc_par=Krylov_trunc_params
+                )
             logger.info(f"Extended bond dimension: {self.psi.chi}.")
         return
 

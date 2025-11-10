@@ -3693,8 +3693,9 @@ def svd(a,
 def polar(a, cutoff=1.e-16, left=False, inner_labels=[None, None]):
     """Polar decomposition of an Array `a`.
 
-    Factorizes ``u * p = a`` (left=False) or ``p * u = a`` (left=True), such that ``a = U*diag(S)*VH`` (where ``*`` stands for
-    a :func:`tensordot` and `diag` creates an correctly shaped Array with `S` on the diagonal).
+    Factorizes ``u * p = a`` (left=False) or ``p * u = a`` (left=True), such that
+    ``a = U * diag(S) * VH`` (where ``*`` stands for a :func:`tensordot` and `diag` creates a
+    correctly shaped Array with `S` on the diagonal).
     For a non-zero `cutoff` this holds only approximately.
 
     There is a gauge freedom regarding the charges, see also :meth:`Array.gauge_total_charge`.
