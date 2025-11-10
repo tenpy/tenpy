@@ -85,6 +85,7 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
         Parameters for subspace expansion in :meth:`prepare_evolve`.
 
     """
+
     EffectiveH = None
 
     def __init__(self, psi, model, options, **kwargs):
@@ -205,6 +206,7 @@ class TwoSiteTDVPEngine(TDVPEngine):
         :include: TDVPEngine
 
     """
+
     EffectiveH = TwoSiteH
 
     def __init__(self, psi, model, options, **kwargs):
@@ -285,6 +287,7 @@ class SingleSiteTDVPEngine(TDVPEngine):
         :include: TDVPEngine
 
     """
+
     EffectiveH = OneSiteH
 
     def get_sweep_schedule(self):
@@ -379,6 +382,7 @@ class TimeDependentSingleSiteTDVP(TimeDependentHAlgorithm,SingleSiteTDVPEngine):
 
     See details in :class:`~tenpy.algorithms.algorithm.TimeDependentHAlgorithm` as well.
     """
+
     def reinit_model(self):
         # recreate model
         TimeDependentHAlgorithm.reinit_model(self)

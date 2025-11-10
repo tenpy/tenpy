@@ -84,6 +84,7 @@ class TruncationError(Hdf5Exportable):
         `TEBD Wikipedia article <https://en.wikipedia.org/wiki/Time-evolving_block_decimation>`.
 
     """
+
     def __init__(self, eps=0., ov=1.):
         self.eps = eps
         self.ov = ov

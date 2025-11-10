@@ -131,6 +131,7 @@ class Sweep(Algorithm):
         If ``None``, no mixer is used (anymore), otherwise the mixer instance.
 
     """
+
     DefaultMixer = None
     use_mixer_by_default = False  # The default for the "mixer" config option
 
@@ -971,6 +972,7 @@ class EffectiveH(NpcLinearOperator):
         calculating charge combinations in the contractions.
 
     """
+
     length = None
     acts_on = None
 
@@ -1077,6 +1079,7 @@ class OneSiteH(EffectiveH):
         Tensors making up the network of `self`.
 
     """
+
     length = 1
     acts_on = ['vL', 'p0', 'vR']
 
@@ -1291,6 +1294,7 @@ class TwoSiteH(EffectiveH):
         Tensors making up the network of `self`.
 
     """
+
     length = 2
     acts_on = ['vL', 'p0', 'p1', 'vR']
 
@@ -1467,6 +1471,7 @@ class ZeroSiteH(EffectiveH):
         Tensors making up the network of `self`.
 
     """
+
     length = 0
     acts_on = ['vL', 'vR']
 
@@ -1527,6 +1532,7 @@ class DummyTwoSiteH(EffectiveH):
 
     This allows to base the :class:`VariationalCompression` on the :class:`Sweep` class.
     """
+
     length = 2
 
     def __init__(self, *args, **kwargs):
@@ -1600,6 +1606,7 @@ class Mixer:
         ``None`` means to never disable the mixer.
 
     """
+
     can_decompose_1site = False
     _default_amplitude = 1.e-5
     _default_decay = 2.
@@ -2112,6 +2119,7 @@ class SubspaceExpansion(Mixer):
     they calculate `U` and `V` internally.
 
     """
+
     can_decompose_1site = True
 
     def __init__(self, options, sweep_activated=0):
@@ -2229,6 +2237,7 @@ class VariationalCompression(IterativeSweeps):
         Used to keep track of renormalization in the last sweep for `psi.norm`.
 
     """
+
     EffectiveH = DummyTwoSiteH
 
     def __init__(self, psi, options, resume_data=None):
@@ -2427,6 +2436,7 @@ class VariationalApplyMPO(VariationalCompression):
         Used to keep track of renormalization in the last sweep for `psi.norm`.
 
     """
+
     EffectiveH = TwoSiteH
 
     def __init__(self, psi, U_MPO, options, **kwargs):

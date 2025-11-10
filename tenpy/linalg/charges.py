@@ -78,6 +78,7 @@ class ChargeInfo:
     DipolarChargeInfo
 
     """
+
     trivial_shift = True
 
     def __init__(self, mod=[], names=None):
@@ -426,6 +427,7 @@ class DipolarChargeInfo(ChargeInfo):
         Like parameters of same name
 
     """
+
     trivial_shift = False  # If shift_charges acts trivially
 
     def __init__(self, mod=[], names=None, charge_idcs=[], dipole_idcs=[], dipole_dims=None):
@@ -593,6 +595,7 @@ class LegCharge:
     Further they *must* set `sorted` and `bunched` to ``False`` (if they might not preserve them).
 
     """
+
     def __init__(self, chargeinfo, slices, charges, qconj=1):
         self.chinfo = chargeinfo
         self.slices = np.array(slices, dtype=np.intp)
@@ -1516,6 +1519,7 @@ class LegPipe(LegCharge):
     Here the qindex ``Qi`` of the pipe corresponds to qindices ``qi_l`` on the individual legs.
 
     """
+
     def __init__(self, legs, qconj=1, sort=True, bunch=True):
         chinfo = legs[0].chinfo
         # initialize LegCharge with trivial charges/slices; gets overwritten in _init_from_legs

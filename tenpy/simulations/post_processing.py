@@ -60,6 +60,7 @@ class DataLoader:
         Include an Option for saving data into a ``.hdf5`` file without overwriting any results.
 
     """
+
     logger = logging.getLogger(__name__ + ".DataLoader")
 
     def __init__(self, filename=None, simulation=None, data=None):
@@ -267,6 +268,7 @@ class DataFiles:
         loading results/output_2.h5 ... successful
 
     """
+
     def __init__(self, files=None, folder=None):
         self._open_files = {} # filename -> DataLoader
         self._resolve_filenames = {}

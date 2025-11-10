@@ -49,6 +49,7 @@ class DualSquare(Lattice):
         `basis`, `pos` and `pairs` are set accordingly.
 
     """
+
     dim = 2  #: the dimension of the lattice
 
     def __init__(self, Lx, Ly, sites, **kwargs):
@@ -137,6 +138,7 @@ class ToricCode(CouplingMPOModel):
             first and last sites of the MPS, and require **squared** MPS bond-dimensions.
 
     """
+
     default_lattice = DualSquare
     force_default_lattice = True
 

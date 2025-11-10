@@ -144,6 +144,7 @@ class VUMPSEngine(IterativeSweeps):
         instead to calculate the entanglement entropy and store it inside this list.
 
     """
+
     EffectiveH = None
 
     def __init__(self, psi, model, options, **kwargs):
@@ -574,6 +575,7 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
         :include: DMRGEngine
 
     """
+
     EffectiveH = OneSiteH
 
     def __init__(self, psi, model, options, **kwargs):
@@ -723,6 +725,7 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         :include: DMRGEngine
 
     """
+
     EffectiveH = TwoSiteH
     DefaultMixer = SubspaceExpansion
     use_mixer_by_default = False

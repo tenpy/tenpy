@@ -79,6 +79,7 @@ class Model(Hdf5Exportable):
         The data type of the Hamiltonian
 
     """
+
     #: logging.Logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
     logger = logging.getLogger(__name__ + ".Model")
 
@@ -344,6 +345,7 @@ class NearestNeighborModel(Model):
         `H_bond` is not affected by the `explicit_plus_hc` flag of a :class:`CouplingModel`.
 
     """
+
     def __init__(self, lattice, H_bond):
         Model.__init__(self, lattice)
         self.H_bond = list(H_bond)
@@ -682,6 +684,7 @@ class MPOModel(Model):
         the represented Hamiltonian is ``H_MPO + hermitian_conjugate(H_MPO)``.
 
     """
+
     def __init__(self, lattice, H_MPO):
         Model.__init__(self, lattice)
         self.H_MPO = H_MPO
@@ -885,6 +888,7 @@ class CouplingModel(Model):
         *represented* Hamiltonian is independent of the `explicit_plus_hc` flag.
 
     """
+
     def __init__(self, lattice, explicit_plus_hc=False):
         Model.__init__(self, lattice)
         L = self.lat.N_sites

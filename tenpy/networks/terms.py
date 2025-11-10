@@ -93,6 +93,7 @@ class TermList(Hdf5Exportable):
     The negative index -5 here indicates a tensor left of the current MPS unit cell.
 
     """
+
     def __init__(self, terms, strength=1.):
         self.terms = list(terms)
         self.strength = np.array(strength)
@@ -321,6 +322,7 @@ class OnsiteTerms(Hdf5Exportable):
         For each index `i` a dictionary ``{'opname': strength}`` defining the onsite terms.
 
     """
+
     def __init__(self, L):
         assert L > 0
         self.L = L
@@ -513,6 +515,7 @@ class CouplingTerms(Hdf5Exportable):
         iMPS unit cells.
 
     """
+
     def __init__(self, L):
         assert L > 0
         self.L = L
@@ -921,6 +924,7 @@ class MultiCouplingTerms(CouplingTerms):
         ``0 <= ijkl[-1] - shift < L``.
 
     """
+
     def __init__(self, L):
         assert L > 0
         self.L = L
@@ -1399,6 +1403,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
         one of the centered terms as described in :meth:`add_centered_exponentially_decaying_term`.
 
     """
+
     def __init__(self, L):
         assert L > 0
         self.L = L

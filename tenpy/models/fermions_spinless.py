@@ -54,6 +54,7 @@ class FermionModel(CouplingMPOModel):
             particles hopping around the circumference of the cylinder acquire a phase `phi_ext`.
 
     """
+
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N', str)
         if conserve == 'best':
@@ -83,5 +84,6 @@ class FermionChain(FermionModel, NearestNeighborModel):
 
     See the :class:`FermionModel` for the documentation of parameters.
     """
+
     default_lattice = Chain
     force_default_lattice = True

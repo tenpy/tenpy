@@ -50,6 +50,7 @@ class TFIModel(CouplingMPOModel):
             Defaults to ``J=g=1``
 
     """
+
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity', str)
         assert conserve != 'Sz'
@@ -75,5 +76,6 @@ class TFIChain(TFIModel, NearestNeighborModel):
 
     See the :class:`TFIModel` for the documentation of parameters.
     """
+
     default_lattice = Chain
     force_default_lattice = True

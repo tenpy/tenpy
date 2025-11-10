@@ -46,6 +46,7 @@ class NpcLinearOperator:
         Labels of the state on which the operator can act. NB: Class attribute.
 
     """
+
     acts_on = None  # Derived classes should set this as a class attribute
 
     def matvec(self, vec):
@@ -104,6 +105,7 @@ class NpcLinearOperatorWrapper:
         The original operator implementing the `matvec`.
 
     """
+
     def __init__(self, orig_operator):
         self.orig_operator = orig_operator
 
@@ -141,6 +143,7 @@ class NpcLinearOperatorWrapper:
 
 class SumNpcLinearOperator(NpcLinearOperatorWrapper):
     """Sum of two linear operators."""
+
     def __init__(self, orig_operator, other_operator):
         super().__init__(orig_operator)
         self.other_operator = other_operator
@@ -164,6 +167,7 @@ class ShiftNpcLinearOperator(NpcLinearOperatorWrapper):
 
     This can be useful e.g. for better Lanczos convergence.
     """
+
     def __init__(self, orig_operator, shift):
         if shift == 0.:
             warnings.warn("shift=0: no need for ShiftNpcLinearOperator", stacklevel=2)
@@ -189,6 +193,7 @@ class BoostNpcLinearOperator(NpcLinearOperatorWrapper):
 
     This can be useful e.g. for better Lanczos convergence.
     """
+
     def __init__(self, orig_operator, boosts, boost_vecs):
         assert len(boosts) == len(boost_vecs)
         if len(boosts) == 0.:
@@ -225,6 +230,7 @@ class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
         The vectors to orthogonalize against.
 
     """
+
     def __init__(self, orig_operator, ortho_vecs):
         if len(ortho_vecs) == 0:
             warnings.warn("Empty `ortho_vecs`: no need to patch `OrthogonalNpcLinearOperator`",
@@ -325,6 +331,7 @@ class FlatLinearOperator(ScipyLinearOperator):
         Labels of the guess before combining them into a pipe (stored as `leg`).
 
     """
+
     def __init__(self, npc_matvec, leg, dtype, charge_sector=0, vec_label=None, compact_flat=None):
         self.npc_matvec = npc_matvec
         self.leg = leg
@@ -750,6 +757,7 @@ class FlatHermitianOperator(FlatLinearOperator):
     Note that we don't check :meth:`matvec` to return a hermitian result, we only define an adjoint
     to be `self`.
     """
+
     def _adjoint(self):
         return self
 

@@ -54,6 +54,7 @@ class Config(MutableMapping):
         Keeps track of any :attr:`options` not yet used.
 
     """
+
     def __init__(self, config, name):
         self.options = config
         self.unused = set(config.keys())

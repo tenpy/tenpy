@@ -50,6 +50,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
             Whether to sort by charges of physical legs. `True` by default.
 
     """
+
     def __init__(self, model_params):
         # 0) read out/set default parameters
         model_params = asConfig(model_params, "XXZChain")
@@ -113,6 +114,7 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
         See :cfg:config:`XXZChain`
 
     """
+
     default_lattice = "Chain"
     force_default_lattice = True
 

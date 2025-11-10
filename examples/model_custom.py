@@ -22,6 +22,7 @@ class AnisotropicSpin1Chain(CouplingMPOModel, NearestNeighborModel):
     .. math ::
         H = J \sum_i \vec{S}_i \cdot \vec{S}_{i+1} + B \sum_i S^x_i + D \sum_i (S^z_i)^2
     """
+
     default_lattice = Chain
     force_default_lattice = True
 

@@ -51,6 +51,7 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         We won't recalculate `_U` if those parameters didn't change.
 
     """
+
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
         options = self.options

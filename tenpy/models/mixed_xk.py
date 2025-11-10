@@ -135,6 +135,7 @@ class MixedXKLattice(Lattice):
         Values for the orbitals, one row for each site in the *unit cell*.
 
     """
+
     def __init__(self,
                  N_rings,
                  Ly,
@@ -759,6 +760,7 @@ class SpinlessMixedXKSquare(MixedXKModel):
         t, V : float | array
             Couplings as defined for the Hamiltonian above.
     """
+
     def init_lattice(self, model_params):
         N_orb = 1  # simplest case possible
         chinfo = npc.ChargeInfo([1], ["Charge"])
@@ -814,6 +816,7 @@ class HubbardMixedXKSquare(MixedXKModel):
         t, U : float | array
             Couplings as defined for the Hamiltonian above.
     """
+
     def init_lattice(self, model_params):
         N_orb = 2  # for spin up (l=0) and down (l=1)
         chinfo = npc.ChargeInfo([1, 1], ["Charge", "Spin"])

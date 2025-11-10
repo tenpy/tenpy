@@ -42,6 +42,7 @@ class GroundStateSearch(Simulation):
         :include: Simulation
 
     """
+
     default_algorithm = 'TwoSiteDMRGEngine'
     default_measurements = Simulation.default_measurements + []
 
@@ -91,6 +92,7 @@ class PlaneWaveExcitations(GroundStateSearch):
         :include: Simulation
 
     """
+
     default_algorithm = 'PlaneWaveExcitationEngine'
 
     def __init__(self, options, *, gs_data=None, **kwargs):
@@ -324,6 +326,7 @@ class OrthogonalExcitations(GroundStateSearch):
                 Only defined if :cfg:option:`Simulation.save_psi` is True.
 
     """
+
     def __init__(self, options, *, orthogonal_to=None, **kwargs):
         super().__init__(options, **kwargs)
         resume_data = kwargs.get('resume_data', {})
@@ -1246,6 +1249,7 @@ class ExcitationInitialState(InitialStateBuilder):
         Simulation class for which to initial a state to be used as excitation initial state.
 
     """
+
     def __init__(self, sim, options):
         self.sim = sim
         self.options = asConfig(options, self.__class__.__name__)

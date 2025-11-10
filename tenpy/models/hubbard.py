@@ -52,6 +52,7 @@ class BoseHubbardModel(CouplingMPOModel):
             circumference of the cylinder acquire a phase ``2 pi phi_ext``.
 
     """
+
     def init_sites(self, model_params):
         n_max = model_params.get('n_max', 3, int)
         filling = model_params.get('filling', 0.5, 'real')
@@ -86,6 +87,7 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
 
     See the :class:`BoseHubbardModel` for the documentation of parameters.
     """
+
     def __init__(self, model_params):
         model_params = asConfig(model_params, self.__class__.__name__)
         model_params.setdefault('lattice', "Chain")
@@ -168,6 +170,7 @@ class FermiHubbardModel(CouplingMPOModel):
             circumference of the cylinder acquire a phase ``2 pi phi_ext``.
 
     """
+
     def init_sites(self, model_params):
         cons_N = model_params.get('cons_N', 'N', str)
         cons_Sz = model_params.get('cons_Sz', 'Sz', str)
@@ -200,6 +203,7 @@ class FermiHubbardChain(FermiHubbardModel, NearestNeighborModel):
 
     See the :class:`FermiHubbardModel` for the documentation of parameters.
     """
+
     default_lattice = Chain
     force_default_lattice = True
 

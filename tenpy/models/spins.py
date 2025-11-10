@@ -49,6 +49,7 @@ class SpinModel(CouplingMPOModel):
             Defaults to Heisenberg ``Jx=Jy=Jz=1.`` with other couplings 0.
 
     """
+
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5, 'real')
         conserve = model_params.get('conserve', 'best', str)
@@ -101,6 +102,7 @@ class SpinChain(SpinModel, NearestNeighborModel):
 
     See the :class:`SpinModel` for the documentation of parameters.
     """
+
     default_lattice = Chain
     force_default_lattice = True
 

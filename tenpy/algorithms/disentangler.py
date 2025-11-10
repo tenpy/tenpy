@@ -70,6 +70,7 @@ class Disentangler:
             :class:`NormDisentangler` and :class:`GradientDescentDisentangler`.
 
     """
+
     def __init__(self, parent):
         self.parent = parent
 
@@ -108,6 +109,7 @@ class BackwardDisentangler(Disentangler):
 
     Arguments and return values are the same as for :class:`Disentangler`.
     """
+
     def __init__(self, parent):
         self.parent = parent
         from . import purification
@@ -130,6 +132,7 @@ class RenyiDisentangler(Disentangler):
 
     See :cite:`hauschild2018`.
     """
+
     def __init__(self, parent):
         self.max_iter = parent.options.get('disent_max_iter', 20, int)
         self.eps = parent.options.get('disent_eps', 1.e-10, float)
@@ -235,6 +238,7 @@ class NormDisentangler(Disentangler):
             with an extra power of `chi_max`, and thus worse than the rest of TEBD.
 
     """
+
     def __init__(self, parent):
         self.max_iter = parent.options.get('disent_max_iter', 20, int)
         self.eps = parent.options.get('disent_eps', 1.e-10, 'real')
@@ -317,6 +321,7 @@ class GradientDescentDisentangler(Disentangler):
             Only for :class:`GradientDescentDisentangler`, the step sizes for gradient descend.
 
     """
+
     def __init__(self, parent):
         self.max_iter = parent.options.get('disent_max_iter', 20, int)
         self.eps = parent.options.get('disent_eps', 1.e-10, 'real')
@@ -433,6 +438,7 @@ class NoiseDisentangler(Disentangler):
             If ``None``, the unitary is Haar random, i.e. adds maximal noise.
 
     """
+
     def __init__(self, parent):
         self.a = parent.options.get('disent_noiselevel', 0.01, 'real')
 
@@ -457,6 +463,7 @@ class LastDisentangler(Disentangler):
     Useful as a starting point in a :class:`CompositeDisentangler` to reduce the number of
     iterations for a following disentangler.
     """
+
     def __call__(self, theta):
         U = None
         U_idx_dt, i = self.parent._update_index
@@ -477,6 +484,7 @@ class DiagonalizeDisentangler(Disentangler):
 
     Arguments and return values are the same as for :class:`Disentangler`.
     """
+
     def __call__(self, theta):
         rho = npc.tensordot(theta,
                             theta.conj(),
@@ -513,6 +521,7 @@ class CompositeDisentangler(Disentangler):
         The disentanglers to be used.
 
     """
+
     def __init__(self, disentanglers):
         self.disentanglers = disentanglers
 
@@ -556,6 +565,7 @@ class MinDisentangler(Disentangler):
             Default ``1.``.
 
     """
+
     def __init__(self, disentanglers, parent):
         self.disentanglers = disentanglers
         self.n = parent.options.get('disent_min_n', 1., 'real')

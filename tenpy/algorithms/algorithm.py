@@ -79,6 +79,7 @@ class Algorithm:
         Possibly a copy of `psi` to be used for :meth:`get_resume_data`.
 
     """
+
     def __init__(self, psi, model, options, *, resume_data=None, cache=None):
         self.options = asConfig(options, self.__class__.__name__)
         self.trunc_params = self.options.subconfig('trunc_params')
@@ -371,6 +372,7 @@ class TimeEvolutionAlgorithm(Algorithm):
         which is introduced due to the truncation during the sequence of update steps.
 
     """
+
     time_dependent_H = False  #: whether the algorithm supports time-dependent H
 
     def __init__(self, psi, model, options, **kwargs):
@@ -516,6 +518,7 @@ class TimeDependentHAlgorithm(TimeEvolutionAlgorithm):
     .. todo ::
         This is still under development and lacks rigorous tests.
     """
+
     time_dependent_H = True
 
     def __init__(self, psi, model, options, **kwargs):

@@ -1601,6 +1601,7 @@ class MPS(BaseMPSExpectationValue):
         legs changed.
 
     """
+
     # Canonical form conventions: the saved B = s**nu[0]--Gamma--s**nu[1].
     # For the canonical forms, ``nu[0] + nu[1] = 1``
     _valid_forms = {

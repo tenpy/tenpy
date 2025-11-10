@@ -76,5 +76,6 @@ class ClockChain(ClockModel, NearestNeighborModel):
 
     See the :class:`ClockModel` for the documentation of parameters.
     """
+
     default_lattice = Chain
     force_default_lattice = True

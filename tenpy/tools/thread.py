@@ -13,6 +13,7 @@ __all__ = ["WorkerDied", "Worker"]
 
 class WorkerDied(Exception):
     """Exception thrown if the main thread detects that the worker subthread died."""
+
     pass
 
 
@@ -60,6 +61,7 @@ class Worker:
         {'2+2': 4, '3+4': 7}
 
     """
+
     def __init__(self, name="tenpy worker", max_queue_size=0, daemon=None):
         self.name = name
         self.tasks = queue.Queue(maxsize=max_queue_size)

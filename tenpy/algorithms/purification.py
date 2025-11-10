@@ -23,6 +23,7 @@ class PurificationTwoSiteU(TwoSiteH):
     The MPO gets only applied to the physical legs `p0`, `p1`, the ancilla legs `q0`, `q1` of
     `theta` are ignored.
     """
+
     length = 2
     acts_on = ['vL', 'p0', 'q0', 'p1', 'q1', 'vR']
 
@@ -36,6 +37,7 @@ class PurificationTwoSiteU(TwoSiteH):
 
 class PurificationApplyMPO(VariationalApplyMPO):
     """Variant of `VariationalApplyMPO` suitable for purification."""
+
     EffectiveH = PurificationTwoSiteU
 
     def update_local(self, _, optimize=True):
@@ -109,6 +111,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         the disentangler from the last application. Initialized to identities.
 
     """
+
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
         self._disent_iterations = np.zeros(psi.L)
@@ -459,6 +462,7 @@ class PurificationTEBD2(PurificationTEBD):
     for real-time evolution (similar as :meth:`~tenpy.algorithms.tebd.TEBDEngine.update_imag` does
     for imaginary time evolution).
     """
+
     def update(self, N_steps):
         """Evolve by ``N_steps * U_param['dt']``.
 

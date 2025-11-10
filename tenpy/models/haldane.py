@@ -51,6 +51,7 @@ class BosonicHaldaneModel(CouplingMPOModel):
             circumference of the cylinder acquire a phase ``2 pi phi_ext``.
 
     """
+
     default_lattice = Honeycomb
     force_default_lattice = True
 
@@ -127,6 +128,7 @@ class FermionicHaldaneModel(CouplingMPOModel):
             circumference of the cylinder acquire a phase ``2 pi phi_ext``.
 
     """
+
     default_lattice = Honeycomb
     force_default_lattice = True
 

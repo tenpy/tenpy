@@ -136,6 +136,7 @@ class OptimizationFlag(IntEnum):
         Enable this optimization only during the parts of the code where it is really necessary.
         Check whether it actually helps - if it doesn't, keep the optimization disabled!
     """
+
     none = 0
     default = 1
     safe = 2
@@ -181,6 +182,7 @@ class temporary_level:
         # here we are back to the optimization level as before the ``with ...`` statement
 
     """
+
     def __init__(self, temporary_level):
         self.temporary_level = temporary_level
 

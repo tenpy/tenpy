@@ -31,6 +31,7 @@ class AKLTChain(NearestNeighborModel, MPOModel):
           = J \sum_i (\vec{S}_i \cdot \vec{S}_{i+1}
                      +\frac{1}{3} (\vec{S}_i \cdot \vec{S}_{i+1})^2)
     """
+
     def __init__(self, model_params):
         model_params = asConfig(model_params, "AKLTModel")
         L = model_params.get('L', 2, int)

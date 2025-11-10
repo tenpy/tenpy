@@ -104,6 +104,7 @@ class EventHandler:
         another_one called: iteration 3
 
     """
+
     def __init__(self, arg_descr=None):
         self.arg_descr = arg_descr
         self.listeners = []

@@ -192,6 +192,7 @@ class HofstadterFermions(CouplingMPOModel):
             the allowed MPS unit cell sizes. See :func:`hopping_phases` for details.
 
     """
+
     default_lattice = Square
     force_default_lattice = True
 
@@ -287,6 +288,7 @@ class HofstadterBosons(CouplingMPOModel):
             the allowed MPS unit cell sizes. See :func:`hopping_phases` for details.
 
     """
+
     default_lattice = Square
     force_default_lattice = True
 

@@ -173,6 +173,7 @@ class Array:
         but *must* be set to `False` by algorithms changing _qdata.
 
     """
+
     def __init__(self, legcharges, dtype=np.float64, qtotal=None, labels=None):
         """See help(self)"""
         self.legs = list(legcharges)

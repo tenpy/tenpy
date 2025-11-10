@@ -77,5 +77,6 @@ class tJChain(tJModel, NearestNeighborModel):
 
     See the :class:`tJModel` for the documentation of parameters.
     """
+
     default_lattice = Chain
     force_default_lattice = True

@@ -918,6 +918,7 @@ class TenpyInconsistencyError(Exception):
     """Error class that is raised when a consistency check fails.
 
     See :meth:`consistency_check`."""
+
     pass
 
 
@@ -925,6 +926,7 @@ class TenpyInconsistencyWarning(UserWarning):
     """Warning category that is emitted when a consistency check fails.
 
     See :meth:`consistency_check`."""
+
     pass
 
 
@@ -938,6 +940,7 @@ class BetaWarning(UserWarning):
     Rather, it's appropriate to test robustness, ideally by cross-checking with another
     well-tested algorithm.
     """
+
     pass
 
 

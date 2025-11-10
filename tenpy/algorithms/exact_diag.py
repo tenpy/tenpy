@@ -80,6 +80,7 @@ class ExactDiag:
         Bool mask, which of the indices of the pipe are in the desired `charge_sector`.
 
     """
+
     def __init__(self, model, charge_sector=None, sparse=False, max_size=2e6):
         if model.lat.bc_MPS != 'finite':
             raise ValueError("Full diagonalization works only on finite systems")

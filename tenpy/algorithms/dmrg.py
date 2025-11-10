@@ -189,6 +189,7 @@ class DMRGEngine(IterativeSweeps):
         instead to calculate the entanglement entropy and store it inside this list.
 
     """
+
     EffectiveH = None
 
     def __init__(self, psi, model, options, **kwargs):
@@ -857,6 +858,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         :include: DMRGEngine
 
     """
+
     EffectiveH = TwoSiteH
     DefaultMixer = mps_common.DensityMatrixMixer
     use_mixer_by_default = False
@@ -968,6 +970,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         :include: DMRGEngine
 
     """
+
     EffectiveH = OneSiteH
     DefaultMixer = mps_common.SubspaceExpansion
     use_mixer_by_default = True

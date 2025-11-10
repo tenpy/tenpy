@@ -162,6 +162,7 @@ class Lattice:
         similar as `_mps2lat_vals_idx`, but for a fixed `u` picking a site from the unit cell.
 
     """
+
     Lu = None  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
 
     def __init__(self,
@@ -1684,6 +1685,7 @@ class TrivialLattice(Lattice):
         Further keyword arguments given to :class:`Lattice`.
 
     """
+
     def __init__(self, mps_sites, **kwargs):
         Lattice.__init__(self, [1], mps_sites, **kwargs)
 
@@ -1714,6 +1716,7 @@ class SimpleLattice(Lattice):
         Similarly, `positions` can be specified as a single vector.
 
     """
+
     Lu = 1  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
 
     def __init__(self, Ls, site, **kwargs):
@@ -1832,6 +1835,7 @@ class MultiSpeciesLattice(Lattice):
     In this case, you could also call :func:`tenpy.networks.site.spin_half_species`.
 
     """
+
     Lu = None  #: unknown number of sites in the unit cell
 
     def __init__(self, simple_lattice, species_sites, species_names=None):
@@ -2062,6 +2066,7 @@ class IrregularLattice(Lattice):
         ['F', 'F', 'S', 'F', 'F']
 
     """
+
     _REMOVED = -123456  # value in self._perm indicating removed sites.
 
     def __init__(self,
@@ -2265,6 +2270,7 @@ class HelicalLattice(Lattice):
         The total number of sites will be ``N_unit_cells * len(regular_lattice.unit_cell)``.
 
     """
+
     _REMOVED = IrregularLattice._REMOVED
 
     def __init__(self, regular_lattice, N_unit_cells):
@@ -2525,6 +2531,7 @@ class Chain(SimpleLattice):
         `pairs` are set accordingly.
 
     """
+
     dim = 1  #: the dimension of the lattice
 
     def __init__(self, L, site, **kwargs):
@@ -2639,6 +2646,7 @@ class Ladder(Lattice):
         `basis`, `pos` and `pairs` are set accordingly.
 
     """
+
     Lu = 2  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
     dim = 1  #: the dimension of the lattice
 
@@ -2763,6 +2771,7 @@ class NLegLadder(Lattice):
             Number of legs for a NLegLadder lattice (ignored for other lattices). Default ``3``.
 
     """
+
     dim = 1  #: the dimension of the lattice
 
     def __init__(self, L, N, sites, **kwargs):
@@ -2890,6 +2899,7 @@ class Square(SimpleLattice):
         Similarly, `positions` can be specified as a single vector.
 
     """
+
     dim = 2  #: the dimension of the lattice
 
     def __init__(self, Lx, Ly, site, **kwargs):
@@ -2962,6 +2972,7 @@ class Triangular(SimpleLattice):
         Similarly, `positions` can be specified as a single vector.
 
     """
+
     dim = 2  #: the dimension of the lattice
 
     def __init__(self, Lx, Ly, site, **kwargs):
@@ -3038,6 +3049,7 @@ class Honeycomb(Lattice):
         are set in :attr:`pairs`.
 
     """
+
     dim = 2  #: the dimension of the lattice
     Lu = 2  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
 
@@ -3136,6 +3148,7 @@ class Kagome(Lattice):
         `basis`, `pos` and `pairs` are set accordingly.
 
     """
+
     dim = 2  #: the dimension of the lattice
     Lu = 3  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
 
@@ -3200,6 +3213,7 @@ class SimpleBZ:
         dimension of the Brillouin Zone
 
     """
+
     def __init__(self, vertices, basis, dim: int):
         assert dim == 1 or dim == 2, 'SimpleBZ is only defined for dimensions 1 and 2'
         self.dim = dim

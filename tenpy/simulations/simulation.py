@@ -188,6 +188,7 @@ class Simulation:
         See :meth:`handle_ctrl_c_sigint` for details.
 
     """
+
     #: name of the default algorithm `engine` class
     default_algorithm = 'TwoSiteDMRGEngine'
 
@@ -1236,6 +1237,7 @@ class Skip(ValueError):
         Filename of the existing output file due to which the simulation is skipped.
 
     """
+
     def __init__(self, msg, filename):
         filename = str(filename)
         super().__init__(msg + '\n' + filename)

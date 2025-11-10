@@ -19,6 +19,7 @@ class TwoSiteHThreadPlusHC(TwoSiteH):
     Using threads instead of e.g. MPI parallelization means we don't need to make explicit copies
     of (at least one of) the environment tensors and communication is much cheaper.
     """
+
     def __init__(self, *args, plus_hc_worker=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._plus_hc_worker = plus_hc_worker

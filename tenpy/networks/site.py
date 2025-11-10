@@ -2015,6 +2015,7 @@ class ClockSite(Site):
         Defines what is conserved, see table above.
 
     """
+
     def __init__(self, q, conserve='Z', sort_charge=True):
         if not (isinstance(q, int) and q > 1):
             raise ValueError(f'invalid q: {q}')

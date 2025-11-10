@@ -89,6 +89,7 @@ class DictCache(collections.abc.MutableMapping):
         >>> assert cache.get('c', default=None) is None
 
     """
+
     def __init__(self, storage):
         self.long_term_storage = storage
         self.long_term_keys = set()
@@ -214,6 +215,7 @@ class CacheFile(DictCache):
     and make sure that you call :meth:`close` after usage.
     The easiest way to ensure this is to use a ``with`` statement, see :meth:`open`.
     """
+
     @classmethod
     def open(cls,
              storage_class="Storage",
@@ -299,6 +301,7 @@ class Storage:
     The vanilla :class:`Storage` class is "trivial" in the sense that it actually doesn't save
     the data to disk, but keeps explicit references in RAM.
     """
+
     #: Whether the storage is actually kept in memory, instead of saving to disk.
     trivial = True
 
@@ -392,6 +395,7 @@ class PickleStorage(Storage):
         An existing directory within which pickle files will be saved for each `key`.
 
     """
+
     trivial = False
 
     #: filename extension
@@ -488,6 +492,7 @@ class _NumpyStorage(PickleStorage):
         An existing directory within which numpy files will be saved for each `key`.
 
     """
+
     extension = '.npy'
 
     def load(self, key):
@@ -567,6 +572,7 @@ class Hdf5Storage(Storage):
         :func:`~tenpy.tools.hdf5_io.save_to_hdf5` under the specified keys.
 
     """
+
     trivial = False
 
     def __init__(self, h5group):
@@ -688,6 +694,7 @@ class ThreadedStorage(Storage):
         Instance of one of the other storage classes to wrap around.
 
     """
+
     def __init__(self, worker, disk_storage):
         if disk_storage.trivial:
             raise ValueError("ThreadedStorage with trivial `disk_storage` doesn't make sense")

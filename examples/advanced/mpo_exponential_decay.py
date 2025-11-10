@@ -49,6 +49,7 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
         Whether to sort by charges of physical legs. `True` by default.
 
     """
+
     def __init__(self, model_params):
         # model parameters
         model_params = asConfig(model_params, "ExponentiallyDecayingHeisenberg")
