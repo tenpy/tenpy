@@ -23,7 +23,7 @@ def test_MPO():
             grid = [[s.Id, s.Sp, s.Sm, s.Sz],
                     [None, None, None, s.Sm],
                     [None, None, None, s.Sp],
-                    [None, None, None, s.Id]]  # yapf: disable
+                    [None, None, None, s.Id]]  # fmt: skip
             legW = npc.LegCharge.from_qflat(s.leg.chinfo, [[0], s.Sp.qtotal, s.Sm.qtotal, [0]])
             W = npc.grid_outer(grid, [legW, legW.conj()], grid_labels=['wL', 'wR'])
             Ws = [W] * L
@@ -401,7 +401,7 @@ def test_MPOTransferMatrix(eps=1.e-13):
             [None, None, None, None, Jxy*0.5*s.Sm],
             [None, None, None, None, Jxy*0.5*s.Sp],
             [None, None, None, gamma*s.Id, Jz*s.Sz],
-            [None, None, None, None, s.Id]]  # yapf: disable
+            [None, None, None, None, s.Id]]  # fmt: skip
     H = mpo.MPO.from_grids([s] * 3, [grid] * 3, 'infinite', 0, 4, max_range=np.inf, mps_unit_cell_width=3)
     psi = mps.MPS.from_singlets(s, 3, [(0, 1)], lonely=[2], bc='infinite', unit_cell_width=3)
     psi.roll_mps_unit_cell(-1)  # -> nontrivial chi at the cut between unit cells

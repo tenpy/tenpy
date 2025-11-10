@@ -65,19 +65,16 @@ class FermionicPiFluxModel(CouplingMPOModel):
 
         for u1, u2, dx in self.lat.NN:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
-            self.add_coupling(t1_phi, u1, 'Cd', u2, 'C', dx, 'JW',
-                              category='t1 Cd_i C_j', plus_hc=True)  # yapf: disable
+            self.add_coupling(t1_phi, u1, 'Cd', u2, 'C', dx, 'JW', category='t1 Cd_i C_j', plus_hc=True)
             self.add_coupling(V, u1, 'N', u2, 'N', dx, category='V N_i N_j')
 
         for u1, u2, dx in self.lat.nNNdashed:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
-            self.add_coupling(t2_phi, u1, 'Cd', u2, 'C', dx, 'JW',
-                              category='t2 Cd_i C_j', plus_hc=True)  # yapf: disable
+            self.add_coupling(t2_phi, u1, 'Cd', u2, 'C', dx, 'JW', category='t2 Cd_i C_j', plus_hc=True)
 
         for u1, u2, dx in self.lat.nNNdotted:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
-            self.add_coupling(-t2_phi, u1, 'Cd', u2, 'C', dx, 'JW',
-                              category='-t2 Cd_i C_j', plus_hc=True)  # yapf: disable
+            self.add_coupling(-t2_phi, u1, 'Cd', u2, 'C', dx, 'JW', category='-t2 Cd_i C_j', plus_hc=True)
 
 
 def plot_lattice():

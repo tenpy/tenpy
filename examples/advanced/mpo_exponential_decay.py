@@ -77,7 +77,7 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
         # operators using the add_op method
         Sz, Sp, Sm, Id = site.Sz, site.Sp, site.Sm, site.Id
 
-        # yapf:disable
+        # fmt: off
         # The grid (list of lists) that defines the MPO. It is possible to define the
         # operators in the grid in the following ways:
         # 1) NPC arrays, defined above:
@@ -100,7 +100,7 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
                 [None       , None      , [("Id",g)], None      , [("Sp", 0.5*Jxx)]],
                 [None       , None      , None      , [("Id",g)], [("Sz",Jz)]      ],
                 [None       , None      , None      , None      , "Id"             ]]
-        # yapf:enable
+        # fmt: on
         grids = [grid] * L
 
         # Generate the MPO from the grid. Note that it is not necessary to specify

@@ -239,7 +239,7 @@ def test_npc_Array_itemacces():
     check_idx = [(2, Ellipsis, 1),
                  (slice(None), 3, np.array([True, True, False, True, False])),
                  (slice(3, 4), np.array([2, 4, 5]), slice(1, 4, 2)),
-                 (slice(4, 2, -1), 2, np.array([3, 1, 4, 2]))]  # yapf: disable
+                 (slice(4, 2, -1), 2, np.array([3, 1, 4, 2]))]  # fmt: skip
     for idx in check_idx:
         print("take slice for ", idx)
         b = a[idx]
@@ -352,7 +352,7 @@ def test_npc_grid_concat():
     A_full = npc.grid_concat(grid, [1])
     npt.assert_equal(Aflat, A_full.to_ndarray())
     grid = [[A[:, :1, 2:3], A[:, :1, 0:2]],
-            [A[:, 2:, 2:3], A[:, 2:, 0:2]]]  # yapf: disable
+            [A[:, 2:, 2:3], A[:, 2:, 0:2]]]  # fmt: skip
     A_part = npc.grid_concat(grid, [1, 2]).to_ndarray()
     A_part_exact = Aflat[:, [0, 2, 3], :][:, :, [2, 0, 1]]
     npt.assert_equal(A_part, A_part_exact)
@@ -374,7 +374,7 @@ def test_npc_grid_outer():
             [None, None, None, None, op_min],
             [None, None, None, None, op_pl],
             [None, None, None, None, op_0],
-            [None, None, None, None, op_id]]  # yapf: disable
+            [None, None, None, None, op_id]]  # fmt: skip
     leg_WL = npc.LegCharge.from_qflat(ci, ci.make_valid([[0], [1], [-1], [0], [0]]))
     leg_WR = npc.LegCharge.from_qflat(ci, ci.make_valid([[0], [1], [-1], [0], [0]]), -1)
     leg_WR_calc = npc.detect_grid_outer_legcharge(grid, [leg_WL, None], qconj=-1)[1]

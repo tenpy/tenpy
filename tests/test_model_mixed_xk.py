@@ -107,7 +107,7 @@ def test_mixed_hubbard():
         },
     }
     product_state = [[['full'], ['empty'], ['full']],
-                     [['full'], ['empty'], ['empty']]]  #yapf: disable
+                     [['full'], ['empty'], ['empty']]]  # fmt: skip
     psi = MPS.from_lat_product_state(M.lat, product_state)
     info = dmrg.run(psi, M, dmrg_params)
     E_real = info['E']

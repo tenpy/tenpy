@@ -229,7 +229,7 @@ def test_pairs():
 
 def test_lattice_order():
     s = site.SpinHalfSite('Sz', sort_charge=True)
-    # yapf: disable
+    # fmt: off
     chain = lattice.Chain(4, s)
     order_default = np.array([[0, 0], [1, 0], [2, 0], [3, 0]])
     npt.assert_equal(chain.order, order_default)
@@ -273,7 +273,7 @@ def test_lattice_order():
                              [0, 2, 0], [1, 2, 0], [0, 2, 2], [0, 2, 1], [1, 2, 2], [1, 2, 1],
                              [0, 3, 0], [1, 3, 0], [0, 3, 2], [0, 3, 1], [1, 3, 2], [1, 3, 1]])
     npt.assert_equal(kag.order, order_kag_gr)
-    # yapf: enable
+    # fmt: on
 
 
 def test_possible_couplings():

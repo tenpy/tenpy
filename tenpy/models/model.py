@@ -1253,8 +1253,7 @@ class CouplingModel(Model):
             hc_op1 = site1.get_hc_op_name(op1)
             hc_op2 = site2.get_hc_op_name(op2)
             hc_opstr = site2.get_hc_op_name(op_string)
-            self.add_coupling(np.conj(strength), u2, hc_op2, u1, hc_op1, -dx,
-                              hc_opstr, category, plus_hc=False)  # yapf: disable
+            self.add_coupling(np.conj(strength), u2, hc_op2, u1, hc_op1, -dx, hc_opstr, category, plus_hc=False)
         # done
 
     def add_coupling_term(self,

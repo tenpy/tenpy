@@ -201,7 +201,8 @@ def test_CouplingModel_explicit():
     #  1.50000 * Cd JW_1 C_3 +
     #  1.50000 * JW C_1 Cd_3 +
     #  4.00000 * N_1 N_4
-    # yapf: disable
+
+    # fmt: off
     W0_ex = [[Id,   CdJW, JWC,  N,    None, None, None, None, None, N*0.125],
              [None, None, None, None, None, None, None, None, None, C*1.5],
              [None, None, None, None, None, None, None, None, None, Cd*1.5],
@@ -222,8 +223,8 @@ def test_CouplingModel_explicit():
              [None, None, None, None, None, None, None, Id,   None, None],
              [None, None, None, None, None, None, None, None, None, N*4.0],
              [None, None, None, None, None, None, None, None, None, Id]]
+    # fmt: on
 
-    # yapf: enable
     W0_ex = npc.grid_outer(W0_ex, W0_new.legs[:2])
     W1_ex = npc.grid_outer(W1_ex, W1_new.legs[:2])
     assert npc.norm(W0_new - W0_ex)**2 == 0.  # coupling constants: no rounding errors
@@ -253,7 +254,7 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
     CdJW = Cd.matvec(JW)  # = Cd
     JWC = JW.matvec(C)  # = C
     NJW = N.matvec(JW)
-    # yapf: disable
+    # fmt: off
     H_MPO_graph = tenpy.networks.mpo.MPOGraph.from_terms((M.all_onsite_terms(),
                                                           M.all_coupling_terms(),
                                                           M.exp_decaying_terms),
@@ -298,7 +299,7 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
              [None, None, None, None, None, None, None, None, None, None, Cd],
              [None, None, None, None, None, None, None, None, None, None, N],
              [None, None, None, None, None, None, None, None, None, None, Id]]
-    # yapf: enable
+    # fmt: on
     W0_ex = npc.grid_outer(W0_ex, W0_new.legs[:2])
     assert npc.norm(W0_new - W0_ex) == 0.  # coupling constants: no rounding errors
     W1_ex = npc.grid_outer(W1_ex, W1_new.legs[:2])

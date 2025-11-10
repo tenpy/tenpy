@@ -559,7 +559,7 @@ def test_expectation_value_term():
                           [('Nu', 1-psi2.L), ('Nd', 2-psi2.L)],  # shift outside of unit cell
                           [('Nd', 2+2*psi2.L), ('Nu', 5+2*psi2.L)],  # to test shift code block
                           [('Nu Nd', 3)],
-                          [('Nu', 1), ('Nu', 5)]], pref)  # yapf: disable
+                          [('Nu', 1), ('Nu', 5)]], pref)  # fmt: skip
     desired = sum(pref[1:])
     assert desired == sum(
         [psi2.expectation_value_term(term) * strength for term, strength in term_list])
@@ -582,7 +582,7 @@ def test_correlation_function():
                                    [ 0.,  0.,  1.,  0.,  0., -1.],
                                    [ 0., -1.,  0.,  1.,  0.,  0.],
                                    [ 1.,  0.,  0.,  0.,  1.,  0.],
-                                   [ 0.,  0., -1.,  0.,  0.,  1.]])  # yapf: disable
+                                   [ 0.,  0., -1.,  0.,  0.,  1.]])  # fmt: skip
     npt.assert_almost_equal(corr1, corr1_exact)
     corr1 = psi1.term_correlation_function_right([('Sz', 0)], [('Sz', 0)])
     npt.assert_almost_equal(corr1, corr1_exact[0, 1:])
@@ -618,7 +618,7 @@ def test_correlation_function():
     corr2_exact = np.array([[ 0.,  0.,  0.,  0.],
                             [ 0.,  1.,  0.,  0.],
                             [ 0.,  0.,  0.,  0.],
-                            [ 0.,  0.,  0.,  1.]])  # yapf: disable
+                            [ 0.,  0.,  0.,  1.]])  # fmt: skip
     npt.assert_almost_equal(corr2, corr2_exact)
     psi3 = psi2.copy()
     from tenpy.algorithms.tebd import RandomUnitaryEvolution
@@ -720,7 +720,7 @@ def test_MPSEnvironment_expectation_values():
     corr_exact = np.array([[ -1.,  1.,  1., 1.],
                            [ -1.,  1.,  -1.,  -1.],
                            [ 1.,  1.,  -1.,  1.],
-                           [ -1.,  -1.,  -1.,  1.]])  # yapf: disable
+                           [ -1.,  -1.,  -1.,  1.]])  # fmt: skip
     corr_exact /= 16
     npt.assert_almost_equal(corr_xz, corr_exact)
     #term correlation function

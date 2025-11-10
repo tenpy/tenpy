@@ -118,9 +118,11 @@ def test_mkl(n=2):
 
 def test_group_by_degeneracy():
     group_by_degeneracy = tools.misc.group_by_degeneracy
+    # fmt: off
     #    0     1       2    3       4  5    6
     E = [2., 2.4, 1.9999, 1.8, 2.3999, 5, 1.8]
-    k = [0,    1,      2,   2,      1, 2,   1]  # yapf: disable
+    k = [0,    1,      2,   2,      1, 2,   1]
+    # fmt: on
     g = group_by_degeneracy(E)
     assert g == [(0, ), (1, ), (2, ), (3, 6), (4, ), (5, )]
     g = group_by_degeneracy(E, cutoff=0.01)

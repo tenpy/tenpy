@@ -46,7 +46,7 @@ def test_onsite_terms():
                                {},
                                {"X_3": strength1[3]},
                                {},
-                               {}] # yapf: disable
+                               {}] # fmt: skip
     strength2 = np.arange(2., 2. + L * 0.25, 0.25)
     o2 = OnsiteTerms(L)
     for i in [1, 4, 3, 5]:
@@ -59,14 +59,14 @@ def test_onsite_terms():
                                {},
                                {"X_3": strength1[3] + strength2[3], "Y_3": strength2[3]},
                                {"Y_4": strength2[4]},
-                               {"Y_5": strength2[5]}] # yapf: disable
+                               {"Y_5": strength2[5]}]  # fmt: skip
     o1.remove_zeros()
     assert o1.onsite_terms == [{"X_0": strength1[0]},
                                {"Y_1": strength2[1]},
                                {},
                                {"X_3": strength1[3]+ strength2[3], "Y_3": strength2[3]},
                                {"Y_4": strength2[4]},
-                               {"Y_5": strength2[5]}] # yapf: disable
+                               {"Y_5": strength2[5]}]  # fmt: skip
     # convert to term_list
     tl = o1.to_TermList()
     assert tl.terms == [[("X_0", 0)], [("Y_1", 1)], [("X_3", 3)], [("Y_3", 3)], [("Y_4", 4)],
@@ -95,7 +95,7 @@ def test_coupling_terms():
     c1_des = {0: {('X_0', 'Id'): {1: {'Y_1': 0.125},
                                   2: {'Y_2': 0.25},
                                   3: {'Y_3': 0.375}}},
-              2: {('X_2', 'Id'): {3: {'Y_3': 2.375}}}} # yapf: disable
+              2: {('X_2', 'Id'): {3: {'Y_3': 2.375}}}}  # fmt: skip
     assert c1.coupling_terms == c1_des
     c1._test_terms(sites)
     assert c1.max_range() == 3 - 0
@@ -117,16 +117,16 @@ def test_coupling_terms():
     #couplings now in left/ right structure from MultiCoupling
 
     t_des_L = {2: {('X_2', 'Id'): {-1: [1]}},
-               0: {('X_0', 'Id'): {-1: [2, 3, 4]}}} # yapf: disable
+               0: {('X_0', 'Id'): {-1: [2, 3, 4]}}}  # fmt: skip
     t_des_R = {5: [1, 2],
                3: {('Y_3', 'Id'): {5: [3]}},
-               2: {('Y_2', 'Id'): {5: [4]}}} # yapf: disable
+               2: {('Y_2', 'Id'): {5: [4]}}}  # fmt: skip
     c_des = [None,
              (3, 'Y_3', 0, 2.375),
              (1, 'Y_1', 0, 0.125),
              (2, 'Id', 0, 0.375),
              (1, 'Id', 0, 0.25),
-            ]  # yapf: disable
+            ]  # fmt: skip
     assert mc.terms_left == t_des_L
     assert mc.terms_right == t_des_R
     assert mc.connections == c_des
@@ -139,19 +139,21 @@ def test_coupling_terms():
                0: {('X_0', 'Id'): {-1: [2, 3, 4],
                                    1: {('Y_1', 'Id'): {-1: [5]}}},
                    ('X_0', 'S1'): {1: {('Y_1', 'S2'): {-1: [6]}}}},
-               1: {('X_1', 'Id'): {-1: [7]}}}  # yapf: disable
+               1: {('X_1', 'Id'): {-1: [7]}}}  # fmt: skip
     t_des_R = {5: [1, 2],
                3: {('Y_3', 'Id'): {5: [3, 5, 7]},
                    ('Y_3', 'S2'): {5: [6]}},
-               2: {('Y_2', 'Id'): {5: [4]}}}  # yapf: disable
-    c_des = [None,
-             (3, 'Y_3', 0, 2.375),
-             (1, 'Y_1', 0, 0.125),
-             (2, 'Id', 0, 0.375),
-             (1, 'Id', 0, 0.25),
-             (2, 'Id', 0, 20.0),
-             (2, 'S2', 0, 30.0),
-             (2, 'Y_2', 0, 40.0)]
+               2: {('Y_2', 'Id'): {5: [4]}}}  # fmt: skip
+    c_des = [
+        None,
+        (3, 'Y_3', 0, 2.375),
+        (1, 'Y_1', 0, 0.125),
+        (2, 'Id', 0, 0.375),
+        (1, 'Id', 0, 0.25),
+        (2, 'Id', 0, 20.0),
+        (2, 'S2', 0, 30.0),
+        (2, 'Y_2', 0, 40.0),
+    ]
 
     assert mc.terms_left == t_des_L
     assert mc.terms_right == t_des_R
@@ -193,7 +195,7 @@ def test_coupling_terms():
                                   2: {'Y_2': 0.25},
                                   3: {'Y_3': 0.375}}},
               1: {('X_1', 'Id'): {2: {'Y_2': 1.25}}},
-              2: {('X_2', 'Id'): {3: {'Y_3': 2.375}}}} # yapf: disable
+              2: {('X_2', 'Id'): {3: {'Y_3': 2.375}}}}  # fmt: skip
     assert c1.coupling_terms == c1_des
     c1._test_terms(sites)
     mc += c2
@@ -201,12 +203,12 @@ def test_coupling_terms():
                0: {('X_0', 'Id'): {-1: [2, 3, 4],
                                    1: {('Y_1', 'Id'): {-1: [5]}}},
                    ('X_0', 'S1'): {1: {('Y_1', 'S2'): {-1: [6]}}}},
-               1: {('X_1', 'Id'): {-1: [7, 8]}}}  # yapf: disable
+               1: {('X_1', 'Id'): {-1: [7, 8]}}}  # fmt: skip
 
     t_des_R = {5: [1, 2, 8],
                3: {('Y_3', 'Id'): {5: [3, 5, 7]},
                    ('Y_3', 'S2'): {5: [6]}},
-               2: {('Y_2', 'Id'): {5: [4]}}}  # yapf: disable
+               2: {('Y_2', 'Id'): {5: [4]}}}  # fmt: skip
     c_des = [None,
              (3, 'Y_3', 0, 2.375),
              (1, 'Y_1', 0, 0.25),
@@ -215,7 +217,7 @@ def test_coupling_terms():
              (2, 'Id', 0, 20.0),
              (2, 'S2', 0, 30.0),
              (2, 'Y_2', 0, 40.0),
-             (2, 'Y_2', 0, 1.25)]  # yapf:disable
+             (2, 'Y_2', 0, 1.25)]  # fmt: skip
     assert mc.terms_left == t_des_L
     assert mc.terms_right == t_des_R
     assert mc.connections == c_des
@@ -332,7 +334,7 @@ def test_exp_decaying_terms():
     ts_desired = ([[("X", 0), ("Y", 0 + 2 * i)] for i in range(1, cutoff_range + 1)] +
                   [[("X", 2), ("Y", 2 + 2 * i)] for i in range(1, cutoff_range + 1)] +
                   [[("X", 4), ("Y", 4 + 2 * i)] for i in range(1, cutoff_range + 1)] +
-                  [[("X", 6), ("Y", 6 + 2 * i)] for i in range(1, cutoff_range + 1)])  # yapf: disable
+                  [[("X", 6), ("Y", 6 + 2 * i)] for i in range(1, cutoff_range + 1)])  # fmt: skip
     assert ts.terms == ts_desired
     strength_desired = np.tile(l**np.arange(1, cutoff_range + 1) * p, 4)
     assert np.all(ts.strength == strength_desired)
@@ -390,7 +392,7 @@ def test_exp_decaying_terms():
     ts_desired = ([[("X", 0), ("Y", -1 + 2 * i)] for i in range(1, cutoff_range + 1)] +
                   [[("X", 2), ("Y", 1 + 2 * i)] for i in range(1, cutoff_range + 1)] +
                   [[("X", 4), ("Y", 3 + 2 * i)] for i in range(1, cutoff_range + 1)] +
-                  [[("X", 6), ("Y", 5 + 2 * i)] for i in range(1, cutoff_range + 1)])  # yapf: disable
+                  [[("X", 6), ("Y", 5 + 2 * i)] for i in range(1, cutoff_range + 1)])  # fmt: skip
     assert ts.terms == ts_desired
     strength_desired = np.tile(l**np.arange(1, cutoff_range + 1) * p, 4)
     assert np.all(ts.strength == strength_desired)
@@ -444,7 +446,7 @@ def test_exp_decaying_terms():
     ts_desired = ([[("X", 1), ("Y", 0 + 2 * i)] for i in range(1, cutoff_range + 1)] +
                   [[("X", 3), ("Y", 2 + 2 * i)] for i in range(1, cutoff_range + 1)] +
                   [[("X", 5), ("Y", 4 + 2 * i)] for i in range(1, cutoff_range + 1)] +
-                  [[("X", 7), ("Y", 6 + 2 * i)] for i in range(1, cutoff_range + 1)])  # yapf: disable
+                  [[("X", 7), ("Y", 6 + 2 * i)] for i in range(1, cutoff_range + 1)])  # fmt: skip
     print(ts.terms)
     print(ts_desired)
     assert ts.terms == ts_desired

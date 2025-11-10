@@ -1584,7 +1584,7 @@ class SpinHalfFermionSite(Site):
         ops = dict(JW=JW, JWu=JWu, JWd=JWd,
                    Cu=Cu, Cdu=Cdu, Cd=Cd, Cdd=Cdd,
                    Nu=Nu, Nd=Nd, Ntot=Ntot, NuNd=NuNd, dN=dN,
-                   Sx=Sx, Sy=Sy, Sz=Sz, Sp=Sp, Sm=Sm)  # yapf: disable
+                   Sx=Sx, Sy=Sy, Sz=Sz, Sp=Sp, Sm=Sm)  # fmt: skip
 
         # handle charges
         qmod = []
@@ -1757,7 +1757,7 @@ class SpinHalfHoleSite(Site):
         ops = dict(JW=JW, JWu=JWu, JWd=JWd,
                    Cu=Cu, Cdu=Cdu, Cd=Cd, Cdd=Cdd,
                    Nu=Nu, Nd=Nd, Ntot=Ntot, dN=dN,
-                   Sx=Sx, Sy=Sy, Sz=Sz, Sp=Sp, Sm=Sm)  # yapf: disable
+                   Sx=Sx, Sy=Sy, Sz=Sz, Sp=Sp, Sm=Sm)  # fmt: skip
 
         # handle charges
         qmod = []

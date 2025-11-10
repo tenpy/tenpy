@@ -205,7 +205,7 @@ def test_spin_half_fermion_site():
     hcs = dict(Id='Id', JW='JW', JWu='JWu', JWd='JWd',
                Cu='Cdu', Cdu='Cu', Cd='Cdd', Cdd='Cd',
                Nu='Nu', Nd='Nd', NuNd='NuNd', Ntot='Ntot', dN='dN',
-               Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')  # yapf: disable
+               Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')  # fmt: skip
     sites = []
     for cons_N, cons_Sz in it.product(['N', 'parity', None], ['Sz', 'parity', None]):
         print("conserve ", repr(cons_N), repr(cons_Sz))
@@ -247,7 +247,7 @@ def test_spin_half_hole_site():
     hcs = dict(Id='Id', JW='JW', JWu='JWu', JWd='JWd',
                Cu='Cdu', Cdu='Cu', Cd='Cdd', Cdd='Cd',
                Nu='Nu', Nd='Nd', Ntot='Ntot', dN='dN',
-               Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')  # yapf: disable
+               Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')  # fmt: skip
     sites = []
     for cons_N, cons_Sz in it.product(['N', 'parity', None], ['Sz', 'parity', None]):
         print("conserve ", repr(cons_N), repr(cons_Sz))

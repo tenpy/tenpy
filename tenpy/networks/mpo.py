@@ -1983,7 +1983,7 @@ class MPO(MPSGeometry):
                 [None,           block(s, 1, 1), None,           block(s, 1, 2)],
                 [None,           None,           block(o, 1, 1), block(o, 1, 2)],
                 [None,           None,           None,           block(s, 2, 2)]
-            ]  # yapf: disable
+            ]  # fmt: skip
             w_grid = np.array(w_grid, dtype=object)
             if w_grid[0, 0] is None:
                 w_grid[0, 0] = block(o, 0, 0)
