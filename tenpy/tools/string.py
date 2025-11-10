@@ -1,7 +1,8 @@
 """Tools for handling strings."""
 # Copyright (C) TeNPy Developers, Apache license
 
-from typing import Sequence
+from collections.abc import Sequence
+
 import numpy as np
 
 __all__ = ['is_non_string_iterable', 'vert_join', 'to_mathematica_lists', 'format_like_list',
