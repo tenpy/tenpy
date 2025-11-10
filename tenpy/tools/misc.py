@@ -80,6 +80,7 @@ def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
     -------
     a_array : ndarray
         A copy of `a` converted to a numpy ndarray of desired dimension and shape.
+
     """
     a = np.array(a, dtype=dtype)  # copy
     if a.ndim != len(shape):
@@ -154,6 +155,7 @@ def argsort(a, sort=None, **kwargs):
     -------
     index_array : ndarray, int
         Same shape as `a`, such that ``a[index_array]`` is sorted in the specified way.
+
     """
     if sort is not None:
         if sort == 'm<' or sort == 'SM':
@@ -198,6 +200,7 @@ def inverse_permutation(perm):
     -------
     inv_perm : 1D array (int)
         The inverse permutation of `perm` such that ``inv_perm[perm[j]] = j = perm[inv_perm[j]]``.
+
     """
     perm = np.asarray(perm, dtype=np.intp)
     inv_perm = np.empty_like(perm)
@@ -222,6 +225,7 @@ def list_to_dict_list(l):
         A dictionary with (key, value) pairs ``(key):[i1,i2,...]``
         where ``i1, i2, ...`` are the indices where `key` is found in `l`:
         i.e. ``key == tuple(l[i1]) == tuple(l[i2]) == ...``
+
     """
     d = {}
     for i, r in enumerate(l):
@@ -261,6 +265,7 @@ def atleast_2d_pad(a, pad_item=0):
     >>> atleast_2d_pad([[3, 4], [1, 6, 7]])
     array([[3., 4., 0.],
            [1., 6., 7.]])
+
     """
     iter(a)  # check that a is at least 1D iterable
     if len(a) == 0:
@@ -296,6 +301,7 @@ def transpose_list_list(D, pad=None):
     T : list of lists
         transposed, rectangular version of `D`.
         constructed such that ``T[i][j] = D[j][i] if i < len(D[j]) else pad``
+
     """
     nRow = len(D)
     if nRow == 0:
@@ -317,6 +323,7 @@ def zero_if_close(a, tol=1.e-15):
         numpy array to be rounded
     tol : float
         the threshold which values to consider as '0'.
+
     """
     if a.dtype == np.complex128 or a.dtype == np.complex64:
         ar = np.choose(np.abs(a.real) < tol, [a.real, np.zeros(a.shape)])
@@ -348,6 +355,7 @@ def pad(a, w_l=0, v_l=0, w_r=0, v_r=0, axis=0):
     -------
     padded : ndarray
         a copy of `a` with enlarged `axis`, padded with the given values.
+
     """
     shp = list(a.shape)
     shp[axis] += w_r + w_l
@@ -378,6 +386,7 @@ def add_with_None_0(a, b):
     -------
     sum :
         ``a + b``, except if `a` or `b` is `None`, in which case the other variable is returned.
+
     """
     if a is None:
         return b
@@ -419,6 +428,7 @@ def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
     [(0, 2), (1, 4), (3, 6), (5,)]
     >>> group_by_degeneracy(E, k, cutoff=0.001)  # k and E need to be close
     [(0,), (1, 4), (2,), (3,), (5,), (6,)]
+
     """
     assert cutoff >= 0.
     E = np.asarray(E)
@@ -457,6 +467,7 @@ def get_close(values, target, default=None, eps=1.e-13):
     -------
     value : float
         An entry of `values`, if one close to `target` is found, otherwise `default`.
+
     """
     for v in values:
         if abs(v - target) < eps:
@@ -485,6 +496,7 @@ def find_subclass(base_class, subclass_name):
     Raises
     ------
     ValueError: When no or multiple subclasses of `base_class` exists with that `subclass_name`.
+
     """
     if not isinstance(subclass_name, str):
         subclass = subclass_name
@@ -548,6 +560,7 @@ def get_recursive(nested_data, recursive_key, separator=".", default=_UNSET):
     --------
     set_recursive : same for changing/setting a value.
     flatten : Get a completely flat structure.
+
     """
     if recursive_key.startswith(separator):
         recursive_key = recursive_key[len(separator):]
@@ -600,6 +613,7 @@ def merge_recursive(*nested_data, conflict='error', path=None):
     merged: dict of dict
         A single nested dictionary with the keys/values of the `nested_data` merged.
         Dictionary values appearing in multiple of the `nested_data` get merged recursively.
+
     """
     if len(nested_data) == 0:
         raise ValueError("need at least one nested_data")
@@ -675,6 +689,7 @@ def flatten(mapping, separator='.'):
     See also
     --------
     get_recursive : Useful to obtain a single entry from a nested data structure.
+
     """
     if isinstance(mapping, Config):
         mapping = mapping.as_dict()
@@ -793,6 +808,7 @@ def setup_logging(output_filename=None,
             If used, all other options except `skip_setup` and `capture_warnings` are ignored.
         capture_warnings : bool
             Whether to call :func:`logging.captureWarnings` to include the warnings into the log.
+
     """
     import logging.config
     if filename is _not_set:
@@ -884,6 +900,7 @@ def convert_memory_units(value, unit_from='bytes', unit_to=None):
         The value in the unit `unit_to`.
     unit_to : str
         The unit to which `value` was converted.
+
     """
     units = ['bytes', 'KB', 'MB', 'GB', 'TB']
     factors = [1024**i for i in range(len(units))]
@@ -985,6 +1002,7 @@ def consistency_check(value, options, threshold_key, threshold_default, msg, com
         By default, we check if ``value <= threshold`` and raise otherwise.
         This allows other comparison operations.
         A callable means we check ``compare(value, threshold)``.
+
     """
     threshold = options.get(threshold_key, threshold_default)
     warn_instead = False

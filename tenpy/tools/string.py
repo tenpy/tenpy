@@ -48,6 +48,7 @@ def vert_join(strlist, valign='t', halign='l', delim=' '):
     sample    |  [3 4 5]
     multiline |  [6 7 8]]
     string    |
+
     """
     # expand tabs, split to newlines
     strlist = [str(s).expandtabs().split('\n') for s in strlist]

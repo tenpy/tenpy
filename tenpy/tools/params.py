@@ -52,6 +52,7 @@ class Config(MutableMapping):
         Dictionary containing the actual option keys and values.
     unused : set
         Keeps track of any :attr:`options` not yet used.
+
     """
     def __init__(self, config, name):
         self.options = config
@@ -65,6 +66,7 @@ class Config(MutableMapping):
         ----------
         share_unused : bool
             Whether the :attr:`unused` set should be shared.
+
         """
         res = Config(self.options.copy(), self.name)
         if share_unused:
@@ -89,6 +91,7 @@ class Config(MutableMapping):
         ----------
         filename : str
             Name of the resulting YAML file.
+
         """
         import yaml
         with open(filename, 'w') as stream:
@@ -116,6 +119,7 @@ class Config(MutableMapping):
         -------
         obj : Config
             A `Config` object, loaded from file.
+
         """
         if name is None:
             name = os.path.basename(filename)
@@ -139,6 +143,7 @@ class Config(MutableMapping):
             HDF5 group which is supposed to represent `self`.
         subpath : str
             The `name` of `h5gr` with a ``'/'`` in the end.
+
         """
         type_repr = hdf5_saver.save_dict_content(self.options, h5gr, subpath)
         h5gr.attrs[ATTR_FORMAT] = type_repr
@@ -164,6 +169,7 @@ class Config(MutableMapping):
         -------
         obj : cls
             Newly generated class instance containing the required data.
+
         """
         dict_format = hdf5_loader.get_attr(h5gr, ATTR_FORMAT)
         obj = cls.__new__(cls)  # create class instance, no __init__() call
@@ -222,6 +228,7 @@ class Config(MutableMapping):
         ----------
         recursive : bool
             If True, check the values of `self` for other :class:`Config` and warn in them as well.
+
         """
         unused = getattr(self, 'unused', None)
         if unused is None:
@@ -268,6 +275,7 @@ class Config(MutableMapping):
         -------
         val :
             The value for `option` if it existed, `default` otherwise.
+
         """
         use_default = key not in self.options.keys()
         val = self.options.setdefault(key, default)  # get & set default if not existent
@@ -326,6 +334,7 @@ class Config(MutableMapping):
             Key name for the option being set.
         default :
             The value to be set by default if the option is not yet set.
+
         """
         use_default = key not in self.keys()
         self.options.setdefault(key, default)
@@ -356,6 +365,7 @@ class Config(MutableMapping):
         ----------
         *keys : str
             Each key is marked as read out.
+
         """
         for key in keys:
             self.unused.discard(key)  # (does nothing if key not in set)
@@ -369,6 +379,7 @@ class Config(MutableMapping):
             Key/option name for the parameter being read out.
         action : str, optional
             Use to adapt log message to specific actions (e.g. "Deleting")
+
         """
         name = self.name
         new_key = option in self.unused or use_default
@@ -421,6 +432,7 @@ class Config(MutableMapping):
             False, if all ``self[key]`` are zero or `None` and
             True, if any of the ``self[key]`` for single `key` in `keys`,
             or if any of the entries for a tuple of `keys`
+
         """
         for k in keys:
             if isinstance(k, tuple):
@@ -460,6 +472,7 @@ class Config(MutableMapping):
         -------
         bool
             True if `self` has key `key` with a nontrivial value. False otherwise.
+
         """
         return (key in self.keys() and self.options[key] is not None
                 and np.any(np.array(self.options[key])) != 0)
@@ -480,6 +493,7 @@ def asConfig(config, name):
     -------
     config : :class:`Config`
         Either directly `config` or ``Config(config, name)``.
+
     """
     if isinstance(config, Config):
         return config

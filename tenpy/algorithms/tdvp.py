@@ -83,6 +83,7 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
     ----------
     Krylov_params : :class:`~tenpy.tools.params.Config`
         Parameters for subspace expansion in :meth:`prepare_evolve`.
+
     """
     EffectiveH = None
 
@@ -175,6 +176,7 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
         ----------
         N_steps : int
             The number of steps to evolve.
+
         """
         consistency_check(dt, self.options, 'max_dt', 1.,
                           'dt > ``max_dt`` is unreasonably large for TDVP.',

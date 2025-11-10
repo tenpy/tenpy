@@ -77,6 +77,7 @@ class Algorithm:
         Data given as parameter `resume_data` and/or to be returned by :meth:`get_resume_data`.
     _resume_psi :
         Possibly a copy of `psi` to be used for :meth:`get_resume_data`.
+
     """
     def __init__(self, psi, model, options, *, resume_data=None, cache=None):
         self.options = asConfig(options, self.__class__.__name__)
@@ -130,6 +131,7 @@ class Algorithm:
         **kwargs :
             Further keyword arguments for class initialization.
             If not defined, `resume_data` is collected with :meth:`get_resume_data`.
+
         """
         # If `resume_data` is defined in the kwargs, use that.
         # This allows subclasses to overwrite instead of calling :meth:`get_resume_data`.
@@ -189,6 +191,7 @@ class Algorithm:
             Dictionary with necessary data (apart from copies of `psi`, `model`, `options`)
             that allows to continue the algorithm run from where we are now.
             It might contain an explicit copy of `psi`.
+
         """
         psi = self._resume_psi
         if psi is not None:
@@ -225,6 +228,7 @@ class Algorithm:
         See also
         --------
         tenpy.simulations.simulation.estimate_simulation_RAM: global function calling this.
+
         """
         # first get memory per tensor entry in bytes
         dtypes = [self.psi.dtype]
@@ -365,6 +369,7 @@ class TimeEvolutionAlgorithm(Algorithm):
     trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
         Upper bound for the accumulated error of the represented state,
         which is introduced due to the truncation during the sequence of update steps.
+
     """
     time_dependent_H = False  #: whether the algorithm supports time-dependent H
 
@@ -441,6 +446,7 @@ class TimeEvolutionAlgorithm(Algorithm):
         ----------
         dt : float
             The time step to be used.
+
         """
         # this function can e.g. calculate an approximation
         raise NotImplementedError("Subclasses should implement this.")
@@ -471,6 +477,7 @@ class TimeEvolutionAlgorithm(Algorithm):
         -------
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             Sum of truncation errors introduced during evolution.
+
         """
         trunc_err = TruncationError()
 

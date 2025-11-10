@@ -88,6 +88,7 @@ class Disentangler:
         U : :class:`~tenpy.linalg.conserved.Array` | None
             The unitary used to disentangle `theta`, with labels ``'q0', 'q1', 'q0*', 'q1*'``.
             If no unitary was found/applied, it might also be ``None``.
+
         """
         # do nothing
         return theta, None
@@ -194,6 +195,7 @@ class RenyiDisentangler(Disentangler):
             Renyi entropy (n=2), :math:`S2 = \frac{1}{1-2} \log tr(\rho_L^2)` of `U theta`.
         new_U : :class:`~tenpy.linalg.np_conserved.Array`
             Unitary with legs ``'q0', 'q1', 'q0*', 'q1*'``, which should disentangle `theta`.
+
         """
         U_theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         # same legs as theta: 'vL', 'p0', 'q0', 'p1', 'q1', 'vR'
@@ -284,6 +286,7 @@ class NormDisentangler(Disentangler):
         new_U : :class:`~tenpy.linalg.np_conserved.Array`
             Unitary with legs ``'q0', 'q1', 'q0*', 'q1*'``.
             Chosen such that ``new_U|theta>`` has maximal overlap with the truncated ``U|theta>``.
+
         """
         U_theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         lambda_ = U_theta.combine_legs([['vL', 'p0', 'q0'], ['vR', 'p1', 'q1']], qconj=[+1, -1])
@@ -376,6 +379,7 @@ class GradientDescentDisentangler(Disentangler):
             The *disentangled* wave function ``new_U theta``.
         new_U : :class:`~tenpy.linalg.np_conserved.Array`
             Unitary with legs ``'q0', 'q1', 'q0*', 'q1*'``, which was used to disentangle `theta`.
+
         """
         theta2 = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
         X, Y, Z = npc.svd(theta2, inner_labels=['vR', 'vL'])
@@ -507,6 +511,7 @@ class CompositeDisentangler(Disentangler):
     ----------
     disentanglers : list of :class:`Disentangler`
         The disentanglers to be used.
+
     """
     def __init__(self, disentanglers):
         self.disentanglers = disentanglers
@@ -628,6 +633,7 @@ def get_disentangler(method, parent):
                         CompositeDisentangler([MinDisentangler([BackwardDisentangler(p),
                                                                 LastDisentangler(p)]),
                                                 GradientDescentDisentangler(p)], p), p)
+
     """
     try:
         disent, unparsed = _parse_composite(str(method), parent)

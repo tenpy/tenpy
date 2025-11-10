@@ -36,6 +36,7 @@ def matvec_to_array(H):
     -------
     H_dense : ndarray, shape ``(H.dim, H.dim)``
         a dense array version of `H`.
+
     """
     dim, dim2 = H.shape
     assert (dim == dim2)
@@ -71,6 +72,7 @@ def entropy(p, n=1):
         Shannon-entropy :math:`-\sum_i p_i \log(p_i)` (n=1) or
         Renyi-entropy :math:`\frac{1}{1-n} \log(\sum_i p_i^n)` (n != 1)
         of the distribution `p`.
+
     """
     p = p[p > 1.e-30]  # just for stability reasons / to avoid NaN in log
     if n == 1:
@@ -134,6 +136,7 @@ def speigs(A, k, *args, **kwargs):
     v : ndarray
         array of min(`k`, A.shape[0]) eigenvectors, ``v[:, i]`` is the `i`-th eigenvector.
         Only returned if ``kwargs['return_eigenvectors'] == True``.
+
     """
     d = A.shape[0]
     if A.shape != (d, d):
@@ -181,6 +184,7 @@ def speigsh(A, k, *args, **kwargs):
     v : ndarray
         Array of min(`k`, A.shape[0]) eigenvectors, ``v[:, i]`` is the `i`-th eigenvector.
         Only returned if ``kwargs['return_eigenvectors'] == True``.
+
     """
     d = A.shape[0]
     if A.shape != (d, d):
@@ -223,6 +227,7 @@ def perm_sign(p):
     (1, 2, 0): 1
     (2, 0, 1): 1
     (2, 1, 0): -1
+
     """
     rp = np.argsort(p)
     p = np.argsort(rp)
@@ -255,6 +260,7 @@ def qr_li(A, cutoff=1.e-15):
     Q, R : :class:`numpy.ndarray`
         Decomposition of `A` into isometry `Q^d Q = 1` and upper right `R` with diagonal entries
         larger than `cutoff`.
+
     """
     Q, R, P = scipy.linalg.qr(A, mode='economic', pivoting=True)
     keep = np.abs(np.diag(R)) > cutoff
@@ -288,6 +294,7 @@ def rq_li(A, cutoff=1.e-15):
         Decomposition of `A` into isometry `Q Q^d = 1` and upper right `R` with diagonal entries
         larger than `cutoff`. If ``M, N = A.shape``, then ``R.shape = M, K`` and ``Q.shape = K, N``
         with ``K <= min(M, N)``.
+
     """
     q, r = qr_li(A.T[:, ::-1], cutoff)
     return r.T[::-1, ::-1], q.T[::-1, :]

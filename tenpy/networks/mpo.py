@@ -129,6 +129,7 @@ class MPO(MPSGeometry):
         virtual leg that connects to itself.
         The cycle is `_W[0][i0, i1] * _W[1][i1, i2] * ... * _W[L-1][iL-1, iL]`
         Defaults to None if :attr:`_outer_permutation` does not exist.
+
     """
 
     def __init__(self,
@@ -169,6 +170,7 @@ class MPO(MPSGeometry):
         ----------
         norm_tol : float
             Entries in :attr:`_W` are considered zero if their norm is smaller than `norm_tol`.
+
         """
         if self._graph is not None:
             return
@@ -285,6 +287,7 @@ class MPO(MPSGeometry):
             Indices of the outer virtual leg that connect to themselves
         cycles : list of {list of int}
             The corresponding cycles as in :attr:`_cycles`.
+
         """
         j_cycles = []
         cycles = []
@@ -344,6 +347,7 @@ class MPO(MPSGeometry):
             upper indices
         j_lower : set of int
             lower indices
+
         """
         outer_connections, j_cycles, _ = graph_connections
         # check IdL, IdR valid
@@ -411,6 +415,7 @@ class MPO(MPSGeometry):
             HDF5 group which is supposed to represent `self`.
         subpath : str
             The `name` of `h5gr` with a ``'/'`` in the end.
+
         """
         hdf5_saver.save(self.sites, subpath + "sites")
         hdf5_saver.save(self.chinfo, subpath + "chinfo")
@@ -445,6 +450,7 @@ class MPO(MPSGeometry):
         -------
         obj : cls
             Newly generated class instance containing the required data.
+
         """
         obj = cls.__new__(cls)  # create class instance, no __init__() call
         hdf5_loader.memorize_load(h5gr, obj)
@@ -516,6 +522,7 @@ class MPO(MPSGeometry):
         --------
         grid_insert_ops : used to plug in `entries` of the grid.
         tenpy.linalg.np_conserved.grid_outer : used for final conversion.
+
         """
         chinfo = sites[0].leg.chinfo
         L = len(sites)
@@ -611,6 +618,7 @@ class MPO(MPSGeometry):
             >>> C_expected = np.conj(coeff)[:, np.newaxis] * coeff[np.newaxis, :]
             >>> bool(np.max(np.abs(C - C_expected) ) < 1.e-10)
             True
+
         """
         coeff = np.asarray(coeff)
         assert coeff.shape == (len(sites), )
@@ -695,6 +703,7 @@ class MPO(MPSGeometry):
         ----------
         factor : int
             The new number of sites in the unit cell will be increased from `L` to ``factor*L``.
+
         """
         if int(factor) != factor:
             raise ValueError("`factor` should be integer!")
@@ -732,6 +741,7 @@ class MPO(MPSGeometry):
             Number of sites to be grouped together.
         grouped_sites : None | list of :class:`~tenpy.networks.site.GroupedSite`
             The sites grouped together.
+
         """
         if grouped_sites is None:
             grouped_sites = group_sites(self.sites, n, charges='same')
@@ -779,6 +789,7 @@ class MPO(MPSGeometry):
         See also
         --------
         tenpy.networks.mps.MPS.extract_segment : similar method for MPS.
+
         """
         sites_per_ring = self.L // self.unit_cell_width
         unit_cell_width, remainder = divmod(last + 1 - first, sites_per_ring)
@@ -866,6 +877,7 @@ class MPO(MPSGeometry):
         -------
         U : :class:`~tenpy.networks.mpo.MPO`
             The propagator, i.e. approximation :math:`U ~= exp(H*dt)`
+
         """
         if approximation == 'II':
             return self.make_U_II(dt)
@@ -886,6 +898,7 @@ class MPO(MPSGeometry):
         -------
         UI : :class:`~tenpy.networks.mpo.MPO`
             The propagator, i.e. approximation :math:`U_I ~= exp(H*dt)`
+
         """
         if self.explicit_plus_hc:
             raise NotImplementedError("MPO.make_U_I() assumes hermitian H, you can't use "
@@ -1020,6 +1033,7 @@ class MPO(MPSGeometry):
         exp_val : float/complex
             The expectation value of `self` with respect to the state `psi`.
             For an infinite MPS: the (energy) density per site.
+
         """
         if self.finite:
             return self.expectation_value_finite(psi, **init_env_data)
@@ -1043,6 +1057,7 @@ class MPO(MPSGeometry):
         exp_val : float/complex
             The expectation value of `self` with respect to the state `psi`
             (extensive, not the density).
+
         """
         if psi.bc == 'segment':
             if len(init_env_data) == 0:
@@ -1077,6 +1092,7 @@ class MPO(MPSGeometry):
         -------
         exp_val : float/complex
             The expectation value density of `self` with respect to the state `psi`.
+
         """
         if psi.finite:
             raise ValueError("not infinite MPS")
@@ -1121,6 +1137,7 @@ class MPO(MPSGeometry):
         exp_val : float/complex
             The expectation value of `self` with respect to the state `psi`.
             For an infinite MPS: the density per site.
+
         """
         if psi.finite:
             raise ValueError("not infinite MPS")
@@ -1196,6 +1213,7 @@ class MPO(MPSGeometry):
             The result of ``<psi|self|psi> = self.expectation_value(psi)`` if known;
             otherwise obtained from :meth:`expectation_value`.
             (Set this to 0 to obtain only the part ``<psi|self^2|psi>``.)
+
         """
         if self.bc != 'finite':
             raise ValueError("works only for finite systems")
@@ -1246,6 +1264,7 @@ class MPO(MPSGeometry):
         prefactor : float
             The prefactor obtained from ``trace(dagger(ops), H) / norm``,
             where ``norm = trace(dagger(ops), ops)``
+
         """
         ops = to_iterable(ops)
         IdL = self.get_IdL(i)
@@ -1312,6 +1331,7 @@ class MPO(MPSGeometry):
         -------
         term_list : :class:`~tenpy.networks.terms.TermList`
             The terms in `self` with left-most index in `start`.
+
         """
         if start is not None:
             start = to_iterable(start)
@@ -1433,6 +1453,7 @@ class MPO(MPSGeometry):
         -------
         equal : bool
             Whether `self` equals `other` to the desired precision.
+
         """
         if self.finite:
             num_sites = self.L
@@ -1474,6 +1495,7 @@ class MPO(MPSGeometry):
             The state to which `self` should be applied, in place.
         options : dict
             See above.
+
         """
         options = asConfig(options, "ApplyMPO")
         method = options['compression_method']
@@ -1510,6 +1532,7 @@ class MPO(MPSGeometry):
         ----------
         psi : :class:`~tenpy.networks.mps.MPS`
             The MPS to which `self` should be applied. Modified in place!
+
         """
         bc = psi.bc
         if bc != self.bc:
@@ -1594,6 +1617,7 @@ class MPO(MPSGeometry):
                 bond dimension will be truncated to `m_temp * chi_max`
             trunc_weight: float
                 reduces cut for Schmidt values to `trunc_weight * svd_min`
+
         """
         options = asConfig(options, "zip_up")
         m_temp = options.get('m_temp', 2, int)
@@ -1682,6 +1706,7 @@ class MPO(MPSGeometry):
             [1 C D] -> [beta*1 beta*C alpha*1+beta*D]
 
         Another choice is to modify `N` tensors specified by the input argument `sites`.
+
         """
         if self.bc != 'finite':
             raise NotImplementedError("MPO.add_identity only works for finite MPO.")
@@ -1776,6 +1801,7 @@ class MPO(MPSGeometry):
             We project onto IdL on site ``0``, contract tensors from ``range(num_sites)``, and
             then project onto IdR. By default, we use ``L + 2 * max_range`` of whichever MPO has the
             larger value, where we substitute ``L`` for an unknown or infinite ``max_range``.
+
         """
         if self.finite and other.finite:
             assert self.L == other.L
@@ -1917,6 +1943,7 @@ class MPO(MPSGeometry):
         -------
         sum_mpo : :class:`MPO`
             The sum `self + other`.
+
         """
         if self.explicit_plus_hc != other.explicit_plus_hc:
             raise ValueError('Can not add MPOs with different explicit_plus_hc flags')
@@ -2029,6 +2056,7 @@ def make_W_II(t, A, B, C, D):
     A, B, C, D :  :class:`numpy.ndarray`
         Blocks of the MPO tensor to be exponentiated, as defined in :cite:`zaletel2015`.
         Legs ``'wL', 'wR', 'p', 'p*'``; legs projected to a single IdL/IdR can be dropped.
+
     """
     tC = np.sqrt(np.abs(t))  #spread time step across B, C
     tB = t / tC
@@ -2127,6 +2155,7 @@ class MPOGraph(MPSGeometry):
         ``keyL in states[i]`` and ``keyR in states[i+1]``.
     _grid_legs : None | list of LegCharge
         The charges for the MPO
+
     """
 
     _valid_bc = ['finite', 'infinite']  # segment makes no sense for MPOGraph
@@ -2171,6 +2200,7 @@ class MPOGraph(MPSGeometry):
         --------
         from_term_list :
             equivalent for representation by :class:`~tenpy.networks.terms.TermList`.
+
         """
         graph = cls(sites, bc, 0, unit_cell_width=unit_cell_width)
         for term in terms:
@@ -2205,6 +2235,7 @@ class MPOGraph(MPSGeometry):
         See also
         --------
         from_terms : equivalent for other representation of terms.
+
         """
         ot_ct = term_list.to_OnsiteTerms_CouplingTerms(sites)
         return cls.from_terms(ot_ct, sites, bc, insert_all_id, unit_cell_width=unit_cell_width)
@@ -2245,6 +2276,7 @@ class MPOGraph(MPSGeometry):
             Whether to check that 'opname' exists on the given `site`.
         skip_existing : bool
             If ``True``, skip adding the graph node if it exists (with same keys and `opname`).
+
         """
         i = i % self.L
         if check_op:
@@ -2288,6 +2320,7 @@ class MPOGraph(MPSGeometry):
         -------
         key_i : tuple
             The `key` on the right of site i we connected to.
+
         """
         if j <= i:
             raise ValueError("j <= i not allowed")
@@ -2325,6 +2358,7 @@ class MPOGraph(MPSGeometry):
         -------
         key_i : hashable
             The `key` on the right of site i we connected to.
+
         """
         if j <= i:
             raise ValueError("j <= i not allowed")
@@ -2353,6 +2387,7 @@ class MPOGraph(MPSGeometry):
             ``'IdR'->'IdR'`` to the right of the leftmost existing 'IdR'.
             The latter avoid "dead ends" in the MPO, but some functions (like `make_WI`) expect
             'IdL'/'IdR' to exist on all bonds.
+
         """
         if self.bc == 'infinite' or insert_all_id:
             max_IdL = self.L  # add identities for all sites
@@ -2387,6 +2422,7 @@ class MPOGraph(MPSGeometry):
         -------
         mpo : :class:`MPO`
             the MPO which self represents.
+
         """
         self.test_sanity()
         # pre-work: generate the grid
@@ -2472,6 +2508,7 @@ class MPOGraph(MPSGeometry):
             entry `i+1` needs to be conjugated to be used as `wR` leg of `W[i]`.
         Ws_qtotal :  list of qtotal
             Same as argument, but parsed to a list of L charges defaulting to zeros.
+
         """
         L = self.L
         states = self._ordered_states
@@ -2622,6 +2659,7 @@ class MPOEnvironment(BaseEnvironment):
     ----------
     H : :class:`~tenpy.networks.mpo.MPO`
         The MPO sandwiched between `bra` and `ket`.
+
     """
 
     def __init__(self, bra, H, ket, cache=None, **init_env_data):
@@ -2672,6 +2710,7 @@ class MPOEnvironment(BaseEnvironment):
         gmres_options : dict
             Further optional parameters for :class:`tenpy.linalg.krylov_based.GMRES`.
             Only relevant for **infinite** MPS if method 'iter' is used to get `init_LP`/`init_RP`.
+
         """
         if not self.finite  and (init_LP is None or init_RP is None) and \
                 start_env_sites is None and self.bra is self.ket:
@@ -2792,6 +2831,7 @@ class MPOEnvironment(BaseEnvironment):
         -------
         init_LP : :class:`~tenpy.linalg.np_conserved.Array`
             Environment left of site `i` with labels ``'vR*', 'wR', 'vR'``.
+
         """
         i0 = i - start_env_sites
         IdL = self.H.get_IdL(i0)
@@ -2818,6 +2858,7 @@ class MPOEnvironment(BaseEnvironment):
         -------
         init_RP : :class:`~tenpy.linalg.np_conserved.Array`
             Environment right of site `i` with labels ``'vL*', 'wL', 'vL'``.
+
         """
         i0 = i + start_env_sites
         IdR = self.H.get_IdR(i0)
@@ -2855,6 +2896,7 @@ class MPOEnvironment(BaseEnvironment):
         LP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything left of site `i`,
             with labels ``'vR*', 'wR', 'vR'`` for `bra`, `H`, `ket`.
+
         """
         # actually same as MPSEnvironment, just updated the labels in the doc string.
         return super().get_LP(i, store)
@@ -2883,6 +2925,7 @@ class MPOEnvironment(BaseEnvironment):
         RP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything right of site `i`,
             with labels ``'vL*', 'wL', 'vL'`` for `bra`, `H`, `ket`.
+
         """
         # actually same as MPSEnvironment, just updated the labels in the doc string.
         return super().get_RP(i, store)
@@ -2900,6 +2943,7 @@ class MPOEnvironment(BaseEnvironment):
         ----------
         i0 : int
             Site index.
+
         """
         # same as MPSEnvironment.full_contraction, but also contract 'wL' with 'wR'
         LP, RP = self._full_contraction_LP_RP(i0)
@@ -3100,6 +3144,7 @@ class MPOEnvironmentBuilder:
         -------
         grid : list of {list of { [None | :class:`~tenpy.linalg.np_conserved.Array`, set of int] }}
             As described above
+
         """
         grid = []
         for chi in self.H.chi[1:]:
@@ -3233,6 +3278,7 @@ class MPOEnvironmentBuilder:
             envs['init_LP'][j]=`LP[0][j]` and envs['init_RP'][j]=`RP[self.L-1][j]`
         E : float
             Energy per site, only returned if `calc_E` is True.
+
         """
         if not self.H.chinfo.trivial_shift:
             raise NotImplementedError('Iterative LP/RP initialization is not yet supported for '
@@ -3576,6 +3622,7 @@ class MPOTransferMatrix(NpcLinearOperator):
         Initial guess suitable for `flat_linop` in non-tenpy form.
     unit_cell_width : int
         See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+
     """
 
     def __init__(self, H, psi, transpose=False, guess=None, _subtraction_gauge='rho'):
@@ -3695,6 +3742,7 @@ class MPOTransferMatrix(NpcLinearOperator):
             If True, project away the trace of the "IdL" part (transpose=False)
             or "IdR" part (transpose=True), respectively, to transform the Jordan-Block structure
             into something that is translation invariant.
+
         """
         if not self.transpose:  # right to left
             vec.itranspose(['vL', 'wL', 'vL*'])  # shouldn't do anything
@@ -3740,6 +3788,7 @@ class MPOTransferMatrix(NpcLinearOperator):
             Eigenvalue for the transfer matrix; should be (very) close to 1.
         vec :
             Eigenvector to be used as initial LP/RP for an :class:`MPOEnvironment`.
+
         """
         if 'v0_npc' not in kwargs:
             kwargs.setdefault('v0', self.flat_guess)
@@ -3759,6 +3808,7 @@ class MPOTransferMatrix(NpcLinearOperator):
         -------
         energy : float
             Energy *per site* of the MPS.
+
         """
         if not self.transpose:
             axes = (['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*'])
@@ -3820,6 +3870,7 @@ class MPOTransferMatrix(NpcLinearOperator):
             Energy per site. Only returned if `calc_E` is True.
         eps : float
             The contraction of ``<LP |SS|RP>`` for the environment
+
         """
         # first right to left
         envs = []
@@ -3893,6 +3944,7 @@ def grid_insert_ops(site, grid):
         Copy of `grid` with entries ``[('opname', strength), ...]`` replaced by
         ``sum([strength*site.get_op('opname') for opname, strength in entry])``
         and entries ``'opname'`` replaced by ``site.get_op('opname')``.
+
     """
     new_grid = [None] * len(grid)
     for i, row in enumerate(grid):

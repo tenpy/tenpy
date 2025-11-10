@@ -78,6 +78,7 @@ class ExactDiag:
         Just ``_pipe.conj()``.
     _mask : 1D bool ndarray | ``None``
         Bool mask, which of the indices of the pipe are in the desired `charge_sector`.
+
     """
     def __init__(self, model, charge_sector=None, sparse=False, max_size=2e6):
         if model.lat.bc_MPS != 'finite':
@@ -125,6 +126,7 @@ class ExactDiag:
         ----------
         model : :class:`tenpy.models.model.Model`
             Model with infinite bc and MPO.
+
         """
         model_segment = model.extract_segment(first, last, enlarge)
         model_segment.lat.bc_MPS = 'finite'
@@ -145,6 +147,7 @@ class ExactDiag:
             Further keyword arguments as for the ``__init__`` of the class.
         **kwargs :
             Further keyword arguments as for the ``__init__`` of the class.
+
         """
         from ..models.lattice import TrivialLattice
         from ..models.model import MPOModel
@@ -237,6 +240,7 @@ class ExactDiag:
             Ground state energy (possibly in the given sector).
         psi0 : :class:`~tenpy.linalg.np_conserved.Array`
             Ground state (possibly in the given sector).
+
         """
         if self.E is None or self.V is None:
             raise ValueError("You need to call `full_diagonalization` first!")
@@ -272,6 +276,7 @@ class ExactDiag:
         -------
         psi : :class:`~tenpy.linalg.np_conserved.Array`
             The MPS contracted along the virtual bonds.
+
         """
         if mps.bc != 'finite':
             raise ValueError("Full diagonalization works only on finite systems")
@@ -297,6 +302,7 @@ class ExactDiag:
         -------
         mps : :class:`~tenpy.networks.mps.MPS`
             An normalized MPS representation in canonical form.
+
         """
         if not isinstance(psi.legs[0], npc.LegPipe):
             # projected onto charge_sector: need to restore the LegPipe.
@@ -351,6 +357,7 @@ def get_full_wavefunction(psi: MPS, undo_sort_charge: bool = True):
     theta : 1D array
         The wavefunction. Basis order is like for a Kronecker product :func:`numpy.kron` of the
         local basis order, see `undo_sort_charge`.
+
     """
     if psi.bc != 'finite':
         raise ValueError('psi must have finite boundary conditions')
@@ -386,6 +393,7 @@ def get_numpy_Hamiltonian(model, from_mpo: bool = True, undo_sort_charge: bool =
     H : 2D array
         The Hamiltonian as a matrix. Basis order is like for a Kronecker product :func:`numpy.kron`
         of the local basis order, see `undo_sort_charge`.
+
     """
     if model.lat.bc_MPS != 'finite':
         raise ValueError('Model must be defined on a finite lattice.')
@@ -414,6 +422,7 @@ def get_scipy_sparse_Hamiltonian(model, undo_sort_charge: bool = True):
     H : CSR matrix
         The Hamiltonian as a scipy CSR sparse matrix. Basis order is like for a Kronecker product
         :func:`numpy.kron` of the local basis order, see `undo_sort_charge`.
+
     """
     if model.lat.bc_MPS != 'finite':
         raise ValueError('Model must be defined on a finite lattice.')

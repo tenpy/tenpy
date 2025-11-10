@@ -47,6 +47,7 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
         What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
     sort_charge : bool
         Whether to sort by charges of physical legs. `True` by default.
+
     """
     def __init__(self, model_params):
         # model parameters

@@ -60,6 +60,7 @@ class MomentumMPS:
         The momentum of the state.
     n_sites : int
         Number of sites for each excitation.
+
     """
 
     def __init__(self, Xs, uMPS, p, n_sites=1):
@@ -103,6 +104,7 @@ class MomentumMPS:
             HDF5 group which is supposed to represent `self`.
         subpath : str
             The `name` of `h5gr` with a ``'/'`` in the end.
+
         """
         hdf5_saver.save(self._X, subpath + "tensors")
         hdf5_saver.save(self.uMPS_GS, subpath + "GS_uMPS")
@@ -128,6 +130,7 @@ class MomentumMPS:
         -------
         obj : cls
             Newly generated class instance containing the required data.
+
         """
         obj = cls.__new__(cls)  # create class instance, no __init__() call
         hdf5_loader.memorize_load(h5gr, obj)

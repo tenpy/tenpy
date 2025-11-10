@@ -66,6 +66,7 @@ def append_right_env(As, Bs, R, Ws=None):
     -------
     temp : :class:`~tenpy.linalg.np_conserved.Array`
         The new environment with the tensors above included.
+
     """
     temp = R.copy()
     for i in reversed(range(len(As))):
@@ -97,6 +98,7 @@ def append_left_env(As, Bs, L, Ws=None):
     -------
     temp : :class:`~tenpy.linalg.np_conserved.Array`
         The new environment with the tensors above included.
+
     """
     temp = L.copy()
     for i in range(len(As)):
@@ -131,6 +133,7 @@ def construct_orthogonal(M, left=True):
     -------
     Q : :class:`~tenpy.linalg.np_conserved.Array`
         The orthogonal complement, such that the relation above is fulfilled.
+
     """
     if left:
         M = M.copy().combine_legs([['vL', 'p'], ['vR']], qconj=[+1, -1])
@@ -181,6 +184,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         The matrices of the MPO.
     VLs : list of :class:`~tenpy.linalg.np_conserved.Array`
         The orthogonal complements for each AL.
+
     """
 
     def __init__(self, psi, model, options, **kwargs):
@@ -356,6 +360,7 @@ class PlaneWaveExcitationEngine(Algorithm):
                 Convergence criterion for the explicit summation.
             sum_iterations : int
                 Maximum number of iterations for the explicit summation (default sum_iterations=100).
+
         """
         sum_tol = self.options.get('sum_tol', 1.e-10, 'real')
         sum_iterations = self.options.get('sum_iterations', 100, int)
@@ -440,6 +445,7 @@ class PlaneWaveExcitationEngine(Algorithm):
                 Convergence criterion for the explicit summation.
             sum_iterations : int
                 Maximum number of iterations for the explicit summation (default sum_iterations=100).
+
         """
         sum_tol = self.options.get('sum_tol', 1.e-10, 'real')
         sum_iterations = self.options.get('sum_iterations', 100, int)
@@ -514,6 +520,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         ----------
         outer : :class:`PlaneWaveExcitationEngine`
             Parent engine for the plane wave excitation ansatz.
+
         """
 
         def __init__(self, outer):
@@ -593,6 +600,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
             factor of the smaller Brillouin zone: p*L.
+
         """
 
         def __init__(self, outer, p):
@@ -656,6 +664,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         -------
         X_init : list of :class:`~tenpy.linalg.np_conserved.Array`
             Initial guess for excitation tensors for each site of the unit cell.
+
         """
         X_init = []
         valid_charge = False
@@ -731,6 +740,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         The matrices of the MPO.
     VLs : list of :class:`~tenpy.linalg.np_conserved.Array`
         The orthogonal complements for each AL.
+
     """
 
     def __init__(self, psi, model, options, **kwargs):
@@ -949,6 +959,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
                 Convergence criterion for the explicit summation.
             sum_iterations : int
                 Maximum number of iterations for the explicit summation (default sum_iterations=100).
+
         """
         sum_tol = self.options.get('sum_tol', 1.e-10, 'real')
         sum_iterations = self.options.get('sum_iterations', 100, int)
@@ -1070,6 +1081,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
                 Convergence criterion for the explicit summation.
             sum_iterations : int
                 Maximum number of iterations for the explicit summation (default sum_iterations=100).
+
         """
         sum_tol = self.options.get('sum_tol', 1.e-10, 'real')
         sum_iterations = self.options.get('sum_iterations', 100, int)
@@ -1145,6 +1157,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
             factor of the smaller Brillouin zone: p*L.
+
         """
 
         def __init__(self, outer, p):
@@ -1258,6 +1271,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
             factor of the smaller Brillouin zone: p*L.
+
         """
 
         def __init__(self, outer, p):
@@ -1372,6 +1386,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         -------
         X_init : list of :class:`~tenpy.linalg.np_conserved.Array`
             Initial guess for excitation tensors for each site of the unit cell.
+
         """
         X_init = []
         valid_charge = False

@@ -159,6 +159,7 @@ class SpinChainNNN2(CouplingMPOModel):
             Whether to sort by charges of physical legs. `True` by default.
         Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
             Coupling as defined for the Hamiltonian above.
+
     """
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5, 'real')

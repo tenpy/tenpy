@@ -45,6 +45,7 @@ def ncon(tensor_list, leg_links, sequence=None):
     -------
     result : :class:`Array` | complex
         The number or tensor resulting from the contraction.
+
     """
     tensor_list, leg_links, sequence = _ncon_input_checks(tensor_list, leg_links, sequence)
     tensor_list, leg_links, sequence = _ncon_do_traces(tensor_list, leg_links, sequence)
@@ -87,6 +88,7 @@ def contract(tensor_list, tensor_names=None, leg_contractions=None, open_legs=No
     -------
     result : :class:`Array` | complex
         The number or tensor resulting from the contraction.
+
     """
 
     if leg_contractions is None:
@@ -206,6 +208,7 @@ def _partial_trace(tensor, tensor_links, loc):
         the proper replacement entry for `tensor_links`
     used_values: np.ndarray
         the entries of `tensor_links` that indicated the trace and are missing in the returned `tensor_links`
+
     """
     num_occurrences = np.sum(tensor_links[:, None] == tensor_links[None, :], axis=1)
     trace_links = np.unique(tensor_links[np.where(num_occurrences > 1)[0]])

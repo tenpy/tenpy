@@ -72,6 +72,7 @@ class AKLTChain(NearestNeighborModel, MPOModel):
         -------
         psi_aklt : :class:`~tenpy.networks.mps.MPS`
             The AKLT groundstate
+
         """
         # build each B tensor of the MPS as contraction of
         #    --sR  sL--

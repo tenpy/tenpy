@@ -44,6 +44,7 @@ def _get_git_revision(cwd=None):
     -------
     revision : str
         Revision hash of the git HEAD, i.e, the last git commit to which git compares everything.
+
     """
     if cwd is None:
         cwd = os.path.dirname(os.path.abspath(__file__))

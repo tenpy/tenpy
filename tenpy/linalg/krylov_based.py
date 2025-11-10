@@ -110,6 +110,7 @@ class KrylovBased:
     http://web.eecs.utk.edu/~dongarra/etemplates/node103.html#estimate_residual.
     Given the gap, the Ritz residual gives a bound on the error in the wavefunction,
     ``err < (RitzRes/gap)**2``. The gap is estimated from the full Lanczos spectrum.
+
     """
 
     _dtype_h_krylov = np.complex128
@@ -345,6 +346,7 @@ class Arnoldi(KrylovBased):
             Corresponding best eigenvectors (estimates).
         N : int
             Used dimension of the Krylov space, i.e., how many iterations where performed.
+
         """
         assert self.N_cache >= self.N_max
         N = self._build_krylov()
@@ -484,6 +486,7 @@ class LanczosGroundState(KrylovBased):
             Ground state vector (estimate).
         N : int
             Used dimension of the Krylov space, i.e., how many iterations where performed.
+
         """
         N = self._build_krylov()
         E0 = self.Es[N - 1, 0]
@@ -603,6 +606,7 @@ class LanczosEvolution(LanczosGroundState):
         Prefactor of H in the exponential.
     _result_norm : float
         Norm of the resulting vector.
+
     """
     def __init__(self, H, psi0, options):
         super().__init__(H, psi0, options)
@@ -629,6 +633,7 @@ class LanczosEvolution(LanczosGroundState):
             ``expm(delta (H + E_shift)).dot(psi)``.
         N : int
             Krylov space dimension used.
+
         """
         self.delta = delta
         N = self._build_krylov()
@@ -700,6 +705,7 @@ def lanczos_arpack(H, psi, options={}):
         Ground state energy.
     psi0 : :class:`~tenpy.linalg.np_conserved.Array`
         Ground state vector.
+
     """
     options = asConfig(options, "Lanczos")
     H_flat, psi_flat = FlatHermitianOperator.from_guess_with_pipe(H.matvec, psi, dtype=H.dtype)
@@ -726,6 +732,7 @@ def gram_schmidt(vecs, rcond=1.e-14):
     -------
     vecs : list of Array
         The ortho-normalized vectors (without any ``None``).
+
     """
     res = []
     for vec in vecs:
@@ -762,6 +769,7 @@ def plot_stats(ax, Es):
         The axes on which we should plot.
     Es : list of ndarray.
         The energies :attr:`Lanczos.Es`.
+
     """
     ks = [[k] * len(E) for k, E in enumerate(Es)]
     ks = np.array(sum(ks, []))

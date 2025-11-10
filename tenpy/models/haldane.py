@@ -49,6 +49,7 @@ class BosonicHaldaneModel(CouplingMPOModel):
             External magnetic flux 'threaded' through the cylinder. Hopping amplitudes for bonds
             'across' the periodic boundary are modified such that particles hopping around the
             circumference of the cylinder acquire a phase ``2 pi phi_ext``.
+
     """
     default_lattice = Honeycomb
     force_default_lattice = True
@@ -124,6 +125,7 @@ class FermionicHaldaneModel(CouplingMPOModel):
             External magnetic flux 'threaded' through the cylinder. Hopping amplitudes for bonds
             'across' the periodic boundary are modified such that particles hopping around the
             circumference of the cylinder acquire a phase ``2 pi phi_ext``.
+
     """
     default_lattice = Honeycomb
     force_default_lattice = True

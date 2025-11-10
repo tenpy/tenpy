@@ -34,6 +34,7 @@ def linear_fit(x, y):
         They "y-intercept" parameter of the fit function.
     res : float
         The (squared) residue, i.e. ``sum((y - (a * x + b)) ** 2)``.
+
     """
     assert x.ndim == 1 and y.ndim == 1
     fit = np.linalg.lstsq(np.vstack([x, np.ones(len(x))]).T, y, rcond=None)
@@ -90,6 +91,7 @@ def alg_decay_fit(x, y, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
     See Also
     --------
     alg_decay_fits
+
     """
     x = np.array(x)
     y = np.array(y)
@@ -140,6 +142,7 @@ def alg_decay_fits(x, ys, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
     See Also
     --------
     alg_decay_fit
+
     """
     x = np.array(x)
     if x.ndim != 1:
@@ -186,6 +189,7 @@ def plot_alg_decay_fit(plot_module, x, y, fit_par, xfunc=None, kwargs={}, plot_f
         extrap_line_end     int    ...       Define the end of the extrapolation as ``x[extrap_line_end]``.
                                              Per default, it ends at the end of the x-axis.
         =================== ====== ========= =======================================================================
+
     """
     if xfunc is None:
         def xfunc(x):
@@ -242,6 +246,7 @@ def fit_with_sum_of_exp(f, n, N=50):
     lambdas, prefactors: 1D arrays
         Such that :math:`f(k) \approx \sum_i x_i \lambda_i^k` for (integer) 1 <= `k` <= `N`.
         The function :func:`sum_of_exp` evaluates this for given `x`.
+
     """
     assert n < N
     x = np.arange(1, N + 1)
@@ -310,6 +315,7 @@ def central_charge_from_S_profile(psi, exclude=None):
         Central charge and constant offset as in :func:`entropy_profile_from_CFT`.
     res : float
         Residuum of the error.
+
     """
     if not psi.bc == 'finite':
         raise ValueError("works only for finite MPS at a critical point")

@@ -107,6 +107,7 @@ class PurificationTEBD(tebd.TEBDEngine):
     _guess_U_disent : list of list of npc.Array
         Same index structure as `self._U`: for each two-site U of the physical time evolution
         the disentangler from the last application. Initialized to identities.
+
     """
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
@@ -128,6 +129,7 @@ class PurificationTEBD(tebd.TEBDEngine):
             The inverse temperature `beta` = 1/T, by which we should cool down.
             We evolve to the closest multiple of ``options['dt']``,
             see also :attr:`evolved_time`.
+
         """
         delta_t = self.options.get('dt', 0.1, 'real')
         TrotterOrder = 2  # currently, imaginary time evolution works only for second order.
@@ -178,6 +180,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced by the truncation
             during this update step.
+
         """
         i0, i1 = i - 1, i
         logger.debug("Update sites (%d, %d)", i0, i1)
@@ -241,6 +244,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced by the truncation
             during this update step.
+
         """
         i0, i1 = i - 1, i
         logger.debug("Update sites (%d, %d)", i0, i1)
@@ -288,6 +292,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         U : :class:`~tenpy.linalg.conserved.Array`
             The unitary used to disentangle `theta`, with labels ``'q0', 'q1', 'q0*', 'q1*'``.
             If no unitary was found/applied, it might also be ``None``.
+
         """
         theta, U = self.used_disentangler(theta)
         U_idx_dt, i = self._update_index
@@ -330,6 +335,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         ----------
         n: int
             maximal number of sites to disentangle at once.
+
         """
         for i in range(0, self.psi.L - n + 1):  # sweep left to right
             self._update_index = None, i
@@ -466,6 +472,7 @@ class PurificationTEBD2(PurificationTEBD):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced due to the truncation during
             this sequence of update steps.
+
         """
         trunc_err = TruncationError()
         order = self._U_param['order']
@@ -497,6 +504,7 @@ class PurificationTEBD2(PurificationTEBD):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced due to the truncation
             during this sequence of update steps.
+
         """
         Us = self._U[U_idx_dt]
         trunc_err = TruncationError()

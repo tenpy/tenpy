@@ -111,6 +111,7 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
     ----------
     model_params : dict | :class:`~tenpy.tools.params.Config`
         See :cfg:config:`XXZChain`
+
     """
     default_lattice = "Chain"
     force_default_lattice = True

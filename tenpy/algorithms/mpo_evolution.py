@@ -49,6 +49,7 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
     _U_param : dict
         A dictionary containing the information of the latest created `_U`.
         We won't recalculate `_U` if those parameters didn't change.
+
     """
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
@@ -79,6 +80,7 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
             The order of the algorithm. Only 1 and 2 are allowed.
         approximation : 'I' or 'II'
             Type of approximation for the time evolution operator.
+
         """
         U_param = dict(dt=dt, order=order, approximation=approximation)
         if self._U_param == U_param and not self.force_prepare_evolve:

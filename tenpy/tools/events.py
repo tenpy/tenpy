@@ -102,6 +102,7 @@ class EventHandler:
         high_priority call: iteration 3
         my_listener called: iteration 3 with data 12
         another_one called: iteration 3
+
     """
     def __init__(self, arg_descr=None):
         self.arg_descr = arg_descr
@@ -145,6 +146,7 @@ class EventHandler:
         -------
         callback : callable
             The callback function exactly as given.
+
         """
         if callback is None:
             # handle the case that we got called as property like this::
@@ -178,6 +180,7 @@ class EventHandler:
         priority : int
             Higher priority indicates that the callback function should be called before other
             possibly registered callback functions.
+
         """
         func = find_global(module_name, func_name)
         self.connect(func, priority, extra_kwargs)
@@ -190,6 +193,7 @@ class EventHandler:
         listener_id : int
             The id of the listener, as given by :attr:`id_of_last_connected`
             right after calling :meth:`connect`.
+
         """
         for i, listener in enumerate(self.listeners):
             if listener.listener_id == 0:
@@ -210,6 +214,7 @@ class EventHandler:
         -------
         results : list
             List of results returned by the individual callback functions.
+
         """
         self._prepare_emit()
         results = []

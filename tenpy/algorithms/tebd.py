@@ -93,6 +93,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         The `i`-th entry is left of site `i`.
     _update_index : None | (int, int)
         The indices ``i_dt,i_bond`` of ``U_bond = self._U[i_dt][i_bond]`` during update_step.
+
     """
     def __init__(self, psi, model, options, **kwargs):
         TimeEvolutionAlgorithm.__init__(self, psi, model, options, **kwargs)
@@ -190,6 +191,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         -------
         time_steps : list of float
             We need ``U = exp(-i H_{even/odd} delta_t * dt)`` for the `dt` returned in this list.
+
         """
         if order == 1:
             return [1.]
@@ -235,6 +237,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             the decomposition of `H`.
             They are chosen such that a subsequent application of ``exp(d[j] t H[k])`` to a given
             state ``|psi>`` yields ``(exp(N_steps t H[k]) + O(N_steps t^{order+1}))|psi>``.
+
         """
         even, odd = 0, 1
         if N_steps == 0:
@@ -309,6 +312,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             Determines whether we perform real or imaginary time-evolution.
         E_offset : None | list of float
             Possible offset added to `H_bond` for real-time evolution.
+
         """
         U_param = dict(order=order, delta_t=delta_t, type_evo=type_evo, E_offset=E_offset)
         if type_evo == 'real':
@@ -348,6 +352,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced due to the truncation during
             this sequence of evolution steps.
+
         """
         if dt is not None:
             assert dt == self._U_param['delta_t']
@@ -390,6 +395,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced due to the truncation
             during this sequence of update steps.
+
         """
         Us = self._U[U_idx_dt]
         trunc_err = TruncationError()
@@ -425,6 +431,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced by the truncation
             during this update step.
+
         """
         i0, i1 = i - 1, i
         logger.debug("Update sites (%d, %d)", i0, i1)
@@ -498,6 +505,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced due to the truncation during
             this sequence of update steps.
+
         """
         trunc_err = TruncationError()
         order = self._U_param['order']
@@ -551,6 +559,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced by the truncation
             during this update step.
+
         """
         i0, i1 = i - 1, i
         logger.debug("Update sites (%d, %d)", i0, i1)
@@ -815,6 +824,7 @@ class RandomUnitaryEvolution(TEBDEngine):
         >>> eng2.run()  # random unitaries respect Sz conservation -> we stay in all-up sector
         >>> print(psi2.chi)  # still a product state, not really random!!!
         [1, 1, 1, 1, 1, 1, 1]
+
     """
 
     def __init__(self, psi, options, **kwargs):
@@ -884,6 +894,7 @@ class RandomUnitaryEvolution(TEBDEngine):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced due to the truncation during
             this sequence of update steps.
+
         """
         trunc_err = TruncationError()
         for _ in range(N_steps):

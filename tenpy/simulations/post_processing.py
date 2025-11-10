@@ -58,6 +58,7 @@ class DataLoader:
 
     .. todo ::
         Include an Option for saving data into a ``.hdf5`` file without overwriting any results.
+
     """
     logger = logging.getLogger(__name__ + ".DataLoader")
 
@@ -139,6 +140,7 @@ class DataLoader:
         -------
         dict
             data loaded from paths as dictionary
+
         """
         paths = to_iterable(paths)
         res = dict()
@@ -166,6 +168,7 @@ class DataLoader:
         -------
         res :
             data corresponding to path
+
         """
         key = prefix + path
         try:
@@ -262,6 +265,7 @@ class DataFiles:
         DataLoader(filename='results/output_1.h5')
         >>> data_files['results/output_2.h5']
         loading results/output_2.h5 ... successful
+
     """
     def __init__(self, files=None, folder=None):
         self._open_files = {} # filename -> DataLoader
@@ -378,6 +382,7 @@ def pp_spectral_function(DL: DataLoader,
     conjugate_correlation : bool | False
     **kwargs
         keyword arguments to :func:`~tenpy.tools.spectral_function_tools.spectral_function`
+
     """
     dt: float = DL.sim_params['algorithm_params']['dt']
     N_steps = DL.sim_params['algorithm_params'].get('N_steps', None)
@@ -423,6 +428,7 @@ def pp_plot_correlations_on_lattice(DL: DataLoader,
         default (sub-) directory under which to save the plot
     kwargs :
         kwargs to :func:`~tenpy.tools.spectral_function_tools.plot_correlations_on_lattice`
+
     """
     import matplotlib.pyplot as plt
     if not os.path.exists(default_dir):

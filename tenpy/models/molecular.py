@@ -55,6 +55,7 @@ class MolecularModel(CouplingMPOModel):
             Two-body tensor with shape `(norb, norb, norb, norb)`.
         constant : float
             Constant.
+
     """
 
     def __init__(self, params: dict) -> None:

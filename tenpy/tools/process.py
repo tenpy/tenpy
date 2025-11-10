@@ -37,6 +37,7 @@ def memory_usage():
     -------
     mem : float
         Currently used memory in megabytes. ``-1.`` if no way to read out.
+
     """
     try:
         import resource  # linux-only
@@ -73,6 +74,7 @@ def load_omp_library(libs=["libiomp5.so",
     omp : CDLL | None
         OpenMP shared library if found, otherwise None.
         Once it was successfully imported, no re-imports are tried.
+
     """
     global _omp_lib
     if _omp_lib is None:
@@ -99,6 +101,7 @@ def omp_get_nthreads():
     max_threads : int
         The maximum number of threads used by OpenMP (and thus MKL).
         ``-1`` if unable to read out.
+
     """
     omp = load_omp_library()
     if omp is not None:
@@ -118,6 +121,7 @@ def omp_set_nthreads(n):
     -------
     success : bool
         whether the shared library was found and set.
+
     """
     omp = load_omp_library()
     if omp is not None:
@@ -133,6 +137,7 @@ def mkl_get_nthreads():
     -------
     max_threads : int
         The maximum number of threads used by MKL. ``-1`` if unable to read out.
+
     """
     try:
         import mkl  # available in conda MKL
@@ -158,6 +163,7 @@ def mkl_set_nthreads(n):
     -------
     success : bool
         whether the shared library was found and set.
+
     """
     try:
         import mkl  # available in conda MKL

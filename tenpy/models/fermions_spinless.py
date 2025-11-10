@@ -52,6 +52,7 @@ class FermionModel(CouplingMPOModel):
             External magnetic flux 'threaded' through the cylinder.
             Hopping amplitudes for bonds 'across' the periodic boundary are modified such that
             particles hopping around the circumference of the cylinder acquire a phase `phi_ext`.
+
     """
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N', str)

@@ -26,6 +26,7 @@ def amend_parent_docstring(parent, insert_at: str = 'Parameters\n', insert_befor
         Note that an empty string can be used to achieve insertion at the very beginning.
     insert_before : bool
         If the amending part will be inserted before ``insert_at``. Otherwise, after.
+
     """
     parent_doc = getattr(parent, '__doc__', None)
     if parent_doc is None:

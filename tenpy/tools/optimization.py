@@ -179,6 +179,7 @@ class temporary_level:
             set_level(OptimizationFlag.skip_args_check)
             do_some_really_heavy_stuff()
         # here we are back to the optimization level as before the ``with ...`` statement
+
     """
     def __init__(self, temporary_level):
         self.temporary_level = temporary_level
@@ -217,6 +218,7 @@ def set_level(level=1):
     level : int | OptimizationFlag | str | None
         The new global optimization level to be set.
         ``None`` defaults to keeping the current level.
+
     """
     global _level
     _level = to_OptimizationFlag(level)
@@ -241,6 +243,7 @@ def optimize(level_compare=OptimizationFlag.default):
     optimize : bool
         True if the algorithms should try to optimize, i.e., whether the global
         "optimization level" is equal or higher than the level to compare to.
+
     """
     global _level
     return (_level >= level_compare)
@@ -293,6 +296,7 @@ def use_cython(func=None, replacement=None, check_doc=True):
         The function replacing the decorated function `func`.
         If the cython code can not be loaded, this is just `func`,
         otherwise it's the cython version specified by `replacement`.
+
     """
     if func is None:
         # someone used ``@use_cython(replacement=...)``

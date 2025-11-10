@@ -82,6 +82,7 @@ class TruncationError(Hdf5Exportable):
         This is probably the quantity you are actually interested in.
         Takes into account the factor 2 explained in the section on Errors in the
         `TEBD Wikipedia article <https://en.wikipedia.org/wiki/Time-evolving_block_decimation>`.
+
     """
     def __init__(self, eps=0., ov=1.):
         self.eps = eps
@@ -102,6 +103,7 @@ class TruncationError(Hdf5Exportable):
             (before re-normalization).
         norm_old : float
             Norm of all Schmidt values before truncation, :math:`\sqrt{\sum_{a} \lambda_a^2}`.
+
         """
         eps = 1. - norm_new**2 / norm_old**2  # = (norm_old**2 - norm_new**2)/norm_old**2
         return cls(eps, 1. - 2. * eps)
@@ -117,6 +119,7 @@ class TruncationError(Hdf5Exportable):
         norm_old : float
             Norm of all Schmidt values before truncation, :math:`\sqrt{\sum_{a} \lambda_a^2}`.
             Default (``None``) is 1.
+
         """
         eps = np.sum(np.square(S_discarded))
         if norm_old:
@@ -186,6 +189,7 @@ def truncate(S, options):
         Useful for re-normalization.
     err : :class:`TruncationError`
         The error of the represented state which is introduced due to the truncation.
+
     """
     options = asConfig(options, "truncation")
     # by default, only truncate values which are much closer to zero than machine precision.
@@ -284,6 +288,7 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
         The truncation error introduced.
     renormalization : float
         Factor, by which S was renormalized.
+
     """
     U, S, VH = npc.svd(theta,
                        full_matrices=False,
@@ -342,6 +347,7 @@ def eigh_rho(rho, trunc_par, UPLO='L', sort=None):
         The first label is inherited from `A`, the second label is ``'eig'``.
     err : :class:`TruncationError`
         The truncation error introduced.
+
     """
     W, V = npc.eigh(rho, UPLO=UPLO, sort=sort)
     W[W<1.e-14] = 0     # set small eigenvalues to zero
@@ -391,6 +397,7 @@ def _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, mov
     Y0 : Array with legs [vL, (p1.vR)] or [(vL.p0), vR]
         If ``move_right=True``, the legs of Y0 are [vL, (p1.vR)].
         If ``move_right=False``, the legs of Y0 are [(vL.p0), vR].
+
     """
 
     assert min_block_increase >= 0
@@ -602,6 +609,7 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
     trunc_err : TruncationError
     renormalization : float
         Factor, by which S was renormalized.
+
     """
 
     if compute_err:

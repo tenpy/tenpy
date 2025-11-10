@@ -191,6 +191,7 @@ class PurificationMPS(MPS):
             Whether the resulting MPS should have 'norm' 1.
         unit_cell_width : int
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+
         """
         L = len(sites)
         rho = rho.combine_legs([[f'p{i}' for i in range(L)], [f'p{i}*' for i in range(L)]])  # [P, P*]
@@ -235,6 +236,7 @@ class PurificationMPS(MPS):
         infiniteT_MPS : :class:`PurificationMPS`
             Describes the infinite-temperature (grand canonical) ensemble,
             i.e. expectation values give a trace over all basis states.
+
         """
         sites = list(sites)
         L = len(sites)
@@ -380,6 +382,7 @@ class PurificationMPS(MPS):
         -------
         entropies : 1D ndarray
             ``entropies[i]`` contains the entropy for the the region ``A_i`` defined above.
+
         """
         segment = np.sort(segment)
         if first_site is None:
@@ -439,6 +442,7 @@ class PurificationMPS(MPS):
         mutinf : 1D array
             ``mutinf[k]`` is the mutual information :math:`I(i:j)` between the
             sites ``i, j = coords[k]``.
+
         """
         # Now same as MPS.mutinf_two_site(), but contract additionally over leg.
         if max_range is None:
@@ -539,6 +543,7 @@ class PurificationMPS(MPS):
             If `sample_q` == True, we return the probability of measuring a particular configuration
             on both physical and ancilla legs, even though we don't return the ancilla configuration.
             Hence, the returned probability isn't really meaningful.
+
         """
         if complex_amplitude:
             msg = ("Sampling a purification MPS only retuns the probability of the sampled string; "
@@ -697,6 +702,7 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
         Shallow copy of the `model` with charges of sites, `H_MPO` and `H_bond` adjusted
         to fit the doubled (with 0 extended) charges of the canonical ensemble of the
         :class:`PurificationMPS`. The number of
+
     """
     # cac := conserve_ancilla_charge
     model = model.copy()

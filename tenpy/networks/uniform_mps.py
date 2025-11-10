@@ -94,6 +94,7 @@ class UniformMPS(MPS):
         the necessity of re-implementations for derived classes like the
         :class:`~tenpy.networks.purification_mps.Purification_MPS` if just the number of physical
         legs changed.
+
     """
 
     # valid boundary conditions. Don't overwrite this!
@@ -244,6 +245,7 @@ class UniformMPS(MPS):
             HDF5 group which is supposed to represent `self`.
         subpath : str
             The `name` of `h5gr` with a ``'/'`` in the end.
+
         """
         hdf5_saver.save(self.sites, subpath + "sites")
         hdf5_saver.save(self._AL, subpath + "tensors_AL")
@@ -280,6 +282,7 @@ class UniformMPS(MPS):
         -------
         psi : :class:`~tenpy.networks.mps.MPS`
             The right-canonical form converted from the uniform MPS.
+
         """
 
         if self.diagonal_gauge is False:
@@ -314,6 +317,7 @@ class UniformMPS(MPS):
             Cutoff for the singular values.
         check_overlap: bool
             Check the overlap between the state before and after changing to diagonal gauge.
+
         """
         if check_overlap:
             old_uMPS = self.copy()
@@ -404,6 +408,7 @@ class UniformMPS(MPS):
         -------
         obj : cls
             Newly generated class instance containing the required data.
+
         """
         obj = cls.__new__(cls)  # create class instance, no __init__() call
         hdf5_loader.memorize_load(h5gr, obj)
@@ -443,6 +448,7 @@ class UniformMPS(MPS):
         -------
         psi : :class:`UniformMPS`
             The resulting uniform MPS.
+
         """
         # make copies of 4 types of tensors
         dtype = psi.dtype
@@ -522,6 +528,7 @@ class UniformMPS(MPS):
         -------
         mps : :class:`UniformMPS`
             An MPS with the `flat` matrices converted to npc arrays.
+
         """
         sites = list(sites)
         L = len(sites)
@@ -653,6 +660,7 @@ class UniformMPS(MPS):
             The MPS 'matrix' `B` at site `i` with leg labels ``'vL', 'p', 'vR'``.
             May be a view of the matrix (if ``copy=False``),
             or a copy (if the form changed or ``copy=True``).
+
         """
         if form is None:
             return self.get_AR(i, copy=copy, label_p=label_p)
@@ -716,6 +724,7 @@ class UniformMPS(MPS):
             Should have leg labels ``'vL', 'p', 'vR'`` (not necessarily in that order).
         form : ``'B'/'AR' | 'A'/'AL' | 'Th'/'AC'`` | tuple(float, float)
             The (canonical) form of the `B` to set.
+
         """
         if form == 'A' or form == (1., 0.) or form == 'AL':
             return self.set_AL(i, B)
@@ -800,6 +809,7 @@ class UniformMPS(MPS):
             The n-site wave function with leg labels ``vL, p0, p1, .... p{n-1}, vR``.
             In Vidal's notation (with s=lambda, G=Gamma):
             ``theta = s**form_L G_i s G_{i+1} s ... G_{i+n-1} s**form_R``.
+
         """
         if n == 1:
             return self.get_B(i, (1., 1.), True, cutoff, '0')
@@ -822,6 +832,7 @@ class UniformMPS(MPS):
         ----------
         factor : int
             The new number of sites in the unit cell will be increased from `L` to ``factor*L``.
+
         """
         if int(factor) != factor:
             raise ValueError("`factor` should be integer!")
@@ -848,6 +859,7 @@ class UniformMPS(MPS):
         ----------
         shift : int
             By how many sites to move the tensors to the right.
+
         """
         if self.finite:
             raise ValueError("makes only sense for infinite boundary conditions")
@@ -918,6 +930,7 @@ class UniformMPS(MPS):
         -------
         qtotal : charges
             The sum of the `qtotal` of the individual `B` tensors.
+
         """
         assert not only_physical_legs, "Not possible for UniformMPS"
         # Assume self.segment_boundaries is None, None for UniformMPS
@@ -988,6 +1001,7 @@ class UniformMPS(MPS):
             (i.e., taking into account the :attr:`norm` of both MPS).
             For an infinite MPS, ``<self|other>`` is the overlap per unit cell, i.e.,
             the largest eigenvalue of the TransferMatrix.
+
         """
         assert not ignore_form, "UniformMPS have both forms. Use one."
         return super().overlap(other,

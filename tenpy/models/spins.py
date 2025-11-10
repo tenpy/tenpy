@@ -47,6 +47,7 @@ class SpinModel(CouplingMPOModel):
         Jx, Jy, Jz, hx, hy, hz, muJ, D, E  : float | array
             Coupling as defined for the Hamiltonian above.
             Defaults to Heisenberg ``Jx=Jy=Jz=1.`` with other couplings 0.
+
     """
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5, 'real')
@@ -135,6 +136,7 @@ class DipolarSpinChain(CouplingMPOModel):
             See change comment in :class:`~tenpy.networks.site.Site`.
         J3, J4 : float | array
             Coupling as defined for the Hamiltonian above.
+
     """
 
     def init_lattice(self, model_params):

@@ -76,6 +76,7 @@ class ChargeInfo:
     See Also
     --------
     DipolarChargeInfo
+
     """
     trivial_shift = True
 
@@ -122,6 +123,7 @@ class ChargeInfo:
             HDF5 group which is supposed to represent `self`.
         subpath : str
             The `name` of `h5gr` with a ``'/'`` in the end.
+
         """
         h5gr.attrs['num_charges'] = self._qnumber
         hdf5_saver.save(self._mod, subpath + "U1_ZN")
@@ -148,6 +150,7 @@ class ChargeInfo:
         -------
         obj : cls
             Newly generated class instance containing the required data.
+
         """
         obj = cls.__new__(cls)  # create class instance, no __init__() call
         hdf5_loader.memorize_load(h5gr, obj)
@@ -175,6 +178,7 @@ class ChargeInfo:
         -------
         chinfo : :class:`ChargeInfo`
             ChargeInfo combining all the given charges.
+
         """
         charges = [ci.mod for ci in chinfos]
         names = sum([ci.names for ci in chinfos], [])
@@ -196,6 +200,7 @@ class ChargeInfo:
         -------
         chinfo : :class:`ChargeInfo`
             ChargeInfo where the specified charge is dropped.
+
         """
         if charge is None:
             return cls()  # trivial charge
@@ -222,6 +227,7 @@ class ChargeInfo:
         -------
         chinfo : :class:`ChargeInfo`
             ChargeInfo where `qmod` of the specified charge was changed.
+
         """
         if isinstance(charge, str):
             charge = chinfo.names.index(charge)
@@ -270,6 +276,7 @@ class ChargeInfo:
         -------
         charges :
             A copy of `charges` taken modulo `mod`, but with ``x % 1 := x``
+
         """
         if charges is None:
             return np.zeros((self.qnumber, ), dtype=QTYPE)
@@ -290,6 +297,7 @@ class ChargeInfo:
         -------
         res : bool
             True, if all 0 <= charges <= self.mod (wherever self.mod != 1)
+
         """
         charges = np.asarray(charges, dtype=QTYPE)[..., self._mask]
         return np.all(np.logical_and(0 <= charges, charges < self._mod_masked))
@@ -320,6 +328,7 @@ class ChargeInfo:
         -------
         charges : 2D ndarray of dtype QTYPE
             The mapped charges. Note that
+
         """
         return charges
 
@@ -336,6 +345,7 @@ class ChargeInfo:
         dx_0 : float
             Number of lattice indices of the translation.
             Horizontal shift is a general shift by ``dx=[dx_0] + [0] * dim``.
+
         """
         return charges
 
@@ -414,6 +424,7 @@ class DipolarChargeInfo(ChargeInfo):
     ----------
     _charge_idcs, _dipole_idcs, _dipole_dims
         Like parameters of same name
+
     """
     trivial_shift = False  # If shift_charges acts trivially
 
@@ -580,6 +591,7 @@ class LegCharge:
     Instances of this class can be shared between different `npc.Array`.
     Thus, functions changing ``self.slices`` or ``self.charges`` *must* always make copies.
     Further they *must* set `sorted` and `bunched` to ``False`` (if they might not preserve them).
+
     """
     def __init__(self, chargeinfo, slices, charges, qconj=1):
         self.chinfo = chargeinfo
@@ -649,6 +661,7 @@ class LegCharge:
             HDF5 group which is supposed to represent `self`.
         subpath : str
             The `name` of `h5gr` with a ``'/'`` in the end.
+
         """
         format = hdf5_saver.format_selection.get("LegCharge", "blocks")
         h5gr.attrs["format"] = format
@@ -693,6 +706,7 @@ class LegCharge:
         -------
         obj : cls
             Newly generated class instance containing the required data.
+
         """
         obj = cls.__new__(cls)
         hdf5_loader.memorize_load(h5gr, obj)
@@ -757,6 +771,7 @@ class LegCharge:
         --------
         sort : sorts by charges
         bunch : bunches contiguous blocks of the same charge.
+
         """
         qflat = np.asarray(qflat, dtype=QTYPE)
         if qflat.ndim == 1 and chargeinfo.qnumber == 1:
@@ -778,6 +793,7 @@ class LegCharge:
         --------
         sort : sorts by charges
         bunch : bunches contiguous blocks of the same charge.
+
         """
         res = cls(chargeinfo, slices, charges, qconj)
         res.sorted = res.is_sorted()
@@ -794,6 +810,7 @@ class LegCharge:
             The nature of the charge.
         qdict : dict
             A dictionary mapping a tuple of charges to slices.
+
         """
         slices = np.array([(sl.start, sl.stop) for sl in qdict.values()], np.intp)
         charges = np.array(list(qdict.keys()), dtype=QTYPE).reshape((-1, chargeinfo.qnumber))
@@ -823,6 +840,7 @@ class LegCharge:
         -------
         combined : :class:`LegCharge`
             A LegCharge with the charges of both legs. Is neither sorted nor bunched!
+
         """
         legs = list(legs)
         chinfo = ChargeInfo.add([leg.chinfo for leg in legs])
@@ -878,6 +896,7 @@ class LegCharge:
         -------
         dropped : :class:`LegCharge`
             A LegCharge with the specified charge dropped. Is neither sorted nor bunched!
+
         """
         if charge is None:
             return cls.from_trivial(leg.ind_len, chargeinfo, leg.qconj)
@@ -910,6 +929,7 @@ class LegCharge:
         -------
         leg : :class:`LegCharge`
             A LegCharge with the specified charge changed. Is neither sorted nor bunched!
+
         """
         chinfo = ChargeInfo.change(leg.chinfo, charge, new_qmod, new_name)
         if chargeinfo is not None:
@@ -950,6 +970,7 @@ class LegCharge:
         conjugated : :class:`LegCharge`
             Shallow copy of `self` with flipped :attr:`qconj`.
             :meth:`test_contractible` of `self` with `conjugated` will not raise an error.
+
         """
         res = self.copy()  # shallow copy
         res.qconj = -self.qconj
@@ -964,6 +985,7 @@ class LegCharge:
             (Shallow) copy of self with negative `qconj` and `charges`, thus representing the
             very same charges.
             :meth:`test_equal` of `self` with `conj_charges` will not raise an error.
+
         """
         res = self.copy()
         res.qconj = -self.qconj
@@ -988,6 +1010,7 @@ class LegCharge:
         Returns
         -------
         Shallow copy with mapped charges.
+
         """
         res = self.copy()  # shallow copy
         res.charges = map_func(self.charges, *func_args, **func_kwargs)
@@ -1068,6 +1091,7 @@ class LegCharge:
         --------
         test_equal :
             ``self.test_contractible(other)`` just performs ``self.test_equal(other.conj())``.
+
         """
         if optimize(OptimizationFlag.skip_arg_checks):
             return
@@ -1088,6 +1112,7 @@ class LegCharge:
         --------
         test_contractible :
             ``self.test_equal(other)`` is equivalent to ``self.test_contractible(other.conj())``.
+
         """
         if optimize(OptimizationFlag.skip_arg_checks):
             return
@@ -1120,6 +1145,7 @@ class LegCharge:
         -------
         sizes : ndarray, shape (block_number,)
             The sizes of the individual blocks; ``sizes[i] = slices[i+1] - slices[i]``.
+
         """
         return self.slices[1:] - self.slices[:-1]
 
@@ -1146,6 +1172,7 @@ class LegCharge:
             The qindex, i.e. the index of the block containing `flat_index`.
         index_within_block : int
             The index of `flat_index` within the block given by `qindex`.
+
         """
         if flat_index < 0:
             flat_index += self.ind_len
@@ -1176,6 +1203,7 @@ class LegCharge:
         Raises
         ------
         ValueError : if the answer is not unique (because `self` is not blocked).
+
         """
         charges = self.chinfo.make_valid(self.qconj * np.asarray(charges))
         equal_rows = np.all(charges[np.newaxis, :] == self.charges, axis=1)
@@ -1217,6 +1245,7 @@ class LegCharge:
         bunch : enlarge blocks for contiguous qind of the same charges.
         numpy.take : can apply `perm_flat` to a given axis
         tenpy.tools.misc.inverse_permutation : returns inverse of a permutation
+
         """
         if self.sorted and ((not bunch) or self.bunched):  # nothing to do
             return np.arange(self.block_number, dtype=np.intp), self
@@ -1246,6 +1275,7 @@ class LegCharge:
         See also
         --------
         sort : sorts by charges, thus enforcing complete blocking in combination with bunch.
+
         """
         if self.bunched:  # nothing to do
             return np.arange(self.block_number + 1, dtype=np.intp), self
@@ -1273,6 +1303,7 @@ class LegCharge:
             The bool mask for each of the *remaining* blocks.
         projected_copy : :class:`LegCharge`
             Copy of self with the qind projected by `mask`.
+
         """
         mask = np.asarray(mask, dtype=np.bool_)
         cp = self.copy()
@@ -1303,6 +1334,7 @@ class LegCharge:
         -------
         extended_leg : :class:`LegCharge`
             Copy of `self` extended by the charge blocks of the `extra` leg.
+
         """
         if not isinstance(extra, LegCharge):
             extra = LegCharge.from_trivial(extra, self.chinfo, self.qconj)
@@ -1325,6 +1357,7 @@ class LegCharge:
         -------
         charges : array[QTYPE, ndim=2]
             Rows are the rows of self.charges lexsorted and without duplicates.
+
         """
         charges = self.charges.copy()
         if not self.sorted:
@@ -1383,6 +1416,7 @@ class LegCharge:
         ------
         ValueError
             If perm_flat mixes blocks of different qindex.
+
         """
         perm_flat = np.asarray(perm_flat)
         perm_qind = perm_flat[self.slices[:-1]]
@@ -1480,6 +1514,7 @@ class LegPipe(LegCharge):
         self.charges[Qi]*self.qconj == sum([l.charges[qi_l]*l.qconj for l in self.legs])  mod qmod
 
     Here the qindex ``Qi`` of the pipe corresponds to qindices ``qi_l`` on the individual legs.
+
     """
     def __init__(self, legs, qconj=1, sort=True, bunch=True):
         chinfo = legs[0].chinfo
@@ -1551,6 +1586,7 @@ class LegPipe(LegCharge):
             HDF5 group which is supposed to represent `self`.
         subpath : str
             The `name` of `h5gr` with a ``'/'`` in the end.
+
         """
         super().save_hdf5(hdf5_saver, h5gr, subpath)
         hdf5_saver.save(self.legs, subpath + "legs")
@@ -1574,6 +1610,7 @@ class LegPipe(LegCharge):
         -------
         obj : cls
             Newly generated class instance containing the required data.
+
         """
         sorted = hdf5_loader.get_attr(h5gr, "sorted")
         bunched = hdf5_loader.get_attr(h5gr, "bunched")
@@ -1620,6 +1657,7 @@ class LegPipe(LegCharge):
             Shallow copy of `self` with flipped :attr:`qconj`. Whenever we contract two legs,
             they need to be conjugated to each other.
             The incoming legs of the pipe are also conjugated.
+
         """
         res = LegCharge.conj(self)  # invert self.qconj
         res.legs = tuple([l.conj() for l in self.legs])
@@ -1677,6 +1715,7 @@ class LegPipe(LegCharge):
         -------
         outgoing_index : int
             The index in the outgoing leg.
+
         """
         # need to calculate the `a_j` in the Notes of the doc-string of self.
         if len(incoming_indices) != self.nlegs:
@@ -1811,6 +1850,7 @@ class LegPipe(LegCharge):
         q_map_indices : 1D array
             For each row of `qind_incoming` an index `j` such that
             ``self.q_map[j, 3:] == qind_incoming[j]``.
+
         """
         assert (qind_incoming.shape[1] == self.nlegs)
         # calculate indices of q_map[_perm], which is sorted by :math:`i_1, i_2, ...`,
@@ -1870,6 +1910,7 @@ def _find_row_differences(qflat):
     diffs: 1D array
         The indices where rows change, including the first and last. Equivalent to:
         ``[0]+[i for i in range(1, len(qflat)) if np.any(qflat[i-1] != qflat[i])] + [len(qflat)]``
+
     """
     if qflat.shape[1] == 0:
         return np.array([0, qflat.shape[0]], dtype=np.intp)
@@ -1918,6 +1959,7 @@ def _sliced_copy(dest, dest_beg, src, src_beg, slice_shape):
         Entries are start of the slices used for `src`
     slice_shape : intp[ndim]
         The length of the slices.
+
     """
     if dest_beg is None:
         dest_beg = [0] * dest.ndim

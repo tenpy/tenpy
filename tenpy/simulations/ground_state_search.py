@@ -40,6 +40,7 @@ class GroundStateSearch(Simulation):
     -------
     .. cfg:config :: GroundStateSearch
         :include: Simulation
+
     """
     default_algorithm = 'TwoSiteDMRGEngine'
     default_measurements = Simulation.default_measurements + []
@@ -88,6 +89,7 @@ class PlaneWaveExcitations(GroundStateSearch):
     -------
     .. cfg:config :: PlaneWaveExcitations
         :include: Simulation
+
     """
     default_algorithm = 'PlaneWaveExcitationEngine'
 
@@ -132,6 +134,7 @@ class PlaneWaveExcitations(GroundStateSearch):
         -------
         gs_data : dict
             The data loaded from :cfg:option:`OrthogonalExcitations.ground_state_filename`.
+
         """
         gs_fn, gs_data = self._load_gs_data()
         gs_data_options = gs_data['simulation_parameters']
@@ -204,6 +207,7 @@ class PlaneWaveExcitations(GroundStateSearch):
             Data loaded from the ground state file.
         gs_fn : str | None
             Filename where to save `gs_data`. Do nothing if `gs_fn` is None.
+
         """
         assert self.init_env_data, "should have been defined by extract_segment()"
         orig_fn = self.output_filename
@@ -318,6 +322,7 @@ class OrthogonalExcitations(GroundStateSearch):
             excitations : list
                 Tensor network states representing the excitations.
                 Only defined if :cfg:option:`Simulation.save_psi` is True.
+
     """
     def __init__(self, options, *, orthogonal_to=None, **kwargs):
         super().__init__(options, **kwargs)
@@ -384,6 +389,7 @@ class OrthogonalExcitations(GroundStateSearch):
         -------
         data : dict
             The data loaded from :cfg:option:`OrthogonalExcitations.ground_state_filename`.
+
         """
         # TODO: allow to pass ground state data as kwargs to sim instead!
         gs_fn = self.options['ground_state_filename']
@@ -439,6 +445,7 @@ class OrthogonalExcitations(GroundStateSearch):
         -------
         write_back : bool
             Whether we should call :meth:`write_converged_environments`.
+
         """
         enlarge = self.options.get('segment_enlarge', None, int)
         first = self.options.get('segment_first', 0, int)
@@ -471,6 +478,7 @@ class OrthogonalExcitations(GroundStateSearch):
             Data loaded from the ground state file.
         gs_fn : str
             Filename where to save `gs_data`.
+
         """
         if not self.init_env_data:
             raise ValueError("Didn't converge new environments!")
@@ -688,6 +696,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         -------
         gs_data : dict
             The data loaded from :cfg:option:`OrthogonalExcitations.ground_state_filename`.
+
         """
         gs_fn_alpha, gs_data_alpha, gs_fn_beta, gs_data_beta = self._load_gs_data()
         gs_data_options_alpha = gs_data_alpha['simulation_parameters']
@@ -815,6 +824,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             if we don't switch charge sector.
         write_back : bool
             Whether :meth:`write_back_environments` should be called.
+
         """
         if psi0_alpha_Orig.bc == 'infinite':
             return self._extract_segment_from_infinite(
@@ -1152,6 +1162,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         ----------
         psi0_alpha : :class:`~tenpy.networks.msp.MPS`
             Infinite ground state MPS on the left, matching :attr:`init_env_data_alpha`.
+
         """
         self.logger.info("Calculate reference energy by contracting environments")
         first, last = self.results['segment_first_last']
@@ -1233,6 +1244,7 @@ class ExcitationInitialState(InitialStateBuilder):
     ----------
     sim : :class:`OrthogonalExcitations`
         Simulation class for which to initial a state to be used as excitation initial state.
+
     """
     def __init__(self, sim, options):
         self.sim = sim

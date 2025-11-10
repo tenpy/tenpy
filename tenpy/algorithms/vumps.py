@@ -205,6 +205,7 @@ class VUMPSEngine(IterativeSweeps):
             The energy of the current ground state approximation.
         psi : :class:`~tenpy.networks.uniform_mps.UniformMPS`
             The current ground state approximation, i.e. just a reference to :attr:`psi`.
+
         """
         options = self.options
         cutoff = options.get('cutoff', 0., 'real')
@@ -380,6 +381,7 @@ class VUMPSEngine(IterativeSweeps):
         psi : :class:`~tenpy.networks.mps.MPS`
             The MPS representing the ground state after the simulation,
             i.e. just a reference to :attr:`psi`.
+
         """
         self.shelve = False
         _ = self.pre_run_initialize()  # note: vumps computes result only in post_run_cleanup
@@ -499,6 +501,7 @@ class VUMPSEngine(IterativeSweeps):
         ----------
         **update_data : dict
             What was returned by :meth:`update_local`.
+
         """
         self.update_stats['i0'].append(self.i0)
         self.update_stats['e_L'].append(e_L)
@@ -569,6 +572,7 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
     -------
     .. cfg:config :: SingleSiteDMRGEngine
         :include: DMRGEngine
+
     """
     EffectiveH = OneSiteH
 
@@ -609,6 +613,7 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
         -------
         update_data : dict
             Data computed during the local update.
+
         """
         psi = self.psi
         i0 = self.i0
@@ -679,6 +684,7 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
             entanglement entropy left of site ``i0``
         entropy_right : float
             entanglement entropy right of site ``i0``
+
         """
         U_ACL, _, _ = npc.polar(AC.combine_legs(['vL', 'p'], qconj=[+1]), left=False)
         U_CL, _, s1 = npc.polar(C2, left=False)
@@ -715,6 +721,7 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
     -------
     .. cfg:config :: TwoSiteDMRGEngine
         :include: DMRGEngine
+
     """
     EffectiveH = TwoSiteH
     DefaultMixer = SubspaceExpansion
@@ -745,6 +752,7 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         -------
         update_data : dict
             Data computed during the local update.
+
         """
         psi = self.psi
         i0 = self.i0
@@ -827,6 +835,7 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
             entanglement entropy left of site ``i0``
         entropy_right : float
             entanglement entropy right of site ``i0+1``
+
         """
 
         U_ACL, _, _ = npc.polar(AC2.combine_legs(['vL', 'p'], qconj=[+1]), left=False)
@@ -881,6 +890,7 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         S_approx : ndarray
             Just the `S` if a 1D ndarray, or an approximation of the correct S (which was used for
             truncation) in case `S` is 2D Array.
+
         """
         i0 = self.i0
         mixer = self.mixer

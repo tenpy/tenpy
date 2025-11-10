@@ -88,6 +88,7 @@ def sweep_phase_diagram(g_list, conserve, chi: int, Ly: int):
     Returns
     -------
     A dictionary with the parameters repeated and with observables.
+
     """
     psi = None
     g_list=g_list
@@ -148,6 +149,7 @@ def single_run(g: float, Ly: int, conserve, chi_max: int, psi=None):
         Correlation function over a horizontal distance of 10 unit cells
     correlation_length : float
         The correlation length of the MPS in units of horizontal lattice sites.
+
     """
     # 2) Initialize the model
     # For a full list of options see

@@ -47,6 +47,7 @@ class DualSquare(Lattice):
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `pairs` are set accordingly.
+
     """
     dim = 2  #: the dimension of the lattice
 
@@ -134,6 +135,7 @@ class ToricCode(CouplingMPOModel):
             *not* use "periodic" boundary conditions:
             The MPS is still "open", so this will introduce long-range couplings between the
             first and last sites of the MPS, and require **squared** MPS bond-dimensions.
+
     """
     default_lattice = DualSquare
     force_default_lattice = True

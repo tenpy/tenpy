@@ -58,6 +58,7 @@ class Worker:
         ...    assert "3+4" in results   # now we can be sure that we got all results
         >>> results
         {'2+2': 4, '3+4': 7}
+
     """
     def __init__(self, name="tenpy worker", max_queue_size=0, daemon=None):
         self.name = name

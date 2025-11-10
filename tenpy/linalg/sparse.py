@@ -44,6 +44,7 @@ class NpcLinearOperator:
         The data type of its action.
     acts_on : list of str
         Labels of the state on which the operator can act. NB: Class attribute.
+
     """
     acts_on = None  # Derived classes should set this as a class attribute
 
@@ -68,6 +69,7 @@ class NpcLinearOperator:
         -------
         matrix : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of the represented operator.
+
         """
         raise NotImplementedError("This function should be implemented in derived classes")
 
@@ -100,6 +102,7 @@ class NpcLinearOperatorWrapper:
     ----------
     orig_operator : NpcLinearOperator
         The original operator implementing the `matvec`.
+
     """
     def __init__(self, orig_operator):
         self.orig_operator = orig_operator
@@ -220,6 +223,7 @@ class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
         The original `EffectiveH` instance to wrap around.
     ortho_vecs : list of :class:`~tenpy.linalg.np_conserved.Array`
         The vectors to orthogonalize against.
+
     """
     def __init__(self, orig_operator, ortho_vecs):
         if len(ortho_vecs) == 0:
@@ -319,6 +323,7 @@ class FlatLinearOperator(ScipyLinearOperator):
     _labels_split : list of str
         Only set if initialized with :meth:`from_guess_with_pipe`.
         Labels of the guess before combining them into a pipe (stored as `leg`).
+
     """
     def __init__(self, npc_matvec, leg, dtype, charge_sector=0, vec_label=None, compact_flat=None):
         self.npc_matvec = npc_matvec
@@ -360,6 +365,7 @@ class FlatLinearOperator(ScipyLinearOperator):
             :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray`.
             Works only for fixed charge sector and if the `leg` of `mat` is blocked;
             None defaults to ``leg.is_blocked()``.
+
         """
         if mat.rank != 2:
             raise ValueError("Works only for square matrices")
@@ -404,6 +410,7 @@ class FlatLinearOperator(ScipyLinearOperator):
             Instance of the class to be used as linear operator
         guess_flat : np.ndarray
             Numpy vector representing the guess `v0_guess`.
+
         """
         if dtype is None:
             dtype = v0_guess.dtype
@@ -466,6 +473,7 @@ class FlatLinearOperator(ScipyLinearOperator):
         matvec_vec : np.ndarray
             The result of acting the represented LinearOperator (`self`) on `vec`,
             i.e., the result of applying `npc_matvec` to an npc Array generated from `vec`.
+
         """
         vec = np.asarray(vec)
         if vec.ndim != 1:
@@ -493,6 +501,7 @@ class FlatLinearOperator(ScipyLinearOperator):
         -------
         npc_vec : :class:`~tenpy.linalg.np_conserved.Array`
             Same as `vec`, but converted into a npc array.
+
         """
         if self._charge_sector is not None:
             res = npc.zeros([self.leg], vec.dtype, self._charge_sector, labels=[self.vec_label])
@@ -532,6 +541,7 @@ class FlatLinearOperator(ScipyLinearOperator):
         -------
         vec : 1D ndarray
             Same entries as `npc_vec`, but converted into a flat Numpy array.
+
         """
         if self._charge_sector is not None:
             assert npc_vec.rank == 1
@@ -570,6 +580,7 @@ class FlatLinearOperator(ScipyLinearOperator):
         -------
         npc_vec : :class:`~tenpy.linalg.np_conserved.Array`
             Same as `vec`, but converted into a npc array.
+
         """
         assert self._charge_sector is None
         return npc.Array.from_ndarray(vec, [self.leg], cutoff=cutoff, labels=[self.vec_label])
@@ -597,6 +608,7 @@ class FlatLinearOperator(ScipyLinearOperator):
             The result of acting the represented LinearOperator (`self`) on `vec`,
             i.e., the result of applying `npc_matvec` to an npc Array generated from `vec`.
             Has the same leg structure as `vec`.
+
         """
         legs_initially_combined = (vec.rank == 1)
         if legs_initially_combined:
@@ -656,6 +668,7 @@ class FlatLinearOperator(ScipyLinearOperator):
             The eigenvalues, sorted according to `which`.
         w : list of :class:`~tenpy.linalg.np_conserved.Array`
             The eigenvectors corresponding to `eta`, as npc.Array with LegPipe.
+
         """
         if max_num_ev is None:
             max_num_ev = num_ev + 2
