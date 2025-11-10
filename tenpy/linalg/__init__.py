@@ -53,7 +53,6 @@ def _patch_cython():
     _npc_helper._np_conserved = np_conserved
     assert _npc_helper.QTYPE == charges.QTYPE, f'{_npc_helper.QTYPE} != {charges.QTYPE}'
     # check types
-    warn = False
     import numpy as np
     check_types = [
         (np.float64, np.complex128),

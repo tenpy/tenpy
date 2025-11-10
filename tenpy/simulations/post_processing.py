@@ -346,7 +346,7 @@ class DataFiles:
             print(f"loading {file!s}", end=' ')
             try:
                 _ = self[file]
-            except OSError as e:
+            except OSError:
                 print("... FAILED! Ignoring.")
             else:
                 print("... successful")

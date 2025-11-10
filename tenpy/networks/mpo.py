@@ -3858,8 +3858,7 @@ class MPOTransferMatrix(NpcLinearOperator):
                 ) % L == first % L, "Need to have an integer number of unit cells for the bond to be the same."
             SL = psi.get_SL(first)
             if not isinstance(SL, npc.Array):
-                vL, vR = init_env_data['init_LP'].get_leg(
-                    'vR').conj(), init_env_data['init_RP'].get_leg('vL').conj()
+                vL = init_env_data['init_LP'].get_leg('vR').conj()
                 SL = npc.diag(SL,
                               vL,
                               dtype=np.promote_types(psi.dtype, H.dtype),

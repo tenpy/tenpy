@@ -164,7 +164,7 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
                 extension_err = self.psi.subspace_expansion(
                     expand_into=Krylov_extended_basis, trunc_par=Krylov_trunc_params
                 )
-            logger.info(f"Extended bond dimension: {self.psi.chi}.")
+            logger.info(f"Extended bond dimension: {self.psi.chi}. Extension error: {extension_err}")
         return
 
     def evolve(self, N_steps, dt):

@@ -241,7 +241,6 @@ class GMRES():
                     break
             self.total_iters.append(k+1)
             self.backsolve(k+1)
-            Q_mat = npc.concatenate(self.qs[:k+1], axis=1)
             for i in range(k+1):
                 self.x.iadd_prefactor_other(self.y[i], self.qs[i])
             if not converged:
