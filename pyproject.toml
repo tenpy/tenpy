@@ -119,7 +119,19 @@ target-version = "py310"
 exclude = ["doc/sphinx_ext/*", "doc/toycodes", "doc/notebooks"]
 
 [tool.ruff.lint]
-select = ["F", "E", "W", "I", "UP", "ISC", "LOG", "INP", "D"]
+# Full list of rules: https://docs.astral.sh/ruff/rules/
+select = [
+    "F",  # Pyflakes
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "I",  # isort (sort import statements)
+    "UP",  # pyupgrade
+    "ISC",  # implicit-str-concat
+    "LOG",  # logging
+    "INP",  # no-pep420 (implicit namespace packages)
+    "D",  # pydocstyle
+    "FIX001",  # Line contains "FIX" + "ME" (avoided full spelling here -> doesnt match full text search)
+]
 ignore = [
     "F403", "F405",  # star imports
     "E741",  # ambiguous variable names like l
