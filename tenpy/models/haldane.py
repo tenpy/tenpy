@@ -61,12 +61,12 @@ class BosonicHaldaneModel(CouplingMPOModel):
         return site
 
     def init_terms(self, model_params):
-        t1 = np.asarray(model_params.get('t1', -1., 'real_or_array'))
+        t1 = np.asarray(model_params.get('t1', -1.0, 'real_or_array'))
         t2_default = (np.sqrt(129) / 36) * t1 * np.exp(1j * np.arccos(3 * np.sqrt(3 / 43)))
         t2 = np.asarray(model_params.get('t2', t2_default, 'complex_or_array'))
         V = np.asarray(model_params.get('V', 0, 'real_or_array'))
-        mu = np.asarray(model_params.get('mu', 0., 'real_or_array'))
-        phi_ext = model_params.get('phi_ext', 0., 'real')
+        mu = np.asarray(model_params.get('mu', 0.0, 'real_or_array'))
+        phi_ext = model_params.get('phi_ext', 0.0, 'real')
 
         self.add_onsite(mu, 0, 'N', category='mu N')
         self.add_onsite(-mu, 1, 'N', category='mu N')
@@ -76,9 +76,14 @@ class BosonicHaldaneModel(CouplingMPOModel):
             self.add_coupling(t1_phi, u1, 'Bd', u2, 'B', dx, category='t1 Bd_i B_j', plus_hc=True)
             self.add_coupling(V, u1, 'N', u2, 'N', dx, category='V N_i N_j')
 
-        for u1, u2, dx in [(0, 0, np.array([-1, 1])), (0, 0, np.array([1, 0])),
-                           (0, 0, np.array([0, -1])), (1, 1, np.array([0, 1])),
-                           (1, 1, np.array([1, -1])), (1, 1, np.array([-1, 0]))]:
+        for u1, u2, dx in [
+            (0, 0, np.array([-1, 1])),
+            (0, 0, np.array([1, 0])),
+            (0, 0, np.array([0, -1])),
+            (1, 1, np.array([0, 1])),
+            (1, 1, np.array([1, -1])),
+            (1, 1, np.array([-1, 0])),
+        ]:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, 2 * np.pi * phi_ext])
             self.add_coupling(t2_phi, u1, 'Bd', u2, 'B', dx, category='t2 Bd_i B_j', plus_hc=True)
 
@@ -138,12 +143,12 @@ class FermionicHaldaneModel(CouplingMPOModel):
         return site
 
     def init_terms(self, model_params):
-        t1 = np.asarray(model_params.get('t1', -1., 'real_or_array'))
+        t1 = np.asarray(model_params.get('t1', -1.0, 'real_or_array'))
         t2_default = np.sqrt(129) / 36 * t1 * np.exp(1j * np.arccos(3 * np.sqrt(3 / 43)))
         t2 = np.asarray(model_params.get('t2', t2_default, 'complex_or_array'))
         V = np.asarray(model_params.get('V', 0, 'real_or_array'))
-        mu = np.asarray(model_params.get('mu', 0., 'real_or_array'))
-        phi_ext = model_params.get('phi_ext', 0., 'real')
+        mu = np.asarray(model_params.get('mu', 0.0, 'real_or_array'))
+        phi_ext = model_params.get('phi_ext', 0.0, 'real')
 
         self.add_onsite(mu, 0, 'N', category='mu N')
         self.add_onsite(-mu, 1, 'N', category='mu N')
@@ -153,8 +158,13 @@ class FermionicHaldaneModel(CouplingMPOModel):
             self.add_coupling(t1_phi, u1, 'Cd', u2, 'C', dx, category='t1 Cd_i C_j', plus_hc=True)
             self.add_coupling(V, u1, 'N', u2, 'N', dx, category='V N_i N_j')
 
-        for u1, u2, dx in [(0, 0, np.array([-1, 1])), (0, 0, np.array([1, 0])),
-                           (0, 0, np.array([0, -1])), (1, 1, np.array([0, 1])),
-                           (1, 1, np.array([1, -1])), (1, 1, np.array([-1, 0]))]:
+        for u1, u2, dx in [
+            (0, 0, np.array([-1, 1])),
+            (0, 0, np.array([1, 0])),
+            (0, 0, np.array([0, -1])),
+            (1, 1, np.array([0, 1])),
+            (1, 1, np.array([1, -1])),
+            (1, 1, np.array([-1, 0])),
+        ]:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, 2 * np.pi * phi_ext])
             self.add_coupling(t2_phi, u1, 'Cd', u2, 'C', dx, category='t2 Cd_i C_j', plus_hc=True)

@@ -15,15 +15,37 @@ from .params import Config
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
-    'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
-    'zero_if_close', 'pad', 'add_with_None_0', 'group_by_degeneracy', 'get_close',
-    'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive', 'merge_recursive',
-    'flatten', 'setup_logging', 'convert_memory_units', 'consistency_check',
-    'TenpyInconsistencyError', 'TenpyInconsistencyWarning', 'BetaWarning'
+    'to_iterable',
+    'to_iterable_of_len',
+    'to_array',
+    'anynan',
+    'argsort',
+    'lexsort',
+    'inverse_permutation',
+    'list_to_dict_list',
+    'atleast_2d_pad',
+    'transpose_list_list',
+    'zero_if_close',
+    'pad',
+    'add_with_None_0',
+    'group_by_degeneracy',
+    'get_close',
+    'find_subclass',
+    'get_recursive',
+    'set_recursive',
+    'update_recursive',
+    'merge_recursive',
+    'flatten',
+    'setup_logging',
+    'convert_memory_units',
+    'consistency_check',
+    'TenpyInconsistencyError',
+    'TenpyInconsistencyWarning',
+    'BetaWarning',
 ]
 
 _not_set = object()  # sentinel
+
 
 def to_iterable(a):
     """If `a` is a not iterable or a string, return ``[a]``, else return ``a``."""
@@ -50,11 +72,11 @@ def to_iterable_of_len(a, L):
         return [a] * L
     # else:
     if len(a) != L:
-        raise ValueError(f"wrong length: got {len(a):d}, expected {L:d}")
+        raise ValueError(f'wrong length: got {len(a):d}, expected {L:d}')
     return a
 
 
-def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
+def to_array(a, shape=(None,), dtype=None, allow_incommensurate=False):
     """Convert `a` to an numpy array and tile to matching dimension/shape.
 
     This function provides similar functionality as numpys broadcast, but not quite the same:
@@ -97,11 +119,11 @@ def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
         reps[i] = shape[i] // a.shape[i]
         if shape[i] % a.shape[i] != 0:
             if allow_incommensurate:
-                reps[i] = reps[i] +  1
+                reps[i] = reps[i] + 1
                 crop[i] = slice(None, shape[i])
                 need_crop = True
             else:
-                raise ValueError(f"incommensurate len for tiling from {a.shape[i]:d} to {shape[i]:d}")
+                raise ValueError(f'incommensurate len for tiling from {a.shape[i]:d} to {shape[i]:d}')
     a = np.tile(a, reps)
     if need_crop:
         a = a[tuple(crop)]
@@ -171,7 +193,7 @@ def argsort(a, sort=None, **kwargs):
         elif sort == 'LI':
             a = -np.imag(a)
         else:
-            raise ValueError("unknown sort option " + repr(sort))
+            raise ValueError('unknown sort option ' + repr(sort))
     return np.argsort(a, **kwargs)
 
 
@@ -314,7 +336,7 @@ def transpose_list_list(D, pad=None):
     return T
 
 
-def zero_if_close(a, tol=1.e-15):
+def zero_if_close(a, tol=1.0e-15):
     """Set real and/or imaginary part to 0 if their absolute value is smaller than `tol`.
 
     Parameters
@@ -395,7 +417,7 @@ def add_with_None_0(a, b):
     return a + b
 
 
-def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
+def group_by_degeneracy(E, *args, subset=None, cutoff=1.0e-12):
     """Find groups of indices for which (energy) values are degenerate.
 
     Parameters
@@ -421,19 +443,19 @@ def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
 
         from tenpy.tools.misc import *
 
-    >>> E = [2., 2.4, 1.9999, 1.8, 2.3999, 5, 1.8]
+    >>> E = [2.0, 2.4, 1.9999, 1.8, 2.3999, 5, 1.8]
     ... # -> 0   1    2       3    4       5  6
-    >>> k = [0,  1,   2,      2,   1,      2, 1]
+    >>> k = [0, 1, 2, 2, 1, 2, 1]
     >>> group_by_degeneracy(E, cutoff=0.001)
     [(0, 2), (1, 4), (3, 6), (5,)]
     >>> group_by_degeneracy(E, k, cutoff=0.001)  # k and E need to be close
     [(0,), (1, 4), (2,), (3,), (5,), (6,)]
 
     """
-    assert cutoff >= 0.
+    assert cutoff >= 0.0
     E = np.asarray(E)
     args = [np.asarray(arg) for arg in args]
-    N, = E.shape
+    (N,) = E.shape
     groups = []
     if subset is None:
         subset = np.arange(N, dtype=np.intp)
@@ -449,7 +471,7 @@ def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
     return groups
 
 
-def get_close(values, target, default=None, eps=1.e-13):
+def get_close(values, target, default=None, eps=1.0e-13):
     """Iterate through `values` and return first entry closer than `eps`.
 
     Parameters
@@ -501,23 +523,25 @@ def find_subclass(base_class, subclass_name):
     if not isinstance(subclass_name, str):
         subclass = subclass_name
         if not isinstance(subclass, type):
-            raise TypeError("expect a str or class for `subclass_name`, got " + repr(subclass))
+            raise TypeError('expect a str or class for `subclass_name`, got ' + repr(subclass))
         if not issubclass(subclass, base_class):
             # still allow it: might intend duck-typing. However, a warning should be raised!
-            warnings.warn(f"find_subclass: {subclass!r} is not subclass of {base_class!r}")
+            warnings.warn(f'find_subclass: {subclass!r} is not subclass of {base_class!r}')
         return subclass
     found = set()
     _find_subclass_recursion(base_class, subclass_name, found, set())
     if len(found) == 0:
-        raise ValueError(f"No subclass of {base_class.__name__} called {subclass_name!r} defined. "
-                         "Maybe missing an import of a file with a custom class definition?")
+        raise ValueError(
+            f'No subclass of {base_class.__name__} called {subclass_name!r} defined. '
+            'Maybe missing an import of a file with a custom class definition?'
+        )
     elif len(found) == 1:
         return found.pop()
     else:
         found_not_deprecated = [c for c in found if not getattr(c, 'deprecated', False)]
         if len(found_not_deprecated) == 1:
             return found_not_deprecated[0]
-        msg = f"There exist multiple subclasses of {base_class!r} with name {subclass_name!r}:"
+        msg = f'There exist multiple subclasses of {base_class!r} with name {subclass_name!r}:'
         raise ValueError('\n'.join([msg] + [repr(c) for c in found]))
 
 
@@ -534,7 +558,7 @@ def _find_subclass_recursion(base_class, name_to_find, found, checked):
 _UNSET = object()  # sentinel
 
 
-def get_recursive(nested_data, recursive_key, separator=".", default=_UNSET):
+def get_recursive(nested_data, recursive_key, separator='.', default=_UNSET):
     """Extract specific value from a nested data structure.
 
     Parameters
@@ -563,7 +587,7 @@ def get_recursive(nested_data, recursive_key, separator=".", default=_UNSET):
 
     """
     if recursive_key.startswith(separator):
-        recursive_key = recursive_key[len(separator):]
+        recursive_key = recursive_key[len(separator) :]
     if not recursive_key:
         return nested_data  # return the original data if recursive_key is just "/"
     for subkey in recursive_key.split(separator):
@@ -573,10 +597,10 @@ def get_recursive(nested_data, recursive_key, separator=".", default=_UNSET):
     return nested_data
 
 
-def set_recursive(nested_data, recursive_key, value, separator=".", insert_dicts=False):
+def set_recursive(nested_data, recursive_key, value, separator='.', insert_dicts=False):
     """Same as :func:`get_recursive`, but set the data entry to `value`."""
     if recursive_key.startswith(separator):
-        recursive_key = recursive_key[len(separator):]
+        recursive_key = recursive_key[len(separator) :]
     subkeys = recursive_key.split(separator)
     for subkey in subkeys[:-1]:
         if insert_dicts and subkey not in nested_data:
@@ -585,7 +609,7 @@ def set_recursive(nested_data, recursive_key, value, separator=".", insert_dicts
     nested_data[subkeys[-1]] = value
 
 
-def update_recursive(nested_data, update_data, separator=".", insert_dicts=True):
+def update_recursive(nested_data, update_data, separator='.', insert_dicts=True):
     """Wrapper around :func:`set_recursive` to allow updating multiple values at once.
 
     It simply calls :func:`set_recursive` for each ``recursive_key, value in update_data.items()``.
@@ -616,7 +640,7 @@ def merge_recursive(*nested_data, conflict='error', path=None):
 
     """
     if len(nested_data) == 0:
-        raise ValueError("need at least one nested_data")
+        raise ValueError('need at least one nested_data')
     elif len(nested_data) == 1:
         return nested_data[0]
     elif len(nested_data) > 2:
@@ -632,19 +656,12 @@ def merge_recursive(*nested_data, conflict='error', path=None):
         if key in merged:
             val1 = merged[key]
             if isinstance(val1, Mapping) and isinstance(val2, Mapping):
-                merged[key] = merge_recursive(val1,
-                                              val2,
-                                              conflict=conflict,
-                                              path=path + [repr(key)])
+                merged[key] = merge_recursive(val1, val2, conflict=conflict, path=path + [repr(key)])
             else:
                 if conflict == 'error':
                     if val1 != val2:
                         path = ':'.join(path + [repr(key)])
-                        msg = '\n'.join([
-                            f"Conflict with different values at {path}; we got:",
-                            repr(val1),
-                            repr(val2)
-                        ])
+                        msg = '\n'.join([f'Conflict with different values at {path}; we got:', repr(val1), repr(val2)])
                         raise ValueError(msg)
                 elif conflict == 'first':
                     pass
@@ -674,9 +691,7 @@ def flatten(mapping, separator='.'):
 
         from tenpy.tools.misc import *
 
-    >>> sample_data = {'some': {'nested': {'entry': 100, 'structure': 200},
-    ...                         'subkey': 10},
-    ...                'topentry': 1}
+    >>> sample_data = {'some': {'nested': {'entry': 100, 'structure': 200}, 'subkey': 10}, 'topentry': 1}
     >>> flat = flatten(sample_data)
     >>> for k in sorted(flat):
     ...     print(repr(k), ':', flat[k])
@@ -693,7 +708,7 @@ def flatten(mapping, separator='.'):
     """
     if isinstance(mapping, Config):
         mapping = mapping.as_dict()
-    result = {}  #mapping.copy()
+    result = {}  # mapping.copy()
     for k1, v1 in mapping.items():
         if isinstance(v1, dict):
             flat_submapping = flatten(v1, separator)
@@ -709,17 +724,19 @@ def flatten(mapping, separator='.'):
 skip_logging_setup = False
 
 
-def setup_logging(output_filename=None,
-                  *,
-                  filename=_not_set,
-                  to_stdout="INFO",
-                  to_file="INFO",
-                  format="%(levelname)-8s: %(message)s",
-                  datefmt=None,
-                  logger_levels={},
-                  dict_config=None,
-                  capture_warnings=None,
-                  skip_setup=None):
+def setup_logging(
+    output_filename=None,
+    *,
+    filename=_not_set,
+    to_stdout='INFO',
+    to_file='INFO',
+    format='%(levelname)-8s: %(message)s',
+    datefmt=None,
+    logger_levels={},
+    dict_config=None,
+    capture_warnings=None,
+    skip_setup=None,
+):
     """Configure the :mod:`logging` module.
 
     The default logging setup is given by the following equivalent `dict_config`
@@ -811,6 +828,7 @@ def setup_logging(output_filename=None,
 
     """
     import logging.config
+
     if filename is _not_set:
         if output_filename is not None:
             root, ext = os.path.splitext(output_filename)
@@ -843,21 +861,13 @@ def setup_logging(output_filename=None,
             }
             if not to_stdout:
                 cwd = os.getcwd()
-                print(f"now logging to {cwd!s}/{filename!s}")
+                print(f'now logging to {cwd!s}/{filename!s}')
         dict_config = {
             'version': 1,  # mandatory
             'disable_existing_loggers': False,
-            'formatters': {
-                'custom': {
-                    'format': format,
-                    'datefmt': datefmt
-                }
-            },
+            'formatters': {'custom': {'format': format, 'datefmt': datefmt}},
             'handlers': handlers,
-            'root': {
-                'handlers': list(handlers.keys()),
-                'level': 'DEBUG'
-            },
+            'root': {'handlers': list(handlers.keys()), 'level': 'DEBUG'},
             'loggers': {},
         }
         if '%' not in format:
@@ -953,10 +963,10 @@ _consistency_compare_funcs = {
     '>=': operator.ge,
     '!=': operator.ne,
     '==': operator.eq,
-    'abs()<=': lambda x,y: abs(x) <= y,
-    'abs()<': lambda x,y: abs(x) < y,
-    'abs()>': lambda x,y: abs(x) > y,
-    'abs()>=': lambda x,y: abs(x) >= y,
+    'abs()<=': lambda x, y: abs(x) <= y,
+    'abs()<': lambda x, y: abs(x) < y,
+    'abs()>': lambda x, y: abs(x) > y,
+    'abs()>=': lambda x, y: abs(x) >= y,
 }
 
 
@@ -1020,10 +1030,12 @@ def consistency_check(value, options, threshold_key, threshold_default, msg, com
         check_passed = compare_func(value, threshold)
     except Exception:
         # note: logger.exception adds traceback info
-        logger.exception("Error during consistency_check for ``%s``. This is likely due to a bug "
-                         "like incompatible types in the consistency check. "
-                         "Consider to report it on https://github.com/tenpy/tenpy/issues/. ",
-                         threshold_key)
+        logger.exception(
+            'Error during consistency_check for ``%s``. This is likely due to a bug '
+            'like incompatible types in the consistency check. '
+            'Consider to report it on https://github.com/tenpy/tenpy/issues/. ',
+            threshold_key,
+        )
         check_passed = True
 
     if not check_passed:

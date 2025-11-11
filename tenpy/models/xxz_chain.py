@@ -53,11 +53,11 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
 
     def __init__(self, model_params):
         # 0) read out/set default parameters
-        model_params = asConfig(model_params, "XXZChain")
+        model_params = asConfig(model_params, 'XXZChain')
         L = model_params.get('L', 2, int)
-        Jxx = model_params.get('Jxx', 1., 'real_or_array')
-        Jz = model_params.get('Jz', 1., 'real_or_array')
-        hz = model_params.get('hz', 0., 'real_or_array')
+        Jxx = model_params.get('Jxx', 1.0, 'real_or_array')
+        Jz = model_params.get('Jz', 1.0, 'real_or_array')
+        hz = model_params.get('hz', 0.0, 'real_or_array')
         bc_MPS = model_params.get('bc_MPS', 'finite', str)
         conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
@@ -74,9 +74,9 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
             else:
                 leg = npc.LegCharge.from_trivial(2)
             # 2) onsite operators
-            Sp = [[0., 1.], [0., 0.]]
-            Sm = [[0., 0.], [1., 0.]]
-            Sz = [[0.5, 0.], [0., -0.5]]
+            Sp = [[0.0, 1.0], [0.0, 0.0]]
+            Sm = [[0.0, 0.0], [1.0, 0.0]]
+            Sz = [[0.5, 0.0], [0.0, -0.5]]
             # (Can't define Sx and Sy as onsite operators: they are incompatible with Sz charges.)
             # 3) local physical site
             site = Site(leg, ['up', 'down'], sort_charge=sort_charge, Sp=Sp, Sm=Sm, Sz=Sz)
@@ -115,7 +115,7 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
 
     """
 
-    default_lattice = "Chain"
+    default_lattice = 'Chain'
     force_default_lattice = True
 
     def init_sites(self, model_params):
@@ -127,9 +127,9 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
 
     def init_terms(self, model_params):
         # read out parameters
-        Jxx = model_params.get('Jxx', 1., 'real_or_array')
-        Jz = model_params.get('Jz', 1., 'real_or_array')
-        hz = model_params.get('hz', 0., 'real_or_array')
+        Jxx = model_params.get('Jxx', 1.0, 'real_or_array')
+        Jz = model_params.get('Jz', 1.0, 'real_or_array')
+        hz = model_params.get('hz', 0.0, 'real_or_array')
         # add terms
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-hz, u, 'Sz')

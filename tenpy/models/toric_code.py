@@ -55,11 +55,10 @@ class DualSquare(Lattice):
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 2)
         basis = np.eye(2)
-        pos = np.array([[0., 0.5], [0.5, 0.]])
+        pos = np.array([[0.0, 0.5], [0.5, 0.0]])
         kwargs.setdefault('basis', basis)
         kwargs.setdefault('positions', pos)
-        NN = [(1, 0, np.array([0, 0])), (1, 0, np.array([1, 0])), (0, 1, np.array([-1, 1])),
-              (0, 1, np.array([0, 1]))]
+        NN = [(1, 0, np.array([0, 0])), (1, 0, np.array([1, 0])), (0, 1, np.array([-1, 1])), (0, 1, np.array([0, 1]))]
         nNN = [(i, i, dx) for i in [0, 1] for dx in [np.array([1, 0]), np.array([0, 1])]]
         nnNN = [(i, i, dx) for i in [0, 1] for dx in [np.array([1, 1]), np.array([-1, 1])]]
         kwargs.setdefault('pairs', {})
@@ -81,7 +80,7 @@ class DualSquare(Lattice):
         ================== =========================== =============================
         """
         if isinstance(order, str):
-            if order == "default":
+            if order == 'default':
                 priority = (0, 2, 1)
                 snake_winding = (False, False, False)
                 return get_order(self.shape, snake_winding, priority)
@@ -149,12 +148,14 @@ class ToricCode(CouplingMPOModel):
         return site
 
     def init_terms(self, model_params):
-        Jv = np.asarray(model_params.get('Jv', 1., 'real_or_array'))
-        Jp = np.asarray(model_params.get('Jp', 1., 'real_or_array'))
+        Jv = np.asarray(model_params.get('Jv', 1.0, 'real_or_array'))
+        Jp = np.asarray(model_params.get('Jp', 1.0, 'real_or_array'))
         # vertex/star term
-        self.add_multi_coupling(-Jv, [('Sigmax', [0, 0], 1), ('Sigmax', [0, 0], 0),
-                                      ('Sigmax', [-1, 0], 1), ('Sigmax', [0, -1], 0)])
+        self.add_multi_coupling(
+            -Jv, [('Sigmax', [0, 0], 1), ('Sigmax', [0, 0], 0), ('Sigmax', [-1, 0], 1), ('Sigmax', [0, -1], 0)]
+        )
         # plaquette term
-        self.add_multi_coupling(-Jp, [('Sigmaz', [0, 0], 1), ('Sigmaz', [0, 0], 0),
-                                      ('Sigmaz', [0, 1], 1), ('Sigmaz', [1, 0], 0)])
+        self.add_multi_coupling(
+            -Jp, [('Sigmaz', [0, 0], 1), ('Sigmaz', [0, 0], 0), ('Sigmaz', [0, 1], 1), ('Sigmaz', [1, 0], 0)]
+        )
         # done

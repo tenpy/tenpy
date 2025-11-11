@@ -24,22 +24,23 @@ def setup_benchmark(mod_q=[1], legs=10, size=20, **kwargs):
         conserve = 'parity'
     elif mod_q == [1]:
         conserve = 'Sz'
-    model_params = dict(L=L, S=2., D=0.3, bc_MPS='infinite', conserve=conserve, verbose=0)
+    model_params = dict(L=L, S=2.0, D=0.3, bc_MPS='infinite', conserve=conserve, verbose=0)
     #  print("conserve =", repr(conserve))
     M = SpinChain(model_params)
     initial_state = (['up', 'down'] * L)[:L]
-    psi = MPS.from_product_state(M.lat.mps_sites(), initial_state, bc='infinite',
-                                 unit_cell_width=M.lat.mps_unit_cell_width)
+    psi = MPS.from_product_state(
+        M.lat.mps_sites(), initial_state, bc='infinite', unit_cell_width=M.lat.mps_unit_cell_width
+    )
     local_dim = psi.sites[0].dim
     tebd_params = {
         'trunc_params': {
             'chi_max': size,
-            'svd_min': 1.e-45,
+            'svd_min': 1.0e-45,
         },
         'order': 2,
         'N_steps': 5,
         'dt': 0.1,
-        'verbose': 0.,
+        'verbose': 0.0,
     }
     eng = tebd.TEBDEngine(psi, M, tebd_params)
     eng.verbose = 0.02
@@ -51,7 +52,7 @@ def setup_benchmark(mod_q=[1], legs=10, size=20, **kwargs):
             print(eng.psi.entanglement_entropy())
     assert min(eng.psi.chi) == size  # ensure full bond dimension
     if eng.verbose > 0.1:
-        print("set up tebd for size", size)
+        print('set up tebd for size', size)
     return eng
 
 

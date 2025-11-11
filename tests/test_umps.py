@@ -14,11 +14,8 @@ def test_to_and_from_mps():
 
     uniform_psi = uniform_mps.UniformMPS.from_MPS(psi)
     assert np.max(uniform_psi.test_sanity()) < 1e-10
-    assert np.allclose(uniform_psi.expectation_value("Sz"), [0.5, -0.5, 0.5, -0.5])
+    assert np.allclose(uniform_psi.expectation_value('Sz'), [0.5, -0.5, 0.5, -0.5])
 
     psi2 = uniform_psi.to_MPS(check_overlap=True)
     ov = psi.overlap(psi2, understood_infinite=True)
-    assert (abs(ov - 1.) < 1.e-15)
-
-
-
+    assert abs(ov - 1.0) < 1.0e-15

@@ -1,7 +1,6 @@
 """Short tests for the :class:`DataLoader` and for post_processing functions in a Simulation"""
 # Copyright (C) TeNPy Developers, Apache license
 
-
 import copy
 
 import numpy as np
@@ -20,7 +19,7 @@ class DummyAlgorithmPP(Algorithm):
     def __init__(self, psi, model, options, *, resume_data=None, cache=None):
         super().__init__(psi, model, options, resume_data=resume_data)
         self.dummy_value = -1
-        self.evolved_time = self.options.get('start_time', 0.)
+        self.evolved_time = self.options.get('start_time', 0.0)
 
     def run(self):
         N_steps = self.options.get('N_steps', 5)
@@ -44,49 +43,44 @@ def broken_pp_dummy_function(*args, **kwargs):
 
 
 simulation_params = {
-    'model_class':
-    'XXZChain',
+    'model_class': 'XXZChain',
     'model_params': {
         'bc_MPS': 'finite',
         'L': 4,
         'sort_charge': True,
     },
-    'algorithm_class':
-    'DummyAlgorithmPP',
+    'algorithm_class': 'DummyAlgorithmPP',
     'algorithm_params': {
         'N_steps': 2,
         'dt': 0.5,
     },
     'initial_state_params': {
         'method': 'lat_product_state',  # mandatory -> would complain if not passed on
-        'product_state': [['up'], ['down']]
+        'product_state': [['up'], ['down']],
     },
     'connect_measurements': [('tenpy.simulations.measurement', 'm_onsite_expectation_value', {'opname': 'Sz'})],
-
-    'post_processing': [(__name__, 'pp_dummy_function',
-                         {'results_key': 'pp_result',
-                          'kwarg_getting_m_key': '<Sz>'}),
-                        (__name__, 'broken_pp_dummy_function'),
-                        (__name__, 'pp_dummy_function',
-                         {'results_key': 'pp_result',
-                          'kwarg_getting_m_key': '<Sz>'})],
+    'post_processing': [
+        (__name__, 'pp_dummy_function', {'results_key': 'pp_result', 'kwarg_getting_m_key': '<Sz>'}),
+        (__name__, 'broken_pp_dummy_function'),
+        (__name__, 'pp_dummy_function', {'results_key': 'pp_result', 'kwarg_getting_m_key': '<Sz>'}),
+    ],
 }
 
 
 def test_Simulation_with_post_processing():
     sim_params = copy.deepcopy(simulation_params)
     sim = Simulation(sim_params)
-    msg = "Error during post_process of test_post_processing broken_pp_dummy_function"
+    msg = 'Error during post_process of test_post_processing broken_pp_dummy_function'
     with pytest.warns(UserWarning, match=msg):
         # should do exactly two measurements: one before and one after eng.run()
         results = sim.run()
-    assert 'errors_during_run' in results, "we called broken_pp_dummy_function, so there should be an error"
+    assert 'errors_during_run' in results, 'we called broken_pp_dummy_function, so there should be an error'
     assert 'pp_result' in results
     assert 'pp_result_1' in results  # make sure pp_result was not overwritten
 
     Sz = results['measurements']['<Sz>']
     pp_result = results['pp_result']
-    assert np.allclose(2*Sz, pp_result)
+    assert np.allclose(2 * Sz, pp_result)
 
 
 def test_init_of_DataLoader(tmp_path):
@@ -95,10 +89,10 @@ def test_init_of_DataLoader(tmp_path):
     sim_params['output_filename'] = '_test.pkl'
     sim_params['max_errors_before_abort'] = None
     sim = Simulation(sim_params)
-    msg = "Error during post_process of test_post_processing broken_pp_dummy_function"
+    msg = 'Error during post_process of test_post_processing broken_pp_dummy_function'
     with pytest.warns(UserWarning, match=msg):
         results = sim.run()
-    assert 'errors_during_run' in results, "we called broken_pp_dummy_function, so there should be an error"
+    assert 'errors_during_run' in results, 'we called broken_pp_dummy_function, so there should be an error'
     DL_1 = DataLoader(data=results)
     DL_2 = DataLoader(simulation=sim)
     DL_3 = DataLoader(filename=tmp_path / '_test.pkl')

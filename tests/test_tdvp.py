@@ -10,8 +10,8 @@ from tenpy.networks.mps import MPS
 
 
 @pytest.mark.slow
-def test_tdvp(eps=1.e-5):
-    """compare overlap from TDVP with TEBD """
+def test_tdvp(eps=1.0e-5):
+    """compare overlap from TDVP with TEBD"""
     L = 8
     chi = 20  # no truncation necessary!
     delta_t = 0.01
@@ -29,31 +29,24 @@ def test_tdvp(eps=1.e-5):
 
     M = SpinChain(parameters)
     # prepare system in product state
-    product_state = ["up", "down"] * (L // 2)
-    psi_tebd = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS,
-                                      unit_cell_width=M.lat.mps_unit_cell_width)
+    product_state = ['up', 'down'] * (L // 2)
+    psi_tebd = MPS.from_product_state(
+        M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+    )
 
     N_steps = 2
     tebd_params = {
         'order': 4,
         'dt': delta_t,
         'N_steps': N_steps,
-        'trunc_params': {
-            'chi_max': chi,
-            'svd_min': 1.e-10,
-            'trunc_cut': None
-        }
+        'trunc_params': {'chi_max': chi, 'svd_min': 1.0e-10, 'trunc_cut': None},
     }
 
     tdvp_params = {
         'start_time': 0,
         'dt': delta_t,
         'N_steps': N_steps,
-        'trunc_params': {
-            'chi_max': chi,
-            'svd_min': 1.e-10,
-            'trunc_cut': None
-        }
+        'trunc_params': {'chi_max': chi, 'svd_min': 1.0e-10, 'trunc_cut': None},
     }
 
     # start by comparing TEBD and 2-site TDVP (increasing bond dimension)
@@ -64,7 +57,7 @@ def test_tdvp(eps=1.e-5):
         tebd_engine.run()
         tdvp2_engine.run()
         ov = psi_tebd.overlap(psi_tdvp)
-        print(tdvp2_engine.evolved_time, "ov = 1. - ", ov - 1.)
+        print(tdvp2_engine.evolved_time, 'ov = 1. - ', ov - 1.0)
         assert np.abs(1 - ov) < eps
         Sz_tebd = psi_tebd.expectation_value('Sz')
         Sz_tdvp = psi_tdvp.expectation_value('Sz')
@@ -78,7 +71,7 @@ def test_tdvp(eps=1.e-5):
         tebd_engine.run()
         tdvp1_engine.run()
         ov = psi_tebd.overlap(psi_tdvp)
-        print(tdvp1_engine.evolved_time, "ov = 1. - ", ov - 1.)
+        print(tdvp1_engine.evolved_time, 'ov = 1. - ', ov - 1.0)
         assert np.abs(1 - np.abs(ov)) < 1e-5
         Sz_tebd = psi_tebd.expectation_value('Sz')
         Sz_tdvp = psi_tdvp.expectation_value('Sz')
@@ -86,8 +79,17 @@ def test_tdvp(eps=1.e-5):
 
 
 def test_fixes_339(L=8, chi=10, dt=0.5):
-    model_params = dict(L=L, S=.5, conserve=None, Jx=1., Jy=1., Jz=1., hx=np.random.random(L),
-                        hz=np.random.random(L), bc_MPS='finite')
+    model_params = dict(
+        L=L,
+        S=0.5,
+        conserve=None,
+        Jx=1.0,
+        Jy=1.0,
+        Jz=1.0,
+        hx=np.random.random(L),
+        hz=np.random.random(L),
+        bc_MPS='finite',
+    )
     trunc_params = dict(chi_max=chi, svd_min=1e-10, trunc_cut=None)
     tdvp_params = dict(start_time=0, dt=dt, N_steps=1, trunc_params=trunc_params)
     model = SpinChain(model_params)
@@ -104,7 +106,6 @@ def test_fixes_339(L=8, chi=10, dt=0.5):
     err_max = np.max(tdvp2.trunc_err_list)
     wrong_err = expect_err + TruncationError(err_max, 1 - 2 * err_max)
 
-
     if np.allclose(tdvp2.trunc_err.eps, wrong_err.eps):
         print('matches with wrong eps')
     if np.allclose(tdvp2.trunc_err.ov_err, wrong_err.ov_err):
@@ -114,4 +115,3 @@ def test_fixes_339(L=8, chi=10, dt=0.5):
     assert np.allclose(tdvp2.trunc_err.ov_err, expect_err.ov_err)
     assert not np.allclose(tdvp2.trunc_err.eps, wrong_err.eps)
     assert not np.allclose(tdvp2.trunc_err.ov_err, wrong_err.ov_err)
-

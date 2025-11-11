@@ -51,9 +51,7 @@ from ..linalg import np_conserved as npc
 from ..tools.hdf5_io import Hdf5Exportable
 from ..tools.params import asConfig
 
-__all__ = ['TruncationError', 'truncate', 'svd_theta', 'decompose_theta_qr_based',
-           'eigh_rho']
-
+__all__ = ['TruncationError', 'truncate', 'svd_theta', 'decompose_theta_qr_based', 'eigh_rho']
 
 
 class TruncationError(Hdf5Exportable):
@@ -85,7 +83,7 @@ class TruncationError(Hdf5Exportable):
 
     """
 
-    def __init__(self, eps=0., ov=1.):
+    def __init__(self, eps=0.0, ov=1.0):
         self.eps = eps
         self.ov = ov
 
@@ -94,7 +92,7 @@ class TruncationError(Hdf5Exportable):
         return TruncationError(self.eps, self.ov)
 
     @classmethod
-    def from_norm(cls, norm_new, norm_old=1.):
+    def from_norm(cls, norm_new, norm_old=1.0):
         r"""Construct TruncationError from norm after and before the truncation.
 
         Parameters
@@ -106,8 +104,8 @@ class TruncationError(Hdf5Exportable):
             Norm of all Schmidt values before truncation, :math:`\sqrt{\sum_{a} \lambda_a^2}`.
 
         """
-        eps = 1. - norm_new**2 / norm_old**2  # = (norm_old**2 - norm_new**2)/norm_old**2
-        return cls(eps, 1. - 2. * eps)
+        eps = 1.0 - norm_new**2 / norm_old**2  # = (norm_old**2 - norm_new**2)/norm_old**2
+        return cls(eps, 1.0 - 2.0 * eps)
 
     @classmethod
     def from_S(cls, S_discarded, norm_old=None):
@@ -125,7 +123,7 @@ class TruncationError(Hdf5Exportable):
         eps = np.sum(np.square(S_discarded))
         if norm_old:
             eps /= norm_old * norm_old
-        return cls(eps, 1. - 2. * eps)
+        return cls(eps, 1.0 - 2.0 * eps)
 
     def __add__(self, other):
         res = TruncationError()
@@ -136,13 +134,13 @@ class TruncationError(Hdf5Exportable):
     @property
     def ov_err(self):
         """Error ``1.-ov`` of the overlap with the correct state."""
-        return 1. - self.ov
+        return 1.0 - self.ov
 
     def __repr__(self):
-        if self.eps != 0 or self.ov != 1.:
-            return f"TruncationError(eps={self.eps:.4e}, ov={self.ov:.10f})"
+        if self.eps != 0 or self.ov != 1.0:
+            return f'TruncationError(eps={self.eps:.4e}, ov={self.ov:.10f})'
         else:
-            return "TruncationError()"
+            return 'TruncationError()'
 
 
 def truncate(S, options):
@@ -192,24 +190,24 @@ def truncate(S, options):
         The error of the represented state which is introduced due to the truncation.
 
     """
-    options = asConfig(options, "truncation")
+    options = asConfig(options, 'truncation')
     # by default, only truncate values which are much closer to zero than machine precision.
     # This is only to avoid problems with taking the inverse of `S`.
     chi_max = options.get('chi_max', 100, int)
     chi_min = options.get('chi_min', None, int)
     deg_tol = options.get('degeneracy_tol', None, 'real')
-    svd_min = options.get('svd_min', 1.e-14, 'real')
-    trunc_cut = options.get('trunc_cut', 1.e-14, 'real')
+    svd_min = options.get('svd_min', 1.0e-14, 'real')
+    trunc_cut = options.get('trunc_cut', 1.0e-14, 'real')
 
-    if trunc_cut is not None and trunc_cut >= 1.:
-        raise ValueError("trunc_cut >=1.")
-    if not np.any(S > 1.e-10):
-        warnings.warn("no Schmidt value above 1.e-10", stacklevel=2)
-    if np.any(S < -1.e-10):
-        warnings.warn("negative Schmidt values!", stacklevel=2)
+    if trunc_cut is not None and trunc_cut >= 1.0:
+        raise ValueError('trunc_cut >=1.')
+    if not np.any(S > 1.0e-10):
+        warnings.warn('no Schmidt value above 1.e-10', stacklevel=2)
+    if np.any(S < -1.0e-10):
+        warnings.warn('negative Schmidt values!', stacklevel=2)
 
     # use 1.e-100 as replacement for <=0 values for a well-defined logarithm.
-    logS = np.log(np.choose(S <= 0., [S, 1.e-100 * np.ones(len(S))]))
+    logS = np.log(np.choose(S <= 0.0, [S, 1.0e-100 * np.ones(len(S))]))
     piv = np.argsort(logS)  # sort *ascending*.
     logS = logS[piv]
     # goal: find an index 'cut' such that we keep piv[cut:], i.e. cut between `cut-1` and `cut`.
@@ -220,13 +218,13 @@ def truncate(S, options):
         # keep at most chi_max values
         good2 = np.zeros(len(piv), dtype=np.bool_)
         good2[-chi_max:] = True
-        good = _combine_constraints(good, good2, "chi_max")
+        good = _combine_constraints(good, good2, 'chi_max')
 
     if chi_min is not None and chi_min > 1:
         # keep at most chi_max values
         good2 = np.ones(len(piv), dtype=np.bool_)
-        good2[-chi_min + 1:] = False
-        good = _combine_constraints(good, good2, "chi_min")
+        good2[-chi_min + 1 :] = False
+        good = _combine_constraints(good, good2, 'chi_min')
 
     if deg_tol:
         # don't cut between values (cut-1, cut) with ``log(S[cut]/S[cut-1]) < deg_tol``
@@ -235,22 +233,26 @@ def truncate(S, options):
         good2 = np.empty(len(piv), np.bool_)
         good2[0] = True
         good2[1:] = np.greater_equal(logS[1:] - logS[:-1], deg_tol)
-        good = _combine_constraints(good, good2, "degeneracy_tol")
+        good = _combine_constraints(good, good2, 'degeneracy_tol')
 
     if svd_min is not None:
         # keep only values S[i] >= svd_min
         good2 = np.greater_equal(logS, np.log(svd_min))
-        good = _combine_constraints(good, good2, "svd_min")
+        good = _combine_constraints(good, good2, 'svd_min')
 
     if trunc_cut is not None:
-        good2 = (np.cumsum(S[piv]**2) > trunc_cut * trunc_cut)
-        good = _combine_constraints(good, good2, "trunc_cut")
+        good2 = np.cumsum(S[piv] ** 2) > trunc_cut * trunc_cut
+        good = _combine_constraints(good, good2, 'trunc_cut')
 
     cut = np.nonzero(good)[0][0]  # smallest possible cut: keep as many S as allowed
     mask = np.zeros(len(S), dtype=np.bool_)
     np.put(mask, piv[cut:], True)
     norm_new = np.linalg.norm(S[mask])
-    return mask, norm_new, TruncationError.from_S(S[np.logical_not(mask)]),
+    return (
+        mask,
+        norm_new,
+        TruncationError.from_S(S[np.logical_not(mask)]),
+    )
 
 
 def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL']):
@@ -291,23 +293,18 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
         Factor, by which S was renormalized.
 
     """
-    U, S, VH = npc.svd(theta,
-                       full_matrices=False,
-                       compute_uv=True,
-                       qtotal_LR=qtotal_LR,
-                       inner_labels=inner_labels)
+    U, S, VH = npc.svd(theta, full_matrices=False, compute_uv=True, qtotal_LR=qtotal_LR, inner_labels=inner_labels)
     renormalization = np.linalg.norm(S)
     S = S / renormalization
     piv, new_norm, err = truncate(S, trunc_par)
     new_len_S = np.sum(piv, dtype=np.int_)
-    if new_len_S * 100 < len(S) and (trunc_par['chi_max'] is None
-                                     or new_len_S != trunc_par['chi_max']):
-        msg = f"Catastrophic reduction in chi: {len(S):d} -> {new_len_S:d}"
+    if new_len_S * 100 < len(S) and (trunc_par['chi_max'] is None or new_len_S != trunc_par['chi_max']):
+        msg = f'Catastrophic reduction in chi: {len(S):d} -> {new_len_S:d}'
         # NANs are excluded in npc.svd
         UHU = npc.tensordot(U.conj(), U, axes=[[0], [0]])
-        msg += f" |U^d U - 1| = {npc.norm(UHU - npc.eye_like(UHU)):f}"
+        msg += f' |U^d U - 1| = {npc.norm(UHU - npc.eye_like(UHU)):f}'
         VHV = npc.tensordot(VH, VH.conj(), axes=[[1], [1]])
-        msg += f" |V V - 1| = {npc.norm(VHV - npc.eye_like(VHV)):f}"
+        msg += f' |V V - 1| = {npc.norm(VHV - npc.eye_like(VHV)):f}'
         warnings.warn(msg, stacklevel=2)
     S = S[piv] / new_norm
     renormalization *= new_norm
@@ -351,7 +348,7 @@ def eigh_rho(rho, trunc_par, UPLO='L', sort=None):
 
     """
     W, V = npc.eigh(rho, UPLO=UPLO, sort=sort)
-    W[W<1.e-14] = 0     # set small eigenvalues to zero
+    W[W < 1.0e-14] = 0  # set small eigenvalues to zero
     renormalization = np.sum(W)
     W = W / renormalization
     # We normalize the eigenvalues to have sum 1 to represent a valid density matrix.
@@ -359,20 +356,20 @@ def eigh_rho(rho, trunc_par, UPLO='L', sort=None):
     piv, new_norm, err = truncate(np.sqrt(W), trunc_par)
     # err reported is for the normalized eigenvalues.
     new_len_W = np.sum(piv, dtype=np.int_)
-    if new_len_W * 100 < len(W) and (trunc_par['chi_max'] is None
-                                     or new_len_W != trunc_par['chi_max']):
-        msg = f"Catastrophic reduction in chi: {len(W):d} -> {new_len_W:d}"
+    if new_len_W * 100 < len(W) and (trunc_par['chi_max'] is None or new_len_W != trunc_par['chi_max']):
+        msg = f'Catastrophic reduction in chi: {len(W):d} -> {new_len_W:d}'
         # NANs are excluded in npc.svd
         VHV = npc.tensordot(V.conj(), V, axes=[[0], [0]])
-        msg += f" |V^d V - 1| = {npc.norm(VHV - npc.eye_like(VHV)):f}"
+        msg += f' |V^d V - 1| = {npc.norm(VHV - npc.eye_like(VHV)):f}'
         warnings.warn(msg, stacklevel=2)
     W = W[piv] / new_norm**2 * renormalization
     V.iproject(piv, axes=1)  # V = V[:, piv]
     return W, V, err
 
 
-def _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, move_right: bool,
-                 expand: float, min_block_increase: int):
+def _qr_theta_Y0(
+    old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, move_right: bool, expand: float, min_block_increase: int
+):
     """Generate the initial guess `Y0` for the (left) right isometry.
 
     Helper function for the QR based theta decomposition `decompose_theta_qr_based()`.
@@ -475,8 +472,7 @@ def _qr_theta_Y0(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, mov
     return Y0
 
 
-def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[None, None],
-                   trunc_params=None):
+def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[None, None], trunc_params=None):
     """Computes the singular value decomposition of a matrix A via eigh
 
     Singular values and vectors are obtained by diagonalizing the "square" A.hc @ A and/or A @ A.hc,
@@ -536,10 +532,19 @@ def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[N
     return U, S, Vd, trunc_err, renormalize
 
 
-def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array,
-                             move_right: bool, expand: float, min_block_increase: int,
-                             use_eig_based_svd: bool, trunc_params: dict, compute_err: bool,
-                             return_both_T: bool):
+def decompose_theta_qr_based(
+    old_qtotal_L,
+    old_qtotal_R,
+    old_bond_leg,
+    theta: npc.Array,
+    move_right: bool,
+    expand: float,
+    min_block_increase: int,
+    use_eig_based_svd: bool,
+    trunc_params: dict,
+    compute_err: bool,
+    return_both_T: bool,
+):
     r"""Performs a QR based decomposition of a matrix `theta` (= the wavefunction) and truncates it.
 
     The result is an approximation.
@@ -623,13 +628,13 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
         # QR based updates
         # theta_i1: [vL,(p1.vR)]
         theta_i1 = npc.tensordot(Y0.conj(), theta, ['(vL*.p0*)', '(vL.p0)']).ireplace_label('vR*', 'vL')
-        theta_i1.itranspose(['(p1.vR)', 'vL']) # theta_i1: [(p1.vR),vL]
-        B_R, _ = npc.qr(theta_i1, inner_labels=['vL', 'vR'], inner_qconj=-1) # B_R: [(p1.vR),vL]
-        B_R.itranspose(['vL', '(p1.vR)']) # B_R: [vL,(p1.vR)]
+        theta_i1.itranspose(['(p1.vR)', 'vL'])  # theta_i1: [(p1.vR),vL]
+        B_R, _ = npc.qr(theta_i1, inner_labels=['vL', 'vR'], inner_qconj=-1)  # B_R: [(p1.vR),vL]
+        B_R.itranspose(['vL', '(p1.vR)'])  # B_R: [vL,(p1.vR)]
 
         # theta_i0: [(vL.p0),vR]
         theta_i0 = npc.tensordot(theta, B_R.conj(), ['(p1.vR)', '(p1*.vR*)']).ireplace_label('vL*', 'vR')
-        A_L, Xi = npc.qr(theta_i0, inner_labels=['vR', 'vL']) # A_L: [(vL.p0), vR]
+        A_L, Xi = npc.qr(theta_i0, inner_labels=['vR', 'vL'])  # A_L: [(vL.p0), vR]
 
     else:
         # Get initial guess for the right isometry
@@ -639,11 +644,11 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
         # QR based updates
         # theta_i0: [(vL.p0),vR]
         theta_i0 = npc.tensordot(theta, Y0.conj(), ['(p1.vR)', '(p1*.vR*)']).ireplace_label('vL*', 'vR')
-        A_L, _ = npc.qr(theta_i0, inner_labels=['vR', 'vL']) # A_L: [(vL.p0), vR]
+        A_L, _ = npc.qr(theta_i0, inner_labels=['vR', 'vL'])  # A_L: [(vL.p0), vR]
 
         # theta_i1: [vL,(p1.vR)]
         theta_i1 = npc.tensordot(A_L.conj(), theta, ['(vL*.p0*)', '(vL.p0)']).ireplace_label('vR*', 'vL')
-        theta_i1.itranspose(['(p1.vR)', 'vL']) # theta_i1: [(p1.vR),vL]
+        theta_i1.itranspose(['(p1.vR)', 'vL'])  # theta_i1: [(p1.vR),vL]
         B_R, Xi = npc.qr(theta_i1, inner_labels=['vL', 'vR'], inner_qconj=-1)
         B_R.itranspose(['vL', '(p1.vR)'])
         Xi.itranspose(['vL', 'vR'])
@@ -658,7 +663,7 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
 
     # Assign return matrices
     T_Lc, T_Rc = None, None
-    form = ['A','B']
+    form = ['A', 'B']
     if move_right:
         T_Lc = npc.tensordot(A_L, U, ['vR', 'vL'])
         if return_both_T:
@@ -688,7 +693,7 @@ def decompose_theta_qr_based(old_qtotal_L, old_qtotal_R, old_bond_leg, theta: np
             theta_approx = npc.tensordot(T_Lc.scale_axis(S, axis='vR'), T_Rc, ['vR', 'vL'])
         N_theta = npc.norm(theta)
         eps = npc.norm(theta / N_theta - theta_approx * renormalization / N_theta) ** 2
-        trunc_err = TruncationError(eps, 1. - 2. * eps)
+        trunc_err = TruncationError(eps, 1.0 - 2.0 * eps)
     else:
         trunc_err = TruncationError(np.nan, np.nan)
 
@@ -719,8 +724,7 @@ def _combine_constraints(good1, good2, warn):
 
 # truncation parameter for truncating svd values at machine precision
 # excluding 0. and negative S values only
-_machine_prec_trunc_par = asConfig({'svd_min': np.finfo(np.float64).eps,
-                                    'trunc_cut': None,
-                                    'chi_max': None},
-                                   'machine_prec_trunc_params')
+_machine_prec_trunc_par = asConfig(
+    {'svd_min': np.finfo(np.float64).eps, 'trunc_cut': None, 'chi_max': None}, 'machine_prec_trunc_params'
+)
 _machine_prec_trunc_par.unused.clear()

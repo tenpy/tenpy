@@ -87,17 +87,22 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         if self._U_param == U_param and not self.force_prepare_evolve:
             return  # nothing to do: _U is cached
         self._U_param = U_param
-        logger.info("Calculate U for %s", U_param)
-        consistency_check(dt, self.options, 'max_dt', 1.,
-                          'delta_t > ``max_delta_t`` is unreasonably large for trotterization.',
-                          compare='abs()<=')
+        logger.info('Calculate U for %s', U_param)
+        consistency_check(
+            dt,
+            self.options,
+            'max_dt',
+            1.0,
+            'delta_t > ``max_delta_t`` is unreasonably large for trotterization.',
+            compare='abs()<=',
+        )
         H_MPO = self.model.H_MPO
         if order == 1:
             U_MPO = H_MPO.make_U(dt * -1j, approximation=approximation)
             self._U_MPO = [U_MPO]
         elif order == 2:
-            U1 = H_MPO.make_U(-(1. + 1j) / 2. * dt * 1j, approximation=approximation)
-            U2 = H_MPO.make_U(-(1. - 1j) / 2. * dt * 1j, approximation=approximation)
+            U1 = H_MPO.make_U(-(1.0 + 1j) / 2.0 * dt * 1j, approximation=approximation)
+            U2 = H_MPO.make_U(-(1.0 - 1j) / 2.0 * dt * 1j, approximation=approximation)
             self._U_MPO = [U1, U2]
         else:
             raise ValueError(f'order {order} not implemented')
@@ -110,10 +115,11 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         return trunc_err
 
 
-class TimeDependentExpMPOEvolution(TimeDependentHAlgorithm,ExpMPOEvolution):
+class TimeDependentExpMPOEvolution(TimeDependentHAlgorithm, ExpMPOEvolution):
     """Variant of :class:`ExpMPOEvolution` that can handle time-dependent hamiltonians.
 
     See details in :class:`~tenpy.algorithms.algorithm.TimeDependentHAlgorithm` as well.
     """
+
     # uses run from TimeDependentHAlgorithm
     # so nothing to redefine here

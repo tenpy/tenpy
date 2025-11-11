@@ -52,18 +52,18 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
 
     def __init__(self, model_params):
         # model parameters
-        model_params = asConfig(model_params, "ExponentiallyDecayingHeisenberg")
+        model_params = asConfig(model_params, 'ExponentiallyDecayingHeisenberg')
         L = model_params.get('L', 2)
         xi = model_params.get('xi', 0.5)
-        Jxx = model_params.get('Jxx', 1.)
+        Jxx = model_params.get('Jxx', 1.0)
         Jz = model_params.get('Jz', 1.5)
-        hz = model_params.get('hz', 0.)
+        hz = model_params.get('hz', 0.0)
         conserve = model_params.get('conserve', 'Sz')
         sort_charge = model_params.get('sort_charge', True)
-        if xi == 0.:
-            g = 0.
+        if xi == 0.0:
+            g = 0.0
         elif xi == np.inf:
-            g = 1.
+            g = 1.0
         else:
             g = np.exp(-1 / (xi))
 
@@ -77,7 +77,7 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
         # operators using the add_op method
         Sz, Sp, Sm, Id = site.Sz, site.Sp, site.Sm, site.Id
 
-        # yapf:disable
+        # fmt: off
         # The grid (list of lists) that defines the MPO. It is possible to define the
         # operators in the grid in the following ways:
         # 1) NPC arrays, defined above:
@@ -100,15 +100,14 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
                 [None       , None      , [("Id",g)], None      , [("Sp", 0.5*Jxx)]],
                 [None       , None      , None      , [("Id",g)], [("Sz",Jz)]      ],
                 [None       , None      , None      , None      , "Id"             ]]
-        # yapf:enable
+        # fmt: on
         grids = [grid] * L
 
         # Generate the MPO from the grid. Note that it is not necessary to specify
         # the physical legs and their charges, since the from_grids method can extract
         # this information from the position of the operators inside the grid.
         H = MPO.from_grids(
-            lat.mps_sites(), grids, bc='infinite', IdL=0, IdR=-1,
-            mps_unit_cell_width=lat.mps_unit_cell_width
+            lat.mps_sites(), grids, bc='infinite', IdL=0, IdR=-1, mps_unit_cell_width=lat.mps_unit_cell_width
         )
         MPOModel.__init__(self, lat, H)
 
@@ -117,23 +116,21 @@ def example_run_dmrg():
     """Use iDMRG to extract information about the ground state of the system."""
     model_params = dict(L=2, Jxx=1, Jz=1.5, xi=0.8)
     model = ExponentiallyDecayingHeisenberg(model_params)
-    psi = MPS.from_product_state(model.lat.mps_sites(), ["up", "down"], bc='infinite',
-                                 unit_cell_width=model.lat.mps_unit_cell_width)
+    psi = MPS.from_product_state(
+        model.lat.mps_sites(), ['up', 'down'], bc='infinite', unit_cell_width=model.lat.mps_unit_cell_width
+    )
     dmrg_params = {
         'mixer': True,
-        'chi_list': {
-            0: 100
-        },
-        'trunc_params': {
-            'svd_min': 1.e-10
-        },
+        'chi_list': {0: 100},
+        'trunc_params': {'svd_min': 1.0e-10},
     }
     results = dmrg.run(psi, model, dmrg_params)
-    print("Energy per site: ", results['E'])
-    print("<Sz>: ", psi.expectation_value('Sz'))
+    print('Energy per site: ', results['E'])
+    print('<Sz>: ', psi.expectation_value('Sz'))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     import logging
+
     logging.basicConfig(level=logging.INFO)
     example_run_dmrg()

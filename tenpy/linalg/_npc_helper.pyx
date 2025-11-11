@@ -759,8 +759,8 @@ cpdef void _sliced_copy(np.ndarray dest, intp_t[::1] dest_beg, np.ndarray src, i
 
     Equivalent to ::
 
-        dst_sl = tuple([slice(i, i+d) for (i, d) in zip(dest_beg, slice_shape)])
-        src_sl = tuple([slice(i, i+d) for (i, d) in zip(src_beg, slice_shape)])
+        dst_sl = tuple([slice(i, i + d) for (i, d) in zip(dest_beg, slice_shape)])
+        src_sl = tuple([slice(i, i + d) for (i, d) in zip(src_beg, slice_shape)])
         dest[dst_sl] = src[src_sl]
 
     For example ``dest[0:4, 2:5] = src[1:5, 0:3]`` is equivalent to
@@ -780,6 +780,7 @@ cpdef void _sliced_copy(np.ndarray dest, intp_t[::1] dest_beg, np.ndarray src, i
         Entries are start of the slices used for `src`
     slice_shape : intp[ndim]
         The length of the slices.
+
     """
     cdef char *dest_data = np.PyArray_BYTES(dest)
     cdef char *src_data = np.PyArray_BYTES(src)

@@ -55,7 +55,7 @@ class ClockModel(CouplingMPOModel):
         conserve = model_params.get('conserve', 'Z', str)
         if conserve == 'best':
             conserve = 'Z'
-            self.logger.info("%s: set conserve to %s", self.name, conserve)
+            self.logger.info('%s: set conserve to %s', self.name, conserve)
         q = model_params.get('q', None, int)
         if q is None:
             raise ValueError('Need to specify q.')
@@ -63,8 +63,8 @@ class ClockModel(CouplingMPOModel):
         return ClockSite(q=q, conserve=conserve, sort_charge=sort_charge)
 
     def init_terms(self, model_params):
-        J = np.asarray(model_params.get('J', 1., 'real_or_array'))
-        g = np.asarray(model_params.get('g', 1., 'real_or_array'))
+        J = np.asarray(model_params.get('J', 1.0, 'real_or_array'))
+        g = np.asarray(model_params.get('g', 1.0, 'real_or_array'))
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-g, u, 'Z', plus_hc=True)
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:

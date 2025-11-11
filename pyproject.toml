@@ -162,3 +162,7 @@ ignore = [
     "E501",  # line too long
     "UP009",  # UTF-8 encoding declaration is unnecessary
 ]
+
+[tool.ruff.format]
+quote-style = "single"
+docstring-code-format = true

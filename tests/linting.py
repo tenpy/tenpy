@@ -29,35 +29,37 @@ def check_all_attribute(check_module=tenpy):
     """
     _name_ = check_module.__name__
     if not hasattr(check_module, '__all__'):
-        raise AssertionError(f"module {_name_} has no line __all__ = [...]")
+        raise AssertionError(f'module {_name_} has no line __all__ = [...]')
     _all_ = check_module.__all__
 
     # print("test __all__ of", _name_)
     # find entries in __all__ but not in the module
     nonexistent = [n for n in _all_ if not hasattr(check_module, n)]
     if len(nonexistent) > 0:
-        raise AssertionError(f"found entries {nonexistent!s} in __all__ but not in module {_name_}")
+        raise AssertionError(f'found entries {nonexistent!s} in __all__ but not in module {_name_}')
 
     # find objects in the module, which are not listed in __all__ (although they should be)
     for n, obj in inspect.getmembers(check_module):
         if n[0] == '_' or n in _all_:  # private or listed in __all__
             continue
-        if getattr(obj, "__module__", None) == _name_:
+        if getattr(obj, '__module__', None) == _name_:
             # got a class or function defined in the module
-            raise AssertionError(f"object {obj!r} defined in {_name_} but not in __all__")
+            raise AssertionError(f'object {obj!r} defined in {_name_} but not in __all__')
 
     # recurse into submodules
     path = getattr(check_module, '__path__', [])
     if not path:
         return  # not package with submodules
-    skip_submodules = getattr(check_module, "__skip_import__", [])
+    skip_submodules = getattr(check_module, '__skip_import__', [])
     for _, name, _ in pkgutil.iter_modules(path):
         if name.startswith('_') or name in skip_submodules:
             continue
         submodule = getattr(check_module, name, None)
         if not submodule:
-            msg = (f"Submodule {name} not imported in {_name_}. Add it explicitly to list "
-                   f"`__skip_import__` in {_name_}->__init__.py if this is intended.")
+            msg = (
+                f'Submodule {name} not imported in {_name_}. Add it explicitly to list '
+                f'`__skip_import__` in {_name_}->__init__.py if this is intended.'
+            )
             raise AssertionError(msg)
         if submodule and submodule.__name__.startswith(_name_):
             check_all_attribute(submodule)

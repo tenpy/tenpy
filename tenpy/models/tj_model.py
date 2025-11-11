@@ -60,13 +60,13 @@ class tJModel(CouplingMPOModel):
 
     def init_terms(self, model_params):
         # 0) Read out/set default parameters.
-        t = model_params.get('t', 1., 'real_or_array')
-        J = model_params.get('J', 1., 'real_or_array')
+        t = model_params.get('t', 1.0, 'real_or_array')
+        J = model_params.get('J', 1.0, 'real_or_array')
 
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             self.add_coupling(-t, u1, 'Cdu', u2, 'Cu', dx, plus_hc=True)
             self.add_coupling(-t, u1, 'Cdd', u2, 'Cd', dx, plus_hc=True)
-            self.add_coupling(J / 2., u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
+            self.add_coupling(J / 2.0, u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
 
             self.add_coupling(J, u1, 'Sz', u2, 'Sz', dx)
             self.add_coupling(-J / 4, u1, 'Ntot', u2, 'Ntot', dx)

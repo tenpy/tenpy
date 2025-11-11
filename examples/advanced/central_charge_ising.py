@@ -19,9 +19,9 @@ from tenpy.networks.mps import MPS
 
 
 def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
-    model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve='best')
+    model_params = dict(L=2, J=1.0, g=g, bc_MPS='infinite', conserve='best')
     M = TFIChain(model_params)
-    product_state = ["up"] * M.lat.N_sites
+    product_state = ['up'] * M.lat.N_sites
     psi = MPS.from_product_state(
         M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
     )
@@ -29,12 +29,9 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
         'start_env': 10,
         'mixer': False,
         #  'mixer_params': {'amplitude': 1.e-3, 'decay': 5., 'disable_after': 50},
-        'trunc_params': {
-            'chi_max': 5,
-            'svd_min': 1.e-10
-        },
-        'max_E_err': 1.e-9,
-        'max_S_err': 1.e-6,
+        'trunc_params': {'chi_max': 5, 'svd_min': 1.0e-10},
+        'max_E_err': 1.0e-9,
+        'max_S_err': 1.0e-6,
         'update_env': 0,
     }
 
@@ -44,7 +41,6 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
     eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
 
     for chi in chi_list:
-
         t0 = time.time()
 
         eng.reset_stats()
@@ -53,7 +49,7 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
 
         eng.trunc_params['chi_max'] = chi
         ##   DMRG Calculation    ##
-        print("Start iDMRG CALCULATION")
+        print('Start iDMRG CALCULATION')
         eng.run()
         eng.options['mixer'] = None
         psi.canonical_form()
@@ -63,15 +59,10 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
         # the bond 0 is between MPS unit cells and hence sensible even for 2D lattices.
         xi_list.append(psi.correlation_length())
 
-        print(chi,
-              time.time() - t0,
-              np.mean(psi.expectation_value(M.H_bond)),
-              s_list[-1],
-              xi_list[-1],
-              flush=True)
+        print(chi, time.time() - t0, np.mean(psi.expectation_value(M.H_bond)), s_list[-1], xi_list[-1], flush=True)
         tenpy.tools.optimization.optimize(3)  # quite some speedup for small chi
 
-        print("SETTING NEW BOND DIMENSION")
+        print('SETTING NEW BOND DIMENSION')
 
     return s_list, xi_list
 
@@ -95,29 +86,21 @@ def fit_plot_central_charge(s_list, xi_list, filename):
     print('Covariance Matrix', fitCovariances)
 
     # plot the data as blue circles
-    plt.errorbar(LXi,
-                 S,
-                 fmt='o',
-                 c='blue',
-                 ms=5.5,
-                 markerfacecolor='white',
-                 markeredgecolor='blue',
-                 markeredgewidth=1.4)
+    plt.errorbar(
+        LXi, S, fmt='o', c='blue', ms=5.5, markerfacecolor='white', markeredgecolor='blue', markeredgewidth=1.4
+    )
     # plot the fitted line
-    plt.plot(LXi,
-             fitFunc(Xi, fitParams[0], fitParams[1]),
-             linewidth=1.5,
-             c='black',
-             label=f'fit c={fitParams[0]:.2f}')
+    plt.plot(LXi, fitFunc(Xi, fitParams[0], fitParams[1]), linewidth=1.5, c='black', label=f'fit c={fitParams[0]:.2f}')
 
     plt.xlabel(r'$\log{\,}\xi_{\chi}$', fontsize=16)
     plt.ylabel(r'$S$', fontsize=16)
-    plt.legend(loc='lower right', borderaxespad=0., fancybox=True, shadow=True, fontsize=16)
+    plt.legend(loc='lower right', borderaxespad=0.0, fancybox=True, shadow=True, fontsize=16)
     plt.savefig(filename)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     import logging
+
     logging.basicConfig(level=logging.INFO)
     s_list, xi_list = example_DMRG_tf_ising_infinite_S_xi_scaling(g=1)
-    fit_plot_central_charge(s_list, xi_list, "central_charge_ising.pdf")
+    fit_plot_central_charge(s_list, xi_list, 'central_charge_ising.pdf')

@@ -1,4 +1,5 @@
 """An example determining the phase diagram of the 2D transverse field Ising model."""
+
 # Copyright (C) TeNPy Developers, Apache license
 import argparse
 import os
@@ -19,25 +20,20 @@ def main():
         description='Runs a phase diagrams sweep for the TFIM, i.e. DMRG for a grid of values g.'
     )
     parser.add_argument(
-        '--plot', metavar='FOLDER', type=str, default=None,
-        help='Plot results in the given folder instead of running the simulation'
+        '--plot',
+        metavar='FOLDER',
+        type=str,
+        default=None,
+        help='Plot results in the given folder instead of running the simulation',
     )
     parser.add_argument(
-        '-o', type=str, default=None,
-        help='Folder for output. Defaults to a subfolder of playground in the repo root.'
+        '-o', type=str, default=None, help='Folder for output. Defaults to a subfolder of playground in the repo root.'
     )
+    parser.add_argument('--conserve', type=str, default='None', help='What should be conserved')
+    parser.add_argument('--chi', type=int, default=8, help='Bond dimension')
+    parser.add_argument('--Ly', type=int, default=4, help='Cylinder circumference')
     parser.add_argument(
-        '--conserve', type=str, default='None', help='What should be conserved'
-    )
-    parser.add_argument(
-        '--chi', type=int, default=8, help='Bond dimension'
-    )
-    parser.add_argument(
-        '--Ly', type=int, default=4, help='Cylinder circumference'
-    )
-    parser.add_argument(
-        '--num_g_points', type=int, default=101,
-        help='Resolution of the phase diagram. Recommend round number plus 1.'
+        '--num_g_points', type=int, default=101, help='Resolution of the phase diagram. Recommend round number plus 1.'
     )
     args = parser.parse_args()
 
@@ -91,7 +87,7 @@ def sweep_phase_diagram(g_list, conserve, chi: int, Ly: int):
 
     """
     psi = None
-    g_list=g_list
+    g_list = g_list
     energy_list = []
     entropies = []
     mag_z_list = []
@@ -113,9 +109,16 @@ def sweep_phase_diagram(g_list, conserve, chi: int, Ly: int):
         corr_length_list.append(corr_length)
 
     return dict(
-        g_list=g_list, chi=chi, Ly=Ly, conserve=conserve,
-        energy_list=energy_list, entropies=entropies, mag_z_list=mag_z_list,
-        mag_x_list=mag_x_list, corr_xx_list=corr_xx_list, corr_length_list=corr_length_list,
+        g_list=g_list,
+        chi=chi,
+        Ly=Ly,
+        conserve=conserve,
+        energy_list=energy_list,
+        entropies=entropies,
+        mag_z_list=mag_z_list,
+        mag_x_list=mag_x_list,
+        corr_xx_list=corr_xx_list,
+        corr_length_list=corr_length_list,
     )
 
 
@@ -228,6 +231,7 @@ def make_plot(folder):
 
     import matplotlib as mpl
     import matplotlib.pyplot as plt
+
     linewidth = 5.90666
     mpl.rcParams.update({'font.size': 10})
     mpl.rcParams.update({'legend.fontsize': 8})
@@ -240,7 +244,7 @@ def make_plot(folder):
             assert np.allclose(other, g_list)
 
         fig_width = linewidth
-        aspect = .7
+        aspect = 0.7
         fig, axs = plt.subplots(2, 2, figsize=(fig_width, aspect * fig_width), sharex=True)
         for ax in axs[1]:
             ax.set_xlabel('$g/J$')
@@ -252,11 +256,9 @@ def make_plot(folder):
         plot_styles = {
             (Ly, chi): dict(
                 label=f'${Ly},~{chi}$',
-                color=mpl.colormaps['Reds' if Ly == 8 else 'Blues'](
-                    np.log(chi / min_chi) / np.log(max_chi / min_chi)
-                ),
+                color=mpl.colormaps['Reds' if Ly == 8 else 'Blues'](np.log(chi / min_chi) / np.log(max_chi / min_chi)),
                 ls={20: '-', 50: '--', 200: '-.'}[chi],
-                lw={4: 1.5, 8: 2}[Ly]
+                lw={4: 1.5, 8: 2}[Ly],
             )
             for Ly, chi in results
         }  # plot_styles[Ly, chi] == kwargs_for_plot_function

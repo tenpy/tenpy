@@ -13,8 +13,17 @@ import scipy.sparse.linalg
 from . import misc
 
 __all__ = [
-    'LeviCivita3', 'matvec_to_array', 'entropy', 'gcd', 'gcd_array', 'lcm', 'speigs', 'speigsh',
-    'perm_sign', 'qr_li', 'rq_li'
+    'LeviCivita3',
+    'matvec_to_array',
+    'entropy',
+    'gcd',
+    'gcd_array',
+    'lcm',
+    'speigs',
+    'speigsh',
+    'perm_sign',
+    'qr_li',
+    'rq_li',
 ]
 
 #: 3-dim identity matrix of type int
@@ -39,7 +48,7 @@ def matvec_to_array(H):
 
     """
     dim, dim2 = H.shape
-    assert (dim == dim2)
+    assert dim == dim2
     X = np.zeros((dim, dim), H.dtype)
     v = np.zeros((dim), H.dtype)
     for i in range(dim):
@@ -74,13 +83,13 @@ def entropy(p, n=1):
         of the distribution `p`.
 
     """
-    p = p[p > 1.e-30]  # just for stability reasons / to avoid NaN in log
+    p = p[p > 1.0e-30]  # just for stability reasons / to avoid NaN in log
     if n == 1:
         return -np.inner(np.log(p), p)
     elif n == np.inf:
         return -np.log(np.max(p))
     else:  # general n != 1, inf
-        return np.log(np.sum(p**n)) / (1. - n)
+        return np.log(np.sum(p**n)) / (1.0 - n)
 
 
 def gcd(a, b):
@@ -140,12 +149,12 @@ def speigs(A, k, *args, **kwargs):
     """
     d = A.shape[0]
     if A.shape != (d, d):
-        raise ValueError("A.shape not a square matrix: " + str(A.shape))
+        raise ValueError('A.shape not a square matrix: ' + str(A.shape))
     if k < d - 1:
         return scipy.sparse.linalg.eigs(A, k, *args, **kwargs)
     else:
         if k > d:
-            warnings.warn("trimming speigs k to smaller matrix dimension d", stacklevel=2)
+            warnings.warn('trimming speigs k to smaller matrix dimension d', stacklevel=2)
             k = d
         if isinstance(A, np.ndarray):
             Amat = A
@@ -188,12 +197,12 @@ def speigsh(A, k, *args, **kwargs):
     """
     d = A.shape[0]
     if A.shape != (d, d):
-        raise ValueError("A.shape not a square matrix: " + str(A.shape))
+        raise ValueError('A.shape not a square matrix: ' + str(A.shape))
     if k < d - 1:
         return scipy.sparse.linalg.eigsh(A, k, *args, **kwargs)
     else:
         if k > d:
-            warnings.warn("trimming speigsh k to smaller matrix dimension d", stacklevel=2)
+            warnings.warn('trimming speigsh k to smaller matrix dimension d', stacklevel=2)
             k = d
         if isinstance(A, np.ndarray):
             Amat = A
@@ -220,7 +229,7 @@ def perm_sign(p):
     --------
     >>> import itertools
     >>> for p in itertools.permutations(range(3)):
-    ...      print('{p!s}: {sign!s}'.format(p=p, sign=tenpy.tools.math.perm_sign(p)))
+    ...     print('{p!s}: {sign!s}'.format(p=p, sign=tenpy.tools.math.perm_sign(p)))
     (0, 1, 2): 1
     (0, 2, 1): -1
     (1, 0, 2): -1
@@ -243,7 +252,7 @@ def perm_sign(p):
     return s
 
 
-def qr_li(A, cutoff=1.e-15):
+def qr_li(A, cutoff=1.0e-15):
     """QR decomposition with cutoff to discard nearly linear dependent columns in `Q`.
 
     Perform a QR decomposition with pivoting, discard columns where ``R[i,i] < cutoff``,
@@ -276,7 +285,7 @@ def qr_li(A, cutoff=1.e-15):
     return np.dot(Q, q), R
 
 
-def rq_li(A, cutoff=1.e-15):
+def rq_li(A, cutoff=1.0e-15):
     """RQ decomposition with cutoff to discard nearly linear dependent columns in `Q`.
 
     Uses :func:`qr_li` on transpose of `A`.

@@ -1,4 +1,5 @@
 """Check if subpackages define proper __all__."""
+
 # Copyright (C) TeNPy Developers, Apache license
 import types
 
@@ -6,8 +7,7 @@ import tenpy
 
 
 def test_duplicate_free_all(check_module=tenpy):
-    """Recursively check that `__all__` of a module contains only valid entries and no duplicates.
-    """
+    """Recursively check that `__all__` of a module contains only valid entries and no duplicates."""
     print(f'Checking module {check_module.__name__}')
     _all_ = getattr(check_module, '__all__', None)
     assert _all_ is not None, f'missing __all__'

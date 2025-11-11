@@ -67,5 +67,5 @@ __all__ = [
 ]
 
 __skip_import__ = [
-    'truncation', # deprecated, moved to tenpy.linalg
+    'truncation',  # deprecated, moved to tenpy.linalg
 ]

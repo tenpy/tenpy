@@ -30,17 +30,17 @@ class AnisotropicSpin1Chain(CouplingMPOModel, NearestNeighborModel):
         conserve = model_params.get('conserve', 'best')
         if conserve == 'best':
             conserve = 'Sz' if not model_params.any_nonzero(['B']) else None
-            self.logger.info("%s: set conserve to %s", self.name, conserve)
+            self.logger.info('%s: set conserve to %s', self.name, conserve)
         sort_charge = model_params.get('sort_charge', True)
-        return SpinSite(S=1., conserve=None, sort_charge=sort_charge)
+        return SpinSite(S=1.0, conserve=None, sort_charge=sort_charge)
 
     def init_terms(self, model_params):
-        J = model_params.get('J', 1.)
-        B = model_params.get('B', 0.)
-        D = model_params.get('D', 0.)
+        J = model_params.get('J', 1.0)
+        B = model_params.get('B', 0.0)
+        D = model_params.get('D', 0.0)
 
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            self.add_coupling(J / 2., u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
+            self.add_coupling(J / 2.0, u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
             self.add_coupling(J, u1, 'Sz', u2, 'Sz', dx)
 
         for u in range(len(self.lat.unit_cell)):
@@ -61,8 +61,8 @@ def m_pollmann_turner_inversion(results, psi, model, simulation, tol=0.01):
     U_I = evecs[0].split_legs().transpose().conj()
     U_I *= np.sqrt(U_I.shape[0])  # previously normalized to npc.norm(U_I) = 1, need unitary
     results['pollmann_turner_inversion_U_I'] = U_I
-    if abs(eta) < 1. - tol:
-        O_I = 0.
+    if abs(eta) < 1.0 - tol:
+        O_I = 0.0
     else:
         O_I = npc.inner(U_I, U_I.conj(), axes=[[0, 1], [1, 0]]) / U_I.shape[0]
     results['pollmann_turner_inversion'] = O_I

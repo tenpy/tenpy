@@ -13,11 +13,10 @@ from tenpy.linalg.random_matrix import standard_normal_complex
 def test_svd():
     """check whether svd_function behaves as np.linalg.svd."""
     for dtype in [np.float32, np.float64, np.complex64, np.complex128]:
-        print("dtype = ", dtype)
+        print('dtype = ', dtype)
         for m, n in [(1, 1), (1, 10), (10, 1), (10, 10), (10, 20)]:
-            print("m, n = ", m, n)
-            tol_NULP = 200 * max(max(m, n)**3,
-                                 100)  # quite large tolerance, but seems to be required...
+            print('m, n = ', m, n)
+            tol_NULP = 200 * max(max(m, n) ** 3, 100)  # quite large tolerance, but seems to be required...
             if np.dtype(dtype).kind == 'c':  # complex?
                 A = standard_normal_complex((m, n))
             else:
@@ -34,5 +33,5 @@ def test_svd():
             npt.assert_array_almost_equal_nulp(Sonly, S, tol_NULP)
             recalc = U.dot(np.diag(S)).dot(VT)
             npt.assert_array_almost_equal_nulp(recalc, A, tol_NULP)
-        print("types of U, S, VT = ", U.dtype, S.dtype, VT.dtype)
+        print('types of U, S, VT = ', U.dtype, S.dtype, VT.dtype)
         assert U.dtype == A.dtype
