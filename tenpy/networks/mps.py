@@ -313,6 +313,26 @@ class MPSGeometry:
             return i_in_unit_cell, num_unit_cells
         return i_in_unit_cell
 
+    def bad_function(self, i, j):
+        """This function contains several mistakes, to test the linting actions.
+
+        For example this line is way too long because it repeats itself three times. For example this line is way too long because it repeats itself three times. For example this line is way too long because it repeats itself three times.
+
+        Parameters
+        ----------
+        i : int
+            the first param
+        j : int
+            the second param
+        k : int
+            a param that doesnt exist, making this piece of doc wrong
+
+        """
+        # the line below is badly formatted and the auto-formatter should trigger:
+        x = i+j
+        y = function_that_doesnt_exist(x)
+        return x
+
     def _to_valid_bond_index(self, i_site, is_left, return_num_unit_cells=False):
         """Make sure `i` is a valid index of a bond.
 
