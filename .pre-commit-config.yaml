@@ -26,3 +26,14 @@ repos:
       # Run the formatter.
       - id: ruff-format
         types_or: [ python, pyi ]
+
+  - repo: local
+    hooks:
+      # Check for forbidden strings in all text files, e.g. FIXME, DONTSHIP
+      - id: fixme
+        name: FIXME check
+        entry: FIXME|DONTSHIP
+        language: pygrep
+        types: [text]
+        # this file needs to include the forbidden patterns, so we need to exclude it.
+        exclude: ^\.pre-commit-config\.yaml$
