@@ -23,7 +23,7 @@ __all__ = ['version', 'released', 'short_version', 'git_revision', 'full_version
 version = '1.1.0'
 
 #: whether this is a released version or modified
-released = True
+released = False
 
 #: same as version, but with 'v' in front
 short_version = 'v' + version
