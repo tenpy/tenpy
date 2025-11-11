@@ -19,8 +19,8 @@ What you really need to know about `np_conserved`
 
 The good news is: It is not necessary to understand all the details explained in the following sections
 if you just want to use TeNPy for "standard" simulations like TEBD and DMRG.
-In praxis, **you will likely not have to define the charges by yourself**. 
-For most simulations using TeNPy, the charges are initially defined in the :class:`~tenpy.networks.site.Site`; 
+In praxis, **you will likely not have to define the charges by yourself**.
+For most simulations using TeNPy, the charges are initially defined in the :class:`~tenpy.networks.site.Site`;
 and there are many pre-defined sites like the :class::class:`~tenpy.networks.site.SpinHalfSite`, which you can just use.
 The sites in turn are initialized by the :class:`Model` class you are using (see also :doc:`/intro/model`).
 From there, all the necessary charge information is automatically propagated along with the tensors.
@@ -35,7 +35,7 @@ However, you should definitely know a few basic facts about the usage of charge 
   This **excludes certain operators** (like :math:`S^x` for Sz conservation) and MPS which are a superpositions of states in different charge sectors.
 - There is a class :class:`~tenpy.linalg.charges.ChargeInfo` holding the general information what kind of charges we have,
   and a :class:`~tenpy.linalg.charges.LegCharge` for the charge data on a given leg. The leg holds a flag `qconj` which
-  is +1 or -1, depending on whether the leg goes into the tensor (representing a vector space) 
+  is +1 or -1, depending on whether the leg goes into the tensor (representing a vector space)
   or out of the tensor (representing the corresponding dual vector space).
 - Besides the array class methods, there are a bunch of functions like :func:`~tenpy.linalg.np_conserved.tensordot`,
   :func:`~tenpy.linalg.np_conserved.svd` or :func:`~tenpy.linalg.np_conserved.eigh` to manipulate tensors.
@@ -56,7 +56,7 @@ Often, it is necessary to "combine" multiple legs into one: for example to perfo
 For a flat array, this can be done with ``np.reshape``, e.g., if ``A`` has shape ``(10, 3, 7)`` then ``B = np.reshape(A, (30, 7))`` will
 result in a (view of the) array with one less dimension, but a "larger" first leg. By default (``order='C'``), this
 results in ::
-    
+
     B[i*3 + j , k] == A[i, j, k] for i in range(10) for j in range(3) for k in range(7)
 
 While for a np.array, also a reshaping ``(10, 3, 7) -> (2, 21, 5)`` would be allowed, it does not make sense
@@ -66,7 +66,7 @@ physically. The only sensible "reshape" operation on an :class:`~tenpy.linalg.np
 2) to **split** a pipe of previously combined legs with :meth:`~tenpy.linalg.np_conserved.Array.split_legs`.
 
 Each leg has a Hilbert space, and a representation of the symmetry on that Hilbert space.
-Combining legs corresponds to the tensor product operation, and for abelian groups, 
+Combining legs corresponds to the tensor product operation, and for abelian groups,
 the corresponding "fusion" of the representation is the simple addition of charge.
 
 Fusion is not a lossless process, so if we ever want to split the combined leg,
@@ -114,7 +114,7 @@ So here is how it works:
   which will set up the labeling ``{'a': 0, 'b': 1, 'c': 3 ...}``.
 
 - (Where implemented) the specification of axes can use either the labels **or** the index positions.
-  For instance, the call ``tensordot(A, B, [['a', 2, 'c'], [...]])`` will interpret ``'a'`` and  ``'c'`` as labels 
+  For instance, the call ``tensordot(A, B, [['a', 2, 'c'], [...]])`` will interpret ``'a'`` and  ``'c'`` as labels
   (calling :meth:`~tenpy.linalg.np_conserved.Array.get_leg_indices` to find their positions using the dict)
   and 2 as 'the 2nd leg'. That's why we require labels to be strings!
 - Labels will be intelligently inherited through the various operations of `np_conserved`.
@@ -231,7 +231,7 @@ is used to formally combine multiple legs into one leg. Again, more details foll
 
 Physical Example
 ++++++++++++++++
-For concreteness, you can think of the Hamiltonian :math:`H = -t \sum_{<i,j>} (c^\dagger_i c_j + H.c.) + U n_i n_j` 
+For concreteness, you can think of the Hamiltonian :math:`H = -t \sum_{<i,j>} (c^\dagger_i c_j + H.c.) + U n_i n_j`
 with :math:`n_i = c^\dagger_i c_i`.
 This Hamiltonian has the global :math:`U(1)` gauge symmetry :math:`c_i \rightarrow c_i e^{i\phi}`.
 The corresponding charge is the total number of particles :math:`N = \sum_i n_i`.
@@ -241,8 +241,8 @@ Note that the total charge is a sum of local terms, living on single sites.
 Thus, you can infer the charge of a single physical site: it's just the value :math:`q_i = n_i \in \mathbb{N}` for each of the states.
 
 Note that you can only assign integer charges. Consider for example the spin 1/2 Heisenberg chain.
-Here, you can naturally identify the magnetization :math:`S^z = \sum_i S^z_i` as the conserved quantity, 
-with values :math:`S^z_i = \pm \frac{1}{2}`. 
+Here, you can naturally identify the magnetization :math:`S^z = \sum_i S^z_i` as the conserved quantity,
+with values :math:`S^z_i = \pm \frac{1}{2}`.
 Obviously, if :math:`S^z` is conserved, then so is :math:`2 S^z`, so you can use the charges
 :math:`q_i = 2 S^z_i \in \lbrace-1, +1 \rbrace` for the `down` and `up` states, respectively.
 Alternatively, you can also use a shift and define :math:`q_i = S^z_i + \frac{1}{2} \in \lbrace 0, 1 \rbrace`.
@@ -252,7 +252,7 @@ These terms break the total particle conservation,
 but they preserve the total parity, i.e., :math:`N \mod 2` is conserved. Thus, you would introduce a charge with :math:`m = 2` in this case.
 
 In the above examples, we had only a single charge conserved at a time, but you might be lucky and have multiple
-conserved quantities, e.g. if you have two chains coupled only by interactions. 
+conserved quantities, e.g. if you have two chains coupled only by interactions.
 TeNPy is designed to handle the general case of multiple charges.
 When giving examples, we will restrict to one charge, but everything generalizes to multiple charges.
 
@@ -264,7 +264,7 @@ This can be done in three formats: **qflat**, as **qind** and as **qdict**.
 Let me explain them with examples, for simplicity considering only a single charge (the most inner array has one entry
 for each charge).
 
-**qflat** form: simply a list of charges for each index. 
+**qflat** form: simply a list of charges for each index.
     An example::
 
         qflat = [[-2], [-1], [-1], [0], [0], [0], [0], [3], [3]]
@@ -275,7 +275,7 @@ for each charge).
     A `qindex` would just enumerate these blocks as ``0, 1, 2, 3``.
 
 **qind** form: a 1D array `slices` and a 2D array `charges`.
-    This is a more compact version than the `qflat` form: 
+    This is a more compact version than the `qflat` form:
     the `slices` give a partition of the indices and the `charges` give the charge values. The same example as above
     would simply be::
 
@@ -284,7 +284,7 @@ for each charge).
 
 
     Note that  `slices` includes ``0`` as first entry and the number of indices (here ``9``) as last entries.
-    Thus it has len ``block_number + 1``, where ``block_number`` (given by :attr:`~tenpy.linalg.charges.LegCharge.block_number`) 
+    Thus it has len ``block_number + 1``, where ``block_number`` (given by :attr:`~tenpy.linalg.charges.LegCharge.block_number`)
     is the number of charge blocks in the leg, i.e. a `qindex` runs from 0 to ``block_number-1``.
     On the other hand, the 2D array `charges` has shape ``(block_number, qnumber)``, where ``qnumber`` is the
     number of charges (given by :attr:`~tenpy.linalg.charges.ChargeInfo.qnumber`).
@@ -304,7 +304,7 @@ for each charge).
     Since the keys of a dictionary are unique, this form is only possible if the leg is `completely blocked`.
 
 
-The :class:`~tenpy.linalg.charges.LegCharge` saves the charge data of a leg internally in `qind` form, 
+The :class:`~tenpy.linalg.charges.LegCharge` saves the charge data of a leg internally in `qind` form,
 directly in the attribute `slices` and `charges`.
 However, it also provides convenient functions for conversion between from and to the `qflat` and `qdict` form.
 
@@ -334,7 +334,7 @@ charges                           bunched    sorted     blocked
 ``[[-2], [0], [-1], [0], [3]]``   ``True``   ``False``  ``False``
 ================================  =========  =========  ==========
 
-If a leg is `bunched` and `sorted`, it is automatically `blocked` (but not vice versa). 
+If a leg is `bunched` and `sorted`, it is automatically `blocked` (but not vice versa).
 See also :ref:`below <blocking>` for further comments on that.
 
 
@@ -342,8 +342,8 @@ See also :ref:`below <blocking>` for further comments on that.
 
 Which entries of the npc Array can be non-zero?
 +++++++++++++++++++++++++++++++++++++++++++++++
-The reason for the speedup with np_conserved lies in the fact that it saves only the blocks 'compatible' with the charges. 
-But how is this 'compatible' defined? 
+The reason for the speedup with np_conserved lies in the fact that it saves only the blocks 'compatible' with the charges.
+But how is this 'compatible' defined?
 
 Assume you have a tensor, call it :math:`T`, and the :class:`~tenpy.linalg.charges.LegCharge` for all of its legs, say :math:`a, b, c, ...`.
 
@@ -367,7 +367,7 @@ The rule which entries of the a :class:`~tenpy.linalg.np_conserved.Array` can be
 
 In other words, there is a *single* **total charge** ``.qtotal`` attribute of a :class:`~tenpy.linalg.np_conserved.Array`.
 All indices ``ia, ib, ic, ...`` for which the above defined ``qtotal[ia, ib, ic, ...]`` matches this `total charge`,
-are said to be **compatible with the charges** and can be non-zero. 
+are said to be **compatible with the charges** and can be non-zero.
 All other indices are **incompatible with the charges** and must be zero.
 
 In case of multiple charges, `qnumber` > 1, is a straight-forward generalization:
@@ -379,15 +379,15 @@ The pesky qconj - contraction as an example
 Why did we introduce the ``qconj`` flag? Remember it's just a sign telling whether the charge points inward or outward.
 So whats the reasoning?
 
-The short answer is, that LegCharges actually live on bonds (i.e., legs which are to be contracted) 
-rather than individual tensors. Thus, it is convenient to share the LegCharges between different legs and even tensors, 
+The short answer is, that LegCharges actually live on bonds (i.e., legs which are to be contracted)
+rather than individual tensors. Thus, it is convenient to share the LegCharges between different legs and even tensors,
 and just adjust the sign of the charges with `qconj`.
 
 As an example, consider the contraction of two tensors, :math:`C_{ia,ic} = \sum_{ib} A_{ia,ib} B_{ib,ic}`.
 For simplicity, say that the total charge of all three tensors is zero.
 What are the implications of the above rule for non-zero entries?
 Or rather, how can we ensure that ``C`` complies with the above rule?
-An entry ``C[ia,ic]`` will only be non-zero, 
+An entry ``C[ia,ic]`` will only be non-zero,
 if there is an ``ib`` such that both ``A[ia,ib]`` and ``B[ib,ic]`` are non-zero, i.e., both of the following equations are
 fulfilled::
 
@@ -410,7 +410,7 @@ This justifies the introduction of `qconj`:
 when you define the tensors, you have to define the :class:`~tenpy.linalg.charges.LegCharge` for the `b` only once, say for ``A.legs[1]``.
 For ``B.legs[0]`` you simply use ``A.legs[1].conj()`` which creates a copy of the LegCharge with shared `slices` and `charges`, but opposite `qconj`.
 As a more impressive example, all 'physical' legs of an MPS can usually share the same
-:class:`~tenpy.linalg.charges.LegCharge` (up to different ``qconj`` if the local Hilbert space is the same). 
+:class:`~tenpy.linalg.charges.LegCharge` (up to different ``qconj`` if the local Hilbert space is the same).
 This leads to the following convention:
 
 .. topic :: Convention
@@ -423,7 +423,7 @@ This leads to the following convention:
 Assigning charges to non-physical legs
 ++++++++++++++++++++++++++++++++++++++
 From the above physical examples, it should be clear how you assign charges to physical legs.
-But what about other legs, e.g, the virtual bond of an MPS (or an MPO)? 
+But what about other legs, e.g, the virtual bond of an MPS (or an MPO)?
 
 The charge of these bonds must be derived by using the 'rule for non-zero entries', as far as they are not arbitrary.
 As a concrete example, consider an MPS on just two spin 1/2 sites::
@@ -448,7 +448,7 @@ default ``qconj=+1`` for all ``p, x, y, z``: ``y.conj()`` has the same charges a
 
 The legs ``x`` and ``z`` of an ``L=2`` MPS, are 'dummy' legs with just one index ``0``.
 The charge on one of them, as well as the total charge of both ``A`` and ``B`` is arbitrary (i.e., a gauge freedom),
-so we make a simple choice: total charge 0 on both arrays, as well as for :math:`x=0`, 
+so we make a simple choice: total charge 0 on both arrays, as well as for :math:`x=0`,
 ``x = npc.LegCharge.from_qflat(chinfo, [0], qconj=+1)``.
 
 The charges on the bonds `y` and `z` then depend on the state the MPS represents.
@@ -461,17 +461,17 @@ as a simple example. A possible MPS representation is given by::
 There are two non-zero entries in ``A``, for the indices :math:`(a, x, y) = (\uparrow, 0, 0)` and :math:`(\downarrow, 0, 1)`.
 For :math:`(a, x, y) = (\uparrow, 0, 0)`, we want::
 
-    A.qtotal = 0 = p.to_qflat()[up] * p.qconj + x.to_qflat()[0] * x.qconj + y.conj().to_qflat()[0] * y.conj().qconj 
+    A.qtotal = 0 = p.to_qflat()[up] * p.qconj + x.to_qflat()[0] * x.qconj + y.conj().to_qflat()[0] * y.conj().qconj
                  = 1                * (+1)    + 0               * (+1)    + y.conj().to_qflat()[0] * (-1)
 
 This fixes the charge of ``y=0`` to 1.
 A similar calculation for :math:`(a, x, y) = (\downarrow, 0, 1)` yields the charge ``-1`` for ``y=1``.
 We have thus all the charges of the leg ``y`` and can define ``y = npc.LegCharge.from_qflat(chinfo, [1, -1], qconj=+1)``.
 
-Now take a look at the entries of ``B``. 
+Now take a look at the entries of ``B``.
 For the non-zero entry :math:`(b, y, z) = (\uparrow, 1, 0)`, we want::
 
-    B.qtotal = 0 = p.to_qflat()[up] * p.qconj + y.to_qflat()[1] * y.qconj + z.conj().to_qflat()[0] * z.conj().qconj 
+    B.qtotal = 0 = p.to_qflat()[up] * p.qconj + y.to_qflat()[1] * y.qconj + z.conj().to_qflat()[0] * z.conj().qconj
                  = 1                * (+1)    + (-1)            * (+1)    + z.conj().to_qflat()[0] * (-1)
 
 This implies the charge 0 for `z` = 0, thus ``z = npc.LegCharge.form_qflat(chinfo, [0], qconj=+1)``.
@@ -484,8 +484,8 @@ As an exercise, you can calculate the charge of `z` in the case that ``A.qtotal=
 charge ``2`` for ``x=0``. The result is -2.
 
 .. note ::
-    
-    This section is meant be an pedagogical introduction. In you program, you can use the functions 
+
+    This section is meant be an pedagogical introduction. In you program, you can use the functions
     :func:`~tenpy.linalg.np_conserved.detect_legcharge` (which does exactly what's described above) or
     :func:`~tenpy.linalg.np_conserved.detect_qtotal` (if you know all `LegCharges`, but not `qtotal`).
 
@@ -533,7 +533,7 @@ Algorithms which need a full blocking should state that explicitly in their doc-
 (Some functions (like `svd` and `eigh`) require complete blocking internally, but if necessary they just work on
 a temporary copy returned by :meth:`~tenpy.linalg.np_conserved.as_completely_blocked`).
 
-If you expect the tensor to be dense subject to charge constraints (as for MPS), 
+If you expect the tensor to be dense subject to charge constraints (as for MPS),
 it will be most efficient to fully block by charge, so that work is done on large chunks.
 
 However, if you expect the tensor to be sparser than required by charge (as for an MPO),
@@ -544,7 +544,7 @@ Nevertheless, the algorithms were not designed with this in mind, so it is not r
 If you haven't created the array yet, you can call :meth:`~tenpy.linalg.charges.LegCharge.sort` (with ``bunch=True``)
 on each :class:`~tenpy.linalg.charges.LegCharge` which you want to block.
 This sorts by charges and thus induces a permutation of the indices, which is also returned as an 1D array ``perm``.
-For consistency, you have to apply this permutation to your flat data as well. 
+For consistency, you have to apply this permutation to your flat data as well.
 
 Alternatively, you can simply call :meth:`~tenpy.linalg.np_conserved.Array.sort_legcharge` on an existing :class:`~tenpy.linalg.np_conserved.Array`.
 It calls :meth:`~tenpy.linalg.charges.LegCharge.sort` internally on the specified legs and performs the necessary
@@ -562,17 +562,17 @@ The order in which they are stored in the list is not physically meaningful, and
 So to figure out where the sub block sits in the tensor, we need the ``_qdata`` structure (on top of the LegCharges in ``legs``).
 
 Consider a rank 3 tensor ``T``, with the first leg like::
-    
+
     legs[0].slices = np.array([0, 1, 4, ...])
     legs[0].charges = np.array([[-2], [1], ...])
 
 Each row of `charges` gives the charges for a `charge block` of the leg, with the actual indices of the
-total tensor determined by the `slices`. 
+total tensor determined by the `slices`.
 The *qindex* simply enumerates the charge blocks of a lex.
 Picking a qindex (and thus a `charge block`) from each leg, we have a subblock of the tensor.
 
 For each (non-zero) subblock of the tensor, we put a (numpy) ndarray entry in the ``_data`` list.
-Since each subblock of the tensor is specified by `rank` qindices, 
+Since each subblock of the tensor is specified by `rank` qindices,
 we put a corresponding entry in ``_qdata``, which is a 2D array of shape ``(#stored_blocks, rank)``.
 Each row corresponds to a non-zero subblock, and there are rank columns giving the corresponding qindex for each leg.
 
@@ -601,7 +601,7 @@ The third subblock has an ndarray ``t3``, and qindices ``[4 2 2]`` for the three
 
 .. note ::
 
-   Outside of `np_conserved`, you should use the API to access the entries. 
+   Outside of `np_conserved`, you should use the API to access the entries.
    If you really need to iterate over all blocks of an Array ``T``, try ``for (block, blockslices, charges, qindices) in T: do_something()``.
 
 The order in which the blocks stored in ``_data``/``_qdata`` is arbitrary (although of course ``_data`` and ``_qdata`` must be in correspondence).

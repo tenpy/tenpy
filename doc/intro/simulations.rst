@@ -54,7 +54,7 @@ Parallelization: controlling the number of threads
 --------------------------------------------------
 Almost all of the TeNPy code is "only" using thread-based parallelization provided by the underlying LAPACK/BLAS package linked to by Numpy/Scipy, and/or TeNPy's Cython code when you compile it.
 (A notable exception is the :class:`~tenpy.tools.cache.ThreadedStorage` for caching.)
-In practice, you can control the number of threads in the same way as if you use just plain numpy - by default, this uses all the CPU cores on a given machine. 
+In practice, you can control the number of threads in the same way as if you use just plain numpy - by default, this uses all the CPU cores on a given machine.
 
 If you run things on a cluster, it is often required to only use a fixed number of cores. Assuming a standard Linux cluster, the easiest way to control the used number of threads is usually the OMP_NUM_THREADS environment variable, which you can set in your cluster submission script:
 
@@ -79,17 +79,17 @@ The allowed options on the top level are documented in the corresponding simulat
 :class:`~tenpy.simulations.ground_state_search.GroundStateSearch`.
 
 The allowed entries in the `model_params` section depend on the `model_class`:
-Clearly, the :class:`~tenpy.models.spins.SpinChain` in the example above requires a different set of specified 
+Clearly, the :class:`~tenpy.models.spins.SpinChain` in the example above requires a different set of specified
 coupling parameters than, e.g., the :class:`~tenpy.models.hubbard.FermiHubbardModel`.
 The base model classes like the :class:`~tenpy.models.models.model.CouplingMPOModel` have a common set of parameters
-usually read out, but custom model implementations can override this and/or add additional parameters. 
+usually read out, but custom model implementations can override this and/or add additional parameters.
 The list of allowed parameters can hence be found in the documentation of the most specialized class that you use, e.g.,
 the :class:`~tenpy.models.tf_ising.TFIChain`` above.
 
 Similarly, allowed values in the `algorithm_params` section depend on the used `algorithm_class`.
 
 
-To get the full set of used options, it can be convenient to simply run the algorithm 
+To get the full set of used options, it can be convenient to simply run the algorithm
 (for debugging parameters to allow a very quick run) and look at the ``results['simulation_parameters']``
 returned by the simulation (or saved to file):
 
@@ -173,7 +173,7 @@ Possible entries depend on the simulation class run, and some options like `save
 Let us consider our initial DMRG example.
 The :class:`~tenpy.simulations.ground_state_search.GroundStateSearch` performs two measurements: one on the initial
 state (unless disabled with :cfg:option:`measure_initial` and one on the final state.
-Further, MPS-based simulations by default measure the entanglement entropies for cutting at the various MPS bonds, 
+Further, MPS-based simulations by default measure the entanglement entropies for cutting at the various MPS bonds,
 such that we can read out the final half-chain entanglement entropy like this::
 
     >>> import tenpy
@@ -185,7 +185,7 @@ such that we can read out the final half-chain entanglement entropy like this::
     (2, 31)
     >>> print(results['measurements']['entropy'][-1, (L-1)//2])
 
-Here, the shape of the entropy array is ``(2, 31)`` since 2 is the number of measurements 
+Here, the shape of the entropy array is ``(2, 31)`` since 2 is the number of measurements
 (one on the initial state, one on the final ground state), and 31=L-1 the number of bonds.
 Note that you can easily read out the simulation parameters, even default ones that are only implicitly defined
 somewhere in the code!
@@ -198,7 +198,7 @@ add more with the :cfg:option:`Simulation.connect_measurements` parameters. Each
 called whenever the simulation wants to measure, e.g. with the initial state, at the end of the simulation, and for time
 evolutions also during the evolution. The default measurement functions are defined in
 the module :mod:`tenpy.simulations.measurement`; :func:`~tenpy.simulations.measurement.m_measurement_index` documents what
-arguments a measurement function should have. 
+arguments a measurement function should have.
 In the simplest case, you just specify the module and function name, but you can also add more arguments, as the
 following example shows.
 
@@ -264,7 +264,7 @@ You can then run this simulation, say for three different `D` values specified d
 .. note ::
 
     If you use the setup from the [TeNPyProjectTemplate]_ repository, the ``cluster_jobs.py`` helps to manage submitting
-    jobs with similar parameters to a computing cluster; 
+    jobs with similar parameters to a computing cluster;
     it includes this very example as a starting point for customization.
 
 
@@ -279,14 +279,14 @@ Moreover, you need to have :cfg:option:`Simulation.save_psi` and :cfg:option:`Si
     save_psi: True
     save_resume_data: True
 
-If this is the case, the simulation will save the current status at certain "checkpoints" defined by the algorithm, 
+If this is the case, the simulation will save the current status at certain "checkpoints" defined by the algorithm,
 e.g., in DMRG at the end of a sweep.
 The checkpoints are saved to the same filename as the desired final output file, and get overwritten by each following save at a checkpoint.
 You can check ``results['finished']`` in the output file to see whether it finished.
 
 You can then resume the simulation using the function :func:`tenpy.resume_from_checkpoint`.
 
-Note that you can also adjust parameters for the resume. 
+Note that you can also adjust parameters for the resume.
 For example, if you find that a DMRG result (even a finished one) is not yet fully converged in bond dimension, you can "resume" the simulation
 with a larger bond dimension and a new output filename.
 For DMRG, this is roughly equivalent to starting a new simulation with the initial state loaded
@@ -302,7 +302,7 @@ particular for flux pump experiments, or to get a stable scaling with bond dimen
 
 To achieve this, you need to call :func:`~tenpy.run_seq_simulations` instead of just :func:`~tenpy.run_simulation`, and
 specify the :cfg:config:`sequential` parameters for the simulation (at the top level of the yaml files), in particular
-the `recursive_keys` for the parameters to be changed. The values for those parameters can be specified as 
+the `recursive_keys` for the parameters to be changed. The values for those parameters can be specified as
 :cfg:option:`sequential.value_lists`, or as lists in the original location of the yaml file.
 
 .. code-block :: yaml

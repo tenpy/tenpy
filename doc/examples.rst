@@ -7,7 +7,7 @@ Toy codes
 These "toy codes" are meant to give you a flavor of the different algorithms,
 while keeping the codes as readable and simple as possible.
 They can be found in a separate [TeNPyToycodes]_ repository https://github.com/tenpy/tenpy_notebooks in the folder ``tenpy_toycodes/``.
-The only requirements to run them are Python 3, Numpy, and Scipy, (and jupyter for running the notebooks). 
+The only requirements to run them are Python 3, Numpy, and Scipy, (and jupyter for running the notebooks).
 For reference, we include them here as examples.
 
 .. toctree::
@@ -27,7 +27,7 @@ Python scripts
 --------------
 
 These example scripts illustrate the very basic interface for calling TeNPy.
-They are included in the [TeNPySource]_ repository in the folder ``examples/``, 
+They are included in the [TeNPySource]_ repository in the folder ``examples/``,
 we include them here in the documentation for reference.
 You need to install TeNPy to call them (see :doc:`/INSTALL`), but you can copy them anywhere before execution.
 (Some scripts include other files from the same folder, though; copy those as well.)
