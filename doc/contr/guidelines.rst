@@ -1,22 +1,106 @@
 Coding Guidelines
 =================
+We ask you to comply with the following guidelines for contributions
+Most of our coding guidelines are explicitly checked by the GitHub actions that run on every pull
+request, but there are some extra guidelines below.
 
-To keep consistency, we ask you to comply with the following guidelines for contributions.
-However, these are just guidelines - it still helps if you contribute something, even if doesn't follow these rules ;-)
+We have a `pre-commit <https://pre-commit.com/>`_ configuration in the repository that should make
+it easy for somewhat experienced developers to adhere to the automatically checked rules.
+If it detects any violation it stops the commit, reports them and automatically fixes them if possible.
+In addition, follow the list of guidelines below, which is not automatically checked by tools.
 
-- Use a code style based on :pep:`8`.
-  The git repo includes a config file ``.style.yapf`` for the python package `yapf <http://github.com/google/yapf>`_.
-  `yapf` is a tool to auto-format code, e.g., by the command ``yapf -i some/file`` (-i for "in place").
-  We run yapf on a regular basis on the github main branch.
-  If your branch diverged, it might help to run yapf before merging.
+If you are having trouble with the guidelines, please don't let that stop you from sharing your contribution.
+Someone from the team can finish up.
 
-  .. note ::
 
-    Since no tool is perfect, you can format some regions of code manually and enclose them
-    with the special comments ``# yapf: disable`` and ``# yapf: enable``.
+Guidelines
+~~~~~~~~~~
 
+- Summarize the changes you have made in the changelog.
+  Make a new file, and e.g. name it after the PR, ``doc/changelog/latest/pr_401.txt`` or similar.
+  Make sure to use ``.txt`` suffix.
+  It should contain only bullet points.
+  See e.g. `this example <https://github.com/tenpy/tenpy/blob/b49485e7cfdfe9ec4fe740e6dbeea3451783840b/doc/changelog/latest/pr_520.txt>`_.
+
+- If you add a new toycode or example: add a reference to include it in the documentation.
+
+- Use relative imports within TeNPy. Example::
+
+      from ..linalg import np_conserved as npc
+
+
+- Include documentation, Put a docstring on every new module, class and function.
+  See the section on docs below.
+
+- Include tests for your new features. See the existing ones in the ``tests/`` folder.
+
+- Long running tests are marked with ``@pytest.mark.slow``. You can exclude them by running only
+  ``pytest -m "not slow"``. If your new tests are slow (``> 10s`` total), mark them accordingly.
+
+- Preserve backwards compatibility as far as possible.
+  If you change how a feature works, or how it is accessed or what its function signature is,
+  keep the deprecated version around with suitable deprecation warnings.
+  Issue a ``DeprecationWarning`` or ``FutureWarning`` when the deprecated implementation is used.
+  A common pattern for deprecated classes is to subclass from the new implementation and override
+  methods as needed.
+  Use the ``.. deprecated ::`` directive in the docstring and describe what should be used instead.
+  Include a version number roughly 2-3 versions in the future, at which the deprecated version will
+  be removed.
+  Make sure you update the changelog, clearly stating which new feature replaces which old one in
+  what circumstance.
+  For deprecated config options use :meth:`~tenpy.tools.config.Config.deprecated_alias` or
+  :meth:`~tenpy.tools.config.Config.deprecated_ignore`.
+
+- Prefer GitHub issues over todo comments in the code.
+  Do not leave todo comments unless you take responsibility to take care of the todo later.
+  Even if you do, GitHub issues are a better place to keep track of open todos.
+
+- Unfinished functions should ``raise NotImplementedError()``.
+
+
+
+Linter rules
+~~~~~~~~~~~~
+The following rules are explicitly checked both by GitHub actions, as well as by the pre-commit
+configuration
+
+- Basic sanity checks (dont push private keys, yaml files should be valid, no debugging leftovers, ...)
+
+- Linting of the python code using ``ruff check``, with the rules configured in ``pyproject.toml``.
+
+- Linting of docstrings using ``flake8-rst-docstrings``, with the rules configured in ``.flake8``
+
+- Autoformatting using ``ruff format``. The pre-commit simply does these changes and amends them,
+  the GitHub action only checks that another run would not change anything but does not propose
+  these changes. You can either read the diff in the action logs, or better run ``ruff`` locally,
+  e.g. via ``pre-commit``.
+
+- Check that text files do not contain the specific strings ``FIXME`` and ``DONTSHIP``.
+  You may use them in your workflow as reminders to do something before committing/pushing.
+
+
+Workarounds
+~~~~~~~~~~~
+Automated tools are never perfect.
+If the tool complains and you are reasonably sure that it is wrong, you can use the following workarounds.
+Use them *responsibly* and *sparingly*.
+
+- You can disable linters locally using ``# noqa <rule>`` comments.
+  See `ruff: Error suppression <https://docs.astral.sh/ruff/linter/#error-suppression>`_.
+
+- You can ignore linter rules in ``pyproject.toml``. Prefer per-file ignores over global ignores.
+  See `ruff: Error suppression <https://docs.astral.sh/ruff/linter/#error-suppression>`_.
+
+- You can disable autoformatting locally by using
+  `pragma comments <https://docs.astral.sh/ruff/formatter/#format-suppression>`_.
+
+- You can exclude files for ruff in ``pyproject.toml``. Do this only with a solid reason!
+  See `ruff: exclude <https://docs.astral.sh/ruff/settings/#exclude>`_.
+
+
+Documentation
+~~~~~~~~~~~~~
 - Every function/class/module should be documented by its doc-string, see :pep:`257`.
-  We auto-format the doc-strings with `docformatter <https://github.com/myint/docformatter>`_ on a regular basis.
 
   Additional documentation for the user guide is in the folder ``doc/``.
 
@@ -44,60 +128,18 @@ However, these are just guidelines - it still helps if you contribute something,
         Write inline formulas as :math:`H |\Psi\rangle = E |\Psi\rangle` or displayed equations as
         .. math ::
 
-           e^{i\pi} + 1 = 0
+            e^{i\pi} + 1 = 0
 
-        In doc-strings, math can only be used in the Notes section.
         To refer to variables within math, use `\mathtt{varname}`.
 
-        .. todo ::
-
-           This block can describe things which need to be done and is automatically included in a section of :doc:`todo`.
         """
 
-- Use relative imports within TeNPy. Example::
-
-      from ..linalg import np_conserved as npc
-
-- Use the python package `pytest <https://pytest.org>`_ for testing.
-  Run it simply with ``pytest`` in `tests/`.
-  You should make sure that all tests run through, before you ``git push`` back into the public repo.
-  Long-running tests are marked with the attribute `slow`; for a quick check you can also run
-  ``pytest -m "not slow"``.
-
-  We have set up github actions to automatically run the tests.
-
-- Reversely, if you write new functions, please also include suitable tests!
-
-- Preserve backwards compatibility as far as possible.
-  If you change how a feature works, or how it is accessed or what its function signature is,
-  keep the deprecated version around with suitable deprecation warnings.
-  Issue a ``DeprecationWarning`` or ``FutureWarning`` when the deprecated implementation is used.
-  A common pattern for deprecated classes is to subclass from the new implementation and override
-  methods as needed.
-  Use the ``.. deprecated ::`` directive in the docstring and describe what should be used instead.
-  Include a version number roughly 2-3 versions in the future, at which the deprecated version will
-  be removed.
-  Make sure you update the changelog, clearly stating which new feature replaces which old one in
-  what circumstance.
-  For deprecated config options use :meth:`~tenpy.tools.config.Config.deprecated_alias`.
-
-- During development, you might introduce ``# TODO`` comments.  But also try to remove them again later!
-  If you're not 100% sure that you will remove it soon, please add a doc-string with a
-  ``.. todo ::`` block, such that we can keep track of it.
-
-  Unfinished functions should ``raise NotImplementedError()``.
-- Summarize the changes you have made in the changelog. For PRs and larger changes, make a new file,
-  and e.g. name it after the PR, ``doc/changelog/latest/pr_401.txt`` or similar. Make sure to use ``.txt`` suffix.
-  It should contain only bullet points (``- `` followed by text, additional lines starting with two spaces).
-  For very small changes, you may add to (or create, if it doesn't exist yet) ``doc/changelog/latest/misc.txt``.
-- If you want to try out new things in temporary files: any folder named ``playground`` is ignored by `git`.
-- If you add a new toycode or example: add a reference to include it in the documentation.
 - We've created a sphinx extensions for `documenting config-option dictionaries <https://sphinx-cfg-options.readthedocs.io/en/latest/>`_.
-  If a class takes a dictionary of options, we usually call it `options`,
-  convert it to a :class:`~tenpy.tools.params.Config` at the very beginning of the `__init__` with
+  If a class takes a dictionary of options, we usually call it ``options``,
+  convert it to a :class:`~tenpy.tools.params.Config` at the very beginning of the ``__init__`` with
   :func:`~tenpy.tools.params.asConfig`, save it as ``self.options``,
   and document it in the class doc-string with a ``.. cfg:config ::`` directive.
-  The name of the `config` should usually be the class-name (if that is sufficiently unique),
+  The name of the ``config`` should usually be the class-name (if that is sufficiently unique),
   or for algorithms directly the common name of the algorithm, e.g. "DMRG"; use the same name for the
   use the same name for the documentation of the ``.. cfg:config ::`` directive as for the
   :class:`~tenpy.tools.params.Config` class instance.
