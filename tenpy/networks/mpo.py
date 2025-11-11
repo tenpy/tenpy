@@ -202,13 +202,14 @@ class MPO(MPSGeometry):
         .. note ::
 
             - Attempting to do this makes only sense if the MPO is periodic.
-            The upper triangular form applies to **the whole unit cell**.
-            In particular, the MPO matrices :attr:`_W` are **not** ordered.
+              The upper triangular form applies to **the whole unit cell**.
+              In particular, the MPO matrices :attr:`_W` are **not** ordered.
             - Ordering the graph can fail for multiple reasons. This is generally not
-            critical and :attr:`_outer_permutation` should be set to `False`.
-            If an error occurs, we raise a `ValueError`, catch it at the end and
-            prompt a distinct warning. Functions that require the upper triangular form
-            should check the status via :attr:`_outer_permutation`.
+              critical and :attr:`_outer_permutation` should be set to `False`.
+              If an error occurs, we raise a `ValueError`, catch it at the end and
+              prompt a distinct warning. Functions that require the upper triangular form
+              should check the status via :attr:`_outer_permutation`.
+
         """
         # check whether ordering the graph makes sense
         if self._outer_permutation is not None and not self._outer_permutation:

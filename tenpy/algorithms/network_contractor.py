@@ -208,6 +208,7 @@ def _partial_trace(tensor, tensor_links, loc):
     Parameters
     ----------
     tensor: :class:'Array'
+        The tensor to do traces on.
     tensor_links: np.ndarray
         the corresponding entry of `tensor_links`
     loc: int

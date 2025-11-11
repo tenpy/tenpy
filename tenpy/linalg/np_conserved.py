@@ -937,12 +937,10 @@ class Array:
 
         Returns
         -------
-        res : `dtype`
-            Only returned, if a single integer is given for all legs.
-            It is the entry specified by `inds`, giving ``0.`` for non-saved blocks.
-        or
-        sliced : :class:`Array`
-            A copy with some of the data removed by :meth:`take_slice` and/or :meth:`project`.
+        sliced : scalar or :class:`Array`
+            If a single integer is given for all legs, a scalar, giving ``0.`` for non-saved blocks.
+            If any slices, a copy with some of the data removed by :meth:`take_slice` and/or
+            :meth:`project`.
 
         Notes
         -----
@@ -4744,10 +4742,18 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     f_dot_sum : function
         a wrapper around a suitable BLAS function for performing the matrix product
         of single blocks sum over the results.
-        For ``a, a2, ...`` from ``a_data`` (and similar for ``b_data``) the code
-        ``s = f_dot_sum(a, b, None); s = f_dot_sum(a2, b2, s); ....``
-        should be equivalent to (yet faster than)
-        ``s = np.dot(a, b); s += np.dot(a2, b2); ... ``.
+        For ``a, a2, ...`` from ``a_data`` (and similar for ``b_data``) the code::
+
+            s = f_dot_sum(a, b, None)
+            s = f_dot_sum(a2, b2, s)
+            ...
+
+        should be equivalent to (yet faster than)::
+
+            s = np.dot(a, b)
+            s += np.dot(a2, b2)
+            ...
+
     res_dtype : np.dtype
         The data type which should be chosen for the result.
         (The `dtype` of the ``s`` above might differ from `res_dtype`!).
@@ -4890,7 +4896,7 @@ def _tensordot_worker(a, b, axes):
     Second, if the ``i`` and ``j`` are not compatible with the new total charge,
     we know that ``C_{i,j}`` will be zero.
     Third, given ``i`` and ``j``, the sum over ``k`` runs only over
-    ``k1`` with nonzero :math:`A_{i,k1}`, and ``k2` with nonzero :math:`B_{k2,j}`.
+    ``k1`` with nonzero :math:`A_{i,k1}`, and ``k2`` with nonzero :math:`B_{k2,j}`.
 
     How many multiplications :math:`A_{i,k} B_{k,j}` we actually have to perform
     depends on the sparseness. In the ideal case, if ``k`` (i.e. a LegPipe of the legs summed over)

@@ -183,20 +183,20 @@ def plot_alg_decay_fit(plot_module, x, y, fit_par, xfunc=None, kwargs={}, plot_f
     plot_fit_args : dict
         A dictionary that controls how the fit is shown via the following key value pairs::
 
-        =================== ====== ========= =======================================================================
-        key                 type   default   description
-        =================== ====== ========= =======================================================================
-        show_data_points    bool   True      If the datapoint `x`, `y` should be plotted.
-        ------------------- ------ --------- -----------------------------------------------------------------------
-        n_interp            int    30        The number of points to plot for the fit.
-        ------------------- ------ --------- -----------------------------------------------------------------------
-        show_fit            bool   True      If the fit should be plotted.
-        ------------------- ------ --------- -----------------------------------------------------------------------
-        extrap_line_start   int    -2        Define the start of the extrapolation line as ``x[extrap_line_start]``.
-        ------------------- ------ --------- -----------------------------------------------------------------------
-        extrap_line_end     int    ...       Define the end of the extrapolation as ``x[extrap_line_end]``.
-                                             Per default, it ends at the end of the x-axis.
-        =================== ====== ========= =======================================================================
+            =================== ====== ========= =======================================================================
+            key                 type   default   description
+            =================== ====== ========= =======================================================================
+            show_data_points    bool   True      If the datapoint `x`, `y` should be plotted.
+            ------------------- ------ --------- -----------------------------------------------------------------------
+            n_interp            int    30        The number of points to plot for the fit.
+            ------------------- ------ --------- -----------------------------------------------------------------------
+            show_fit            bool   True      If the fit should be plotted.
+            ------------------- ------ --------- -----------------------------------------------------------------------
+            extrap_line_start   int    -2        Define the start of the extrapolation line as ``x[extrap_line_start]``.
+            ------------------- ------ --------- -----------------------------------------------------------------------
+            extrap_line_end     int    ...       Define the end of the extrapolation as ``x[extrap_line_end]``.
+                                                Per default, it ends at the end of the x-axis.
+            =================== ====== ========= =======================================================================
 
     """
     if xfunc is None:

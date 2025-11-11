@@ -1548,11 +1548,12 @@ def _tensordot_worker(a, b, int axes):
     Second, if the ``i`` and ``j`` are not compatible with the new total charge,
     we know that ``C_{i,j}`` will be zero.
     Third, given ``i`` and ``j``, the sum over ``k`` runs only over
-    ``k1`` with nonzero :math:`A_{i,k1}`, and ``k2` with nonzero :math:`B_{k2,j}`.
+    ``k1`` with nonzero :math:`A_{i,k1}`, and ``k2`` with nonzero :math:`B_{k2,j}`.
 
     How many multiplications :math:`A_{i,k} B_{k,j}` we actually have to perform
     depends on the sparseness. In the ideal case, if ``k`` (i.e. a LegPipe of the legs summed over)
     is completely blocked by charge, the 'sum' over ``k`` will contain at most one term!
+
     """
     cdef QTYPE_t[::1] chinfo_mod = a.chinfo._mod
     cdef intp_t cut_a = a.rank - axes

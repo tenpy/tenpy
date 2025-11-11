@@ -1513,8 +1513,10 @@ def run_seq_simulations(
         If True, collect the results by keeping *copies* of psi and all simulation results
         *in memory*. (This can kill your available RAM quickly!)
     simulation_class : str
+        The simulation class that defines what to run
     simulation_class_kwargs : dict | None
-    **simulation_params :
+        Keyword arguments for the simulation class
+    **simulation_params:
         Further arguments as in :func:`run_simulation`.
 
     Returns
