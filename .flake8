@@ -1,0 +1,25 @@
+[flake8]
+require-plugins = flake8-rst-docstrings
+; Code linting is mainly done with ruff.
+; We only lint the RST syntax in docstrings in .py files using flake8, since ruff cant do it.
+select = RST
+ignore = RST210,RST213,RST306
+; RST210,  ; **kwargs gives false positives
+; RST213,  ; *args gives false positives
+; RST306,  ; link targets (they are not available in the pure rst, sphinx has to build them)
+
+rst-roles =
+    class,mod,meth,func,attr,data
+    py:func,
+    arxiv,cite,doi,
+    doc,ref,
+    cfg:option,cfg:option,cfg:config,cfg:configoptions,
+rst-directives =
+    autodata,autosummary,
+    todo,versionchanged,deprecated,
+    plot,
+    doctest,testsetup,
+    cfg:option,cfg:option,cfg:config,cfg:configoptions,
+exclude =
+    tests,
+    doc/toycodes/,

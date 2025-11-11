@@ -27,6 +27,13 @@ repos:
       - id: ruff-format
         types_or: [ python, pyi ]
 
+  - repo: https://github.com/pycqa/flake8
+    rev: '7.3.0'
+    hooks:
+    - id: flake8
+      exclude: ^(tests/|doc/toycodes/)
+      additional_dependencies: [flake8-rst-docstrings]
+
   - repo: local
     hooks:
       # Check for forbidden strings in all text files, e.g. FIXME, DONTSHIP

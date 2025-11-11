@@ -34,10 +34,16 @@ jobs:
         python -m build .
         python -m pip install ".[lint]"
 
-    - name: Run linter
+    - name: Lint python code
       # uses options from pyproject.toml
       run: |
         ruff check
+
+    - name: Lint docs
+      # we run flake8 only for RST rules of docstrings in .py files
+      # config in .flake8
+      run: |
+        flake8 --select RST
 
     - name: Run autoformatter
       # uses options from pyproject.toml

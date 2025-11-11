@@ -318,7 +318,7 @@ class MPSGeometry:
 
         For finite MPS, we just check if ``i`` is within bounds ``0 <= i < L + 1``.
         For infinite MPS, we return a bond index  ``0 <= i_in_unit_cell < L`` *within* the MPS unit
-        cell that is equivalent to ``i``, by adding a suitable multiple of ``self.L`
+        cell that is equivalent to ``i``, by adding a suitable multiple of ``self.L``.
 
         Parameters
         ----------
@@ -2700,6 +2700,7 @@ class MPS(BaseMPSExpectationValue):
         charge_sector : tuple of int
             The charge sector corresponding to the conserved charge of the ``sites``
         dtype : type
+            Datatype for the new MPS
         bc, form, norm, unit_cell_width
             Same argument as for :class:`~tenpy.networks.mps.MPS`.
 

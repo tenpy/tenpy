@@ -17,3 +17,5 @@ dependencies:
   - pytest>=6.0
   - ruff
   - pre-commit
+  - flake8
+  - flake8-rst-docstrings

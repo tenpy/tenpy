@@ -371,9 +371,12 @@ def pp_spectral_function(DL: DataLoader, *, correlation_key, conjugate_correlati
 
     Parameters
     ----------
-    DL : DataLoader
+    DL : :class:`DataLoader`
+        The data loader to read from
     correlation_key : str
+        key for correlation function
     conjugate_correlation : bool | False
+        If the correlation function should be complex conjugated
     **kwargs
         keyword arguments to :func:`~tenpy.tools.spectral_function_tools.spectral_function`
 
@@ -408,6 +411,7 @@ def pp_plot_correlations_on_lattice(
     Parameters
     ----------
     DL : :class:`DataLoader`
+        The data loader to read from
     data_key: str
         key for correlation function
     t_step: int
@@ -416,8 +420,9 @@ def pp_plot_correlations_on_lattice(
         Valid keys are the ones defined in the corresponding lattice :attr:`~tenpy.models.lattice.Lattice.pairs`,
         e.g. `'nearest_neighbors'`
     markers : str or list
-          a str for a single or a list of symbols for different sites within a unit cell given to plot sites
+        A str for a single or a list of symbols for different sites within a unit cell given to plot sites
     figsize : tuple
+        The size of the figure.
     save_as : str
         string under which to save the plot (and extension)
     default_dir : str

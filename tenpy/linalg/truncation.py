@@ -385,10 +385,8 @@ def _qr_theta_Y0(
     old_bond_leg : :class:`~tenpy.linalg.charges.LegCharge`
         The leg between the old left tensor and the old right tensor.
         e.g. ``old_bond_leg = T_L.get_leg('vR')`` or ``old_bond_leg = T_R.get_leg('vL')``
-    theta : Array with legs [(vL.p0), (p1.vR)]
-    move_right : bool
-    expand : float
-    min_block_increase : int
+    theta, move_right, expand, min_block_increase
+        Same as parameters for :func:`decompose_theta_qr_based`.
 
     Returns
     -------
@@ -605,14 +603,17 @@ def decompose_theta_qr_based(
     Returns
     -------
     T_Lc : array with legs [(vL.p), vR] or None
+        The left tensor, see definition above
     S : 1D numpy array
         The singular values of the array.
         Normalized to ``np.linalg.norm(S)==1``.
     T_Rc : array with legs [vL, (p.vR)] or None
+        The right tensor, see definition above
     form : list
         List containing two entries providing the form of the two arrays `T_Lc` and `T_Rc` in string form.
         e.g. ``['A','Th']``
     trunc_err : TruncationError
+        The error of the approximate factorization
     renormalization : float
         Factor, by which S was renormalized.
 

@@ -81,6 +81,7 @@ def m_measurement_index(results, psi, model, simulation, results_key='measuremen
         Instead of returning the result, the output should be written into this dictionary
         under an appropriate key (or multiple keys, if applicable).
     psi :
+        The tensor network state to measure in.
     model :
         Tensor network state and matching model (with same sites/indexing) to be measured.
         Usually shorthand for ``simulation.psi`` and ``simulation.model``, respectively,

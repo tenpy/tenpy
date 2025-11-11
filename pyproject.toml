@@ -58,7 +58,7 @@ docbuild = [
     "sphinx_copybutton",
 ]
 test = ["pytest>=6.0", "physics_tenpy[io, memory]"]
-lint = ["ruff", "pre-commit"]
+lint = ["ruff", "pre-commit", "flake8", "flake8-rst-docstrings"]
 all = ["physics_tenpy[plot, io, test, lint, extra, docbuild]"]
 
 
@@ -119,6 +119,7 @@ target-version = "py310"
 exclude = ["doc/sphinx_ext/*", "doc/toycodes", "doc/notebooks"]
 
 [tool.ruff.lint]
+# Note: we use flake8 to lint docstrings, see .flake8
 # Full list of rules: https://docs.astral.sh/ruff/rules/
 select = [
     "F",  # Pyflakes
