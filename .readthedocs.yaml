@@ -11,7 +11,7 @@ build:
     - graphviz
   tools:
     python: "3.11"
-    
+
 
 # Build documentation in the doc/ directory with Sphinx
 sphinx:

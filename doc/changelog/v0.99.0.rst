@@ -17,12 +17,12 @@ Added
 ^^^^^
 - :pull:`266` combining several new features
 
-  * Variational Uniform MPS (VUMPS) algorithm :class:`~tenpy.algorithms.vumps.SingleSiteVUMPSEngine` 
-    and :class:`~tenpy.algorithms.vumps.TwoSiteVUMPSEngine` for the optimization of the new MPS subclass 
-    :class:`~tenpy.networks.mps.UniformMPS`, 
+  * Variational Uniform MPS (VUMPS) algorithm :class:`~tenpy.algorithms.vumps.SingleSiteVUMPSEngine`
+    and :class:`~tenpy.algorithms.vumps.TwoSiteVUMPSEngine` for the optimization of the new MPS subclass
+    :class:`~tenpy.networks.mps.UniformMPS`,
   * the :class:`~tenpy.networks.mps.MomentumMPS` for the quasi-particle excitation ansatz,
     which can be optimized by :class:`~tenpy.algorithms.plane_wave_excitation.PlaneWaveExcitationEngine`
-  * MPS initialization methods :meth:`~tenpy.networks.mps.MPS.from_random_unitary_evolution` and 
+  * MPS initialization methods :meth:`~tenpy.networks.mps.MPS.from_random_unitary_evolution` and
     :meth:`~tenpy.networks.mps.MPS.from_desired_bond_dimension`
   * Overhaul of simulation :class:`~tenpy.simulations.ground_state.OrthogonalExcitations` and generalization to new
     :class:`~tenpy.simulations.ground_state.TopologicalExcitations`,
@@ -42,7 +42,7 @@ Added
 
 - Added class :class:`~tenpy.models.lattice.SimpleBZ` for the Brillouin zone of a Lattice and convenience functions for
   plotting it.
-- Add simulation classes 
+- Add simulation classes
   :class:`~tenpy.simulations.time_evolution.SpectralSimulation`,
   :class:`~tenpy.simulations.time_evolution.TimeDependentCorrelation`,
   :class:`~tenpy.simulations.time_evolution.TimeDependentCorrelationEvolveBraKet`,
@@ -62,6 +62,5 @@ Fixed
 - MPO methods :meth:`~tenpy.networks.mpo.MPO.dagger`, :meth:`~tenpy.networks.mpo.MPO.is_hermitian`,
   and :meth:`~tenpy.networks.mpo.MPO.__add__` now respect
   the :attr:`~tenpy.networks.mpo.MPO.explicit_plus_hc` flag.
-- Handle Jordan wigner strings better, see :pull:`355`. This includes a new way to add JW signs on a virtual MPS leg 
+- Handle Jordan wigner strings better, see :pull:`355`. This includes a new way to add JW signs on a virtual MPS leg
   via the site's :meth:`~tenpy.networks.site.Site.charge_to_JW_signs`
-

@@ -62,7 +62,7 @@ In the end, you can just try different orderings and see which one works best.
 The simplest way to *change* the order is to use a non-default value for the initialization parameter `order` of the
 :class:`~tenpy.models.lattice.Lattice` class. This gets passed on to :meth:`~tenpy.models.lattice.Lattice.ordering`,
 which you can override by creating a custom lattice class to define new possible orderings.
-Alternatively, you can go the most general way and simply set the attribute `order` to be a 2D numpy array with 
+Alternatively, you can go the most general way and simply set the attribute `order` to be a 2D numpy array with
 lattice indices as rows, in the order you want.
 
 .. plot ::
@@ -92,7 +92,7 @@ lattice indices as rows, in the order you want.
     lat4.order = old_order[permutation, :]
 
     for lat, label, ax in zip([lat1, lat2, lat3, lat4],
-                              ["order='default'", 
+                              ["order='default'",
                                "order='Cstyle'",
                                "order='Cstyle'",
                                "custom permutation"],
@@ -109,7 +109,7 @@ lattice indices as rows, in the order you want.
 Boundary conditions
 -------------------
 
-The :class:`~tenpy.models.lattice.Lattice` defines the **boundary conditions** `bc` in each direction. 
+The :class:`~tenpy.models.lattice.Lattice` defines the **boundary conditions** `bc` in each direction.
 It can be one of the usual ``'open'`` or ``'periodic'`` in each direction and will be used by the
 :class:`~tenpy.models.model.CouplingModel` to determine whether there should be added periodic couplings in the
 corresponding directions.
