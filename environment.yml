@@ -19,3 +19,4 @@ dependencies:
   - pre-commit
   - flake8
   - flake8-rst-docstrings
+  - sphinx-lint

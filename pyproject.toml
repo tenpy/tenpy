@@ -58,7 +58,7 @@ docbuild = [
     "sphinx_copybutton",
 ]
 test = ["pytest>=6.0", "physics_tenpy[io, memory]"]
-lint = ["ruff", "pre-commit", "flake8", "flake8-rst-docstrings"]
+lint = ["ruff", "pre-commit", "flake8", "flake8-rst-docstrings", "sphinx-lint"]
 all = ["physics_tenpy[plot, io, test, lint, extra, docbuild]"]
 
 
