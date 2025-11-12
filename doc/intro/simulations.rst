@@ -84,7 +84,7 @@ coupling parameters than, e.g., the :class:`~tenpy.models.hubbard.FermiHubbardMo
 The base model classes like the :class:`~tenpy.models.models.model.CouplingMPOModel` have a common set of parameters
 usually read out, but custom model implementations can override this and/or add additional parameters.
 The list of allowed parameters can hence be found in the documentation of the most specialized class that you use, e.g.,
-the :class:`~tenpy.models.tf_ising.TFIChain`` above.
+the :class:`~tenpy.models.tf_ising.TFIChain` above.
 
 Similarly, allowed values in the `algorithm_params` section depend on the used `algorithm_class`.
 

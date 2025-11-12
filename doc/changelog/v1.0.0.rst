@@ -88,8 +88,8 @@ Backwards incompatible changes
 - Remove deprecated / legacy classes:
 
   - ``dmrg.SingleSiteMixer``, ``drmg.TwoSiteMixer``
-  - ``dmrg.EngineCombine``, dmrg.EngineFracture``
-  - ``tdvp.Engine``, tdvp.OldTDVPEngine``
+  - ``dmrg.EngineCombine``, ``dmrg.EngineFracture``
+  - ``tdvp.Engine``, ``tdvp.OldTDVPEngine``
   - ``tebd.Engine``
   - ``model.MultiCoupingModel``
 

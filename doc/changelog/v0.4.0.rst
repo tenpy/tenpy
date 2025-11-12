@@ -115,7 +115,7 @@ Changed
 - The way the labels of npc Arrays are stored internally changed to a simple list with None entries.
   There is a deprecated propery setter yielding a dictionary with the labels.
 - renamed `first_LP` and `last_RP` arguments of :class:`~tenpy.networks.mps.MPSEnvironment` and :class:`~tenpy.networks.mpo.MPOEnvironment` to `init_LP` and `init_RP`.
-- Testing: insetad of the (outdated) `nose <https://nose.readthedocs.io/en/latest/>`_, we now use `pytest <https://pytest.org>` for testing.
+- Testing: insetad of the (outdated) `nose <https://nose.readthedocs.io/en/latest/>`_, we now use `pytest <https://pytest.org>`_ for testing.
 
 Fixed
 ^^^^^

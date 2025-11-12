@@ -27,7 +27,7 @@ instead of stdout. Note that you should call `basicConfig` only once; subsequent
 
 
 More detailed configurations can be made through :mod:`logging.config`.
-For example, the following both prints log messages to stdout and saves them to`output_filename.log`::
+For example, the following both prints log messages to stdout and saves them to ``output_filename.log``::
 
     import logging.config
     conf = {

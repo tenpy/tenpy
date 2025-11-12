@@ -11,7 +11,7 @@ The first check of whether tenpy is installed successfully, is to try to import 
     the compilation of the Cython parts (or you didn't compile at all).
     While the code might run slower, the results should still be the same.
 
-The function :func:`tenpy.show_config()` prints information about the used versions of tenpy, numpy and
+The function :func:`tenpy.show_config` prints information about the used versions of tenpy, numpy and
 scipy, as well on the fact whether the Cython parts were compiled and could be imported.
 
 As a further check of the installation you can try to run (one of) the python files in the `examples/` subfolder;
