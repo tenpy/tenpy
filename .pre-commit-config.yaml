@@ -34,6 +34,17 @@ repos:
       exclude: ^(tests/|doc/toycodes/)
       additional_dependencies: [flake8-rst-docstrings]
 
+  - repo: https://github.com/sphinx-contrib/sphinx-lint
+    rev: v1.0.0
+    hooks:
+      - id: sphinx-lint
+        args:
+          - "-e=all"
+          - "--max-line-length=1000"
+          - "-d=default-role"
+        files: '^doc/.*\.rst$'
+        exclude: '^doc/toycodes/.*\.rst$'
+
   - repo: local
     hooks:
       # Check for forbidden strings in all text files, e.g. FIXME, DONTSHIP
@@ -44,12 +55,3 @@ repos:
         types: [text]
         # this file needs to include the forbidden patterns, so we need to exclude it.
         exclude: ^(\.pre-commit-config\.yaml|doc/contr/guidelines.rst)$
-
-      - id: sphinx-lint
-        name: Sphinx lint
-        description: 'Searches for common typos in sphinx-flavored rst files.'
-        files: '^doc/*\.rst$'
-        exclude: '^doc/toycodes/*\.rst$'
-        entry: sphinx-lint
-        args: [ -e=all , d default-role , --max-line-length=1000 , ]
-        language: python
