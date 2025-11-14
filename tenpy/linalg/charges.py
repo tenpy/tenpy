@@ -27,8 +27,18 @@ import warnings
 import numpy as np
 
 from ..tools.misc import inverse_permutation, lexsort
-from ..tools.optimization import OptimizationFlag, optimize, use_cython
+from ..tools.optimization import OptimizationFlag, optimize
 from ..tools.string import vert_join
+
+
+def use_cython(replacement):
+    """Dummy that allows us to safely remove cython"""
+
+    def decorator(f):
+        return f
+
+    return decorator
+
 
 __all__ = ['ChargeInfo', 'DipolarChargeInfo', 'LegCharge', 'LegPipe', 'QTYPE']
 

@@ -27,20 +27,6 @@ knobs you can turn to tweak the most out of this library, explained in the follo
    we recommend to use the Python distributed provided by Intel or Anaconda. They ship with numpy
    and scipy which use Intels MKL library, such that e.g. ``np.tensordot`` is parallelized to use
    multiple cores.
-#) In case you didn't do that yet: some parts of the library are written in both python and Cython
-   with the same interface, so you can simply compile the Cython code, as explained in
-   :doc:`../INSTALL`. Then everything should work the same way from a user perspective,
-   while internally the faster, pre-compiled cython code from ``tenpy/linalg/_npc_helper.pyx``
-   is used. This should also be a safe thing to do.
-   The replacement of the optimized functions is done by the decorator :func:`use_cython`.
-
-   .. note ::
-
-       By default, the compilation will link against the BLAS functions provided by
-       :mod:`scipy.linalg.cython_blas`. Whether they use MKL depends on the scipy version you
-       installed.
-       However, you can explicitly link against a given MKL by providing the path during
-       compilation, as explained in :ref:`linkingMKL`.
 
 #) One of the great things about python is its dynamical nature - anything can be done at runtime.
    In that spirit, this module allows to set a global  "optimization level" which can be changed
@@ -60,50 +46,20 @@ knobs you can turn to tweak the most out of this library, explained in the follo
         Check whether it actually helps - if it doesn't, keep the optimization disabled!
         Some parts of the library already do that as well (e.g. DMRG after the first sweep).
 
-#) You might want to try some different compile time options for the cython code, set in the
-   `setup.py` in the top directory of the repository.
-   Since the `setup.py` reads out the `TENPY_OPTIMIZE`
-   environment variable, you can simple use an ``export TENPY_OPTIMIZE=3`` (in your bash/terminal)
-   right before compilation. An ``export TENPY_OPTIMIZE=0`` activates profiling hooks instead.
-
-   .. warning ::
-       This increases the probability of getting segmentation faults and anyway might not
-       help that much; in the crucial parts of the cython code, these optimizations are already
-       applied. We do *not* recommend using this!
-
-.. autodata:: have_cython_functions
-.. autodata:: compiled_with_MKL
 """
 # Copyright (C) TeNPy Developers, Apache license
 
 import os
-import warnings
 from enum import IntEnum
 
 __all__ = [
-    'have_cython_functions',
     'OptimizationFlag',
     'temporary_level',
     'to_OptimizationFlag',
     'set_level',
     'get_level',
     'optimize',
-    'use_cython',
-    'compiled_with_MKL',
 ]
-
-
-have_cython_functions = None
-"""bool whether the import of the cython file ``tenpy/linalg/_npc_helper.pyx`` succeeded.
-
-The value is set in the first call of :func:`use_cython`.
-"""
-
-compiled_with_MKL = False
-"""bool whether the cython file was compiled with `HAVE_MKL`.
-
-The value is set in the first call of :func:`use_cython`.
-"""
 
 
 class OptimizationFlag(IntEnum):
@@ -250,106 +206,6 @@ def optimize(level_compare=OptimizationFlag.default):
     return _level >= level_compare
 
 
-def use_cython(func=None, replacement=None, check_doc=True):
-    """Decorator to replace a function with a Cython-equivalent from _npc_helper.pyx.
-
-    This is a `decorator <https://docs.python.org/3.7/glossary.html#term-decorator>`_, which is
-    supposed to be used in front of function definitions with an ``@`` sign, for example::
-
-        @use_cython
-        def my_slow_function(a):
-            "some example function with slow python loops"
-            result = 0.0
-            for i in range(a.shape[0]):
-                for j in range(a.shape[1]):
-                    # ... heavy calculations ...
-                    result += np.cos(a[i, j] ** 2) * (i + j)
-            return result
-
-    This decorator indicates that there is a `Cython <https://cython.org>`_ implementation in
-    the file ``tenpy/linalg/_npc_helper.pyx``, which should have the same signature (i.e. same
-    arguments and return values) as the decorated function, and can be used as a replacement for
-    the decorated function. However, if the cython code could not be compiled on your system
-    (or if the environment variable ``TENPY_OPTIMIZE`` is set to negative values, or
-    the environment variable ``TENPY_NO_CYTHON`` is "true"), we just pass the previous function.
-
-    .. note ::
-       In case that the decorator is used for a class method, the corresponding Cython version
-       needs to have an ``@cython.binding(True)``.
-
-    Parameters
-    ----------
-    func : function
-        The defined function
-    replacement : string | None
-        The name of the function defined in ``tenpy/linalg/_npc_helper.pyx`` which should
-        replace the decorated function.
-        ``None`` defaults to the name of the decorated function,
-        e.g., in the above example `my_slow_function`.
-    check_doc : bool
-        If True, we check that the cython version of the function has the exact same doc string
-        (up to a possible first line containing the function signature) to exclude typos and
-        inconsistent versions.
-
-    Returns
-    -------
-    replacement_func : function
-        The function replacing the decorated function `func`.
-        If the cython code can not be loaded, this is just `func`,
-        otherwise it's the cython version specified by `replacement`.
-
-    """
-    if func is None:
-        # someone used ``@use_cython(replacement=...)``
-        # so we need to return another decorator function
-        def _decorator(func):
-            return use_cython(func, replacement, check_doc)
-
-        return _decorator
-    global _npc_helper_module
-    global have_cython_functions
-    global compiled_with_MKL
-    if have_cython_functions is None:
-        if os.getenv('TENPY_NO_CYTHON', '').lower() in ['true', 'yes', 'y', '1']:
-            have_cython_functions = False
-        elif optimize(OptimizationFlag.default):
-            try:
-                from ..linalg import _npc_helper
-
-                _npc_helper_module = _npc_helper
-                have_cython_functions = True
-                compiled_with_MKL = _npc_helper.compiled_with_MKL
-            except ImportError:
-                warnings.warn("Couldn't load compiled cython code. Code will run a bit slower.")
-                have_cython_functions = False
-        else:
-            have_cython_functions = False
-    if not have_cython_functions:
-        # can't provide a faster version: cython module not available
-        return func
-    if replacement is None:
-        replacement = func.__name__
-    fast_func = _npc_helper_module.__dict__.get(replacement, None)
-    if fast_func is None:
-        msg = "can't find cython function {0!s} to replace python function {1!s} in {2!r}"
-        msg = msg.format(replacement, func.__name__, func.__module__)
-        raise ValueError(msg)
-    if check_doc:
-        import inspect
-
-        clean_fdoc = inspect.getdoc(func)
-        clean_cdoc = inspect.getdoc(fast_func)
-        cdoc = fast_func.__doc__
-        # if the cython compiler directive 'embedsignature' is used, the first line contains the
-        # function signature, so the doc string starts only with the second line
-        clean_cdoc2 = inspect.cleandoc(cdoc[cdoc.find('\n') + 1 :])
-        if clean_fdoc != clean_cdoc and clean_fdoc != clean_cdoc2:
-            msg = f'cython version of {func.__name__!s} has different doc-string'
-            raise ValueError(msg)
-    return fast_func
-
-
 # private global variables
 _level = OptimizationFlag.default  # set default optimization level
 set_level(os.getenv('TENPY_OPTIMIZE', default=None))  # update from environment variable
-_npc_helper_module = None
