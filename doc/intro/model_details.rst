@@ -193,7 +193,7 @@ As most physical Hamiltonians are Hermitian, these Hamiltonians are fully determ
 
 is fully determined by the term :math:`c^{\dagger}_i c_j` if we demand that Hermitian conjugates are included automatically.
 In TeNPy, whenever you add a coupling using :meth:`~tenpy.models.model.CouplingModel.add_onsite`,
-:meth:`~tenpy.models.model.CouplingModel.add_coupling()`, or :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling()`,
+:meth:`~tenpy.models.model.CouplingModel.add_coupling`, or :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling`,
 you can use the optional argument `plus_hc` to automatically create and add the Hermitian conjugate of that coupling term - as shown above.
 
 Additionally, in an MPO, explicitly adding both a non-Hermitian term and its conjugate increases the bond dimension of the MPO, which increases the memory requirements of the :class:`~tenpy.networks.mpo.MPOEnvironment`.
@@ -205,7 +205,7 @@ Instead of adding the conjugate terms explicitly, you can set a flag `explicit_p
 
 .. note ::
 
-    The model flag `explicit_plus_hc` should be used in conjunction with the flag `plus_hc` in :meth:`~tenpy.models.model.CouplingModel.add_coupling()` or :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling()`.
+    The model flag `explicit_plus_hc` should be used in conjunction with the flag `plus_hc` in :meth:`~tenpy.models.model.CouplingModel.add_coupling` or :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling`.
     If `plus_hc` is `False` while `explicit_plus_hc` is `True` the MPO bond dimension will not be reduced, but you will still pay the additional computational cost of computing the Hermitian conjugate at runtime.
 
 Thus, we end up with several use cases, depending on your preferences.

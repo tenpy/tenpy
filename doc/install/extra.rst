@@ -77,7 +77,7 @@ packages installed during compilation. In this case, it will link against the MK
 HDF5 file format support
 ^^^^^^^^^^^^^^^^^^^^^^^^
 We support exporting data to files in the [HDF5]_ format through the python interface of the
-`h5py <https://docs.h5py.org/en/stable/>` package, see :doc:`/intro/input_output` for more information.
+`h5py <https://docs.h5py.org/en/stable/>`_ package, see :doc:`/intro/input_output` for more information.
 However, that requires the installation of the HDF5 library and h5py.
 
 YAML parameter files

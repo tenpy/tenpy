@@ -44,6 +44,7 @@ jobs:
       # config in .flake8
       run: |
         flake8 --select RST
+        sphinx-lint -e all doc -i doc/toycodes -i doc/notebooks --max-line-length=1000 -d default-role
 
     - name: Run autoformatter
       # uses options from pyproject.toml

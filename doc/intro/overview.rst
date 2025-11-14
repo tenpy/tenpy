@@ -157,11 +157,11 @@ the spin liquid nature of the ground state of this model is highly debated in th
 Algorithms
 ----------
 
-The highest level beyond the wrapping simulations) is given by algorithms like DMRG and TEBD.
+The highest level (beyond the wrapping simulations) is given by algorithms like DMRG and TEBD.
 They usually need to be initialized with a state, i.e., tensor network like an MPS, and suitable model.
 Those are defined in the next lower levels.
 The following simple example illustrates the basic structure that the simulation class needs to perform for the same
-parameters as the example above, calling the cl:mod:`~tenpy.algorithms.dmrg`.
+parameters as the example above.
 
 .. literalinclude:: /../examples/userguide/f_dmrg_finite.py
 
