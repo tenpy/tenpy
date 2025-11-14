@@ -23,13 +23,11 @@ run these few lines of python code::
 That being said, I actually did profile and optimize (parts of) the library; and there are a few
 knobs you can turn to tweak the most out of this library, explained in the following.
 
-1) Simply install the 'bottleneck' python package, which allows to optimize slow parts of numpy,
-   most notably 'NaN' checking.
-2) Figure out which numpy/scipy/python you are using. As explained in :doc:`../INSTALL`,
+1) Figure out which numpy/scipy/python you are using. As explained in :doc:`../INSTALL`,
    we recommend to use the Python distributed provided by Intel or Anaconda. They ship with numpy
    and scipy which use Intels MKL library, such that e.g. ``np.tensordot`` is parallelized to use
    multiple cores.
-3) In case you didn't do that yet: some parts of the library are written in both python and Cython
+#) In case you didn't do that yet: some parts of the library are written in both python and Cython
    with the same interface, so you can simply compile the Cython code, as explained in
    :doc:`../INSTALL`. Then everything should work the same way from a user perspective,
    while internally the faster, pre-compiled cython code from ``tenpy/linalg/_npc_helper.pyx``
@@ -44,7 +42,7 @@ knobs you can turn to tweak the most out of this library, explained in the follo
        However, you can explicitly link against a given MKL by providing the path during
        compilation, as explained in :ref:`linkingMKL`.
 
-4) One of the great things about python is its dynamical nature - anything can be done at runtime.
+#) One of the great things about python is its dynamical nature - anything can be done at runtime.
    In that spirit, this module allows to set a global  "optimization level" which can be changed
    *dynamically* (i.e., during runtime) with :func:`set_level`. The library will then try some
    extra optimization, most notably skip sanity checks of arguments.
@@ -62,7 +60,7 @@ knobs you can turn to tweak the most out of this library, explained in the follo
         Check whether it actually helps - if it doesn't, keep the optimization disabled!
         Some parts of the library already do that as well (e.g. DMRG after the first sweep).
 
-5) You might want to try some different compile time options for the cython code, set in the
+#) You might want to try some different compile time options for the cython code, set in the
    `setup.py` in the top directory of the repository.
    Since the `setup.py` reads out the `TENPY_OPTIMIZE`
    environment variable, you can simple use an ``export TENPY_OPTIMIZE=3`` (in your bash/terminal)
@@ -73,7 +71,6 @@ knobs you can turn to tweak the most out of this library, explained in the follo
        help that much; in the crucial parts of the cython code, these optimizations are already
        applied. We do *not* recommend using this!
 
-.. autodata:: bottleneck
 .. autodata:: have_cython_functions
 .. autodata:: compiled_with_MKL
 """
@@ -84,7 +81,6 @@ import warnings
 from enum import IntEnum
 
 __all__ = [
-    'bottleneck',
     'have_cython_functions',
     'OptimizationFlag',
     'temporary_level',
@@ -96,11 +92,6 @@ __all__ = [
     'compiled_with_MKL',
 ]
 
-try:
-    import bottleneck
-except ImportError:
-    bottleneck = None
-    #: None, or the `bottleneck` module, if installed.
 
 have_cython_functions = None
 """bool whether the import of the cython file ``tenpy/linalg/_npc_helper.pyx`` succeeded.

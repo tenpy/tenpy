@@ -94,7 +94,7 @@ from scipy.linalg import blas as BLAS  # python interface to BLAS
 
 from ..tools.math import qr_li
 from ..tools.math import speigs as _sp_speigs
-from ..tools.misc import anynan, argsort, inverse_permutation, list_to_dict_list, to_iterable
+from ..tools.misc import argsort, inverse_permutation, list_to_dict_list, to_iterable
 from ..tools.optimization import OptimizationFlag, optimize, use_cython
 from ..tools.string import is_non_string_iterable, vert_join
 from . import charges  # for private functions
@@ -139,6 +139,11 @@ __all__ = [
     'to_iterable_arrays',
     'polar',
 ]
+
+
+def anynan(a):
+    return np.isnan(np.sum(a))
+
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
 QCUTOFF = np.finfo(np.float64).eps * 10
