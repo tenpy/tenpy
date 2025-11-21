@@ -662,6 +662,80 @@ class MPO(MPSGeometry):
         # no graph
         return cls.from_grids(sites, grids, 'finite', IdL, IdR, mps_unit_cell_width=unit_cell_width)
 
+    @classmethod
+    def from_Wflat(
+        cls,
+        sites,
+        Wflat,
+        bc='finite',
+        dtype=None,
+        permute=True,
+        legL=None,
+        IdL=None,
+        IdR=None,
+        max_range=None,
+        unit_cell_width=None,
+    ):
+        """Construct a matrix product operator from a set of numpy array `Wflat`.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the local Hilbert space.
+        Bflat : iterable of numpy ndarrays
+            The matrix defining the MPS on each site, with legs ``'p', 'p*', 'wL', 'wR'``
+            (physical ket-like, physical bra-like, virtual left/right).
+        bc : {'infinite', 'finite', 'segment'}
+            MPS boundary conditions. See docstring of :class:`MPS`.
+        dtype : type or string
+            The data type of the array entries. Defaults to the common dtype of `Bflat`.
+        permute : bool
+            The :class:`~tenpy.networks.Site` might permute the local basis states if charge
+            conservation gets enabled.
+            If `permute` is True (default), we permute the given `Bflat` locally according to
+            each site's :attr:`~tenpy.networks.Site.perm`.
+            The `Bflat` should then always be given as if `conserve=None` in the Site.
+        leg_L : LegCharge | ``None``
+            Leg charges at bond 0, which are purely conventional.
+            If ``None``, use trivial charges.
+        IdL, IdR, max_range:
+            See same arguments for :class:`MPO`.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+
+        """
+        sites = list(sites)
+        L = len(sites)
+        Wflat = list(Wflat)
+        if len(Wflat) != L:
+            raise ValueError('Length of Wflat does not match number of sites.')
+        ci = sites[0].leg.chinfo
+        if legL is None:
+            legL = npc.LegCharge.from_qflat(ci, [ci.make_valid(None)] * Wflat[0].shape[2])
+            legL = legL.bunch()[1]
+        Ws = []
+        if dtype is None:
+            dtype = np.dtype(np.common_type(*Wflat))
+        for i, site in enumerate(sites):
+            W = np.array(Wflat[i], dtype)
+            if permute:
+                W = W[site.perm, :, :]
+            # calculate the LegCharge of the right leg
+            legs = [site.leg, site.leg.conj(), legL, None]  # other legs are known
+            legs = npc.detect_legcharge(W, ci, legs, None, qconj=-1)
+            W = npc.Array.from_ndarray(W, legs, dtype)
+            W.iset_leg_labels(['p', 'p*', 'wL', 'wR'])
+            Ws.append(W)
+            legL = legs[-1].conj()  # prepare for next `i`
+        if bc == 'infinite':
+            # for an iMPS, the last leg has to match the first one.
+            # so we need to gauge `qtotal` of the last `B` such that the right leg matches.
+            chdiff = Ws[-1].get_leg('wR').charges[0] - Ws[0].get_leg('wL').charges[0]
+            Ws[-1] = Ws[-1].gauge_total_charge('wR', ci.make_valid(chdiff))
+        res = MPO(sites=sites, Ws=Ws, bc=bc, IdL=IdL, IdR=IdR, max_range=max_range, mps_unit_cell_width=unit_cell_width)
+        res.test_sanity()
+        return res
+
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
         super().test_sanity()
