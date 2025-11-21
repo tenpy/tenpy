@@ -482,3 +482,28 @@ def test_MPO_from_wavepacket(L=10):
     assert np.max(np.abs(C - C_expexcted)) < 1.0e-10
     print(C)
     print(C_expexcted)
+
+
+@pytest.mark.parametrize('bc', ['finite', 'infinite'])
+@pytest.mark.parametrize('conserve', ['Sz', None])
+@pytest.mark.parametrize('sort_charge', [True, False])
+def test_MPO_from_Wflat(bc, conserve, sort_charge, L=6, d=2, chi=5):
+    sites = [site.SpinHalfSite(conserve=conserve, sort_charge=sort_charge)] * L
+
+    if bc == 'finite':
+        WL = np.random.uniform(size=(d, d, 1, chi))
+        W_bulk = [np.random.uniform(size=(d, d, chi, chi)) for _ in range(L - 2)]
+        WR = np.random.uniform(size=(d, d, chi, 1))
+        Wflat = [WL, *W_bulk, WR]
+    else:
+        Wflat = [np.random.uniform(size=(d, d, chi, chi)) for _ in range(L)]
+
+    if conserve == 'Sz':
+        pytest.xfail('Need to generate symmetric W first...')
+
+    op = mpo.MPO.from_Wflat(sites=sites, Wflat=Wflat, bc=bc, unit_cell_width=L)
+
+    op.test_sanity()
+    Wflat2 = [W.to_ndarray() for W in op._W]
+    for W, W2 in zip(Wflat, Wflat2):
+        assert np.allclose(W, W2)

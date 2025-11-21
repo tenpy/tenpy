@@ -1,0 +1,1 @@
+- Add :meth:`tenpy.networks.mpo.MPO.from_Wflat`.
