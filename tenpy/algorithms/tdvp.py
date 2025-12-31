@@ -38,6 +38,7 @@ import warnings
 from ..linalg import np_conserved as npc
 from ..linalg.krylov_based import LanczosEvolution
 from ..linalg.truncation import TruncationError, svd_theta
+from ..linalg.sparse import SumNpcLinearOperator
 from ..tools.misc import consistency_check
 from ..tools.params import asConfig
 from .algorithm import TimeDependentHAlgorithm, TimeEvolutionAlgorithm
@@ -273,6 +274,8 @@ class TwoSiteTDVPEngine(TDVPEngine):
 
     def one_site_update(self, i, dt):
         H1 = OneSiteH(self.env, i, combine=False)
+        if hasattr(self.env, 'H') and self.env.H.explicit_plus_hc:
+            H1 = SumNpcLinearOperator(H1, H1.adjoint())
         theta = self.psi.get_theta(i, n=1, cutoff=self.S_inv_cutoff)
         theta = H1.combine_theta(theta)
         theta, _ = LanczosEvolution(H1, theta, self.lanczos_params).run(dt)
