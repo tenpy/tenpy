@@ -37,8 +37,8 @@ import warnings
 
 from ..linalg import np_conserved as npc
 from ..linalg.krylov_based import LanczosEvolution
-from ..linalg.truncation import TruncationError, svd_theta
 from ..linalg.sparse import SumNpcLinearOperator
+from ..linalg.truncation import TruncationError, svd_theta
 from ..tools.misc import consistency_check
 from ..tools.params import asConfig
 from .algorithm import TimeDependentHAlgorithm, TimeEvolutionAlgorithm

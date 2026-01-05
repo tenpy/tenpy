@@ -28,7 +28,7 @@ def test_tdvp(eps=1.0e-5):
     }
 
     M = SpinChain(parameters)
-    parameters['explicit_plus_hc'] = True   
+    parameters['explicit_plus_hc'] = True
     M_explicit_plus_hc = SpinChain(parameters)
     # prepare system in product state
     product_state = ['up', 'down'] * (L // 2)
@@ -61,7 +61,7 @@ def test_tdvp(eps=1.0e-5):
         tebd_engine.run()
         tdvp2_engine.run()
         tdvp2_engine_plus_hc.run()
-        
+
         ov = psi_tebd.overlap(psi_tdvp)
         ov2 = psi_tebd.overlap(psi_tdvp_plus_hc)
         print(tdvp2_engine.evolved_time, 'ov = 1. - ', ov - 1.0)
