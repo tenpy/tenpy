@@ -1,0 +1,4 @@
+- Fix an error where two-site TDVP did not correctly handle ``explicit_plus_hc``.
+  If the explicit part of the Hamiltonian (without the plus hc) is non-Hermitian,
+  this should lead to an error in the Krylov evolution.
+  However, if the explicit part is already hermitian, it silently does a wrong calculation.
