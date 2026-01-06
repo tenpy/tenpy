@@ -10,26 +10,26 @@ from tenpy.networks.mps import MPS
 
 
 @pytest.mark.slow
-def test_tdvp(eps=1.0e-5):
+@pytest.mark.parametrize('plus_hc_case', ['no +hc', 'hermitian +hc', 'non-hermitian +hc'])
+def test_tdvp(plus_hc_case, eps=1.0e-5):
     """compare overlap from TDVP with TEBD"""
     L = 8
     chi = 20  # no truncation necessary!
     delta_t = 0.01
-    parameters = {
-        'L': L,
-        'S': 0.5,
-        'conserve': None,
-        'Jx': 1.0,
-        'Jy': 1.0,
-        'Jz': 1.0,
-        'hx': np.random.random(L),
-        'hz': np.random.random(L),
-        'bc_MPS': 'finite',
-    }
+    parameters = dict(
+        L=L, S=0.5, conserve=None, Jx=1, Jy=1, Jz=1, hx=np.random.random(L), hz=np.random.random(L), bc_MPS='finite'
+    )
+    if plus_hc_case == 'no +hc':
+        pass
+    elif plus_hc_case == 'hermitian +hc':
+        parameters['explicit_plus_hc'] = True
+    elif plus_hc_case == 'non-hermitian +hc':
+        parameters['hz'] = parameters['hz'] + 1.0j * np.random.random(L)
+        parameters['explicit_plus_hc'] = True
+    else:
+        raise ValueError
 
     M = SpinChain(parameters)
-    parameters['explicit_plus_hc'] = True
-    M_explicit_plus_hc = SpinChain(parameters)
     # prepare system in product state
     product_state = ['up', 'down'] * (L // 2)
     psi_tebd = MPS.from_product_state(
@@ -53,25 +53,18 @@ def test_tdvp(eps=1.0e-5):
 
     # start by comparing TEBD and 2-site TDVP (increasing bond dimension)
     psi_tdvp = psi_tebd.copy()
-    psi_tdvp_plus_hc = psi_tebd.copy()
     tebd_engine = tebd.TEBDEngine(psi_tebd, M, tebd_params)
     tdvp2_engine = tdvp.TwoSiteTDVPEngine(psi_tdvp, M, tdvp_params)
-    tdvp2_engine_plus_hc = tdvp.TwoSiteTDVPEngine(psi_tdvp_plus_hc, M_explicit_plus_hc, tdvp_params)
     for _ in range(3):
         tebd_engine.run()
         tdvp2_engine.run()
-        tdvp2_engine_plus_hc.run()
 
         ov = psi_tebd.overlap(psi_tdvp)
-        ov2 = psi_tebd.overlap(psi_tdvp_plus_hc)
         print(tdvp2_engine.evolved_time, 'ov = 1. - ', ov - 1.0)
-        print(tdvp2_engine_plus_hc.evolved_time, 'ov2 = 1. - ', ov2 - 1.0)
         assert np.abs(1 - ov) < eps
         Sz_tebd = psi_tebd.expectation_value('Sz')
         Sz_tdvp = psi_tdvp.expectation_value('Sz')
-        Sz_tdvp_plus_hc = psi_tdvp_plus_hc.expectation_value('Sz')
         assert np.max(np.abs(Sz_tebd - Sz_tdvp)) < eps
-        assert np.max(np.abs(Sz_tebd - Sz_tdvp_plus_hc)) < eps
 
     # now compare TEBD and 1-site TDVP (constant bond dimension)
     tdvp_params['start_time'] = tdvp2_engine.evolved_time

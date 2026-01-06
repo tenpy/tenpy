@@ -379,6 +379,8 @@ class SingleSiteTDVPEngine(TDVPEngine):
     def zero_site_update(self, i, theta, dt):
         """Zero-site update on the left of site `i`."""
         H0 = ZeroSiteH(self.env, i)
+        if hasattr(self.env, 'H') and self.env.H.explicit_plus_hc:
+            H0 = SumNpcLinearOperator(H0, H0.adjoint())
         theta, _ = LanczosEvolution(H0, theta, self.lanczos_params).run(dt)
         return theta, H0
 
