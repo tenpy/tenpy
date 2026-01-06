@@ -46,7 +46,6 @@ dependencies = [
 plot = ["matplotlib"]
 io = ["h5py", "pyyaml"]
 memory = ["psutil"]
-extra = ["bottleneck"]
 docbuild = [
     "Sphinx",
     "sphinx-rtd-theme",
@@ -59,7 +58,7 @@ docbuild = [
 ]
 test = ["pytest>=6.0", "physics_tenpy[io, memory]"]
 lint = ["ruff", "pre-commit", "flake8", "flake8-rst-docstrings", "sphinx-lint"]
-all = ["physics_tenpy[plot, io, test, lint, extra, docbuild]"]
+all = ["physics_tenpy[plot, io, test, lint, docbuild]"]
 
 
 [project.urls]

@@ -592,8 +592,7 @@ class Hdf5Saver:
         """Store objects already saved in the :attr:`memo_save`.
 
         This allows to avoid copies, if the same python object appears multiple times in the
-        data of `obj`. Examples can be shared :class:`~tenpy.linalg.charges.LegCharge` objects
-        or even shared :class:`~tenpy.linalg.np_conserved.Array`.
+        data of `obj`.
         Using the memo also avoids crashes from cyclic references,
         e.g., when a list contains a reference to itself.
 
@@ -944,8 +943,6 @@ class Hdf5Loader:
 
         This allows to avoid copies, if the same dataset appears multiple times in the
         hdf5 group of `obj`.
-        Examples can be shared :class:`~tenpy.linalg.charges.LegCharge` objects
-        or even shared :class:`~tenpy.linalg.np_conserved.Array`.
 
         To handle cyclic references correctly, this function should be called *before* loading
         data from subgroups with new calls of :meth:`load`.

@@ -6,7 +6,6 @@ dependencies:
   - cython>=0.29
   - mkl
   - mkl-devel
-  - bottleneck
   - pip
   - setuptools>=68.0.0
   - h5py

@@ -4,3 +4,6 @@
 [submodule "doc/toycodes"]
 	path = doc/toycodes
 	url = https://github.com/tenpy/tenpy_toycodes
+[submodule "cyten"]
+	path = cyten
+	url = https://github.com/tenpy/cyten

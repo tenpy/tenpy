@@ -6,7 +6,6 @@ dependencies:
   - numpy
   - scipy
   - cython>=0.29
-  - bottleneck
   - pip
   - setuptools>=68.0.0
   - h5py
