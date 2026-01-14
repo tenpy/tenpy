@@ -9,7 +9,6 @@ dependencies:
   - mkl
   - mkl-devel
   - libblas=*=*mkl  # pin BLAS to use MKL
-  - bottleneck
   - pip
   - setuptools>=68.0.0
   - h5py

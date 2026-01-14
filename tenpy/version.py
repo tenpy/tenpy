@@ -20,7 +20,7 @@ __all__ = ['version', 'released', 'short_version', 'git_revision', 'full_version
 
 # hard-coded version for people without git...
 #: current release version as a string
-version = '1.1.0'
+version = '2.0.0-alpha'
 
 #: whether this is a released version or modified
 released = False
@@ -96,26 +96,14 @@ def _get_version_summary():
     import numpy
     import scipy
 
-    from .tools.optimization import compiled_with_MKL, have_cython_functions
-
-    if have_cython_functions:
-        cython_info = 'compiled'
-        if compiled_with_MKL:
-            cython_info = cython_info + ' with HAVE_MKL'
-        else:
-            cython_info = cython_info + ' without HAVE_MKL'
-    else:
-        cython_info = 'not compiled'
-
     summary = (
-        'tenpy {tenpy_ver!s} ({cython_info!s}),\n'
+        'tenpy {tenpy_ver!s},\n'
         'git revision {git_rev!s} using\n'
         'python {python_ver!s}\n'
         'numpy {numpy_ver!s}, scipy {scipy_ver!s}'
     )
     summary = summary.format(
         tenpy_ver=full_version,
-        cython_info=cython_info,
         git_rev=git_revision,
         python_ver=sys.version,
         numpy_ver=numpy.version.full_version,
