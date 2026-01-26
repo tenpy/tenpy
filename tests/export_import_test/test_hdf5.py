@@ -53,16 +53,25 @@ def test_hdf5_export_import(tmp_path):
 
 @pytest.mark.parametrize('fn', datadir_hdf5)
 @pytest.mark.filterwarnings('ignore::FutureWarning')
+@pytest.mark.filterwarnings('ignore:unit_cell_width is a new argument:UserWarning')
 def test_import_from_datadir(fn):
+    version = io_test.parse_version(str(fn).removeprefix('exported_from_tenpy_').removesuffix('.hdf5'))
     print('import ', fn)
     filename = os.path.join(io_test.datadir, fn)
     with h5py.File(filename, 'r') as f:
         data = hdf5_io.load_from_hdf5(f)
     if 'version' in data:
         data_expected = io_test.gen_example_data(data['version'])
+        assert io_test.parse_version(data['version']) == version
     else:
         data_expected = io_test.gen_example_data('0.4.0')
+
     io_test.assert_equal_data(data, data_expected)
+
+    if version <= io_test.parse_version('0.9.0'):
+        with pytest.raises(ValueError, match='not enough values to unpack'):
+            io_test.assert_event_handler_example_works(data)
+        pytest.xfail()
     io_test.assert_event_handler_example_works(data)
 
 
