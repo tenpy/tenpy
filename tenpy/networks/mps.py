@@ -1780,7 +1780,7 @@ class MPS(BaseMPSExpectationValue):
         hdf5_saver.save(self._B, subpath + 'tensors')
         hdf5_saver.save(self._S, subpath + 'singular_values')
         hdf5_saver.save(self.bc, subpath + 'boundary_condition')
-        hdf5_saver.save(np.array(self.form), subpath + 'canonical_form')
+        hdf5_saver.save(list(self.form), subpath + 'canonical_form')
         hdf5_saver.save(self.chinfo, subpath + 'chinfo')
         hdf5_saver.save(self.unit_cell_width, subpath + 'unit_cell_width')
         hdf5_saver.save(self.segment_boundaries, subpath + 'segment_boundaries')
@@ -1819,7 +1819,7 @@ class MPS(BaseMPSExpectationValue):
         obj._S = hdf5_loader.load(subpath + 'singular_values')
         obj.bc = hdf5_loader.load(subpath + 'boundary_condition')
         form = hdf5_loader.load(subpath + 'canonical_form')
-        obj.form = [tuple(f) for f in form]
+        obj.form = [None if f is None else tuple(f) for f in form]
         obj.norm = hdf5_loader.get_attr(h5gr, 'norm')
 
         obj.grouped = hdf5_loader.get_attr(h5gr, 'grouped')
@@ -2859,12 +2859,13 @@ class MPS(BaseMPSExpectationValue):
     def chi(self):
         """Dimensions of the (nontrivial) virtual bonds."""
         chi = []
-        for i in self.nontrivial_bonds:
-            if self._S[i] is None:
+        for n, S in enumerate(self._S[self.nontrivial_bonds]):
+            if S is None:
+                i = self.nontrivial_bonds.start + n
                 chi.append(self.get_B(i, form=None).get_leg('vL').ind_len)
             else:
                 # s.shape[0] == len(s) for 1D numpy array, but works also for a 2D npc Array.
-                chi.append(min(self._S[i].shape))
+                chi.append(min(S.shape))
         return chi
 
     def get_B(self, i, form='B', copy=False, cutoff=1.0e-16, label_p=None):
