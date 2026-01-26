@@ -2858,8 +2858,14 @@ class MPS(BaseMPSExpectationValue):
     @property
     def chi(self):
         """Dimensions of the (nontrivial) virtual bonds."""
-        # s.shape[0] == len(s) for 1D numpy array, but works also for a 2D npc Array.
-        return [min(s.shape) for s in self._S[self.nontrivial_bonds]]
+        chi = []
+        for i in self.nontrivial_bonds:
+            if self._S[i] is None:
+                chi.append(self.get_B(i, form=None).get_leg('vL').ind_len)
+            else:
+                # s.shape[0] == len(s) for 1D numpy array, but works also for a 2D npc Array.
+                chi.append(min(self._S[i].shape))
+        return chi
 
     def get_B(self, i, form='B', copy=False, cutoff=1.0e-16, label_p=None):
         """Return (view of) `B` at site `i` in canonical form.
