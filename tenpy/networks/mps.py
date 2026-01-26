@@ -1656,6 +1656,8 @@ class MPS(BaseMPSExpectationValue):
         for i in range(self.L + 1)[self.nontrivial_bonds]:
             if isinstance(SVs[i], npc.Array):
                 self._S[i] = SVs[i].copy()
+            elif SVs[i] is None:
+                self._S[i] = None
             else:
                 self._S[i] = np.array(SVs[i], dtype=np.float64)
         if self.bc == 'finite':
@@ -1679,24 +1681,50 @@ class MPS(BaseMPSExpectationValue):
             if B.get_leg_labels() != self._B_labels:
                 raise ValueError(f'B has wrong labels {B.get_leg_labels()!r}, expected {self._B_labels!r}')
             i2 = (i + 1) if self.finite else (i + 1) % self.L
-            if len(self._S[i2].shape) == 1:
-                if self._S[i].shape[-1] != B.get_leg('vL').ind_len or self._S[i2].shape[0] != B.get_leg('vR').ind_len:
+
+            # figure out ind_len of adjacent singular values
+            mixer_is_on = False
+            if self._S[i] is None:
+                ind_len_S1 = None
+            elif len(self._S[i].shape) == 1:
+                ind_len_S1 = self._S[i].shape[-1]
+            elif len(self._S[i].shape) == 2:
+                mixer_is_on = True
+            else:
+                raise ValueError
+            if self._S[i2] is None:
+                ind_len_S2 = None
+            elif len(self._S[i2].shape) == 1:
+                ind_len_S2 = self._S[i2].shape[-1]
+            elif len(self._S[i2].shape) == 2:
+                mixer_is_on = True
+            else:
+                raise ValueError
+
+            if mixer_is_on:
+                # special case during DMRG with mixer
+                # note: we should have a well-defined form everywhere, so we can use specific forms
+                if self.finite and i == self.L - 1:
+                    assert self.get_B(i).get_leg('vR').ind_len == 1
+                    assert self.get_B(0).get_leg('vL').ind_len == 1
+                else:
+                    B = self.get_B(i, form='Th')
+                    B2 = self.get_B(i + 1, form='B')
+                    B.get_leg('vR').test_contractible(B2.get_leg('vL'))
+            else:
+                if ind_len_S1 is not None and ind_len_S1 != B.get_leg('vL').ind_len:
+                    raise ValueError('shape of B incompatible with len of singular values')
+                if ind_len_S2 is not None and ind_len_S2 != B.get_leg('vR').ind_len:
                     raise ValueError('shape of B incompatible with len of singular values')
                 if not self.finite or i + 1 < self.L:
                     B2 = self.get_B(i + 1, form=None)
                     B.get_leg('vR').test_contractible(B2.get_leg('vL'))
-            else:
-                assert len(self._S[i2].shape) == 2  # special case during DMRG with mixer,
-                # important for simulation resume while mixer is on
-                # we should have a well-defined form everywhere
-                B = self.get_B(i, form='Th')
-                B2 = self.get_B(i + 1, form='B')
-                # and be able to contract Th-B
-                B.get_leg('vR').test_contractible(B2.get_leg('vL'))
-                # (but not necessarily A-B, as we have it on the first bond at DMRG checkpoints)
+
             assert self.form[i] in self._valid_forms.values()
         if self.bc == 'finite':
-            if len(self._S[0]) != 1 or len(self._S[-1]) != 1:
+            if self._S[0] is not None and len(self._S[0]) != 1:
+                raise ValueError('non-trivial outer bonds for finite MPS')
+            if self._S[-1] is not None and len(self._S[-1]) != 1:
                 raise ValueError('non-trivial outer bonds for finite MPS')
 
     def copy(self):

@@ -963,5 +963,20 @@ def test_fixes_181():
     psi1.enlarge_chi([0, 0, 0, 1, 2, 2, 2, 1, 0, 0, 0])
 
 
+def test_fixes_600_copying():
+    # See https://github.com/tenpy/tenpy/issues/600
+
+    # prepare an MPS with no form and no singular values set
+    L = 10
+    sites = [site.SpinHalfSite('Sz', sort_charge=True)] * L
+    psi = mps.MPS.from_product_state(sites, ['up', 'down'] * (L // 2), form=None, unit_cell_width=L)
+    for i in range(1, L):
+        psi._S[i] = None
+    psi.test_sanity()
+
+    psi2 = psi.copy()
+    psi2.test_sanity()
+
+
 if __name__ == '__main__':
     test_sample_measurements()

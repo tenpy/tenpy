@@ -1,0 +1,1 @@
+- Support MPS with unknown singular values, i.e. with ``None in mps._S``.
