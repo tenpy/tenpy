@@ -473,7 +473,18 @@ class MPO(MPSGeometry):
         obj.grouped = hdf5_loader.get_attr(h5gr, 'grouped')
         obj.bc = hdf5_loader.load(subpath + 'boundary_condition')
         obj.max_range = hdf5_loader.load(subpath + 'max_range')
-        obj.unit_cell_width = hdf5_loader.load(subpath + 'unit_cell_width')
+        if 'unit_cell_width' in h5gr:
+            obj.unit_cell_width = hdf5_loader.load(subpath + 'unit_cell_width')
+        else:
+            msg = (
+                'unit_cell_width is a new argument for MPS and similar classes. '
+                'It is optional for now, but will become mandatory in a future release. '
+                'The default value (unit_cell_width=len(sites)) is correct, iff the '
+                'lattice is a Chain. For other lattices, it is incorrect. '
+                'It is used for dipolar charges and correlation_function2.'
+            )
+            warnings.warn(msg, stacklevel=2)
+            obj.unit_cell_width = len(obj.sites)
         obj.explicit_plus_hc = h5gr.attrs.get('explicit_plus_hc', False)
         obj._graph = None
         obj._outer_permutation = None
