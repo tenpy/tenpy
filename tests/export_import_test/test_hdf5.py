@@ -53,6 +53,7 @@ def test_hdf5_export_import(tmp_path):
 
 @pytest.mark.parametrize('fn', datadir_hdf5)
 @pytest.mark.filterwarnings('ignore::FutureWarning')
+@pytest.mark.filterwarnings('UserWarning: unit_cell_width is a new argument')
 def test_import_from_datadir(fn):
     print('import ', fn)
     filename = os.path.join(io_test.datadir, fn)

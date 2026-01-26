@@ -36,6 +36,41 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v5
+      with:
+        fetch-depth: 0  # required to get all tags
+
+    - name: Fetch example I/O datasets
+      uses: actions/checkout@v5
+      with:
+        repository: tenpy/io_example_data
+        ref: main
+        path: io_example_data
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Move example I/O datasets
+      run: |
+        mv io_example_data/data tests/export_import_test
+
+    - name: Check for missing I/O datasets
+      run: |
+        any_missing=false
+        git tag | while read version; do
+          [[ $version != v* ]] && echo "Skipping non-version tag: $version" && continue
+          [[ $version == v0.* ]] && echo "Skipping: $version" && continue  # don't have data for all.
+          echo "Checking: $version"
+          bare_version=${version#v}
+          if [ ! -f "tests/export_import_test/data/exported_from_tenpy_$bare_version.pkl" ]; then
+            echo "  Pickle data missing!"
+            any_missing=true
+          fi
+          if [ ! -f "tests/export_import_test/data/exported_from_tenpy_$bare_version.hdf5" ]; then
+            echo "  HDF5 data missing!"
+            any_missing=true
+          fi
+        done
+        if $any_missing; then
+          exit 1
+        fi
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v6
