@@ -3463,7 +3463,7 @@ class MPS(BaseMPSExpectationValue):
             Copy of self with 'segment' boundary conditions.
 
         """
-        unit_cell_width, remainder = divmod(last - first, self.N_sites_per_hor_spacing)
+        unit_cell_width, remainder = divmod(last - first + 1, self.N_sites_per_hor_spacing)
         if remainder != 0:
             raise ValueError(f'Number of sites must be an integer multiple of {self.N_sites_per_hor_spacing}.')
         sites = [self.get_site(i) for i in range(first, last + 1)]

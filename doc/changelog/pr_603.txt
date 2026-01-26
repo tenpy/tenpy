@@ -1,0 +1,2 @@
+- Fix typo in the computation of the :attr:`~tenpy.mps.MPS.unit_cell_width` during
+  :meth:`~tenpy.mps.MPS.extract_segment`.
