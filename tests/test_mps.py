@@ -4,6 +4,7 @@
 import numpy as np
 import numpy.testing as npt
 import pytest
+from export_import_test import io_test
 from random_test import rand_permutation, random_MPS
 
 import tenpy.linalg.np_conserved as npc
@@ -13,7 +14,7 @@ from tenpy.models.lattice import Chain, MultiSpeciesLattice, Square
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.networks import mps, site
 from tenpy.networks.terms import TermList
-from tenpy.tools import misc
+from tenpy.tools import hdf5_io, misc
 
 spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 
@@ -961,6 +962,42 @@ def test_fixes_181():
         model_dtype=np.complex128,
     ).run()
     psi1.enlarge_chi([0, 0, 0, 1, 2, 2, 2, 1, 0, 0, 0])
+
+
+def test_fixes_600_copying():
+    # See https://github.com/tenpy/tenpy/issues/600
+
+    # prepare an MPS with no form and no singular values set
+    L = 10
+    sites = [site.SpinHalfSite('Sz', sort_charge=True)] * L
+    psi = mps.MPS.from_product_state(sites, ['up', 'down'] * (L // 2), form=None, unit_cell_width=L)
+    for i in range(1, L):
+        psi._S[i] = None
+    psi.test_sanity()
+
+    psi2 = psi.copy()
+    psi2.test_sanity()
+
+
+def test_fixes_600_hdf5(tmp_path):
+    # See https://github.com/tenpy/tenpy/issues/600
+
+    h5py = pytest.importorskip('h5py')
+
+    # prepare an MPS with no form and no singular values set
+    L = 10
+    sites = [site.SpinHalfSite('Sz', sort_charge=True)] * L
+    psi = mps.MPS.from_product_state(sites, ['up', 'down'] * (L // 2), form=None, unit_cell_width=L)
+    for i in range(1, L):
+        psi._S[i] = None
+    psi.test_sanity()
+
+    data = {'psi': psi}
+    with h5py.File(tmp_path / 'foo.hdf5', 'w') as f:
+        hdf5_io.save_to_hdf5(f, data)
+    with h5py.File(tmp_path / 'foo.hdf5', 'r') as f:
+        data_imported = hdf5_io.load_from_hdf5(f)
+    io_test.assert_equal_data(data_imported, data)
 
 
 if __name__ == '__main__':

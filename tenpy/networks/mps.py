@@ -1656,6 +1656,8 @@ class MPS(BaseMPSExpectationValue):
         for i in range(self.L + 1)[self.nontrivial_bonds]:
             if isinstance(SVs[i], npc.Array):
                 self._S[i] = SVs[i].copy()
+            elif SVs[i] is None:
+                self._S[i] = None
             else:
                 self._S[i] = np.array(SVs[i], dtype=np.float64)
         if self.bc == 'finite':
@@ -1679,24 +1681,50 @@ class MPS(BaseMPSExpectationValue):
             if B.get_leg_labels() != self._B_labels:
                 raise ValueError(f'B has wrong labels {B.get_leg_labels()!r}, expected {self._B_labels!r}')
             i2 = (i + 1) if self.finite else (i + 1) % self.L
-            if len(self._S[i2].shape) == 1:
-                if self._S[i].shape[-1] != B.get_leg('vL').ind_len or self._S[i2].shape[0] != B.get_leg('vR').ind_len:
+
+            # figure out ind_len of adjacent singular values
+            mixer_is_on = False
+            if self._S[i] is None:
+                ind_len_S1 = None
+            elif len(self._S[i].shape) == 1:
+                ind_len_S1 = self._S[i].shape[-1]
+            elif len(self._S[i].shape) == 2:
+                mixer_is_on = True
+            else:
+                raise ValueError
+            if self._S[i2] is None:
+                ind_len_S2 = None
+            elif len(self._S[i2].shape) == 1:
+                ind_len_S2 = self._S[i2].shape[-1]
+            elif len(self._S[i2].shape) == 2:
+                mixer_is_on = True
+            else:
+                raise ValueError
+
+            if mixer_is_on:
+                # special case during DMRG with mixer
+                # note: we should have a well-defined form everywhere, so we can use specific forms
+                if self.finite and i == self.L - 1:
+                    assert self.get_B(i).get_leg('vR').ind_len == 1
+                    assert self.get_B(0).get_leg('vL').ind_len == 1
+                else:
+                    B = self.get_B(i, form='Th')
+                    B2 = self.get_B(i + 1, form='B')
+                    B.get_leg('vR').test_contractible(B2.get_leg('vL'))
+            else:
+                if ind_len_S1 is not None and ind_len_S1 != B.get_leg('vL').ind_len:
+                    raise ValueError('shape of B incompatible with len of singular values')
+                if ind_len_S2 is not None and ind_len_S2 != B.get_leg('vR').ind_len:
                     raise ValueError('shape of B incompatible with len of singular values')
                 if not self.finite or i + 1 < self.L:
                     B2 = self.get_B(i + 1, form=None)
                     B.get_leg('vR').test_contractible(B2.get_leg('vL'))
-            else:
-                assert len(self._S[i2].shape) == 2  # special case during DMRG with mixer,
-                # important for simulation resume while mixer is on
-                # we should have a well-defined form everywhere
-                B = self.get_B(i, form='Th')
-                B2 = self.get_B(i + 1, form='B')
-                # and be able to contract Th-B
-                B.get_leg('vR').test_contractible(B2.get_leg('vL'))
-                # (but not necessarily A-B, as we have it on the first bond at DMRG checkpoints)
+
             assert self.form[i] in self._valid_forms.values()
         if self.bc == 'finite':
-            if len(self._S[0]) != 1 or len(self._S[-1]) != 1:
+            if self._S[0] is not None and len(self._S[0]) != 1:
+                raise ValueError('non-trivial outer bonds for finite MPS')
+            if self._S[-1] is not None and len(self._S[-1]) != 1:
                 raise ValueError('non-trivial outer bonds for finite MPS')
 
     def copy(self):
@@ -1752,7 +1780,7 @@ class MPS(BaseMPSExpectationValue):
         hdf5_saver.save(self._B, subpath + 'tensors')
         hdf5_saver.save(self._S, subpath + 'singular_values')
         hdf5_saver.save(self.bc, subpath + 'boundary_condition')
-        hdf5_saver.save(np.array(self.form), subpath + 'canonical_form')
+        hdf5_saver.save(list(self.form), subpath + 'canonical_form')
         hdf5_saver.save(self.chinfo, subpath + 'chinfo')
         hdf5_saver.save(self.unit_cell_width, subpath + 'unit_cell_width')
         hdf5_saver.save(self.segment_boundaries, subpath + 'segment_boundaries')
@@ -1791,7 +1819,7 @@ class MPS(BaseMPSExpectationValue):
         obj._S = hdf5_loader.load(subpath + 'singular_values')
         obj.bc = hdf5_loader.load(subpath + 'boundary_condition')
         form = hdf5_loader.load(subpath + 'canonical_form')
-        obj.form = [tuple(f) for f in form]
+        obj.form = [None if f is None else tuple(f) for f in form]
         obj.norm = hdf5_loader.get_attr(h5gr, 'norm')
 
         obj.grouped = hdf5_loader.get_attr(h5gr, 'grouped')
@@ -2097,7 +2125,7 @@ class MPS(BaseMPSExpectationValue):
             If `permute` is True (default), we permute the given `p_state` locally according to
             each site's :attr:`~tenpy.networks.Site.perm`.
             The `p_state` entries should then always be given as if `conserve=None` in the Site.
-        form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
+        form : (list of) {``'B' | 'A' | 'C' | 'G'`` | tuple(float, float)}
             Defines the canonical form. See module doc-string.
             A single choice holds for all of the entries.
         chargeL : charges
@@ -2841,8 +2869,15 @@ class MPS(BaseMPSExpectationValue):
     @property
     def chi(self):
         """Dimensions of the (nontrivial) virtual bonds."""
-        # s.shape[0] == len(s) for 1D numpy array, but works also for a 2D npc Array.
-        return [min(s.shape) for s in self._S[self.nontrivial_bonds]]
+        chi = []
+        for n, S in enumerate(self._S[self.nontrivial_bonds]):
+            if S is None:
+                i = self.nontrivial_bonds.start + n
+                chi.append(self.get_B(i, form=None).get_leg('vL').ind_len)
+            else:
+                # s.shape[0] == len(s) for 1D numpy array, but works also for a 2D npc Array.
+                chi.append(min(S.shape))
+        return chi
 
     def get_B(self, i, form='B', copy=False, cutoff=1.0e-16, label_p=None):
         """Return (view of) `B` at site `i` in canonical form.
