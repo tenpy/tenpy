@@ -2114,7 +2114,7 @@ class MPS(BaseMPSExpectationValue):
             If `permute` is True (default), we permute the given `p_state` locally according to
             each site's :attr:`~tenpy.networks.Site.perm`.
             The `p_state` entries should then always be given as if `conserve=None` in the Site.
-        form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
+        form : (list of) {``'B' | 'A' | 'C' | 'G'`` | tuple(float, float)}
             Defines the canonical form. See module doc-string.
             A single choice holds for all of the entries.
         chargeL : charges
