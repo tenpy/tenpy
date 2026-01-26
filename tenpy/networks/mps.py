@@ -1797,7 +1797,18 @@ class MPS(BaseMPSExpectationValue):
         obj.grouped = hdf5_loader.get_attr(h5gr, 'grouped')
         obj._transfermatrix_keep = hdf5_loader.get_attr(h5gr, 'transfermatrix_keep')
         obj.chinfo = hdf5_loader.load(subpath + 'chinfo')
-        obj.unit_cell_width = hdf5_loader.load(subpath + 'unit_cell_width')
+        if 'unit_cell_width' in h5gr:
+            obj.unit_cell_width = hdf5_loader.load(subpath + 'unit_cell_width')
+        else:
+            msg = (
+                'unit_cell_width is a new argument for MPS and similar classes. '
+                'It is optional for now, but will become mandatory in a future release. '
+                'The default value (unit_cell_width=len(sites)) is correct, iff the '
+                'lattice is a Chain. For other lattices, it is incorrect. '
+                'It is used for dipolar charges and correlation_function2.'
+            )
+            warnings.warn(msg, stacklevel=2)
+            obj.unit_cell_width = len(obj.sites)
         obj.dtype = np.result_type(*[B.dtype for B in obj._B])
         if 'segment_boundaries' in h5gr:
             obj.segment_boundaries = hdf5_loader.load(subpath + 'segment_boundaries')

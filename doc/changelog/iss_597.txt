@@ -1,0 +1,2 @@
+- Fix hdf5 loading for MPS and MPO. They were not backwards compatible and could not load
+  files from tenpy<1.1.0
