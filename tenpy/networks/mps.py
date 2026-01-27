@@ -4552,17 +4552,27 @@ class MPS(BaseMPSExpectationValue):
             # we actually had a canonical form before, so we should *not* ignore the 'S'
             M = self.get_B(0, form='Th')
             form = 'B'  # for other 'M'
-        Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
+        # separate norm of M in QR decomposition
+        Q, R = self._canonical_form_qr_normalized(
+            M.combine_legs(['vL'] + self._p_label), renormalize, inner_labels=['vR', 'vL']
+        )
         # Q = unitary, R has to be multiplied to the right
         self.set_B(0, Q.split_legs(0), form='A')
         for i in range(1, L - 1):
             M = self.get_B(i, form)
             M = npc.tensordot(R, M, axes=['vR', 'vL'])
-            Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
+            Q, R = self._canonical_form_qr_normalized(
+                M.combine_legs(['vL'] + self._p_label), renormalize, inner_labels=['vR', 'vL']
+            )
             # Q is unitary, i.e. left canonical, R has to be multiplied to the right
             self.set_B(i, Q.split_legs(0), form='A')
         M = self.get_B(L - 1, form)
         M = npc.tensordot(R, M, axes=['vR', 'vL'])
+        # isolate norm before any SVDs
+        norm = npc.norm(M)
+        if not renormalize:
+            self.norm = self.norm * norm
+        M /= norm
         if self.bc == 'segment':
             # also need to calculate new singular values on the very right
             U, S, VR_segment = npc.svd(
@@ -4578,8 +4588,6 @@ class MPS(BaseMPSExpectationValue):
             VR_segment = None
         # sweep from right to left, calculating all the singular values
         U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1), cutoff=cutoff, inner_labels=['vR', 'vL'])
-        if not renormalize:
-            self.norm = self.norm * np.linalg.norm(S)
         S = S / np.linalg.norm(S)  # normalize
         self.set_SL(L - 1, S)
         self.set_B(L - 1, V.split_legs(1), form='B')
@@ -4621,6 +4629,14 @@ class MPS(BaseMPSExpectationValue):
             else:
                 self.segment_boundaries = (U, VR_segment)
             return U, VR_segment
+
+    def _canonical_form_qr_normalized(self, M, renormalize, **kwargs):
+        norm = npc.norm(M)
+        if not renormalize:
+            self.norm = self.norm * norm
+        M /= norm
+        Q, R = npc.qr(M, **kwargs)
+        return Q, R
 
     def canonical_form_infinite1(self, renormalize=True, tol_xi=1.0e6):
         """Bring an infinite MPS into canonical form; in place.
