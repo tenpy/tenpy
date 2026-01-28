@@ -87,7 +87,7 @@ def gen_example_data(version=tenpy.version.full_version):
         )
         data['recursive'][3][1] = data['recursive'][1] = data['recursive']
         data['exportable'].some_attr = 'something'
-    if parse_version(version) >= parse_version('0.7.2.dev33'):
+    if parse_version(version) > parse_version('0.7.2'):
         dummy = DummyClass()
         data['dummy'] = dummy
         event_handler = tenpy.tools.events.EventHandler('obj')

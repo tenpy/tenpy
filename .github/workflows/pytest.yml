@@ -69,6 +69,11 @@ jobs:
           fi
         done
         if $any_missing; then
+          {
+            echo "## Missing I/O data."
+            echo "Should update data in the [io_example_data](https://github.com/tenpy/io_example_data)."
+            echo "See its readme."
+          } >> $GITHUB_STEP_SUMMARY
           exit 1
         fi
 
