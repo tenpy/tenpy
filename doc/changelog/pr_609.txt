@@ -1,0 +1,2 @@
+- Add explicit normalizations during :meth:`~tenpy.mps.MPS.canonical_form_finite` that stabilize
+  it for MPS with small norm, see :iss:`596`.
