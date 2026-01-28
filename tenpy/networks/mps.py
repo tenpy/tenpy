@@ -2,26 +2,29 @@ r"""This module contains a base class for a Matrix Product State (MPS).
 
 An MPS looks roughly like this::
 
-    |   -- B[0] -- B[1] -- B[2] -- ...
-    |       |       |      |
+    |     ┏━━━━━━━┓    ┏━━━━━━━┓    ┏━━━━━━━┓
+    |   ──┨ _B[0] ┠────┨ _B[1] ┠────┨ _B[2] ┠── ...
+    |     ┗━━━┯━━━┛    ┗━━━┯━━━┛    ┗━━━┯━━━┛
+    |         │            │            │
 
 We use the following label convention for the `B` (where arrows indicate `qconj`)::
 
-    |  vL ->- B ->- vR
-    |         |
-    |         ^
-    |         p
+    |        ┏━━━━━━━┓
+    |   vL ──┨   B   ┠── vR
+    |        ┗━━━┯━━━┛
+    |            │
+    |            p
 
 We store one 3-leg tensor `_B[i]` with labels ``'vL', 'vR', 'p'`` for each of the `L` sites
 ``0 <= i < L``.
-Additionally, we store singular value arrays `_S[ib]` on each bond ``0 <= ib < L + int(finite)``,
-i.e. ``L + 1`` arrays for finite systems and ``L`` arrays for infinite systems.
+Additionally, we store singular values `_S[ib]` on each bond ``0 <= ib < L + int(finite)`` as
+a diagonal tensor, i.e. ``L + 1`` tensors for finite systems and ``L`` tensors for infinite systems.
 Note that for infinite systems, the bond ``ib == L`` to the right of the unit cell is equivalent
 to the bond ``ib == 0``. ``_S[ib]`` gives the singular values on the bond ``ib-1, ib``.
 However, be aware that e.g. :attr:`~tenpy.networks.mps.MPS.chi` returns only the dimensions of the
 :attr:`~tenpy.networks.mps.MPS.nontrivial_bonds` depending on the boundary conditions.
 
-The matrices and singular values always represent a normalized state
+The B tensors and singular values always represent a normalized state
 (i.e. ``np.linalg.norm(psi._S[ib]) == 1`` up to roundoff errors),
 but (for finite MPS) we keep track of the norm in :attr:`~tenpy.networks.mps.MPS.norm`
 (which is respected by :meth:`~tenpy.networks.mps.MPS.overlap`, ...).
@@ -32,7 +35,7 @@ Valid MPS boundary conditions are the following:
 `bc`        description
 ==========  ===================================================================================
 'finite'    Finite MPS, ``G0 s1 G1 ... s{L-1} G{l-1}``. This is achieved
-            by using a trivial left and right bond ``s[0] = s[-1] = np.array([1.])``.
+            by using a trivial left and right bond ``s[0] = s[-1] = ct.eye(trivial_virt_leg)``.
 'segment'   Generalization of 'finite', describes an MPS embedded in left and right
             environments. The left environment is described by ``chi[0]`` *orthonormal* states
             which are weighted by the singular values ``s[0]``. Similar, ``s[L]`` weight some
@@ -152,21 +155,18 @@ import random
 import warnings
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable
+from typing import Literal
 
 import numpy as np
 
-from ..linalg import np_conserved as npc
-from ..linalg import sparse
-from ..linalg.charges import DipolarChargeInfo
-from ..linalg.krylov_based import Arnoldi
-from ..linalg.random_matrix import GOE, GUE
-from ..linalg.truncation import TruncationError, _machine_prec_trunc_par, eigh_rho, svd_theta
+import cyten as ct
+
+from ..linalg.truncation import TruncationError
 from ..tools import hdf5_io
 from ..tools.cache import DictCache
 from ..tools.math import entropy, lcm
 from ..tools.misc import BetaWarning, argsort, get_recursive, inverse_permutation, to_array, to_iterable
 from ..tools.params import asConfig
-from .site import group_sites
 
 logger = logging.getLogger(__name__)
 
@@ -196,9 +196,9 @@ class MPSGeometry:
 
     Attributes
     ----------
-    chinfo : :class:`~tenpy.linalg.np_conserved.ChargeInfo`
-        The nature of the charge.
-    sites : list of :class:`~tenpy.models.lattice.Site`
+    symmetry : :class:`cyten.Symmetry`
+        The nature of the symmetry.
+    sites : list of :class:`cyten.Site`
         Defines the local Hilbert space for each site.
     bc : ``'finite' | 'segment' | 'infinite'``
         Boundary conditions as described in the table of the module doc-string.
@@ -212,9 +212,9 @@ class MPSGeometry:
 
     _valid_bc = ('finite', 'segment', 'infinite')  # valid boundary conditions. Dont overwrite this!
 
-    def __init__(self, sites, bc, unit_cell_width=None):
+    def __init__(self, sites: list[ct.Site], bc: Literal['finite', 'segment', 'infinite'], unit_cell_width: int = None):
         self.sites = list(sites)
-        self.chinfo = self.sites[0].leg.chinfo
+        self.symmetry = self.sites[0].symmetry  # FIXME purge chinfo
         self.bc = bc
         if unit_cell_width is None:
             msg = (
@@ -234,8 +234,8 @@ class MPSGeometry:
         if not (isinstance(self.unit_cell_width, int) and self.unit_cell_width > 0):
             raise ValueError(f'invalid unit_cell_width: {self.unit_cell_width}')
         for i, site in enumerate(self.sites):
-            if site.leg.chinfo != self.chinfo:
-                raise ValueError(f'Invalid ChargeInfo for site {i}.')
+            if site.leg.symmetry != self.symmetry:
+                raise ValueError(f'Invalid symmetry for site {i}.')
 
     @property
     def L(self):
@@ -276,7 +276,7 @@ class MPSGeometry:
         # Note: self.L % self.unit_cell_width == 0 guaranteed by test_sanity
         return self.L // self.unit_cell_width
 
-    def _to_valid_site_index(self, i, return_num_unit_cells=False):
+    def _to_valid_site_index(self, i: int, return_num_unit_cells: bool = False) -> int | tuple[int, int]:
         """Make sure `i` is a valid index of a site.
 
         For finite MPS, we just check if ``i`` is within bounds ``0 <= i < L``.
@@ -313,7 +313,9 @@ class MPSGeometry:
             return i_in_unit_cell, num_unit_cells
         return i_in_unit_cell
 
-    def _to_valid_bond_index(self, i_site, is_left, return_num_unit_cells=False):
+    def _to_valid_bond_index(
+        self, i_site: int, is_left: bool, return_num_unit_cells: bool = False
+    ) -> int | tuple[int, int]:
         """Make sure `i` is a valid index of a bond.
 
         For finite MPS, we just check if ``i`` is within bounds ``0 <= i < L + 1``.
@@ -352,98 +354,27 @@ class MPSGeometry:
         return self._to_valid_site_index(i_site + int(not is_left), return_num_unit_cells)
 
     def shift_charges_unit_cells(self, charges, num_unit_cells):
-        """Shift charges by an integer multiple of unit cells.
-
-        See the notes on :ref:`shift_symmetry`.
-
-        A unit cell has length :attr:`~tenpy.networks.mps.MPSGeometry.L` and a shift by one
-        unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mps.MPSGeometry.unit_cell_width`
-        lattice spacings.
-
-        Essentially, this is a convenience wrapper around
-        :math:`tenpy.linalg.charges.ChargeInfo.shift_charges_horizontal`.
-
-        Parameters
-        ----------
-        charges : 2D ndarray of dtype QTYPE
-            The charges to shift.
-        num_unit_cells : int
-            The number of unit cells.
-
-        Returns
-        -------
-        2D ndarray of dtype QTYPE
-            The shifted charges.
-
-        """
-        dx_0 = num_unit_cells * self.unit_cell_width
-        return self.chinfo.shift_charges_horizontal(charges, dx_0)
+        raise NotImplementedError('TODO: shift-symmetry')
 
     def shift_Site_unit_cells(self, site, num_unit_cells):
-        """Shift a `site` by an integer multiple of unit cells.
+        # TODO reactivate this in get_site
+        raise NotImplementedError('TODO: shift-symmetry')
 
-        See the notes on :ref:`shift_symmetry`.
+    def shift_Tensor_unit_cells(self, arr, num_unit_cells, inplace: bool = False):
+        raise NotImplementedError('TODO: shift-symmetry')
 
-        A unit cell has length :attr:`~tenpy.networks.mps.MPSGeometry.L` and a shift by one
-        unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mps.MPSGeometry.unit_cell_width`
-        lattice spacings.
-
-        Parameters
-        ----------
-        site : :class:`~tenpy.networks.site.Site`
-            The site to shift.
-        num_unit_cells : int
-            The number of unit cells.
-
-        Returns
-        -------
-        :class:`~tenpy.networks.site.Site`
-            A new site with shifted charges, or the unmodified input `site` if the shift is trivial.
-
-        """
-        if num_unit_cells == 0 or site.leg.chinfo.trivial_shift:
-            return site
-        leg = site.leg.apply_charge_mapping(
-            site.leg.chinfo.shift_charges_horizontal, func_kwargs=dict(dx_0=num_unit_cells * self.unit_cell_width)
-        )
-        return copy.copy(site).change_charge(leg)  # shallow copy
-
-    def shift_Array_unit_cells(self, arr, num_unit_cells, inplace: bool = False):
-        """Shift an Array by an integer multiple of unit cells.
-
-        See the notes on :ref:`shift_symmetry`.
-
-        A unit cell has length :attr:`~tenpy.networks.mps.MPSGeometry.L` and a shift by one
-        unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mps.MPSGeometry.unit_cell_width`
-        lattice spacings.
-
-        Parameters
-        ----------
-        arr : :class:`~tenpy.linalg.np_conserved.Array`
-            The site to shift.
-        num_unit_cells : int
-            The number of unit cells.
-        inplace : bool
-            If the array (its legs, qtotal) can be modified in-place.
-            Otherwise (default) we make a shallow copy.
-
-        Returns
-        -------
-        :class:`~tenpy.linalg.np_conserved.Array`
-            The shifted array.
-
-        """
-        dx_0 = num_unit_cells * self.unit_cell_width
-        return arr.shift_charges_horizontal(dx_0, inplace=inplace)
-
-    def get_site(self, i):
+    def get_site(self, i: int) -> ct.Site:
         """Get the `i`-th site.
 
         This is ``self.sites[i]`` if `i` is in the unit cell and takes care of shifting the
         charges otherwise.
         """
-        i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        return self.shift_Site_unit_cells(self.sites[i_in_unit_cell], num_unit_cells)
+        # i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
+        # return self.shift_Site_unit_cells(self.sites[i_in_unit_cell], num_unit_cells)
+        return self.sites[self._to_valid_site_index(i)]
+
+
+# FIXME stopped here
 
 
 class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
@@ -2876,7 +2807,7 @@ class MPS(BaseMPSExpectationValue):
         B = self._B[i_in_unit_cell]
         if copy:
             B = B.copy()
-        B = self.shift_Array_unit_cells(B, num_unit_cells=num_unit_cells, inplace=copy)
+        B = self.shift_Tensor_unit_cells(B, num_unit_cells=num_unit_cells, inplace=copy)
         new_form = self._to_valid_form(form)
         old_form = self.form[i_in_unit_cell]
         if new_form is not None and old_form != new_form:
@@ -2908,7 +2839,7 @@ class MPS(BaseMPSExpectationValue):
 
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        B = self.shift_Array_unit_cells(B, -num_unit_cells)
+        B = self.shift_Tensor_unit_cells(B, -num_unit_cells)
         self.form[i_in_unit_cell] = self._to_valid_form(form)
         self.dtype = np.promote_types(self.dtype, B.dtype)
         self._B[i_in_unit_cell] = B.itranspose(self._B_labels)
@@ -2958,7 +2889,7 @@ class MPS(BaseMPSExpectationValue):
         i_in_unit_cell, num_unit_cells = self._to_valid_bond_index(i, is_left=True, return_num_unit_cells=True)
         S = self._S[i_in_unit_cell]
         if isinstance(S, npc.Array):
-            S = self.shift_Array_unit_cells(S, num_unit_cells, inplace=False)
+            S = self.shift_Tensor_unit_cells(S, num_unit_cells, inplace=False)
         return S
 
     def get_SR(self, i):
@@ -2969,7 +2900,7 @@ class MPS(BaseMPSExpectationValue):
         i_in_unit_cell, num_unit_cells = self._to_valid_bond_index(i, is_left=False, return_num_unit_cells=True)
         S = self._S[i_in_unit_cell]
         if isinstance(S, npc.Array):
-            S = self.shift_Array_unit_cells(S, num_unit_cells, inplace=False)
+            S = self.shift_Tensor_unit_cells(S, num_unit_cells, inplace=False)
         return S
 
     def set_SL(self, i, S):
@@ -2979,7 +2910,7 @@ class MPS(BaseMPSExpectationValue):
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_bond_index(i, is_left=True, return_num_unit_cells=True)
         if isinstance(S, npc.Array):
-            S = self.shift_Array_unit_cells(S, -num_unit_cells)
+            S = self.shift_Tensor_unit_cells(S, -num_unit_cells)
         self._S[i_in_unit_cell] = S
 
     def set_SR(self, i, S):
@@ -2989,7 +2920,7 @@ class MPS(BaseMPSExpectationValue):
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_bond_index(i, is_left=False, return_num_unit_cells=True)
         if isinstance(S, npc.Array):
-            S = self.shift_Array_unit_cells(S, -num_unit_cells)
+            S = self.shift_Tensor_unit_cells(S, -num_unit_cells)
         self._S[i_in_unit_cell] = S
 
     def get_theta(self, i, n=2, cutoff=1.0e-16, formL=1.0, formR=1.0):
@@ -4622,7 +4553,7 @@ class MPS(BaseMPSExpectationValue):
         # phase 1: bring bond (i1-1, i1) in canonical form
         # find dominant right eigenvector
         norm, Gr = self._canonical_form_dominant_gram_matrix(i1, False, tol_xi)
-        Gr = self.shift_Array_unit_cells(Gr, -1)
+        Gr = self.shift_Tensor_unit_cells(Gr, -1)
         self._B[i1] /= np.sqrt(norm)  # correct norm
         if not renormalize:
             self.norm *= np.sqrt(norm)
@@ -4642,7 +4573,7 @@ class MPS(BaseMPSExpectationValue):
             self.norm *= np.sqrt(norm)
         # bring bond to canonical form
         Gl, Yl, Yr = self._canonical_form_correct_left(i1, Gl, Wr)
-        Gl = self.shift_Array_unit_cells(Gl, -1)
+        Gl = self.shift_Tensor_unit_cells(Gl, -1)
         Wr = np.ones(Yr.legs[0].ind_len, np.float64)
         # now the bond (i1-1,i1) is in canonical form
         Wr_list[i1] = Wr  # diag(Wr) is right eigenvector on bond (i1-1, i1)
@@ -4730,7 +4661,7 @@ class MPS(BaseMPSExpectationValue):
             self._B[i] = V.split_legs()
             self.set_SL(i, S)
         # note: we included SVD on i=0; else the virtual leg (-1, 0) might not even be sorted
-        U = self.shift_Array_unit_cells(U, 1)
+        U = self.shift_Tensor_unit_cells(U, 1)
         self._B[-1] = npc.tensordot(self._B[-1], U, axes=['vR', 'vL'])
 
     def _canonical_form_left_orthogonalize(self, L, tol, arnoldi_params):
@@ -5296,7 +5227,7 @@ class MPS(BaseMPSExpectationValue):
                     ) from e
             opname = op
         else:
-            op = self.shift_Array_unit_cells(op, -num_unit_cells, inplace=False)
+            op = self.shift_Tensor_unit_cells(op, -num_unit_cells, inplace=False)
             opname = op
             need_JW = False
 
@@ -6405,7 +6336,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             key = self._LP_keys[i0_in_unit_cell]
             LP = self.cache.get(key, None)
             if LP is not None:
-                LP = self.shift_Array_unit_cells(LP, num_unit_cells, inplace=False)
+                LP = self.shift_Tensor_unit_cells(LP, num_unit_cells, inplace=False)
                 break
             # (for finite, LP[0] should always be set, so we should abort at latest with i0=0)
         else:  # no break called
@@ -6452,7 +6383,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             key = self._RP_keys[i0_in_unit_cell]
             RP = self.cache.get(key, None)
             if RP is not None:
-                RP = self.shift_Array_unit_cells(RP, num_unit_cells, inplace=False)
+                RP = self.shift_Tensor_unit_cells(RP, num_unit_cells, inplace=False)
                 break
             # (for finite, RP[-1] should always be set, so we should abort at latest with i0=L-1)
         else:  # no break called
@@ -6485,7 +6416,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         Takes care of shifting as described in :ref:`shift_symmetry`.
         """
         i, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        self.cache[self._LP_keys[i]] = self.shift_Array_unit_cells(LP, -num_unit_cells)
+        self.cache[self._LP_keys[i]] = self.shift_Tensor_unit_cells(LP, -num_unit_cells)
         self._LP_age[i] = age
 
     def set_RP(self, i, RP, age):
@@ -6494,7 +6425,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         Takes care of shifting as described in :ref:`shift_symmetry`.
         """
         i, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        self.cache[self._RP_keys[i]] = self.shift_Array_unit_cells(RP, -num_unit_cells)
+        self.cache[self._RP_keys[i]] = self.shift_Tensor_unit_cells(RP, -num_unit_cells)
         self._RP_age[i] = age
 
     def del_LP(self, i):
