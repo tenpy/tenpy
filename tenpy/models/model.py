@@ -801,7 +801,7 @@ class MPOModel(Model):
                 continue
             Wi = Ws[i]
             if pbc_bond:
-                Wi = H_MPO.shift_Array_unit_cells(Wi, -1)
+                Wi = H_MPO.shift_Tensor_unit_cells(Wi, -1)
             IdL_a = H_MPO.IdL[i]
             IdR_c = H_MPO.IdR[j + 1]
             Hb = npc.tensordot(Wi[IdL_a, :, :, :], Wj[:, IdR_c, :, :], axes=('wR', 'wL'))
@@ -829,8 +829,8 @@ class MPOModel(Model):
             Id_i = sites[i].Id
             H_onsite_i = H_onsite[i]
             if j == 0:
-                Id_i = H_MPO.shift_Array_unit_cells(Id_i, -1, inplace=False)
-                H_onsite_i = H_MPO.shift_Array_unit_cells(H_onsite_i, -1, inplace=False)
+                Id_i = H_MPO.shift_Tensor_unit_cells(Id_i, -1, inplace=False)
+                H_onsite_i = H_MPO.shift_Tensor_unit_cells(H_onsite_i, -1, inplace=False)
             Hb = npc.outer(Id_i, strength_j * H_onsite[j]) + npc.outer(strength_i * H_onsite_i, sites[j].Id)
             Hb = add_with_None_0(H_bond[j], Hb)
             Hb.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
