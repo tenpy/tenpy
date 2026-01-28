@@ -25,8 +25,4 @@ so you probably won't need to import `charges` directly.
 # Copyright (C) TeNPy Developers, Apache license
 
 from . import truncation
-from .truncation import *
-
-__all__ = [
-    *truncation.__all__,
-]
+from .truncation import TruncationError
