@@ -9,7 +9,6 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from .optimization import bottleneck
 from .params import Config
 
 logger = logging.getLogger(__name__)
@@ -18,7 +17,6 @@ __all__ = [
     'to_iterable',
     'to_iterable_of_len',
     'to_array',
-    'anynan',
     'argsort',
     'lexsort',
     'inverse_permutation',
@@ -128,18 +126,6 @@ def to_array(a, shape=(None,), dtype=None, allow_incommensurate=False):
     if need_crop:
         a = a[tuple(crop)]
     return a
-
-
-if bottleneck is not None:
-
-    def anynan(a):
-        """Check whether any entry of a ndarray `a` is 'NaN'."""
-        return bottleneck.anynan(a)
-else:
-
-    def anynan(a):
-        """Check whether any entry of a ndarray `a` is 'NaN'."""
-        return np.isnan(np.sum(a))  # still faster than 'np.isnan(a).any()'
 
 
 def argsort(a, sort=None, **kwargs):
