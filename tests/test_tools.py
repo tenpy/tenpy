@@ -1,9 +1,6 @@
 """A collection of tests for tenpy.tools submodules."""
 
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
-
-pytest.skip(allow_module_level=True)
 
 import itertools as it
 import os.path
@@ -215,6 +212,10 @@ def test_approximate_sum_of_exp(N=100):
 
 
 def test_find_subclass():
+    with pytest.raises(AttributeError):
+        _ = tenpy.models
+    pytest.xfail('models not updated yet')
+
     BaseCls = tenpy.models.lattice.Lattice
     SimpleLattice = tenpy.models.lattice.SimpleLattice  # direct sublcass of Lattice
     Square = tenpy.models.lattice.Square  # sublcass of SimpleLattice -> recursion necessary
@@ -316,6 +317,10 @@ def test_setup_logging():
 
 def test_fixes_consistency_check_IrregularLattice():
     # tests if the bug reported at https://tenpy.johannes-hauschild.de/viewtopic.php?t=757 is fixed.
+
+    with pytest.raises(AttributeError):
+        _ = tenpy.models
+    pytest.xfail('models not updated yet')
 
     class SpinModel_triangular_finite(tenpy.models.CouplingMPOModel):
         def init_sites(self, model_params):
