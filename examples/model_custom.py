@@ -8,12 +8,12 @@ or somewhere in the ``PYTHON_PATH``. Then you can use it with the parameters fil
 """
 
 import numpy as np
+from tenpy.networks.site import SpinSite
 
 from tenpy.linalg import np_conserved as npc
 from tenpy.models.lattice import Chain
 from tenpy.models.model import CouplingMPOModel, NearestNeighborModel
 from tenpy.networks.mps import TransferMatrix
-from tenpy.networks.site import SpinSite
 
 
 class AnisotropicSpin1Chain(CouplingMPOModel, NearestNeighborModel):

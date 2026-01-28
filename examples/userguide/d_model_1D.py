@@ -1,8 +1,9 @@
 """Definition of a model: the XXZ chain."""
 
+from tenpy.networks.site import SpinSite
+
 from tenpy.models.lattice import Chain
 from tenpy.models.model import CouplingModel, MPOModel, NearestNeighborModel
-from tenpy.networks.site import SpinSite
 
 
 class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):

@@ -12,8 +12,8 @@ but this example might be helpful to see the general idea.
 
 import matplotlib.pyplot as plt
 import numpy as np
-
 import tenpy.linalg.np_conserved as npc
+
 from tenpy.algorithms import dmrg
 from tenpy.models.tf_ising import TFIChain
 from tenpy.networks.mps import MPS

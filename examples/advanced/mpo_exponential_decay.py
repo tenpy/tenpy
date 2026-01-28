@@ -11,13 +11,13 @@ system in the thermodynamic limit.
 # Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
+from tenpy.networks.site import SpinHalfSite
 
 from tenpy.algorithms import dmrg
 from tenpy.models.lattice import Chain
 from tenpy.models.model import MPOModel
 from tenpy.networks.mpo import MPO
 from tenpy.networks.mps import MPS
-from tenpy.networks.site import SpinHalfSite
 from tenpy.tools.params import asConfig
 
 

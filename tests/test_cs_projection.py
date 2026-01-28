@@ -6,11 +6,11 @@ import pytest
 pytest.skip(allow_module_level=True)
 
 import numpy as np
+from tenpy.networks.site import FermionSite, SpinHalfFermionSite, SpinSite
 
 from tenpy.models.hubbard import FermiHubbardModel
 from tenpy.networks.mps import MPS
 from tenpy.networks.purification_mps import PurificationMPS
-from tenpy.networks.site import FermionSite, SpinHalfFermionSite, SpinSite
 
 
 def test_cs_projection():

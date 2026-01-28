@@ -13,13 +13,13 @@ import numpy.testing as npt
 import pytest
 import scipy.linalg as LA
 import tenpy.linalg.np_conserved as npc
+from tenpy.networks.site import SpinHalfSite
 
 from tenpy.algorithms import exact_diag, mpo_evolution, tdvp, tebd
 from tenpy.models.model import CouplingMPOModel, NearestNeighborModel
 from tenpy.models.spins import DipolarSpinChain, SpinChain
 from tenpy.models.tf_ising import TFIChain
 from tenpy.networks.mps import MPS
-from tenpy.networks.site import SpinHalfSite
 
 
 @pytest.mark.parametrize(

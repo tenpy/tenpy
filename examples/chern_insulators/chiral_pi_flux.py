@@ -6,13 +6,13 @@ Based on the model in [Neupert2011]_
 # Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
+from tenpy.networks.site import FermionSite
 
 from tenpy.algorithms import dmrg
 from tenpy.models import lattice
 from tenpy.models.model import CouplingMPOModel
 from tenpy.networks import site
 from tenpy.networks.mps import MPS
-from tenpy.networks.site import FermionSite
 
 
 class BipartiteSquare(lattice.Lattice):
