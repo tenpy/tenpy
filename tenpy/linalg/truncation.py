@@ -47,9 +47,10 @@ import warnings
 
 import numpy as np
 
-from ..linalg import np_conserved as npc
 from ..tools.hdf5_io import Hdf5Exportable
 from ..tools.params import asConfig
+
+npc = None  # dummy
 
 __all__ = ['TruncationError', 'truncate', 'svd_theta', 'decompose_theta_qr_based', 'eigh_rho']
 
@@ -368,7 +369,13 @@ def eigh_rho(rho, trunc_par, UPLO='L', sort=None):
 
 
 def _qr_theta_Y0(
-    old_qtotal_L, old_qtotal_R, old_bond_leg, theta: npc.Array, move_right: bool, expand: float, min_block_increase: int
+    old_qtotal_L,
+    old_qtotal_R,
+    old_bond_leg,
+    theta: 'npc.Array',
+    move_right: bool,
+    expand: float,
+    min_block_increase: int,
 ):
     """Generate the initial guess `Y0` for the (left) right isometry.
 
@@ -534,7 +541,7 @@ def decompose_theta_qr_based(
     old_qtotal_L,
     old_qtotal_R,
     old_bond_leg,
-    theta: npc.Array,
+    theta: 'npc.Array',
     move_right: bool,
     expand: float,
     min_block_increase: int,
