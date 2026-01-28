@@ -56,7 +56,7 @@ def test_import_from_datadir(fn):
     print('import ', fn)
     filename = os.path.join(io_test.datadir, fn)
     with open(filename, 'rb') as f:
-        if version <= io_test.parse_version('0.9.0'):
+        if io_test.parse_version('0.8.0') <= version <= io_test.parse_version('0.9.0'):
             with pytest.raises(
                 TypeError, match=r"Listener.__new__\(\) missing 1 required positional argument: 'extra_kwargs'"
             ):
@@ -71,7 +71,7 @@ def test_import_from_datadir(fn):
     else:
         data_expected = io_test.gen_example_data('0.4.0')
 
-    if version < io_test.parse_version('1.1.0'):
+    if io_test.parse_version('0.6.0') <= version < io_test.parse_version('1.1.0'):
         with pytest.raises(AttributeError, match="'MPS' object has no attribute 'unit_cell_width'"):
             io_test.assert_equal_data(data, data_expected)
         pytest.xfail()
