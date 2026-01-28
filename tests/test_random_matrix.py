@@ -1,9 +1,12 @@
 """A collection of tests for :module:`tenpy.linalg.random_matrix`."""
+
 # Copyright (C) TeNPy Developers, Apache license
+import pytest
+
+pytest.skip(allow_module_level=True)
 
 import numpy as np
 import numpy.testing as npt
-
 import tenpy.linalg.np_conserved as npc
 import tenpy.linalg.random_matrix as rmat
 

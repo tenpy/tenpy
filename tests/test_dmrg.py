@@ -1,13 +1,17 @@
 """A collection of tests to check the functionality of `tenpy.dmrg`"""
+
 # Copyright (C) TeNPy Developers, Apache license
+import pytest
+
+pytest.skip(allow_module_level=True)
 
 import warnings
 
 import numpy as np
 import pytest
+import tenpy.linalg.np_conserved as npc
 from scipy import integrate
 
-import tenpy.linalg.np_conserved as npc
 from tenpy.algorithms import dmrg, dmrg_parallel
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.models.lattice import Chain

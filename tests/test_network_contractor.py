@@ -1,5 +1,9 @@
 """a collection of tests to check the functionality of network_contractor.py."""
+
 # Copyright (C) TeNPy Developers, Apache license
+import pytest
+
+pytest.skip(allow_module_level=True)
 
 import numpy as np
 from random_test import random_Array

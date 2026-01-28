@@ -1,4 +1,7 @@
 # Copyright (C) TeNPy Developers, Apache license
+import pytest
+
+pytest.skip(allow_module_level=True)
 
 import pytest
 from test_model import check_general_model

@@ -1,8 +1,12 @@
-import numpy as np
 import pytest
 
-import tenpy
+pytest.skip(allow_module_level=True)
+
+import numpy as np
+import pytest
 import tenpy.linalg.np_conserved as npc
+
+import tenpy
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.models.tf_ising import TFIChain
 

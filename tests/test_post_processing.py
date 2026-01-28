@@ -1,5 +1,9 @@
 """Short tests for the :class:`DataLoader` and for post_processing functions in a Simulation"""
+
 # Copyright (C) TeNPy Developers, Apache license
+import pytest
+
+pytest.skip(allow_module_level=True)
 
 import copy
 

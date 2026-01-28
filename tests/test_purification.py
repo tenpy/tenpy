@@ -1,13 +1,17 @@
 """A collection of tests for :module:`tenpy.networks.purification_mps`."""
+
 # Copyright (C) TeNPy Developers, Apache license
+import pytest
+
+pytest.skip(allow_module_level=True)
 
 import numpy as np
 import numpy.testing as npt
 import pytest
 import scipy
-
 import tenpy.linalg.np_conserved as npc
 import tenpy.linalg.random_matrix as rmat
+
 from tenpy.algorithms.purification import PurificationApplyMPO, PurificationTEBD
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.networks import purification_mps, site

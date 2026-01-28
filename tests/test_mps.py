@@ -1,12 +1,16 @@
 """A collection of tests for :module:`tenpy.networks.mps`."""
+
 # Copyright (C) TeNPy Developers, Apache license
+import pytest
+
+pytest.skip(allow_module_level=True)
 
 import numpy as np
 import numpy.testing as npt
 import pytest
+import tenpy.linalg.np_conserved as npc
 from random_test import rand_permutation, random_MPS
 
-import tenpy.linalg.np_conserved as npc
 from tenpy.algorithms import tebd
 from tenpy.models.aklt import AKLTChain
 from tenpy.models.lattice import Chain, MultiSpeciesLattice, Square

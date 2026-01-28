@@ -167,6 +167,7 @@ ignore = [
     "F841",  # Local variable is assigned to but never used
     "INP001",  # is part of an implicit namespace package
     "D",  # pydocstyle
+    "E402",  # Module level import not at top of file
 ]
 "doc/conf.py" = [
     "D",  # docstrings

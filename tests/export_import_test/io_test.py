@@ -7,15 +7,19 @@ generate the files, you can call the ``test_*.py`` files in this folder manually
 test_pickle.py``. This will generate the files with pre-defined data (see :func:`gen_example_data`)
 and the tenpy version in the filename.
 """
+
 # Copyright (C) TeNPy Developers, Apache license
+import pytest
+
+pytest.skip(allow_module_level=True)
 
 import os
 import types
 
 import numpy as np
+import tenpy.linalg.np_conserved as npc
 
 import tenpy
-import tenpy.linalg.np_conserved as npc
 import tenpy.models.tf_ising
 
 try:

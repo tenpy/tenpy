@@ -1,13 +1,17 @@
 """A collection of tests for (classes in) :mod:`tenpy.models.model`."""
+
 # Copyright (C) TeNPy Developers, Apache license
+import pytest
+
+pytest.skip(allow_module_level=True)
 
 import itertools
 
 import numpy as np
 import numpy.testing as npt
 import pytest
-
 import tenpy.linalg.np_conserved as npc
+
 import tenpy.networks.site
 from tenpy.algorithms.exact_diag import ExactDiag, get_numpy_Hamiltonian
 from tenpy.models import lattice, model

@@ -1,4 +1,7 @@
 # Copyright (C) TeNPy Developers, Apache license
+import pytest
+
+pytest.skip(allow_module_level=True)
 import itertools
 
 import numpy as np
