@@ -634,7 +634,7 @@ class UniformMPS(MPS):
     def get_AL(self, i, copy=False, label_p=None):
         """Return (view of) `AL` at site `i` in canonical form."""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        AL = self.shift_Array_unit_cells(self._AL[i_in_unit_cell], num_unit_cells=num_unit_cells, inplace=not copy)
+        AL = self.shift_Tensor_unit_cells(self._AL[i_in_unit_cell], num_unit_cells=num_unit_cells, inplace=not copy)
         if label_p is not None:
             AL = self._replace_p_label(AL, label_p)
         return AL
@@ -642,7 +642,7 @@ class UniformMPS(MPS):
     def get_AR(self, i, copy=False, label_p=None):
         """Return (view of) `AR` at site `i` in canonical form."""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        AR = self.shift_Array_unit_cells(self._AR[i_in_unit_cell], num_unit_cells=num_unit_cells, inplace=not copy)
+        AR = self.shift_Tensor_unit_cells(self._AR[i_in_unit_cell], num_unit_cells=num_unit_cells, inplace=not copy)
         if label_p is not None:
             AR = self._replace_p_label(AR, label_p)
         return AR
@@ -650,7 +650,7 @@ class UniformMPS(MPS):
     def get_AC(self, i, copy=False, label_p=None):
         """Return (view of) `AC` at site `i` in canonical form."""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        AC = self.shift_Array_unit_cells(self._AC[i_in_unit_cell], num_unit_cells=num_unit_cells, inplace=not copy)
+        AC = self.shift_Tensor_unit_cells(self._AC[i_in_unit_cell], num_unit_cells=num_unit_cells, inplace=not copy)
         if label_p is not None:
             AC = self._replace_p_label(AC, label_p)
         return AC
@@ -658,7 +658,7 @@ class UniformMPS(MPS):
     def get_C(self, i, copy=False):
         """Return center matrix C on the left of site `i`"""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        return self.shift_Array_unit_cells(self._C[i_in_unit_cell], num_unit_cells=num_unit_cells, inplace=not copy)
+        return self.shift_Tensor_unit_cells(self._C[i_in_unit_cell], num_unit_cells=num_unit_cells, inplace=not copy)
 
     def set_B(self, i, B, form='B'):
         """Set tensor `B` at site `i`.
@@ -686,28 +686,28 @@ class UniformMPS(MPS):
     def set_AL(self, i, AL):
         """Set `AL` at site `i`"""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        AL = self.shift_Array_unit_cells(AL, -num_unit_cells)
+        AL = self.shift_Tensor_unit_cells(AL, -num_unit_cells)
         self.dtype = np.promote_types(self.dtype, AL.dtype)
         self._AL[i_in_unit_cell] = AL.itranspose(self._B_labels)
 
     def set_AR(self, i, AR):
         """Set `AR` at site `i`"""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        AR = self.shift_Array_unit_cells(AR, -num_unit_cells)
+        AR = self.shift_Tensor_unit_cells(AR, -num_unit_cells)
         self.dtype = np.promote_types(self.dtype, AR.dtype)
         self._AR[i_in_unit_cell] = AR.itranspose(self._B_labels)
 
     def set_AC(self, i, AC):
         """Set `AC` at site `i`"""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        AC = self.shift_Array_unit_cells(AC, -num_unit_cells)
+        AC = self.shift_Tensor_unit_cells(AC, -num_unit_cells)
         self.dtype = np.promote_types(self.dtype, AC.dtype)
         self._AC[i_in_unit_cell] = AC.itranspose(self._B_labels)
 
     def set_C(self, i, C):
         """Set `C` left of site `i`"""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        C = self.shift_Array_unit_cells(C, -num_unit_cells)
+        C = self.shift_Tensor_unit_cells(C, -num_unit_cells)
         self.dtype = np.promote_types(self.dtype, C.dtype)
         self._C[i_in_unit_cell] = C.itranspose(self._C_labels)
 
