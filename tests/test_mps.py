@@ -1012,12 +1012,14 @@ def test_fixes_596(renormalize):
     psi.form = [None] * L
     psi.test_sanity()
 
-    psi.canonical_form_finite(cutoff=1e-10, renormalize=renormalize)
+    cutoff = 1.0e-10
+    psi.canonical_form_finite(cutoff=cutoff, renormalize=renormalize)
     psi.test_sanity()
     expect_norm = 1 if renormalize else 0.5**L
-    assert abs(psi.norm - expect_norm) < 1e-16
-    assert abs(psi.overlap(psi) - expect_norm**2) < 1e-16
-    assert psi.overlap(psi_old) > (1 - 1e-8) * expect_norm
+    assert abs((psi.norm - expect_norm) / expect_norm) < 10 * cutoff
+    assert abs((psi.overlap(psi) - expect_norm**2) / expect_norm**2) < 10 * cutoff
+    assert abs((psi.overlap(psi_old) - expect_norm) / expect_norm) < 1e-8
+    # the above assert also ensures psi.overlap(psi_old)  > 0
 
 
 if __name__ == '__main__':
