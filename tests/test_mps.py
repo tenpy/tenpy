@@ -1000,5 +1000,27 @@ def test_fixes_600_hdf5(tmp_path):
     io_test.assert_equal_data(data_imported, data)
 
 
+@pytest.mark.parametrize('renormalize', [True, False])
+def test_fixes_596(renormalize):
+    # See https://github.com/tenpy/tenpy/issues/596
+    L = 100
+    psi = mps.MPS.from_product_state([site.SpinHalfSite()] * L, ['up'] * L, unit_cell_width=L)
+    psi_old = psi.copy()
+
+    for tensor in psi._B:
+        tensor /= 2
+    psi.form = [None] * L
+    psi.test_sanity()
+
+    cutoff = 1.0e-10
+    psi.canonical_form_finite(cutoff=cutoff, renormalize=renormalize)
+    psi.test_sanity()
+    expect_norm = 1 if renormalize else 0.5**L
+    assert abs((psi.norm - expect_norm) / expect_norm) < 10 * cutoff
+    assert abs((psi.overlap(psi) - expect_norm**2) / expect_norm**2) < 10 * cutoff
+    assert abs((psi.overlap(psi_old) - expect_norm) / expect_norm) < 1e-8
+    # the above assert also ensures psi.overlap(psi_old)  > 0
+
+
 if __name__ == '__main__':
     test_sample_measurements()

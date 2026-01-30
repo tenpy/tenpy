@@ -4552,17 +4552,20 @@ class MPS(BaseMPSExpectationValue):
             # we actually had a canonical form before, so we should *not* ignore the 'S'
             M = self.get_B(0, form='Th')
             form = 'B'  # for other 'M'
+        M = self._normalize_array(M.copy(deep=True), renormalize=renormalize)
         Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
         # Q = unitary, R has to be multiplied to the right
         self.set_B(0, Q.split_legs(0), form='A')
         for i in range(1, L - 1):
             M = self.get_B(i, form)
             M = npc.tensordot(R, M, axes=['vR', 'vL'])
+            M = self._normalize_array(M, renormalize=renormalize)
             Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
             # Q is unitary, i.e. left canonical, R has to be multiplied to the right
             self.set_B(i, Q.split_legs(0), form='A')
         M = self.get_B(L - 1, form)
         M = npc.tensordot(R, M, axes=['vR', 'vL'])
+        M = self._normalize_array(M, renormalize=renormalize)
         if self.bc == 'segment':
             # also need to calculate new singular values on the very right
             U, S, VR_segment = npc.svd(
@@ -6146,6 +6149,14 @@ class MPS(BaseMPSExpectationValue):
 
     def _normalize_exp_val(self, value):
         return np.real_if_close(value)  # ignore self.norm
+
+    def _normalize_array(self, arr, renormalize):
+        """Normalize an array in-place, optionally absorb the factor into the :attr:`norm`."""
+        norm = npc.norm(arr)
+        if not renormalize:
+            self.norm = self.norm * norm
+        arr /= norm
+        return arr
 
     def _contract_with_LP(self, C, i):
         C.ireplace_labels(['vL'], ['vR*'])
