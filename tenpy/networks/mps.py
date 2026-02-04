@@ -956,7 +956,10 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         return self.expectation_value_multi_sites(ops, i_min)
     
     def expectation_value_term_list(self, term_list):
-        """Computes the expectation value of a an operator given as a term_list"""
+        """Computes the expectation value of an operator given as a term_list
+        which contains terms and strength.
+        """
+
         sum = 0
         for term, strength in zip(term_list.terms, term_list.strength):
             sum += strength*self.expectation_value_term(term)
