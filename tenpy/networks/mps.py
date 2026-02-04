@@ -954,6 +954,16 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         if has_extra_JW:
             raise ValueError('Odd number of operators which need a Jordan Wigner string')
         return self.expectation_value_multi_sites(ops, i_min)
+    
+    def expectation_value_term_list(self, term_list):
+        """Computes the expectation value of an operator given as a term_list
+        which contains terms and strength.
+        """
+
+        sum = 0
+        for term, strength in zip(term_list.terms, term_list.strength):
+            sum += strength*self.expectation_value_term(term)
+        return sum
 
     def term_correlation_function_right(self, term_L, term_R, i_L=0, j_R=None, autoJW=True, opstr=None):
         """Correlation function between (multi-site) terms, moving the right term, fix left term.
