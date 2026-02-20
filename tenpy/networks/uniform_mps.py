@@ -415,7 +415,7 @@ class UniformMPS(MPS):
         obj.grouped = hdf5_loader.get_attr(h5gr, 'grouped')
         obj._transfermatrix_keep = hdf5_loader.get_attr(h5gr, 'transfermatrix_keep')
         obj.chinfo = hdf5_loader.load(subpath + 'chinfo')
-        obj.dtype = np.find_common_type([B.dtype for B in obj._AR], [])
+        obj.dtype = np.result_type(*(B.dtype for B in obj._AR))
         if 'segment_boundaries' in h5gr:
             obj.segment_boundaries = hdf5_loader.load(subpath + 'segment_boundaries')
         else:

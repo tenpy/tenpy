@@ -68,7 +68,7 @@ class MomentumMPS:
             'MomentumMPS is a new feature and not as well-tested as the rest of the library', BetaWarning, stacklevel=2
         )
         assert len(Xs) == uMPS.L, 'Need as many excitations as sites in unit cell.'
-        self.dtype = dtype = np.find_common_type([X.dtype for X in Xs], [])
+        self.dtype = dtype = np.result_type(*(X.dtype for X in Xs))
         self._X = [X.astype(dtype, copy=True) for X in Xs]
         self.uMPS_GS = uMPS
 
