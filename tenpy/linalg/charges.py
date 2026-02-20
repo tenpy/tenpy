@@ -1798,7 +1798,7 @@ class LegPipe(LegCharge):
         grid = grid.reshape(nlegs, -1)  # *this* is the actual `reshaping`
         # *columns* of grid are now all possible combinations of qindices.
 
-        nblocks = grid.shape[1]  # number of blocks in the pipe = np.product(self.subqshape)
+        nblocks = grid.shape[1]  # number of blocks in the pipe = np.prod(self.subqshape)
         # determine q_map -- it's essentially the grid.
         q_map = np.empty((nblocks, 3 + nlegs), dtype=np.intp)
         q_map[:, 3:] = grid.T  # transpose -> rows are possible combinations.

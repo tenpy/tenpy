@@ -565,7 +565,7 @@ def LegPipe__init_from_legs(self, bint sort=True, bint bunch=True):
     cdef intp_t[:, ::1] grid2 = grid.reshape(nlegs, -1)
         # *this* is the actual `reshaping`
     # *columns* of grid are now all possible cominations of qindices.
-    cdef intp_t nblocks = grid2.shape[1]  # number of blocks in the pipe = np.product(qshape)
+    cdef intp_t nblocks = grid2.shape[1]  # number of blocks in the pipe = np.prod(qshape)
     cdef np.ndarray[intp_t, ndim=2, mode='c'] q_map = _np_empty_2D(nblocks, 3 + nlegs, intp_num)
     # determine q_map -- it's essentially the grid.
     q_map[:, 3:] = grid2.T  # transpose -> rows are possible combinations.
