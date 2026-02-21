@@ -2350,7 +2350,7 @@ class MPS(BaseMPSExpectationValue):
             unit_cell_width=unit_cell_width,
             understood_shift_symmetry=understood_shift_symmetry,
         )
-        if res.L > 1 and max(res.chi) > 1:
+        if res.L > 1 and max(res.chi) > 1 and form is not None:
             # the SVs set above are not the correct Schmidt values if chi > 1.
             res.canonical_form()
         return res
