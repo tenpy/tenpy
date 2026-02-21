@@ -4539,17 +4539,17 @@ class MPS(BaseMPSExpectationValue):
         S = self.get_SL(0)
         if self.bc == 'segment':
             if S is None:
-                raise ValueError('Need S[0] and S[L] for segment boundary conditions.')
+                raise ValueError('Need S[0] for segment boundary conditions.')
             self.set_SL(0, S / np.linalg.norm(S))
-            S = self.get_SR(L - 1)
-            self.set_SR(L - 1, S / np.linalg.norm(S))
         else:  # bc == 'finite':
             self.set_SL(0, np.array([1.0]))  # trivial singular value on very left/right
             self.set_SR(L - 1, np.array([1.0]))
         # sweep from left to right to bring it into left canonical form.
-        if any([(f is None) for f in self.form]):
+        if any(f is None for f in self.form):
             # ignore any 'S' and canonical form
             M = self.get_B(0, form=None)
+            if self.bc == 'segment':
+                M = M.scale_axis(self.get_SL(0), 'vL')
             form = None
         else:
             # we actually had a canonical form before, so we should *not* ignore the 'S'
