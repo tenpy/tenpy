@@ -79,6 +79,9 @@ class MomentumMPS:
         self.p = p
         self.n_sites = n_sites  # Number of sites of single excitation tensor.
 
+    def test_sanity(self):
+        pass  # nothing yet. TODO add checks
+
     def copy(self):
         """Returns a copy of `self`."""
         # __init__ makes deep copies of B, S
