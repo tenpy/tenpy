@@ -4577,7 +4577,7 @@ class MPS(BaseMPSExpectationValue):
                 qtotal_LR=[M.qtotal, None],
                 inner_labels=['vR', 'vL'],
             )
-            S /= np.linalg.norm(S)
+            assert np.isclose(np.linalg.norm(S), 1, 1e-14, 1e-14)
             self.set_SR(L - 1, S)
             M = U.scale_axis(S, 1).split_legs(0)
         else:
@@ -4598,7 +4598,7 @@ class MPS(BaseMPSExpectationValue):
                 qtotal_LR=[None, M.qtotal],
                 inner_labels=['vR', 'vL'],
             )
-            S = S / np.linalg.norm(S)  # normalize
+            assert np.isclose(np.linalg.norm(S), 1, 1e-14, 1e-14)
             self.set_SL(i, S)
             self.set_B(i, V.split_legs(1), form='B')
         if self.bc == 'finite':
