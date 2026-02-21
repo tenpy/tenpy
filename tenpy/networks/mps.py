@@ -4269,8 +4269,11 @@ class MPS(BaseMPSExpectationValue):
         if self.finite:
             if ignore_form:
                 # Use TransferMatrix with option to ignore the form
-                TM = TransferMatrix(self, other, charge_sector=charge_sector, form=None)
-                res = TM.matvec(TM.initial_guess(1.0))  # apply transfer matrix to identity
+                TM = TransferMatrix(self, other, charge_sector=charge_sector, form=None, transpose=True)
+                vec = TM.initial_guess(1.0)
+                if self.bc == 'segment':  # account for S[0], assume S[L] is already in rightmost B
+                    vec.iscale_axis(self.get_SL(0) * other.get_SL(0))
+                res = TM.matvec(vec)
                 return npc.trace(res, 0, 1) * self.norm * other.norm
             else:
                 env = MPSEnvironment(self, other)
