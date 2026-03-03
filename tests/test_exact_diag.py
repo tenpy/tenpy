@@ -10,7 +10,7 @@ import pytest
 import tenpy.linalg.np_conserved as npc
 from tenpy.algorithms import exact_diag
 from tenpy.linalg.krylov_based import LanczosGroundState
-from tenpy.models import TFIChain, XXZChain, TFIModel
+from tenpy.models import TFIChain, TFIModel, XXZChain
 from tenpy.networks import MPS, SpinHalfSite
 
 
