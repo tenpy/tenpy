@@ -4471,7 +4471,8 @@ class MPS(BaseMPSExpectationValue):
             The random number generator; if None, a new `numpy.random.default_rng()` is generated.
         norm_tol : float
             Tolerance
-        canonical_kwargs : keyword arguements for canonicalization functions
+        canonical_kwargs : keyword arguments
+            keyword arguments for canonicalization functions
 
         Returns
         -------
