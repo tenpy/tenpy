@@ -4388,7 +4388,7 @@ class MPS(BaseMPSExpectationValue):
             the probability of measuring ``|sigmas...>`` is ``weight**2``.
             For a finite system where we sample all sites (i.e., the trace over the compliment of
             the sites is trivial), this is the actual overlap ``<sigmas...|psi>``
-            including the phase. If complex_amplitude is True, we return ``weight**2``.
+            including the phase. If complex_amplitude is False, we return ``weight**2``.
 
         """
         if tuple(self._p_label) != ('p',):
@@ -4440,6 +4440,103 @@ class MPS(BaseMPSExpectationValue):
                 # return probability
                 total_weight = np.abs(total_weight) ** 2
         return sigmas, total_weight
+
+    def measure_and_reset(self, which_sites=None, ops=None, rng=None, norm_tol=1.0e-12, **canonical_kwargs):
+        """Measure (subset of) sites in desired basis and reset to product.
+
+        This function performs projective measurement on (a subset of) sites, and projects
+        these measured sites onto the resulting measurement eigenvector. The action on each
+        site is non-unitary, so we recanonicalize after each measure and reset.
+
+        Unlike for `sample_measurements`, for infinite boundary conditions, the probability of
+        measuring a set of `sigmas` **is** ``|psi.overlap(MPS.from_product_state(sigmas, ...))|^2``,
+        since after each measurement, we recanonicalize the iMPS. So the action on a single site
+        is used to update **all** unit cells. So even if we measure all sites in the iMPS, this
+        function will not behave consistently with `sample_measurements`.
+
+        The state is modified **in place**, so if we call the function twice on the same state
+        with the same measurement basis, then we should get the same measurements for both
+        calls. The probability returned by the second call should be one.
+
+        Parameters
+        ----------
+        which_sites: list of int
+            Which sites to we measure and reset? If None, then do all sites so default
+            to ``range(0, L)``.
+        ops : list of str
+            If not None, measure in the eigenbasis of
+            ``self.sites[i].get_op(ops[(i - first_site) % len(ops)])`` and directly return the
+            corresponding eigenvalue in `sigmas`.
+        rng : :class:`numpy.random.Generator`
+            The random number generator; if None, a new `numpy.random.default_rng()` is generated.
+        norm_tol : float
+            Tolerance
+        canonical_kwargs : keyword arguments
+            keyword arguments for canonicalization functions
+
+        Returns
+        -------
+        sigmas : list of int | list of float
+            On each site the index of the local basis that was measured,
+            as specified in the corresponding :class:`~tenpy.networks.site.Site` in :attr:`sites`.
+            Note that this can change depending on whether/what charges you conserve!
+            Explicitly specifying the measurement operator will avoid that issue.
+        probability : real
+            The probability ``trace(|psi><psi|sigmas...><sigmas...|)``, i.e.,
+            the probability of measuring ``|sigmas...>``.
+            Since we do not necessarily measure all sites, we do not offer the opportunity to
+            return the complex amplitude.
+
+        """
+        if tuple(self._p_label) != ('p',):
+            raise NotImplementedError("Only works for a single physical 'p' leg")
+        if which_sites is None:
+            which_sites = range(self.L)
+        if rng is None:
+            rng = np.random.default_rng()
+        sigmas = []
+        total_probability = 1.0
+        for i, ws in enumerate(which_sites):
+            # Get the theta for the current site ws
+            theta = self.get_theta(ws, n=1).replace_label('p0', 'p')
+            # Get the site object that defines the available operators
+            site = self.get_site(ws)
+            if ops is not None:
+                op_name = ops[i % len(ops)]
+                op = site.get_op(op_name).transpose(['p', 'p*'])
+                if npc.norm(op - op.conj().transpose()) > 1.0e-13:
+                    raise ValueError(f'measurement operator {op_name!r} not hermitian')
+                W, V = npc.eigh(op)
+                # V will have legs p, eig
+                theta = npc.tensordot(V.conj(), theta, axes=['p*', 'p']).replace_label('eig*', 'p')
+            else:
+                W = np.arange(site.dim)
+            # perform a projective measurement:
+            # trace out rest except site `i`
+            rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*'], ['vL', 'vR']])
+            # probabilities p(sigma) = <sigma|rho|sigma>
+            rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
+            if abs(np.sum(rho_diag) - 1.0) > norm_tol:
+                raise ValueError('not normalized to `norm_tol`')
+            rho_diag /= np.sum(rho_diag)
+            sigma = rng.choice(site.dim, p=rho_diag)  # randomly select index from probabilities
+            sigmas.append(W[sigma])
+            # Project theta depending on measurement outcome
+            # Theta is rotated so that the diagonal basis is used for measurements.
+            s = np.zeros(site.dim)
+            s[sigma] = 1.0
+            theta.iscale_axis(s, axis='p')
+            weight = npc.norm(theta)
+            total_probability *= np.abs(weight) ** 2
+            # Rotate theta back to the computational basis
+            if ops is not None:
+                theta = npc.tensordot(V, theta, axes=['eig', 'p'])
+            # Update the wavefunction with theta, after normalizing it
+            theta /= weight
+            self.set_B(ws, theta, form='Th')
+            # Recanonicalize since we have applied a non-unitary operation
+            self.canonical_form(**canonical_kwargs)
+        return sigmas, total_probability
 
     def norm_test(self):
         """Check that self is in canonical form.
@@ -4513,7 +4610,7 @@ class MPS(BaseMPSExpectationValue):
         Parameters
         ----------
         renormalize: bool
-            Whether a change in the norm should be discarded or used to *update* :attr:`norm`.
+            Whether a change in the norm should be discarded (True) or used to *update* :attr:`norm` (False).
             Note that even `renormalize=True` *does not reset* the :attr:`norm` to 1.
             To do that, you would rather have to set ``psi.norm = 1`` explicitly!
         cutoff : float | None
