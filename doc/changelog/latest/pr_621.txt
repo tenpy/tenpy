@@ -1,0 +1,1 @@
+- Improved :func:`tenpy.algorithms.exact_diag.get_numpy_Hamiltonian` by setting the cutoff for exponentially decaying terms to 0 (increasing accuracy)
