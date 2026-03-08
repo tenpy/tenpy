@@ -10,7 +10,7 @@ import pytest
 import tenpy.linalg.np_conserved as npc
 from tenpy.algorithms import exact_diag
 from tenpy.linalg.krylov_based import LanczosGroundState
-from tenpy.models import TFIChain, XXZChain
+from tenpy.models import TFIChain, TFIModel, XXZChain
 from tenpy.networks import MPS, SpinHalfSite
 
 
@@ -82,6 +82,26 @@ def get_tfi_Hamiltonian(L, J, g, up_down_basis=True):
     return H_expect
 
 
+def get_tfi_Hamiltonian_exp_decay(L, g, pref, lambda_, up_down_basis=True):
+    if up_down_basis:
+        sz = np.array([[1, 0], [0, -1]], float)
+    else:
+        sz = np.array([[-1, 0], [0, 1]], float)
+    sx = np.array([[0, 1], [1, 0]], float)
+    eye = np.eye(2, dtype=float)
+    ops = [eye] * L
+    H_expect = 0
+    for i in range(L):
+        ops = [eye] * L
+        ops[i] = sz
+        H_expect = H_expect - g * reduce(np.kron, ops)
+        for j in range(i + 1, L):
+            ops = [eye] * L
+            ops[i] = ops[j] = sx
+            H_expect = H_expect - pref * lambda_ ** (j - i) * reduce(np.kron, ops)
+    return H_expect
+
+
 @pytest.mark.parametrize('undo_sort_charge', [True, False])
 @pytest.mark.parametrize('conserve', ['best', 'None'])
 def test_get_full_wavefunction(undo_sort_charge, conserve, L=10):
@@ -127,6 +147,28 @@ def test_get_numpy_Hamiltonian(undo_sort_charge, conserve, use_ED, J=1, g=4.3291
     L = 6 if use_ED else 10  # using ED is a bit slow (overhead from combine? or is np.ix_ slow?)
     model = TFIChain(dict(L=L, conserve=conserve, J=J, g=g))
     H_expect = get_tfi_Hamiltonian(L=L, J=J, g=g, up_down_basis=undo_sort_charge or conserve == 'None')
+    if use_ED:
+        # default behavior for this model is from couplings. test from full_H explicitly.
+        H_res = exact_diag._get_numpy_Hamiltonian_ExactDiag_full_H(
+            model, from_mpo=True, undo_sort_charge=undo_sort_charge
+        )
+    else:
+        H_res = exact_diag.get_numpy_Hamiltonian(model, undo_sort_charge=undo_sort_charge)
+    assert np.allclose(H_res, H_expect)
+
+
+@pytest.mark.parametrize('undo_sort_charge', [True, False])
+@pytest.mark.parametrize('conserve', ['best', 'None'])
+@pytest.mark.parametrize('use_ED', [True, False])
+def test_get_numpy_Hamiltonian_exp_decay(undo_sort_charge, conserve, use_ED, J=0, g=4.3291, pref=1, lambda_=0.7839):
+    L = 6 if use_ED else 10  # using ED is a bit slow (overhead from combine? or is np.ix_ slow?)
+    model = TFIModel(dict(L=L, conserve=conserve, J=J, g=g, lattice='Chain'))
+    model.manually_call_init_H = True
+    model.add_exponentially_decaying_coupling(-1 * pref, lambda_, 'Sigmax', 'Sigmax')
+    model.init_H_from_terms()
+    H_expect = get_tfi_Hamiltonian_exp_decay(
+        L=L, g=g, pref=pref, lambda_=lambda_, up_down_basis=undo_sort_charge or conserve == 'None'
+    )
     if use_ED:
         # default behavior for this model is from couplings. test from full_H explicitly.
         H_res = exact_diag._get_numpy_Hamiltonian_ExactDiag_full_H(
