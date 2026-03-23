@@ -343,9 +343,10 @@ class MPSGeometry:
         Returns
         -------
         i_in_unit_cell : int
-            Index within the unit cell that is equal or equivalent to `i`.
+            Index within the unit cell that is equal or equivalent to the selected left or right
+            bond of `i_site`.
         num_unit_cells : int, optional
-            The index of the unit cell that `i` lies in.
+            The index of the unit cell that the selected left or right bond of `i_site` lies in.
             This is always ``0`` for finite MPS and is ``i // L`` for infinite MPS.
 
         """
@@ -396,15 +397,16 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
     See :class:`MPS` for details.
     """
 
-    def expectation_value(self,
-                          ops: list[str | ct.Coupling | ct.Tensor] | str | ct.Coupling | ct.Tensor,
-                          sites: list[int] = None,
-                          axes: tuple[list[str], list[str]] = None
-                          ) -> np.ndarray:
+    def expectation_value(
+        self,
+        ops: list[str | ct.Coupling | ct.Tensor] | str | ct.Coupling | ct.Tensor,
+        sites: list[int] = None,
+        axes: tuple[list[str], list[str]] = None,
+    ) -> np.ndarray:
         """Expectation value ``<bra|ops|ket>`` of (n-site) operator(s).
 
         Calculates n-site expectation values of operators sandwiched between bra and ket.
-        For examples the contraction for a two-site operator on site `i` would look like::
+        For example the contraction for a two-site operator on site `i` would look like::
 
             |          .--S--B[i]--B[i+1]--.
             |          |     |     |       |
@@ -426,6 +428,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             FIXME can tile?
             If a single entry, it is used for all `sites`.
             If a string, we look up the operator in the corresponding `sites`, see :meth:`get_op`.
+            Such operators only act on single sites, i.e., they are on-site operators.
         sites : list of int
             For each entry ``j in sites``, we evaluate an expectation value where ``op`` acts on
             site(s) ``j, j+1, ..., j+{n-1}``.
@@ -437,6 +440,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             the second `n` legs with the non-conjugated `B`.
             ``None`` defaults to ``(['p'], ['p*'])`` for single site (n=1), or
             ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for `n` > 1.
+            Only relevant when providing an operator as :class:`cyten.Tensor`.
 
         Returns
         -------
@@ -516,11 +520,16 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             [0.0625 0.0625 0.0625 0.0625 0.0625 0.0625]
 
         """
-        # check valid `ops` and figure out number of sites acted on
-        first_site = 0 if sites is None else to_iterable(sites)[0]
         is_single_op = isinstance(ops, (str, ct.Tensor, ct.Coupling))
-        first_op = ops if is_single_op else ops[first_site % len(ops)]
-        n = first_site.operator_n_sites(first_op)
+        first_op = ops if is_single_op else ops[0]
+        if isinstance(first_op, str):
+            # can only be on-site operator
+            n = 1
+        elif isinstance(first_op, ct.Tensor):
+            # do not take domain or codomain legs; bended tensors are allowed in planar diagrams
+            n = first_op.num_legs // 2
+        else:
+            n = len(first_op.factorization)
 
         # fill in default values
         if sites is None:
@@ -530,14 +539,14 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 sites = range(self.L)
         else:
             sites = to_iterable(sites)
-        if axes is None:
-            if n == 1:
-                axes = (['p'], ['p*'])
-            else:
-                axes = (self._get_p_labels(n), self._get_p_labels(n, True))#
-        else:
+        if axes is not None:
+            # non-standard leg labels -> replace later with standard convention
             assert len(axes) == 2
             assert len(axes[0]) == n == len(axes[1])
+            if n == 1:
+                new_axes = (['p'], ['p*'])
+            else:
+                new_axes = (self._get_p_labels(n), self._get_p_labels(n, True))
 
         # convert `ops` to list of appropriate length
         if is_single_op:
@@ -545,23 +554,61 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         else:
             assert len(ops) == len(sites)
 
-        diagram = mps_expectation_value_diagrams[n]
         bra, ket = self._get_bra_ket()
-
         res = []
         for i in sites:
-            tensors = dict(
-                theta_ket = ket.get_theta(i, n),  # FIXME define labelling convention
-                theta_bra = bra.get_theta(i, n),  # OPTIMIZE this could mean duplicate contraction work if bra is ket
-                op = self.get_op(ops, i),  # FIXME possibly need relabelling
-                LP = self.get_LP(i),  # FIXME define labelling convention
-                RP = self.get_RP(i),  # FIXME define labelling convention
-            )
+            op = self.get_op(ops, i)
+            if isinstance(op, ct.Coupling):
+                res.append(self._expectation_value_coupling(bra=bra, ket=ket, op=op, site=i))
+            else:
+                if axes is not None:
+                    # None means we already have the expected labels
+                    # TODO relabelling is in-place, thus copy?
+                    op = op.copy(deep=False, device=op.device).relabel(
+                        [(l_old, l_new) for l_old, l_new in zip(axes[0] + axes[1], new_axes[0] + new_axes[1])]
+                    )
+                res.append(self._expectation_value_tensor(bra=bra, ket=ket, op=op, site=i))
             # FIXME implement get_LP / get_RP abstractly in this class! (replace _contract_with_LP)
-            res.append(diagram.evaluate(tensors))
         return self._normalize_exp_val(res)
 
-# FIXME stopped here
+    def _expectation_value_coupling(self, bra: MPS, ket: MPS, op: ct.Coupling, site: int) -> complex | float:
+        """Expectation value ``<bra|op|ket>`` with ``op`` being a (n-site) :class:cyten.Coupling.
+
+        Couplings have the advantage that they are factorized, i.e., we can contract from
+        "left to right" rather than directly dealing with tensors having n physical legs.
+        """
+        n = len(op.factorization)
+        tensors = [[f'B{i}_ket', ket.get_B(site + i)] for i in range(1, n)]
+        tensors.extend([[f'B{i}_bra', bra.get_B(site + i).hc] for i in range(1, n)])
+        tensors.extend([[f'W{i}', W] for i, W in enumerate(op.factorization)])
+        tensors = dict(
+            tensors,
+            theta0_ket=ket.get_theta(site, 1),
+            theta0_bra=bra.get_theta(site, 1).hc,
+            LP=self.get_LP(site),
+            RP=self.get_RP(site + n),
+        )
+        # TODO do we want to squeeze the trivial legs of W{0} and W{n-1} or add trivial legs to LP and RP?
+        return mps_exp_val_diagrams_coupling_op[n].evaluate(tensors)
+
+    def _expectation_value_tensor(self, bra: MPS, ket: MPS, op: ct.Tensor, site: int) -> complex | float:
+        """Expectation value ``<bra|op|ket>`` with ``op`` being a (n-site) :class:cyten.Tensor."""
+        n = op.num_legs // 2
+        theta_ket = ket.get_theta(site, n)
+        if bra is ket:
+            theta_bra = theta_ket.hc
+        else:
+            theta_bra = bra.get_theta(site, n).hc
+        tensors = dict(
+            theta_ket=theta_ket,  # FIXME define labelling convention
+            theta_bra=theta_bra,
+            op=op,
+            LP=self.get_LP(site),  # FIXME define labelling convention
+            RP=self.get_RP(site + n),  # FIXME define labelling convention
+        )
+        return mps_exp_val_diagrams_tensor_op[n].evaluate(tensors)
+
+    # FIXME stopped here
 
     def apply_JW_string_left_of_virt_leg(self, theta, virt_leg_index, i):
         """Apply signs on a virtual MPS leg equivalent to a Jordan-Wigner string on the left.
