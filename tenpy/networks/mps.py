@@ -147,15 +147,17 @@ After applying such an evolution operator, you indeed stay in the form of a tran
 iMPS, so this is the form *assumed* when calling MPO :meth:`~tenpy.networks.mpo.MPO.apply` on an
 MPS.
 """
+
 # Copyright (C) TeNPy Developers, Apache license
 from __future__ import annotations
+
 import copy
 import logging
 import random
 import warnings
 from abc import ABCMeta, abstractmethod
-from collections.abc import Iterable
-from typing import Literal, Sequence
+from collections.abc import Iterable, Sequence
+from typing import Literal
 
 import numpy as np
 
@@ -188,7 +190,46 @@ __all__ = [
 #     which allows us to exploit that the contraction is trivial also.
 
 
-mps_expectation_value_diagrams: dict[int, ct.PlanarDiagram] = {}  # FIXME implement some!
+def _generate_expectation_value_diagram_tensor_op(n: int) -> ct.PlanarDiagram:
+    """Planar diagram associated with the expectation value of an `n`-leg tensor.
+
+    The tensors in the diagram are the left and right environments `LP` and `RP` (cf.
+    :meth:`MPSGeometry.get_LP` and :meth:`MPSGeometry.get_LP`), the `n`-site ket and bra wave
+    functions `theta_ket` and `theta_bra` (cf. :meth:`MPS.get_theta`), and the operator `op`
+    for which the expectation value is computed.
+
+    The labels for the physical legs are expected to be ``'p', 'p*'`` for ``n==1`` and
+    ``'p0', 'p1', ..., 'p{n-1}', 'p0*', 'p1*', ..., 'p{n-1}*'`` otherwise.
+    """
+    if n == 1:
+        return ct.PlanarDiagram(
+            tensors='LP[vR*, vR], RP[vL*, vL], op[p, p*], theta_ket[vL, p, vR], theta_bra[vR*, p*, vL*]',
+            definition='LP:vR @ theta_ket:vL, theta_ket:p @ op:p*, LP:vR* @ theta_bra:vL*, '
+            'theta_bra:p* @ op:p, RP:vL @ theta_ket:vR, RP:vL* @ theta_bra:vR*',
+            dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
+        )
+
+    p_labels = [f'p{i}' for i in range(n)]
+    ps_labels = [f'p{i}*' for i in range(n)]
+    dim_d_labels = p_labels + ps_labels
+    op_contr = [f'theta_ket:{l1} @ op:{l2}' for l1, l2 in zip(p_labels, ps_labels)]
+    op_contr.extend([f'op:{l1} @ theta_bra:{l2}' for l1, l2 in zip(p_labels, ps_labels)])
+    op_contr = ', '.join(op_contr)
+    p_labels = ', '.join(p_labels)
+    ps_labels = ', '.join(reversed(ps_labels))
+    return ct.PlanarDiagram(
+        tensors=f'LP[vR*, vR], RP[vL*, vL], op[{p_labels}, {ps_labels}], '
+        f'theta_ket[vL, {p_labels}, vR], theta_bra[vR*, {ps_labels}, vL*]',
+        definition=f'LP:vR @ theta_ket:vL, {op_contr}, LP:vR* @ theta_bra:vL*, '
+        'RP:vL @ theta_ket:vR, RP:vL* @ theta_bra:vR*',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=dim_d_labels),
+    )
+
+
+mps_expectation_value_diagrams_tensor_op: dict[int, ct.PlanarDiagram] = {
+    n: _generate_expectation_value_diagram_tensor_op(n) for n in range(5)
+}
+mps_expectation_value_diagrams_coupling_op: dict[int, ct.PlanarDiagram] = {}  # FIXME implement some!
 
 
 class MPSGeometry:
@@ -589,7 +630,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             RP=self.get_RP(site + n),
         )
         # TODO do we want to squeeze the trivial legs of W{0} and W{n-1} or add trivial legs to LP and RP?
-        return mps_exp_val_diagrams_coupling_op[n].evaluate(tensors)
+        return mps_expectation_value_diagrams_coupling_op[n].evaluate(tensors)
 
     def _expectation_value_tensor(self, bra: MPS, ket: MPS, op: ct.Tensor, site: int) -> complex | float:
         """Expectation value ``<bra|op|ket>`` with ``op`` being a (n-site) :class:cyten.Tensor."""
@@ -606,7 +647,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             LP=self.get_LP(site),  # FIXME define labelling convention
             RP=self.get_RP(site + n),  # FIXME define labelling convention
         )
-        return mps_exp_val_diagrams_tensor_op[n].evaluate(tensors)
+        return mps_expectation_value_diagrams_tensor_op[n].evaluate(tensors)
 
     # FIXME stopped here
 
