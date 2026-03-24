@@ -190,13 +190,52 @@ __all__ = [
 #     which allows us to exploit that the contraction is trivial also.
 
 
+def _generate_expectation_value_diagram_coupling_op(n: int) -> ct.PlanarDiagram:
+    """Planar diagram associated with the expectation value of an `n`-leg coupling.
+
+    The tensors in the diagram are the left and right environments `LP` and `RP` (cf.
+    :meth:`MPSGeometry.get_LP` and :meth:`MPSGeometry.get_LP`), the `n` on-site ket and bra wave
+    functions ``theta0_ket, B1_ket, ..., B{n-1}_ket`` and ``theta0_bra, B1_bra, ..., B{n-1}_bra``
+    (cf. :meth:`MPS.get_theta`, :meth:`MPS.get_B`), and the operator for which the expectation
+    value is computed in terms of its factorization ``W0, W1, ..., W{n-1}`` (cf.
+    :attr:`cyten.Coupling.factorization`), where the trivial left leg of `W0` and the trivial
+    right leg of `W{n-1}` are assumed to be removed.
+
+    The labels for the physical legs are expected to be `'p'` and `'p*'` for each of the on-site
+    ket and bra wave functions, respectively.
+    """
+    tensors = 'LP[vR*, vR], RP[vL*, vL], theta0_ket[vL, p, vR], theta0_bra[vR*, p*, vL*]'
+    partial_contr = 'LP:vR @ theta0_ket:vL, theta0_ket:p @ W0:p*, LP:vR* @ theta0_bra:vL*, theta0_bra:p* @ W0:p'
+    if n == 1:
+        return ct.PlanarDiagram(
+            tensors=f'{tensors}, W0[p, p*]',
+            definition=f'{partial_contr}, RP:vL @ theta0_ket:vR, RP:vL* @ theta0_bra:vR*',
+            dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
+        )
+
+    tensors += ', W0[p, wR, p*]'
+    for i in range(1, n):
+        W_tensor = f'W{i}[wL, p, p*]' if i == n - 1 else f'W{i}[wL, p, wR, p*]'
+        tensors += f', B{i}_ket[vL, p, vR], B{i}_bra[vR*, p*, vL*], {W_tensor}'
+        B_left = 'theta0' if i == 1 else f'B{i - 1}'
+        partial_contr += (
+            f'{B_left}_ket:vR @ B{i}_ket:vL, B{i}_ket:p @ W{i}:p*, W{i - 1}:wR @ W{i}:wL, '
+            f'{B_left}_bra:vR* @ B{i}_bra:vL*, B{i}_bra:p* @ W{i}:p'
+        )
+    return ct.PlanarDiagram(
+        tensors=tensors,
+        definition=f'{partial_contr}, RP:vL @ B{n - 1}_ket:vR, RP:vL* @ B{n - 1}_bra:vR*',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL', 'wR']),
+    )
+
+
 def _generate_expectation_value_diagram_tensor_op(n: int) -> ct.PlanarDiagram:
     """Planar diagram associated with the expectation value of an `n`-leg tensor.
 
     The tensors in the diagram are the left and right environments `LP` and `RP` (cf.
     :meth:`MPSGeometry.get_LP` and :meth:`MPSGeometry.get_LP`), the `n`-site ket and bra wave
     functions `theta_ket` and `theta_bra` (cf. :meth:`MPS.get_theta`), and the operator `op`
-    for which the expectation value is computed.
+    (:class:`cyten.Tensor`) for which the expectation value is computed.
 
     The labels for the physical legs are expected to be ``'p', 'p*'`` for ``n==1`` and
     ``'p0', 'p1', ..., 'p{n-1}', 'p0*', 'p1*', ..., 'p{n-1}*'`` otherwise.
@@ -226,10 +265,12 @@ def _generate_expectation_value_diagram_tensor_op(n: int) -> ct.PlanarDiagram:
     )
 
 
-mps_expectation_value_diagrams_tensor_op: dict[int, ct.PlanarDiagram] = {
-    n: _generate_expectation_value_diagram_tensor_op(n) for n in range(5)
+mps_expectation_value_diagrams_coupling_op: dict[int, ct.PlanarDiagram] = {
+    n: _generate_expectation_value_diagram_coupling_op(n) for n in range(1, 5)
 }
-mps_expectation_value_diagrams_coupling_op: dict[int, ct.PlanarDiagram] = {}  # FIXME implement some!
+mps_expectation_value_diagrams_tensor_op: dict[int, ct.PlanarDiagram] = {
+    n: _generate_expectation_value_diagram_tensor_op(n) for n in range(1, 5)
+}
 
 
 class MPSGeometry:
@@ -580,14 +621,14 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 sites = range(self.L)
         else:
             sites = to_iterable(sites)
+        if n == 1:
+            new_axes = (['p'], ['p*'])
+        else:
+            new_axes = (self._get_p_labels(n), self._get_p_labels(n, True))
         if axes is not None:
             # non-standard leg labels -> replace later with standard convention
             assert len(axes) == 2
             assert len(axes[0]) == n == len(axes[1])
-            if n == 1:
-                new_axes = (['p'], ['p*'])
-            else:
-                new_axes = (self._get_p_labels(n), self._get_p_labels(n, True))
 
         # convert `ops` to list of appropriate length
         if is_single_op:
@@ -606,8 +647,10 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                     # None means we already have the expected labels
                     # TODO relabelling is in-place, thus copy?
                     op = op.copy(deep=False, device=op.device).relabel(
-                        [(l_old, l_new) for l_old, l_new in zip(axes[0] + axes[1], new_axes[0] + new_axes[1])]
+                        {l_old: l_new for l_old, l_new in zip(axes[0] + axes[1], new_axes[0] + new_axes[1])}
                     )
+                else:
+                    assert op.labels_are(*new_axes[0], *new_axes[1])
                 res.append(self._expectation_value_tensor(bra=bra, ket=ket, op=op, site=i))
             # FIXME implement get_LP / get_RP abstractly in this class! (replace _contract_with_LP)
         return self._normalize_exp_val(res)
@@ -627,9 +670,11 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             theta0_ket=ket.get_theta(site, 1),
             theta0_bra=bra.get_theta(site, 1).hc,
             LP=self.get_LP(site),
-            RP=self.get_RP(site + n),
+            RP=self.get_RP(site + n - 1),
         )
-        # TODO do we want to squeeze the trivial legs of W{0} and W{n-1} or add trivial legs to LP and RP?
+        # remove trivial legs at left and right ends
+        tensors['W0'] = ct.squeeze_legs(tensors['W0'], 'wL')
+        tensors[f'W{n - 1}'] = ct.squeeze_legs(tensors[f'W{n - 1}'], 'wR')
         return mps_expectation_value_diagrams_coupling_op[n].evaluate(tensors)
 
     def _expectation_value_tensor(self, bra: MPS, ket: MPS, op: ct.Tensor, site: int) -> complex | float:
@@ -645,7 +690,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             theta_bra=theta_bra,
             op=op,
             LP=self.get_LP(site),  # FIXME define labelling convention
-            RP=self.get_RP(site + n),  # FIXME define labelling convention
+            RP=self.get_RP(site + n - 1),  # FIXME define labelling convention
         )
         return mps_expectation_value_diagrams_tensor_op[n].evaluate(tensors)
 
