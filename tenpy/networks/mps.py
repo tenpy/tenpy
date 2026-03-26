@@ -190,45 +190,6 @@ __all__ = [
 #     which allows us to exploit that the contraction is trivial also.
 
 
-def _generate_expectation_value_diagram_coupling_op(n: int) -> ct.PlanarDiagram:
-    """Planar diagram associated with the expectation value of an `n`-leg coupling.
-
-    The tensors in the diagram are the left and right environments `LP` and `RP` (cf.
-    :meth:`MPSGeometry.get_LP` and :meth:`MPSGeometry.get_LP`), the `n` on-site ket and bra wave
-    functions ``theta0_ket, B1_ket, ..., B{n-1}_ket`` and ``theta0_bra, B1_bra, ..., B{n-1}_bra``
-    (cf. :meth:`MPS.get_theta`, :meth:`MPS.get_B`), and the operator for which the expectation
-    value is computed in terms of its factorization ``W0, W1, ..., W{n-1}`` (cf.
-    :attr:`cyten.Coupling.factorization`), where the trivial left leg of `W0` and the trivial
-    right leg of `W{n-1}` are assumed to be removed.
-
-    The labels for the physical legs are expected to be `'p'` and `'p*'` for each of the on-site
-    ket and bra wave functions, respectively.
-    """
-    tensors = 'LP[vR*, vR], RP[vL*, vL], theta0_ket[vL, p, vR], theta0_bra[vR*, p*, vL*]'
-    partial_contr = 'LP:vR @ theta0_ket:vL, theta0_ket:p @ W0:p*, LP:vR* @ theta0_bra:vL*, theta0_bra:p* @ W0:p'
-    if n == 1:
-        return ct.PlanarDiagram(
-            tensors=f'{tensors}, W0[p, p*]',
-            definition=f'{partial_contr}, RP:vL @ theta0_ket:vR, RP:vL* @ theta0_bra:vR*',
-            dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
-        )
-
-    tensors += ', W0[p, wR, p*]'
-    for i in range(1, n):
-        W_tensor = f'W{i}[wL, p, p*]' if i == n - 1 else f'W{i}[wL, p, wR, p*]'
-        tensors += f', B{i}_ket[vL, p, vR], B{i}_bra[vR*, p*, vL*], {W_tensor}'
-        B_left = 'theta0' if i == 1 else f'B{i - 1}'
-        partial_contr += (
-            f'{B_left}_ket:vR @ B{i}_ket:vL, B{i}_ket:p @ W{i}:p*, W{i - 1}:wR @ W{i}:wL, '
-            f'{B_left}_bra:vR* @ B{i}_bra:vL*, B{i}_bra:p* @ W{i}:p'
-        )
-    return ct.PlanarDiagram(
-        tensors=tensors,
-        definition=f'{partial_contr}, RP:vL @ B{n - 1}_ket:vR, RP:vL* @ B{n - 1}_bra:vR*',
-        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL', 'wR']),
-    )
-
-
 def _generate_expectation_value_diagram_tensor_op(n: int) -> ct.PlanarDiagram:
     """Planar diagram associated with the expectation value of an `n`-leg tensor.
 
@@ -265,11 +226,45 @@ def _generate_expectation_value_diagram_tensor_op(n: int) -> ct.PlanarDiagram:
     )
 
 
-mps_expectation_value_diagrams_coupling_op: dict[int, ct.PlanarDiagram] = {
-    n: _generate_expectation_value_diagram_coupling_op(n) for n in range(1, 5)
-}
 mps_expectation_value_diagrams_tensor_op: dict[int, ct.PlanarDiagram] = {
     n: _generate_expectation_value_diagram_tensor_op(n) for n in range(1, 5)
+}
+mps_contraction_diagram_operations: dict[str, ct.PlanarDiagram] = {
+    'LP2 @ TM': ct.PlanarDiagram(
+        tensors='LP[vR*, vR], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='LP:vR @ ket:vL, ket:p @ bra:p*, LP:vR* @ bra:vL*',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
+    ),
+    'LP2 @ bra-W-ket2': ct.PlanarDiagram(
+        tensors='LP[vR*, vR], W[p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='LP:vR @ ket:vL, ket:p @ W:p*, LP:vR* @ bra:vL*, bra:p* @ W:p',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
+    ),
+    'LP3 @ bra-W-ket3': ct.PlanarDiagram(
+        tensors='LP[vR*, wR, vR], W[wL, p, wR, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='LP:vR @ ket:vL, ket:p @ W:p*, LP:wR @ W:wL, LP:vR* @ bra:vL*, W:p @ bra:p*',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL', 'wR']),
+    ),
+    'LP2 @ bra-W-ket3': ct.PlanarDiagram(
+        tensors='LP[vR*, vR], W[p, wR, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='LP:vR @ ket:vL, ket:p @ W:p*, LP:vR* @ bra:vL*, W:p @ bra:p*',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wR']),
+    ),
+    'LP3 @ bra-W-ket2': ct.PlanarDiagram(
+        tensors='LP[vR*, wR, vR], W[wL, p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='LP:vR @ ket:vL, ket:p @ W:p*, LP:wR @ W:wL, LP:vR* @ bra:vL*, W:p @ bra:p*',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL', 'wR']),
+    ),
+    'LP2 @ RP2': ct.PlanarDiagram(
+        tensors='LP[vR*, vR], RP[vL*, vL]',
+        definition='LP:vR @ RP:vL, LP:vR* @ RP:vL*',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*']),
+    ),
+    'LP3 @ RP3': ct.PlanarDiagram(
+        tensors='LP[vR*, wR, vR], RP[vL*, vL, wL]',
+        definition='LP:vR @ RP:vL, LP:vR* @ RP:vL*, LP:wR @ RP:wL',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], w=['wL', 'wR']),
+    ),
 }
 
 
@@ -662,20 +657,29 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         "left to right" rather than directly dealing with tensors having n physical legs.
         """
         n = len(op.factorization)
-        tensors = [[f'B{i}_ket', ket.get_B(site + i)] for i in range(1, n)]
-        tensors.extend([[f'B{i}_bra', bra.get_B(site + i).hc] for i in range(1, n)])
-        tensors.extend([[f'W{i}', W] for i, W in enumerate(op.factorization)])
+        # need to remove trivial legs at left and right ends of coupling
         tensors = dict(
-            tensors,
-            theta0_ket=ket.get_theta(site, 1),
-            theta0_bra=bra.get_theta(site, 1).hc,
             LP=self.get_LP(site),
-            RP=self.get_RP(site + n - 1),
+            ket=ket.get_theta(site, 1),
+            bra=bra.get_theta(site, 1).hc,
+            W=ct.squeeze_legs(op.factorization[0], 'wL'),
         )
-        # remove trivial legs at left and right ends
-        tensors['W0'] = ct.squeeze_legs(tensors['W0'], 'wL')
-        tensors[f'W{n - 1}'] = ct.squeeze_legs(tensors[f'W{n - 1}'], 'wR')
-        return mps_expectation_value_diagrams_coupling_op[n].evaluate(tensors)
+        if n == 1:
+            tensors['W'] = ct.squeeze_legs(tensors['W'], 'wR')
+            res = mps_contraction_diagram_operations['LP2 @ bra-W-ket2'].evaluate(tensors)
+        else:
+            res = mps_contraction_diagram_operations['LP2 @ bra-W-ket3'].evaluate(tensors)
+            for i in range(1, n - 1):
+                res = mps_contraction_diagram_operations['LP3 @ bra-W-ket3'].evaluate(
+                    LP=res, ket=ket.get_B(site + i), bra=bra.get_B(site + i).hc, W=op.factorization[i]
+                )
+            res = mps_contraction_diagram_operations['LP3 @ bra-W-ket2'].evaluate(
+                LP=res,
+                ket=ket.get_B(site + n - 1),
+                bra=bra.get_B(site + n - 1).hc,
+                W=ct.squeeze_legs(op.factorization[-1], 'wR'),
+            )
+        return mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(LP=res, RP=self.get_RP(site + n - 1))
 
     def _expectation_value_tensor(self, bra: MPS, ket: MPS, op: ct.Tensor, site: int) -> complex | float:
         """Expectation value ``<bra|op|ket>`` with ``op`` being a (n-site) :class:cyten.Tensor."""
