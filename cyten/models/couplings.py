@@ -12,10 +12,13 @@ import numpy as np
 
 from ..backends import get_same_backend
 from ..block_backends import Block, Dtype
-from ..symmetries import FibonacciAnyonCategory, Sector, SymmetryError
-from ..tensors import SymmetricTensor, add_trivial_leg, compose, horizontal_factorization, permute_legs, squeeze_legs
+from ..symmetries import FibonacciAnyonCategory, Sector, SymmetryError, TensorProduct
+from ..tensors import SymmetricTensor, add_trivial_leg, compose, horizontal_factorization, permute_legs, squeeze_legs, tdot
 from .degrees_of_freedom import ALL_SPECIES, BosonicDOF, ClockDOF, FermionicDOF, Site, SpinDOF
 from .sites import GoldenSite
+
+import base64
+import json
 
 
 class Coupling:
@@ -48,25 +51,31 @@ class Coupling:
 
     """
 
-    def __init__(self, sites: list[Site], factorization: list[SymmetricTensor], name: str = None):
+    def __init__(
+        self, sites: list[Site], factorization: list[SymmetricTensor], name: str = None, skip_sanity: bool = False
+    ):
         self.sites = sites
-        assert len(factorization) == len(sites)
+        assert len(factorization) == len(sites) or len(factorization) == len(sites) + 1
         self.factorization = factorization
         self.name = name
-        self.test_sanity()  # OPTIMIZE
+        if not skip_sanity:
+            self.test_sanity()
 
     def test_sanity(self):
         """Perform sanity checks."""
         backend = get_same_backend(*self.sites)
-        for s, W in zip(self.sites, self.factorization):
-            s.test_sanity()
+        site_idx = 0
+        for W in self.factorization:
             W.test_sanity()
             assert W.backend == backend
             assert W.num_codomain_legs == 2
             assert W.num_domain_legs == 2
             assert W.labels == ['wL', 'p', 'wR', 'p*']
-            assert W.get_leg_co_domain('p') == s.leg
-            assert W.get_leg_co_domain('p*') == s.leg
+            if site_idx < len(self.sites):
+                s = self.sites[site_idx]
+                assert W.get_leg_co_domain('p') == s.leg
+                assert W.get_leg_co_domain('p*') == s.leg
+                site_idx += 1
         assert self.factorization[0].get_leg('wL').is_trivial
         for W1, W2 in zip(self.factorization[:-1], self.factorization[1:]):
             assert W1.get_leg_co_domain('wR') == W2.get_leg_co_domain('wL')
@@ -205,6 +214,205 @@ class Coupling:
     ) -> np.ndarray:
         """Convert to a numpy array."""
         return self.to_tensor().to_numpy(leg_order, numpy_dtype, understood_braiding)
+
+    def insert_identity_between_sites(self, position: int) -> Coupling:
+        """
+        Insert identity tensor between sites at given position.
+        """
+
+        if position <= 0 or position >= len(self.sites):
+            raise ValueError(f'Position must be between 1 and {len(self.sites) - 1}, got {position}')
+
+        site_left = self.sites[position - 1]
+        site_right = self.sites[position]
+        leg = site_left.leg
+        backend = get_same_backend(site_left, site_right)
+
+        left_block = self.factorization[position - 1]
+        right_block = self.factorization[position]
+
+        wR_space = left_block.domain.factors[-1]
+        wL_space = right_block.codomain.factors[0]
+
+        if isinstance(wR_space, list) or isinstance(wL_space, list):
+            raise NotImplementedError('Multi-bond insertions not yet supported')
+
+        if leg != site_right.leg:
+            raise ValueError(f'Sites must have same physical leg.')
+
+        # Create identity via from_eye, permute, and relabel
+        identity_tensor = SymmetricTensor.from_eye(
+            co_domain=[leg, wR_space],
+            backend=backend,
+            labels=['p', 'w'],
+        )
+        # Permute: swap codomain legs so w moves to first position
+        identity_tensor = permute_legs(identity_tensor, codomain=['w', 'p'], domain=['p*', 'w*'], bend_right=False)
+        # Relabel to match [wL, p, wR, p*]
+        identity_tensor = identity_tensor.relabel({'w': 'wL', 'w*': 'wR'})
+
+        new_sites = self.sites[:position] + [site_left] + self.sites[position:]
+        new_factorization = (
+            self.factorization[:position]
+            + [identity_tensor]
+            + self.factorization[position:]
+        )
+
+        return Coupling(sites=new_sites, factorization=new_factorization, name=self.name, skip_sanity=True)
+
+
+    def to_hash(self) -> str:
+        """Compute a hash that uniquely identifies this coupling.
+
+        The hash is a base64-encoded JSON string containing all information needed
+        to reconstruct the coupling, including site parameters and tensor data.
+
+        Returns
+        -------
+        str
+            A unique hash string for this coupling.
+        """
+
+        def serialize_space(space):
+            """Serialize a Space (ElementarySpace) to a dict."""
+
+            def to_python_int(x):
+                """Convert numpy int to Python int for JSON serialization."""
+                if hasattr(x, 'item'):
+                    return x.item()
+                return int(x)
+
+            defining_sectors = space.defining_sectors
+            if hasattr(defining_sectors, 'tolist'):
+                defining_sectors = defining_sectors.tolist()
+            defining_sectors = [[to_python_int(s) for s in row] for row in defining_sectors]
+
+            return {
+                'symmetry': str(type(space.symmetry).__name__),
+                'defining_sectors': defining_sectors,
+                'sector_decomposition': [to_python_int(s) for s in space.sector_decomposition],
+                'multiplicities': [to_python_int(m) for m in space.multiplicities],
+                'is_dual': bool(space.is_dual),
+            }
+
+        def serialize_tensor(tensor):
+            """Serialize a SymmetricTensor to a dict."""
+            data_base64 = base64.b64encode(tensor.to_numpy().tobytes()).decode('ascii')
+            codomain_labels = tensor.codomain_labels
+            domain_labels = tensor.domain_labels
+            return {
+                'labels': [*codomain_labels, *domain_labels],
+                'codomain': [serialize_space(f) for f in tensor.codomain.factors],
+                'domain': [serialize_space(f) for f in tensor.domain.factors],
+                'data': data_base64,
+                'dtype': str(tensor.dtype),
+            }
+
+        def serialize_site(site):
+            """Serialize a Site to a dict."""
+            from .sites import SpinSite
+
+            result = {'type': type(site).__name__}
+            if isinstance(site, SpinSite):
+                result['S'] = site.S
+                result['conserve'] = site.conserve
+            else:
+                raise NotImplementedError(f'Serialization of {type(site).__name__} not implemented')
+            return result
+
+        data = {
+            'name': self.name,
+            'sites': [serialize_site(site) for site in self.sites],
+            'factorization': [serialize_tensor(t) for t in self.factorization],
+        }
+
+        json_str = json.dumps(data, sort_keys=True)
+        return base64.b64encode(json_str.encode('utf-8')).decode('ascii')
+
+    @classmethod
+    def from_hash(cls, hash_str: str) -> Coupling:
+        """Reconstruct a coupling from its hash.
+
+        Parameters
+        ----------
+        hash_str : str
+            The hash string previously returned by :meth:`to_hash`.
+
+        Returns
+        -------
+        Coupling
+            The reconstructed coupling.
+        """
+        import base64
+        import json
+        from ..backends import get_backend
+        from ..symmetries import ElementarySpace, NoSymmetry, SU2Symmetry, U1Symmetry, ZNSymmetry, Symmetry
+
+        def deserialize_space(data):
+            """Deserialize a dict to a Space (ElementarySpace)."""
+            sym_name = data['symmetry']
+            if sym_name == 'NoSymmetry':
+                sym = NoSymmetry()
+            elif sym_name == 'SU2Symmetry':
+                sym = SU2Symmetry()
+            elif sym_name == 'U1Symmetry':
+                sym = U1Symmetry()
+            elif sym_name == 'ZNSymmetry':
+                sym = ZNSymmetry(n=2)
+            else:
+                raise NotImplementedError(f'Symmetry {sym_name} not implemented')
+
+            sectors = data['defining_sectors']
+            mults = data['multiplicities']
+
+            if len(sectors) == 1 and len(sectors[0]) == 1 and sectors[0][0] == 0 and mults[0] > 1 and len(mults) == 1:
+                return ElementarySpace.from_trivial_sector(dim=mults[0], symmetry=sym)
+            return ElementarySpace.from_defining_sectors(sym, sectors, multiplicities=mults)
+
+        def deserialize_tensor(data, backend):
+            """Deserialize a dict to a SymmetricTensor."""
+            data_bytes = base64.b64decode(data['data'])
+            arr = np.frombuffer(data_bytes, dtype=np.complex128).reshape(-1).copy()
+
+            codomain = TensorProduct([deserialize_space(d) for d in data['codomain']])
+            domain = TensorProduct([deserialize_space(d) for d in data['domain']])
+
+            shape = tuple(f.dim for f in codomain.factors) + tuple(f.dim for f in reversed(domain.factors))
+            arr = arr.reshape(shape)
+
+            labels = data['labels']
+            codomain_labels = labels[: len(data['codomain'])]
+            domain_labels = labels[len(data['codomain']) :]
+
+            tensor = SymmetricTensor.from_dense_block(
+                arr,
+                codomain=codomain,
+                domain=domain,
+                labels=[codomain_labels, domain_labels],
+                backend=backend,
+                understood_braiding=True,
+            )
+            return tensor
+
+        def deserialize_site(data):
+            """Deserialize a dict to a Site."""
+            site_type = data['type']
+            if site_type == 'SpinSite':
+                from .sites import SpinSite
+
+                return SpinSite(S=data['S'], conserve=data['conserve'])
+            else:
+                raise NotImplementedError(f'Deserialization of {site_type} not implemented')
+
+        json_bytes = base64.b64decode(hash_str.encode('ascii'))
+        data = json.loads(json_bytes.decode('utf-8'))
+
+        sites = [deserialize_site(s) for s in data['sites']]
+        backend = get_same_backend(*sites)
+
+        factorization = [deserialize_tensor(t, backend) for t in data['factorization']]
+
+        return cls(sites=sites, factorization=factorization, name=data['name'], skip_sanity=True)
 
 
 # SPIN COUPLINGS
