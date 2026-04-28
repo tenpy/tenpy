@@ -687,12 +687,12 @@ class MPO(MPSGeometry):
         W = self._W[i_in_unit_cell]
         if copy:
             W = W.copy()
-        return self.shift_Array_unit_cells(W, num_unit_cells=num_unit_cells, inplace=copy)
+        return self.shift_Tensor_unit_cells(W, num_unit_cells=num_unit_cells, inplace=copy)
 
     def set_W(self, i, W):
         """Set `W` at site `i`. Note that ``W`` may be modified in-place."""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        self._W[i_in_unit_cell] = self.shift_Array_unit_cells(W, -num_unit_cells)
+        self._W[i_in_unit_cell] = self.shift_Tensor_unit_cells(W, -num_unit_cells)
         self._reset_graph()
 
     def get_IdL(self, i):

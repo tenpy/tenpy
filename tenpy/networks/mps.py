@@ -2,26 +2,29 @@ r"""This module contains a base class for a Matrix Product State (MPS).
 
 An MPS looks roughly like this::
 
-    |   -- B[0] -- B[1] -- B[2] -- ...
-    |       |       |      |
+    |     ┏━━━━━━━┓    ┏━━━━━━━┓    ┏━━━━━━━┓
+    |   ──┨ _B[0] ┠────┨ _B[1] ┠────┨ _B[2] ┠── ...
+    |     ┗━━━┯━━━┛    ┗━━━┯━━━┛    ┗━━━┯━━━┛
+    |         │            │            │
 
 We use the following label convention for the `B` (where arrows indicate `qconj`)::
 
-    |  vL ->- B ->- vR
-    |         |
-    |         ^
-    |         p
+    |        ┏━━━━━━━┓
+    |   vL ──┨   B   ┠── vR
+    |        ┗━━━┯━━━┛
+    |            │
+    |            p
 
 We store one 3-leg tensor `_B[i]` with labels ``'vL', 'vR', 'p'`` for each of the `L` sites
 ``0 <= i < L``.
-Additionally, we store singular value arrays `_S[ib]` on each bond ``0 <= ib < L + int(finite)``,
-i.e. ``L + 1`` arrays for finite systems and ``L`` arrays for infinite systems.
+Additionally, we store singular values `_S[ib]` on each bond ``0 <= ib < L + int(finite)`` as
+a diagonal tensor, i.e. ``L + 1`` tensors for finite systems and ``L`` tensors for infinite systems.
 Note that for infinite systems, the bond ``ib == L`` to the right of the unit cell is equivalent
 to the bond ``ib == 0``. ``_S[ib]`` gives the singular values on the bond ``ib-1, ib``.
 However, be aware that e.g. :attr:`~tenpy.networks.mps.MPS.chi` returns only the dimensions of the
 :attr:`~tenpy.networks.mps.MPS.nontrivial_bonds` depending on the boundary conditions.
 
-The matrices and singular values always represent a normalized state
+The B tensors and singular values always represent a normalized state
 (i.e. ``np.linalg.norm(psi._S[ib]) == 1`` up to roundoff errors),
 but (for finite MPS) we keep track of the norm in :attr:`~tenpy.networks.mps.MPS.norm`
 (which is respected by :meth:`~tenpy.networks.mps.MPS.overlap`, ...).
@@ -32,7 +35,7 @@ Valid MPS boundary conditions are the following:
 `bc`        description
 ==========  ===================================================================================
 'finite'    Finite MPS, ``G0 s1 G1 ... s{L-1} G{l-1}``. This is achieved
-            by using a trivial left and right bond ``s[0] = s[-1] = np.array([1.])``.
+            by using a trivial left and right bond ``s[0] = s[-1] = ct.eye(trivial_virt_leg)``.
 'segment'   Generalization of 'finite', describes an MPS embedded in left and right
             environments. The left environment is described by ``chi[0]`` *orthonormal* states
             which are weighted by the singular values ``s[0]``. Similar, ``s[L]`` weight some
@@ -144,29 +147,28 @@ After applying such an evolution operator, you indeed stay in the form of a tran
 iMPS, so this is the form *assumed* when calling MPO :meth:`~tenpy.networks.mpo.MPO.apply` on an
 MPS.
 """
+
 # Copyright (C) TeNPy Developers, Apache license
+from __future__ import annotations
 
 import copy
 import logging
 import random
 import warnings
 from abc import ABCMeta, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
+from typing import Literal
 
 import numpy as np
 
-from ..linalg import np_conserved as npc
-from ..linalg import sparse
-from ..linalg.charges import DipolarChargeInfo
-from ..linalg.krylov_based import Arnoldi
-from ..linalg.random_matrix import GOE, GUE
-from ..linalg.truncation import TruncationError, _machine_prec_trunc_par, eigh_rho, svd_theta
+import cyten as ct
+
+from ..linalg.truncation import TruncationError
 from ..tools import hdf5_io
 from ..tools.cache import DictCache
 from ..tools.math import entropy, lcm
 from ..tools.misc import BetaWarning, argsort, get_recursive, inverse_permutation, to_array, to_iterable
 from ..tools.params import asConfig
-from .site import group_sites
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +182,56 @@ __all__ = [
     'InitialStateBuilder',
     'build_initial_state',
 ]
+
+
+# FIXME start a changelog
+#   - BaseMPSExpectationValue moved behavior from _contract_with_LP to get_LP.
+#     If the LP is trivial (e.g. in <psi|op_local|psi>), we now get get_Lp(...) == ct.Identity
+#     which allows us to exploit that the contraction is trivial also.
+#   - BaseMPSExpectationValue.expectation_value now only takes a single operator that is a coupling
+#     or on-site operator (str). For tensor operators, we have expectation_value_tensors, which
+#     converts the operators to couplings. Only the latter now has an `axes` argument. Also changed
+#     the `sites` argument to list of list of int, such that we may insert identities between the
+#     individual tensors of a coupling.
+
+
+mps_contraction_diagram_operations: dict[str, ct.PlanarDiagram] = {
+    'LP2 @ TM': ct.PlanarDiagram(
+        tensors='LP[vR*, vR], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='LP:vR @ ket:vL, ket:p @ bra:p*, LP:vR* @ bra:vL*',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
+    ),
+    'LP2 @ bra-W-ket2': ct.PlanarDiagram(
+        tensors='LP[vR*, vR], W[p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='LP:vR @ ket:vL, ket:p @ W:p*, LP:vR* @ bra:vL*, bra:p* @ W:p',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
+    ),
+    'LP3 @ bra-W-ket3': ct.PlanarDiagram(
+        tensors='LP[vR*, wR, vR], W[wL, p, wR, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='LP:vR @ ket:vL, ket:p @ W:p*, LP:wR @ W:wL, LP:vR* @ bra:vL*, W:p @ bra:p*',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL', 'wR']),
+    ),
+    'LP2 @ bra-W-ket3': ct.PlanarDiagram(
+        tensors='LP[vR*, vR], W[p, wR, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='LP:vR @ ket:vL, ket:p @ W:p*, LP:vR* @ bra:vL*, W:p @ bra:p*',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wR']),
+    ),
+    'LP3 @ bra-W-ket2': ct.PlanarDiagram(
+        tensors='LP[vR*, wR, vR], W[wL, p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='LP:vR @ ket:vL, ket:p @ W:p*, LP:wR @ W:wL, LP:vR* @ bra:vL*, W:p @ bra:p*',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL', 'wR']),
+    ),
+    'LP2 @ RP2': ct.PlanarDiagram(
+        tensors='LP[vR*, vR], RP[vL*, vL]',
+        definition='LP:vR @ RP:vL, LP:vR* @ RP:vL*',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*']),
+    ),
+    'LP3 @ RP3': ct.PlanarDiagram(
+        tensors='LP[vR*, wR, vR], RP[vL*, vL, wL]',
+        definition='LP:vR @ RP:vL, LP:vR* @ RP:vL*, LP:wR @ RP:wL',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], w=['wL', 'wR']),
+    ),
+}
 
 
 class MPSGeometry:
@@ -196,9 +248,9 @@ class MPSGeometry:
 
     Attributes
     ----------
-    chinfo : :class:`~tenpy.linalg.np_conserved.ChargeInfo`
-        The nature of the charge.
-    sites : list of :class:`~tenpy.models.lattice.Site`
+    symmetry : :class:`cyten.Symmetry`
+        The nature of the symmetry.
+    sites : list of :class:`cyten.Site`
         Defines the local Hilbert space for each site.
     bc : ``'finite' | 'segment' | 'infinite'``
         Boundary conditions as described in the table of the module doc-string.
@@ -212,9 +264,9 @@ class MPSGeometry:
 
     _valid_bc = ('finite', 'segment', 'infinite')  # valid boundary conditions. Dont overwrite this!
 
-    def __init__(self, sites, bc, unit_cell_width=None):
+    def __init__(self, sites: list[ct.Site], bc: Literal['finite', 'segment', 'infinite'], unit_cell_width: int = None):
         self.sites = list(sites)
-        self.chinfo = self.sites[0].leg.chinfo
+        self.symmetry = self.sites[0].symmetry  # FIXME purge chinfo
         self.bc = bc
         if unit_cell_width is None:
             msg = (
@@ -234,8 +286,8 @@ class MPSGeometry:
         if not (isinstance(self.unit_cell_width, int) and self.unit_cell_width > 0):
             raise ValueError(f'invalid unit_cell_width: {self.unit_cell_width}')
         for i, site in enumerate(self.sites):
-            if site.leg.chinfo != self.chinfo:
-                raise ValueError(f'Invalid ChargeInfo for site {i}.')
+            if site.leg.symmetry != self.symmetry:
+                raise ValueError(f'Invalid symmetry for site {i}.')
 
     @property
     def L(self):
@@ -276,7 +328,7 @@ class MPSGeometry:
         # Note: self.L % self.unit_cell_width == 0 guaranteed by test_sanity
         return self.L // self.unit_cell_width
 
-    def _to_valid_site_index(self, i, return_num_unit_cells=False):
+    def _to_valid_site_index(self, i: int, return_num_unit_cells: bool = False) -> int | tuple[int, int]:
         """Make sure `i` is a valid index of a site.
 
         For finite MPS, we just check if ``i`` is within bounds ``0 <= i < L``.
@@ -313,7 +365,9 @@ class MPSGeometry:
             return i_in_unit_cell, num_unit_cells
         return i_in_unit_cell
 
-    def _to_valid_bond_index(self, i_site, is_left, return_num_unit_cells=False):
+    def _to_valid_bond_index(
+        self, i_site: int, is_left: bool, return_num_unit_cells: bool = False
+    ) -> int | tuple[int, int]:
         """Make sure `i` is a valid index of a bond.
 
         For finite MPS, we just check if ``i`` is within bounds ``0 <= i < L + 1``.
@@ -332,9 +386,10 @@ class MPSGeometry:
         Returns
         -------
         i_in_unit_cell : int
-            Index within the unit cell that is equal or equivalent to `i`.
+            Index within the unit cell that is equal or equivalent to the selected left or right
+            bond of `i_site`.
         num_unit_cells : int, optional
-            The index of the unit cell that `i` lies in.
+            The index of the unit cell that the selected left or right bond of `i_site` lies in.
             This is always ``0`` for finite MPS and is ``i // L`` for infinite MPS.
 
         """
@@ -352,98 +407,24 @@ class MPSGeometry:
         return self._to_valid_site_index(i_site + int(not is_left), return_num_unit_cells)
 
     def shift_charges_unit_cells(self, charges, num_unit_cells):
-        """Shift charges by an integer multiple of unit cells.
-
-        See the notes on :ref:`shift_symmetry`.
-
-        A unit cell has length :attr:`~tenpy.networks.mps.MPSGeometry.L` and a shift by one
-        unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mps.MPSGeometry.unit_cell_width`
-        lattice spacings.
-
-        Essentially, this is a convenience wrapper around
-        :math:`tenpy.linalg.charges.ChargeInfo.shift_charges_horizontal`.
-
-        Parameters
-        ----------
-        charges : 2D ndarray of dtype QTYPE
-            The charges to shift.
-        num_unit_cells : int
-            The number of unit cells.
-
-        Returns
-        -------
-        2D ndarray of dtype QTYPE
-            The shifted charges.
-
-        """
-        dx_0 = num_unit_cells * self.unit_cell_width
-        return self.chinfo.shift_charges_horizontal(charges, dx_0)
+        raise NotImplementedError('TODO: shift-symmetry')
 
     def shift_Site_unit_cells(self, site, num_unit_cells):
-        """Shift a `site` by an integer multiple of unit cells.
+        # TODO reactivate this in get_site
+        raise NotImplementedError('TODO: shift-symmetry')
 
-        See the notes on :ref:`shift_symmetry`.
+    def shift_Tensor_unit_cells(self, arr, num_unit_cells, inplace: bool = False):
+        raise NotImplementedError('TODO: shift-symmetry')
 
-        A unit cell has length :attr:`~tenpy.networks.mps.MPSGeometry.L` and a shift by one
-        unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mps.MPSGeometry.unit_cell_width`
-        lattice spacings.
-
-        Parameters
-        ----------
-        site : :class:`~tenpy.networks.site.Site`
-            The site to shift.
-        num_unit_cells : int
-            The number of unit cells.
-
-        Returns
-        -------
-        :class:`~tenpy.networks.site.Site`
-            A new site with shifted charges, or the unmodified input `site` if the shift is trivial.
-
-        """
-        if num_unit_cells == 0 or site.leg.chinfo.trivial_shift:
-            return site
-        leg = site.leg.apply_charge_mapping(
-            site.leg.chinfo.shift_charges_horizontal, func_kwargs=dict(dx_0=num_unit_cells * self.unit_cell_width)
-        )
-        return copy.copy(site).change_charge(leg)  # shallow copy
-
-    def shift_Array_unit_cells(self, arr, num_unit_cells, inplace: bool = False):
-        """Shift an Array by an integer multiple of unit cells.
-
-        See the notes on :ref:`shift_symmetry`.
-
-        A unit cell has length :attr:`~tenpy.networks.mps.MPSGeometry.L` and a shift by one
-        unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mps.MPSGeometry.unit_cell_width`
-        lattice spacings.
-
-        Parameters
-        ----------
-        arr : :class:`~tenpy.linalg.np_conserved.Array`
-            The site to shift.
-        num_unit_cells : int
-            The number of unit cells.
-        inplace : bool
-            If the array (its legs, qtotal) can be modified in-place.
-            Otherwise (default) we make a shallow copy.
-
-        Returns
-        -------
-        :class:`~tenpy.linalg.np_conserved.Array`
-            The shifted array.
-
-        """
-        dx_0 = num_unit_cells * self.unit_cell_width
-        return arr.shift_charges_horizontal(dx_0, inplace=inplace)
-
-    def get_site(self, i):
+    def get_site(self, i: int) -> ct.Site:
         """Get the `i`-th site.
 
         This is ``self.sites[i]`` if `i` is in the unit cell and takes care of shifting the
         charges otherwise.
         """
-        i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        return self.shift_Site_unit_cells(self.sites[i_in_unit_cell], num_unit_cells)
+        # i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
+        # return self.shift_Site_unit_cells(self.sites[i_in_unit_cell], num_unit_cells)
+        return self.sites[self._to_valid_site_index(i)]
 
 
 class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
@@ -459,11 +440,15 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
     See :class:`MPS` for details.
     """
 
-    def expectation_value(self, ops, sites=None, axes=None):
-        """Expectation value ``<bra|ops|ket>`` of (n-site) operator(s).
+    def expectation_value(
+        self,
+        op: str | ct.Coupling,
+        sites: list[list[int]] | list[int] = None,
+    ) -> np.ndarray:
+        """Expectation value ``<bra|op|ket>`` of an (n-site) operator.
 
         Calculates n-site expectation values of operators sandwiched between bra and ket.
-        For examples the contraction for a two-site operator on site `i` would look like::
+        For example the contraction for a two-site operator on site `i` would look like::
 
             |          .--S--B[i]--B[i+1]--.
             |          |     |     |       |
@@ -474,32 +459,33 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             |          .--S--B*[i]-B*[i+1]-.
 
         Here, the `B` are taken from `ket`, the `B*` from `bra`.
-        For MPS expectation values these are the same and LP/ RP are trivial.
+        For MPS expectation values these are the same and LP / RP are trivial.
 
 
         Parameters
         ----------
-        ops : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
-            The operators, for which the expectation value should be taken,
-            All operators should all have the same number of legs (namely `2 n`).
-            If less than ``len(sites)`` operators are given, we repeat them periodically.
-            Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
-            :attr:`sites`.
-        sites : list
-            List of site indices. Expectation values are evaluated there.
-            If ``None`` (default), the entire chain is taken (clipping for finite b.c.)
-        axes : None | (list of str, list of str)
-            Two lists of each `n` leg labels giving the physical legs of the operator used for
-            contraction. The first `n` legs are contracted with conjugated `B`,
-            the second `n` legs with the non-conjugated `B`.
-            ``None`` defaults to ``(['p'], ['p*'])`` for single site (n=1), or
-            ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for `n` > 1.
+        op : :class:`cyten.Coupling` | str
+            The operator, for which the expectation values should be taken.
+            Is used for all entries in `sites`.
+            If a string, we look up the operator in the corresponding `sites`, see :meth:`get_op`.
+            Such operators only act on single sites, i.e., they are on-site operators.
+            Note that a :class:`cyten.Tensor` is not allowed as input; use
+            :meth:`expectation_value_tensors` for this case.
+        sites : list of list of int | list of int
+            If list of list of int: For each ``site_list in sites``, evaluate the expectation value
+            where the individual tensors in the factorization of ``op`` act on the site(s)
+            ``site_list[0], ..., site_list[n-1]``. Each `site_list` must be sorted.
+            If list of int: For each entry ``j in sites``, evaluate the expectation value where
+            ``op`` acts on site(s) ``j, j+1, ..., j+{n-1}``.
+            If ``None`` (default), evaluate the expectation value where ``op`` acts on site(s)
+            ``j, j+1, ..., j+{n-1}`` with `j` running over all sites of the chain.
+            For finite b.c. with ``n``-site `op`, this is clipped to ``range(L - n + 1)``.
 
         Returns
         -------
         exp_vals : 1D ndarray
-            Expectation values, ``exp_vals[i] = <bra|ops[i]|ket>``, where ``ops[i]`` acts on
-            site(s) ``j, j+1, ..., j+{n-1}`` with ``j=sites[i]``.
+            Expectation values, ``exp_vals[i] = <bra|op|ket>``, where ``op`` acts on site(s)
+            ``[j1, j2, ..., j{n-1}]=sites[i]``.
 
             .. warning ::
 
@@ -573,28 +559,200 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             [0.0625 0.0625 0.0625 0.0625 0.0625 0.0625]
 
         """
-        ops, sites, n, (op_ax_p, op_ax_pstar) = self._expectation_value_args(ops, sites, axes)
-        ax_p = ['p' + str(k) for k in range(n)]
-        ax_pstar = ['p' + str(k) + '*' for k in range(n)]
+        if not isinstance(op, (str, ct.Coupling)):
+            raise ValueError('Expectation values can only be computed for a single operator that is not a tensor')
+        if isinstance(op, str):
+            # can only be on-site operator
+            n = 1
+        else:
+            n = len(op.factorization)
+
+        # for sites, fill in default values or convert list[int] to list[list[int]]
+        if sites is None:
+            limit = self.L - (n - 1) if self.finite else self.L
+            sites = [list(range(i, i + n) for i in range(limit))]
+        else:
+            sites = to_iterable(sites)
+            for i, site_list in enumerate(sites):
+                if not isinstance(site_list, Iterable):
+                    if self.finite and site_list + n > self.L:
+                        bc_err = 'Specified site(s) are inconsistent with operator length and boundary conditions'
+                        raise ValueError(bc_err)
+                    sites[i] = list(range(site_list, site_list + n))
+
         bra, ket = self._get_bra_ket()
-        E = []
-        for i in sites:
-            op, needs_JW = self.get_op(ops, i)
-            op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
-            theta_ket = ket.get_theta(i, n)
-            if needs_JW:
-                if isinstance(self, MPSEnvironment):
-                    self.apply_JW_string_left_of_virt_leg(theta_ket, 'vL', i)
+        res = []
+        for i, site_list in enumerate(sites):
+            # TODO should we get the operator for each site? -> if str, we would get a different error when
+            # one of the sites does not have the operator (rather than a generic contraction error)
+            op = self.get_op(op, i)
+            if isinstance(op, ct.Coupling):
+                res.append(self._expectation_value_coupling(bra=bra, ket=ket, op=op, sites=site_list))
+            else:
+                assert len(site_list) == 1, 'On-site operators can only act on a single site'
+                res.append(self._expectation_value_onsite_op(bra=bra, ket=ket, op=op, site=site_list[0]))
+            # FIXME implement get_LP / get_RP abstractly in this class! (replace _contract_with_LP)
+        return self._normalize_exp_val(res)
+
+    def expectation_value_tensors(
+        self,
+        op: ct.Tensor,
+        sites: list[list[int]] | list[int] = None,
+        axes: tuple[list[str], list[str]] = None,
+    ) -> np.ndarray:
+        """Expectation value ``<bra|op|ket>`` of an (n-site) operator.
+
+        Same as :meth:`expectation_value`, but for operators that are tensors rather than couplings.
+        The tensors are converted to couplings in order to compute the expectation values. It is
+        thus more efficient to manually convert the tensors when expectation values of the same
+        tensors are to be computed using multiple method calls.
+
+
+        Parameters
+        ----------
+        op : :class:`cyten.Tensor`
+            The operator, for which the expectation values should be taken.
+            Is used for all entries in `sites`.
+        sites : list of list of int | list of int
+            If list of list of int: For each ``site_list in sites``, evaluate the expectation value
+            where the individual tensors in the factorization of ``op`` act on the site(s)
+            ``site_list[0], ..., site_list[n-1]``. Each `site_list` must be sorted.
+            If list of int: For each entry ``j in sites``, evaluate the expectation value where
+            ``op`` acts on site(s) ``j, j+1, ..., j+{n-1}``.
+            If ``None`` (default), evaluate the expectation value where ``op`` acts on site(s)
+            ``j, j+1, ..., j+{n-1}`` with `j` running over all sites of the chain.
+            For finite b.c. with ``n``-site `op`, this is clipped to ``range(L - n + 1)``.
+        axes : None | (list of str, list of str)
+            Two lists of each `n` leg labels giving the physical legs of the operator used for
+            contraction. The first `n` legs are contracted with conjugated `B`,
+            the second `n` legs with the non-conjugated `B`.
+            ``None`` defaults to ``(['p'], ['p*'])`` for single site (``n == 1``), or
+            ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for ``n > 1``.
+
+        Returns
+        -------
+        exp_vals : 1D ndarray
+            Expectation values, ``exp_vals[i] = <bra|op|ket>``, where ``op`` acts on site(s)
+            ``[j1, j2, ..., j{n-1}]=sites[i]``.
+
+            .. warning ::
+
+                The :class:`MPSEnvironment` variant of this method takes the accumulated MPS
+                :attr:`~tenpy.networks.mps.MPS.norm` into account, which is non-trivial e.g. when you
+                used `apply_local_op` with non-unitary operators.
+
+                In contrast, the :class:`MPS` variant of this method *ignores* the `norm`,
+                i.e. returns the expectation value for the normalized state.
+
+        """
+        assert isinstance(op, ct.Tensor), 'Operator is not a tensor'
+        n = op.num_legs // 2
+        if n == 1:
+            # TODO maybe we want to change this?
+            # on-site operators have different labeling conventions here and in couplings
+            if axes is None:
+                axes = (['p'], ['p*'])
+            elif axes == (['p0'], ['p0*']):
+                axes = None
+        new_axes = (self._get_p_labels(n), self._get_p_labels(n, True))
+
+        # take the first entry in sites for the conversion
+        if sites is None:
+            site_list = list(range(n))
+        else:
+            site_list = sites[0]
+            if not isinstance(site_list, Iterable):
+                site_list = list(range(site_list, site_list + n))
+
+        # get sites from the ket
+        _, ket = self._get_bra_ket()
+        if axes is not None:
+            # None means we already have the expected labels
+            # TODO relabelling is in-place, thus copy?
+            op = op.copy(deep=False, device=op.device).relabel(
+                {l_old: l_new for l_old, l_new in zip(axes[0] + axes[1], new_axes[0] + new_axes[1])}
+            )
+        else:
+            assert op.labels_are(*new_axes[0], *new_axes[1])
+        return self.expectation_value(
+            op=ct.Coupling.from_tensor(op, sites=[ket.get_site(i) for i in site_list]), sites=sites
+        )
+
+    def _expectation_value_coupling(self, bra: MPS, ket: MPS, op: ct.Coupling, sites: list[int]) -> complex | float:
+        """Expectation value ``<bra|op|ket>`` with ``op`` being a (n-site) :class:cyten.Coupling.
+
+        Couplings have the advantage that they are factorized, i.e., we can contract from
+        "left to right" rather than directly dealing with tensors having n physical legs.
+
+        Parameters
+        ----------
+        bra, ket : :class:`MPS`
+            The bra and ket with respect to which the expectation value is evaluated.
+        op : :class:`cyten.Coupling`
+            Operator for which the expectation value is evaluated. The tensors in its factorization
+            ``op.factorization[i]`` act on ``sites[i]``. Acts trivially on sites not contained in
+            `sites`.
+        sites : list of int
+            The sites on which the operator acts. Must be sorted and of the same length as `op`.
+
+        """
+        msg = f'Inconsistent number of sites and coupling length'
+        assert len(sites) == len(op.factorization), msg
+        # need to remove trivial legs at left and right ends of coupling
+        tensors = dict(
+            LP=self.get_LP(sites[0]),  # FIXME define labelling convention
+            ket=ket.get_theta(sites[0], 1),  # FIXME define labelling convention
+            bra=bra.get_theta(sites[0], 1).hc,
+            W=ct.squeeze_legs(op.factorization[0], 'wL'),
+        )
+        if len(sites) == 1:
+            tensors['W'] = ct.squeeze_legs(tensors['W'], 'wR')
+            res = mps_contraction_diagram_operations['LP2 @ bra-W-ket2'].evaluate(tensors)
+        else:
+            res = mps_contraction_diagram_operations['LP2 @ bra-W-ket3'].evaluate(tensors)
+            i = 1  # next entry in op.factorization and sites
+            for site in range(sites[0] + 1, sites[-1]):
+                if site == sites[i]:
+                    W = op.factorization[i]
+                    i += 1
                 else:
-                    msg = "Expectation value of operator that needs JW string can't work"
-                    raise ValueError(msg)
-            C = npc.tensordot(op, theta_ket, axes=[ax_pstar, ax_p])  # C has same labels as theta
-            C = self._contract_with_LP(C, i)  # axes_p + (vR*, vR)
-            C = self._contract_with_RP(C, i + n - 1)  # axes_p + (vR*, vL*)
-            C.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])  # back to original theta labels
-            theta_bra = bra.get_theta(i, n)
-            E.append(npc.inner(theta_bra, C, axes='labels', do_conj=True))
-        return self._normalize_exp_val(E)
+                    # OPTIMIZE reuse old identities for identical sites?
+                    # TODO identity
+                    raise NotImplementedError
+                res = mps_contraction_diagram_operations['LP3 @ bra-W-ket3'].evaluate(
+                    LP=res, ket=ket.get_B(site), bra=bra.get_B(site).hc, W=W
+                )
+            res = mps_contraction_diagram_operations['LP3 @ bra-W-ket2'].evaluate(
+                LP=res,
+                ket=ket.get_B(sites[-1]),
+                bra=bra.get_B(sites[-1]).hc,
+                W=ct.squeeze_legs(op.factorization[-1], 'wR'),
+            )
+        return mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(LP=res, RP=self.get_RP(sites[-1]))
+
+    def _expectation_value_onsite_op(self, bra: MPS, ket: MPS, op: ct.Tensor, site: int) -> complex | float:
+        """Expectation value ``<bra|op|ket>`` with ``op`` being an on-site :class:cyten.Tensor.
+
+        Parameters
+        ----------
+        bra, ket : :class:`MPS`
+            The bra and ket with respect to which the expectation value is evaluated.
+        op : :class:`cyten.Tensor`
+            Operator for which the expectation value is evaluated. Must have two legs with labels
+            `p` and `p*`, similar to on-site operators in :attr:`cyten.Site.onsite_operators`.
+        site : int
+            The site on which the operator acts.
+
+        """
+        res = mps_contraction_diagram_operations['LP2 @ bra-W-ket2'].evaluate(
+            LP=self.get_LP(site),
+            ket=ket.get_theta(site),
+            bra=bra.get_theta(site).hc,
+            W=op,
+        )
+        return mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(LP=res, RP=self.get_RP(site))
+
+    # FIXME stopped here
 
     def apply_JW_string_left_of_virt_leg(self, theta, virt_leg_index, i):
         """Apply signs on a virtual MPS leg equivalent to a Jordan-Wigner string on the left.
@@ -1460,7 +1618,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         warnings.warn(msg, category=FutureWarning, stacklevel=2)
         return self._to_valid_site_index(i)
 
-    def get_op(self, op_list, i):
+    def get_op(self, op_list, i) -> ct.Tensor:  # FIXME prbly want Tensor vs Coupling ??
         """Given a list of operators, select the one corresponding to site `i`.
 
         Parameters
@@ -1505,8 +1663,13 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         return op, needs_JW
 
     @abstractmethod
-    def _normalize_exp_val(self, value):
-        """Return `value`, but multiply with bra.norm and ket.norm for MPSEnvironment."""
+    def _normalize_exp_val(self, value: Sequence[complex]) -> np.ndarray:
+        """Post processing of result values of :meth:`expectation_value`.
+
+        Should always convert to numpy array and ensure real values.
+        Optionally (depending on concrete subclass), considers state norms or not.
+        E.g., in :class:`MPS` we ignore the norm but consider the norms in :class:`MPSEnvironment`.
+        """
         ...
 
     @abstractmethod
@@ -1526,7 +1689,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def _get_bra_ket(self):
+    def _get_bra_ket(self) -> tuple[MPS, MPS]:
         """Return bra and ket providing :meth:`get_B` for expectation values."""
         ...
         # for MPS: return self, self
@@ -2876,7 +3039,7 @@ class MPS(BaseMPSExpectationValue):
         B = self._B[i_in_unit_cell]
         if copy:
             B = B.copy()
-        B = self.shift_Array_unit_cells(B, num_unit_cells=num_unit_cells, inplace=copy)
+        B = self.shift_Tensor_unit_cells(B, num_unit_cells=num_unit_cells, inplace=copy)
         new_form = self._to_valid_form(form)
         old_form = self.form[i_in_unit_cell]
         if new_form is not None and old_form != new_form:
@@ -2908,7 +3071,7 @@ class MPS(BaseMPSExpectationValue):
 
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        B = self.shift_Array_unit_cells(B, -num_unit_cells)
+        B = self.shift_Tensor_unit_cells(B, -num_unit_cells)
         self.form[i_in_unit_cell] = self._to_valid_form(form)
         self.dtype = np.promote_types(self.dtype, B.dtype)
         self._B[i_in_unit_cell] = B.itranspose(self._B_labels)
@@ -2958,7 +3121,7 @@ class MPS(BaseMPSExpectationValue):
         i_in_unit_cell, num_unit_cells = self._to_valid_bond_index(i, is_left=True, return_num_unit_cells=True)
         S = self._S[i_in_unit_cell]
         if isinstance(S, npc.Array):
-            S = self.shift_Array_unit_cells(S, num_unit_cells, inplace=False)
+            S = self.shift_Tensor_unit_cells(S, num_unit_cells, inplace=False)
         return S
 
     def get_SR(self, i):
@@ -2969,7 +3132,7 @@ class MPS(BaseMPSExpectationValue):
         i_in_unit_cell, num_unit_cells = self._to_valid_bond_index(i, is_left=False, return_num_unit_cells=True)
         S = self._S[i_in_unit_cell]
         if isinstance(S, npc.Array):
-            S = self.shift_Array_unit_cells(S, num_unit_cells, inplace=False)
+            S = self.shift_Tensor_unit_cells(S, num_unit_cells, inplace=False)
         return S
 
     def set_SL(self, i, S):
@@ -2979,7 +3142,7 @@ class MPS(BaseMPSExpectationValue):
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_bond_index(i, is_left=True, return_num_unit_cells=True)
         if isinstance(S, npc.Array):
-            S = self.shift_Array_unit_cells(S, -num_unit_cells)
+            S = self.shift_Tensor_unit_cells(S, -num_unit_cells)
         self._S[i_in_unit_cell] = S
 
     def set_SR(self, i, S):
@@ -2989,7 +3152,7 @@ class MPS(BaseMPSExpectationValue):
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_bond_index(i, is_left=False, return_num_unit_cells=True)
         if isinstance(S, npc.Array):
-            S = self.shift_Array_unit_cells(S, -num_unit_cells)
+            S = self.shift_Tensor_unit_cells(S, -num_unit_cells)
         self._S[i_in_unit_cell] = S
 
     def get_theta(self, i, n=2, cutoff=1.0e-16, formL=1.0, formR=1.0):
@@ -4622,7 +4785,7 @@ class MPS(BaseMPSExpectationValue):
         # phase 1: bring bond (i1-1, i1) in canonical form
         # find dominant right eigenvector
         norm, Gr = self._canonical_form_dominant_gram_matrix(i1, False, tol_xi)
-        Gr = self.shift_Array_unit_cells(Gr, -1)
+        Gr = self.shift_Tensor_unit_cells(Gr, -1)
         self._B[i1] /= np.sqrt(norm)  # correct norm
         if not renormalize:
             self.norm *= np.sqrt(norm)
@@ -4642,7 +4805,7 @@ class MPS(BaseMPSExpectationValue):
             self.norm *= np.sqrt(norm)
         # bring bond to canonical form
         Gl, Yl, Yr = self._canonical_form_correct_left(i1, Gl, Wr)
-        Gl = self.shift_Array_unit_cells(Gl, -1)
+        Gl = self.shift_Tensor_unit_cells(Gl, -1)
         Wr = np.ones(Yr.legs[0].ind_len, np.float64)
         # now the bond (i1-1,i1) is in canonical form
         Wr_list[i1] = Wr  # diag(Wr) is right eigenvector on bond (i1-1, i1)
@@ -4730,7 +4893,7 @@ class MPS(BaseMPSExpectationValue):
             self._B[i] = V.split_legs()
             self.set_SL(i, S)
         # note: we included SVD on i=0; else the virtual leg (-1, 0) might not even be sorted
-        U = self.shift_Array_unit_cells(U, 1)
+        U = self.shift_Tensor_unit_cells(U, 1)
         self._B[-1] = npc.tensordot(self._B[-1], U, axes=['vR', 'vL'])
 
     def _canonical_form_left_orthogonalize(self, L, tol, arnoldi_params):
@@ -5296,7 +5459,7 @@ class MPS(BaseMPSExpectationValue):
                     ) from e
             opname = op
         else:
-            op = self.shift_Array_unit_cells(op, -num_unit_cells, inplace=False)
+            op = self.shift_Tensor_unit_cells(op, -num_unit_cells, inplace=False)
             opname = op
             need_JW = False
 
@@ -6405,7 +6568,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             key = self._LP_keys[i0_in_unit_cell]
             LP = self.cache.get(key, None)
             if LP is not None:
-                LP = self.shift_Array_unit_cells(LP, num_unit_cells, inplace=False)
+                LP = self.shift_Tensor_unit_cells(LP, num_unit_cells, inplace=False)
                 break
             # (for finite, LP[0] should always be set, so we should abort at latest with i0=0)
         else:  # no break called
@@ -6452,7 +6615,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             key = self._RP_keys[i0_in_unit_cell]
             RP = self.cache.get(key, None)
             if RP is not None:
-                RP = self.shift_Array_unit_cells(RP, num_unit_cells, inplace=False)
+                RP = self.shift_Tensor_unit_cells(RP, num_unit_cells, inplace=False)
                 break
             # (for finite, RP[-1] should always be set, so we should abort at latest with i0=L-1)
         else:  # no break called
@@ -6485,7 +6648,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         Takes care of shifting as described in :ref:`shift_symmetry`.
         """
         i, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        self.cache[self._LP_keys[i]] = self.shift_Array_unit_cells(LP, -num_unit_cells)
+        self.cache[self._LP_keys[i]] = self.shift_Tensor_unit_cells(LP, -num_unit_cells)
         self._LP_age[i] = age
 
     def set_RP(self, i, RP, age):
@@ -6494,7 +6657,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         Takes care of shifting as described in :ref:`shift_symmetry`.
         """
         i, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        self.cache[self._RP_keys[i]] = self.shift_Array_unit_cells(RP, -num_unit_cells)
+        self.cache[self._RP_keys[i]] = self.shift_Tensor_unit_cells(RP, -num_unit_cells)
         self._RP_age[i] = age
 
     def del_LP(self, i):
@@ -6846,11 +7009,13 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         return np.real_if_close(value) * (self.bra.norm * self.ket.norm)
 
     def _contract_with_LP(self, C, i):
+        # FIXME get rid of these? replace with having _get_LP -> ct.Identity
         LP = self.get_LP(i, store=True)
         C = npc.tensordot(LP, C, axes=['vR', 'vL'])  # axes_p + (vR*, vR)
         return C
 
     def _contract_with_RP(self, C, i):
+        # FIXME get rid of these? replace with having _get_LP -> ct.Identity
         RP = self.get_RP(i, store=True)
         C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vL, vL*)
         return C
