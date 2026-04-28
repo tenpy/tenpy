@@ -188,47 +188,13 @@ __all__ = [
 #   - BaseMPSExpectationValue moved behavior from _contract_with_LP to get_LP.
 #     If the LP is trivial (e.g. in <psi|op_local|psi>), we now get get_Lp(...) == ct.Identity
 #     which allows us to exploit that the contraction is trivial also.
+#   - BaseMPSExpectationValue.expectation_value now only takes a single operator that is a coupling
+#     or on-site operator (str). For tensor operators, we have expectation_value_tensors, which
+#     converts the operators to couplings. Only the latter now has an `axes` argument. Also changed
+#     the `sites` argument to list of list of int, such that we may insert identities between the
+#     individual tensors of a coupling.
 
 
-def _generate_expectation_value_diagram_tensor_op(n: int) -> ct.PlanarDiagram:
-    """Planar diagram associated with the expectation value of an `n`-leg tensor.
-
-    The tensors in the diagram are the left and right environments `LP` and `RP` (cf.
-    :meth:`MPSGeometry.get_LP` and :meth:`MPSGeometry.get_LP`), the `n`-site ket and bra wave
-    functions `theta_ket` and `theta_bra` (cf. :meth:`MPS.get_theta`), and the operator `op`
-    (:class:`cyten.Tensor`) for which the expectation value is computed.
-
-    The labels for the physical legs are expected to be ``'p', 'p*'`` for ``n==1`` and
-    ``'p0', 'p1', ..., 'p{n-1}', 'p0*', 'p1*', ..., 'p{n-1}*'`` otherwise.
-    """
-    if n == 1:
-        return ct.PlanarDiagram(
-            tensors='LP[vR*, vR], RP[vL*, vL], op[p, p*], theta_ket[vL, p, vR], theta_bra[vR*, p*, vL*]',
-            definition='LP:vR @ theta_ket:vL, theta_ket:p @ op:p*, LP:vR* @ theta_bra:vL*, '
-            'theta_bra:p* @ op:p, RP:vL @ theta_ket:vR, RP:vL* @ theta_bra:vR*',
-            dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
-        )
-
-    p_labels = [f'p{i}' for i in range(n)]
-    ps_labels = [f'p{i}*' for i in range(n)]
-    dim_d_labels = p_labels + ps_labels
-    op_contr = [f'theta_ket:{l1} @ op:{l2}' for l1, l2 in zip(p_labels, ps_labels)]
-    op_contr.extend([f'op:{l1} @ theta_bra:{l2}' for l1, l2 in zip(p_labels, ps_labels)])
-    op_contr = ', '.join(op_contr)
-    p_labels = ', '.join(p_labels)
-    ps_labels = ', '.join(reversed(ps_labels))
-    return ct.PlanarDiagram(
-        tensors=f'LP[vR*, vR], RP[vL*, vL], op[{p_labels}, {ps_labels}], '
-        f'theta_ket[vL, {p_labels}, vR], theta_bra[vR*, {ps_labels}, vL*]',
-        definition=f'LP:vR @ theta_ket:vL, {op_contr}, LP:vR* @ theta_bra:vL*, '
-        'RP:vL @ theta_ket:vR, RP:vL* @ theta_bra:vR*',
-        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=dim_d_labels),
-    )
-
-
-mps_expectation_value_diagrams_tensor_op: dict[int, ct.PlanarDiagram] = {
-    n: _generate_expectation_value_diagram_tensor_op(n) for n in range(1, 5)
-}
 mps_contraction_diagram_operations: dict[str, ct.PlanarDiagram] = {
     'LP2 @ TM': ct.PlanarDiagram(
         tensors='LP[vR*, vR], ket[vL, p, vR], bra[vR*, p*, vL*]',
@@ -476,11 +442,10 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
     def expectation_value(
         self,
-        ops: list[str | ct.Coupling | ct.Tensor] | str | ct.Coupling | ct.Tensor,
-        sites: list[int] = None,
-        axes: tuple[list[str], list[str]] = None,
+        op: str | ct.Coupling,
+        sites: list[list[int]] | list[int] = None,
     ) -> np.ndarray:
-        """Expectation value ``<bra|ops|ket>`` of (n-site) operator(s).
+        """Expectation value ``<bra|op|ket>`` of an (n-site) operator.
 
         Calculates n-site expectation values of operators sandwiched between bra and ket.
         For example the contraction for a two-site operator on site `i` would look like::
@@ -494,36 +459,33 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             |          .--S--B*[i]-B*[i+1]-.
 
         Here, the `B` are taken from `ket`, the `B*` from `bra`.
-        For MPS expectation values these are the same and LP/ RP are trivial.
+        For MPS expectation values these are the same and LP / RP are trivial.
 
 
         Parameters
         ----------
-        ops : (list of) { :class:`cyten.Coupling` | :class:`cyten.Tensor` | str }
-            The operator(s), for which the expectation values should be taken.
-            If a list, we expect one entry per `sites`, and that all have the same number of legs.
-            FIXME can tile?
-            If a single entry, it is used for all `sites`.
+        op : :class:`cyten.Coupling` | str
+            The operator, for which the expectation values should be taken.
+            Is used for all entries in `sites`.
             If a string, we look up the operator in the corresponding `sites`, see :meth:`get_op`.
             Such operators only act on single sites, i.e., they are on-site operators.
-        sites : list of int
-            For each entry ``j in sites``, we evaluate an expectation value where ``op`` acts on
-            site(s) ``j, j+1, ..., j+{n-1}``.
-            If ``None`` (default), the entire chain is taken.
-            For finite b.c. with ``n``-site `ops`, this is clipped to ``range(L - n + 1)``.
-        axes : None | (list of str, list of str)
-            Two lists of each `n` leg labels giving the physical legs of the operator used for
-            contraction. The first `n` legs are contracted with conjugated `B`,
-            the second `n` legs with the non-conjugated `B`.
-            ``None`` defaults to ``(['p'], ['p*'])`` for single site (n=1), or
-            ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for `n` > 1.
-            Only relevant when providing an operator as :class:`cyten.Tensor`.
+            Note that a :class:`cyten.Tensor` is not allowed as input; use
+            :meth:`expectation_value_tensors` for this case.
+        sites : list of list of int | list of int
+            If list of list of int: For each ``site_list in sites``, evaluate the expectation value
+            where the individual tensors in the factorization of ``op`` act on the site(s)
+            ``site_list[0], ..., site_list[n-1]``. Each `site_list` must be sorted.
+            If list of int: For each entry ``j in sites``, evaluate the expectation value where
+            ``op`` acts on site(s) ``j, j+1, ..., j+{n-1}``.
+            If ``None`` (default), evaluate the expectation value where ``op`` acts on site(s)
+            ``j, j+1, ..., j+{n-1}`` with `j` running over all sites of the chain.
+            For finite b.c. with ``n``-site `op`, this is clipped to ``range(L - n + 1)``.
 
         Returns
         -------
         exp_vals : 1D ndarray
-            Expectation values, ``exp_vals[i] = <bra|ops[i]|ket>``, where ``ops[i]`` acts on
-            site(s) ``j, j+1, ..., j+{n-1}`` with ``j=sites[i]``.
+            Expectation values, ``exp_vals[i] = <bra|op|ket>``, where ``op`` acts on site(s)
+            ``[j1, j2, ..., j{n-1}]=sites[i]``.
 
             .. warning ::
 
@@ -597,106 +559,198 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             [0.0625 0.0625 0.0625 0.0625 0.0625 0.0625]
 
         """
-        is_single_op = isinstance(ops, (str, ct.Tensor, ct.Coupling))
-        first_op = ops if is_single_op else ops[0]
-        if isinstance(first_op, str):
+        if not isinstance(op, (str, ct.Coupling)):
+            raise ValueError('Expectation values can only be computed for a single operator that is not a tensor')
+        if isinstance(op, str):
             # can only be on-site operator
             n = 1
-        elif isinstance(first_op, ct.Tensor):
-            # do not take domain or codomain legs; bended tensors are allowed in planar diagrams
-            n = first_op.num_legs // 2
         else:
-            n = len(first_op.factorization)
+            n = len(op.factorization)
 
-        # fill in default values
+        # for sites, fill in default values or convert list[int] to list[list[int]]
         if sites is None:
-            if self.finite:
-                sites = range(self.L - (n - 1))
-            else:
-                sites = range(self.L)
+            limit = self.L - (n - 1) if self.finite else self.L
+            sites = [list(range(i, i + n) for i in range(limit))]
         else:
             sites = to_iterable(sites)
-        if n == 1:
-            new_axes = (['p'], ['p*'])
-        else:
-            new_axes = (self._get_p_labels(n), self._get_p_labels(n, True))
-        if axes is not None:
-            # non-standard leg labels -> replace later with standard convention
-            assert len(axes) == 2
-            assert len(axes[0]) == n == len(axes[1])
-
-        # convert `ops` to list of appropriate length
-        if is_single_op:
-            ops = [ops] * len(sites)
-        else:
-            assert len(ops) == len(sites)
+            for i, site_list in enumerate(sites):
+                if not isinstance(site_list, Iterable):
+                    if self.finite and site_list + n > self.L:
+                        bc_err = 'Specified site(s) are inconsistent with operator length and boundary conditions'
+                        raise ValueError(bc_err)
+                    sites[i] = list(range(site_list, site_list + n))
 
         bra, ket = self._get_bra_ket()
         res = []
-        for i in sites:
-            op = self.get_op(ops, i)
+        for i, site_list in enumerate(sites):
+            # TODO should we get the operator for each site? -> if str, we would get a different error when
+            # one of the sites does not have the operator (rather than a generic contraction error)
+            op = self.get_op(op, i)
             if isinstance(op, ct.Coupling):
-                res.append(self._expectation_value_coupling(bra=bra, ket=ket, op=op, site=i))
+                res.append(self._expectation_value_coupling(bra=bra, ket=ket, op=op, sites=site_list))
             else:
-                if axes is not None:
-                    # None means we already have the expected labels
-                    # TODO relabelling is in-place, thus copy?
-                    op = op.copy(deep=False, device=op.device).relabel(
-                        {l_old: l_new for l_old, l_new in zip(axes[0] + axes[1], new_axes[0] + new_axes[1])}
-                    )
-                else:
-                    assert op.labels_are(*new_axes[0], *new_axes[1])
-                res.append(self._expectation_value_tensor(bra=bra, ket=ket, op=op, site=i))
+                assert len(site_list) == 1, 'On-site operators can only act on a single site'
+                res.append(self._expectation_value_onsite_op(bra=bra, ket=ket, op=op, site=site_list[0]))
             # FIXME implement get_LP / get_RP abstractly in this class! (replace _contract_with_LP)
         return self._normalize_exp_val(res)
 
-    def _expectation_value_coupling(self, bra: MPS, ket: MPS, op: ct.Coupling, site: int) -> complex | float:
+    def expectation_value_tensors(
+        self,
+        op: ct.Tensor,
+        sites: list[list[int]] | list[int] = None,
+        axes: tuple[list[str], list[str]] = None,
+    ) -> np.ndarray:
+        """Expectation value ``<bra|op|ket>`` of an (n-site) operator.
+
+        Same as :meth:`expectation_value`, but for operators that are tensors rather than couplings.
+        The tensors are converted to couplings in order to compute the expectation values. It is
+        thus more efficient to manually convert the tensors when expectation values of the same
+        tensors are to be computed using multiple method calls.
+
+
+        Parameters
+        ----------
+        op : :class:`cyten.Tensor`
+            The operator, for which the expectation values should be taken.
+            Is used for all entries in `sites`.
+        sites : list of list of int | list of int
+            If list of list of int: For each ``site_list in sites``, evaluate the expectation value
+            where the individual tensors in the factorization of ``op`` act on the site(s)
+            ``site_list[0], ..., site_list[n-1]``. Each `site_list` must be sorted.
+            If list of int: For each entry ``j in sites``, evaluate the expectation value where
+            ``op`` acts on site(s) ``j, j+1, ..., j+{n-1}``.
+            If ``None`` (default), evaluate the expectation value where ``op`` acts on site(s)
+            ``j, j+1, ..., j+{n-1}`` with `j` running over all sites of the chain.
+            For finite b.c. with ``n``-site `op`, this is clipped to ``range(L - n + 1)``.
+        axes : None | (list of str, list of str)
+            Two lists of each `n` leg labels giving the physical legs of the operator used for
+            contraction. The first `n` legs are contracted with conjugated `B`,
+            the second `n` legs with the non-conjugated `B`.
+            ``None`` defaults to ``(['p'], ['p*'])`` for single site (``n == 1``), or
+            ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for ``n > 1``.
+
+        Returns
+        -------
+        exp_vals : 1D ndarray
+            Expectation values, ``exp_vals[i] = <bra|op|ket>``, where ``op`` acts on site(s)
+            ``[j1, j2, ..., j{n-1}]=sites[i]``.
+
+            .. warning ::
+
+                The :class:`MPSEnvironment` variant of this method takes the accumulated MPS
+                :attr:`~tenpy.networks.mps.MPS.norm` into account, which is non-trivial e.g. when you
+                used `apply_local_op` with non-unitary operators.
+
+                In contrast, the :class:`MPS` variant of this method *ignores* the `norm`,
+                i.e. returns the expectation value for the normalized state.
+
+        """
+        assert isinstance(op, ct.Tensor), 'Operator is not a tensor'
+        n = op.num_legs // 2
+        if n == 1:
+            # TODO maybe we want to change this?
+            # on-site operators have different labeling conventions here and in couplings
+            if axes is None:
+                axes = (['p'], ['p*'])
+            elif axes == (['p0'], ['p0*']):
+                axes = None
+        new_axes = (self._get_p_labels(n), self._get_p_labels(n, True))
+
+        # take the first entry in sites for the conversion
+        if sites is None:
+            site_list = list(range(n))
+        else:
+            site_list = sites[0]
+            if not isinstance(site_list, Iterable):
+                site_list = list(range(site_list, site_list + n))
+
+        # get sites from the ket
+        _, ket = self._get_bra_ket()
+        if axes is not None:
+            # None means we already have the expected labels
+            # TODO relabelling is in-place, thus copy?
+            op = op.copy(deep=False, device=op.device).relabel(
+                {l_old: l_new for l_old, l_new in zip(axes[0] + axes[1], new_axes[0] + new_axes[1])}
+            )
+        else:
+            assert op.labels_are(*new_axes[0], *new_axes[1])
+        return self.expectation_value(
+            op=ct.Coupling.from_tensor(op, sites=[ket.get_site(i) for i in site_list]), sites=sites
+        )
+
+    def _expectation_value_coupling(self, bra: MPS, ket: MPS, op: ct.Coupling, sites: list[int]) -> complex | float:
         """Expectation value ``<bra|op|ket>`` with ``op`` being a (n-site) :class:cyten.Coupling.
 
         Couplings have the advantage that they are factorized, i.e., we can contract from
         "left to right" rather than directly dealing with tensors having n physical legs.
+
+        Parameters
+        ----------
+        bra, ket : :class:`MPS`
+            The bra and ket with respect to which the expectation value is evaluated.
+        op : :class:`cyten.Coupling`
+            Operator for which the expectation value is evaluated. The tensors in its factorization
+            ``op.factorization[i]`` act on ``sites[i]``. Acts trivially on sites not contained in
+            `sites`.
+        sites : list of int
+            The sites on which the operator acts. Must be sorted and of the same length as `op`.
+
         """
-        n = len(op.factorization)
+        msg = f'Inconsistent number of sites and coupling length'
+        assert len(sites) == len(op.factorization), msg
         # need to remove trivial legs at left and right ends of coupling
         tensors = dict(
-            LP=self.get_LP(site),
-            ket=ket.get_theta(site, 1),
-            bra=bra.get_theta(site, 1).hc,
+            LP=self.get_LP(sites[0]),  # FIXME define labelling convention
+            ket=ket.get_theta(sites[0], 1),  # FIXME define labelling convention
+            bra=bra.get_theta(sites[0], 1).hc,
             W=ct.squeeze_legs(op.factorization[0], 'wL'),
         )
-        if n == 1:
+        if len(sites) == 1:
             tensors['W'] = ct.squeeze_legs(tensors['W'], 'wR')
             res = mps_contraction_diagram_operations['LP2 @ bra-W-ket2'].evaluate(tensors)
         else:
             res = mps_contraction_diagram_operations['LP2 @ bra-W-ket3'].evaluate(tensors)
-            for i in range(1, n - 1):
+            i = 1  # next entry in op.factorization and sites
+            for site in range(sites[0] + 1, sites[-1]):
+                if site == sites[i]:
+                    W = op.factorization[i]
+                    i += 1
+                else:
+                    # OPTIMIZE reuse old identities for identical sites?
+                    # TODO identity
+                    raise NotImplementedError
                 res = mps_contraction_diagram_operations['LP3 @ bra-W-ket3'].evaluate(
-                    LP=res, ket=ket.get_B(site + i), bra=bra.get_B(site + i).hc, W=op.factorization[i]
+                    LP=res, ket=ket.get_B(site), bra=bra.get_B(site).hc, W=W
                 )
             res = mps_contraction_diagram_operations['LP3 @ bra-W-ket2'].evaluate(
                 LP=res,
-                ket=ket.get_B(site + n - 1),
-                bra=bra.get_B(site + n - 1).hc,
+                ket=ket.get_B(sites[-1]),
+                bra=bra.get_B(sites[-1]).hc,
                 W=ct.squeeze_legs(op.factorization[-1], 'wR'),
             )
-        return mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(LP=res, RP=self.get_RP(site + n - 1))
+        return mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(LP=res, RP=self.get_RP(sites[-1]))
 
-    def _expectation_value_tensor(self, bra: MPS, ket: MPS, op: ct.Tensor, site: int) -> complex | float:
-        """Expectation value ``<bra|op|ket>`` with ``op`` being a (n-site) :class:cyten.Tensor."""
-        n = op.num_legs // 2
-        theta_ket = ket.get_theta(site, n)
-        if bra is ket:
-            theta_bra = theta_ket.hc
-        else:
-            theta_bra = bra.get_theta(site, n).hc
-        tensors = dict(
-            theta_ket=theta_ket,  # FIXME define labelling convention
-            theta_bra=theta_bra,
-            op=op,
-            LP=self.get_LP(site),  # FIXME define labelling convention
-            RP=self.get_RP(site + n - 1),  # FIXME define labelling convention
+    def _expectation_value_onsite_op(self, bra: MPS, ket: MPS, op: ct.Tensor, site: int) -> complex | float:
+        """Expectation value ``<bra|op|ket>`` with ``op`` being an on-site :class:cyten.Tensor.
+
+        Parameters
+        ----------
+        bra, ket : :class:`MPS`
+            The bra and ket with respect to which the expectation value is evaluated.
+        op : :class:`cyten.Tensor`
+            Operator for which the expectation value is evaluated. Must have two legs with labels
+            `p` and `p*`, similar to on-site operators in :attr:`cyten.Site.onsite_operators`.
+        site : int
+            The site on which the operator acts.
+
+        """
+        res = mps_contraction_diagram_operations['LP2 @ bra-W-ket2'].evaluate(
+            LP=self.get_LP(site),
+            ket=ket.get_theta(site),
+            bra=bra.get_theta(site).hc,
+            W=op,
         )
-        return mps_expectation_value_diagrams_tensor_op[n].evaluate(tensors)
+        return mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(LP=res, RP=self.get_RP(site))
 
     # FIXME stopped here
 
