@@ -1,0 +1,56 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: check-vcs-permalinks
+      - id: check-toml
+      - id: check-yaml
+        exclude: tfi_cylinder.yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: [ --maxkb=600 ]
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: check-symlinks
+      - id: detect-private-key
+      - id: end-of-file-fixer
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.4
+    hooks:
+      # Run the linter.
+      - id: ruff-check
+        types_or: [ python, pyi ]
+        args: [ --fix , --exit-non-zero-on-fix ]
+      # Run the formatter.
+      - id: ruff-format
+        types_or: [ python, pyi ]
+
+  - repo: https://github.com/pycqa/flake8
+    rev: '7.3.0'
+    hooks:
+    - id: flake8
+      exclude: ^(tests/|toycodes/)
+      additional_dependencies: [flake8-rst-docstrings]
+
+  - repo: https://github.com/sphinx-contrib/sphinx-lint
+    rev: v1.0.0
+    hooks:
+      - id: sphinx-lint
+        args:
+          - "-e=all"
+          - "--max-line-length=1000"
+          - "-d=default-role"
+        files: '^docs/.*\.rst$'
+
+  - repo: local
+    hooks:
+      # Check for forbidden strings in all text files, e.g. FIXME, DONTSHIP
+      - id: fixme
+        name: FIXME check
+        entry: FIXME|DONTSHIP
+        language: pygrep
+        types: [text]
+        # this file needs to include the forbidden patterns, so we need to exclude it.
+        exclude: ^(\.pre-commit-config\.yaml|docs/guidelines/code_style.rst)$

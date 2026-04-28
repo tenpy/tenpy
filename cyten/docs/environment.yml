@@ -1,0 +1,35 @@
+name: cyten
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10
+  - pip
+  - setuptools>=68.0.0
+  - pybind11
+  - scikit-build-core
+  - numpy>=2.0
+  - scipy
+  - boost
+  - libboost
+  - openblas
+  # alteratively use MKL instead of openblas
+  # - mkl
+  # - mkl-devel
+  # - libblas=*=*mkl  # pin BLAS to use MKL
+  # Testing
+  - pytest>=6.0
+  - sympy
+
+  # building docs
+  - doxygen
+  - sphinx
+  - sphinx_rtd_theme
+  - graphviz
+  - sphinx-copybutton
+  - pip:
+    - breathe  # conde-forge version seems incompatible
+
+  # I/O (to be added later...)
+  # - hdf5
+  # - h5py
+  # - pyyaml

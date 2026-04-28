@@ -1,0 +1,53 @@
+name: Run Pytest (numpy)
+# Run the test suite using pytest
+
+on:
+  # pushes to main
+  push:
+    branches:
+      - main
+  # PRs
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+
+jobs:
+  build:
+    if: github.event.pull_request.draft == false
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # make pytest output in color
+      PY_COLORS: 1
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install --upgrade setuptools build
+
+    - name: Build and install
+      # also installs extra dependencies defined in pyproject.toml
+      run: |
+        python -m build .
+        python -m pip install -e ".[test]"
+
+    - name: Run pytest
+      # configuration in pyproject.toml
+      # Note: This runs in the repo root directory, which contains the cyten source folder.
+      #       To use the version we just installed, it is important to run `pytest`
+      #       instead of `python -m pytest`.
+      run: pytest --block-backends "numpy" -vv

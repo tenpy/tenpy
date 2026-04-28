@@ -1,0 +1,173 @@
+
+[build-system]
+requires = ["scikit-build-core", "pybind11", "numpy>=2.0"]
+build-backend = "scikit_build_core.build"
+
+
+[tool.scikit-build]
+cmake.version = ">=3.15"
+build-dir = "build" # The build directory. Defaults to a temporary directory, but can be set.
+cmake.build-type = "Debug"  # TODO: for now setup debug builds - update this once we release!
+# Select the editable mode to use. Can be "redirect" (default) or "inplace".
+# editable.mode = "inplace"
+wheel.packages = ["cyten"]
+
+[tool.scikit-build.cmake.define]
+BUILD_DOC = {env="BUILD_DOC", default="OFF"}
+
+
+[project]
+name = "cyten"
+version = "0.1"
+# dynamic = ["version"] # TODO: does this still work with scikit build?
+description = ""
+readme = {file = "README.md", content-type = "text/markdown"}
+requires-python = ">=3.10"
+license = {text = "Apache_v2"}
+# authors = [
+#     {name = "TeNPy Developer Team"},
+#     {name = "cyten Developer Team"},
+# ]
+# maintainers = [
+#     {name = "Johannes Hauschild", email="cyten@johannes-hauschild.de"},
+#     ...
+# ]
+keywords = ["tensor networks", "tensor"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    # "Development Status :: 4 - Beta",
+    # "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Natural Language :: English",
+    "Programming Language :: C++",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: Unix",
+    "Operating System :: MacOS",
+    # "Operating System :: Microsoft :: Windows",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy",
+    "scipy",
+]
+
+[project.optional-dependencies]
+# users:
+io = ["h5py", "pyyaml"]
+gpu = ["torch"]
+# dev:
+test = ["pytest>=6.0", "sympy", "cyten[io]"]
+lint = ["ruff", "flake8", "flake8-rst-docstrings", "sphinx-lint"]
+docbuild = [
+    "Sphinx",
+    "sphinx-rtd-theme",
+    "sphinxcontrib-bibtex",
+    "sphinx_copybutton",
+]
+# bundles
+dev = ["cyten[io, test, lint, docbuild]"]
+all = ["cyten[io, gpu, test, lint, docbuild]"]
+
+
+[project.urls]
+"Homepage" = "https://github.com/tenpy/cyten"
+# "Documentation" = "https://cyten.readthedocs.io/"
+"Source" = "https://github.com/tenpy/cyten"
+"Bug Tracker" = "https://github.com/tenpy/cyten/issues"
+
+
+# [project.scripts]
+# cyten-run = "cyten:console_main"
+
+
+[tool.setuptools.packages.find]
+include = ['cyten*']
+
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "error",  # consider all unfiltered warnings error. they should be handled or filtered.
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "FusionTree: marks tests that use the FusionTreeBackend.",
+    "numpy: marks tests that use the numpy block backend.",
+    "torch: marks tests that use the torch block backend.",
+    "example: marks tests as example (deselect with '-m \"not example\"')",
+    "deselect_invalid_ChargedTensor_cases: modifies collection. See notes in conftest.py",
+]
+log_level = "INFO"
+log_format = "%(asctime)s %(levelname)-8s %(filename)-16s%(lineno)4d: %(message)s"
+testpaths = ["tests"]
+
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+exclude = []
+
+
+[tool.ruff.lint]
+# Note: we use flake8 to lint docstrings, see .flake8
+# Full list of rules: https://docs.astral.sh/ruff/rules/
+select = [
+    "F",  # Pyflakes
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "I",  # isort (sort import statements)
+    "UP",  # pyupgrade
+    "ISC",  # implicit-str-concat
+    "LOG",  # logging
+    "INP",  # no-pep420 (implicit namespace packages)
+    "D",  # pydocstyle
+]
+ignore = [
+    "F403", "F405",  # star imports
+    "E741",  # ambiguous variable names like l
+    "F541",  # f-string without any placeholders
+    "UP015",  # Unnecessary mode argument
+    "UP008",  # Use `super()` instead of `super(__class__, self)`
+    "D102",  # Missing docstring in public method
+    "D105",  # Missing docstring in magic method
+    "D107",  # Missing docstring in __init__
+    "D203",  # We use D211 instead (we put no blank line before class docstring)
+    "D213",  # We use D214 instead (our multi-line docs start in the first line)
+    "D400",  # First line should end with a period
+    "D401",  # First line of docstring should be in imperative mood
+    "D415",  # First line should end with a period, question mark, or exclamation point
+    "D417",  # Missing argument description
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = [
+    "F401",  # imported but unused
+]
+"conftest.py" = [
+    "D103",  # Missing docstring in public function
+]
+"tests/*.py" = [
+    "E501",  # line too long
+    "F841",  # Local variable is assigned to but never used
+    "INP001",  # is part of an implicit namespace package
+    "D",  # pydocstyle
+]
+"docs/*.py" = [
+    "INP001",  # is part of an implicit namespace package
+]
+"toycodes/*.py" = [
+    "INP001",  # is part of an implicit namespace package
+    "D102",  # missing docstrings
+]
+
+[tool.ruff.format]
+quote-style = "single"
+docstring-code-format = true
