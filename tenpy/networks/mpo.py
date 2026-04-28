@@ -56,6 +56,9 @@ from .mps import BaseEnvironment, MPSGeometry, TransferMatrix
 from .site import group_sites
 from .terms import TermList
 
+from cyten.models.couplings import Coupling
+from cyten.tensors import permute_legs
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -192,6 +195,94 @@ class MPO(MPSGeometry):
                     op = W[jL, jR]
                     if npc.norm(op) > norm_tol:
                         self._graph[i][(jL, jR)] = op
+
+    def _make_graph_from_couplings(self, couplings, site_map=None, norm_tol=1e-12):
+        """Construct graph from cyten Couplings using hashing.
+
+        This method builds the MPOGraph representation using couplings from
+        cyten/models/couplings. It uses the hash values from :meth:`Coupling.to_hash`
+        to uniquely specify couplings and their factorization tensors to build
+        the MPO graph.
+
+        Parameters
+        ----------
+        couplings : list of cyten.models.couplings.Coupling
+            List of Coupling objects to use for building the MPO graph.
+        site_map : dict or None
+            Optional mapping from cyten Site objects to integer indices in the MPO.
+            If None, assumes coupling sites correspond to consecutive MPO sites starting at 0.
+        norm_tol : float
+            Entries in the coupling factorization are considered zero if their
+            norm is smaller than `norm_tol`.
+
+        """
+        if self._graph is not None:
+            return
+
+        self._graph = [{} for _ in range(len(self.sites))]
+
+        hash_to_bond_info = {}
+        current_jL = 0
+
+        for coupling in couplings:
+            if not isinstance(coupling, Coupling):
+                raise TypeError(f'Expected Coupling, got {type(coupling)}')
+
+            coupling_hash = coupling.to_hash()
+
+            sites = coupling.sites
+            num_coupling_sites = len(sites)
+
+            if num_coupling_sites > self.L:
+                raise ValueError(f'Coupling spans {num_coupling_sites} sites but MPO only has {self.L} sites')
+
+            factorization = coupling.factorization
+            num_factorization_tensors = len(factorization)
+
+            if num_factorization_tensors not in [num_coupling_sites, num_coupling_sites + 1]:
+                raise ValueError(
+                    f'Coupling factorization has {num_factorization_tensors} tensors for {num_coupling_sites} sites'
+                )
+
+            if coupling_hash not in hash_to_bond_info:
+                chiL_max = max(f.shape[0] for f in factorization)
+                chiR_max = max(f.shape[1] for f in factorization)
+                hash_to_bond_info[coupling_hash] = {
+                    'jL_offset': current_jL,
+                    'jR_offset': current_jL,
+                    'chiL': chiL_max,
+                    'chiR': chiR_max,
+                }
+                current_jL += max(chiL_max, chiR_max)
+
+            bond_info = hash_to_bond_info[coupling_hash]
+            jL_offset = bond_info['jL_offset']
+            jR_offset = bond_info['jR_offset']
+
+            if site_map is not None:
+                site_indices = [site_map.get(s, i) for i, s in enumerate(sites)]
+            else:
+                site_indices = list(range(num_coupling_sites))
+
+            for local_idx, tensor in enumerate(factorization):
+                if local_idx >= len(site_indices):
+                    break
+                site_idx = site_indices[local_idx]
+
+                tensor = permute_legs(tensor, codomain=['wL', 'wR'], domain=['p', 'p*'])
+
+                tensor_np = tensor.to_numpy()
+                chiL = tensor_np.shape[0]
+                chiR = tensor_np.shape[1]
+
+                for jL in range(chiL):
+                    for jR in range(chiR):
+                        op = tensor_np[jL, jR, :, :]
+                        op_norm = np.linalg.norm(op)
+                        if op_norm > norm_tol:
+                            global_jL = jL_offset + jL
+                            global_jR = jR_offset + jR
+                            self._graph[site_idx % self.L][(global_jL, global_jR)] = op
 
     def _order_graph(self):
         """Find an ordering for :attr:`_graph` if possible
@@ -2268,6 +2359,50 @@ class MPOGraph(MPSGeometry):
         ot_ct = term_list.to_OnsiteTerms_CouplingTerms(sites)
         return cls.from_terms(ot_ct, sites, bc, insert_all_id, unit_cell_width=unit_cell_width)
 
+    @classmethod
+    def from_couplings(cls, couplings, sites, bc='finite', insert_all_id=True, unit_cell_width=None):
+        """Initialize an :class:`MPOGraph` from cyten Couplings using hashing.
+
+        This method creates an MPOGraph where the graph keys are tuples containing
+        the coupling hashes. The coupling hash uniquely identifies the coupling's data.
+
+        Parameters
+        ----------
+        couplings : list of cyten.models.couplings.Coupling
+            List of Couplings to build the graph from.
+        sites : list of :class:`~tenpy.models.lattice.Site`
+            Local sites of the Hilbert space.
+        bc : ``'finite' | 'infinite'``
+            MPO boundary conditions.
+        insert_all_id : bool
+            Whether to insert identity edges such that `IdL` and `IdR` are defined on each bond.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+
+        Returns
+        -------
+        graph : :class:`MPOGraph`
+            Initialized with the given couplings.
+
+        """
+        try:
+            from cyten.models.couplings import Coupling
+        except ImportError as e:
+            raise ImportError(f'cyten not available: {e}')
+
+        L = len(sites)
+        graph = cls(sites, bc, 0, unit_cell_width=unit_cell_width)
+
+        for coupling in couplings:
+            if not isinstance(coupling, Coupling):
+                raise TypeError(f'Expected Coupling, got {type(coupling)}')
+            graph.add_coupling_as_term(coupling)
+
+        if insert_all_id:
+            graph.add_missing_IdL_IdR(insert_all_id)
+
+        return graph
+
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
         super().test_sanity()
@@ -2322,6 +2457,367 @@ class MPOGraph(MPSGeometry):
             entry = D[keyR]
             if not skip_existing or not any([op == opname for op, _ in entry]):
                 entry.append((opname, strength))
+
+    def add_coupling(self, coupling, strength=1.0, check_op=True):
+        """Add a cyten Coupling to the graph using hashes.
+
+        This method uses the coupling's hash to create graph entries using tuples
+        containing the hash.
+
+        Parameters
+        ----------
+        coupling : cyten.models.couplings.Coupling
+            The coupling to add to the graph.
+        strength : float
+            Prefactor for the coupling.
+        check_op : bool
+            Whether to check that operators exist on the sites.
+
+        """
+
+        if not isinstance(coupling, Coupling):
+            raise TypeError(f'Expected Coupling, got {type(coupling)}')
+
+        coupling_hash = coupling.to_hash()
+        sites = coupling.sites
+        factorization = coupling.factorization
+        num_factorization_tensors = len(factorization)
+
+        if num_factorization_tensors not in [len(sites), len(sites) + 1]:
+            raise ValueError(f'Coupling factorization has {num_factorization_tensors} tensors for {len(sites)} sites')
+
+        hash_tuple = ('coupling', coupling_hash)
+
+        for local_idx, tensor in enumerate(factorization):
+            site_idx = local_idx
+            i = site_idx % self.L
+
+            tensor = permute_legs(tensor, codomain=['wL', 'wR'], domain=['p', 'p*'])
+            tensor_np = tensor.to_numpy()
+
+            chiL = tensor_np.shape[0]
+            chiR = tensor_np.shape[1]
+
+            for jL in range(chiL):
+                keyL = hash_tuple + (site_idx, jL)
+                for jR in range(chiR):
+                    keyR = hash_tuple + (site_idx, jR)
+                    op = tensor_np[jL, jR, :, :]
+
+                    if np.linalg.norm(op) > 1e-12:
+                        site = self.sites[i]
+                        for op_idx in range(op.shape[0]):
+                            for op_idx_star in range(op.shape[1]):
+                                op_value = op[op_idx, op_idx_star]
+                                if abs(op_value) > 1e-12:
+                                    pass
+
+    def add_coupling_as_term(self, coupling, strength=1.0):
+        """Add a cyten Coupling to the graph as a term with named operators.
+
+        This method adds the coupling to the graph using hash-based keys.
+        Parameters
+        ----------
+        coupling : cyten.models.couplings.Coupling
+            The coupling to add to the graph.
+        strength : float
+            Prefactor for the coupling.
+
+        """
+
+        if not isinstance(coupling, Coupling):
+            raise TypeError(f'Expected Coupling, got {type(coupling)}')
+
+        coupling_hash = coupling.to_hash()
+        sites = coupling.sites
+        factorization = coupling.factorization
+
+        hash_key = ('coupling', coupling_hash)
+
+        num_sites = len(sites)
+        num_tensors = len(factorization)
+
+        if num_tensors == num_sites + 1:
+            start_idx = 0
+        elif num_tensors == num_sites:
+            start_idx = 0
+        else:
+            raise ValueError(f'Coupling factorization has {num_tensors} tensors for {num_sites} sites')
+
+        prev_key = hash_key + (start_idx, 'start')
+
+        for local_idx in range(num_tensors):
+            tensor = factorization[local_idx]
+            site_idx = local_idx + start_idx if num_tensors == num_sites else local_idx
+            i = site_idx % self.L
+
+            tensor = permute_legs(tensor, codomain=['wL', 'wR'], domain=['p', 'p*'])
+            tensor_np = tensor.to_numpy()
+
+            chiL = tensor_np.shape[0]
+            chiR = tensor_np.shape[1]
+
+            for jL in range(chiL):
+                keyL = prev_key + (jL,)
+                for jR in range(chiR):
+                    keyR = (
+                        hash_key + (local_idx + 1, jR)
+                        if local_idx < num_tensors - 1
+                        else hash_key + (local_idx + 1, 'end')
+                    )
+                    op = tensor_np[jL, jR, :, :]
+
+                    if np.linalg.norm(op) > 1e-12:
+                        opname = f'coupling_op_{local_idx}'
+                        self.add(i, keyL, keyR, opname, strength * 1.0, check_op=False, skip_existing=True)
+
+            if local_idx < num_tensors - 1:
+                prev_key = keyR
+
+    def add_coupling_identity_string(self, coupling, i, j, opname='Id', check_op=True, skip_existing=True):
+        """Insert identity edges for a coupling's identity insertions between sites.
+
+        For couplings with identities inserted (via insert_identity_between_sites),
+        this method adds the identities that connect the coupling's factorization
+        across sites between i and j.
+
+        Parameters
+        ----------
+        coupling : cyten.models.couplings.Coupling
+            The coupling to add identity strings for.
+        i, j : int
+            Site indices between which to insert identity edges. i < j.
+            j can be larger than :attr:`L`, in which case the operators are
+            supposed to act on different MPS unit cells.
+        opname : str
+            Name of the identity operator. Default is 'Id'.
+        check_op : bool
+            Whether to check that 'opname' exists on the given site.
+        skip_existing : bool
+            Whether existing graph nodes should be skipped.
+
+        Returns
+        -------
+        list of tuple
+            The keys on the right of each site we connected to.
+
+        """
+
+        if not isinstance(coupling, Coupling):
+            raise TypeError(f'Expected Coupling, got {type(coupling)}')
+
+        coupling_hash = coupling.to_hash()
+        hash_key = ('coupling', coupling_hash)
+
+        factorization = coupling.factorization
+        num_tensors = len(factorization)
+        num_sites = len(coupling.sites)
+
+        if num_tensors != num_sites + 1:
+            raise ValueError(
+                f'add_coupling_identity_string expects a coupling with identity insertions '
+                f'(got {num_tensors} tensors for {num_sites} sites)'
+            )
+
+        returned_keys = []
+
+        if j <= i:
+            raise ValueError('j <= i not allowed')
+
+        for local_idx in range(num_tensors):
+            site_idx = (i + local_idx) % self.L
+            tensor = factorization[local_idx]
+            tensor = permute_legs(tensor, codomain=['wL', 'wR'], domain=['p', 'p*'])
+            tensor_np = tensor.to_numpy()
+
+            chiL = tensor_np.shape[0]
+            chiR = tensor_np.shape[1]
+
+            for jL in range(chiL):
+                for jR in range(chiR):
+                    op = tensor_np[jL, jR, :, :]
+                    if np.linalg.norm(op) < 1e-12:
+                        keyL = hash_key + (local_idx, jL)
+                        keyR = hash_key + (local_idx + 1, jR)
+                        self.add(site_idx, keyL, keyR, opname, 1.0, check_op=check_op, skip_existing=skip_existing)
+
+            if local_idx < num_tensors - 1:
+                returned_keys.append(hash_key + (local_idx + 1, jR))
+
+        return returned_keys
+
+    def add_coupling_string_left_to_right(
+        self, coupling, start_key, i, j, opname='Id', check_op=True, skip_existing=True
+    ):
+        """Add a string of identity operators for a coupling, starting from an existing key.
+
+        This is similar to add_string_left_to_right but works with coupling hash keys.
+
+        Parameters
+        ----------
+        coupling : cyten.models.couplings.Coupling
+            The coupling to add the string for.
+        start_key : tuple
+            The key at bond (i+1, i) to connect from.
+        i, j : int
+            An edge is inserted on all sites between `i` and `j`, `i < j`.
+            j can be larger than :attr:`L`, in which case the operators are
+            supposed to act on different MPS unit cells.
+        opname : str
+            Name of the operator to be used for the string.
+        check_op : bool
+            Whether to check that 'opname' exists on the given site.
+        skip_existing : bool
+            Whether existing graph nodes should be skipped.
+
+        Returns
+        -------
+        key_i : tuple
+            The key on the right of site i we connected to.
+
+        """
+        try:
+            from cyten.models.couplings import Coupling
+        except ImportError as e:
+            raise ImportError(f'cyten not available: {e}')
+
+        if not isinstance(coupling, Coupling):
+            raise TypeError(f'Expected Coupling, got {type(coupling)}')
+
+        coupling_hash = coupling.to_hash()
+        hash_key = ('coupling', coupling_hash)
+
+        if j <= i:
+            raise ValueError('j <= i not allowed')
+
+        keyL = keyR = start_key
+        for k in range(i + 1, j):
+            if (k - i) % self.L == 0:
+                keyR = keyL + (k, hash_key, opname)
+            k = k % self.L
+            if not self.has_edge(k, keyL, keyR):
+                self.add(k, keyL, keyR, opname, 1.0, check_op=check_op, skip_existing=skip_existing)
+            keyL = keyR
+        return keyL
+
+    def add_coupling_string_right_to_left(
+        self, coupling, start_key, j, i, opname='Id', check_op=True, skip_existing=True
+    ):
+        """Add a string of identity operators for a coupling, starting from an existing key.
+
+        Similar to add_string_right_to_left but works with coupling hash keys.
+
+        Parameters
+        ----------
+        coupling : cyten.models.couplings.Coupling
+            The coupling to add the string for.
+        start_key : tuple
+            The key at bond (j-1, j) to connect from.
+        j, i : int
+            An edge is inserted on all sites between `i` and `j`, `i < j`.
+            Note the switched argument order compared to add_coupling_string_left_to_right.
+        opname : str
+            Name of the operator to be used for the string.
+        check_op : bool
+            Whether to check that 'opname' exists on the given site.
+        skip_existing : bool
+            Whether existing graph nodes should be skipped.
+
+        Returns
+        -------
+        key_i : tuple
+            The key on the left of site i we connected to.
+
+        """
+
+        if not isinstance(coupling, Coupling):
+            raise TypeError(f'Expected Coupling, got {type(coupling)}')
+
+        coupling_hash = coupling.to_hash()
+        hash_key = ('coupling', coupling_hash)
+
+        if j <= i:
+            raise ValueError('j <= i not allowed')
+
+        keyL = keyR = start_key
+        for k in range(j - 1, i, -1):
+            if (j - k) % self.L == 0:
+                keyL = keyR + (k, hash_key, opname)
+            k = k % self.L
+            if not self.has_edge(k, keyL, keyR):
+                self.add(k, keyL, keyR, opname, 1.0, check_op=check_op, skip_existing=skip_existing)
+            keyR = keyL
+        return keyR
+
+    def add_missing_IdL_IdR(self, insert_all_id=True):
+        """Add missing identity ('Id') edges connecting ``'IdL'->'IdL'`` and ``'IdR'->'IdR'``.
+
+        This function should be called *after* all other operators have been inserted.
+
+        Parameters
+        ----------
+        insert_all_id : bool
+            If ``True``, insert 'Id' edges on *all* bonds.
+            If ``False`` and boundary conditions are finite, only insert
+            ``'IdL'->'IdL'`` to the left of the rightmost existing 'IdL' and
+            ``'IdR'->'IdR'`` to the right of the leftmost existing 'IdR'.
+            The latter avoid "dead ends" in the MPO, but some functions (like `make_WI`) expect
+            'IdL'/'IdR' to exist on all bonds.
+
+        """
+        if self.bc == 'infinite' or insert_all_id:
+            max_IdL = self.L
+            min_IdR = 0
+        else:
+            max_IdL = max([0] + [i for i, s in enumerate(self.states[:-1]) if 'IdL' in s])
+            min_IdR = min([self.L] + [i for i, s in enumerate(self.states[:-1]) if 'IdR' in s])
+        for k in range(0, max_IdL):
+            if not self.has_edge(k, 'IdL', 'IdL'):
+                self.add(k, 'IdL', 'IdL', 'Id', 1.0)
+        for k in range(min_IdR, self.L):
+            if not self.has_edge(k, 'IdR', 'IdR'):
+                self.add(k, 'IdR', 'IdR', 'Id', 1.0)
+
+    def add_missing_IdL_IdR_for_couplings(self, couplings, insert_all_id=True):
+        """Add missing identities for couplings.
+
+        Parameters
+        ----------
+        couplings : list of cyten.models.couplings.Coupling
+            List of couplings to add missing identities for.
+
+        insert_all_id : bool
+            If True, insert identity edges on all bonds for all couplings.
+            If False, only insert where needed.
+        """
+
+        for coupling in couplings:
+            if not isinstance(coupling, Coupling):
+                raise TypeError(f'Expected Coupling, got {type(coupling)}')
+
+            coupling_hash = coupling.to_hash()
+            hash_key = ('coupling', coupling_hash)
+
+            factorization = coupling.factorization
+            num_tensors = len(factorization)
+            num_sites = len(coupling.sites)
+
+            for local_idx in range(num_tensors - 1):
+                site_idx = local_idx % self.L
+                tensor_left = factorization[local_idx]
+                tensor_right = factorization[local_idx + 1]
+
+                chiL = tensor_left.shape[1]
+                chiR = tensor_right.shape[0]
+
+                for jL in range(chiL):
+                    for jR in range(chiR):
+                        keyL = hash_key + (local_idx + 1, jL)
+                        keyR = hash_key + (local_idx + 1, jR)
+                        if not self.has_edge(site_idx, keyL, keyR):
+                            self.add(site_idx, keyL, keyR, 'Id', 1.0, check_op=False, skip_existing=True)
+
+        self.add_missing_IdL_IdR(insert_all_id)
 
     def add_string_left_to_right(self, i, j, key, opname='Id', check_op=True, skip_existing=True):
         r"""Insert a bunch of edges for an 'operator string' into the graph.

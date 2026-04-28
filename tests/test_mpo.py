@@ -10,10 +10,11 @@ import pytest
 from random_test import random_MPS
 
 from tenpy.algorithms.exact_diag import ExactDiag
-from tenpy.linalg import np_conserved as npc
+#from tenpy.linalg import np_conserved as npc
 from tenpy.models.spins import SpinChain
 from tenpy.models.xxz_chain import XXZChain
-from tenpy.networks import mpo, mps, site
+from tenpy.networks import mpo, mps
+from tenpy.networks import site
 from tenpy.networks.terms import CouplingTerms, MultiCouplingTerms, OnsiteTerms, TermList
 
 spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
@@ -109,6 +110,62 @@ def test_MPOGraph_term_conversion():
     assert g4.graph == g3.graph
 
 
+def test_MPOGraph_coupling_hash_tuples():
+    """Test MPOGraph.add_coupling_as_term with hash-based tuple keys."""
+    try:
+        from cyten.models.sites import SpinSite
+        from cyten.models.couplings import heisenberg_coupling, spin_field_coupling
+    except ImportError:
+        pytest.skip('cyten not available')
+
+    try:
+        from tenpy.networks import mpo
+        from tenpy.networks import site as tenpy_site
+    except ImportError:
+        pytest.skip('tenpy.networks not available')
+
+    L = 4
+    spin_sites = [SpinSite(S=0.5, conserve='Sz') for _ in range(L)]
+
+    coupling1 = heisenberg_coupling([spin_sites[0], spin_sites[1]], J=1.0)
+    coupling2 = heisenberg_coupling([spin_sites[0], spin_sites[1]], J=2.0)
+    coupling3 = spin_field_coupling([spin_sites[0]], hz=0.5)
+
+    hashes = [c.to_hash() for c in [coupling1, coupling2, coupling3]]
+    assert hashes[0] != hashes[1]
+    assert hashes[0] != hashes[2]
+    assert hashes[1] != hashes[2]
+
+    tenpy_sites = [tenpy_site.SpinHalfSite(conserve='Sz', sort_charge=False) for _ in range(L)]
+    graph = mpo.MPOGraph(tenpy_sites, bc='finite', unit_cell_width=L)
+
+    graph.add_coupling_as_term(coupling1)
+    graph.add_coupling_as_term(coupling2)
+    graph.add_coupling_as_term(coupling3)
+
+    graph.add_missing_IdL_IdR()
+
+    assert graph.graph is not None
+    assert len(graph.graph) == L
+
+    hash_keys_found = set()
+    for site_graph in graph.graph:
+        for keyL in site_graph.keys():
+            if isinstance(keyL, tuple) and len(keyL) >= 2 and keyL[0] == 'coupling':
+                hash_keys_found.add(keyL[1])
+
+    assert len(hash_keys_found) == 3
+    for h in hashes:
+        assert h in hash_keys_found
+
+    all_keys = set()
+    for site_graph in graph.graph:
+        all_keys.update(site_graph.keys())
+
+    for key in hash_keys_found:
+        assert ('coupling', key) in all_keys or any(k[0] == 'coupling' and k[1] == key for k in all_keys)
+
+
 def test_MPO_conversion():
     L = 8
     sites = []
@@ -118,6 +175,7 @@ def test_MPO_conversion():
         s.add_op(f'Y_{i:d}', np.array([[0.0, 1.0], [-1.0, 0.0]]))
         s.add_op(f'Z_{i:d}', np.array([[1.0, 0.0], [0.0, -1.0]]))
         sites.append(s)
+
     terms = [
         [('X_0', 0)],
         [('X_0', 0), ('X_1', 1)],
@@ -486,3 +544,5 @@ def test_MPO_from_wavepacket(L=10):
     assert np.max(np.abs(C - C_expexcted)) < 1.0e-10
     print(C)
     print(C_expexcted)
+
+
