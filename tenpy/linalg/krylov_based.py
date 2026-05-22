@@ -456,7 +456,7 @@ class Arnoldi(KrylovBased):
 
 
 class ArnoldiEvolution(Arnoldi):
-    """Compute :math:`\\exp(\\delta H) |\\psi_0\\rangle` using Arnoldi for non-Hermitian `H`.
+    r"""Compute :math:`\\exp(\\delta H) |\\psi_0\\rangle` using Arnoldi for non-Hermitian `H`.
 
     Drop-in replacement for :class:`LanczosEvolution` when `H` is not Hermitian.
     Builds an upper Hessenberg projection of `H` via full Gram-Schmidt orthogonalization
@@ -482,6 +482,7 @@ class ArnoldiEvolution(Arnoldi):
         Prefactor of H in the exponential.
     _result_norm : float
         Norm of the result vector.
+
     """
 
     def __init__(self, H, psi0, options):
@@ -510,6 +511,7 @@ class ArnoldiEvolution(Arnoldi):
             Best approximation for ``expm(delta * H).dot(psi0)``.
         N : int
             Krylov space dimension used.
+
         """
         assert self.N_cache >= self.N_max  # all basis vectors required for back-transform
         self.delta = delta

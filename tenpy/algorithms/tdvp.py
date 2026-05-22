@@ -275,7 +275,12 @@ class TwoSiteTDVPEngine(TDVPEngine):
         else:
             theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1], qconj=[+1, -1])
         qtotal_i0 = self.psi.get_B(i0, form=None).qtotal
-        U, S, VH, err, renorm = svd_theta(theta, self.trunc_params, qtotal_LR=[qtotal_i0, None], inner_labels=['vR', 'vL'])
+        U, S, VH, err, renorm = svd_theta(
+            theta,
+            self.trunc_params,
+            qtotal_LR=[qtotal_i0, None],
+            inner_labels=['vR', 'vL'],
+        )
         self.psi.norm *= renorm
         B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
         B1 = VH.split_legs(['(p1.vR)']).replace_label('p1', 'p')
