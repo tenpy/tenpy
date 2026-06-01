@@ -10,7 +10,7 @@ from tenpy.networks.mps import MPS
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize('plus_hc_case', ['no +hc', 'hermitian +hc', 'non-hermitian +hc'])
+@pytest.mark.parametrize('plus_hc_case', ['no +hc', 'hermitian +hc', 'non-hermitian +hc', 'non-hermitian -hc'])
 def test_tdvp(plus_hc_case, eps=1.0e-5):
     """compare overlap from TDVP with TEBD"""
     L = 8
@@ -26,6 +26,8 @@ def test_tdvp(plus_hc_case, eps=1.0e-5):
     elif plus_hc_case == 'non-hermitian +hc':
         parameters['hz'] = parameters['hz'] + 1.0j * np.random.random(L)
         parameters['explicit_plus_hc'] = True
+    elif plus_hc_case == 'non-hermitian -hc':
+        parameters['hz'] = parameters['hz'] + 1.0j * np.random.random(L)
     else:
         raise ValueError
 
@@ -51,6 +53,11 @@ def test_tdvp(plus_hc_case, eps=1.0e-5):
         'trunc_params': {'chi_max': chi, 'svd_min': 1.0e-10, 'trunc_cut': None},
     }
 
+    if plus_hc_case == 'non-hermitian -hc':
+        tebd_params['preserve_norm'] = False
+        tdvp_params['preserve_norm'] = False
+        tdvp_params['lanczos_params'] = {'hermitian': False}
+
     # start by comparing TEBD and 2-site TDVP (increasing bond dimension)
     psi_tdvp = psi_tebd.copy()
     tebd_engine = tebd.TEBDEngine(psi_tebd, M, tebd_params)
@@ -59,7 +66,7 @@ def test_tdvp(plus_hc_case, eps=1.0e-5):
         tebd_engine.run()
         tdvp2_engine.run()
 
-        ov = psi_tebd.overlap(psi_tdvp)
+        ov = psi_tebd.overlap(psi_tdvp) / (psi_tebd.norm * psi_tdvp.norm)
         print(tdvp2_engine.evolved_time, 'ov = 1. - ', ov - 1.0)
         assert np.abs(1 - ov) < eps
         Sz_tebd = psi_tebd.expectation_value('Sz')
@@ -73,7 +80,7 @@ def test_tdvp(plus_hc_case, eps=1.0e-5):
     for _ in range(3):
         tebd_engine.run()
         tdvp1_engine.run()
-        ov = psi_tebd.overlap(psi_tdvp)
+        ov = psi_tebd.overlap(psi_tdvp) / (psi_tebd.norm * psi_tdvp.norm)
         print(tdvp1_engine.evolved_time, 'ov = 1. - ', ov - 1.0)
         assert np.abs(1 - np.abs(ov)) < 1e-5
         Sz_tebd = psi_tebd.expectation_value('Sz')
