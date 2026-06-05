@@ -45,9 +45,15 @@ from scipy.linalg import expm
 from scipy.special import comb
 
 #from ..linalg import np_conserved as npc
+<<<<<<< HEAD
 #from ..linalg.krylov_based import GMRES
 #from ..linalg.sparse import FlatLinearOperator, NpcLinearOperator, ShiftNpcLinearOperator
 from ..linalg.truncation import TruncationError   #, svd_theta
+=======
+from ..linalg.krylov_based import GMRES
+from ..linalg.sparse import FlatLinearOperator, NpcLinearOperator, ShiftNpcLinearOperator
+from ..linalg.truncation import TruncationError, svd_theta
+>>>>>>> e48b7943 (Backup local TeNPy edits before cyten editable install)
 from ..tools.math import lcm
 from ..tools.misc import add_with_None_0, inverse_permutation, to_iterable
 from ..tools.params import asConfig
@@ -197,93 +203,85 @@ class MPO(MPSGeometry):
                     if npc.norm(op) > norm_tol:
                         self._graph[i][(jL, jR)] = op
 
-    def _make_graph_from_couplings(self, couplings, site_map=None, norm_tol=1e-12):
-        """Construct graph from cyten Couplings using hashing.
+    def _make_graph_from_couplings(self, couplings_with_start, norm_tol=1e-12):
+        """Construct a dense MPO graph from cyten Couplings using hash-based bond indexing.
 
-        This method builds the MPOGraph representation using couplings from
-        cyten/models/couplings. It uses the hash values from :meth:`Coupling.to_hash`
-        to uniquely specify couplings and their factorization tensors to build
-        the MPO graph.
+        Each coupling hash uniquely identifies a class of interaction. Global virtual bond
+        indices (jL, jR) are allocated once per unique coupling hash and reused for every
+        placement of that coupling on the chain.
 
         Parameters
         ----------
-        couplings : list of cyten.models.couplings.Coupling
-            List of Coupling objects to use for building the MPO graph.
-        site_map : dict or None
-            Optional mapping from cyten Site objects to integer indices in the MPO.
-            If None, assumes coupling sites correspond to consecutive MPO sites starting at 0.
+        couplings_with_start : list of (Coupling, int)
+            Each entry is ``(coupling, start_site)`` where ``start_site`` is the index
+            of the first site the coupling acts on.
         norm_tol : float
-            Entries in the coupling factorization are considered zero if their
-            norm is smaller than `norm_tol`.
+            Graph entries with operator norm below this threshold are omitted.
 
         """
         if self._graph is not None:
             return
 
-        self._graph = [{} for _ in range(len(self.sites))]
+        self._graph = [{} for _ in range(self.L)]
 
-        hash_to_bond_info = {}
-        current_jL = 0
+        # Map hash → base virtual-bond offset allocated for that coupling type.
+        hash_to_jL_base = {}
+        next_bond_idx = 0  # next free global virtual bond index
 
-        for coupling in couplings:
+        for coupling, start_site in couplings_with_start:
             if not isinstance(coupling, Coupling):
                 raise TypeError(f'Expected Coupling, got {type(coupling)}')
 
             coupling_hash = coupling.to_hash()
-
-            sites = coupling.sites
-            num_coupling_sites = len(sites)
-
-            if num_coupling_sites > self.L:
-                raise ValueError(f'Coupling spans {num_coupling_sites} sites but MPO only has {self.L} sites')
-
             factorization = coupling.factorization
-            num_factorization_tensors = len(factorization)
+            num_tensors = len(factorization)
+            num_sites = len(coupling.sites)
 
-            if num_factorization_tensors not in [num_coupling_sites, num_coupling_sites + 1]:
+            if num_tensors not in (num_sites, num_sites + 1):
                 raise ValueError(
-                    f'Coupling factorization has {num_factorization_tensors} tensors for {num_coupling_sites} sites'
+                    f'Coupling factorization has {num_tensors} tensors for {num_sites} sites'
                 )
 
-            if coupling_hash not in hash_to_bond_info:
-                chiL_max = max(f.shape[0] for f in factorization)
-                chiR_max = max(f.shape[1] for f in factorization)
-                hash_to_bond_info[coupling_hash] = {
-                    'jL_offset': current_jL,
-                    'jR_offset': current_jL,
-                    'chiL': chiL_max,
-                    'chiR': chiR_max,
-                }
-                current_jL += max(chiL_max, chiR_max)
+            # Allocate global bond offsets for each internal virtual leg once per hash.
+            # A coupling with num_tensors tensors has (num_tensors - 1) internal bonds.
+            if coupling_hash not in hash_to_jL_base:
+                # Each internal bond needs as many global indices as its dimension.
+                offsets = [next_bond_idx]  # offsets[k] = global base for internal bond k
+                for k in range(num_tensors - 1):
+                    # bond dim between tensor k and tensor k+1 = wR dim of tensor k
+                    wR_dim = factorization[k].get_leg_co_domain('wR').dim
+                    next_bond_idx += wR_dim
+                    offsets.append(next_bond_idx)
+                hash_to_jL_base[coupling_hash] = offsets
 
-            bond_info = hash_to_bond_info[coupling_hash]
-            jL_offset = bond_info['jL_offset']
-            jR_offset = bond_info['jR_offset']
-
-            if site_map is not None:
-                site_indices = [site_map.get(s, i) for i, s in enumerate(sites)]
-            else:
-                site_indices = list(range(num_coupling_sites))
+            offsets = hash_to_jL_base[coupling_hash]
 
             for local_idx, tensor in enumerate(factorization):
-                if local_idx >= len(site_indices):
-                    break
-                site_idx = site_indices[local_idx]
+                site_idx = (start_site + local_idx) % self.L
 
-                tensor = permute_legs(tensor, codomain=['wL', 'wR'], domain=['p', 'p*'])
+                # Rearrange to (wL, wR, p, p*) then dump as numpy.
+                # After permute: codomain=[wL, wR], domain=[p, p*].
+                # to_numpy() with that leg order gives shape (chiL, chiR, d, d)
+                # with axes (wL, wR, p*, p) — domain legs reversed.
+                # We transpose the physical axes so op[jL,jR,:,:] is in (p, p*) order.
+                tensor_rearranged = permute_legs(
+                    tensor, codomain=['wL', 'wR'], domain=['p', 'p*']
+                )
+                arr = tensor_rearranged.to_numpy(understood_braiding=True)
+                # arr shape: (chiL, chiR, d, d) — axes (wL, wR, p*, p); transpose physical
+                arr = arr.transpose(0, 1, 3, 2)  # → (chiL, chiR, d, d) axes (wL, wR, p, p*)
 
-                tensor_np = tensor.to_numpy()
-                chiL = tensor_np.shape[0]
-                chiR = tensor_np.shape[1]
+                chiL, chiR = arr.shape[0], arr.shape[1]
+                jL_base = offsets[local_idx]
+                jR_base = offsets[local_idx + 1] if local_idx + 1 < len(offsets) else offsets[-1]
 
                 for jL in range(chiL):
                     for jR in range(chiR):
-                        op = tensor_np[jL, jR, :, :]
-                        op_norm = np.linalg.norm(op)
-                        if op_norm > norm_tol:
-                            global_jL = jL_offset + jL
-                            global_jR = jR_offset + jR
-                            self._graph[site_idx % self.L][(global_jL, global_jR)] = op
+                        op = arr[jL, jR]  # (d, d) — axes (p, p*)
+                        if np.linalg.norm(op) > norm_tol:
+                            global_jL = jL_base + jL
+                            global_jR = jR_base + jR
+                            self._graph[site_idx][(global_jL, global_jR)] = op
 
     def _order_graph(self):
         """Find an ordering for :attr:`_graph` if possible

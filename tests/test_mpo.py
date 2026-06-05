@@ -1,548 +1,717 @@
 """A collection of tests for (classes in) :module:`tenpy.networks.mpo`."""
 
-# Copyright (C) TeNPy Developers, Apache license
+from cyten.tensors import SymmetricTensor, permute_legs
+from cyten.backends import get_same_backend
+from cyten.models.couplings import Coupling
+
+import cyten
+
+
+import cyten.models.sites as s
+print(s.__file__)
+print(dir(s))
+
+
+
+
 import pytest
 
-pytest.skip(allow_module_level=True)
+#pytest.skip(allow_module_level=True)
 
-import numpy as np
-import pytest
-from random_test import random_MPS
+# from random_test import random_MPS
 
-from tenpy.algorithms.exact_diag import ExactDiag
+#from tenpy.algorithms.exact_diag import ExactDiag
 #from tenpy.linalg import np_conserved as npc
-from tenpy.models.spins import SpinChain
-from tenpy.models.xxz_chain import XXZChain
-from tenpy.networks import mpo, mps
-from tenpy.networks import site
-from tenpy.networks.terms import CouplingTerms, MultiCouplingTerms, OnsiteTerms, TermList
+# from tenpy.models.spins import SpinChain
+# from tenpy.models.xxz_chain import XXZChain
+# from tenpy.networks import mpo, mps
+# from tenpy.networks import site
+# from tenpy.networks.terms import CouplingTerms, MultiCouplingTerms, OnsiteTerms, TermList
 
-spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
+from cyten.models.sites import SpinSite
+from cyten.models.couplings import heisenberg_coupling
 
-
-def test_MPO():
-    s = spin_half
-    for bc in mpo.MPO._valid_bc:
-        for L in [4, 2, 1]:
-            print(bc, ', L =', L)
-            grid = [[s.Id, s.Sp, s.Sm, s.Sz],
-                    [None, None, None, s.Sm],
-                    [None, None, None, s.Sp],
-                    [None, None, None, s.Id]]  # fmt: skip
-            legW = npc.LegCharge.from_qflat(s.leg.chinfo, [[0], s.Sp.qtotal, s.Sm.qtotal, [0]])
-            W = npc.grid_outer(grid, [legW, legW.conj()], grid_labels=['wL', 'wR'])
-            Ws = [W] * L
-            if bc == 'finite':
-                Ws[0] = Ws[0][0:1, :, :, :]
-                Ws[-1] = Ws[-1][:, 3:4, :, :]
-            H = mpo.MPO([s] * L, Ws, bc=bc, IdL=[0] * L + [None], IdR=[None] + [-1] * (L), mps_unit_cell_width=L)
-            H_copy = mpo.MPO([s] * L, Ws, bc=bc, IdL=[0] * L + [None], IdR=[None] + [-1] * (L), mps_unit_cell_width=L)
-            H.test_sanity()
-            print(H.dim)
-            print(H.chi)
-            assert H.is_equal(H)  # everything should be equal to itself
-            assert H.is_hermitian()
-            H.sort_legcharges()
-            H.test_sanity()
-            assert H.is_equal(H_copy)
-            assert H.prefactor(0, ['Sz']) == 1.0
-            for i in range(L - 1):
-                assert H.prefactor(i, ['Sp', 'Sm']) == 1.0
-                assert H.prefactor(i, ['Sz', 'Sz']) == 0.0
-        if L == 4:
-            H2 = H.group_sites(n=2)
-            H2.test_sanity()
-            assert H2.L == 2
+# spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 
 
-def test_MPOGraph():
-    for bc in ['finite', 'infinite']:
-        for L in [2, 4]:
-            print('L =', L)
-            g = mpo.MPOGraph([spin_half] * L, bc, unit_cell_width=L)
-            g.add(0, 'IdL', 'IdR', 'Sz', 0.1)
-            g.add(0, 'IdL', 'Sz0', 'Sz', 1.0)
-            g.add(1, 'Sz0', 'IdR', 'Sz', 0.5)
-            g.add(0, 'IdL', (0, 'Sp'), 'Sp', 0.3)
-            g.add(1, (0, 'Sp'), 'IdR', 'Sm', 0.2)
-            if L > 2 or bc == 'infinite':
-                keyR = g.add_string_left_to_right(0, 3, (0, 'Sp'), 'Id')
-                g.add(3, keyR, 'IdR', 'Sm', 0.1)
-            g.add_missing_IdL_IdR()
-            g.test_sanity()
-            print(repr(g))
-            print(str(g))
-            print('build MPO')
-            g_mpo = g.build_MPO()
-            g_mpo.test_sanity()
+def test_testy():
+    assert 1 == 1
+
+# Copyright (C) TeNPy Developers, Apache license
+
+# def _insert_identity_between_sites(self, position: int, site) -> object:
 
 
-def test_MPOGraph_term_conversion():
-    L = 4
+#     if position <= 0 or position >= len(self.sites):
+#         raise ValueError(
+#             f'Position must be between 1 and {len(self.sites) - 1}, got {position}'
+#         )
 
-    g1 = mpo.MPOGraph([spin_half] * L, 'infinite', unit_cell_width=L)
-    g1.test_sanity()
-    for i in range(L):
-        g1.add(i, 'IdL', 'IdR', 'Sz', 0.5)
-        g1.add(i, 'IdL', ('left', i, 'Sp', 'Id'), 'Sp', 1.0)
-        g1.add(i + 1, ('left', i, 'Sp', 'Id'), 'IdR', 'Sm', 1.5)
-    g1.add_missing_IdL_IdR()
-    terms = [[('Sz', i)] for i in range(L)]
-    terms += [[('Sp', i), ('Sm', i + 1)] for i in range(L)]
-    prefactors = [0.5] * L + [1.5] * L
-    term_list = TermList(terms, prefactors)
-    g2 = mpo.MPOGraph.from_term_list(term_list, [spin_half] * L, 'infinite', unit_cell_width=L)
-    g2.test_sanity()
-    assert g1.graph == g2.graph
-    terms[3:3] = [[('Sm', 2), ('Sp', 0), ('Sz', 1)]]
-    prefactors[3:3] = [3.0]
-    term_list = TermList(terms, prefactors)
-    g3 = mpo.MPOGraph.from_term_list(term_list, [spin_half] * L, 'infinite', unit_cell_width=L)
-    g4 = mpo.MPOGraph([spin_half] * L, 'infinite', unit_cell_width=L)
-    g4.test_sanity()
-    for i in range(L):
-        g4.add(i, 'IdL', 'IdR', 'Sz', 0.5)
-        g4.add(i, 'IdL', ('left', i, 'Sp', 'Id'), 'Sp', 1.0)
-        g4.add(i + 1, ('left', i, 'Sp', 'Id'), 'IdR', 'Sm', 1.5)
-    g4.add_missing_IdL_IdR()
-    g4.add(1, ('left', 0, 'Sp', 'Id'), ('right', 2, 'Sm', 'Id'), 'Sz', 3.0)
-    g4.add(2, ('right', 2, 'Sm', 'Id'), 'IdR', 'Sm', 1.0)
-    assert g4.graph == g3.graph
+#     site_left = self.sites[position - 1]
+#     site_right = self.sites[position]
+#     leg = site.leg
+#     backend = get_same_backend(site_left, site_right)
 
+#     left_block = self.factorization[position - 1]
+#     right_block = self.factorization[position]
 
-def test_MPOGraph_coupling_hash_tuples():
-    """Test MPOGraph.add_coupling_as_term with hash-based tuple keys."""
-    try:
-        from cyten.models.sites import SpinSite
-        from cyten.models.couplings import heisenberg_coupling, spin_field_coupling
-    except ImportError:
-        pytest.skip('cyten not available')
+#     wR_space = left_block.domain.factors[-1]
+#     wL_space = right_block.codomain.factors[0]
 
-    try:
-        from tenpy.networks import mpo
-        from tenpy.networks import site as tenpy_site
-    except ImportError:
-        pytest.skip('tenpy.networks not available')
+#     if isinstance(wR_space, list) or isinstance(wL_space, list):
+#         raise NotImplementedError('Multi-bond insertions not yet supported')
 
-    L = 4
-    spin_sites = [SpinSite(S=0.5, conserve='Sz') for _ in range(L)]
+#     id_tensor = SymmetricTensor.from_eye(
+#         co_domain=[leg, wR_space],
+#         backend=backend,
+#         labels=['p', 'w'],
+#     )
+#     id_tensor = permute_legs(id_tensor, codomain=['w', 'p'], domain=['p*', 'w*'], bend_right=False)
+#     id_tensor = id_tensor.relabel({'w': 'wL', 'w*': 'wR'})
 
-    coupling1 = heisenberg_coupling([spin_sites[0], spin_sites[1]], J=1.0)
-    coupling2 = heisenberg_coupling([spin_sites[0], spin_sites[1]], J=2.0)
-    coupling3 = spin_field_coupling([spin_sites[0]], hz=0.5)
-
-    hashes = [c.to_hash() for c in [coupling1, coupling2, coupling3]]
-    assert hashes[0] != hashes[1]
-    assert hashes[0] != hashes[2]
-    assert hashes[1] != hashes[2]
-
-    tenpy_sites = [tenpy_site.SpinHalfSite(conserve='Sz', sort_charge=False) for _ in range(L)]
-    graph = mpo.MPOGraph(tenpy_sites, bc='finite', unit_cell_width=L)
-
-    graph.add_coupling_as_term(coupling1)
-    graph.add_coupling_as_term(coupling2)
-    graph.add_coupling_as_term(coupling3)
-
-    graph.add_missing_IdL_IdR()
-
-    assert graph.graph is not None
-    assert len(graph.graph) == L
-
-    hash_keys_found = set()
-    for site_graph in graph.graph:
-        for keyL in site_graph.keys():
-            if isinstance(keyL, tuple) and len(keyL) >= 2 and keyL[0] == 'coupling':
-                hash_keys_found.add(keyL[1])
-
-    assert len(hash_keys_found) == 3
-    for h in hashes:
-        assert h in hash_keys_found
-
-    all_keys = set()
-    for site_graph in graph.graph:
-        all_keys.update(site_graph.keys())
-
-    for key in hash_keys_found:
-        assert ('coupling', key) in all_keys or any(k[0] == 'coupling' and k[1] == key for k in all_keys)
+#     new_sites = self.sites[:position] + [site] + self.sites[position:]
+#     new_factorization = (
+#         self.factorization[:position]
+#         + [id_tensor]
+#         + self.factorization[position:]
+#     )
+#     return Coupling(sites=new_sites, factorization=new_factorization, name=self.name, skip_sanity=True)
 
 
-def test_MPO_conversion():
-    L = 8
-    sites = []
-    for i in range(L):
-        s = site.Site(npc.LegCharge.from_trivial(2))
-        s.add_op(f'X_{i:d}', np.array([[0.0, 1.0], [1.0, 0.0]]))
-        s.add_op(f'Y_{i:d}', np.array([[0.0, 1.0], [-1.0, 0.0]]))
-        s.add_op(f'Z_{i:d}', np.array([[1.0, 0.0], [0.0, -1.0]]))
-        sites.append(s)
+def test_identity_tensor_site():
+    """Test sites.identity_tensor: structural correctness and ValueError guard."""
 
-    terms = [
-        [('X_0', 0)],
-        [('X_0', 0), ('X_1', 1)],
-        [('X_0', 0), ('X_3', 3)],
-        [('X_4', 4), ('Y_5', 5), ('Y_7', 7)],
-        [('X_4', 4), ('Y_5', 5), ('X_7', 7)],
-        [('X_4', 4), ('Y_6', 6), ('Y_7', 7)],
-    ]
-    prefactors = [0.25, 10.0, 11.0, 101.0, 102.0, 103.0]
-    term_list = TermList(terms, prefactors)
-    g1 = mpo.MPOGraph.from_term_list(term_list, sites, bc='finite', insert_all_id=False, unit_cell_width=L)
-    ct_add = MultiCouplingTerms(L)
-    ct_add.add_coupling_term(12.0, 4, 5, 'X_4', 'X_5')
-    ct_add.add_multi_coupling_term(0.5, [4, 5, 7], ['X_4', 'Y_5', 'X_7'], 'Id')
-    prefactors[-2] += 0.5
-    terms.append([('X_4', 4), ('X_5', 5)])
-    prefactors.append(12.0)
-    ct_add.add_to_graph(g1)
-    H1 = g1.build_MPO()
-    grids = [
-        [
-            ['Id', 'X_0', [('X_0', 0.25)]]  # site 0
-        ],
-        [
-            ['Id', None, None],  # site 1
-            [None, 'Id', [('X_1', 10.0)]],
-            [None, None, 'Id'],
-        ],
-        [
-            ['Id', None, None],  # site 2
-            [None, [('Id', 11.0)], None],
-            [None, None, 'Id'],
-        ],
-        [
-            ['Id', None],  # site 3
-            [None, 'X_3'],
-            [None, 'Id'],
-        ],
-        [
-            ['X_4', None],  # site 4
-            [None, 'Id'],
-        ],
-        [
-            ['Id', 'Y_5', [('X_5', 12.0)]],  # site 5
-            [None, None, 'Id'],
-        ],
-        [
-            # site 6
-            [None, [('Y_6', 103.0)], None],
-            [[('Id', 102.5)], [('Id', 101.0)], None],
-            [None, None, 'Id'],
-        ],
-        [
-            ['X_7'],  # site 7
-            ['Y_7'],
-            ['Id'],
-        ],
-    ]
-    H2 = mpo.MPO.from_grids(
-        sites, grids, 'finite', [0] * 4 + [None] * 5, [None] * 5 + [-1] * 4, mps_unit_cell_width=len(sites)
-    )
-    for w1, w2 in zip(H1._W, H2._W):
-        assert npc.norm(w1 - w2, np.inf) == 0.0
-    assert H2.is_equal(H1)
-    back_to_terms = H1.to_TermList([['Id', f'X_{i:d}', f'Y_{i:d}', f'Z_{i:d}'] for i in range(L)], max_range=8)
-    assert len(back_to_terms.terms) == len(terms)
-    for term, pref in zip(back_to_terms.terms, back_to_terms.strength):
-        assert term in terms
-        i = terms.index(term)
-        assert abs(prefactors[i] - pref) < 1.0e-13
+    site = SpinSite(S=0.5, conserve='Sz')
+    coupling = heisenberg_coupling([site, site])
+
+    # wL / wR are the co-domain-style representatives of the shared virtual bond;
+    # the coupling sanity guarantee ensures they are the same ElementarySpace.
+    wL = coupling.factorization[0].get_leg_co_domain('wR')
+    wR = coupling.factorization[1].get_leg_co_domain('wL')
+    assert wL == wR, 'coupling internal sanity: virtual bond spaces must match'
+
+    # --- overbraid=True (default) ---
+    tensor = cyten.models.sites.identity_tensor(site, wL, wR, overbraid=True)
+
+    assert tensor.labels == ['wL', 'p', 'wR', 'p*']
+    assert tensor.num_codomain_legs == 2
+    assert tensor.num_domain_legs == 2
+    assert tensor.get_leg_co_domain('p') == site.leg
+    assert tensor.get_leg_co_domain('p*') == site.leg
+    assert tensor.get_leg_co_domain('wL') == wL
+    assert tensor.get_leg_co_domain('wR') == wR
+    tensor.test_sanity()
+
+    # --- overbraid=False ---
+    # For a group symmetry (U(1)) braiding is symmetric, so the result is the same tensor.
+    tensor_under = identity_tensor(site, wL, wR, overbraid=False)
+    assert tensor_under.labels == ['wL', 'p', 'wR', 'p*']
+    tensor_under.test_sanity()
+
+    # --- ValueError: wR != wL ---
+    # The first block's wL is the trivial (1-D) boundary space, which differs from the bond.
+    trivial_space = coupling.factorization[0].get_leg_co_domain('wL')
+    assert trivial_space != wL, 'trivial boundary space must differ from the bond space'
+    with pytest.raises(ValueError):
+        identity_tensor(site, wL, trivial_space)
+
+    # --- Non-trivial physical leg: spin-1 site, same bond ---
+    site_s1 = SpinSite(S=1.0, conserve='Sz')
+    coupling_s1 = heisenberg_coupling([site_s1, site_s1])
+    wL_s1 = coupling_s1.factorization[0].get_leg_co_domain('wR')
+    wR_s1 = coupling_s1.factorization[1].get_leg_co_domain('wL')
+    tensor_s1 = identity_tensor(site_s1, wL_s1, wR_s1)
+    assert tensor_s1.get_leg_co_domain('p') == site_s1.leg
+    tensor_s1.test_sanity()
 
 
-def test_MPOEnvironment():
-    xxz_pars = dict(L=4, Jxx=1.0, Jz=1.1, hz=0.1, bc_MPS='finite', sort_charge=True)
-    L = xxz_pars['L']
-    M = XXZChain(xxz_pars)
-    state = ([0, 1] * L)[:L]  # Neel
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc='finite', unit_cell_width=M.lat.mps_unit_cell_width)
-    env = mpo.MPOEnvironment(psi, M.H_MPO, psi)
-    env.get_LP(3, True)
-    env.get_RP(0, True)
-    env.test_sanity()
-    E_exact = -0.825
-    for i in range(4):
-        E = env.full_contraction(i)  # should be one
-        print('total energy for contraction at site ', i, ': E =', E)
-        assert abs(E - E_exact) < 1.0e-14
+# def test_insert_identity_between_sites():
+#     """Test Coupling.insert_identity_between_sites: structure, error cases, and content."""
+#     from cyten.models.sites import SpinSite
+#     from cyten.models.couplings import heisenberg_coupling
+
+#     # ------------------------------------------------------------------ structure
+#     site_a = SpinSite(S=0.5, conserve='Sz')
+#     site_b = SpinSite(S=0.5, conserve='Sz')
+#     site_mid = SpinSite(S=0.5, conserve='Sz')
+#     original = heisenberg_coupling([site_a, site_b])
+
+#     result = original.insert_identity_between_sites(1, site_mid)
+
+#     assert len(result.sites) == 3
+#     assert len(result.factorization) == 3
+#     assert result.sites[0] is site_a
+#     assert result.sites[1] is site_mid
+#     assert result.sites[2] is site_b
+#     # The inserted tensor must carry the right labels and pass all structural checks.
+#     assert result.factorization[1].labels == ['wL', 'p', 'wR', 'p*']
+#     result.test_sanity()
+
+#     # ------------------------------------------------------------------ error cases
+#     with pytest.raises(ValueError):
+#         original.insert_identity_between_sites(0, site_mid)   # position=0 is out of range
+#     with pytest.raises(ValueError):
+#         original.insert_identity_between_sites(2, site_mid)   # position=len(sites) is out of range
+
+#     # ------------------------------------------------------------------ non-translation-invariant
+#     # Insert a spin-1 site into a chain of spin-1/2 sites (different physical legs).
+#     site_half_ns = SpinSite(S=0.5, conserve='None')
+#     site_one_ns  = SpinSite(S=1.0, conserve='None')
+#     original_ns  = heisenberg_coupling([site_half_ns, site_half_ns])
+
+#     result_ns = original_ns.insert_identity_between_sites(1, site_one_ns)
+#     assert result_ns.sites[1] is site_one_ns
+#     result_ns.test_sanity()
+
+#     # ------------------------------------------------------------------ content check (NoSymmetry)
+#     # For a coupling C2 on [s0, s1], inserting an identity site s_id at position 1 produces
+#     # a 3-site coupling C3 satisfying:
+#     #   C3[p0, pi, p1, p1*, pi*, p0*] = C2[p0, p1, p1*, p0*] * delta(pi, pi*)
+#     #
+#     # Numpy leg order (domain labels are stored reversed in the label list):
+#     #   C2: [p0, p1, p1*, p0*]  → shape [d0, d1, d1, d0]
+#     #   C3: [p0, pi, p1, p1*, pi*, p0*] → shape [d0, di, d1, d1, di, d0]
+#     C2 = original_ns.to_numpy(understood_braiding=True)   # [d0, d1, d1, d0]
+#     C3 = result_ns.to_numpy(understood_braiding=True)      # [d0, di, d1, d1, di, d0]
+
+#     di = site_one_ns.dim   # 3 for spin-1
+#     assert C3.shape == (C2.shape[0], di, C2.shape[1], C2.shape[2], di, C2.shape[3])
+
+#     for pi in range(di):
+#         # Diagonal block: matches original coupling.
+#         np.testing.assert_allclose(C3[:, pi, :, :, pi, :], C2, atol=1e-13,
+#                                    err_msg=f'diagonal block pi={pi} does not match original coupling')
+#     for pi in range(di):
+#         for pi_star in range(di):
+#             if pi != pi_star:
+#                 # Off-diagonal blocks: must vanish (identity in physical space).
+#                 np.testing.assert_allclose(C3[:, pi, :, :, pi_star, :], 0, atol=1e-13,
+#                                            err_msg=f'off-diagonal block pi={pi}, pi*={pi_star} is non-zero')
+
+# def test_MPO():
+#     s = spin_half
+#     for bc in mpo.MPO._valid_bc:
+#         for L in [4, 2, 1]:
+#             print(bc, ', L =', L)
+#             grid = [[s.Id, s.Sp, s.Sm, s.Sz],
+#                     [None, None, None, s.Sm],
+#                     [None, None, None, s.Sp],
+#                     [None, None, None, s.Id]]  # fmt: skip
+#             legW = npc.LegCharge.from_qflat(s.leg.chinfo, [[0], s.Sp.qtotal, s.Sm.qtotal, [0]])
+#             W = npc.grid_outer(grid, [legW, legW.conj()], grid_labels=['wL', 'wR'])
+#             Ws = [W] * L
+#             if bc == 'finite':
+#                 Ws[0] = Ws[0][0:1, :, :, :]
+#                 Ws[-1] = Ws[-1][:, 3:4, :, :]
+#             H = mpo.MPO([s] * L, Ws, bc=bc, IdL=[0] * L + [None], IdR=[None] + [-1] * (L), mps_unit_cell_width=L)
+#             H_copy = mpo.MPO([s] * L, Ws, bc=bc, IdL=[0] * L + [None], IdR=[None] + [-1] * (L), mps_unit_cell_width=L)
+#             H.test_sanity()
+#             print(H.dim)
+#             print(H.chi)
+#             assert H.is_equal(H)  # everything should be equal to itself
+#             assert H.is_hermitian()
+#             H.sort_legcharges()
+#             H.test_sanity()
+#             assert H.is_equal(H_copy)
+#             assert H.prefactor(0, ['Sz']) == 1.0
+#             for i in range(L - 1):
+#                 assert H.prefactor(i, ['Sp', 'Sm']) == 1.0
+#                 assert H.prefactor(i, ['Sz', 'Sz']) == 0.0
+#         if L == 4:
+#             H2 = H.group_sites(n=2)
+#             H2.test_sanity()
+#             assert H2.L == 2
 
 
-def test_MPO_hermitian():
-    L = 4
-    s = spin_half
-    ot = OnsiteTerms(L)
-    ct = CouplingTerms(L)
-    ct.add_coupling_term(1.0, 2, 3, 'Sm', 'Sp')
-    H = mpo.MPOGraph.from_terms((ot, ct), [s] * L, 'infinite', unit_cell_width=L).build_MPO()
-    assert not H.is_hermitian()
-    assert H.is_equal(H)
-    ct.add_coupling_term(1.0, 2, 3, 'Sp', 'Sm')
-    H = mpo.MPOGraph.from_terms((ot, ct), [s] * L, 'infinite', unit_cell_width=L).build_MPO()
-    assert H.is_hermitian()
-    assert H.is_equal(H)
 
-    ct.add_coupling_term(1.0, 3, 18, 'Sm', 'Sp')
-    H = mpo.MPOGraph.from_terms((ot, ct), [s] * L, 'infinite', unit_cell_width=L).build_MPO()
-    assert not H.is_hermitian()
-    assert H.is_equal(H)
-    ct.add_coupling_term(1.0, 3, 18, 'Sp', 'Sm')
-    H = mpo.MPOGraph.from_terms((ot, ct), [s] * L, 'infinite', unit_cell_width=L).build_MPO()
-    assert H.is_hermitian()
-    assert H.is_equal(H)
-
-
-def test_MPO_addition():
-    L = 4
-    for bc in ['infinite', 'finite']:
-        print('bc = ', bc, '-' * 40)
-        s = spin_half
-        ot1 = OnsiteTerms(L)
-        ct1 = CouplingTerms(L)
-        ct1.add_coupling_term(2.0, 2, 3, 'Sm', 'Sp')
-        ct1.add_coupling_term(2.0, 2, 3, 'Sp', 'Sm')
-        ct1.add_coupling_term(2.0, 1, 2, 'Sz', 'Sz')
-        ot1.add_onsite_term(3.0, 1, 'Sz')
-        H1 = mpo.MPOGraph.from_terms((ot1, ct1), [s] * L, bc, unit_cell_width=L).build_MPO()
-        ot2 = OnsiteTerms(4)
-        ct2 = CouplingTerms(4)
-        ct2.add_coupling_term(4.0, 0, 2, 'Sz', 'Sz')
-        ct2.add_coupling_term(4.0, 1, 2, 'Sz', 'Sz')
-        ot2.add_onsite_term(5.0, 1, 'Sz')
-        H2 = mpo.MPOGraph.from_terms((ot2, ct2), [s] * L, bc, unit_cell_width=L).build_MPO()
-        H12_sum = H1 + H2
-        ot12 = OnsiteTerms(4)
-        ot12 += ot1
-        ot12 += ot2
-        ct12 = CouplingTerms(4)
-        ct12 += ct1
-        ct12 += ct2
-        H12 = mpo.MPOGraph.from_terms((ot12, ct12), [s] * L, bc, unit_cell_width=L).build_MPO()
-        assert H12.is_equal(H12_sum)
+# def test_MPOGraph():
+#     for bc in ['finite', 'infinite']:
+#         for L in [2, 4]:
+#             print('L =', L)
+#             g = mpo.MPOGraph([spin_half] * L, bc, unit_cell_width=L)
+#             g.add(0, 'IdL', 'IdR', 'Sz', 0.1)
+#             g.add(0, 'IdL', 'Sz0', 'Sz', 1.0)
+#             g.add(1, 'Sz0', 'IdR', 'Sz', 0.5)
+#             g.add(0, 'IdL', (0, 'Sp'), 'Sp', 0.3)
+#             g.add(1, (0, 'Sp'), 'IdR', 'Sm', 0.2)
+#             if L > 2 or bc == 'infinite':
+#                 keyR = g.add_string_left_to_right(0, 3, (0, 'Sp'), 'Id')
+#                 g.add(3, keyR, 'IdR', 'Sm', 0.1)
+#             g.add_missing_IdL_IdR()
+#             g.test_sanity()
+#             print(repr(g))
+#             print(str(g))
+#             print('build MPO')
+#             g_mpo = g.build_MPO()
+#             g_mpo.test_sanity()
 
 
-@pytest.mark.parametrize('sites', [None, [0], [1], [0, 1, 2, 3], [2, 3], [3, 2]])
-def test_MPO_plus_identity(sites, alpha=0.7, beta=0.42):
-    s = spin_half
+# def test_MPOGraph_term_conversion():
+#     L = 4
 
-    ot = OnsiteTerms(4)
-    ct = CouplingTerms(4)
-    ct.add_coupling_term(2.0, 2, 3, 'Sm', 'Sp')
-    ct.add_coupling_term(2.0, 2, 3, 'Sp', 'Sm')
-    ct.add_coupling_term(2.0, 1, 2, 'Sz', 'Sz')
-    ot.add_onsite_term(3.0, 1, 'Sz')
-    H1 = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'finite', unit_cell_width=4).build_MPO()
-
-    if sites is None:
-        H2 = H1.plus_identity(alpha=alpha, beta=beta)
-    else:
-        H2 = H1.plus_identity(alpha=alpha, beta=beta, sites=sites)
-
-    ot_expect = OnsiteTerms(4)
-    ct_expect = CouplingTerms(4)
-    ct_expect.add_coupling_term(beta * 2.0, 2, 3, 'Sm', 'Sp')
-    ct_expect.add_coupling_term(beta * 2.0, 2, 3, 'Sp', 'Sm')
-    ct_expect.add_coupling_term(beta * 2.0, 1, 2, 'Sz', 'Sz')
-    ot_expect.add_onsite_term(beta * 3.0, 1, 'Sz')
-    ot_expect.add_onsite_term(alpha, 1, 'Id')
-    H2_expect = mpo.MPOGraph.from_terms((ot_expect, ct_expect), [s] * 4, 'finite', unit_cell_width=4).build_MPO()
-
-    assert H2.is_equal(H2_expect)
-
-
-def test_MPO_expectation_value(tol=1.0e-15):
-    L_mpo = 4
-    s = spin_half
-    psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='infinite', unit_cell_width=6)
-    psi1.test_sanity()
-    ot = OnsiteTerms(L_mpo)  # H.L != psi.L, consider L = lcm(4, 6) = 12
-    ot.add_onsite_term(0.1, 0, 'Sz')  # -> 0.5 * 2 (sites 0, 4, not 8)
-    ot.add_onsite_term(0.2, 3, 'Sz')  # -> 0.  (not sites 4, 7, 11)
-    ct = CouplingTerms(L_mpo)  # note: ct.L != psi1.L
-    ct.add_coupling_term(1.0, 2, 3, 'Sz', 'Sz')  # -> 0. (not 2-3, 6-7, 10-11)
-    ct.add_coupling_term(1.5, 1, 3, 'Sz', 'Sz')  # -> 1.5*(-0.25) (1-3, not 5-7, not 9-11)
-    ct.add_coupling_term(2.5, 0, 6, 'Sz', 'Sz')  # -> 2.5*0.25*3 (0-6, 4-10, not 8-14)
-    H = mpo.MPOGraph.from_terms((ot, ct), [s] * L_mpo, 'infinite', unit_cell_width=L_mpo).build_MPO()
-    desired_ev = (0.1 * 0.5 * 2 + 0.2 * 0.0 + 1.0 * 0.0 + 1.5 * -0.25 + 2.5 * 0.25 * 2) / 12
-    ev_power = H.expectation_value_power(psi1, tol=tol)
-    assert abs(ev_power - desired_ev) < tol
-    ev_TM = H.expectation_value_TM(psi1, tol=tol)
-    assert abs(ev_TM - desired_ev) < tol
-    ev = H.expectation_value(psi1, tol)
-    assert abs(ev - desired_ev) < tol
-
-    # now with exponentially decaying term
-    grid = [
-        [s.Id, s.Sz, 3 * s.Sz],
-        [None, 0.1 * s.Id, s.Sz],
-        [None, None, s.Id],
-    ]
-    L_mpo = 1
-    exp_dec_H = mpo.MPO.from_grids([s] * L_mpo, [grid] * L_mpo, bc='infinite', IdL=0, IdR=2, mps_unit_cell_width=L_mpo)
-    desired_ev = (
-        3 * 0.5 * 2  # Sz onsite
-        + 0.25
-        * (
-            0.1**3
-            + 0.1**5
-            + 0.1**9
-            + 0.1**11
-            + 0.1**15  # Z_0 Z_i
-            + 0.1**1
-            + 0.1**5
-            + 0.1**7
-            + 0.1**11
-            + 0.1**13
-        )  # Z_4 Z_i
-        + -0.25
-        * (
-            0.1**1  # Z_1 Z_3
-            + 0.1**2
-        )  # Z_2 Z_4
-        + 0.0  # other sites
-    ) / 6.0  # values > 1.e-15
-    ev_power = exp_dec_H.expectation_value_power(psi1, tol=tol)
-    ev_TM = exp_dec_H.expectation_value_TM(psi1, tol=tol)
-    assert abs(ev_power - desired_ev) < tol
-    assert abs(ev_TM - desired_ev) < tol
-    ev = exp_dec_H.expectation_value(psi1, tol=tol)
-    assert abs(ev - desired_ev) < tol
-    L_mpo = 3  # should give exactly the same answer!
-    exp_dec_H = mpo.MPO.from_grids([s] * L_mpo, [grid] * L_mpo, bc='infinite', IdL=0, IdR=2, mps_unit_cell_width=L_mpo)
-    ev_power = exp_dec_H.expectation_value_power(psi1, tol=tol)
-    ev_TM = exp_dec_H.expectation_value_TM(psi1, tol=tol)
-    assert abs(ev_power - desired_ev) < tol
-    assert abs(ev_TM - desired_ev) < tol
-    ev = exp_dec_H.expectation_value(psi1, tol=tol)
-    assert abs(ev - desired_ev) < tol
+#     g1 = mpo.MPOGraph([spin_half] * L, 'infinite', unit_cell_width=L)
+#     g1.test_sanity()
+#     for i in range(L):
+#         g1.add(i, 'IdL', 'IdR', 'Sz', 0.5)
+#         g1.add(i, 'IdL', ('left', i, 'Sp', 'Id'), 'Sp', 1.0)
+#         g1.add(i + 1, ('left', i, 'Sp', 'Id'), 'IdR', 'Sm', 1.5)
+#     g1.add_missing_IdL_IdR()
+#     terms = [[('Sz', i)] for i in range(L)]
+#     terms += [[('Sp', i), ('Sm', i + 1)] for i in range(L)]
+#     prefactors = [0.5] * L + [1.5] * L
+#     term_list = TermList(terms, prefactors)
+#     g2 = mpo.MPOGraph.from_term_list(term_list, [spin_half] * L, 'infinite', unit_cell_width=L)
+#     g2.test_sanity()
+#     assert g1.graph == g2.graph
+#     terms[3:3] = [[('Sm', 2), ('Sp', 0), ('Sz', 1)]]
+#     prefactors[3:3] = [3.0]
+#     term_list = TermList(terms, prefactors)
+#     g3 = mpo.MPOGraph.from_term_list(term_list, [spin_half] * L, 'infinite', unit_cell_width=L)
+#     g4 = mpo.MPOGraph([spin_half] * L, 'infinite', unit_cell_width=L)
+#     g4.test_sanity()
+#     for i in range(L):
+#         g4.add(i, 'IdL', 'IdR', 'Sz', 0.5)
+#         g4.add(i, 'IdL', ('left', i, 'Sp', 'Id'), 'Sp', 1.0)
+#         g4.add(i + 1, ('left', i, 'Sp', 'Id'), 'IdR', 'Sm', 1.5)
+#     g4.add_missing_IdL_IdR()
+#     g4.add(1, ('left', 0, 'Sp', 'Id'), ('right', 2, 'Sm', 'Id'), 'Sz', 3.0)
+#     g4.add(2, ('right', 2, 'Sm', 'Id'), 'IdR', 'Sm', 1.0)
+#     assert g4.graph == g3.graph
 
 
-def test_MPO_var(L=8, tol=1.0e-13):
-    xxz_pars = dict(L=L, Jx=1.0, Jy=1.0, Jz=1.1, hz=0.1, bc_MPS='finite', conserve=None)
-    M = SpinChain(xxz_pars)
-    psi = random_MPS(L, 2, 10)
-    exp_val = M.H_MPO.expectation_value(psi)
+# def test_MPOGraph_coupling_hash_tuples():
+#     """Test MPOGraph.add_coupling_as_term with hash-based tuple keys."""
+#     try:
+#         from cyten.models.sites import SpinSite
+#         from cyten.models.couplings import heisenberg_coupling, spin_field_coupling
+#     except ImportError:
+#         pytest.skip('cyten not available')
 
-    ED = ExactDiag(M)
-    ED.build_full_H_from_mpo()
-    psi_full = ED.mps_to_full(psi)
-    exp_val_full = npc.inner(psi_full, npc.tensordot(ED.full_H, psi_full, axes=1), axes='range', do_conj=True)
-    assert abs(exp_val - exp_val_full) / abs(exp_val_full) < tol
+#     try:
+#         from tenpy.networks import mpo
+#         from tenpy.networks import site as tenpy_site
+#     except ImportError:
+#         pytest.skip('tenpy.networks not available')
 
-    Hsquared = M.H_MPO.variance(psi, 0.0)
+#     L = 4
+#     spin_sites = [SpinSite(S=0.5, conserve='Sz') for _ in range(L)]
 
-    Hsquared_full = npc.inner(
-        psi_full,
-        npc.tensordot(ED.full_H, npc.tensordot(ED.full_H, psi_full, axes=1), axes=1),
-        axes='range',
-        do_conj=True,
-    )
-    assert abs(Hsquared - Hsquared_full) / abs(Hsquared_full) < tol
-    var = M.H_MPO.variance(psi)
-    var_full = Hsquared_full - exp_val_full**2
-    assert abs(var - var_full) / abs(var_full) < tol
+#     coupling1 = heisenberg_coupling([spin_sites[0], spin_sites[1]], J=1.0)
+#     coupling2 = heisenberg_coupling([spin_sites[0], spin_sites[1]], J=2.0)
+#     coupling3 = spin_field_coupling([spin_sites[0]], hz=0.5)
 
+#     hashes = [c.to_hash() for c in [coupling1, coupling2, coupling3]]
+#     assert hashes[0] != hashes[1]
+#     assert hashes[0] != hashes[2]
+#     assert hashes[1] != hashes[2]
 
-@pytest.mark.parametrize('method', ['SVD', 'variational', 'zip_up'])
-def test_apply_mpo(method):
-    bc_MPS = 'finite'
-    # NOTE: overlap doesn't work for calculating the energy (density) in infinite systems!
-    # energy is extensive, overlap exponential....
-    L = 5
-    g = 0.5
-    model_pars = dict(L=L, Jx=0.0, Jy=0.0, Jz=-4.0, hx=2.0 * g, bc_MPS=bc_MPS, conserve=None)
-    M = SpinChain(model_pars)
-    state = [[1 / np.sqrt(2), -1 / np.sqrt(2)]] * L  # pointing in (-x)-direction
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
-    H = M.H_MPO
-    Eexp = H.expectation_value(psi)
-    psi2 = psi.copy()
-    options = {'compression_method': method, 'trunc_params': {'chi_max': 50}}
-    H.apply(psi2, options)
-    Eapply = psi2.overlap(psi)
-    assert abs(Eexp - Eapply) < 1e-5
-    psi3 = psi.copy()
-    H.apply(psi3, options)
-    Eapply3 = psi3.overlap(psi)
-    assert abs(Eexp - Eapply3) < 1e-5
+#     tenpy_sites = [tenpy_site.SpinHalfSite(conserve='Sz', sort_charge=False) for _ in range(L)]
+#     graph = mpo.MPOGraph(tenpy_sites, bc='finite', unit_cell_width=L)
 
+#     graph.add_coupling_as_term(coupling1)
+#     graph.add_coupling_as_term(coupling2)
+#     graph.add_coupling_as_term(coupling3)
 
-def test_MPOTransferMatrix(eps=1.0e-13):
-    s = spin_half
-    # exponential decay in Sz term to make it harder
-    gamma = 0.5
-    Jxy, Jz = 4.0, 1.0
-    hz = 0.0
-    grid = [[s.Id, s.Sp, s.Sm, s.Sz, hz * s.Sz],
-            [None, None, None, None, Jxy*0.5*s.Sm],
-            [None, None, None, None, Jxy*0.5*s.Sp],
-            [None, None, None, gamma*s.Id, Jz*s.Sz],
-            [None, None, None, None, s.Id]]  # fmt: skip
-    H = mpo.MPO.from_grids([s] * 3, [grid] * 3, 'infinite', 0, 4, max_range=np.inf, mps_unit_cell_width=3)
-    psi = mps.MPS.from_singlets(s, 3, [(0, 1)], lonely=[2], bc='infinite', unit_cell_width=3)
-    psi.roll_mps_unit_cell(-1)  # -> nontrivial chi at the cut between unit cells
-    exact_E = (
-        (-0.25 - 0.25) * Jxy  # singlet <0.5*Sp_i Sm_{i+1}> = 0.25 = <0.5*Sm_i Sp_{i+1}>
-        - 0.25 * Jz  # singlet <Sz_i Sz_{i+1}>
-        + 1.0 * (0.25 * gamma**2 / (1.0 - gamma**3))
-    )  # exponentially decaying "lonely" states
-    # lonely: <Sz_{i} gamma gamma Sz_{i+2}
-    exact_E = exact_E / psi.L  # energy per site
-    for transpose in [False, True]:
-        print(f'transpose={transpose!s}')
-        TM = mpo.MPOTransferMatrix(H, psi, transpose=transpose)
-        TM.matvec(TM.guess, project=False)
-        TM.matvec(TM.guess, project=True)
-        val, vec = TM.dominant_eigenvector()
-        assert abs(val - 1.0) < eps
-        E0 = TM.energy(vec)
-        print(E0, exact_E)
-        assert abs(E0 - exact_E) < eps
-        if not transpose:
-            vec.itranspose(['vL', 'wL', 'vL*'])
-            assert (vec[:, 4, :] - npc.eye_like(vec, 0)).norm() < eps
-        else:
-            vec.itranspose(['vR*', 'wR', 'vR'])
-            assert (vec[:, 0, :] - npc.eye_like(vec, 0)).norm() < eps
-    # get non-trivial psi
-    psi.perturb({'N_steps': 10, 'trunc_params': {'chi_max': 3, 'svd_min': 1.0e-14}}, close_1=False, canonicalize=False)
-    psi.canonical_form_infinite2()
-    # now find eigenvector again
-    # and check TM |vec> = |vec> + val * |v0>
-    # with |v0> = eye(chi) * IdL/IdR
-    for transpose in [False, True]:
-        print(f'transpose={transpose!s}')
-        TM = mpo.MPOTransferMatrix(H, psi, transpose=transpose)
-        val, vec = TM.dominant_eigenvector()
-        E0 = TM.energy(vec)
-        assert abs(val - 1.0) < eps
-        if not transpose:
-            vec.itranspose(['vL', 'wL', 'vL*'])
-            assert (vec[:, 4, :] - npc.eye_like(vec, 0)).norm() < eps
-            v0 = npc.eye_like(vec, 0, labels=['vL', 'vL*']).add_leg(vec.get_leg('wL'), 0, 1, 'wL')
-        else:
-            vec.itranspose(['vR*', 'wR', 'vR'])
-            assert (vec[:, 0, :] - npc.eye_like(vec, 0)).norm() < eps
-            v0 = npc.eye_like(vec, 0, labels=['vR*', 'vR']).add_leg(vec.get_leg('wR'), 4, 1, 'wR')
-        TM_vec = TM.matvec(vec, project=False)
-        TM_vec.itranspose(vec.get_leg_labels())
-        assert (TM_vec - (vec + E0 * 3 * v0)).norm() < eps
+#     graph.add_missing_IdL_IdR()
+
+#     assert graph.graph is not None
+#     assert len(graph.graph) == L
+
+#     hash_keys_found = set()
+#     for site_graph in graph.graph:
+#         for keyL in site_graph.keys():
+#             if isinstance(keyL, tuple) and len(keyL) >= 2 and keyL[0] == 'coupling':
+#                 hash_keys_found.add(keyL[1])
+
+#     assert len(hash_keys_found) == 3
+#     for h in hashes:
+#         assert h in hash_keys_found
+
+#     all_keys = set()
+#     for site_graph in graph.graph:
+#         all_keys.update(site_graph.keys())
+
+#     for key in hash_keys_found:
+#         assert ('coupling', key) in all_keys or any(k[0] == 'coupling' and k[1] == key for k in all_keys)
 
 
-def test_MPO_from_wavepacket(L=10):
-    (
-        k0,
-        x0,
-        sigma,
-    ) = np.pi / 8.0, 2.0, 2.0
-    x = np.arange(L)
-    coeff = np.exp(-1.0j * k0 * x) * np.exp(-0.5 * (x - x0) ** 2 / sigma**2)
-    coeff /= np.linalg.norm(coeff)
-    s = site.FermionSite(conserve='N')
-    wp = mpo.MPO.from_wavepacket([s] * L, coeff, 'Cd', unit_cell_width=L)
-    psi = mps.MPS.from_product_state([s] * L, ['empty'] * L, unit_cell_width=L)
-    wp.apply(psi, dict(compression_method='SVD'))
-    C = psi.correlation_function('Cd', 'C')
-    C_expexcted = np.conj(coeff)[:, np.newaxis] * coeff[np.newaxis, :]
-    assert np.max(np.abs(C - C_expexcted)) < 1.0e-10
-    print(C)
-    print(C_expexcted)
+# def test_MPO_conversion():
+#     L = 8
+#     sites = []
+#     for i in range(L):
+#         s = site.Site(npc.LegCharge.from_trivial(2))
+#         s.add_op(f'X_{i:d}', np.array([[0.0, 1.0], [1.0, 0.0]]))
+#         s.add_op(f'Y_{i:d}', np.array([[0.0, 1.0], [-1.0, 0.0]]))
+#         s.add_op(f'Z_{i:d}', np.array([[1.0, 0.0], [0.0, -1.0]]))
+#         sites.append(s)
+
+#     terms = [
+#         [('X_0', 0)],
+#         [('X_0', 0), ('X_1', 1)],
+#         [('X_0', 0), ('X_3', 3)],
+#         [('X_4', 4), ('Y_5', 5), ('Y_7', 7)],
+#         [('X_4', 4), ('Y_5', 5), ('X_7', 7)],
+#         [('X_4', 4), ('Y_6', 6), ('Y_7', 7)],
+#     ]
+#     prefactors = [0.25, 10.0, 11.0, 101.0, 102.0, 103.0]
+#     term_list = TermList(terms, prefactors)
+#     g1 = mpo.MPOGraph.from_term_list(term_list, sites, bc='finite', insert_all_id=False, unit_cell_width=L)
+#     ct_add = MultiCouplingTerms(L)
+#     ct_add.add_coupling_term(12.0, 4, 5, 'X_4', 'X_5')
+#     ct_add.add_multi_coupling_term(0.5, [4, 5, 7], ['X_4', 'Y_5', 'X_7'], 'Id')
+#     prefactors[-2] += 0.5
+#     terms.append([('X_4', 4), ('X_5', 5)])
+#     prefactors.append(12.0)
+#     ct_add.add_to_graph(g1)
+#     H1 = g1.build_MPO()
+#     grids = [
+#         [
+#             ['Id', 'X_0', [('X_0', 0.25)]]  # site 0
+#         ],
+#         [
+#             ['Id', None, None],  # site 1
+#             [None, 'Id', [('X_1', 10.0)]],
+#             [None, None, 'Id'],
+#         ],
+#         [
+#             ['Id', None, None],  # site 2
+#             [None, [('Id', 11.0)], None],
+#             [None, None, 'Id'],
+#         ],
+#         [
+#             ['Id', None],  # site 3
+#             [None, 'X_3'],
+#             [None, 'Id'],
+#         ],
+#         [
+#             ['X_4', None],  # site 4
+#             [None, 'Id'],
+#         ],
+#         [
+#             ['Id', 'Y_5', [('X_5', 12.0)]],  # site 5
+#             [None, None, 'Id'],
+#         ],
+#         [
+#             # site 6
+#             [None, [('Y_6', 103.0)], None],
+#             [[('Id', 102.5)], [('Id', 101.0)], None],
+#             [None, None, 'Id'],
+#         ],
+#         [
+#             ['X_7'],  # site 7
+#             ['Y_7'],
+#             ['Id'],
+#         ],
+#     ]
+#     H2 = mpo.MPO.from_grids(
+#         sites, grids, 'finite', [0] * 4 + [None] * 5, [None] * 5 + [-1] * 4, mps_unit_cell_width=len(sites)
+#     )
+#     for w1, w2 in zip(H1._W, H2._W):
+#         assert npc.norm(w1 - w2, np.inf) == 0.0
+#     assert H2.is_equal(H1)
+#     back_to_terms = H1.to_TermList([['Id', f'X_{i:d}', f'Y_{i:d}', f'Z_{i:d}'] for i in range(L)], max_range=8)
+#     assert len(back_to_terms.terms) == len(terms)
+#     for term, pref in zip(back_to_terms.terms, back_to_terms.strength):
+#         assert term in terms
+#         i = terms.index(term)
+#         assert abs(prefactors[i] - pref) < 1.0e-13
+
+
+# def test_MPOEnvironment():
+#     xxz_pars = dict(L=4, Jxx=1.0, Jz=1.1, hz=0.1, bc_MPS='finite', sort_charge=True)
+#     L = xxz_pars['L']
+#     M = XXZChain(xxz_pars)
+#     state = ([0, 1] * L)[:L]  # Neel
+#     psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc='finite', unit_cell_width=M.lat.mps_unit_cell_width)
+#     env = mpo.MPOEnvironment(psi, M.H_MPO, psi)
+#     env.get_LP(3, True)
+#     env.get_RP(0, True)
+#     env.test_sanity()
+#     E_exact = -0.825
+#     for i in range(4):
+#         E = env.full_contraction(i)  # should be one
+#         print('total energy for contraction at site ', i, ': E =', E)
+#         assert abs(E - E_exact) < 1.0e-14
+
+
+# def test_MPO_hermitian():
+#     L = 4
+#     s = spin_half
+#     ot = OnsiteTerms(L)
+#     ct = CouplingTerms(L)
+#     ct.add_coupling_term(1.0, 2, 3, 'Sm', 'Sp')
+#     H = mpo.MPOGraph.from_terms((ot, ct), [s] * L, 'infinite', unit_cell_width=L).build_MPO()
+#     assert not H.is_hermitian()
+#     assert H.is_equal(H)
+#     ct.add_coupling_term(1.0, 2, 3, 'Sp', 'Sm')
+#     H = mpo.MPOGraph.from_terms((ot, ct), [s] * L, 'infinite', unit_cell_width=L).build_MPO()
+#     assert H.is_hermitian()
+#     assert H.is_equal(H)
+
+#     ct.add_coupling_term(1.0, 3, 18, 'Sm', 'Sp')
+#     H = mpo.MPOGraph.from_terms((ot, ct), [s] * L, 'infinite', unit_cell_width=L).build_MPO()
+#     assert not H.is_hermitian()
+#     assert H.is_equal(H)
+#     ct.add_coupling_term(1.0, 3, 18, 'Sp', 'Sm')
+#     H = mpo.MPOGraph.from_terms((ot, ct), [s] * L, 'infinite', unit_cell_width=L).build_MPO()
+#     assert H.is_hermitian()
+#     assert H.is_equal(H)
+
+
+# def test_MPO_addition():
+#     L = 4
+#     for bc in ['infinite', 'finite']:
+#         print('bc = ', bc, '-' * 40)
+#         s = spin_half
+#         ot1 = OnsiteTerms(L)
+#         ct1 = CouplingTerms(L)
+#         ct1.add_coupling_term(2.0, 2, 3, 'Sm', 'Sp')
+#         ct1.add_coupling_term(2.0, 2, 3, 'Sp', 'Sm')
+#         ct1.add_coupling_term(2.0, 1, 2, 'Sz', 'Sz')
+#         ot1.add_onsite_term(3.0, 1, 'Sz')
+#         H1 = mpo.MPOGraph.from_terms((ot1, ct1), [s] * L, bc, unit_cell_width=L).build_MPO()
+#         ot2 = OnsiteTerms(4)
+#         ct2 = CouplingTerms(4)
+#         ct2.add_coupling_term(4.0, 0, 2, 'Sz', 'Sz')
+#         ct2.add_coupling_term(4.0, 1, 2, 'Sz', 'Sz')
+#         ot2.add_onsite_term(5.0, 1, 'Sz')
+#         H2 = mpo.MPOGraph.from_terms((ot2, ct2), [s] * L, bc, unit_cell_width=L).build_MPO()
+#         H12_sum = H1 + H2
+#         ot12 = OnsiteTerms(4)
+#         ot12 += ot1
+#         ot12 += ot2
+#         ct12 = CouplingTerms(4)
+#         ct12 += ct1
+#         ct12 += ct2
+#         H12 = mpo.MPOGraph.from_terms((ot12, ct12), [s] * L, bc, unit_cell_width=L).build_MPO()
+#         assert H12.is_equal(H12_sum)
+
+
+# @pytest.mark.parametrize('sites', [None, [0], [1], [0, 1, 2, 3], [2, 3], [3, 2]])
+# def test_MPO_plus_identity(sites, alpha=0.7, beta=0.42):
+#     s = spin_half
+
+#     ot = OnsiteTerms(4)
+#     ct = CouplingTerms(4)
+#     ct.add_coupling_term(2.0, 2, 3, 'Sm', 'Sp')
+#     ct.add_coupling_term(2.0, 2, 3, 'Sp', 'Sm')
+#     ct.add_coupling_term(2.0, 1, 2, 'Sz', 'Sz')
+#     ot.add_onsite_term(3.0, 1, 'Sz')
+#     H1 = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'finite', unit_cell_width=4).build_MPO()
+
+#     if sites is None:
+#         H2 = H1.plus_identity(alpha=alpha, beta=beta)
+#     else:
+#         H2 = H1.plus_identity(alpha=alpha, beta=beta, sites=sites)
+
+#     ot_expect = OnsiteTerms(4)
+#     ct_expect = CouplingTerms(4)
+#     ct_expect.add_coupling_term(beta * 2.0, 2, 3, 'Sm', 'Sp')
+#     ct_expect.add_coupling_term(beta * 2.0, 2, 3, 'Sp', 'Sm')
+#     ct_expect.add_coupling_term(beta * 2.0, 1, 2, 'Sz', 'Sz')
+#     ot_expect.add_onsite_term(beta * 3.0, 1, 'Sz')
+#     ot_expect.add_onsite_term(alpha, 1, 'Id')
+#     H2_expect = mpo.MPOGraph.from_terms((ot_expect, ct_expect), [s] * 4, 'finite', unit_cell_width=4).build_MPO()
+
+#     assert H2.is_equal(H2_expect)
+
+
+# def test_MPO_expectation_value(tol=1.0e-15):
+#     L_mpo = 4
+#     s = spin_half
+#     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='infinite', unit_cell_width=6)
+#     psi1.test_sanity()
+#     ot = OnsiteTerms(L_mpo)  # H.L != psi.L, consider L = lcm(4, 6) = 12
+#     ot.add_onsite_term(0.1, 0, 'Sz')  # -> 0.5 * 2 (sites 0, 4, not 8)
+#     ot.add_onsite_term(0.2, 3, 'Sz')  # -> 0.  (not sites 4, 7, 11)
+#     ct = CouplingTerms(L_mpo)  # note: ct.L != psi1.L
+#     ct.add_coupling_term(1.0, 2, 3, 'Sz', 'Sz')  # -> 0. (not 2-3, 6-7, 10-11)
+#     ct.add_coupling_term(1.5, 1, 3, 'Sz', 'Sz')  # -> 1.5*(-0.25) (1-3, not 5-7, not 9-11)
+#     ct.add_coupling_term(2.5, 0, 6, 'Sz', 'Sz')  # -> 2.5*0.25*3 (0-6, 4-10, not 8-14)
+#     H = mpo.MPOGraph.from_terms((ot, ct), [s] * L_mpo, 'infinite', unit_cell_width=L_mpo).build_MPO()
+#     desired_ev = (0.1 * 0.5 * 2 + 0.2 * 0.0 + 1.0 * 0.0 + 1.5 * -0.25 + 2.5 * 0.25 * 2) / 12
+#     ev_power = H.expectation_value_power(psi1, tol=tol)
+#     assert abs(ev_power - desired_ev) < tol
+#     ev_TM = H.expectation_value_TM(psi1, tol=tol)
+#     assert abs(ev_TM - desired_ev) < tol
+#     ev = H.expectation_value(psi1, tol)
+#     assert abs(ev - desired_ev) < tol
+
+#     # now with exponentially decaying term
+#     grid = [
+#         [s.Id, s.Sz, 3 * s.Sz],
+#         [None, 0.1 * s.Id, s.Sz],
+#         [None, None, s.Id],
+#     ]
+#     L_mpo = 1
+#     exp_dec_H = mpo.MPO.from_grids([s] * L_mpo, [grid] * L_mpo, bc='infinite', IdL=0, IdR=2, mps_unit_cell_width=L_mpo)
+#     desired_ev = (
+#         3 * 0.5 * 2  # Sz onsite
+#         + 0.25
+#         * (
+#             0.1**3
+#             + 0.1**5
+#             + 0.1**9
+#             + 0.1**11
+#             + 0.1**15  # Z_0 Z_i
+#             + 0.1**1
+#             + 0.1**5
+#             + 0.1**7
+#             + 0.1**11
+#             + 0.1**13
+#         )  # Z_4 Z_i
+#         + -0.25
+#         * (
+#             0.1**1  # Z_1 Z_3
+#             + 0.1**2
+#         )  # Z_2 Z_4
+#         + 0.0  # other sites
+#     ) / 6.0  # values > 1.e-15
+#     ev_power = exp_dec_H.expectation_value_power(psi1, tol=tol)
+#     ev_TM = exp_dec_H.expectation_value_TM(psi1, tol=tol)
+#     assert abs(ev_power - desired_ev) < tol
+#     assert abs(ev_TM - desired_ev) < tol
+#     ev = exp_dec_H.expectation_value(psi1, tol=tol)
+#     assert abs(ev - desired_ev) < tol
+#     L_mpo = 3  # should give exactly the same answer!
+#     exp_dec_H = mpo.MPO.from_grids([s] * L_mpo, [grid] * L_mpo, bc='infinite', IdL=0, IdR=2, mps_unit_cell_width=L_mpo)
+#     ev_power = exp_dec_H.expectation_value_power(psi1, tol=tol)
+#     ev_TM = exp_dec_H.expectation_value_TM(psi1, tol=tol)
+#     assert abs(ev_power - desired_ev) < tol
+#     assert abs(ev_TM - desired_ev) < tol
+#     ev = exp_dec_H.expectation_value(psi1, tol=tol)
+#     assert abs(ev - desired_ev) < tol
+
+
+# def test_MPO_var(L=8, tol=1.0e-13):
+#     xxz_pars = dict(L=L, Jx=1.0, Jy=1.0, Jz=1.1, hz=0.1, bc_MPS='finite', conserve=None)
+#     M = SpinChain(xxz_pars)
+#     psi = random_MPS(L, 2, 10)
+#     exp_val = M.H_MPO.expectation_value(psi)
+
+#     ED = ExactDiag(M)
+#     ED.build_full_H_from_mpo()
+#     psi_full = ED.mps_to_full(psi)
+#     exp_val_full = npc.inner(psi_full, npc.tensordot(ED.full_H, psi_full, axes=1), axes='range', do_conj=True)
+#     assert abs(exp_val - exp_val_full) / abs(exp_val_full) < tol
+
+#     Hsquared = M.H_MPO.variance(psi, 0.0)
+
+#     Hsquared_full = npc.inner(
+#         psi_full,
+#         npc.tensordot(ED.full_H, npc.tensordot(ED.full_H, psi_full, axes=1), axes=1),
+#         axes='range',
+#         do_conj=True,
+#     )
+#     assert abs(Hsquared - Hsquared_full) / abs(Hsquared_full) < tol
+#     var = M.H_MPO.variance(psi)
+#     var_full = Hsquared_full - exp_val_full**2
+#     assert abs(var - var_full) / abs(var_full) < tol
+
+
+# @pytest.mark.parametrize('method', ['SVD', 'variational', 'zip_up'])
+# def test_apply_mpo(method):
+#     bc_MPS = 'finite'
+#     # NOTE: overlap doesn't work for calculating the energy (density) in infinite systems!
+#     # energy is extensive, overlap exponential....
+#     L = 5
+#     g = 0.5
+#     model_pars = dict(L=L, Jx=0.0, Jy=0.0, Jz=-4.0, hx=2.0 * g, bc_MPS=bc_MPS, conserve=None)
+#     M = SpinChain(model_pars)
+#     state = [[1 / np.sqrt(2), -1 / np.sqrt(2)]] * L  # pointing in (-x)-direction
+#     psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
+#     H = M.H_MPO
+#     Eexp = H.expectation_value(psi)
+#     psi2 = psi.copy()
+#     options = {'compression_method': method, 'trunc_params': {'chi_max': 50}}
+#     H.apply(psi2, options)
+#     Eapply = psi2.overlap(psi)
+#     assert abs(Eexp - Eapply) < 1e-5
+#     psi3 = psi.copy()
+#     H.apply(psi3, options)
+#     Eapply3 = psi3.overlap(psi)
+#     assert abs(Eexp - Eapply3) < 1e-5
+
+
+# def test_MPOTransferMatrix(eps=1.0e-13):
+#     s = spin_half
+#     # exponential decay in Sz term to make it harder
+#     gamma = 0.5
+#     Jxy, Jz = 4.0, 1.0
+#     hz = 0.0
+#     grid = [[s.Id, s.Sp, s.Sm, s.Sz, hz * s.Sz],
+#             [None, None, None, None, Jxy*0.5*s.Sm],
+#             [None, None, None, None, Jxy*0.5*s.Sp],
+#             [None, None, None, gamma*s.Id, Jz*s.Sz],
+#             [None, None, None, None, s.Id]]  # fmt: skip
+#     H = mpo.MPO.from_grids([s] * 3, [grid] * 3, 'infinite', 0, 4, max_range=np.inf, mps_unit_cell_width=3)
+#     psi = mps.MPS.from_singlets(s, 3, [(0, 1)], lonely=[2], bc='infinite', unit_cell_width=3)
+#     psi.roll_mps_unit_cell(-1)  # -> nontrivial chi at the cut between unit cells
+#     exact_E = (
+#         (-0.25 - 0.25) * Jxy  # singlet <0.5*Sp_i Sm_{i+1}> = 0.25 = <0.5*Sm_i Sp_{i+1}>
+#         - 0.25 * Jz  # singlet <Sz_i Sz_{i+1}>
+#         + 1.0 * (0.25 * gamma**2 / (1.0 - gamma**3))
+#     )  # exponentially decaying "lonely" states
+#     # lonely: <Sz_{i} gamma gamma Sz_{i+2}
+#     exact_E = exact_E / psi.L  # energy per site
+#     for transpose in [False, True]:
+#         print(f'transpose={transpose!s}')
+#         TM = mpo.MPOTransferMatrix(H, psi, transpose=transpose)
+#         TM.matvec(TM.guess, project=False)
+#         TM.matvec(TM.guess, project=True)
+#         val, vec = TM.dominant_eigenvector()
+#         assert abs(val - 1.0) < eps
+#         E0 = TM.energy(vec)
+#         print(E0, exact_E)
+#         assert abs(E0 - exact_E) < eps
+#         if not transpose:
+#             vec.itranspose(['vL', 'wL', 'vL*'])
+#             assert (vec[:, 4, :] - npc.eye_like(vec, 0)).norm() < eps
+#         else:
+#             vec.itranspose(['vR*', 'wR', 'vR'])
+#             assert (vec[:, 0, :] - npc.eye_like(vec, 0)).norm() < eps
+#     # get non-trivial psi
+#     psi.perturb({'N_steps': 10, 'trunc_params': {'chi_max': 3, 'svd_min': 1.0e-14}}, close_1=False, canonicalize=False)
+#     psi.canonical_form_infinite2()
+#     # now find eigenvector again
+#     # and check TM |vec> = |vec> + val * |v0>
+#     # with |v0> = eye(chi) * IdL/IdR
+#     for transpose in [False, True]:
+#         print(f'transpose={transpose!s}')
+#         TM = mpo.MPOTransferMatrix(H, psi, transpose=transpose)
+#         val, vec = TM.dominant_eigenvector()
+#         E0 = TM.energy(vec)
+#         assert abs(val - 1.0) < eps
+#         if not transpose:
+#             vec.itranspose(['vL', 'wL', 'vL*'])
+#             assert (vec[:, 4, :] - npc.eye_like(vec, 0)).norm() < eps
+#             v0 = npc.eye_like(vec, 0, labels=['vL', 'vL*']).add_leg(vec.get_leg('wL'), 0, 1, 'wL')
+#         else:
+#             vec.itranspose(['vR*', 'wR', 'vR'])
+#             assert (vec[:, 0, :] - npc.eye_like(vec, 0)).norm() < eps
+#             v0 = npc.eye_like(vec, 0, labels=['vR*', 'vR']).add_leg(vec.get_leg('wR'), 4, 1, 'wR')
+#         TM_vec = TM.matvec(vec, project=False)
+#         TM_vec.itranspose(vec.get_leg_labels())
+#         assert (TM_vec - (vec + E0 * 3 * v0)).norm() < eps
+
+
+# def test_MPO_from_wavepacket(L=10):
+#     (
+#         k0,
+#         x0,
+#         sigma,
+#     ) = np.pi / 8.0, 2.0, 2.0
+#     x = np.arange(L)
+#     coeff = np.exp(-1.0j * k0 * x) * np.exp(-0.5 * (x - x0) ** 2 / sigma**2)
+#     coeff /= np.linalg.norm(coeff)
+#     s = site.FermionSite(conserve='N')
+#     wp = mpo.MPO.from_wavepacket([s] * L, coeff, 'Cd', unit_cell_width=L)
+#     psi = mps.MPS.from_product_state([s] * L, ['empty'] * L, unit_cell_width=L)
+#     wp.apply(psi, dict(compression_method='SVD'))
+#     C = psi.correlation_function('Cd', 'C')
+#     C_expexcted = np.conj(coeff)[:, np.newaxis] * coeff[np.newaxis, :]
+#     assert np.max(np.abs(C - C_expexcted)) < 1.0e-10
+#     print(C)
+#     print(C_expexcted)
 
 
