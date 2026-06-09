@@ -520,8 +520,7 @@ class ArnoldiEvolution(Arnoldi):
         self._h_krylov[:] = 0.0
         N = self._build_krylov()
         if N > 1:
-            logger.debug('ArnoldiEvolution N=%d, |result[-1]|=%.3e', N,
-                         abs(self._result_krylov[N - 1, 0]))
+            logger.debug('ArnoldiEvolution N=%d, |result[-1]|=%.3e', N, abs(self._result_krylov[N - 1, 0]))
         else:
             logger.debug('ArnoldiEvolution N=1, |h[0,0]|=%.3e', abs(self._h_krylov[0, 0]))
         if N == 1:
@@ -549,7 +548,7 @@ class ArnoldiEvolution(Arnoldi):
             self._result_norm = np.abs(exp_dE)
             self._result_krylov = np.array([[exp_dE / self._result_norm]])
         else:
-            E_kr, v_kr = np.linalg.eig(h[:k + 1, :k + 1])
+            E_kr, v_kr = np.linalg.eig(h[: k + 1, : k + 1])
             # V^{-1} e0 = first column of V^{-1}; use solve for numerical stability
             e0 = np.zeros(k + 1, dtype=complex)
             e0[0] = 1.0
