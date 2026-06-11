@@ -44,17 +44,18 @@ import numpy as np
 from scipy.linalg import expm
 from scipy.special import comb
 
-from ..linalg import np_conserved as npc
-from ..linalg.krylov_based import GMRES
-from ..linalg.sparse import FlatLinearOperator, NpcLinearOperator, ShiftNpcLinearOperator
-from ..linalg.truncation import TruncationError, svd_theta
+#from ..linalg import np_conserved as npc
+#from ..linalg.krylov_based import GMRES
+#from ..linalg.sparse import FlatLinearOperator, NpcLinearOperator, ShiftNpcLinearOperator
+from ..linalg.truncation import TruncationError   #, svd_theta
 from ..tools.math import lcm
 from ..tools.misc import add_with_None_0, inverse_permutation, to_iterable
 from ..tools.params import asConfig
 from ..tools.string import vert_join
 from .mps import BaseEnvironment, MPSGeometry, TransferMatrix
-from .site import group_sites
+#from .site import group_sites
 from .terms import TermList
+import cyten.tensors.sparse
 
 logger = logging.getLogger(__name__)
 
@@ -3606,7 +3607,7 @@ class MPOEnvironmentBuilder:
         return -x_sol  # cancel global minus sign
 
 
-class MPOTransferMatrix(NpcLinearOperator):
+class MPOTransferMatrix(cyten.sparse.LinearOperator):  # TODO: update for LinearOperator
     """Transfermatrix of a Hamiltonian-like MPO sandwiched between canonicalized MPS.
 
     Given an MPS in canonical form, this class helps to find the correct initial MPO environment

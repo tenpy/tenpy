@@ -122,7 +122,6 @@ import copy
 
 import numpy as np
 
-from ..linalg import np_conserved as npc
 from ..tools.math import entropy
 from .mps import MPS
 

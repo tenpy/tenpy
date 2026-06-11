@@ -15,10 +15,10 @@ import logging
 # load and provide sub packages on first input
 # note that the order matters!
 from . import (
+    linalg,
+    #networks,
     # algorithms,
-    # linalg,
     # models,
-    # networks,
     # simulations,
     tools,
     version,  # needs to be after linalg!

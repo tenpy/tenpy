@@ -155,18 +155,18 @@ from collections.abc import Iterable
 
 import numpy as np
 
-from ..linalg import np_conserved as npc
-from ..linalg import sparse
-from ..linalg.charges import DipolarChargeInfo
-from ..linalg.krylov_based import Arnoldi
-from ..linalg.random_matrix import GOE, GUE
-from ..linalg.truncation import TruncationError, _machine_prec_trunc_par, eigh_rho, svd_theta
+#from ..linalg import sparse
+#from ..linalg.charges import DipolarChargeInfo
+#from ..linalg.krylov_based import Arnoldi
+#from ..linalg.random_matrix import GOE, GUE
+from ..linalg.truncation import TruncationError #, _machine_prec_trunc_par, eigh_rho, svd_theta
 from ..tools import hdf5_io
 from ..tools.cache import DictCache
 from ..tools.math import entropy, lcm
 from ..tools.misc import BetaWarning, argsort, get_recursive, inverse_permutation, to_array, to_iterable
 from ..tools.params import asConfig
-from .site import group_sites
+#from .site import group_sites
+import cyten.tensors.sparse
 
 logger = logging.getLogger(__name__)
 
@@ -6856,7 +6856,7 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         return C
 
 
-class TransferMatrix(sparse.NpcLinearOperator):
+class TransferMatrix(cyten.tensors.sparse.LinearOperator): # TODO: adapt for LinearOperator
     r"""Transfer matrix of two MPS (bra & ket).
 
     For an iMPS in the thermodynamic limit, we often need to find the 'dominant `RP`' (and `LP`).

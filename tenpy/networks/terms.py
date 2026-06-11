@@ -12,7 +12,7 @@ import warnings
 
 import numpy as np
 
-from ..linalg import np_conserved as npc
+#from ..linalg import np_conserved as npc
 from ..tools.hdf5_io import Hdf5Exportable
 from ..tools.misc import add_with_None_0
 

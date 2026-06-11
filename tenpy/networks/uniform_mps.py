@@ -27,7 +27,6 @@ import warnings
 
 import numpy as np
 
-from ..linalg import np_conserved as npc
 from ..tools.misc import BetaWarning
 from .mps import MPS
 

@@ -19,7 +19,7 @@ import warnings
 
 import numpy as np
 
-from ..linalg import np_conserved as npc
+#from ..linalg import np_conserved as npc
 from ..models.model import CouplingModel
 from ..networks.mps import MPS
 from ..tools.misc import inverse_permutation
