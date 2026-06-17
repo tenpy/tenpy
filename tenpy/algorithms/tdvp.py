@@ -36,7 +36,7 @@ import logging
 import warnings
 
 from ..linalg import np_conserved as npc
-from ..linalg.krylov_based import LanczosEvolution
+from ..linalg.krylov_based import ArnoldiEvolution, LanczosEvolution
 from ..linalg.sparse import SumNpcLinearOperator
 from ..linalg.truncation import TruncationError, svd_theta
 from ..tools.misc import consistency_check
@@ -84,6 +84,21 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
             For large time steps, the projection to the MPS manifold that is the main building block
             of TDVP, can not be a good approximation anymore. We raise in that case.
             Can be downgraded to a warning by setting this option to ``None``.
+        lanczos_params : dict
+            Parameters for the local Krylov subspace time evolution (passed to
+            :class:`~tenpy.linalg.krylov_based.LanczosEvolution` or
+            :class:`~tenpy.linalg.krylov_based.ArnoldiEvolution`). Supports all options
+            of :cfg:config:`KrylovBased`, plus:
+
+            hermitian : bool
+                If ``True`` (default), use :class:`~tenpy.linalg.krylov_based.LanczosEvolution`,
+                which assumes `H` is Hermitian and builds a tridiagonal Krylov projection.
+                Set to ``False`` to use :class:`~tenpy.linalg.krylov_based.ArnoldiEvolution`,
+                which handles non-Hermitian `H` via full Gram-Schmidt orthogonalization and
+                eigendecomposition of the Hessenberg projection.
+            normalize : bool or None
+                Passed to the ``normalize`` argument of the evolution ``run()`` method.
+                If ``None`` (default), each solver class uses its own default.
 
     Attributes
     ----------
@@ -113,6 +128,18 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
         self.Krylov_params = options.subconfig('Krylov_params')
 
     # run() from TimeEvolutionAlgorithm
+
+    def _krylov_evolve(self, H, theta, dt):
+        """Apply ``exp(dt * H)`` to `theta` using Lanczos or Arnoldi.
+
+        Selects :class:`~tenpy.linalg.krylov_based.LanczosEvolution` (default, Hermitian H) or
+        :class:`~tenpy.linalg.krylov_based.ArnoldiEvolution` (non-Hermitian H) based on the
+        ``hermitian`` key in :attr:`lanczos_params`.
+        """
+        hermitian = self.lanczos_params.get('hermitian', True, bool)
+        cls = LanczosEvolution if hermitian else ArnoldiEvolution
+        normalize = self.lanczos_params.get('normalize', None)
+        return cls(H, theta, self.lanczos_params).run(dt, normalize=normalize)
 
     @property
     def lanczos_options(self):
@@ -242,13 +269,19 @@ class TwoSiteTDVPEngine(TDVPEngine):
         if i0 == L - 2:
             dt = 2.0 * dt  # instead of updating the last pair of sites twice, we double the time
         # update two-site wavefunction
-        theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_params).run(dt)
+        theta, N = self._krylov_evolve(self.eff_H, theta, dt)
         if self.combine:
             theta.itranspose(['(vL.p0)', '(p1.vR)'])  # shouldn't do anything
         else:
             theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1], qconj=[+1, -1])
         qtotal_i0 = self.psi.get_B(i0, form=None).qtotal
-        U, S, VH, err, _ = svd_theta(theta, self.trunc_params, qtotal_LR=[qtotal_i0, None], inner_labels=['vR', 'vL'])
+        U, S, VH, err, renorm = svd_theta(
+            theta,
+            self.trunc_params,
+            qtotal_LR=[qtotal_i0, None],
+            inner_labels=['vR', 'vL'],
+        )
+        self.psi.norm *= renorm
         B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
         B1 = VH.split_legs(['(p1.vR)']).replace_label('p1', 'p')
 
@@ -278,7 +311,7 @@ class TwoSiteTDVPEngine(TDVPEngine):
             H1 = SumNpcLinearOperator(H1, H1.adjoint())
         theta = self.psi.get_theta(i, n=1, cutoff=self.S_inv_cutoff)
         theta = H1.combine_theta(theta)
-        theta, _ = LanczosEvolution(H1, theta, self.lanczos_params).run(dt)
+        theta, _ = self._krylov_evolve(H1, theta, dt)
         self.psi.set_B(i, theta.replace_label('p0', 'p'), form='Th')
 
 
@@ -319,7 +352,7 @@ class SingleSiteTDVPEngine(TDVPEngine):
             dt = 2.0 * dt  # instead of updating the last site twice, we double the time
 
         # update one-site wavefunction
-        theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_params).run(dt)
+        theta, N = self._krylov_evolve(self.eff_H, theta, dt)
         if self.move_right:
             self.right_moving_update(i0, theta)
         else:
@@ -334,7 +367,10 @@ class SingleSiteTDVPEngine(TDVPEngine):
         else:
             theta = theta.combine_legs(['vL', 'p0'], qconj=+1, new_axes=0)
         U, S, VH = npc.svd(theta, qtotal_LR=[theta.qtotal, None], inner_labels=['vR', 'vL'])
-        # no truncation
+        # no truncation; track norm decay for non-Hermitian evolution
+        renorm = npc.norm(S)
+        S /= renorm
+        self.psi.norm *= renorm
         A0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
         self.psi.set_B(i0, A0, form='A')  # left-canonical
         self.psi.set_SR(i0, S)
@@ -353,6 +389,10 @@ class SingleSiteTDVPEngine(TDVPEngine):
         else:
             theta = theta.combine_legs(['p0', 'vR'], qconj=-1, new_axes=1)
         U, S, VH = npc.svd(theta, qtotal_LR=[None, theta.qtotal], inner_labels=['vR', 'vL'])
+        # no truncation; track norm decay for non-Hermitian evolution
+        renorm = npc.norm(S)
+        S /= renorm
+        self.psi.norm *= renorm
         if i0 == 0:
             assert U.shape == (1, 1)
             VH *= U[0, 0]  # just a global phase, but better keep it!
@@ -381,7 +421,7 @@ class SingleSiteTDVPEngine(TDVPEngine):
         H0 = ZeroSiteH(self.env, i)
         if hasattr(self.env, 'H') and self.env.H.explicit_plus_hc:
             H0 = SumNpcLinearOperator(H0, H0.adjoint())
-        theta, _ = LanczosEvolution(H0, theta, self.lanczos_params).run(dt)
+        theta, _ = self._krylov_evolve(H0, theta, dt)
         return theta, H0
 
     def post_update_local(self, **update_data):

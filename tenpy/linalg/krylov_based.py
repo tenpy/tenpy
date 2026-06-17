@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     'KrylovBased',
     'Arnoldi',
+    'ArnoldiEvolution',
     'LanczosGroundState',
     'LanczosEvolution',
     'GMRES',
@@ -452,6 +453,132 @@ class Arnoldi(KrylovBased):
         P_err = (RitzRes / gap) ** 2
         Delta_E0 = self.Es[k - 1, 0] - E[0]
         return P_err < self.P_tol and Delta_E0 < self.E_tol
+
+
+class ArnoldiEvolution(Arnoldi):
+    r"""Compute :math:`\\exp(\\delta H) |\\psi_0\\rangle` using Arnoldi for non-Hermitian `H`.
+
+    Drop-in replacement for :class:`LanczosEvolution` when `H` is not Hermitian.
+    Builds an upper Hessenberg projection of `H` via full Gram-Schmidt orthogonalization
+    (Arnoldi iteration), then computes the matrix exponential of the small projected matrix
+    via eigendecomposition (``numpy.linalg.eig`` + pointwise scalar exponentials).
+
+    Parameters
+    ----------
+    H, psi0, options :
+        Same as :class:`Arnoldi`. Note that `H` need not be Hermitian.
+
+    Options
+    -------
+    .. cfg:config :: ArnoldiEvolution
+        :include: Arnoldi
+
+        E_tol, which, num_ev :
+            Inherited but ignored.
+
+    Attributes
+    ----------
+    delta : float/complex or None
+        Prefactor of H in the exponential.
+    _result_norm : float
+        Norm of the result vector.
+
+    """
+
+    def __init__(self, H, psi0, options):
+        super().__init__(H, psi0, options)
+        self._result_norm = 1.0
+        self.delta = None
+        # Arnoldi._build_krylov does not set _psi0_norm; do it here.
+        self._psi0_norm = npc.norm(psi0)
+
+    def run(self, delta, normalize=None):
+        """Compute ``expm(delta * H).dot(psi0)`` using Arnoldi.
+
+        Parameters
+        ----------
+        delta : float/complex
+            Prefactor of H in the exponential. Note that the complex ``i`` is *not* included.
+        normalize : bool
+            Whether to normalize the result. Defaults to ``False``.
+            Unlike :class:`LanczosEvolution` (which defaults to ``np.real(delta) == 0``),
+            non-Hermitian evolution does not in general preserve the norm, so normalization
+            would strip physically meaningful decay or growth and is off by default.
+
+        Returns
+        -------
+        psi_f : :class:`~tenpy.linalg.np_conserved.Array`
+            Best approximation for ``expm(delta * H).dot(psi0)``.
+        N : int
+            Krylov space dimension used.
+
+        """
+        assert self.N_cache >= self.N_max  # all basis vectors required for back-transform
+        self.delta = delta
+        # Arnoldi._to_cache does not pop old entries, so we must clear state between calls.
+        self._cache = []
+        self._h_krylov[:] = 0.0
+        N = self._build_krylov()
+        if N > 1:
+            logger.debug('ArnoldiEvolution N=%d, |result[-1]|=%.3e', N, abs(self._result_krylov[N - 1, 0]))
+        else:
+            logger.debug('ArnoldiEvolution N=1, |h[0,0]|=%.3e', abs(self._h_krylov[0, 0]))
+        if N == 1:
+            result_full = self._result_krylov[0, 0] * self.psi0
+        else:
+            result_full = self._calc_result_full_evolution(N)
+        if normalize is None:
+            normalize = False
+        if normalize:
+            return result_full, N
+        return (self._psi0_norm * self._result_norm) * result_full, N
+
+    def _calc_result_krylov(self, k):
+        """Compute ``exp(delta * h[:k+1, :k+1]) @ e0`` via eigendecomposition.
+
+        For a general (non-Hermitian) matrix h with right eigenvectors V and eigenvalues E,
+        h = V diag(E) V^{-1}, so exp(delta h) e0 = V diag(exp(delta E)) (V^{-1} e0).
+        This mirrors :class:`LanczosEvolution` (which uses ``eigh`` and V^{-1}=V†),
+        but uses ``eig`` and an explicit solve instead of conjugate-transpose.
+        """
+        h = self._h_krylov
+        delta = self.delta
+        if k == 0:
+            exp_dE = np.exp(delta * h[0, 0])
+            self._result_norm = np.abs(exp_dE)
+            self._result_krylov = np.array([[exp_dE / self._result_norm]])
+        else:
+            E_kr, v_kr = np.linalg.eig(h[: k + 1, : k + 1])
+            # V^{-1} e0 = first column of V^{-1}; use solve for numerical stability
+            e0 = np.zeros(k + 1, dtype=complex)
+            e0[0] = 1.0
+            coeff = np.linalg.solve(v_kr, e0)
+            exp_dH_e0 = np.dot(v_kr, np.exp(E_kr * delta) * coeff)
+            self._result_norm = np.linalg.norm(exp_dH_e0)
+            # Shape (k+1, 1) to be compatible with Arnoldi._converged reading [:, 0].
+            self._result_krylov = (exp_dH_e0 / self._result_norm).reshape(-1, 1)
+
+    def _converged(self, k):
+        """Converged when the last coefficient of ``expm(delta*h)*e0`` is below `P_tol`."""
+        return np.abs(self._result_krylov[k, 0]) < self.P_tol
+
+    def _calc_result_full_evolution(self, N):
+        """Back-transform Krylov coefficients to the original (npc) basis."""
+        vf = self._result_krylov[:N, 0]  # 1-D coefficient array
+        cache = self._cache
+        assert len(cache) >= N
+        if isinstance(self.psi0, npc.Array):
+            psif = vf[0] * cache[0]
+        else:
+            assert isinstance(self.psi0, list)
+            psif = [p * vf[0] for p in cache[0]]
+        for k in range(1, N):
+            self.iadd_prefactor_other(psif, vf[k], cache[k])
+        psif_norm = npc.norm(psif)
+        if abs(1.0 - psif_norm) > 1.0e-5:
+            logger.warning('poorly conditioned H in ArnoldiEvolution! |psi|=%f', psif_norm)
+        self.iscale_prefactor(psif, 1.0 / psif_norm)
+        return psif
 
 
 class LanczosGroundState(KrylovBased):

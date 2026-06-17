@@ -159,3 +159,78 @@ def test_arnoldi(n, which):
     ov = np.inner(psi0.to_ndarray().conj(), psi0_flat)
     print('|<psi0|psi0_flat>|=', abs(ov))
     assert abs(1.0 - abs(ov)) < tol
+
+
+@pytest.mark.parametrize('n', [1, 2, 4, 10, 20])
+def test_arnoldi_evolve(n, tol=5.0e-13):
+    # non-Hermitian matrix (standard_normal_complex gives an arbitrary complex matrix)
+    leg = gen_random_legcharge(ch, n)
+    H = npc.Array.from_func_square(rmat.standard_normal_complex, leg)
+    H_flat = H.to_ndarray()
+    H_Op = H  # use `matvec` of the array
+    qtotal = leg.to_qflat()[0]
+    psi_init = npc.Array.from_func(np.random.random, [leg], qtotal=qtotal)
+    psi_init_flat = psi_init.to_ndarray()
+    eng = krylov_based.ArnoldiEvolution(H_Op, psi_init, {'N_max': 20})
+    for delta in [-0.1j, 0.1j, 0.5j, 0.1, -0.05 - 0.1j]:
+        psi_final_flat = expm(H_flat * delta).dot(psi_init_flat)
+        norm = np.linalg.norm(psi_final_flat)
+        psi_final, N = eng.run(delta, normalize=False)
+        diff = np.linalg.norm(psi_final.to_ndarray() - psi_final_flat)
+        print(f'delta={delta}, N={N}, norm(diff)/norm = {diff / norm}')
+        assert diff / norm < tol
+        psi_final2, N = eng.run(delta, normalize=True)
+        assert npc.norm(psi_final / norm - psi_final2) < tol
+        # Default normalize=None should behave like normalize=False
+        psi_final_default, N = eng.run(delta)
+        assert npc.norm(psi_final_default - psi_final) < tol * npc.norm(psi_final)
+
+
+def test_arnoldi_evolve_dense(tol=5.0e-13):
+    """ArnoldiEvolution on a dense (trivial-charge) matrix, larger Krylov space."""
+    n = 30
+    H_np = np.random.randn(n, n) + 1j * np.random.randn(n, n)
+    H = npc.Array.from_ndarray_trivial(H_np, dtype=complex, labels=['p', 'p*'])
+    leg = H.legs[0]
+    psi_init_np = np.random.randn(n) + 1j * np.random.randn(n)
+    psi_init = npc.Array.from_ndarray_trivial(psi_init_np, dtype=complex, labels=['p'])
+    psi_init_flat = psi_init.to_ndarray()
+    eng = krylov_based.ArnoldiEvolution(H, psi_init, {'N_max': 30})
+    for delta in [-0.1j, 1.0j, 0.1, -0.05 - 0.1j]:
+        psi_final_flat = expm(H_np * delta).dot(psi_init_flat)
+        norm = np.linalg.norm(psi_final_flat)
+        psi_final, N = eng.run(delta, normalize=False)
+        diff = np.linalg.norm(psi_final.to_ndarray() - psi_final_flat)
+        print(f'dense n={n}, delta={delta}, N={N}, norm(diff)/norm = {diff / norm}')
+        assert diff / norm < tol
+    # For large delta (delta=1.0j), expect N > 1 (non-trivial Krylov expansion needed)
+    _, N_large = eng.run(1.0j, normalize=False)
+    assert N_large > 1
+
+
+def test_arnoldi_vs_lanczos_nonhermitian(tol_arnoldi=1.0e-10, tol_lanczos_wrong=1.0e-2):
+    """ArnoldiEvolution is accurate for non-Hermitian H; LanczosEvolution is not."""
+    n = 20
+    leg = gen_random_legcharge(ch, n)
+    # Anti-Hermitian H = 1j * G with G from GUE: H† = -H, so exp(delta*H) is unitary for real delta.
+    # This is non-Hermitian (imaginary eigenvalues), so LanczosEvolution's eigh is wrong.
+    G = npc.Array.from_func_square(rmat.GUE, leg)
+    H = 1j * G
+    H_flat = H.to_ndarray()
+    qtotal = leg.to_qflat()[0]
+    psi_init = npc.Array.from_func(np.random.random, [leg], qtotal=qtotal)
+    psi_init_flat = psi_init.to_ndarray()
+
+    delta = 1.0  # real delta; exp(1.0 * 1j * G) is unitary
+    psi_ref_flat = expm(H_flat * delta).dot(psi_init_flat)
+    norm_ref = np.linalg.norm(psi_ref_flat)
+
+    psi_arnoldi, _ = krylov_based.ArnoldiEvolution(H, psi_init, {'N_max': 20}).run(delta, normalize=False)
+    diff_arnoldi = np.linalg.norm(psi_arnoldi.to_ndarray() - psi_ref_flat)
+    print(f'ArnoldiEvolution diff/norm = {diff_arnoldi / norm_ref}')
+    assert diff_arnoldi / norm_ref < tol_arnoldi
+
+    psi_lanczos, _ = krylov_based.LanczosEvolution(H, psi_init, {}).run(delta, normalize=False)
+    diff_lanczos = np.linalg.norm(psi_lanczos.to_ndarray() - psi_ref_flat)
+    print(f'LanczosEvolution diff/norm = {diff_lanczos / norm_ref}  (expected to be WRONG)')
+    assert diff_lanczos / norm_ref > tol_lanczos_wrong
