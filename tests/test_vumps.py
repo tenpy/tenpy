@@ -6,6 +6,8 @@ import pytest
 from scipy import integrate
 
 from tenpy.algorithms import vumps
+from tenpy.linalg import np_conserved as npc
+from tenpy.models.clock import ClockChain
 from tenpy.models.tf_ising import TFIChain
 from tenpy.networks import mps
 
@@ -75,3 +77,28 @@ def test_vumps(L, engine, mixer, g=1.2):
     assert abs((E_vumps - Eexact) / Eexact) < 1.0e-10
     assert abs((E_vumps - E_vumps2) / E_vumps2) < max(1.0e-10, np.max(psi.norm_test()))
     assert abs((E_vumps - E_vumps3) / E_vumps3) < max(1.0e-10, np.max(psi.norm_test()))
+
+
+def test_nontrivial_initial_psi(L=2, chi=32):
+    # See https://github.com/tenpy/tenpy/issues/614
+    M = ClockChain(dict(L=L, J=1, g=1.5, bc_MPS='infinite', conserve='Z', q=3))
+
+    leg = M.lat.mps_sites()[0].leg
+    tensor = npc.ones([leg, leg, leg.conj()], labels=['vL', 'p', 'vR']) / 3**0.5
+    SV = np.ones(3) / 3**0.5
+    psi = mps.MPS(M.lat.mps_sites(), [tensor] * L, [SV] * L, bc='infinite', unit_cell_width=L)
+
+    vumps_params = dict(
+        combine=False,
+        N_sweeps_check=1,
+        mixer=False,
+        trunc_params=dict(chi_max=chi, svd_min=1e-14),
+        min_sweeps=30,
+        max_sweeps=50,
+        max_split_err=1e-8,
+        max_E_err=1e-12,
+        max_S_err=1e-8,
+    )
+    eng = vumps.TwoSiteVUMPSEngine(psi, M, vumps_params)
+    E, psi = eng.run()
+    psi.test_sanity()
