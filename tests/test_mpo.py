@@ -3,15 +3,16 @@
 from cyten.tensors import SymmetricTensor, permute_legs
 from cyten.backends import get_same_backend
 from cyten.models.couplings import Coupling
+from cyten.models.sites import identity_tensor
+
 
 import cyten
 
 
+import numpy as np
 import cyten.models.sites as s
 print(s.__file__)
 print(dir(s))
-
-
 
 
 import pytest
@@ -24,7 +25,7 @@ import pytest
 #from tenpy.linalg import np_conserved as npc
 # from tenpy.models.spins import SpinChain
 # from tenpy.models.xxz_chain import XXZChain
-# from tenpy.networks import mpo, mps
+from tenpy.networks import mpo
 # from tenpy.networks import site
 # from tenpy.networks.terms import CouplingTerms, MultiCouplingTerms, OnsiteTerms, TermList
 
@@ -125,68 +126,65 @@ def test_identity_tensor_site():
     tensor_s1.test_sanity()
 
 
-# def test_insert_identity_between_sites():
-#     """Test Coupling.insert_identity_between_sites: structure, error cases, and content."""
-#     from cyten.models.sites import SpinSite
-#     from cyten.models.couplings import heisenberg_coupling
+def test_insert_identity_between_sites():
 
-#     # ------------------------------------------------------------------ structure
-#     site_a = SpinSite(S=0.5, conserve='Sz')
-#     site_b = SpinSite(S=0.5, conserve='Sz')
-#     site_mid = SpinSite(S=0.5, conserve='Sz')
-#     original = heisenberg_coupling([site_a, site_b])
+    # ------------------------------------------------------------------ structure
+    site_a = SpinSite(S=0.5, conserve='Sz')
+    site_b = SpinSite(S=0.5, conserve='Sz')
+    site_mid = SpinSite(S=0.5, conserve='Sz')
+    original = heisenberg_coupling([site_a, site_b])
 
-#     result = original.insert_identity_between_sites(1, site_mid)
+    result = original.insert_identity_between_sites(1, site_mid)
 
-#     assert len(result.sites) == 3
-#     assert len(result.factorization) == 3
-#     assert result.sites[0] is site_a
-#     assert result.sites[1] is site_mid
-#     assert result.sites[2] is site_b
-#     # The inserted tensor must carry the right labels and pass all structural checks.
-#     assert result.factorization[1].labels == ['wL', 'p', 'wR', 'p*']
-#     result.test_sanity()
+    assert len(result.sites) == 3
+    assert len(result.factorization) == 3
+    assert result.sites[0] is site_a
+    assert result.sites[1] is site_mid
+    assert result.sites[2] is site_b
+    # The inserted tensor must carry the right labels and pass all structural checks.
+    assert result.factorization[1].labels == ['wL', 'p', 'wR', 'p*']
+    result.test_sanity()
 
-#     # ------------------------------------------------------------------ error cases
-#     with pytest.raises(ValueError):
-#         original.insert_identity_between_sites(0, site_mid)   # position=0 is out of range
-#     with pytest.raises(ValueError):
-#         original.insert_identity_between_sites(2, site_mid)   # position=len(sites) is out of range
+    # ------------------------------------------------------------------ error cases
+    with pytest.raises(ValueError):
+        original.insert_identity_between_sites(0, site_mid)   # position=0 is out of range
+    with pytest.raises(ValueError):
+        original.insert_identity_between_sites(2, site_mid)   # position=len(sites) is out of range
 
-#     # ------------------------------------------------------------------ non-translation-invariant
-#     # Insert a spin-1 site into a chain of spin-1/2 sites (different physical legs).
-#     site_half_ns = SpinSite(S=0.5, conserve='None')
-#     site_one_ns  = SpinSite(S=1.0, conserve='None')
-#     original_ns  = heisenberg_coupling([site_half_ns, site_half_ns])
+    # ------------------------------------------------------------------ non-translation-invariant
+    # Insert a spin-1 site into a chain of spin-1/2 sites (different physical legs).
+    site_half_ns = SpinSite(S=0.5, conserve='None')
+    site_one_ns  = SpinSite(S=1.0, conserve='None')
+    original_ns  = heisenberg_coupling([site_half_ns, site_half_ns])
 
-#     result_ns = original_ns.insert_identity_between_sites(1, site_one_ns)
-#     assert result_ns.sites[1] is site_one_ns
-#     result_ns.test_sanity()
+    result_ns = original_ns.insert_identity_between_sites(1, site_one_ns)
+    assert result_ns.sites[1] is site_one_ns
+    result_ns.test_sanity()
 
-#     # ------------------------------------------------------------------ content check (NoSymmetry)
-#     # For a coupling C2 on [s0, s1], inserting an identity site s_id at position 1 produces
-#     # a 3-site coupling C3 satisfying:
-#     #   C3[p0, pi, p1, p1*, pi*, p0*] = C2[p0, p1, p1*, p0*] * delta(pi, pi*)
-#     #
-#     # Numpy leg order (domain labels are stored reversed in the label list):
-#     #   C2: [p0, p1, p1*, p0*]  → shape [d0, d1, d1, d0]
-#     #   C3: [p0, pi, p1, p1*, pi*, p0*] → shape [d0, di, d1, d1, di, d0]
-#     C2 = original_ns.to_numpy(understood_braiding=True)   # [d0, d1, d1, d0]
-#     C3 = result_ns.to_numpy(understood_braiding=True)      # [d0, di, d1, d1, di, d0]
+    # ------------------------------------------------------------------ content check (NoSymmetry)
+    # For a coupling C2 on [s0, s1], inserting an identity site s_id at position 1 produces
+    # a 3-site coupling C3 satisfying:
+    #   C3[p0, pi, p1, p1*, pi*, p0*] = C2[p0, p1, p1*, p0*] * delta(pi, pi*)
+    #
+    # Numpy leg order (domain labels are stored reversed in the label list):
+    #   C2: [p0, p1, p1*, p0*]  → shape [d0, d1, d1, d0]
+    #   C3: [p0, pi, p1, p1*, pi*, p0*] → shape [d0, di, d1, d1, di, d0]
+    C2 = original_ns.to_numpy(understood_braiding=True)   # [d0, d1, d1, d0]
+    C3 = result_ns.to_numpy(understood_braiding=True)      # [d0, di, d1, d1, di, d0]
 
-#     di = site_one_ns.dim   # 3 for spin-1
-#     assert C3.shape == (C2.shape[0], di, C2.shape[1], C2.shape[2], di, C2.shape[3])
+    di = site_one_ns.dim   # 3 for spin-1
+    assert C3.shape == (C2.shape[0], di, C2.shape[1], C2.shape[2], di, C2.shape[3])
 
-#     for pi in range(di):
-#         # Diagonal block: matches original coupling.
-#         np.testing.assert_allclose(C3[:, pi, :, :, pi, :], C2, atol=1e-13,
-#                                    err_msg=f'diagonal block pi={pi} does not match original coupling')
-#     for pi in range(di):
-#         for pi_star in range(di):
-#             if pi != pi_star:
-#                 # Off-diagonal blocks: must vanish (identity in physical space).
-#                 np.testing.assert_allclose(C3[:, pi, :, :, pi_star, :], 0, atol=1e-13,
-#                                            err_msg=f'off-diagonal block pi={pi}, pi*={pi_star} is non-zero')
+    for pi in range(di):
+        # Diagonal block: matches original coupling.
+        np.testing.assert_allclose(C3[:, pi, :, :, pi, :], C2, atol=1e-13,
+                                   err_msg=f'diagonal block pi={pi} does not match original coupling')
+    for pi in range(di):
+        for pi_star in range(di):
+            if pi != pi_star:
+                # Off-diagonal blocks: must vanish (identity in physical space).
+                np.testing.assert_allclose(C3[:, pi, :, :, pi_star, :], 0, atol=1e-13,
+                                           err_msg=f'off-diagonal block pi={pi}, pi*={pi_star} is non-zero')
 
 # def test_MPO():
 #     s = spin_half
@@ -224,26 +222,26 @@ def test_identity_tensor_site():
 
 
 
-# def test_MPOGraph():
-#     for bc in ['finite', 'infinite']:
-#         for L in [2, 4]:
-#             print('L =', L)
-#             g = mpo.MPOGraph([spin_half] * L, bc, unit_cell_width=L)
-#             g.add(0, 'IdL', 'IdR', 'Sz', 0.1)
-#             g.add(0, 'IdL', 'Sz0', 'Sz', 1.0)
-#             g.add(1, 'Sz0', 'IdR', 'Sz', 0.5)
-#             g.add(0, 'IdL', (0, 'Sp'), 'Sp', 0.3)
-#             g.add(1, (0, 'Sp'), 'IdR', 'Sm', 0.2)
-#             if L > 2 or bc == 'infinite':
-#                 keyR = g.add_string_left_to_right(0, 3, (0, 'Sp'), 'Id')
-#                 g.add(3, keyR, 'IdR', 'Sm', 0.1)
-#             g.add_missing_IdL_IdR()
-#             g.test_sanity()
-#             print(repr(g))
-#             print(str(g))
-#             print('build MPO')
-#             g_mpo = g.build_MPO()
-#             g_mpo.test_sanity()
+def test_MPOGraph():
+    for bc in ['finite', 'infinite']:
+        for L in [2, 4]:
+            print('L =', L)
+            g = mpo.MPOGraph([spin_half] * L, bc, unit_cell_width=L)
+            g.add(0, 'IdL', 'IdR', 'Sz', 0.1)
+            g.add(0, 'IdL', 'Sz0', 'Sz', 1.0)
+            g.add(1, 'Sz0', 'IdR', 'Sz', 0.5)
+            g.add(0, 'IdL', (0, 'Sp'), 'Sp', 0.3)
+            g.add(1, (0, 'Sp'), 'IdR', 'Sm', 0.2)
+            if L > 2 or bc == 'infinite':
+                keyR = g.add_string_left_to_right(0, 3, (0, 'Sp'), 'Id')
+                g.add(3, keyR, 'IdR', 'Sm', 0.1)
+            g.add_missing_IdL_IdR()
+            g.test_sanity()
+            print(repr(g))
+            print(str(g))
+            print('build MPO')
+            g_mpo = g.build_MPO()
+            g_mpo.test_sanity()
 
 
 # def test_MPOGraph_term_conversion():
