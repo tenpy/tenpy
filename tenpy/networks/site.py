@@ -723,7 +723,6 @@ class GroupedSite(Site):
                 legs.append(leg)
         else:
             raise ValueError('Unknown option for `charges`: ' + repr(charges))
-        c2JWps = [getattr(s, 'charge_to_JW_parity', None) for s in sites]  # maybe keep it below
         if charges != 'same':
             sites = [copy.copy(s) for s in sites]  # avoid modifying the existing sites.
             # sort legs
@@ -771,9 +770,10 @@ class GroupedSite(Site):
 
         # propagate `charge_to_JW_parity` if safe/clear what it should be
         # read it into c2JWps for each site before calling Site.change_charge() deleting it
+        c2JWps = [getattr(s, 'charge_to_JW_parity', None) for s in sites] 
         if charges == 'same':
             # already same charges, so could/should have same `charge_to_JW_parity`
-            if all(p is not None and all(p == c2JWps[0]) for p in c2JWps):
+            if all(p is not None and np.array_equal(p , c2JWps[0]) for p in c2JWps):
                 self.charge_to_JW_parity = c2JWps[0]
         elif charges == 'independent':
             if all(p is not None for p in c2JWps):
