@@ -117,7 +117,7 @@ def plot_results(data):
 
 
 if __name__ == '__main__':
-    t1_value = -1
+    t1_value = 1
 
     phi = np.arccos(3 * np.sqrt(3 / 43))
     t2_value = (np.sqrt(129) / 36) * t1_value * np.exp(1j * phi)  # optimal band flatness
