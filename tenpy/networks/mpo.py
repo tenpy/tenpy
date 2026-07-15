@@ -45,15 +45,10 @@ from scipy.linalg import expm
 from scipy.special import comb
 
 #from ..linalg import np_conserved as npc
-<<<<<<< HEAD
 #from ..linalg.krylov_based import GMRES
 #from ..linalg.sparse import FlatLinearOperator, NpcLinearOperator, ShiftNpcLinearOperator
-from ..linalg.truncation import TruncationError   #, svd_theta
-=======
-from ..linalg.krylov_based import GMRES
-from ..linalg.sparse import FlatLinearOperator, NpcLinearOperator, ShiftNpcLinearOperator
-from ..linalg.truncation import TruncationError, svd_theta
->>>>>>> e48b7943 (Backup local TeNPy edits before cyten editable install)
+from ..linalg.truncation import TruncationError
+#from ..linalg.truncation import svd_theta
 from ..tools.math import lcm
 from ..tools.misc import add_with_None_0, inverse_permutation, to_iterable
 from ..tools.params import asConfig
@@ -64,7 +59,7 @@ from .terms import TermList
 import cyten.tensors.sparse
 
 from cyten.models.couplings import Coupling
-from cyten.tensors import permute_legs
+from cyten.tensors import permute_legs, SymmetricTensor
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +199,7 @@ class MPO(MPSGeometry):
                         self._graph[i][(jL, jR)] = op
 
     def _make_graph_from_couplings(self, couplings_with_start, norm_tol=1e-12):
-        """Construct a dense MPO graph from cyten Couplings using hash-based bond indexing.
+        """Construct a MPO graph from cyten Couplings using hash-based indexing.
 
         Each coupling hash uniquely identifies a class of interaction. Global virtual bond
         indices (jL, jR) are allocated once per unique coupling hash and reused for every
@@ -259,16 +254,13 @@ class MPO(MPSGeometry):
             for local_idx, tensor in enumerate(factorization):
                 site_idx = (start_site + local_idx) % self.L
 
-                # Rearrange to (wL, wR, p, p*) then dump as numpy.
-                # After permute: codomain=[wL, wR], domain=[p, p*].
-                # to_numpy() with that leg order gives shape (chiL, chiR, d, d)
-                # with axes (wL, wR, p*, p) — domain legs reversed.
-                # We transpose the physical axes so op[jL,jR,:,:] is in (p, p*) order.
+                # Rearrange to (wL, wR, p, p*)
+                # Transpose so  op[jL,jR,:,:] is in (p, p*) order.
                 tensor_rearranged = permute_legs(
                     tensor, codomain=['wL', 'wR'], domain=['p', 'p*']
                 )
                 arr = tensor_rearranged.to_numpy(understood_braiding=True)
-                # arr shape: (chiL, chiR, d, d) — axes (wL, wR, p*, p); transpose physical
+    
                 arr = arr.transpose(0, 1, 3, 2)  # → (chiL, chiR, d, d) axes (wL, wR, p, p*)
 
                 chiL, chiR = arr.shape[0], arr.shape[1]
@@ -2229,6 +2221,20 @@ def make_W_II(t, A, B, C, D):
     return W
 
 
+def _ensure_identity_op(site):
+    """Make sure `site` has an 'Id' onsite operator, registering one if missing.
+
+    Unlike the old `tenpy.networks.site.Site`, :class:`cyten.models.degrees_of_freedom.Site`
+    does not come with a predefined identity operator, but :class:`MPOGraph` relies on 'Id'
+    being valid on every site
+    """
+    if site.valid_opname('Id'):
+        return
+    op = SymmetricTensor.from_eye([site.leg], backend=site.backend, labels=['p', 'p*'],
+                                   device=site.default_device)
+    site.add_onsite_operator('Id', op)
+
+
 class MPOGraph(MPSGeometry):
     """Representation of an MPO by a graph, based on a 'finite state machine'.
 
@@ -2276,7 +2282,7 @@ class MPOGraph(MPSGeometry):
 
     """
 
-    _valid_bc = ['finite', 'infinite']  # segment makes no sense for MPOGraph
+    _valid_bc = ['finite', 'infinite']  # TODO:need to adapt
 
     def __init__(self, sites, bc='finite', max_range=None, unit_cell_width=None):
         super().__init__(sites=sites, bc=bc, unit_cell_width=unit_cell_width)
@@ -2285,6 +2291,16 @@ class MPOGraph(MPSGeometry):
         self.states = [set() for _ in range(self.L + 1)]
         self.graph = [{} for _ in range(self.L)]
         self._ordered_states = None
+        # cyten-native graph for cyten Couplings: entries are actual SymmetricTensor blocks
+        # (not opname strings), see :meth:`add_coupling_as_term`/:meth:`build_coupling`.
+        # ``_coupling_graph[i] == {keyL: {keyR: SymmetricTensor}}``
+        self._coupling_graph = [dict() for _ in range(self.L)]
+        # ``_coupling_states[bond] == {key: ElementarySpace}``, the space associated to each state
+        self._coupling_states = [dict() for _ in range(self.L + 1)]
+        # rightmost bond where 'IdL' is actually used / leftmost bond where 'IdR' is actually used,
+        # updated by :meth:`add_coupling_as_term`; used by :meth:`add_missing_IdL_IdR_for_couplings`
+        self._coupling_idL_reach = 0
+        self._coupling_idR_reach = self.L
         self.test_sanity()
 
     @classmethod
@@ -2359,11 +2375,15 @@ class MPOGraph(MPSGeometry):
         return cls.from_terms(ot_ct, sites, bc, insert_all_id, unit_cell_width=unit_cell_width)
 
     @classmethod
-    def from_couplings(cls, couplings, sites, bc='finite', insert_all_id=True, unit_cell_width=None):
+    def from_couplings(cls, couplings, sites, bc='finite', positions=None, strengths=None,
+                        splits=None, insert_all_id=True, unit_cell_width=None):
         """Initialize an :class:`MPOGraph` from cyten Couplings using hashing.
 
         This method creates an MPOGraph where the graph keys are tuples containing
         the coupling hashes. The coupling hash uniquely identifies the coupling's data.
+        Use :meth:`build_coupling` (not :meth:`build_MPO`, which only ever produces an old
+        ``np_conserved``-based :class:`MPO`) to convert the resulting graph back into a single
+        cyten Coupling.
 
         Parameters
         ----------
@@ -2373,8 +2393,20 @@ class MPOGraph(MPSGeometry):
             Local sites of the Hilbert space.
         bc : ``'finite' | 'infinite'``
             MPO boundary conditions.
+        positions : None | list of (list of int)
+            For each entry of `couplings`, the MPS site index of every entry of its
+            :attr:`~cyten.models.couplings.Coupling.factorization`; see
+            :meth:`add_coupling_as_term`. ``None`` defaults to every coupling starting at the
+            left edge of the graph.
+        strengths : None | list of float/complex
+            Overall prefactor for each entry of `couplings`. ``None`` defaults to ``1.`` for all.
+        splits : None | list of int
+            For each entry of `couplings`, the local index into its `factorization` whose tensor
+            gets scaled by the corresponding `strengths` entry; see :meth:`add_coupling_as_term`.
+            ``None`` defaults to the last tensor of each coupling.
         insert_all_id : bool
-            Whether to insert identity edges such that `IdL` and `IdR` are defined on each bond.
+            Whether to insert the ``'IdL'``/``'IdR'`` identity edges via
+            :meth:`add_missing_IdL_IdR_for_couplings`.
         unit_cell_width : int
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
@@ -2389,16 +2421,24 @@ class MPOGraph(MPSGeometry):
         except ImportError as e:
             raise ImportError(f'cyten not available: {e}')
 
-        L = len(sites)
+        if positions is None:
+            positions = [None] * len(couplings)
+        if strengths is None:
+            strengths = [1.0] * len(couplings)
+        if splits is None:
+            splits = [None] * len(couplings)
+        if not (len(couplings) == len(positions) == len(strengths) == len(splits)):
+            raise ValueError('`couplings`, `positions`, `strengths` and `splits` must have equal length')
+
         graph = cls(sites, bc, 0, unit_cell_width=unit_cell_width)
 
-        for coupling in couplings:
+        for coupling, coupling_positions, strength, split in zip(couplings, positions, strengths, splits):
             if not isinstance(coupling, Coupling):
                 raise TypeError(f'Expected Coupling, got {type(coupling)}')
-            graph.add_coupling_as_term(coupling)
+            graph.add_coupling_as_term(coupling, positions=coupling_positions, strength=strength, split=split)
 
         if insert_all_id:
-            graph.add_missing_IdL_IdR(insert_all_id)
+            graph.add_missing_IdL_IdR_for_couplings()
 
         return graph
 
@@ -2511,67 +2551,108 @@ class MPOGraph(MPSGeometry):
                                 if abs(op_value) > 1e-12:
                                     pass
 
-    def add_coupling_as_term(self, coupling, strength=1.0):
-        """Add a cyten Coupling to the graph as a term with named operators.
+    def _add_coupling_state(self, bond, key, space):
+        """Register a state `key` on the given `bond` (0..L) with its `ElementarySpace`.
 
-        This method adds the coupling to the graph using hash-based keys.
+        Raises if `key` was already registered on this bond with a *different* space.
+        """
+        states = self._coupling_states[bond]
+        existing = states.get(key)
+        if existing is None:
+            states[key] = space
+        elif existing != space:
+            raise ValueError(f'Conflicting virtual spaces for state {key!r} on bond {bond:d}')
+
+    def _add_coupling_edge(self, i, keyL, keyR, tensor):
+        """Insert (or add to) a single edge of :attr:`_coupling_graph` at site `i`."""
+        row = self._coupling_graph[i].setdefault(keyL, {})
+        if keyR in row:
+            row[keyR] = row[keyR] + tensor
+        else:
+            row[keyR] = tensor
+
+    def add_coupling_as_term(self, coupling, positions=None, strength=1.0, split=None):
+        """Add a cyten Coupling to the graph as a single term.
+
+        Unlike :meth:`add`, which stores ``(opname, strength)`` pairs referencing named onsite
+        operators, this inserts the entries of :attr:`~cyten.models.couplings.Coupling.factorization`
+        directly as :class:`~cyten.tensors.SymmetricTensor` blocks into :attr:`_coupling_graph`.
+        Since each factorization tensor already has correctly-sectored ``'wL'``/``'wR'`` legs
+        (from however the `coupling` itself was constructed), no manual charge/leg-charge
+        bookkeeping is needed here -- :meth:`build_coupling` later reassembles everything
+        via :func:`~cyten.tensors.tensor_from_grid`, which handles the sector bookkeeping.
+
         Parameters
         ----------
         coupling : cyten.models.couplings.Coupling
             The coupling to add to the graph.
+        positions : None | list of int
+            The MPS site index for every entry of :attr:`~cyten.models.couplings.Coupling.factorization`,
+            strictly ascending. Gaps between consecutive positions are bridged with identity
+            tensors (:func:`~cyten.models.sites.identity_tensor`), allowing the coupling to act on
+            non-contiguous MPS sites. ``None`` defaults to ``range(len(coupling.factorization))``,
+            i.e. the coupling starts at the left edge of the graph.
         strength : float
-            Prefactor for the coupling.
+            Overall prefactor for the coupling. Multiplied into the tensor at `split` only.
+        split : None | int
+            Local index into :attr:`~cyten.models.couplings.Coupling.factorization` whose tensor
+            gets scaled by `strength`. ``None`` defaults to the last tensor.
+
+        See Also
+        --------
+        tenpy.networks.terms.to_single_coupling : builds a single Coupling out of several of these.
 
         """
+        from cyten.models.sites import identity_tensor
 
         if not isinstance(coupling, Coupling):
             raise TypeError(f'Expected Coupling, got {type(coupling)}')
 
         coupling_hash = coupling.to_hash()
-        sites = coupling.sites
-        factorization = coupling.factorization
-
         hash_key = ('coupling', coupling_hash)
-
-        num_sites = len(sites)
+        factorization = coupling.factorization
         num_tensors = len(factorization)
 
-        if num_tensors == num_sites + 1:
-            start_idx = 0
-        elif num_tensors == num_sites:
-            start_idx = 0
-        else:
-            raise ValueError(f'Coupling factorization has {num_tensors} tensors for {num_sites} sites')
+        if positions is None:
+            positions = list(range(num_tensors))
+        if len(positions) != num_tensors:
+            raise ValueError(
+                f'need {num_tensors:d} positions (one per factorization tensor), got {len(positions):d}'
+            )
+        if any(p2 <= p1 for p1, p2 in zip(positions, positions[1:])):
+            raise ValueError('`positions` must be strictly ascending')
+        if split is None:
+            split = num_tensors - 1
+        if not 0 <= split < num_tensors:
+            raise ValueError(f'`split` must be in [0, {num_tensors:d}), got {split:d}')
 
-        prev_key = hash_key + (start_idx, 'start')
+        self._coupling_idL_reach = max(self._coupling_idL_reach, positions[0])
+        self._coupling_idR_reach = min(self._coupling_idR_reach, positions[-1] + 1)
 
-        for local_idx in range(num_tensors):
-            tensor = factorization[local_idx]
-            site_idx = local_idx + start_idx if num_tensors == num_sites else local_idx
-            i = site_idx % self.L
+        keyL = 'IdL'
+        for local_idx, (tensor, site_idx) in enumerate(zip(factorization, positions)):
+            is_last = local_idx == num_tensors - 1
+            if local_idx == split and strength != 1.0:
+                tensor = strength * tensor
 
-            tensor = permute_legs(tensor, codomain=['wL', 'wR'], domain=['p', 'p*'])
-            tensor_np = tensor.to_numpy()
+            wL_space = tensor.get_leg_co_domain('wL')
+            wR_space = tensor.get_leg_co_domain('wR')
+            keyR = 'IdR' if is_last else hash_key + (local_idx,)
 
-            chiL = tensor_np.shape[0]
-            chiR = tensor_np.shape[1]
+            self._add_coupling_state(site_idx, keyL, wL_space)
+            self._add_coupling_state(site_idx + 1, keyR, wR_space)
+            self._add_coupling_edge(site_idx % self.L, keyL, keyR, tensor)
 
-            for jL in range(chiL):
-                keyL = prev_key + (jL,)
-                for jR in range(chiR):
-                    keyR = (
-                        hash_key + (local_idx + 1, jR)
-                        if local_idx < num_tensors - 1
-                        else hash_key + (local_idx + 1, 'end')
-                    )
-                    op = tensor_np[jL, jR, :, :]
+            if not is_last:
+                next_site_idx = positions[local_idx + 1]
+                for k in range(site_idx + 1, next_site_idx):
+                    site = self.sites[k % self.L]
+                    id_op = identity_tensor(site, wR_space, wR_space)
+                    self._add_coupling_state(k, keyR, wR_space)
+                    self._add_coupling_state(k + 1, keyR, wR_space)
+                    self._add_coupling_edge(k % self.L, keyR, keyR, id_op)
 
-                    if np.linalg.norm(op) > 1e-12:
-                        opname = f'coupling_op_{local_idx}'
-                        self.add(i, keyL, keyR, opname, strength * 1.0, check_op=False, skip_existing=True)
-
-            if local_idx < num_tensors - 1:
-                prev_key = keyR
+            keyL = keyR
 
     def add_coupling_identity_string(self, coupling, i, j, opname='Id', check_op=True, skip_existing=True):
         """Insert identity edges for a coupling's identity insertions between sites.
@@ -2777,46 +2858,36 @@ class MPOGraph(MPSGeometry):
             if not self.has_edge(k, 'IdR', 'IdR'):
                 self.add(k, 'IdR', 'IdR', 'Id', 1.0)
 
-    def add_missing_IdL_IdR_for_couplings(self, couplings, insert_all_id=True):
-        """Add missing identities for couplings.
+    def add_missing_IdL_IdR_for_couplings(self):
+        """Add the ``'IdL'``/``'IdR'`` identity pass-through edges to the cyten-native graph.
 
-        Parameters
-        ----------
-        couplings : list of cyten.models.couplings.Coupling
-            List of couplings to add missing identities for.
-
-        insert_all_id : bool
-            If True, insert identity edges on all bonds for all couplings.
-            If False, only insert where needed.
+        This is the counterpart of :meth:`add_missing_IdL_IdR` for the tensor-valued
+        :attr:`_coupling_graph` populated by :meth:`add_coupling_as_term`: it inserts an
+        ``'IdL'->'IdL'`` identity edge (:func:`~cyten.models.sites.identity_tensor` with a
+        trivial, dimension-1 bond space) on every site up to (not including) the rightmost bond
+        where some coupling actually starts, and an ``'IdR'->'IdR'`` identity edge from the
+        leftmost bond where some coupling actually ends through the right boundary. This mirrors
+        :meth:`add_missing_IdL_IdR`'s ``insert_all_id=False`` behaviour: 'IdL'/'IdR' are only
+        registered on bonds where they are actually reachable, since
+        :func:`~cyten.tensors.tensor_from_grid` (used by :meth:`build_coupling`) requires every
+        declared state to have at least one nonzero edge.
+        Should be called once, after all couplings have been added.
         """
+        from cyten.models.sites import identity_tensor
+        from cyten.symmetries import ElementarySpace
 
-        for coupling in couplings:
-            if not isinstance(coupling, Coupling):
-                raise TypeError(f'Expected Coupling, got {type(coupling)}')
+        def add_self_loop(i, key):
+            site = self.sites[i]
+            trivial = ElementarySpace.from_trivial_sector(1, symmetry=site.symmetry)
+            self._add_coupling_state(i, key, trivial)
+            self._add_coupling_state(i + 1, key, trivial)
+            if key not in self._coupling_graph[i].get(key, {}):
+                self._add_coupling_edge(i, key, key, identity_tensor(site, trivial, trivial))
 
-            coupling_hash = coupling.to_hash()
-            hash_key = ('coupling', coupling_hash)
-
-            factorization = coupling.factorization
-            num_tensors = len(factorization)
-            num_sites = len(coupling.sites)
-
-            for local_idx in range(num_tensors - 1):
-                site_idx = local_idx % self.L
-                tensor_left = factorization[local_idx]
-                tensor_right = factorization[local_idx + 1]
-
-                chiL = tensor_left.shape[1]
-                chiR = tensor_right.shape[0]
-
-                for jL in range(chiL):
-                    for jR in range(chiR):
-                        keyL = hash_key + (local_idx + 1, jL)
-                        keyR = hash_key + (local_idx + 1, jR)
-                        if not self.has_edge(site_idx, keyL, keyR):
-                            self.add(site_idx, keyL, keyR, 'Id', 1.0, check_op=False, skip_existing=True)
-
-        self.add_missing_IdL_IdR(insert_all_id)
+        for i in range(self._coupling_idL_reach):
+            add_self_loop(i, 'IdL')
+        for i in range(self._coupling_idR_reach, self.L):
+            add_self_loop(i, 'IdR')
 
     def add_string_left_to_right(self, i, j, key, opname='Id', check_op=True, skip_existing=True):
         r"""Insert a bunch of edges for an 'operator string' into the graph.
@@ -2912,6 +2983,8 @@ class MPOGraph(MPSGeometry):
             'IdL'/'IdR' to exist on all bonds.
 
         """
+        for site in self.sites:
+            _ensure_identity_op(site)
         if self.bc == 'infinite' or insert_all_id:
             max_IdL = self.L  # add identities for all sites
             min_IdR = 0
@@ -2966,6 +3039,61 @@ class MPOGraph(MPSGeometry):
             mps_unit_cell_width=self.unit_cell_width,
         )
         return H
+
+    def build_coupling(self, name=None):
+        """Build the  graph (see :meth:`add_coupling_as_term`) into a single Coupling.
+        
+        This method instead each site's tensor
+        directly from :attr:`_coupling_graph` via :func:`~cyten.tensors.tensor_from_grid`, which
+        stacks the  `SymmetricTensor` blocks along their virtual
+        bonds using :meth:`~cyten.symmetries.ElementarySpace.direct_sum`.
+
+        Only ``bc='finite'`` is supported, since :class:`~cyten.models.couplings.Coupling`
+        requires trivial (dimension-1) boundary legs; for the leftmost/rightmost bond, only the
+        ``'IdL'``/``'IdR'`` state is kept (mirroring the boundary projection that
+        :meth:`MPO.from_grids` performs for finite `bc`).
+
+        Parameters
+        ----------
+        name : str, optional
+            Name for the returned Coupling.
+
+        Returns
+        -------
+        coupling : cyten.models.couplings.Coupling
+            Single coupling representing the sum of all terms added to the graph.
+
+        """
+        from cyten.tensors import tensor_from_grid
+
+        if self.bc != 'finite':
+            raise ValueError("build_coupling() requires bc='finite' (Coupling has trivial boundary legs)")
+
+        L = self.L
+        ordered_states = []
+        for bond in range(L + 1):
+            if bond == 0:
+                keys = ['IdL']
+            elif bond == L:
+                keys = ['IdR']
+            else:
+                keys = sorted(self._coupling_states[bond].keys(), key=repr)
+            ordered_states.append({key: idx for idx, key in enumerate(keys)})
+
+        factorization = []
+        for i in range(L):
+            stL, stR = ordered_states[i], ordered_states[i + 1]
+            graph_i = self._coupling_graph[i]
+            grid = [[None] * len(stR) for _ in range(len(stL))]
+            for keyL, a in stL.items():
+                for keyR, tensor in graph_i.get(keyL, {}).items():
+                    b = stR.get(keyR)
+                    if b is None:
+                        continue
+                    grid[a][b] = tensor
+            factorization.append(tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*']))
+
+        return Coupling(sites=list(self.sites), factorization=factorization, name=name)
 
     def __repr__(self):
         return f'<MPOGraph L={self.L:d}>'

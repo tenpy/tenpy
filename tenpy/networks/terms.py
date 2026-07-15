@@ -23,6 +23,7 @@ __all__ = [
     'MultiCouplingTerms',
     'ExponentiallyDecayingTerms',
     'order_combine_term',
+    'to_single_coupling',
 ]
 
 
@@ -1725,3 +1726,77 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                 if not sites[j].valid_opname(op_string):
                     raise ValueError(f'Operator {op_string=} not in site {j}')
         # done
+
+
+def to_single_coupling(couplings, sites, prefactors, split, bc='finite', name=None, unit_cell_width=None):
+    r"""Combine several cyten Couplings into a single cyten Coupling.
+
+    Builds a :class:`~tenpy.networks.mpo.MPOGraph` representing
+    :math:`\sum_k \text{prefactors}[k] \times \text{couplings}[k]`, with
+    ``couplings[k]`` placed on the MPS sites given by ``sites[k]``,
+    and converts the resulting MPO back into a single
+    :class:`~cyten.models.couplings.Coupling`.
+
+    Parameters
+    ----------
+    couplings : list of :class:`~cyten.models.couplings.Coupling`
+        The couplings to be summed.
+    sites : list of list of int
+        For each entry of `couplings`, the MPS site indices its factorization acts on (same
+        length as ``couplings[k].factorization``), strictly ascending. Every MPS site in the
+        covered range ``[0, L)`` must appear in `sites[k]` for at least one `k`, since that is
+        the only way :func:`to_single_coupling` learns which Hilbert space (i.e. which cyten
+        :class:`~cyten.models.degrees_of_freedom.Site`) lives there.
+    prefactors : list of float/complex
+        Overall prefactor for each entry of `couplings`.
+    split : list of int
+        For each coupling, the local index into ``couplings[k].factorization`` whose tensor gets
+        scaled by ``prefactors[k]`` before insertion into the graph. This determines where the
+        coupling's overall strength is "worked into" the graph, analogous to `switchLR` in
+        :meth:`MultiCouplingTerms.add_multi_coupling_term`.
+    bc : ``'finite' | 'infinite'``
+        Boundary conditions for the intermediate :class:`~tenpy.networks.mpo.MPOGraph`/MPO.
+        Note that :class:`~cyten.models.couplings.Coupling` requires trivial boundary legs, so
+        only ``'finite'`` can actually be converted back to a single coupling.
+    name : str, optional
+        Name for the returned :class:`~cyten.models.couplings.Coupling`.
+    unit_cell_width : int, optional
+        See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+
+    Returns
+    -------
+    coupling : :class:`~cyten.models.couplings.Coupling`
+        Single coupling representing the sum of all input couplings.
+
+    See Also
+    --------
+    tenpy.networks.mpo.MPOGraph.add_coupling_as_term : adds a single coupling to the graph.
+    tenpy.networks.mpo.MPOGraph.build_coupling : builds the Coupling from the completed graph.
+
+    """
+    from .mpo import MPOGraph
+
+    n = len(couplings)
+    if not (len(sites) == len(prefactors) == len(split) == n):
+        raise ValueError('`couplings`, `sites`, `prefactors` and `split` must have equal length')
+
+    graph_sites = {}
+    for coupling, positions in zip(couplings, sites):
+        for site, i in zip(coupling.sites, positions):
+            other = graph_sites.setdefault(i, site)
+            if other.leg != site.leg:
+                raise ValueError(f'Conflicting sites at MPS index {i:d}')
+    L = max(graph_sites) + 1
+    if len(graph_sites) != L:
+        raise ValueError('Not all MPS sites in the covered range are reached by a coupling')
+    graph_sites = [graph_sites[i] for i in range(L)]
+
+    if unit_cell_width is None:
+        unit_cell_width = L
+    graph = MPOGraph(graph_sites, bc=bc, max_range=0, unit_cell_width=unit_cell_width)
+    for coupling, positions, prefactor, split_idx in zip(couplings, sites, prefactors, split):
+        graph.add_coupling_as_term(coupling, positions=positions, strength=prefactor, split=split_idx)
+        graph.max_range = max(graph.max_range, positions[-1] - positions[0])
+    graph.add_missing_IdL_IdR_for_couplings()
+
+    return graph.build_coupling(name=name)

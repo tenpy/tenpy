@@ -214,7 +214,7 @@ class MPSGeometry:
 
     def __init__(self, sites, bc, unit_cell_width=None):
         self.sites = list(sites)
-        self.chinfo = self.sites[0].leg.chinfo
+        # self.chinfo = self.sites[0].leg.chinfo
         self.bc = bc
         if unit_cell_width is None:
             msg = (
@@ -233,9 +233,9 @@ class MPSGeometry:
             raise ValueError('invalid boundary condition: ' + repr(self.bc))
         if not (isinstance(self.unit_cell_width, int) and self.unit_cell_width > 0):
             raise ValueError(f'invalid unit_cell_width: {self.unit_cell_width}')
-        for i, site in enumerate(self.sites):
-            if site.leg.chinfo != self.chinfo:
-                raise ValueError(f'Invalid ChargeInfo for site {i}.')
+        # for i, site in enumerate(self.sites):
+        #    if site.leg.chinfo != self.chinfo:
+        #        raise ValueError(f'Invalid ChargeInfo for site {i}.')
 
     @property
     def L(self):
