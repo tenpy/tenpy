@@ -1,0 +1,3 @@
+- Add :class:`ArnoldiEvolution`, similar to :class:`LanczosEvolution`, to support evolution under
+  non-Hermitian effective Hamiltonians
+- Enable TDVP with non-Hermitian Hamiltonians
