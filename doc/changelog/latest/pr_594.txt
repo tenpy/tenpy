@@ -1,7 +1,0 @@
-- Fixed an error where TDVP did not correctly handle ``explicit_plus_hc``.
-  Before, the flag was considered in the two-site update, but ignored in the one-site update
-  for TwoSiteTDVP. For SingleSiteTDVP, it was considered in the one-site update, but ignored in the
-  zero-site update.
-  Using a model with ``explicit_plus_hc`` in TDVP thus led to an incorrect computation.
-  However, in the test cases we used, this led to a barrage of loud warnings from the Lanczos evolution,
-  and thus was not silent.
