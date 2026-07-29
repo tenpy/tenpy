@@ -196,6 +196,8 @@ __all__ = [
 #     the `sites` argument and added an `offsets` argument. The legs of the coupling now act on
 #     `[site + i for i in offsets]`, where site is in `sites`; identities act between the
 #     individual tensors of a coupling.
+#   - MPS now consist of SymmetricTensors as Bs, where the final tensor may also be a ChargedTensor
+#     to absorb the total charge of a unit cell for iMPS. The singular values are DiagonalTensors.
 
 
 mps_contraction_diagram_operations: dict[str, ct.PlanarDiagram] = {
@@ -2362,9 +2364,11 @@ class MPS(BaseMPSExpectationValue):
     ----------
     sites : list of :class:`~tenpy.networks.site.Site`
         Defines the local Hilbert space for each site.
-    Bs : list of :class:`~tenpy.linalg.np_conserved.Array`
-        The 'matrices' of the MPS. Labels are ``vL, vR, p`` (in any order).
-    SVs : list of 1D array
+    Bs : list of :class:`~cyten.Tensor`
+        The 'matrices' of the MPS. Labels are ``vL, p, vR`` (up to cyclic permutation).
+        By convention, the final tensor may be either a :class:`~cyten.SymmetricTensor` or a
+        :class:`~cyten.ChargedTensor`, all other tensors are :class:`~cyten.SymmetricTensor`.
+    SVs : list of :class:`~cyten.DiagonalTensor`
         The singular values on *each* bond. Should always have length `L+1`.
         Entries out of :attr:`nontrivial_bonds` are ignored.
     form : (list of) {``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)}
@@ -2380,27 +2384,31 @@ class MPS(BaseMPSExpectationValue):
         ``s**form[0] -- Gamma -- s**form[1]`` (in Vidal's notation).
     dtype : type
         The data type of the ``_B``.
+    backend : :class:`~cyten.TensorBackend`
+        The backend of the ``_B`` and ``_S``.
+    device : str
+        The device of the ``_B`` and ``_S``.
     norm : float
         The overall norm of the state, i.e. ``sqrt(<psi|psi>)`` - the tensors are kept normalized.
         Ignored for (normalized) :meth:`expectation_value` and co,
         but important for :meth:`overlap` and expectation value methods of :class:`MPSEnvironment`.
     grouped : int
         Number of sites grouped together, see :meth:`group_sites`.
-    segment_boundaries : tuple of :class:`~tenpy.linalg.np_conserved.Array` | (None, None)
+    segment_boundaries : tuple of :class:`~cyten.Tensor` | (None, None)
         Only defined for 'segment' `bc` if :meth:`canonical_form_finite` has been called.
         If defined, it contains the `U_L` and `V_R` that would be returned by that function.
-    _B : list of :class:`npc.Array`
-        The 'matrices' of the MPS. Labels are ``vL, vR, p`` (in any order).
+    _B : list of :class:`~cyten.Tensor`
+        The 'matrices' of the MPS. Labels are ``vL, p, vR`` (up to cyclic permutation).
         We recommend using :meth:`get_B` and :meth:`set_B`, which will take care of the different
         canonical forms.
-    _S : list of {``None``, 1D array, :class:`~tenpy.linalg.np_conserved.Array`}
+    _S : list of {``None``, :class:`~cyten.DiagonalTensor`}
         The singular values on each virtual bond, length ``L+1``.
         May be ``None`` if the MPS is not in canonical form.
         Otherwise, ``_S[i]`` is to the left of ``_B[i]``.
         We recommend using :meth:`get_SL`, :meth:`get_SR`, :meth:`set_SL`, :meth:`set_SR`, which
         takes proper care of the boundary conditions.
         Sometimes (e.g. during DMRG with an enabled mixer), entries may temporarily be
-        a non-diagonal :class:`tenpy.linalg.np_conserved.Array` to be inserted between the
+        a non-diagonal :class:`~cyten.Tensor` to be inserted between the
         left canonical 'A' tensors on the left and right-canonical _B[i] on the right.
     _valid_forms : dict
         Class attribute.
@@ -2438,24 +2446,24 @@ class MPS(BaseMPSExpectationValue):
 
     def __init__(
         self,
-        sites,
-        Bs,
-        SVs,
-        bc='finite',
-        form='B',
-        norm=1.0,
-        unit_cell_width=None,
+        sites: list[ct.Site],
+        Bs: list[ct.SymmetricTensor],
+        SVs: list[ct.DiagonalTensor],
+        bc: Literal['finite', 'infinite', 'segment'] = 'finite',
+        form: str | tuple[int] = 'B',
+        norm: float = 1.0,
+        unit_cell_width: int | None = None,
         understood_shift_symmetry: bool = False,
     ):
         super().__init__(sites, bc, unit_cell_width)
 
-        if not self.chinfo.trivial_shift and bc == 'infinite' and not understood_shift_symmetry:
+        if not self.symmetry.trivial_shift and bc == 'infinite' and not understood_shift_symmetry:
             msg = (
                 'Shift-symmetry is a new experimental feature and the interplay with infinite '
                 'boundary conditions is not yet extensively tested. '
                 'Proceed with care, and compare to simulations without that symmetry enforced. '
             )
-            if isinstance(self.chinfo, npc.DipolarChargeInfo):
+            if isinstance(self.symmetry, DipolarChargeInfo):  # TODO
                 msg += (
                     'Note also that dipole symmetries tend to fragment the Hilbert space and '
                     'it is vital to select an initial state in the correct charge sector. '
@@ -2464,23 +2472,34 @@ class MPS(BaseMPSExpectationValue):
             warnings.warn(msg, BetaWarning, stacklevel=2)
 
         assert len(self.sites) > 0, 'MPS need at least one site'
-        self.dtype = dtype = np.result_type(*[B.dtype for B in Bs])
+        self.dtype = dtype = ct.Dtype.common(*[B.dtype for B in Bs])
+        self.backend = backend = ct.backends.get_same_backend(*Bs, *sites)
+        self.device = device = ct.tensors.get_same_device(*Bs)
         self.form = self._parse_form(form)
         self.norm = norm
         self.grouped = 1
         self.segment_boundaries = (None, None)
 
         # make copies of Bs and SVs
-        self._B = [B.astype(dtype, copy=True).itranspose(self._B_labels) for B in Bs]
+        # TODO best way to store to avoid as many bends as possible when doing contractions?
+        # do a planar_permute_legs here to the best arrangement
+        self._B = [B.copy(deep=True, dtype=dtype) for B in Bs]
         num_S = self.L + 1 if self.finite else self.L
         self._S = [None] * (num_S)
         for i in range(self.L + 1)[self.nontrivial_bonds]:
-            if isinstance(SVs[i], npc.Array):
-                self._S[i] = SVs[i].copy()
-            else:
-                self._S[i] = np.array(SVs[i], dtype=np.float64)
+            assert isinstance(SVs[i], ct.DiagonalTensor), 'singular values must be given as DiagonalTensor'
+            self._S[i] = SVs[i].copy(deep=True, dtype=dtype.to_real)
         if self.bc == 'finite':
-            self._S[0] = self._S[-1] = np.ones([1], dtype=np.float64)
+            self._S[0] = ct.DiagonalTensor.from_eye(
+                leg=Bs[0].get_leg('vL'), backend=backend, labels=['vL', 'vR'], dtype=dtype.to_real, device=device
+            )
+            self._S[-1] = ct.DiagonalTensor.from_eye(
+                leg=Bs[-1].get_leg_co_domain('vR'),
+                backend=backend,
+                labels=['vL', 'vR'],
+                dtype=dtype.to_real,
+                device=device,
+            )
         self._transfermatrix_keep = 1
         self.test_sanity()
 
@@ -2497,30 +2516,34 @@ class MPS(BaseMPSExpectationValue):
                 assert isinstance(f, tuple)
                 assert len(f) == 2
         for i, B in enumerate(self._B):
-            if B.get_leg_labels() != self._B_labels:
-                raise ValueError(f'B has wrong labels {B.get_leg_labels()!r}, expected {self._B_labels!r}')
+            if not B.labels_are(*self._B_labels):
+                raise ValueError(f'B has wrong labels {B.labels!r}, expected {self._B_labels!r}')
             i2 = (i + 1) if self.finite else (i + 1) % self.L
-            if len(self._S[i2].shape) == 1:
-                if self._S[i].shape[-1] != B.get_leg('vL').ind_len or self._S[i2].shape[0] != B.get_leg('vR').ind_len:
-                    raise ValueError('shape of B incompatible with len of singular values')
+            if isinstance(self._S[i2], ct.DiagonalTensor):
+                if (
+                    self._S[i].get_leg('vR') != B.get_leg('vL').dual
+                    or self._S[i2].get_leg('vL') != B.get_leg('vR').dual
+                ):
+                    raise ValueError('singular values not contractible with B')
                 if not self.finite or i + 1 < self.L:
                     B2 = self.get_B(i + 1, form=None)
-                    B.get_leg('vR').test_contractible(B2.get_leg('vL'))
+                    if B.get_leg('vR') != B2.get_leg('vL').dual:
+                        raise ValueError('consecutive B not contractible')
             else:
-                assert len(self._S[i2].shape) == 2  # special case during DMRG with mixer,
+                assert self._S[i2].num_legs == 2  # special case during DMRG with mixer,
                 # important for simulation resume while mixer is on
                 # we should have a well-defined form everywhere
                 B = self.get_B(i, form='Th')
                 B2 = self.get_B(i + 1, form='B')
                 # and be able to contract Th-B
-                B.get_leg('vR').test_contractible(B2.get_leg('vL'))
+                assert B.get_leg('vR') == B2.get_leg('vL')
                 # (but not necessarily A-B, as we have it on the first bond at DMRG checkpoints)
             assert self.form[i] in self._valid_forms.values()
         if self.bc == 'finite':
-            if len(self._S[0]) != 1 or len(self._S[-1]) != 1:
+            if np.sum(self._S[0].leg.multiplicities) != 1 or np.sum(self._S[-1].leg.multiplicities) != 1:
                 raise ValueError('non-trivial outer bonds for finite MPS')
 
-    def copy(self):
+    def copy(self) -> MPS:
         """Returns a copy of `self`.
 
         The copy still shares the sites, chinfo, and LegCharges of the B tensors, but the values of
@@ -2569,6 +2592,7 @@ class MPS(BaseMPSExpectationValue):
             The `name` of `h5gr` with a ``'/'`` in the end.
 
         """
+        # TODO
         hdf5_saver.save(self.sites, subpath + 'sites')
         hdf5_saver.save(self._B, subpath + 'tensors')
         hdf5_saver.save(self._S, subpath + 'singular_values')
@@ -2604,6 +2628,7 @@ class MPS(BaseMPSExpectationValue):
             Newly generated class instance containing the required data.
 
         """
+        # TODO
         obj = cls.__new__(cls)  # create class instance, no __init__() call
         hdf5_loader.memorize_load(h5gr, obj)
 
@@ -2628,7 +2653,7 @@ class MPS(BaseMPSExpectationValue):
         return obj
 
     @classmethod
-    def from_lat_product_state(cls, lat, p_state, allow_incommensurate=False, **kwargs):
+    def from_lat_product_state(cls, lat, p_state, allow_incommensurate: bool = False, **kwargs):
         """Construct an MPS from a product state given in lattice coordinates.
 
         This is a wrapper around :meth:`from_product_state`.
@@ -2661,6 +2686,7 @@ class MPS(BaseMPSExpectationValue):
 
         Examples
         --------
+        TODO
         Let's first consider a :class:`~tenpy.models.lattice.Ladder` composed of a
         :class:`~tenpy.networks.site.SpinHalfSite` and a
         :class:`~tenpy.networks.site.FermionSite`.
@@ -2737,46 +2763,46 @@ class MPS(BaseMPSExpectationValue):
     @classmethod
     def from_product_state(
         cls,
-        sites,
-        p_state,
-        bc='finite',
-        dtype=np.float64,
-        permute=True,
+        sites: list[ct.Site],
+        p_state: list[int | str | np.ndarray],
+        bc: Literal['finite', 'segment', 'infinite'] = 'finite',
+        dtype: ct.Dtype = None,
         form='B',
-        chargeL=None,
-        unit_cell_width=None,
+        chargeL: ct.Sector = None,
+        unit_cell_width: int = None,
+        device: str = None,
         understood_shift_symmetry: bool = False,
-    ):
+    ) -> MPS:
         """Construct a matrix product state from a given product state.
+
+        Note: Only applicable to Abelian symmetries.
 
         Parameters
         ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~cyten.models.degrees_of_freedom.Site`
             The sites defining the local Hilbert space.
         p_state : list of {int | str | 1D array}
             Defines the product state to be represented; one entry for each `site` of the MPS.
             An entry of `str` type is translated to an `int` with the help of
-            :meth:`~tenpy.networks.site.Site.state_labels`.
+            :meth:`~cyten.models.degrees_of_freedom.Site.state_labels`.
             An entry of `int` type represents the physical index of the state to be used.
             An entry which is a 1D array defines the complete wavefunction on that site; this
             allows to make a (local) superposition.
         bc : {'infinite', 'finite', 'segment'}
             MPS boundary conditions. See docstring of :class:`MPS`.
-        dtype : type or string
-            The data type of the array entries.
-        permute : bool
-            The :class:`~tenpy.networks.Site` might permute the local basis states if charge
-            conservation gets enabled.
-            If `permute` is True (default), we permute the given `p_state` locally according to
-            each site's :attr:`~tenpy.networks.Site.perm`.
-            The `p_state` entries should then always be given as if `conserve=None` in the Site.
+        dtype : :class:`~cyten.Dtype`, optional
+            The data type of the tensors. By default, the data type is chosen to be float for
+            symmetries with real topological data, and complex otherwise.
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
             Defines the canonical form. See module doc-string.
             A single choice holds for all of the entries.
-        chargeL : charges
-            Leg charges at bond 0, which are purely conventional.
-        unit_cell_width : int
+        chargeL : :class:`~cyten.Sector`, optional
+            Leg charge / symmetry sector at bond 0, which is purely conventional for Abelian
+            symmetries. Chosen to be the trivial charge by default.
+        unit_cell_width : int, optional
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+        device : str, optional
+            Device of the resulting MPS.
 
         Returns
         -------
@@ -2785,6 +2811,7 @@ class MPS(BaseMPSExpectationValue):
 
         Examples
         --------
+        TODO
         Example to get a Neel state for a :class:`~tenpy.models.tf_ising.TFIChain`:
 
         .. doctest :: MPS.from_product_state
@@ -2827,64 +2854,74 @@ class MPS(BaseMPSExpectationValue):
 
         """
         sites = list(sites)
+        sym = sites[0].symmetry
+        assert sym.is_abelian, 'can only construct product states for Abelian symmetries'
+        if chargeL is None:
+            chargeL = sym.trivial_sector
+        else:
+            assert sym.is_valid_sector(chargeL), f'{chargeL} is not a valid charge sector of the symmetry {sym}'
         L = len(sites)
         p_state = list(p_state)
         if len(p_state) != L:
             raise ValueError('Length of p_state does not match number of sites.')
-        ci = sites[0].leg.chinfo
+        virtual_spaces = [ct.ElementarySpace.from_defining_sectors(sym, chargeL)]
         Bs = []
-        chargeL = ci.make_valid(chargeL)  # sets to zero if `None`
-        legL = npc.LegCharge.from_qflat(ci, [chargeL])  # (no need to bunch)
         for p_st, site in zip(p_state, sites):
-            perm = permute
+            # the permutation from public to internal basis is applied in from_dense_block
             if isinstance(p_st, str):
                 p_st = site.state_labels[p_st]  # translate labels into "int"
-                perm = False
-            try:
-                iter(p_st)
-            except TypeError:
-                # just an int for p_st
-                B = np.zeros((site.dim, 1, 1), dtype)
+            if isinstance(p_st, int):
+                charge_p = site.leg.defining_sectors[p_st]
+                chargeR = sym.fusion_outcomes(virtual_spaces[-1].defining_sectors[0], charge_p)
+                virtual_spaces.append(ct.ElementarySpace.from_defining_sectors(sym, chargeR))
+                B = np.zeros((site.dim, 1, 1))
                 B[p_st, 0, 0] = 1.0
-            else:  # iter works
+            else:
                 if len(p_st) != site.dim:
                     raise ValueError('p_state incompatible with local dim:' + repr(p_st))
-                B = np.array(p_st, dtype).reshape((site.dim, 1, 1))
-            if perm:
-                B = B[site.perm, :, :]
+                # look at all charges where p_st is nonzero and fuse them with the left charge,
+                # we must have unique fusion product on right leg if product state
+                charge_p = site.leg.defining_sectors[p_st != 0]
+                chargeR = sym.fusion_outcomes_broadcast(virtual_spaces[-1].defining_sectors, charge_p)
+                assert np.all(chargeR == chargeR[0]), (
+                    f'specified on-site state incompatible with product state for {sym}'
+                )
+                virtual_spaces.append(ct.ElementarySpace.from_defining_sectors(sym, chargeR[0]))
+                B = np.array(p_st).reshape((site.dim, 1, 1))
             Bs.append(B)
-        SVs = [[1.0]] * (L + 1)
-        return cls.from_Bflat(
+        return cls.from_Bflat_virtual_spaces(
             sites,
+            virtual_spaces,
             Bs,
-            SVs,
-            bc,
-            dtype,
-            False,
-            form,
-            legL,
-            unit_cell_width,
+            SVs=None,
+            bc=bc,
+            dtype=dtype,
+            form=form,
+            unit_cell_width=unit_cell_width,
+            device=device,
             understood_shift_symmetry=understood_shift_symmetry,
         )
 
     @classmethod
     def from_random_unitary_evolution(
         cls,
-        sites,
-        chi,
-        p_state,
-        bc='finite',
-        dtype=np.float64,
-        permute=True,
+        sites: list[ct.Site],
+        chi: int,
+        p_state: list[int | str | np.ndarray],
+        bc: Literal['finite', 'segment', 'infinite'] = 'finite',
+        dtype: ct.Dtype = None,
         form='B',
-        chargeL=None,
+        chargeL: ct.Sector = None,
+        device: str = None,
         understood_shift_symmetry: bool = False,
-    ):
+    ) -> MPS:
         """Construct a matrix product state by evolving a product state with random unitaries.
+
+        Note: Only applicable to Abelian symmetries.
 
         Parameters
         ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~cyten.models.degrees_of_freedom.Site`
             The sites defining the local Hilbert space.
         chi : int
             The target bond dimension. For finite systems, we evolve until the *maximum* bond
@@ -2893,25 +2930,28 @@ class MPS(BaseMPSExpectationValue):
         p_state : list of {int | str | 1D array}
             Defines the product state to start from; one entry for each `site` of the MPS.
             An entry of `str` type is translated to an `int` with the help of
-            :meth:`~tenpy.networks.site.Site.state_labels`.
+            :meth:`~cyten.models.degrees_of_freedom.Site.state_labels`.
             An entry of `int` type represents the physical index of the state to be used.
             An entry which is a 1D array defines the complete wavefunction on that site; this
             allows to make a (local) superposition.
         bc : {'infinite', 'finite', 'segment'}
             MPS boundary conditions. See docstring of :class:`MPS`.
-        dtype : type or string
-            The data type of the array entries.
-        permute : bool
-            The :class:`~tenpy.networks.Site` might permute the local basis states if charge
-            conservation gets enabled.
-            If `permute` is True (default), we permute the given `p_state` locally according to
-            each site's :attr:`~tenpy.networks.Site.perm`.
-            The `p_state` entries should then always be given as if `conserve=None` in the Site.
+        dtype : :class:`~cyten.Dtype`, optional
+            The data type of the tensors. By default, the data type is chosen to be float for
+            symmetries with real topological data, and complex otherwise.
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
             Defines the canonical form. See module doc-string.
             A single choice holds for all of the entries.
-        chargeL : charges
-            Leg charges at bond 0, which are purely conventional.
+        chargeL : :class:`~cyten.Sector` or None
+            Leg charge / symmetry sector at bond 0, which is purely conventional for Abelian
+            symmetries. Chosen to be the trivial charge by default.
+        device : str, optional
+            Device of the resulting MPS.
+
+        Returns
+        -------
+        mps : :class:`MPS`
+            An MPS obtained from evolving the specified product state with random unitaries.
 
         """
         from ..algorithms.tebd import RandomUnitaryEvolution  # local import: avoid circular import
@@ -2920,7 +2960,7 @@ class MPS(BaseMPSExpectationValue):
             msg = 'MPS.from_random_unitary_evolution not implemented for segment BC.'
             raise NotImplementedError(msg)
         psi = MPS.from_product_state(
-            sites, p_state, bc, dtype, permute, form, chargeL, understood_shift_symmetry=understood_shift_symmetry
+            sites, p_state, bc, dtype, form, chargeL, device=device, understood_shift_symmetry=understood_shift_symmetry
         )
         tebd_params = dict(N_steps=10, trunc_params={'chi_max': chi})
         eng = RandomUnitaryEvolution(psi, tebd_params)
@@ -2944,40 +2984,53 @@ class MPS(BaseMPSExpectationValue):
     @classmethod
     def from_desired_bond_dimension(
         cls,
-        sites,
-        chis,
-        bc='finite',
-        dtype=np.float64,
-        permute=True,
-        chargeL=None,
-        unit_cell_width=None,
+        sites: list[ct.Site],
+        chis: int | list[int],
+        bc: Literal['finite', 'segment', 'infinite'] = 'finite',
+        dtype: ct.Dtype = None,
+        chargeL: ct.Sector | ct.ElementarySpace | None = None,
+        chargeR: ct.Sector | ct.ElementarySpace | None = None,
+        total_charge: ct.Sector = None,
+        unit_cell_width: int = None,
+        device: str = None,
         understood_shift_symmetry: bool = False,
-    ):
+    ) -> MPS:
         """Construct a matrix product state with given bond dimensions from random matrices.
 
-        Note: no charge conservation
+        For infinite boundary conditions, `chargeL` is used as starting point for growing virtual
+        spaces until the desired bond dimension is reached.
 
         Parameters
         ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~cyten.models.degrees_of_freedom.Site`
             The sites defining the local Hilbert space.
         chis : (list of) {int}
-            Desired bond dimensions. For a single int, the same bond dimension is used on every bond.
-        bc : {'infinite', 'finite'}
+            Desired bond dimensions. For a single int, the same bond dimension is used on every
+            bond. If list, it should specify the bond dimension of every *nontrivial* bond.
+        bc : {'infinite', 'finite', 'segment'}
             MPS boundary conditions. See docstring of :class:`MPS`. For 'finite' chi is capped to
             the maximum possible at each bond.
-        dtype : type or string
-            The data type of the array entries.
-        permute : bool
-            The :class:`~tenpy.networks.Site` might permute the local basis states if charge
-            conservation gets enabled.
-            If `permute` is True (default), we permute the given `p_state` locally according to
-            each site's :attr:`~tenpy.networks.Site.perm`.
-            The `p_state` entries should then always be given as if `conserve=None` in the Site.
-        chargeL : charges
-            Leg charges at bond 0, which are purely conventional.
-        unit_cell_width : int
+        dtype : :class:`~cyten.Dtype`, optional
+            The data type of the tensors. By default, the data type is chosen to be float for
+            symmetries with real topological data, and complex otherwise.
+        chargeL : :class:`~cyten.Sector` or :class:`~cyten.spaces.ElementarySpace` or None
+            Symmetry sector or space at bond 0. A given sector is converted to a space containing
+            this sector with multiplicity one for finite boundary conditions. For segment boundary
+            conditions, the multiplicity is specified by `chis` instead. `None` (default) is
+            equivalent to specifying the trivial sector.
+        chargeR : :class:`~cyten.Sector` or :class:`~cyten.spaces.ElementarySpace` or None
+            Symmetry sector or space at the final bond. Is ignored for infinite boundary conditions.
+            A given sector is converted to a space containing this sector with multiplicity one for
+            finite boundary conditions. For segment boundary conditions, the multiplicity is
+            specified by `chis` instead. `None` (default) is equivalent to specifying the trivial
+            sector.
+        total_charge : :class:`~cyten.Sector`, optional
+            Total charge of the unit cell for infinite boundary conditions. Is ignored for finite
+            and segemnt boundary conditions. Defaults to the trivial charge sector.
+        unit_cell_width : int, optional
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+        device : str, optional
+            Device of the resulting MPS.
 
         Returns
         -------
@@ -2987,148 +3040,406 @@ class MPS(BaseMPSExpectationValue):
         """
         sites = list(sites)
         L = len(sites)
-        # TODO: what happens if we have charge conservation?
-        assert sites[0].leg.chinfo.qnumber == 0, 'does not work with conserved charges'
+        sym = sites[0].symmetry
+        chi_len = L + (bc == 'segment') - (bc == 'finite')
+        if isinstance(chis, int):
+            chis = [chis] * chi_len
+        assert len(chis) == chi_len, 'wrong length of chi list'
         if bc == 'finite':
-            if isinstance(chis, int):
-                chi_uniform = chis
-                chis = [chi_uniform] * (L - 1)
-            assert len(chis) == L - 1, 'wrong length of chi list'
-            chis.append(1)
-            SVs = [np.ones(1)]
-            Q, _ = np.linalg.qr(np.random.rand(sites[0].dim, chis[0]))
-            Bflat = [Q.reshape(sites[0].dim, 1, Q.shape[1])]  # TODO: this only does real entries
-            for i in range(1, L - 1):
-                B_vR = Bflat[-1].shape[2]
-                SV = np.random.rand(B_vR)
-                SVs.append(SV / np.linalg.norm(SV))
-                Q, _ = np.linalg.qr(np.random.rand(sites[i].dim * B_vR, chis[i]))
-                Bflat.append(Q.reshape(sites[i].dim, B_vR, Q.shape[1]))
-            B_vR = Bflat[-1].shape[2]
-            SV = np.random.rand(B_vR)
-            SVs.append(SV / np.linalg.norm(SV))
-            Bflat.append(np.random.rand(sites[-1].dim * chis[L - 2]).reshape(sites[-1].dim, B_vR, 1))
-            SVs = [np.ones(1)]
-        elif bc == 'infinite':
-            if isinstance(chis, int):
-                chi_uniform = chis
-                chis = [chi_uniform] * L
-            assert len(chis) == L, 'wrong length of chi list'
-            Bflat = []
-            SVs = []
-            for i in range(L):
-                SV = np.random.rand(chis[i])
-                SVs.append(SV / np.linalg.norm(SV))
-                Q, _ = np.linalg.qr(np.random.rand(sites[i].dim * chis[i], chis[(i + 1) % L]))
-                Bflat.append(Q.reshape(sites[i].dim, chis[i], chis[(i + 1) % L]))
-            SVs.append(SVs[0])
+            chis = [1] + chis + [1]
+
+        # construct the correct left and right spaces for finite and segement bc
+        # from the very start; for iMPS, we grow the spaces step by step
+        mults = (chis[0], chis[-1]) if bc == 'segment' else (1, 1)
+        if chargeL is None:
+            vs_left = ct.ElementarySpace.from_trivial_sector(dim=mults[0], symmetry=sym)
+        elif isinstance(chargeL, ct.ElementarySpace):
+            vs_left = chargeL
         else:
-            raise NotImplementedError('MPS.from_desired_bond_dimension not implemented for segment BC.')
-        psi = MPS.from_Bflat(
+            assert sym.is_valid_sector(chargeL), f'{chargeL} is not a valid charge sector of the symmetry {sym}'
+            vs_left = ct.ElementarySpace.from_defining_sectors(sym, [chargeL], multiplicities=[mults[0]])
+        virtual_spaces = [vs_left] + [None] * (L - 1)
+        if bc == 'finite' or bc == 'segment':
+            if chargeR is None:
+                vs_right = ct.ElementarySpace.from_trivial_sector(dim=mults[1], symmetry=sym)
+            elif isinstance(chargeR, ct.ElementarySpace):
+                vs_right = chargeR
+            else:
+                assert sym.is_valid_sector(chargeR), f'{chargeR} is not a valid charge sector of the symmetry {sym}'
+                vs_right = ct.ElementarySpace.from_defining_sectors(sym, [chargeR], multiplicities=[mults[1]])
+            virtual_spaces.append(vs_right)
+
+        # idea: compute allowed charge sectors and multplicities based on fusion
+        # and then adjust multiplicities to fit the bond dimensions
+        if bc == 'finite' or bc == 'segment':
+            charge_err = (
+                f'The specified left and right virtual spaces {vs_left} and '
+                f'{vs_right} are inconsistent for the specified sites.'
+            )
+            for i in range((L + 1) // 2):
+                # range is chosen such that the left and right parts always meet
+                # in the center and we get a consistency condition in the charges
+                new_space_left = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
+                new_space_left = new_space_left.as_ElementarySpace()
+                virtual_spaces[i + 1] = _truncate_virtual_space(
+                    new_space_left, virtual_spaces[i + 1], chi=chis[i + 1], err=charge_err
+                )
+                # due to direction / duality of the legs, need to use dual leg of the site
+                new_space_right = ct.TensorProduct([virtual_spaces[-1 - i], sites[-1 - i].leg.dual], sym)
+                new_space_right = new_space_right.as_ElementarySpace()
+                virtual_spaces[-2 - i] = _truncate_virtual_space(
+                    new_space_right, virtual_spaces[-2 - i], chi=chis[-2 - i], err=charge_err
+                )
+        else:
+            # grow the virtual spaces until they are close enough to a stationary distribution
+            # of multiplicities and then truncate -> should not lead to cutting charges that
+            # make fusion inconsistent if chi is large enough
+            for _ in range(100):  # TODO make this limit larger or smaller?
+                for i in range(L):
+                    new_space = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
+                    virtual_spaces[(i + 1) % L] = new_space.as_ElementarySpace()
+                if all([np.sum(space.multiplicities) > 3 * chi for space, chi in zip(virtual_spaces, chis)]):
+                    break
+            else:
+                # no break occured
+                logger.warning(
+                    'The virtual spaces do not grow fast enough to guarantee an infinite MPS '
+                    'of the desired bond dimension or a converged charge distribution.'
+                )
+            for i in range(L):
+                virtual_spaces[i] = _truncate_virtual_space(virtual_spaces[i], chi=chis[i])
+
+        res = cls.from_desired_virtual_spaces(
+            sites, virtual_spaces, bc, dtype, total_charge, unit_cell_width, device, understood_shift_symmetry
+        )
+        logger.info('Generated MPS of bond dimension %r from random matrices.', list(res.chi))
+        return res
+
+    @classmethod
+    def from_desired_virtual_spaces(
+        cls,
+        sites: list[ct.Site],
+        virtual_spaces: list[ct.ElementarySpace],
+        bc: Literal['finite', 'segment', 'infinite'] = 'finite',
+        dtype: ct.Dtype = None,
+        total_charge: ct.Sector = None,
+        unit_cell_width: int = None,
+        device: str = None,
+        understood_shift_symmetry: bool = False,
+    ) -> MPS:
+        """Construct a matrix product state with given virtual spaces and random tensors.
+
+        Parameters
+        ----------
+        sites : list of :class:`~cyten.models.degrees_of_freedom.Site`
+            The sites defining the local Hilbert space.
+        virtual_spaces : list of :class:`~cyten.spaces.ElementarySpace`
+            Desired virtual spaces for all bonds.
+        bc : {'infinite', 'finite', 'segment'}
+            MPS boundary conditions. See docstring of :class:`MPS`. For 'finite' chi is capped to
+            the maximum possible at each bond.
+        dtype : :class:`~cyten.Dtype`, optional
+            The data type of the tensors. By default, the data type is chosen to be float for
+            symmetries with real topological data, and complex otherwise.
+        total_charge : :class:`~cyten.Sector`, optional
+            Total charge of the unit cell for infinite boundary conditions. Is ignored for finite
+            and segemnt boundary conditions. Defaults to the trivial charge sector.
+        unit_cell_width : int, optional
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+        device : str, optional
+            Device of the resulting MPS.
+
+        Returns
+        -------
+        mps : :class:`MPS`
+            An MPS with the desired virtual spaces.
+
+        """
+        sites = list(sites)
+        backend = ct.backends.get_same_backend(sites)
+        L = len(sites)
+        sym = sites[0].symmetry
+        if bc == 'infinite':
+            if len(virtual_spaces) != L:
+                raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
+            virtual_spaces.append(virtual_spaces[0])
+        elif bc != 'infinite' and len(virtual_spaces) != L + 1:
+            raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
+        if device is None:
+            device = sites[0].default_device
+        if dtype is None:
+            dtype = ct.Dtype.complex128 if sym.has_complex_topological_data else ct.Dtype.float64
+
+        Bs = []
+        SVs = []
+        for i in range(L):
+            codomain = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
+            domain = ct.TensorProduct([virtual_spaces[i + 1]], sym)
+            B = ct.SymmetricTensor.from_random_uniform(
+                codomain, domain, backend, ['vL', 'p', 'vR'], dtype=dtype, device=device
+            )
+            B, _ = ct.qr(B, new_labels=['vR', 'vL'])
+            SV = ct.DiagonalTensor.from_random_uniform(
+                virtual_spaces[i], backend, ['vL', 'vR'], dtype=dtype.to_real, device=device
+            )
+            SVs.append(SV / ct.norm(SV))
+        if bc == 'infinite':
+            SVs.append(SVs[0])
+            # TODO generate ChargedTensor
+            raise NotImplementedError
+        else:
+            SV = ct.DiagonalTensor.from_random_uniform(
+                virtual_spaces[-1], backend, ['vL', 'vR'], dtype=dtype.to_real, device=device
+            )
+            SVs.append(SV / ct.norm(SV))
+        res = cls(
             sites,
-            Bflat,
-            bc=bc,
-            dtype=dtype,
-            permute=permute,
+            Bs,
+            SVs,
+            bc,
             form=None,
-            legL=chargeL,
+            norm=1.0,
             unit_cell_width=unit_cell_width,
             understood_shift_symmetry=understood_shift_symmetry,
         )
-        psi.canonical_form()
-        logger.info('Generated MPS of bond dimension %r from random matrices.', list(psi.chi))
-        return psi
+        res.canonical_form()
+        return res
 
     @classmethod
     def from_Bflat(
         cls,
-        sites,
-        Bflat,
-        SVs=None,
-        bc='finite',
-        dtype=None,
-        permute=True,
+        sites: list[ct.Site],
+        Bflat: Iterable[np.ndarray | ct.Block],
+        SVs: Iterable[np.ndarray | ct.Block] | None = None,
+        bc: Literal['finite', 'segment', 'infinite'] = 'finite',
+        dtype: ct.Dtype = None,
         form='B',
-        legL=None,
-        unit_cell_width=None,
+        legL: ct.Sector | ct.ElementarySpace | None = None,
+        unit_cell_width: int = None,
+        device: str = None,
         understood_shift_symmetry: bool = False,
-    ):
-        """Construct a matrix product state from a set of numpy arrays `Bflat` and singular vals.
+    ) -> MPS:
+        """Construct a matrix product state from a set of numpy arrays or dense blocks.
+
+        Note: Only applicable to Abelian symmetries.
 
         Parameters
         ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~cyten.models.degrees_of_freedom.Site`
             The sites defining the local Hilbert space.
-        Bflat : iterable of numpy ndarrays
+        Bflat : iterable of {numpy ndarrays | :class:`~cyten.Block`}
             The matrix defining the MPS on each site, with legs ``'p', 'vL', 'vR'``
             (physical, virtual left/right).
-        SVs : list of 1D array | ``None``
+        SVs : list of {1D array | :class:`~cyten.Block`} or ``None``
             The singular values on *each* bond. Should always have length `L+1`.
             By default (``None``), set all singular values to the same value.
             Entries out of :attr:`nontrivial_bonds` are ignored.
         bc : {'infinite', 'finite', 'segment'}
             MPS boundary conditions. See docstring of :class:`MPS`.
-        dtype : type or string
-            The data type of the array entries. Defaults to the common dtype of `Bflat`.
-        permute : bool
-            The :class:`~tenpy.networks.Site` might permute the local basis states if charge
-            conservation gets enabled.
-            If `permute` is True (default), we permute the given `Bflat` locally according to
-            each site's :attr:`~tenpy.networks.Site.perm`.
-            The `Bflat` should then always be given as if `conserve=None` in the Site.
+        dtype : :class:`~cyten.Dtype`, optional
+            The data type of the tensors. Defaults to the common dtype of `Bflat`.
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
             Defines the canonical form of `Bflat`. See module doc-string.
             A single choice holds for all of the entries.
-        leg_L : LegCharge | ``None``
-            Leg charges at bond 0, which are purely conventional.
-            If ``None``, use trivial charges.
-        unit_cell_width : int
+        legL : :class:`~cyten.Sector` or :class:`~cyten.spaces.ElementarySpace` or ``None``
+            Symmetry sector or space at bond 0. A given sector is converted to a space containing
+            this sector with multiplicity one. `None` (default) is equivalent to specifying the
+            trivial sector.
+        unit_cell_width : int, optional
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+        device : str, optional
+            Device of the resulting MPS.
 
         Returns
         -------
         mps : :class:`MPS`
-            An MPS with the matrices `Bflat` converted to npc arrays.
+            An MPS with the matrices `Bflat` converted to tensors.
 
         """
         sites = list(sites)
+        sym = sites[0].symmetry
+        sym_err = (
+            'Virtual spaces are only automatically detected for Abelian symmetries. '
+            'Use from_Bflat_virtual_spaces for non-Abelian symmetries'
+        )
+        assert sym.is_abelian, sym_err
+        backend = ct.backends.get_same_backend(sites)
+        Bflat = list(Bflat)
+        if len(Bflat) != len(sites):
+            raise ValueError('Length of Bflat does not match number of sites.')
+        if legL is None:
+            legL = ct.ElementarySpace.from_trivial_sector(sym)
+        elif isinstance(legL, ct.ElementarySpace):
+            pass
+        else:
+            assert sym.is_valid_sector(legL), f'{legL} is not a valid charge sector of the symmetry {sym}'
+            legL = ct.ElementarySpace.from_defining_sectors(sym, [legL])
+
+        virtual_spaces = [legL]
+        CUTOFF = 1e-12  # TODO keep it? adjust based on dtype?
+        for B, site in zip(Bflat, sites):
+            # TODO is it necessary to cast to np array here? Or do we have the necessary methods in the block_backends?
+            # TODO here we use `not isinstance(B, np.ndarray)`, should be converted to `isinstance(B, ct.Block)`?
+            if not isinstance(B, np.ndarray):
+                B = backend.block_backend.to_numpy(B, ct.Dtype.to_numpy_dtype(B.dtype))
+            new_charges = []
+            for i in range(B.shape[2]):
+                B_i = B[:, :, i]
+                inds_max = np.unravel_index(np.argmax(np.abs(B_i)), B_i.shape)
+                val_max = abs(B_i[inds_max])
+                if val_max < CUTOFF:
+                    raise ValueError('Entries in Bflat too small, cannot detect virtual charges')
+                # we can assume here that all entries in this block lead to the same charge on the virtual leg
+                # if they dont, we will get an error when converting dense block -> SymmetricTensor
+                # Bflat has legs p, vL, vR
+                charge_L = virtual_spaces[-1].idx_to_sector(val_max[1])
+                charge_site = site.leg.idx_to_sector(val_max[0])
+                new_charges.append(sym.fusion_outcomes(charge_L, charge_site)[0])
+            new_charges = np.asarray(new_charges, dtype=int)
+            virtual_spaces.append(ct.ElementarySpace.from_defining_sectors(sym, new_charges, unique_sectors=False))
+
+        if bc == 'infinite':
+            virtual_spaces = virtual_spaces[:-1]
+        elif bc == 'finite':
+            assert np.sum(virtual_spaces[-1].multiplicities) == 1
+        return cls.from_Bflat_virtual_spaces(
+            sites,
+            virtual_spaces,
+            Bflat,
+            SVs,
+            bc,
+            dtype=dtype,
+            form=form,
+            unit_cell_width=unit_cell_width,
+            device=device,
+            understood_shift_symmetry=understood_shift_symmetry,
+        )
+
+    @classmethod
+    def from_Bflat_virtual_spaces(
+        cls,
+        sites: list[ct.Site],
+        virtual_spaces: list[ct.ElementarySpace],
+        Bflat: Iterable[np.ndarray | ct.Block],
+        SVs: Iterable[np.ndarray | ct.Block] | None = None,
+        bc: Literal['finite', 'segment', 'infinite'] = 'finite',
+        dtype: ct.Dtype = None,
+        total_charge: ct.Sector = None,
+        form='B',
+        unit_cell_width: int = None,
+        device: str = None,
+        understood_shift_symmetry: bool = False,
+    ) -> MPS:
+        """Construct a matrix product state from a set of numpy arrays or dense blocks and virtual spaces.
+
+        In contrast to `from_Bflat`, this method can be used to construct matrix product states for
+        all symmetries with well-defined dense blocks, not just Abelian ones.
+
+        Parameters
+        ----------
+        sites : list of :class:`~cyten.models.degrees_of_freedom.Site`
+            The sites defining the local Hilbert space.
+        virtual_spaces : list of :class:`~cyten.spaces.ElementarySpace`
+            The virtual spaces on the bonds.
+        Bflat : iterable of {numpy ndarrays | :class:`~cyten.Block`}
+            The matrix defining the MPS on each site, with legs ``'p', 'vL', 'vR'``
+            (physical, virtual left/right).
+        SVs : list of {1D array | :class:`~cyten.Block`} or ``None``
+            The singular values on *each* bond. Should always have length `L+1`.
+            By default (``None``), set all singular values to the same value.
+            Entries out of :attr:`nontrivial_bonds` are ignored.
+        bc : {'infinite', 'finite', 'segment'}
+            MPS boundary conditions. See docstring of :class:`MPS`.
+        dtype : :class:`~cyten.Dtype`, optional
+            The data type of the tensors. Defaults to the common dtype of `Bflat`.
+        total_charge : :class:`~cyten.Sector`, optional
+            Total charge of the unit cell for infinite boundary conditions. Is ignored for finite
+            and segemnt boundary conditions. Defaults to the trivial charge sector.
+        form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
+            Defines the canonical form of `Bflat`. See module doc-string.
+            A single choice holds for all of the entries.
+        unit_cell_width : int, optional
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+        device : str, optional
+            Device of the resulting MPS.
+
+        Returns
+        -------
+        mps : :class:`MPS`
+            An MPS with the matrices `Bflat` converted to tensors.
+
+        """
+        sites = list(sites)
+        sym = sites[0].symmetry
+        assert sym.can_be_dropped
+        backend = ct.backends.get_same_backend(sites)
         L = len(sites)
         Bflat = list(Bflat)
         if len(Bflat) != L:
             raise ValueError('Length of Bflat does not match number of sites.')
-        ci = sites[0].leg.chinfo
-        if legL is None:
-            legL = npc.LegCharge.from_qflat(ci, [ci.make_valid(None)] * Bflat[0].shape[1])
-            legL = legL.bunch()[1]
-        if SVs is None:
-            SVs = [np.ones(B.shape[1]) / np.sqrt(B.shape[1]) for B in Bflat]
-            if bc != 'infinite':
-                SVs.append(np.ones(Bflat[-1].shape[2]) / np.sqrt(Bflat[-1].shape[2]))
-        Bs = []
+        if bc == 'infinite' and len(virtual_spaces) != L:
+            raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
+        elif bc != 'infinite' and len(virtual_spaces) != L + 1:
+            raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
+        if device is None:
+            device = sites[0].default_device
         if dtype is None:
-            dtype = np.dtype(np.common_type(*Bflat))
-        for i, site in enumerate(sites):
-            B = np.array(Bflat[i], dtype)
-            if permute:
-                B = B[site.perm, :, :]
-            # calculate the LegCharge of the right leg
-            legs = [site.leg, legL, None]  # other legs are known
-            legs = npc.detect_legcharge(B, ci, legs, None, qconj=-1)
-            B = npc.Array.from_ndarray(B, legs, dtype)
-            B.iset_leg_labels(['p', 'vL', 'vR'])
-            Bs.append(B)
-            legL = legs[-1].conj()  # prepare for next `i`
+            dtype = ct.Dtype.from_numpy_dtype(np.common_type(*[B for B in Bflat if isinstance(B, np.ndarray)]))
+            dtype = ct.Dtype.common(dtype, *[B.dtype for B in Bflat if not isinstance(B, np.ndarray)])
+            if dtype.is_real and sym.has_complex_topological_data:
+                dtype = dtype.to_complex
+
+        Bs = []
+        for i, B in enumerate(Bflat):
+            codomain = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
+            if bc == 'infinite' and i == L - 1:
+                domain = ct.TensorProduct([virtual_spaces[0]], sym)
+            else:
+                domain = ct.TensorProduct([virtual_spaces[i + 1]], sym)
+            if isinstance(B, np.ndarray):
+                B = backend.block_backend.block_from_numpy(B, dtype=dtype, device=device)
+            # convert to vL, p, vR
+            B = backend.block_backend.permute_axes(B, [1, 0, 2])
+            B = ct.SymmetricTensor.from_dense_block(
+                B,
+                codomain,
+                domain,
+                backend,
+                labels=['vL', 'p', 'vR'],
+                dtype=dtype,
+                device=device,
+                understood_braiding=True,
+            )
+        if SVs is None:
+            new_SVs = [
+                ct.DiagonalTensor.from_eye(leg, backend, ['vL', 'vR'], dtype.to_real, device) for leg in virtual_spaces
+            ]
+            new_SVs = [S / np.sqrt(S.get_leg('vL').dim) for S in new_SVs]
+        else:
+            # numpy array are assumed to be 1D or 2D, blocks are assumed to be 2D
+            new_SVs = []
+            for i, S in enumerate(SVs):
+                if isinstance(S, np.ndarray):
+                    if S.ndim == 1:
+                        S = np.diag(S)
+                    S = backend.block_backend.block_from_numpy(S, dtype=dtype.to_real, device=device)
+                new_SVs.append(
+                    ct.DiagonalTensor.from_dense_block(
+                        S, virtual_spaces[i], backend, ['vL', 'vR'], dtype=dtype.to_real, device=device
+                    )
+                )
+
         if bc == 'infinite':
             # for an iMPS, the last leg has to match the first one.
             # so we need to gauge `qtotal` of the last `B` such that the right leg matches.
-            chdiff = Bs[-1].get_leg('vR').charges[0] - Bs[0].get_leg('vL').charges[0]
-            Bs[-1] = Bs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
+            raise NotImplementedError
         res = cls(
             sites,
             Bs,
-            SVs,
-            form=form,
-            bc=bc,
+            new_SVs,
+            bc,
+            form,
+            norm=1.0,
             unit_cell_width=unit_cell_width,
             understood_shift_symmetry=understood_shift_symmetry,
         )
@@ -3140,16 +3451,16 @@ class MPS(BaseMPSExpectationValue):
     @classmethod
     def from_full(
         cls,
-        sites,
-        psi,
+        sites: list[ct.Site],
+        psi: ct.SymmetricTensor,
         form=None,
-        cutoff=1.0e-16,
-        normalize=True,
-        bc='finite',
-        outer_S=None,
-        unit_cell_width=None,
+        cutoff: float = 1.0e-16,
+        normalize: bool = True,
+        bc: Literal['finite', 'segment'] = 'finite',
+        outer_S: tuple[ct.DiagonalTensor, ct.DiagonalTensor] | None = None,
+        unit_cell_width: int = None,
         understood_shift_symmetry: bool = False,
-    ):
+    ) -> MPS:
         """Construct an MPS from a single tensor `psi` with one leg per physical site.
 
         Performs a sequence of SVDs of psi to split off the `B` matrices and obtain the singular
@@ -3158,9 +3469,9 @@ class MPS(BaseMPSExpectationValue):
 
         Parameters
         ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~cyten.models.degrees_of_freedom.Site`
             The sites defining the local Hilbert space.
-        psi : :class:`~tenpy.linalg.np_conserved.Array`
+        psi : :class:`~cyten.SymmetricTensor`
             The full wave function to be represented as an MPS.
             Should have labels ``'p0', 'p1', ...,  'p{L-1}'`` (in any order).
             Additionally, it may have (or must have for 'segment' `bc`) the legs ``'vL', 'vR'``,
@@ -3193,65 +3504,56 @@ class MPS(BaseMPSExpectationValue):
             raise ValueError('Invalid form: ' + repr(form))
         if bc != 'finite' and bc != 'segment':
             raise ValueError('Wrong boundary conditions: ' + repr(bc))
+        elif bc == 'segment' and outer_S is None:
+            raise ValueError("Outer singular values must be specified for 'segment' boundary conditions")
         # perform SVDs to bring it into 'B' form, afterwards change the form.
         L = len(sites)
         assert L >= 2
-        B_list = [None] * L
-        S_list = [None] * (L + 1)
-        norm = 1.0 if normalize else npc.norm(psi)
+        norm = 1.0 if normalize else ct.norm(psi)
+
+        new_domain = [f'{p}{L - 1}' for p in reversed(cls._p_label)]
+        if psi.has_label('vR'):
+            new_domain = ['vR'] + new_domain
+        psi = ct.planar_permute_legs(psi, domain=new_domain)
+
         if not psi.has_label('vL'):
-            psi = psi.add_trivial_leg(0, label='vL', qconj=+1)
-        elif bc == 'finite' and psi.get_leg('vL').ind_len != 1:
+            if bc == 'segment':
+                raise ValueError("left leg must be specified for 'segment' boundary conditions")
+            psi = ct.add_trivial_leg(psi, codomain_pos=0, label='vL')
+        elif bc == 'finite' and not psi.get_leg('vL').is_trivial:
             raise ValueError("non-trivial left leg for 'finite' bc!")
         if not psi.has_label('vR'):
-            psi = psi.add_trivial_leg(len(psi.get_leg_labels()), label='vR', qconj=-1)
-        elif bc == 'finite' and psi.get_leg('vR').ind_len != 1:
-            raise ValueError("non-trivial left leg for 'finite' bc!")
+            if bc == 'segment':
+                raise ValueError("right leg must be specified for 'segment' boundary conditions")
+            psi = ct.add_trivial_leg(psi, domain_pos=0, label='vR')
+        elif bc == 'finite' and not psi.get_leg('vR').is_trivial:
+            raise ValueError("non-trivial right leg for 'finite' bc!")
 
-        # need to consider subclasses with multiple legs per site (e.g. purification)
-        legs_per_site = len(cls._p_label)
-        # p_labels: e.g. [['p0', 'q0'], ['p1', 'q1'], ...]
-        p_labels = [[f'{p}{i}' for p in cls._p_label] for i in range(L)]
-        # psi_labels: e.g. ['vL', 'p0', 'q0', 'p1', 'q1', ..., 'vR']
-        psi_labels = ['vL'] + [p_i for P in p_labels for p_i in P] + ['vR']
-        psi.itranspose(psi_labels)
-
-        # combine to one leg per site
-        if legs_per_site > 1:
-            psi = psi.combine_legs([[1 + site * legs_per_site + n for n in range(legs_per_site)] for site in range(L)])
-            combined_P_labels = [npc.Array._combine_leg_labels(P) for P in p_labels]
-        else:
-            combined_P_labels = [P[0] for P in p_labels]
-        # now we have legs ``vL, P0, P1, ..., vR``, where e.g. P0==(p0.q0)
-        assert psi._labels == ['vL', *combined_P_labels, 'vR']
-
-        # combine legs from left
-        for i in range(0, L - 1):
-            psi = psi.combine_legs([0, 1])  # combines the legs until `i`
-        # now psi has only three legs: ``'(((vL.P0).P1)...P{L-2})', 'P{L-1}', 'vR'``
+        B_list = [None] * L
+        S_list = [None] * (L + 1)
         for i in range(L - 1, 0, -1):
-            # split off B[i]
-            psi = psi.combine_legs([combined_P_labels[i], 'vR'])
-            psi, S, B = npc.svd(psi, inner_labels=['vR', 'vL'], cutoff=cutoff)
-            S /= np.linalg.norm(S)  # normalize
-            if i > 1:
-                psi.iscale_axis(S, 1)
-            B = B.split_legs(1)
-            if legs_per_site > 1:
-                B = B.split_legs(combined_P_labels[i])
-            B = B.replace_labels(p_labels[i], cls._p_label)
+            psi, S, B = ct.truncated_svd(psi, new_labels=['vR', 'vL'], svd_min=cutoff)
+            # bring S and B to default form
+            S /= ct.norm(S)
+            B = ct.planar_permute_legs(B, domain=['vR'])
+            B.relabel({f'{p}{i}': f'{p}' for p in cls._p_label})
             B_list[i] = B
             S_list[i] = S
-            psi = psi.split_legs(0)
+            if i > 1:
+                # prepare next SVD
+                psi = ct.compose(psi, S)
+                new_domain = ['vR'] + [f'{p}{i - 1}' for p in reversed(cls._p_label)]
+                psi = ct.planar_permute_legs(psi, domain=new_domain)
         # psi is now the first `B` in 'A' form
-        if legs_per_site > 1:
-            psi = psi.split_legs(combined_P_labels[0])
-        B_list[0] = psi.replace_labels(p_labels[0], cls._p_label)
+        psi.relabel({f'{p}0': f'{p}' for p in cls._p_label})
+        B_list[0] = psi
         B_form = ['A'] + ['B'] * (L - 1)
+
         if bc == 'finite':
-            S_list[0] = S_list[-1] = np.ones([1], dtype=np.float64)
-        elif outer_S is not None:
+            pass  # this case is done in the init
+        else:
             S_list[0], S_list[-1] = outer_S
+
         res = cls(
             sites,
             B_list,
@@ -3269,17 +3571,19 @@ class MPS(BaseMPSExpectationValue):
     @classmethod
     def from_singlets(
         cls,
-        site,
-        L,
-        pairs,
-        up='up',
-        down='down',
-        lonely=[],
-        lonely_state='up',
-        bc='finite',
-        unit_cell_width=None,
+        site: ct.Site,
+        L: int,
+        pairs: list[tuple[int]],
+        up: int | str = 'up',
+        down: int | str = 'down',
+        lonely: list[int] = [],
+        lonely_state: int | str = 'up',
+        bc: Literal['finite', 'segment', 'infinite'] = 'finite',
+        dtype: ct.Dtype = ct.Dtype.float64,
+        device: str | None = None,
+        unit_cell_width: int = None,
         understood_shift_symmetry: bool = False,
-    ):
+    ) -> MPS:
         """Create an MPS of entangled singlets.
 
         Parameters
@@ -3310,7 +3614,7 @@ class MPS(BaseMPSExpectationValue):
             An MPS representing singlets on the specified pairs of sites.
 
         """
-        if not site.leg.chinfo.trivial_shift:
+        if not site.symmetry.trivial_shift:
             # Singlet coverings may not be compatible with such symmetries.
             # Consider e.g. the electric dipole moment where the "up" and "down" states have
             # different electric charge. Then, a two-site singlet has no well-defined dipole moment.
@@ -3320,13 +3624,13 @@ class MPS(BaseMPSExpectationValue):
             )
         assert 2 * len(pairs) + len(lonely) == L, 'incompatible indices'
         # set unit_cell_width as if on a Chain. Will not be used by from_product_mps_covering
-        psi_up_down = MPS.from_product_state([site] * 2, [up, down], unit_cell_width=2)
-        psi_down_up = MPS.from_product_state([site] * 2, [down, up], unit_cell_width=2)
+        psi_up_down = MPS.from_product_state([site] * 2, [up, down], unit_cell_width=2, dtype=dtype, device=device)
+        psi_down_up = MPS.from_product_state([site] * 2, [down, up], unit_cell_width=2, dtype=dtype, device=device)
         psi_singlet = psi_up_down.add(psi_down_up, 0.5**0.5, -(0.5**0.5))
         mps_covering = [psi_singlet] * len(pairs)
         index_map = list(pairs)
         if len(lonely) > 0:
-            psi_lonely = MPS.from_product_state([site], [lonely_state], unit_cell_width=1)
+            psi_lonely = MPS.from_product_state([site], [lonely_state], unit_cell_width=1, dtype=dtype, device=device)
             mps_covering.extend([psi_lonely] * len(lonely))
             index_map.extend([(i,) for i in lonely])
         psi = cls.from_product_mps_covering(
@@ -3338,6 +3642,8 @@ class MPS(BaseMPSExpectationValue):
         )
         assert psi.L == L
         return psi
+
+    # FIXME stopped here
 
     @classmethod
     def from_product_mps_covering(
@@ -8428,3 +8734,22 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
             all_sites.remove(site)
 
     return initial_state
+
+
+def _truncate_virtual_space(
+    space1: ct.ElementarySpace, space2: ct.ElementarySpace | None, chi: int, err: str = ''
+) -> ct.ElementarySpace:
+    """Return a common subspace of `space1` and `space2` whose multiplicities sum at most to `chi`."""
+    if space2 is not None:
+        space1 = ct.ElementarySpace.from_largest_common_subspace(space1, space2)
+        if len(space1.sector_decomposition) == 0:
+            raise ValueError(err)
+    chi_current = np.sum(space1.multiplicities)
+    if chi_current > chi:
+        # rescale the multiplicities and add the remaining part to the highest multiplicity
+        new_mults = space1.multiplicities * chi // chi_current
+        diff = chi - np.sum(new_mults)
+        add_idx = np.argsort(space1.multiplicities)[-1]
+        new_mults[add_idx] += diff
+        space1 = ct.ElementarySpace(space1.symmetry, space1.sector_decomposition, new_mults)
+    return space1
