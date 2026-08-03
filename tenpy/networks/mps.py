@@ -2350,7 +2350,7 @@ class MPS(BaseMPSExpectationValue):
             unit_cell_width=unit_cell_width,
             understood_shift_symmetry=understood_shift_symmetry,
         )
-        if res.L > 1 and max(res.chi) > 1:
+        if res.L > 1 and max(res.chi) > 1 and form is not None:
             # the SVs set above are not the correct Schmidt values if chi > 1.
             res.canonical_form()
         return res
@@ -4269,8 +4269,11 @@ class MPS(BaseMPSExpectationValue):
         if self.finite:
             if ignore_form:
                 # Use TransferMatrix with option to ignore the form
-                TM = TransferMatrix(self, other, charge_sector=charge_sector, form=None)
-                res = TM.matvec(TM.initial_guess(1.0))  # apply transfer matrix to identity
+                TM = TransferMatrix(self, other, charge_sector=charge_sector, form=None, transpose=True)
+                vec = TM.initial_guess(1.0)
+                if self.bc == 'segment':  # account for S[0], assume S[L] is already in rightmost B
+                    vec.iscale_axis(self.get_SL(0) * other.get_SL(0))
+                res = TM.matvec(vec)
                 return npc.trace(res, 0, 1) * self.norm * other.norm
             else:
                 env = MPSEnvironment(self, other)
@@ -4536,17 +4539,17 @@ class MPS(BaseMPSExpectationValue):
         S = self.get_SL(0)
         if self.bc == 'segment':
             if S is None:
-                raise ValueError('Need S[0] and S[L] for segment boundary conditions.')
+                raise ValueError('Need S[0] for segment boundary conditions.')
             self.set_SL(0, S / np.linalg.norm(S))
-            S = self.get_SR(L - 1)
-            self.set_SR(L - 1, S / np.linalg.norm(S))
         else:  # bc == 'finite':
             self.set_SL(0, np.array([1.0]))  # trivial singular value on very left/right
             self.set_SR(L - 1, np.array([1.0]))
         # sweep from left to right to bring it into left canonical form.
-        if any([(f is None) for f in self.form]):
+        if any(f is None for f in self.form):
             # ignore any 'S' and canonical form
             M = self.get_B(0, form=None)
+            if self.bc == 'segment':
+                M = M.scale_axis(self.get_SL(0), 'vL')
             form = None
         else:
             # we actually had a canonical form before, so we should *not* ignore the 'S'
@@ -4574,7 +4577,7 @@ class MPS(BaseMPSExpectationValue):
                 qtotal_LR=[M.qtotal, None],
                 inner_labels=['vR', 'vL'],
             )
-            S /= np.linalg.norm(S)
+            assert np.isclose(np.linalg.norm(S), 1, 1e-14, 1e-14)
             self.set_SR(L - 1, S)
             M = U.scale_axis(S, 1).split_legs(0)
         else:
@@ -4595,7 +4598,7 @@ class MPS(BaseMPSExpectationValue):
                 qtotal_LR=[None, M.qtotal],
                 inner_labels=['vR', 'vL'],
             )
-            S = S / np.linalg.norm(S)  # normalize
+            assert np.isclose(np.linalg.norm(S), 1, 1e-14, 1e-14)
             self.set_SL(i, S)
             self.set_B(i, V.split_legs(1), form='B')
         if self.bc == 'finite':
