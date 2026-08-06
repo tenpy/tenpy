@@ -37,16 +37,20 @@ from functools import wraps
 
 import numpy as np
 
-from ..linalg import np_conserved as npc
-from ..linalg.charges import LegCharge
+#from ..linalg import np_conserved as npc
+#from ..linalg.charges import LegCharge
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
-from ..networks.site import Site, group_sites
+from cyten.models.couplings import Coupling
+from cyten.tensors import dagger
+from cyten.models.degrees_of_freedom import FermionicDOF, Site
+#from ..networks.site import group_sites  # np_conserved-only
 from ..networks.terms import (
     CouplingTerms,
     ExponentiallyDecayingTerms,
     MultiCouplingTerms,
     OnsiteTerms,
     order_combine_term,
+    to_single_coupling,
 )
 from ..tools.hdf5_io import Hdf5Exportable
 from ..tools.misc import add_with_None_0, to_array
@@ -895,6 +899,9 @@ class CouplingModel(Model):
         self.coupling_terms = {}
         self.exp_decaying_terms = ExponentiallyDecayingTerms(L)
         self.explicit_plus_hc = explicit_plus_hc
+        # list of (coupling, positions, strength, split), filled by add_coupling,
+        # calc_H_coupling. See tenpy.networks.terms.to_single_coupling
+        self._cyten_couplings = []
         CouplingModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
 
@@ -1061,28 +1068,18 @@ class CouplingModel(Model):
             ot += t
         return ot
 
-    def add_coupling(self, strength, u1, op1, u2, op2, dx, op_string=None, category=None, plus_hc=False):
-        r"""Add two-site coupling terms to the Hamiltonian, summing over lattice sites.
+    def add_twosite_coupling(self, strength, u1, op1, u2, op2, dx, op_string=None, category=None, plus_hc=False):
+        """Add two-site coupling terms to the Hamiltonian, summing over lattice sites.
 
-        Represents couplings of the form
-        :math:`\sum_{x_0, ..., x_{dim-1}} strength[shift(\vec{x})] * OP0 * OP1`, where
-        ``OP0 := lat.unit_cell[u0].get_op(op0)`` acts on the site ``(x_0, ..., x_{dim-1}, u1)``,
-        and ``OP1 := lat.unit_cell[u1].get_op(op1)`` acts on the site
-        ``(x_0+dx[0], ..., x_{dim-1}+dx[dim-1], u1)``.
-        Possible combinations ``x_0, ..., x_{dim-1}`` are determined from the boundary conditions
-        in :meth:`~tenpy.models.lattice.Lattice.possible_couplings`.
+        Inserts twosite operators across the lattice.
+        It multiplies a position-dependent strength by two operators: OP0 and OP1.
+        OP0 acts on a starting grid site, while OP1 acts on a target site shifted by a distance vector (dx).
+        The lattice's boundary conditions automatically determine which grid positions are valid.
 
-        The coupling `strength` may vary spatially if the given `strength` is a numpy array.
-        The correct shape of this array is the `coupling_shape` returned by
-        :meth:`tenpy.models.lattice.coupling_shape` and depends on the boundary
-        conditions. The ``shift(...)`` depends on `dx`,
-        and is chosen such that the first entry ``strength[0, 0, ...]`` of `strength`
-        is the prefactor for the first possible coupling
-        fitting into the lattice if you imagine open boundary conditions.
-
-        The necessary terms are just added to :attr:`coupling_terms`;
-        this function does not rebuild the MPO.
-
+        Note: This is just a backwards-compatible wrapper matching the old add_coupling syntaxfrom
+        earlier TeNPy versions.
+        It creates a Cyten Coupling object and passes it to the new add_coupling method for each
+        position on the lattice.
         Parameters
         ----------
         strength : scalar | array
@@ -1094,153 +1091,202 @@ class CouplingModel(Model):
             Picks the site ``lat.unit_cell[u1]`` for OP1.
         op1 : str
             Valid operator name of an onsite operator in ``lat.unit_cell[u1]`` for OP1,
-            see :meth:`~tenpy.networks.site.Site.get_op`.
+            see :meth:`~cyten.models.degrees_of_freedom.Site.get_op`.
         u2 : int
             Picks the site ``lat.unit_cell[u2]`` for OP2.
         op2 : str
             Valid operator name of an onsite operator in ``lat.unit_cell[u2]`` for OP2,
-            see :meth:`~tenpy.networks.site.Site.get_op`.
+            see :meth:`~cyten.models.degrees_of_freedom.Site.get_op`.
         dx : iterable of int
             Translation vector (of the unit cell) between OP1 and OP2.
             For a 1D lattice, a single int is also fine.
         op_string : str | None
-            Name of an operator to be used between the OP1 and OP2 sites.
-            Typical use case is the phase for a Jordan-Wigner transformation.
-            The operator should be defined on all sites in the unit cell.
-            If ``None``, auto-determine whether a Jordan-Wigner string is needed, using
-            :meth:`~tenpy.networks.site.Site.op_needs_JW`.
+            Not yet supported in cyten, must be ``None``.
         category : str
-            Descriptive name used as key for :attr:`coupling_terms`.
-            Defaults to a string of the form ``"{op1}_i {op2}_j"``.
+            Descriptive name, defaults to a string of the form ``"{op1}_i {op2}_j"``.
         plus_hc : bool
             If `True`, the hermitian conjugate of the terms is added automatically.
 
-        Examples
-        --------
-        When initializing a model, you can add a term :math:`J \sum_{<i,j>} S^z_i S^z_j`
-        on all nearest-neighbor bonds of the lattice like this:
-
-        .. testsetup :: add_coupling
-
-            self = tenpy.models.hubbard.FermiHubbardChain(dict(L=4, cons_Sz=None))
-            # make it look like both a SpinChain and a FermionChain
-            # Sz and Sx operator already exists
-            site = self.lat.unit_cell[0]
-            site.add_op('C',  site.Cdd, need_JW=True)  # 'Cd' already exists!
-            self.manually_call_init_H = True
-
-        .. doctest :: add_coupling
-
-            >>> J = 1.0  # the strength
-            >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            ...     self.add_coupling(J, u1, 'Sz', u2, 'Sz', dx)
-
-        The strength can be an array, which gets tiled to the correct shape.
-        For example, in a 1D :class:`~tenpy.models.lattice.Chain` with an even number of sites and
-        periodic (or infinite) boundary conditions, you can add alternating strong and weak
-        couplings with a line like::
-
-        >>> self.add_coupling([1.5, 1.0], u1, 'Sz', u2, 'Sz', dx)  # doctest: +SKIP
-
-        Make sure to use the `plus_hc` argument if necessary, e.g. for hoppings:
-
-        .. doctest :: add_coupling
-
-            >>> t = 1.0  # hopping strength
-            >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx, plus_hc=True)
-
-        Alternatively, you can add the hermitian conjugate terms explicitly. The correct way is to
-        complex conjugate the strength, take the hermitian conjugate of the operators and swap the
-        order (including a swap `u1` <-> `u2`), and use the opposite direction ``-dx``, i.e.
-        the `h.c.` of ``add_coupling(t, u1, 'A', u2, 'B', dx)`` is
-        ``add_coupling(np.conj(t), u2, hc('B'), u1, hc('A'), -dx)``, where `hc` takes the hermitian
-        conjugate of the operator names, see :meth:`~tenpy.networks.site.Site.get_hc_op_name`.
-        For spin-less fermions (:class:`~tenpy.networks.site.FermionSite`), this would be
-
-        .. doctest :: add_coupling
-
-            >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx)
-            ...     self.add_coupling(np.conj(t), u2, 'Cd', u1, 'C', -dx)  # h.c.
-
-        With spin-full fermions (:class:`~tenpy.networks.site.SpinHalfFermions`), it could be:
-
-        .. doctest :: add_coupling
-
-            >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            ...     self.add_coupling(t, u1, 'Cdu', u2, 'Cd', dx)  # Cdagger_up C_down
-            ...     self.add_coupling(np.conj(t), u2, 'Cdd', u1, 'Cu', -dx)  # h.c. Cdagger_down C_up
-
-        Note that the Jordan-Wigner strings for the fermions are added automatically!
-
         See Also
         --------
+        add_coupling : The cyten method which is called.
         add_onsite : Add terms acting on one site only.
-        add_multi_coupling_term : for terms on more than two sites.
-        add_coupling_term : Add a single term without summing over :math:`\vec{x}`.
+        add_multi_coupling : Add terms acting on more than two sites.
 
         """
+        if op_string is not None:
+            raise NotImplementedError(
+                "`op_string` (explicit Jordan-Wigner strings) is not yet supported here."
+            )
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
         if not np.any(np.asarray(strength) != 0.0):
-            return  # nothing to do: can even accept non-defined onsite operators
+            return
         for op, u in [(op1, u1), (op2, u2)]:
             if not self.lat.unit_cell[u].valid_opname(op):
                 raise ValueError(f'unknown onsite operator {op!r} for u={u:d}\n{self.lat.unit_cell[u]!r}')
         site1 = self.lat.unit_cell[u1]
         site2 = self.lat.unit_cell[u2]
-        if op_string is None:
-            need_JW1 = site1.op_needs_JW(op1)
-            need_JW2 = site2.op_needs_JW(op2)
-            if need_JW1 and need_JW2:
-                op_string = 'JW'
-            elif need_JW1 or need_JW2:
-                raise ValueError('Only one of the operators needs a Jordan-Wigner string?!')
-            else:
-                op_string = 'Id'
-        for u in range(len(self.lat.unit_cell)):
-            if not self.lat.unit_cell[u].valid_opname(op_string):
-                raise ValueError(f'unknown onsite operator {op_string!r} for u={u:d}\n{self.lat.unit_cell[u]!r}')
-        str_on_first = op_string == 'JW'
+        for site, op in [(site1, op1), (site2, op2)]:
+            if isinstance(site, FermionicDOF):
+                raise NotImplementedError(
+                    f"add_twosite_coupling doesn't support fermionic sites yet. "
+                    f"Identity insertion betweennon-adjacent MPS sites requires operators with built-in "
+                    f"Jordan-Wigner strings (like 'cyten.models.couplings.hopping'). Named operator doesn't have this."
+                    f"Fix: Build the Coupling manually and use 'add_coupling(coupling, indices)' instead."
+                )
         if np.all(dx == 0) and u1 == u2:
             raise ValueError("Coupling shouldn't be onsite!")
-        mps_i, mps_j, strength_vals = self.lat.possible_couplings(u1, u2, dx, strength)
-        if self.explicit_plus_hc:
-            # we explicitly add the h.c. later ...
-            if plus_hc:
-                plus_hc = False  # ... so there's no need to do it at the bottom of this function
-                # (this reduces the MPO bond dimension with `explicit_plus_hc=True`)
-            else:
-                strength_vals = strength_vals / 2.0  # ... so we should avoid double-counting
         if category is None:
             category = f'{op1}_i {op2}_j'
-        ct = self.coupling_terms.setdefault(category, CouplingTerms(self.lat.N_sites))
-        # loop to perform the sum over {x_0, x_1, ...}
+        coupling = self._coupling_from_opnames([site1, site2], [op1, op2], name=category)
+        mps_i, mps_j, strength_vals = self.lat.possible_couplings(u1, u2, dx, strength)
         for i, j, current_strength in zip(mps_i, mps_j, strength_vals):
-            # the following is roughly equivalent to
-            # CouplingTerms.coupling_term_handle_JW, but also swaps i <-> j if necessary
-            # and allows `str_on_first` being set explicitly
-            if i < j:
-                o1, o2 = op1, op2
-                if str_on_first and op_string != 'Id':
-                    o1 = site1.multiply_op_names([op1, op_string])  # op2 acts first!
-            else:  # i > j
-                # swap operators to ensure i <= j
-                i, j = j, i
-                o1, o2 = op2, op1
-                if str_on_first and op_string != 'Id':
-                    o1 = site2.multiply_op_names([op_string, op2])  # op2 acts first!
-            # now we have always i < j and 0 <= i < N_sites
-            # j >= N_sites indicates couplings between unit_cells of the infinite MPS.
-            # o1 is the "left" operator; o2 is the "right" operator
-            ct.add_coupling_term(current_strength, i, j, o1, o2, op_string)
-
+            self.add_coupling(coupling, [int(i), int(j)], strength=current_strength, category=category)
         if plus_hc:
-            hc_op1 = site1.get_hc_op_name(op1)
-            hc_op2 = site2.get_hc_op_name(op2)
-            hc_opstr = site2.get_hc_op_name(op_string)
-            self.add_coupling(np.conj(strength), u2, hc_op2, u1, hc_op1, -dx, hc_opstr, category, plus_hc=False)
+            hc_coupling = self._coupling_hermitian_conjugate(coupling, name=f'hc({category})')
+            for i, j, current_strength in zip(mps_i, mps_j, strength_vals):
+                self.add_coupling(
+                    hc_coupling, [int(i), int(j)], strength=np.conj(current_strength), category=category
+                )
         # done
+
+    def add_coupling(self, coupling, indices, strength=1.0, category=None, split=None):
+        """Add a single placement of a Coupling to the Hamiltonian.
+
+        This adds exactly one instance of `strength * coupling` at the specified `indices`.
+        Unlike other methods, it does not loop over the entire lattice. To sum over a whole
+        lattice, call this function once per placement.
+
+        The given indices do not have to be sorted or next to each other.
+        The method automatically permutes the coupling to match the physical
+        left-to-right order of the MPS sites.
+        Any gaps between non-neighboring sites are automatically filled with identity
+        tensors later when the MPO is built.
+
+        Parameters
+        ----------
+        coupling : cyten.models.couplings.Coupling
+            The coupling object to add. Its internal operators are fixed, so its sites
+            must match the physical MPS sites at the given indices.
+        indices : list of int
+            The MPS site indices where the coupling acts (matching the order of the coupling).
+            Can be unsorted or have gaps, but must not contain duplicate indices.
+        strength : scalar
+            A multiplier (prefactor) for this specific placement.
+        category : str, optional
+            A custom label for this term. Defaults to the coupling's name.
+        split : int, optional
+            The index of the tensor that should absorb the `strength` factor. Defaults
+            to the last tensor. It always points to the same physical site, even if
+            the indices were reordered.
+
+        See Also
+        --------
+        add_twosite_coupling : Two-site coupling by operator name, summed over the lattice.
+        add_multi_coupling : Multi-site coupling by operator name, summed over the lattice.
+        calc_H_coupling : Build the Coupling representing the sum of everything added here.
+
+        """
+        num_sites = len(coupling.sites)
+        if len(indices) != num_sites:
+            raise ValueError(f'need {num_sites:d} entries in `indices`, one per site of `coupling`')
+        positions = [int(i) for i in indices]
+        if len(set(positions)) != num_sites:
+            raise ValueError(f'`coupling` would act on repeated MPS sites: positions={positions}')
+        if not np.any(np.asarray(strength) != 0.0):
+            return  # nothing to do
+        if category is None:
+            category = coupling.name or 'coupling'
+        sorted_positions = sorted(positions)
+        if positions == sorted_positions:
+            placed_coupling = coupling
+            placed_split = split
+        else:
+            permutation = list(np.argsort(positions))
+            num_swaps = self._count_inversions(permutation)
+            placed_coupling = coupling.permute(permutation, coupling._levels, [None] * num_swaps)
+            placed_split = None if split is None else permutation.index(split)
+        self._cyten_couplings.append((placed_coupling, sorted_positions, strength, placed_split))
+
+    @staticmethod
+    def _coupling_from_opnames(sites, opnames, name=None):
+        """Build a cyten Coupling representing the product of named onsite operators.
+
+        Parameters
+        ----------
+        sites : list of cyten.models.degrees_of_freedom.Site
+            The sites the coupling acts on, one per entry of `opnames`.
+        opnames : list of str
+            Name of the onsite operator to use on each site, see
+            :meth:`~cyten.models.degrees_of_freedom.Site.get_op`.
+        name : str, optional
+            Name for the returned Coupling.
+
+        Returns
+        -------
+        coupling : cyten.models.couplings.Coupling
+            Coupling representing the outer product of the given operators, each acting on its
+            own site (in the given order).
+
+        """
+        ops = [site.get_op(opname).to_numpy() for site, opname in zip(sites, opnames)]
+        h = ops[0]
+        for op in ops[1:]:
+            h = np.tensordot(h, op, axes=0)
+        # h has axes [p0,p0*, p1,p1*, ..., p(M-1),p(M-1)*]; Coupling.from_dense_block wants
+        # [p0,...,p(M-1), p(M-1)*,...,p0*] (bra legs reversed).
+        n = len(ops)
+        codomain_axes = [2 * m for m in range(n)]
+        domain_axes = [2 * m + 1 for m in range(n)][::-1]
+        h = np.transpose(h, codomain_axes + domain_axes)
+        return Coupling.from_dense_block(h, sites, name=name, understood_braiding=True)
+
+    @staticmethod
+    def _coupling_hermitian_conjugate(coupling, name=None):
+        """Hermitian conjugate of a cyten Coupling, as a new Coupling on the same sites.
+
+        Works at the tensor level (contract, conjugate-transpose, re-factorize), so it applies to
+        *any* Coupling, not just ones built via :meth:`_coupling_from_opnames`.
+        """
+        return Coupling.from_tensor(dagger(coupling.to_tensor()), coupling.sites, name=name)
+
+    @staticmethod
+    def _count_inversions(permutation):
+        """Number of pairs ``i < j`` with ``permutation[i] > permutation[j]``.
+
+        Equal to the number of elementary adjacent transpositions needed to realize
+        `permutation` (see :func:`~cyten.models.couplings._adjacent_transpositions`), i.e. the
+        length of `over_braid` that :meth:`~cyten.models.couplings.Coupling.permute` expects.
+        """
+        n = len(permutation)
+        return sum(1 for i in range(n) for j in range(i + 1, n) if permutation[i] > permutation[j])
+
+    def calc_H_coupling(self, name=None):
+        """Calculate the cyten Coupling representation of the Hamiltonian.
+
+        Uses the couplings added via :meth:`add_coupling` (the cyten-native path).
+
+        Parameters
+        ----------
+        name : str, optional
+            Name for the returned Coupling.
+
+        Returns
+        -------
+        H : cyten.models.couplings.Coupling
+            Coupling representing the sum of all terms added via :meth:`add_coupling`.
+
+        """
+        if not self._cyten_couplings:
+            raise ValueError('No couplings added via add_coupling; nothing to build.')
+        couplings, sites_arg, prefactors, split = [], [], [], []
+        for coupling, positions, strength, split_idx in self._cyten_couplings:
+            couplings.append(coupling)
+            sites_arg.append(positions)
+            prefactors.append(strength)
+            split.append(split_idx)
+        return to_single_coupling(couplings, sites_arg, prefactors, split, bc=self.lat.bc_MPS, name=name)
+
 
     def add_coupling_term(self, strength, i, j, op_i, op_j, op_string='Id', category=None, plus_hc=False):
         """Add a two-site coupling term on given MPS sites.
@@ -1272,9 +1318,9 @@ class CouplingModel(Model):
         """
         if self.explicit_plus_hc:
             if plus_hc:
-                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+                plus_hc = False  # explicitly add the h.c. later
             else:
-                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
+                strength /= 2  # avoid double-counting this term
         if category is None:
             category = f'{op_i}_i {op_j}_j'
         ct = self.coupling_terms.setdefault(category, CouplingTerms(self.lat.N_sites))
@@ -1283,7 +1329,7 @@ class CouplingModel(Model):
             site_i = self.lat.unit_cell[self.lat.order[i, -1]]
             site_j = self.lat.unit_cell[self.lat.order[j % self.lat.N_sites, -1]]
             hc_op_i = site_i.get_hc_op_name(op_i)
-            # NB: op_string should be defined on all sites in the unit cell...
+            # op_string should be defined on all sites in the unit cell...
             hc_op_string = site_i.get_hc_op_name(op_string)
             hc_op_j = site_j.get_hc_op_name(op_j)
             ct.add_coupling_term(np.conj(strength), i, j, hc_op_i, hc_op_j, hc_op_string)
@@ -1302,14 +1348,9 @@ class CouplingModel(Model):
     def add_multi_coupling(self, strength, ops, op_string=None, category=None, plus_hc=False, switchLR='middle_i'):
         r"""Add multi-site coupling terms to the Hamiltonian, summing over lattice sites.
 
-        Represents couplings of the form
-        :math:`sum_{\vec{x}} strength[shift(\vec{x})] * OP_0 * OP_1 * ... * OP_{M-1}`,
-        involving `M` operators.
-        Here, :math:`OP_m` stands for the operator defined by the `m`-th tuple
-        ``(opname, dx, u)`` given in the argument `ops`, which determines the position
-        :math:`\vec{x} + \vec{dx}` and unit-cell index `u` of the site it acts on;
-        the actual operator is given by `self.lat.unit_cell[u].get_op(opname)`.
-
+        This method multiplies a tuple of operators (OP0, OP1, ..., OPM-1) by their strength.
+        Each operator is defined by a name, a unit cell index, and a distance vector (dx) that
+        shifts it relative to a starting lattice site.
         The coupling `strength` may vary spatially if the given `strength` is a numpy array.
         The correct shape of this array is the `coupling_shape` returned by
         :meth:`tenpy.models.lattice.Lattice.possible_multi_couplings` and depends on the boundary
@@ -1318,8 +1359,9 @@ class CouplingModel(Model):
         is the prefactor for the first possible coupling
         fitting into the lattice if you imagine open boundary conditions.
 
-        The necessary terms are just added to :attr:`coupling_terms`;
-        this function does not rebuild the MPO.
+        This is a  wrapper kept under its old TeNPy signature.
+        It builds one :class:`~cyten.models.couplings.Coupling` from
+        `ops` and delegates to the cyten-native :meth:`add_coupling`, once per lattice placement.
 
         Parameters
         ----------
@@ -1327,111 +1369,70 @@ class CouplingModel(Model):
             Prefactor of the coupling. May vary spatially, and is tiled to the required shape.
         ops : list of ``(opname, dx, u)``
             Each tuple determines one operator of the coupling, see the description above.
-            `opname` (str) is the name of the operator (see :meth:`~tenpy.networks.site.Site.get_op`),
+            `opname` (str) is the name of the operator (see
+            :meth:`~cyten.models.degrees_of_freedom.Site.get_op`),
             `dx` (list of length `lat.dim`) is a translation vector, and
             `u` (int) is the index of `lat.unit_cell` on which the operator acts.
-            The first entry of `ops` corresponds to :math:`OP_0` and acts last in the physical
-            sense.
         op_string : str | None
-            If a string is given, we use this as the name of an operator to be used inbetween
-            the operators, *excluding* the sites on which any operators act.
-            This operator should be defined on all sites in the unit cell.
-
-            If ``None``, auto-determine whether a Jordan-Wigner string is needed
-            (using :meth:`~tenpy.networks.site.Site.op_needs_JW`) for each of the segments
-            inbetween the operators and also on the sites of the left operators.
-
-            .. warning :
-                ``None`` figures out for each segment between the operators, whether a
-                Jordan-Wigner string is needed.
-                This is different from a plain ``'JW'``, which just applies a string on
-                *each* segment and gives wrong results e.g. for Cd-C-Cd-C terms!
-
+            Not yet supported in cyten, must be ``None``.
         switchLR : int | ``"middle_i" | "middle_op"``
-            See :meth:`~tenpy.networks.terms.MultiCouplingTerms.add_multi_coupling` for
-            details on possible choices.
+            Accepted for signature compatibility but has no effect: it only ever changed *where*
+            in the old string-based graph `strength` was folded in, which cannot affect the
+            represented Hamiltonian (the analogous cyten-native knob is `split` on
+            :meth:`add_coupling`, similarly inconsequential -- see its docstring).
         category : str
-            Descriptive name used as key for :attr:`coupling_terms`.
-            Defaults to a string of the form ``"{op0}_i {other_ops[0]}_j {other_ops[1]}_k ..."``.
+            Descriptive name; defaults to a string of the form ``"{op0}_i {other_ops[0]}_j {other_ops[1]}_k ..."``.
         plus_hc : bool
-            If `True`, the hermitian conjugate of the terms is added automatically.
-
-        Examples
-        --------
-        A call to :meth:`add_coupling` with arguments
-        ``add_coupling(strength, u1, 'A', u2, 'B', dx)`` is equivalent to the following::
-
-        >>> dx_0 = [0] * self.lat.dim  # = [0] for a 1D lattice, [0, 0] in 2D  # doctest: +SKIP
-        >>> self.add_multi_coupling(strength, [('A', dx_0, u1), ('B', dx, u2)])  # doctest: +SKIP
-
-        To explicitly add the hermitian conjugate (instead of simply using `plus_hc = True`),
-        you need to take the complex conjugate of the
-        `strength`, reverse the order of the operators and take the hermitian conjugates of the
-        individual operator names (indicated by the ``hc(...)``, see
-        :meth:`~tenpy.networks.site.Site.get_hc_op_name`):
-
-        >>> self.add_multi_coupling(np.conj(strength), [(hc('B'), dx, u2), (hc('A'), dx_0, u1)])  # doctest: +SKIP
+            If `True`, the hermitian conjugate of the terms is added automatically, computed at
+            the tensor level (see :meth:`_coupling_hermitian_conjugate`) rather than by
+            name-mangling the operators in `ops`.
 
         See Also
         --------
+        add_coupling : The cyten-native core this delegates to.
         add_onsite : Add terms acting on one site only.
-        add_coupling : Add terms acting on two sites.
-        add_multi_coupling_term : Add a single term, not summing over the possible :math:`\vec{x}`.
+        add_twosite_coupling : Add terms acting on exactly two sites.
 
         """
-        # split `ops` into separate groups
+        if op_string is not None:
+            raise NotImplementedError(
+                "`op_string` (explicit Jordan-Wigner strings) is not yet supported here; build the "
+                "Coupling directly and use add_coupling(coupling, indices) instead."
+            )
         all_ops = [t[0] for t in ops]
         all_us = np.array([t[2] for t in ops], np.intp)
         all_dxs = np.array([t[1] for t in ops], np.intp).reshape([len(ops), self.lat.dim])
         if not np.any(np.asarray(strength) != 0.0):
             return  # nothing to do: can even accept non-defined onsite operators
-        need_JW = np.array([self.lat.unit_cell[u].op_needs_JW(op) for op, _, u in ops], dtype=np.bool_)
-        if not np.sum(need_JW) % 2 == 0:
-            raise ValueError("Invalid coupling: odd number of operators which need 'JW' string")
-        if op_string is None and not any(need_JW):
-            op_string = 'Id'
         for op, _, u in ops:
             if not self.lat.unit_cell[u].valid_opname(op):
                 raise ValueError(f'unknown onsite operator {op!r} for u={u:d}\n{self.lat.unit_cell[u]!r}')
-        if op_string is not None:
-            for u in range(len(self.lat.unit_cell)):
-                if not self.lat.unit_cell[u].valid_opname(op_string):
-                    raise ValueError(f'unknown onsite operator {op_string!r} for u={u:d}\n{self.lat.unit_cell[u]!r}')
+        sites_per_op = [self.lat.unit_cell[u] for _, _, u in ops]
+        for site, op in zip(sites_per_op, all_ops):
+            if isinstance(site, FermionicDOF):
+                raise NotImplementedError(
+                    f'add_multi_coupling does not support fermionic sites yet. Build the Coupling directly '
+                    'and use add_coupling(coupling, indices).'
+                )
         if np.all(all_dxs == all_dxs[0, :]) and np.all(all_us[0] == all_us):
             # note: we DO allow couplings with some onsite terms, but not all of them
             raise ValueError("Coupling shouldn't be purely onsite!")
 
         # prepare: figure out the necessary mps indices
         mps_ijkl, strength_vals = self.lat.possible_multi_couplings(ops, strength)
-        if self.explicit_plus_hc:
-            # we explicitly add the h.c. later ...
-            if plus_hc:
-                plus_hc = False  # ... so there's no need to do it at the bottom of this function
-                # (this reduces the MPO bond dimension with `explicit_plus_hc=True`)
-            else:
-                strength_vals = strength_vals / 2.0  # ... so we should avoid double-counting
         if category is None:
             category = ' '.join(['{op}_{i}'.format(op=op, i=chr(ord('i') + m)) for m, op in enumerate(all_ops)])
-        ct = self.coupling_terms.setdefault(category, MultiCouplingTerms(self.lat.N_sites))
-        if not isinstance(ct, MultiCouplingTerms):
-            # convert ct to MultiCouplingTerms
-            self.coupling_terms[category] = new_ct = MultiCouplingTerms(self.lat.N_sites)
-            new_ct += ct
-            ct = new_ct
-        sites = self.lat.mps_sites()
-        # loop to perform the sum over {x_0, x_1, ...}
+        coupling = self._coupling_from_opnames(sites_per_op, all_ops, name=category)
         for ijkl, current_strength in zip(mps_ijkl, strength_vals):
-            term = list(zip(all_ops, ijkl))
-            term, sign = order_combine_term(term, sites)
-            args = ct.multi_coupling_term_handle_JW(current_strength * sign, term, sites, op_string)
-            ct.add_multi_coupling_term(*args, switchLR=switchLR)
+            self.add_coupling(coupling, [int(i) for i in ijkl], strength=current_strength, category=category)
 
         # add h.c. term
         if plus_hc:
-            hc_ops = [(self.lat.unit_cell[u].get_hc_op_name(opname), dx, u) for (opname, dx, u) in reversed(ops)]
-            self.add_multi_coupling(
-                np.conj(strength), hc_ops, op_string=op_string, category=category, plus_hc=False, switchLR=switchLR
-            )
+            hc_coupling = self._coupling_hermitian_conjugate(coupling, name=f'hc({category})')
+            for ijkl, current_strength in zip(mps_ijkl, strength_vals):
+                self.add_coupling(
+                    hc_coupling, [int(i) for i in ijkl], strength=np.conj(current_strength), category=category
+                )
         # done
 
     def add_multi_coupling_term(

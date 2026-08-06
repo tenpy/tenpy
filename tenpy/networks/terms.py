@@ -1729,49 +1729,38 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
 
 
 def to_single_coupling(couplings, sites, prefactors, split, bc='finite', name=None, unit_cell_width=None):
-    r"""Combine several cyten Couplings into a single cyten Coupling.
+    """Combine several Couplings into a single Coupling.
 
-    Builds a :class:`~tenpy.networks.mpo.MPOGraph` representing
-    :math:`\sum_k \text{prefactors}[k] \times \text{couplings}[k]`, with
-    ``couplings[k]`` placed on the MPS sites given by ``sites[k]``,
-    and converts the resulting MPO back into a single
-    :class:`~cyten.models.couplings.Coupling`.
+    This function builds an intermediate MPO graph representing the sum of all input
+    couplings (each scaled by its respective prefactor). It then converts that entire
+    graph back into one unified Coupling.
 
     Parameters
     ----------
-    couplings : list of :class:`~cyten.models.couplings.Coupling`
-        The couplings to be summed.
+    couplings : list of cyten.models.couplings.Coupling
+        The individual couplings to be summed together.
     sites : list of list of int
-        For each entry of `couplings`, the MPS site indices its factorization acts on (same
-        length as ``couplings[k].factorization``), strictly ascending. Every MPS site in the
-        covered range ``[0, L)`` must appear in `sites[k]` for at least one `k`, since that is
-        the only way :func:`to_single_coupling` learns which Hilbert space (i.e. which cyten
-        :class:`~cyten.models.degrees_of_freedom.Site`) lives there.
-    prefactors : list of float/complex
-        Overall prefactor for each entry of `couplings`.
+        For each coupling, a strictly ascending list of MPS site indices where it acts.
+        Every MPS site within the covered range must appear at least once across these
+        lists so the function can identify the underlying Hilbert space (Site object).
+    prefactors : list of float or complex
+        An overall multiplier for each coupling in the list.
     split : list of int
-        For each coupling, the local index into ``couplings[k].factorization`` whose tensor gets
-        scaled by ``prefactors[k]`` before insertion into the graph. This determines where the
-        coupling's overall strength is "worked into" the graph, analogous to `switchLR` in
-        :meth:`MultiCouplingTerms.add_multi_coupling_term`.
-    bc : ``'finite' | 'infinite'``
-        Boundary conditions for the intermediate :class:`~tenpy.networks.mpo.MPOGraph`/MPO.
-        Note that :class:`~cyten.models.couplings.Coupling` requires trivial boundary legs, so
-        only ``'finite'`` can actually be converted back to a single coupling.
+        For each coupling, the index of the tensor that will absorb its prefactor.
+        This determines where the strength is embedded into the MPO graph.
+    bc : {'finite', 'infinite'}
+        Boundary conditions for the intermediate MPO graph. Note that a unified
+        Coupling requires trivial boundary legs, so only 'finite' can actually
+        be converted back into a single coupling.
     name : str, optional
-        Name for the returned :class:`~cyten.models.couplings.Coupling`.
+        The name assigned to the newly created, combined Coupling.
     unit_cell_width : int, optional
-        See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+        The width of the MPS unit cell.
 
     Returns
     -------
-    coupling : :class:`~cyten.models.couplings.Coupling`
-        Single coupling representing the sum of all input couplings.
-
-    See Also
-    --------
-    tenpy.networks.mpo.MPOGraph.add_coupling_as_term : adds a single coupling to the graph.
-    tenpy.networks.mpo.MPOGraph.build_coupling : builds the Coupling from the completed graph.
+    coupling : cyten.models.couplings.Coupling
+        The single, unified coupling representing the sum of all inputs.
 
     """
     from .mpo import MPOGraph

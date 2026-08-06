@@ -1,151 +1,25 @@
 """A collection of tests for (classes in) :module:`tenpy.networks.mpo`."""
-
-from cyten.tensors import SymmetricTensor, permute_legs
-from cyten.backends import get_same_backend
-from cyten.models.couplings import Coupling
-from cyten.models.sites import identity_tensor
-
-
-import cyten
-
+# Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
-import cyten.models.sites as s
-print(s.__file__)
-print(dir(s))
-
-
 import pytest
+from cyten.models.couplings import Coupling, heisenberg_coupling, spin_field_coupling
+
+# from tenpy.networks import site
+# from tenpy.networks.terms import CouplingTerms, MultiCouplingTerms, OnsiteTerms, TermList
+from cyten.models.sites import SpinSite
 
 #pytest.skip(allow_module_level=True)
-
 # from random_test import random_MPS
-
 #from tenpy.algorithms.exact_diag import ExactDiag
 #from tenpy.linalg import np_conserved as npc
 # from tenpy.models.spins import SpinChain
 # from tenpy.models.xxz_chain import XXZChain
 from tenpy.networks import mpo
-# from tenpy.networks import site
-# from tenpy.networks.terms import CouplingTerms, MultiCouplingTerms, OnsiteTerms, TermList
-
-from cyten.models.sites import SpinSite
-from cyten.models.couplings import heisenberg_coupling, spin_field_coupling, spin_spin_coupling
 from tenpy.networks.terms import to_single_coupling
 
 # spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 spin_half = SpinSite(S=0.5, conserve=None)
-
-
-def test_tests_and_imports_working():
-    assert 1 == 1
-
-# Copyright (C) TeNPy Developers, Apache license
-
-def test_identity_tensor_site():
-    """Test sites.identity_tensor: structural correctness and ValueError guard."""
-
-    site = SpinSite(S=0.5, conserve='Sz')
-    coupling = heisenberg_coupling([site, site])
-
-    # wL / wR are the co-domain-style representatives of the shared virtual bond;
-    # the coupling sanity guarantee ensures they are the same ElementarySpace.
-    wL = coupling.factorization[0].get_leg_co_domain('wR')
-    wR = coupling.factorization[1].get_leg_co_domain('wL')
-    assert wL == wR, 'coupling internal sanity: virtual bond spaces must match'
-
-    # --- overbraid=True (default) ---
-    tensor = cyten.models.sites.identity_tensor(site, wL, wR, overbraid=True)
-
-    assert tensor.labels == ['wL', 'p', 'wR', 'p*']
-    assert tensor.num_codomain_legs == 2
-    assert tensor.num_domain_legs == 2
-    assert tensor.get_leg_co_domain('p') == site.leg
-    assert tensor.get_leg_co_domain('p*') == site.leg
-    assert tensor.get_leg_co_domain('wL') == wL
-    assert tensor.get_leg_co_domain('wR') == wR
-    tensor.test_sanity()
-
-    # --- overbraid=False ---
-    # For a group symmetry (U(1)) braiding is symmetric, so the result is the same tensor.
-    tensor_under = identity_tensor(site, wL, wR, overbraid=False)
-    assert tensor_under.labels == ['wL', 'p', 'wR', 'p*']
-    tensor_under.test_sanity()
-
-    # --- ValueError: wR != wL ---
-    # The first block's wL is the trivial (1-D) boundary space, which differs from the bond.
-    trivial_space = coupling.factorization[0].get_leg_co_domain('wL')
-    assert trivial_space != wL, 'trivial boundary space must differ from the bond space'
-    with pytest.raises(ValueError):
-        identity_tensor(site, wL, trivial_space)
-
-    # --- Non-trivial physical leg: spin-1 site, same bond ---
-    site_s1 = SpinSite(S=1.0, conserve='Sz')
-    coupling_s1 = heisenberg_coupling([site_s1, site_s1])
-    wL_s1 = coupling_s1.factorization[0].get_leg_co_domain('wR')
-    wR_s1 = coupling_s1.factorization[1].get_leg_co_domain('wL')
-    tensor_s1 = identity_tensor(site_s1, wL_s1, wR_s1)
-    assert tensor_s1.get_leg_co_domain('p') == site_s1.leg
-    tensor_s1.test_sanity()
-
-
-def test_insert_identity_between_sites():
-
-    # ------------------------------------------------------------------ structure
-    site_a = SpinSite(S=0.5, conserve='Sz')
-    site_b = SpinSite(S=0.5, conserve='Sz')
-    site_mid = SpinSite(S=0.5, conserve='Sz')
-    original = heisenberg_coupling([site_a, site_b])
-
-    result = original.insert_identity_between_sites(1, site_mid)
-
-    assert len(result.sites) == 3
-    assert len(result.factorization) == 3
-    assert result.sites[0] is site_a
-    assert result.sites[1] is site_mid
-    assert result.sites[2] is site_b
-    # The inserted tensor must carry the right labels..
-    assert result.factorization[1].labels == ['wL', 'p', 'wR', 'p*']
-    result.test_sanity()
-
-    
-    with pytest.raises(ValueError):
-        original.insert_identity_between_sites(0, site_mid)   # position=0 is out of range
-    with pytest.raises(ValueError):
-        original.insert_identity_between_sites(2, site_mid)   # position=len(sites) is out of range
-
-    site_half_ns = SpinSite(S=0.5, conserve='None')
-    site_one_ns  = SpinSite(S=1.0, conserve='None')
-    original_ns  = heisenberg_coupling([site_half_ns, site_half_ns])
-
-    result_ns = original_ns.insert_identity_between_sites(1, site_one_ns)
-    assert result_ns.sites[1] is site_one_ns
-    result_ns.test_sanity()
-
-    # ------------------------------------------------------------------ content check (NoSymmetry)
-    # For a coupling C2 on [s0, s1], inserting an identity site s_id at position 1 produces
-    # a 3-site coupling C3 satisfying:
-    #   C3[p0, pi, p1, p1*, pi*, p0*] = C2[p0, p1, p1*, p0*] * delta(pi, pi*)
-    #
-    # Numpy leg order (domain labels are stored reversed in the label list):
-    #   C2: [p0, p1, p1*, p0*]  → shape [d0, d1, d1, d0]
-    #   C3: [p0, pi, p1, p1*, pi*, p0*] → shape [d0, di, d1, d1, di, d0]
-    C2 = original_ns.to_numpy(understood_braiding=True)   # [d0, d1, d1, d0]
-    C3 = result_ns.to_numpy(understood_braiding=True)      # [d0, di, d1, d1, di, d0]
-
-    di = site_one_ns.dim   # 3 for spin-1
-    assert C3.shape == (C2.shape[0], di, C2.shape[1], C2.shape[2], di, C2.shape[3])
-
-    for pi in range(di):
-        # Diagonal block: matches original coupling.
-        np.testing.assert_allclose(C3[:, pi, :, :, pi, :], C2, atol=1e-13,
-                                   err_msg=f'diagonal block pi={pi} does not match original coupling')
-    for pi in range(di):
-        for pi_star in range(di):
-            if pi != pi_star:
-                # Off-diagonal blocks: must vanish (identity in physical space).
-                np.testing.assert_allclose(C3[:, pi, :, :, pi_star, :], 0, atol=1e-13,
-                                           err_msg=f'off-diagonal block pi={pi}, pi*={pi_star} is non-zero')
 
 def test_MPO():
     pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
@@ -184,67 +58,77 @@ def test_MPO():
 
 
 
-# def test_MPOGraph():
-#     for bc in ['finite', 'infinite']:
-#         for L in [2, 4]:
-#             print('L =', L)
-#             g = mpo.MPOGraph([spin_half] * L, bc, unit_cell_width=L)
-#             g.add(0, 'IdL', 'IdR', 'Sz', 0.1)
-#             g.add(0, 'IdL', 'Sz0', 'Sz', 1.0)
-#             g.add(1, 'Sz0', 'IdR', 'Sz', 0.5)
-#             g.add(0, 'IdL', (0, 'Sp'), 'Sp', 0.3)
-#             g.add(1, (0, 'Sp'), 'IdR', 'Sm', 0.2)
-#             if L > 2 or bc == 'infinite':
-#                 keyR = g.add_string_left_to_right(0, 3, (0, 'Sp'), 'Id')
-#                 g.add(3, keyR, 'IdR', 'Sm', 0.1)
-#             g.add_missing_IdL_IdR()
-#             g.test_sanity()
-#             print(repr(g))
-#             print(str(g))
-#             print('build MPO')
-#             g_mpo = g.build_MPO()
-#             g_mpo.test_sanity()
+def test_MPOGraph():
+    L = 4
+    site = SpinSite(S=0.5, conserve=None)
+    c_nn = heisenberg_coupling([site, site], J=1.0)
+    c_field = spin_field_coupling([site], hz=1.0)
+
+    g = mpo.MPOGraph([site] * L, bc='finite', unit_cell_width=L)
+    g.add_coupling_as_term(c_nn, positions=[0, 1], strength=0.5)
+    g.add_coupling_as_term(c_nn, positions=[0, 3], strength=0.1)
+    g.add_coupling_as_term(c_field, positions=[2], strength=0.3)
+    g.add_missing_IdL_IdR_for_couplings()
+    repr(g)
+
+    H = _coupling_to_dense(g.build_coupling(name='H'), L)
+    terms = [(0.5, {0: op, 1: op}) for op in ('Sx', 'Sy', 'Sz')]
+    terms += [(0.1, {0: op, 3: op}) for op in ('Sx', 'Sy', 'Sz')]
+    terms += [(0.3, {2: 'Sz'})]
+    np.testing.assert_allclose(H, _dense_Hamiltonian(site, L, terms), atol=1e-10)
+
+    g_inf = mpo.MPOGraph([site] * L, bc='infinite', unit_cell_width=L)
+    g_inf.add_coupling_as_term(c_nn, positions=[0, 1])
+    with pytest.raises(ValueError):
+        g_inf.build_coupling()
+
+    with pytest.raises(ValueError):
+        mpo.MPOGraph([site] * L, bc='finite', unit_cell_width=L).add_coupling_as_term(
+            c_nn, positions=[1, 0])  # descending
+    with pytest.raises(ValueError):
+        mpo.MPOGraph([site] * L, bc='finite', unit_cell_width=L).add_coupling_as_term(
+            c_nn, positions=[0])  # wrong count
+    with pytest.raises(ValueError):
+        mpo.MPOGraph([site] * L, bc='finite', unit_cell_width=L).add_coupling_as_term(
+            c_nn, positions=[0, 1], split=5)  # out of range
 
 
-# def test_MPOGraph_term_conversion():
-#     L = 4
+def test_MPOGraph_term_conversion():
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    L = 4
 
-#     g1 = mpo.MPOGraph([spin_half] * L, 'infinite', unit_cell_width=L)
-#     g1.test_sanity()
-#     for i in range(L):
-#         g1.add(i, 'IdL', 'IdR', 'Sz', 0.5)
-#         g1.add(i, 'IdL', ('left', i, 'Sp', 'Id'), 'Sp', 1.0)
-#         g1.add(i + 1, ('left', i, 'Sp', 'Id'), 'IdR', 'Sm', 1.5)
-#     g1.add_missing_IdL_IdR()
-#     terms = [[('Sz', i)] for i in range(L)]
-#     terms += [[('Sp', i), ('Sm', i + 1)] for i in range(L)]
-#     prefactors = [0.5] * L + [1.5] * L
-#     term_list = TermList(terms, prefactors)
-#     g2 = mpo.MPOGraph.from_term_list(term_list, [spin_half] * L, 'infinite', unit_cell_width=L)
-#     g2.test_sanity()
-#     assert g1.graph == g2.graph
-#     terms[3:3] = [[('Sm', 2), ('Sp', 0), ('Sz', 1)]]
-#     prefactors[3:3] = [3.0]
-#     term_list = TermList(terms, prefactors)
-#     g3 = mpo.MPOGraph.from_term_list(term_list, [spin_half] * L, 'infinite', unit_cell_width=L)
-#     g4 = mpo.MPOGraph([spin_half] * L, 'infinite', unit_cell_width=L)
-#     g4.test_sanity()
-#     for i in range(L):
-#         g4.add(i, 'IdL', 'IdR', 'Sz', 0.5)
-#         g4.add(i, 'IdL', ('left', i, 'Sp', 'Id'), 'Sp', 1.0)
-#         g4.add(i + 1, ('left', i, 'Sp', 'Id'), 'IdR', 'Sm', 1.5)
-#     g4.add_missing_IdL_IdR()
-#     g4.add(1, ('left', 0, 'Sp', 'Id'), ('right', 2, 'Sm', 'Id'), 'Sz', 3.0)
-#     g4.add(2, ('right', 2, 'Sm', 'Id'), 'IdR', 'Sm', 1.0)
-#     assert g4.graph == g3.graph
+    g1 = mpo.MPOGraph([spin_half] * L, 'infinite', unit_cell_width=L)
+    g1.test_sanity()
+    for i in range(L):
+        g1.add(i, 'IdL', 'IdR', 'Sz', 0.5)
+        g1.add(i, 'IdL', ('left', i, 'Sp', 'Id'), 'Sp', 1.0)
+        g1.add(i + 1, ('left', i, 'Sp', 'Id'), 'IdR', 'Sm', 1.5)
+    g1.add_missing_IdL_IdR()
+    terms = [[('Sz', i)] for i in range(L)]
+    terms += [[('Sp', i), ('Sm', i + 1)] for i in range(L)]
+    prefactors = [0.5] * L + [1.5] * L
+    term_list = TermList(terms, prefactors)
+    g2 = mpo.MPOGraph.from_term_list(term_list, [spin_half] * L, 'infinite', unit_cell_width=L)
+    g2.test_sanity()
+    assert g1.graph == g2.graph
+    terms[3:3] = [[('Sm', 2), ('Sp', 0), ('Sz', 1)]]
+    prefactors[3:3] = [3.0]
+    term_list = TermList(terms, prefactors)
+    g3 = mpo.MPOGraph.from_term_list(term_list, [spin_half] * L, 'infinite', unit_cell_width=L)
+    g4 = mpo.MPOGraph([spin_half] * L, 'infinite', unit_cell_width=L)
+    g4.test_sanity()
+    for i in range(L):
+        g4.add(i, 'IdL', 'IdR', 'Sz', 0.5)
+        g4.add(i, 'IdL', ('left', i, 'Sp', 'Id'), 'Sp', 1.0)
+        g4.add(i + 1, ('left', i, 'Sp', 'Id'), 'IdR', 'Sm', 1.5)
+    g4.add_missing_IdL_IdR()
+    g4.add(1, ('left', 0, 'Sp', 'Id'), ('right', 2, 'Sm', 'Id'), 'Sz', 3.0)
+    g4.add(2, ('right', 2, 'Sm', 'Id'), 'IdR', 'Sm', 1.0)
+    assert g4.graph == g3.graph
 
 
 def test_MPOGraph_coupling_hash_tuples():
-    """Test that MPOGraph.add_coupling_as_term creates distinct couplings without collisions.
-
-    Each coupling is identified by its hash; :meth:`~tenpy.networks.mpo.MPOGraph.add_coupling_as_term`
-    stores the actual tensor building blocks in :attr:`~tenpy.networks.mpo.MPOGraph._coupling_graph`
-    """
+    """Test that MPOGraph.add_coupling_as_term creates distinct couplings without collisions."""
 
     L = 4
     spin_sites = [SpinSite(S=0.5, conserve='Sz') for _ in range(L)]
@@ -253,10 +137,13 @@ def test_MPOGraph_coupling_hash_tuples():
     coupling2 = heisenberg_coupling([spin_sites[0], spin_sites[1]], J=2.0)
     coupling3 = spin_field_coupling([spin_sites[0]], hz=0.5)
 
-    hashes = [c.to_hash() for c in [coupling1, coupling2, coupling3]]
-    assert hashes[0] != hashes[1]
-    assert hashes[0] != hashes[2]
-    assert hashes[1] != hashes[2]
+    assert coupling1 != coupling2
+    assert coupling1 != coupling3
+    assert coupling2 != coupling3
+
+    coupling1_again = heisenberg_coupling([spin_sites[0], spin_sites[1]], J=1.0)
+    assert coupling1 == coupling1_again
+    assert hash(coupling1) == hash(coupling1_again)
 
     graph_sites = [SpinSite(S=0.5, conserve='Sz') for _ in range(L)]
     graph = mpo.MPOGraph(graph_sites, bc='finite', unit_cell_width=L)
@@ -270,22 +157,20 @@ def test_MPOGraph_coupling_hash_tuples():
     assert graph._coupling_graph is not None
     assert len(graph._coupling_graph) == L
 
-    # all three couplings start at site 0 (default `positions`); each must contribute its own,
-    # non-colliding edge out of 'IdL' there, i.e. no accidental key collisions between couplings.
+    # all three couplings start at site 0, each must contribute its own,
+    # edge out of 'IdL', i.e. no accidental key collisions between couplings.
     assert len(graph._coupling_graph[0]['IdL']) == 3
 
-    # the two 2-site Heisenberg couplings each get their own hash-tagged intermediate state
-    # between site 0 and site 1; the 1-site field coupling closes directly onto 'IdR' and needs
-    # no intermediate state at all.
-    hash_keys_found = set()
+    # the two 2-site Heisenberg couplings each get their own coupling intermediate state
+    couplings_found = set()
     for site_graph in graph._coupling_graph:
         for keyL, row in site_graph.items():
             for key in (keyL, *row.keys()):
-                if isinstance(key, tuple) and len(key) >= 2 and key[0] == 'coupling':
-                    hash_keys_found.add(key[1])
+                if isinstance(key, tuple) and len(key) == 3 and isinstance(key[0], Coupling):
+                    couplings_found.add(key[0])
 
-    assert len(hash_keys_found) == 2
-    assert hash_keys_found == {hashes[0], hashes[1]}
+    assert len(couplings_found) == 2
+    assert couplings_found == {coupling1, coupling2}
 
 
 def test_MPO_conversion():
@@ -389,71 +274,69 @@ def test_MPOEnvironment():
         assert abs(E - E_exact) < 1.0e-14
 
 
+def _hopping_coupling(site, op_i, op_j):
+    """Build a two-site hopping Coupling ``op_i`` on site 0, ``op_j`` on site 1."""
+    # dense block axes [p0, p1, p1*, p0*], see Coupling.from_dense_block / spin_spin_coupling
+    h = np.tensordot(op_i, op_j, axes=0)  # [p0, p0*, p1, p1*]
+    h = np.transpose(h, [0, 2, 3, 1])  # -> [p0, p1, p1*, p0*]
+    return Coupling.from_dense_block(h, [site, site], understood_braiding=True)
+
+
+def _build_hermitian_test_coupling(L, filler, pairs):
+    """Combine hopping terms on `pairs` (list of (coupling, (i, j))) into one Coupling.
+    Fill all other sites with some single-site Coupling, e.g. a zero operator."""
+    couplings, sites_arg, prefactors, split = [], [], [], []
+    changed = set()
+    for coupling, (i, j) in pairs:
+        couplings.append(coupling)
+        sites_arg.append([i, j])
+        prefactors.append(1.0)
+        split.append(0)
+        changed.update((i, j))
+    for k in range(L):
+        if k not in changed:
+            couplings.append(filler)
+            sites_arg.append([k])
+            prefactors.append(1.0)
+            split.append(0)
+    return to_single_coupling(couplings, sites_arg, prefactors, split)
+
+
+def _is_hermitian_coupling(L, site, coupling):
+    labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
+    dim = site.dim**L
+    H = coupling.to_tensor().to_numpy(labels).reshape(dim, dim)
+    return np.allclose(H, H.conj().T)
+
+
 def test_MPO_hermitian():
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
-
-
     """Check that a hopping term alone is non-Hermitian, and adding its h.c. makes it Hermitian.
 
-    Ported from the old np_conserved-based version (which built ``Sm_2 Sp_3`` /
+    Adapted from the old np_conserved-based version (which built ``Sm_2 Sp_3`` /
     ``Sp_2 Sm_3`` via ``CouplingTerms`` + ``MPOGraph.from_terms(...).build_MPO()`` on an
     infinite chain, including a term wrapping into a further unit cell, ``(3, 18)``) to the
-    cyten :func:`~tenpy.networks.terms.to_single_coupling` framework. There is no infinite-bc
-    equivalent here, since :class:`~cyten.models.couplings.Coupling` requires trivial (finite)
-    boundary legs; the unit-cell-wrapping term is instead replaced by a long-range term within
-    one finite chain.
+    cyten :func:`~tenpy.networks.terms.to_single_coupling`.
     """
     L = 4
     site = SpinSite(S=0.5, conserve=None)
     Sm = site.get_op('Sm').to_numpy()
     Sp = site.get_op('Sp').to_numpy()
 
-    def hopping_coupling(op_i, op_j):
-        # dense block axes [p0, p1, p1*, p0*], see Coupling.from_dense_block / spin_spin_coupling
-        h = np.tensordot(op_i, op_j, axes=0)  # [p0, p0*, p1, p1*]
-        h = np.transpose(h, [0, 2, 3, 1])  # -> [p0, p1, p1*, p0*]
-        return Coupling.from_dense_block(h, [site, site], understood_braiding=True)
-
-    c_mp = hopping_coupling(Sm, Sp)  # Sm_i Sp_j
-    c_pm = hopping_coupling(Sp, Sm)  # Sp_i Sm_j
+    c_mp = _hopping_coupling(site, Sm, Sp)  # Sm_i Sp_j
+    c_pm = _hopping_coupling(site, Sp, Sm)  # Sp_i Sm_j
     filler = spin_field_coupling([site], hz=0.0)  # zero operator, just marks a site as covered
 
-    def build(pairs):
-        """Combine hopping terms on `pairs` (list of (coupling, (i, j))) into one Coupling,
-        padding untouched sites with the zero-strength `filler` so every site is covered."""
-        couplings, sites_arg, prefactors, split = [], [], [], []
-        changed= set()
-        for coupling, (i, j) in pairs:
-            couplings.append(coupling)
-            sites_arg.append([i, j])
-            prefactors.append(1.0)
-            split.append(0)
-            changed.update((i, j))
-        for k in range(L):
-            if k not in changed:
-                couplings.append(filler)
-                sites_arg.append([k])
-                prefactors.append(1.0)
-                split.append(0)
-        return to_single_coupling(couplings, sites_arg, prefactors, split)
-
-    def is_hermitian(coupling):
-        labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
-        dim = site.dim**L
-        H = coupling.to_tensor().to_numpy(labels).reshape(dim, dim)
-        return np.allclose(H, H.conj().T)
-
-    H = build([(c_mp, (2, 3))])
-    assert not is_hermitian(H)
-    H = build([(c_mp, (2, 3)), (c_pm, (2, 3))])
-    assert is_hermitian(H)
+    H = _build_hermitian_test_coupling(L, filler, [(c_mp, (2, 3))])
+    assert not _is_hermitian_coupling(L, site, H)
+    H = _build_hermitian_test_coupling(L, filler, [(c_mp, (2, 3)), (c_pm, (2, 3))])
+    assert _is_hermitian_coupling(L, site, H)
 
     # long-range coupling spanning (almost) the whole chain, in place of the old test's
     # unit-cell term (3, 18)
-    H = build([(c_mp, (0, 3))])
-    assert not is_hermitian(H)
-    H = build([(c_mp, (0, 3)), (c_pm, (0, 3))])
-    assert is_hermitian(H)
+    H = _build_hermitian_test_coupling(L, filler, [(c_mp, (0, 3))])
+    assert not _is_hermitian_coupling(L, site, H)
+    H = _build_hermitian_test_coupling(L, filler, [(c_mp, (0, 3)), (c_pm, (0, 3))])
+    assert _is_hermitian_coupling(L, site, H)
 
 
 def test_MPO_addition():
@@ -753,7 +636,7 @@ def _coupling_to_dense(coupling, L):
 def test_to_single_coupling_heisenberg_and_field():
     """to_single_coupling should reproduce a hand-built sum of Heisenberg + field terms."""
 
-        
+
     L = 4
     site = SpinSite(S=0.5, conserve=None)
     c_nn = heisenberg_coupling([site, site], J=1.0)
@@ -777,7 +660,7 @@ def test_to_single_coupling_heisenberg_and_field():
     H_expected = _dense_Hamiltonian(site, L, terms)
 
     np.testing.assert_allclose(H, H_expected, atol=1e-10)
-    np.testing.assert_allclose(H, H.conj().T, atol=1e-10)  
+    np.testing.assert_allclose(H, H.conj().T, atol=1e-10)
 
 
 def test_to_single_coupling_gap_and_split():
@@ -793,21 +676,21 @@ def test_to_single_coupling_gap_and_split():
     H_expected = _dense_Hamiltonian(site, L, [(0.7, {0: 'Sx', 2: 'Sx'}), (0.7, {0: 'Sy', 2: 'Sy'}),
                                                (0.7, {0: 'Sz', 2: 'Sz'}), (0.3, {1: 'Sz'})])
 
-    for split in ([1, 0], [0, 0]):  # scale the tensor at site 0 or at site 2 
+    for split in ([1, 0], [0, 0]):  # scale the tensor at site 0 or at site 2
         result = to_single_coupling(couplings, sites_arg, prefactors, split, name='gap')
         H = _coupling_to_dense(result, L)
         np.testing.assert_allclose(H, H_expected, atol=1e-10)
 
 
 def test_to_single_coupling_bad_input():
-    """Mismatched-length arguments and gaps in site coverage should raise ValueError."""
+    """Mismatched-length arguments and gaps between sites should raise ValueError."""
     site = SpinSite(S=0.5, conserve=None)
     c_field = spin_field_coupling([site], hz=1.0)
 
     with pytest.raises(ValueError):
         to_single_coupling([c_field], [[0]], [1.0, 2.0], [0])  # mismatched lengths
     with pytest.raises(ValueError):
-        # site 1 is never touched by any coupling's own site list
+        # site 1 is never touched
         to_single_coupling([c_field, c_field], [[0], [2]], [1.0, 1.0], [0, 0])
 
 

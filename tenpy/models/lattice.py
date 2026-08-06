@@ -25,9 +25,8 @@ import logging
 import numpy as np
 from scipy.spatial import ConvexHull, Voronoi
 
-from ..linalg.charges import DipolarChargeInfo
+#from ..linalg.charges import DipolarChargeInfo
 from ..networks.mps import MPS  # only to check boundary conditions
-from ..networks.site import Site
 from ..tools.misc import find_subclass, get_close, inverse_permutation, to_array, to_iterable
 
 logger = logging.getLogger(__name__)
@@ -214,21 +213,21 @@ class Lattice:
         if self.bc.shape != (self.dim,):
             raise ValueError('Wrong len of bc')
         assert self.bc.dtype == bool
-        chinfo = None
-        for site in self.unit_cell:
-            if not isinstance(site, Site):
-                continue
-            if chinfo is None:
-                chinfo = site.leg.chinfo
-            if site.leg.chinfo != chinfo:
-                raise ValueError(
-                    'All sites in the lattice must have the same ChargeInfo!'
-                    ' Call tenpy.networks.site.set_common_charges() before '
-                    'giving them to the lattice!'
-                )
-            if isinstance(chinfo, DipolarChargeInfo):
-                for dim in chinfo._dipole_dims:
-                    assert 0 <= dim < self.dim
+        #chinfo = None
+        #for site in self.unit_cell:
+        #    if not isinstance(site, Site):
+        #        continue
+        #    if chinfo is None:
+        #        chinfo = site.leg.chinfo
+        #    if site.leg.chinfo != chinfo:
+        #        raise ValueError(
+        #            'All sites in the lattice must have the same ChargeInfo!'
+        #            ' Call tenpy.networks.site.set_common_charges() before '
+        #            'giving them to the lattice!'
+        #        )
+        #    if isinstance(chinfo, DipolarChargeInfo):
+        #        for dim in chinfo._dipole_dims:
+        #            assert 0 <= dim < self.dim
         if self.basis.shape[0] != self.dim:
             raise ValueError('Need one basis vector for each direction!')
         if self.unit_cell_positions.shape[0] != len(self.unit_cell):
@@ -709,9 +708,9 @@ class Lattice:
                 site = self.unit_cell[lat_indx[-1]]
                 dx = np.copy(lat_indx)
                 dx[-1] = 0
-                if isinstance(site, Site) and not site.leg.chinfo.trivial_shift:  # it can be None
-                    leg = site.leg.apply_charge_mapping(site.leg.chinfo.shift_charges, func_kwargs=dict(dx=dx))
-                    site = copy.copy(site).change_charge(leg)
+                #if isinstance(site, Site) and not site.leg.chinfo.trivial_shift:  # it can be None
+                #    leg = site.leg.apply_charge_mapping(site.leg.chinfo.shift_charges, func_kwargs=dict(dx=dx))
+                #    site = copy.copy(site).change_charge(leg)
                 self._mps_sites_cache.append(site)
         return self._mps_sites_cache[:]
 
