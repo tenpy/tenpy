@@ -32,7 +32,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v6
       with:
-        submodules: recursive
+        submodules: true  # not recursive: for now private submodules within cyten
 
     - name: Set up micromamba
       uses: mamba-org/setup-micromamba@v3
