@@ -9,7 +9,6 @@ We therefore consider them part of a linting routine and do *not* call them from
 import os
 
 
-
 def main():
     """Called when this script is called, e.g. via `python linting.py`"""
     print('Custom Linting:')
