@@ -2,18 +2,22 @@ name: tenpy
 channels:
   - conda-forge
 dependencies:
-  - python>=3.10
-  - numpy
-  - scipy
-  - cython>=0.29
-  - mkl
-  - mkl-devel
-  - libblas=*=*mkl  # pin BLAS to use MKL
+  - python>=3.14
   - pip
   - setuptools>=68.0.0
-  - h5py
-  - pyyaml
+  - pybind11>=3.0
+  - scikit-build-core
+  - numpy>=2.0
+  - scipy
+  - openblas
+  - cmake
+  - pytorch
   - pytest>=6.0
+  - sympy # TODO this is leftover of cyten/symmetries/_su2data.py
+
+  - hdf5=2.1  # temporary pin to avoid incompatible version
+  - h5py=3.16
+  - pyyaml
   - ruff
   - pre-commit
   - flake8

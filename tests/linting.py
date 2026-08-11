@@ -8,7 +8,6 @@ We therefore consider them part of a linting routine and do *not* call them from
 
 import os
 
-import tenpy
 
 
 def main():
@@ -34,8 +33,8 @@ def get_python_files(top):
 
 def check_copyright_notice():
     expected_notice = '# Copyright (C) TeNPy Developers, Apache license'
-    cyten_files = get_python_files(os.path.dirname(tenpy.__file__))
-    for fn in cyten_files:
+    tenpy_files = get_python_files('tenpy')
+    for fn in tenpy_files:
         with open(fn, 'r') as f:
             for line in f:
                 if line.startswith(expected_notice):

@@ -1,4 +1,5 @@
 name: tenpydoc
+# TODO this is outdated
 channels:
   - conda-forge
 dependencies:
