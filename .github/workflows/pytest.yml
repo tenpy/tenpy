@@ -22,6 +22,10 @@ jobs:
     env:
       # make pytest output in color
       PY_COLORS: 1
+    defaults:
+      run:
+        # needed so micromamba activation from setup-micromamba takes effect
+        shell: bash -el {0}
     strategy:
       matrix:
         # reminder: when changing python versions, also look at the other workflows!

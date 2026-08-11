@@ -12,6 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       COV_PERCENT: ${{ steps.save-coverage.outputs.COV_PERCENT }}
+    defaults:
+      run:
+        # needed so micromamba activation from setup-micromamba takes effect
+        shell: bash -el {0}
 
     steps:
       - name: Checkout
