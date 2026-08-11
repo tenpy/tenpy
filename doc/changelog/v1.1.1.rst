@@ -1,0 +1,51 @@
+[v1.1.1] - 2026-07-28
+=====================
+
+Release Notes
+-------------
+Small changes and additions and several minor bugfixes.
+
+Changelog
+---------
+
+Added
+^^^^^
+- Support :class:`~tenpy.networks.mps.MPS` with unknown singular values, i.e. with ``None in mps._S``.
+
+- Add :meth:`tenpy.networks.mpo.MPO.from_Wflat`.
+
+- Add :class:`ArnoldiEvolution`, similar to :class:`LanczosEvolution`, to support evolution under
+  non-Hermitian effective Hamiltonians
+
+- Enable TDVP with non-Hermitian Hamiltonians, see :pull:`625`
+
+
+Changed
+^^^^^^^
+- Improved :func:`tenpy.algorithms.exact_diag.get_numpy_Hamiltonian` by setting the cutoff for
+  exponentially decaying terms to 0 (increasing accuracy)
+
+- Add explicit normalizations during :meth:`~tenpy.mps.MPS.canonical_form_finite` that stabilize
+  it for MPS with small norm, see :issue:`596`.
+
+
+Fixed
+^^^^^
+- Fixed an error where TDVP did not correctly handle ``explicit_plus_hc``.
+  Before, the flag was considered in the two-site update, but ignored in the one-site update
+  for TwoSiteTDVP. For SingleSiteTDVP, it was considered in the one-site update, but ignored in the
+  zero-site update.
+  Using a model with ``explicit_plus_hc`` in TDVP thus led to an incorrect computation.
+  However, in the test cases we used, this led to a barrage of loud warnings from the Lanczos evolution,
+  so it is unlikely that errors from this went unnoticed.
+
+- Fix typo in the computation of the :attr:`~tenpy.mps.MPS.unit_cell_width` during
+  :meth:`~tenpy.mps.MPS.extract_segment`.
+
+- Fix hdf5 loading for MPS and MPO. The implementations were not backwards compatible and could not
+  load files from ``tenpy<1.1.0``
+
+- Fix bug in :meth:`tenpy.linalg.charges.LegCharge.from_drop_charges` where string inputs were
+  not handled correctly, see :issue:`626`
+
+- Fix the sign convention for the Haldane FCI example.
