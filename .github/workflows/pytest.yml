@@ -30,7 +30,7 @@ jobs:
       matrix:
         # reminder: when changing python versions, also look at the other workflows!
         #           also check for new versions of pypa/cibuildwheel used in publish workflow!
-        python-version: ["3.13", "3.14"]
+        python-version: ["3.14"]
 
     steps:
     - name: Checkout
