@@ -59,7 +59,7 @@ jobs:
         python -m pip install -e ".[test]"
 
     - name: Show tenpy config
-      working-directory: ..
+      working-directory: tests
       run: |
         python -c "import tenpy; tenpy.show_config()"
 

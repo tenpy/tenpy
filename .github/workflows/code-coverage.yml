@@ -48,8 +48,9 @@ jobs:
         # Note: This runs in the repo root directory, which contains the uncompiled tenpy package.
         #       To use the version we just installed, it is important to run `coverage`
         #       instead of `python -m coverage`.
+        # Note: only cover tenpy tests, not cyten!
         run: |
-          coverage run -m pytest .
+          coverage run -m pytest tests
           coverage report -m --skip-covered --sort=miss
           coverage json
 
