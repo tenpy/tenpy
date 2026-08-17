@@ -629,12 +629,11 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         res = []
         for site, offset in zip(sites, offsets):
             actual_sites = [site + i for i in offset]
-            op = self.get_op([op], actual_sites[0])  # FIXME implement this (get op from str or coupling)
+            op = self.get_op([op], actual_sites[0])
             if isinstance(op, ct.Coupling):
                 res.append(self._expectation_value_coupling(bra=bra, ket=ket, op=op, sites=actual_sites))
             else:
                 res.append(self._expectation_value_onsite_op(bra=bra, ket=ket, op=op, site=actual_sites[0]))
-            # FIXME implement get_LP / get_RP abstractly in this class! (replace _contract_with_LP)
         return self._normalize_exp_val(res)
 
     def expectation_value_tensor(
@@ -726,7 +725,6 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         _, ket = self._get_bra_ket()
         if axes is not None:
             # None means we already have the expected labels
-            # FIXME relabelling is in-place, thus copy?
             op = op.copy(deep=False, device=op.device).relabel(
                 {l_old: l_new for l_old, l_new in zip(axes[0] + axes[1], new_axes[0] + new_axes[1])}
             )
@@ -1204,7 +1202,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             Coupling for which the correlation function is computed.
         sites_R : list of int
             Sites on which the right part of ``coupling`` acts for each evaluation of the correlator;
-            the ``i``th tensor of the right part acts on site ``sites_R[i]``.
+            the ``i`` th tensor of the right part acts on site ``sites_R[i]``.
             Must fulfill ``0 < len(sites_R) < len(couplings) - 1`` and must be sorted.
         distance : list of int
             Distances between the left and right parts of the coupling for each evaluation of the
@@ -1374,6 +1372,84 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         )
         return result.flatten()
 
+    def term_list_correlation_function_right(self, term_list_L, term_list_R, i_L=0, j_R=None, autoJW=True, opstr=None):
+        """Correlation function between sums of multi-site terms, moving the right sum of term.
+
+        .. deprecated ::
+            Use :meth:``self.correlation_function_split_right`` or
+            :meth:``self.correlation_function`` instead. The value of ``autoJW`` is ignored;
+            factors arising from fermionic exchanges are always applied.
+
+        Generalization of :meth:`term_correlation_function_right` to the case where
+        `term_list_L` and `term_R` are sums of terms.
+        This function calculates ``<bra|term_list_L[i_L] term_list_R[j]|ket> for j in j_R``.
+
+        **Assumes** that overall terms with an odd number of operators requiring a Jordan-Wigner
+        string don't contribute.
+        (In systems conserving the fermionic particle number (parity), this is true.)
+
+        Parameters
+        ----------
+        term_list_L, term_list_R : :class:`~tenpy.networks.terms.TermList`
+            Each a `TermList` representing the sum of terms to be applied.
+        i_L : int
+            Offset added to all the indices of `term_list_L`.
+        j_R : list of int | None
+            List of offsets to be added to the indices of `term_list_R`.
+            Is sorted before use, i.e. the order is ignored.
+            For **finite** MPS, `None` defaults to ``range(j0, L)``,
+            where `j0` is chosen such that `term_R` starts one site right of the `term_L`.
+            For **infinite** MPS, `None` defaults to ``range(L, 11*L, L)``, i.e.,
+            one term per MPS unit cell for a distance of up to 10 unit cells.
+        autoJW : bool
+            Whether to automatically take care of Jordan-Wigner strings.
+        opstr : str
+            Force an intermediate operator string to be used inbetween the terms.
+            (Even used within the `term_list_L/R` for terms with smaller-than maximal support.)
+            Can only be used in combination with ``autoJW=False``.
+
+        Returns
+        -------
+        corrs : 1D array
+            Values of the correlation function, one for each entry in the list `j_R`.
+
+            .. warning ::
+
+                The :class:`MPSEnvironment` variant of this method takes the accumulated MPS
+                :attr:`~tenpy.networks.mps.MPS.norm` into account, which is non-trivial e.g. when you
+                used `apply_local_op` with non-unitary operators.
+
+                In contrast, the :class:`MPS` variant of this method *ignores* the `norm`,
+                i.e. returns the expectation value for the normalized state.
+
+        See Also
+        --------
+        term_correlation_function_right : version for a single term in both `term_list_L/R`.
+
+        """
+        if j_R is None:
+            if self.finite:
+                term_R_min, term_R_max = term_list_R.limits()
+                _, term_L_max = term_list_L.limits()
+                j0 = i_L + term_L_max + 1 - term_R_min
+                j_R = range(j0, self.L - max([0, term_R_max]))
+            else:
+                j_R = range(self.L, 11 * self.L, self.L)
+        else:
+            j_R = np.sort(j_R)
+        coupling_L, sites_L = term_list_L.to_coupling(offset=i_L)  # FIXME implement this
+        coupling_R, sites_R = term_list_L.to_coupling(offset=j_R[0])
+        result = self.correlation_function(
+            op1=coupling_L,
+            op2=coupling_R,
+            sites1=[0],
+            sites2=[j - j_R[0] for j in j_R],
+            offsets1=sites_L,
+            offsets2=sites_R,
+            opstr=opstr,
+        )
+        return result.flatten()
+
     def _apply_transfer_matrices_LP(
         self,
         LP: ct.Tensor,
@@ -1422,8 +1498,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 )
             return LP
         for i in range(num):
-            # FIXME identity
-            identity = ket.get_site(site + i)
+            identity = ket.get_site(site + i).identity_tensor(w=LP.get_leg('wR'))
             op = self.get_op(opstr, site + i)
             if op is not None:
                 identity = ct.tensors.partial_compose(identity, op, tensor1_first_leg='p*')
@@ -1480,8 +1555,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 )
             return RP
         for i in range(num):
-            # FIXME identity
-            identity = ket.get_site(site - i)
+            identity = ket.get_site(site - i).identity_tensor(w=RP.get_leg('wL'))
             op = self.get_op(opstr, site - i)
             if op is not None:
                 identity = ct.tensors.partial_compose(identity, op, tensor1_first_leg='p*')
@@ -1548,8 +1622,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 i += 1
             else:
                 # OPTIMIZE reuse old identities for identical sites?
-                # TODO identity
-                raise NotImplementedError
+                W = ket.get_site(site).identity_tensor(w=W.get_leg('wR'))
             new_LP = mps_contraction_diagram_operations['LP3 @ bra-W-ket3'].evaluate(
                 LP=new_LP, ket=ket.get_B(site), bra=bra.get_B(site).hc, W=W
             )
@@ -1613,8 +1686,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 i -= 1
             else:
                 # OPTIMIZE reuse old identities for identical sites?
-                # TODO identity
-                raise NotImplementedError
+                W = ket.get_site(site).identity_tensor(w=W.get_leg('wL'))
             new_RP = mps_contraction_diagram_operations['bra-W-ket3 @ RP3'].evaluate(
                 RP=new_RP, ket=ket.get_B(site), bra=bra.get_B(site).hc, W=W
             )
@@ -1954,27 +2026,23 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         for site_idx in new_idcs:
             if i1 < len(coupling1) and site_idx == sites1[i1]:
                 W1 = coupling1.factorization[i1]
+                new_sites.append(coupling1.sites[i1])
                 i1 += 1
-                new_sites.append(W1.get_leg_co_domain('p'))
             else:
                 assert site_idx == sites2[i2]
-                new_sites.append(coupling2.factorization[i2].get_leg_co_domain('p'))
+                new_sites.append(coupling2.sites[i2])
                 if i1 == 0 or i1 == len(coupling1):
                     # site_idx before or after coupling1 -> no need to contract with identity
                     W1 = None
                 else:
-                    # FIXME identity
-                    W1 = new_sites[-1]
-                    raise NotImplementedError
+                    W1 = new_sites[-1].identity_tensor(w=Ws[-1].get_leg('wR'))
             if i2 < len(coupling2) and site_idx == sites2[i2]:
                 W2 = coupling2.factorization[i2]
                 i2 += 1
             elif i2 == 0 or i2 == len(coupling2):
                 W2 = None
             else:
-                # FIXME identity
-                W2 = new_sites[-1]
-                raise NotImplementedError
+                W2 = new_sites[-1].identity_tensor(w=Ws[-1].get_leg('wR'))
 
             if W1 is None:
                 W = W2
@@ -2076,210 +2144,21 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         coupling = ct.Coupling(sites=[self.get_site(site) for site in sites], factorization=ops)
         return coupling, sites
 
-    # FIXME stopped here
-
-    def term_list_correlation_function_right(self, term_list_L, term_list_R, i_L=0, j_R=None, autoJW=True, opstr=None):
-        """Correlation function between sums of multi-site terms, moving the right sum of term.
-
-        Generalization of :meth:`term_correlation_function_right` to the case where
-        `term_list_L` and `term_R` are sums of terms.
-        This function calculates ``<bra|term_list_L[i_L] term_list_R[j]|ket> for j in j_R``.
-
-        **Assumes** that overall terms with an odd number of operators requiring a Jordan-Wigner
-        string don't contribute.
-        (In systems conserving the fermionic particle number (parity), this is true.)
-
-        Parameters
-        ----------
-        term_list_L, term_list_R : :class:`~tenpy.networks.terms.TermList`
-            Each a `TermList` representing the sum of terms to be applied.
-        i_L : int
-            Offset added to all the indices of `term_list_L`.
-        j_R : list of int | None
-            List of offsets to be added to the indices of `term_list_R`.
-            Is sorted before use, i.e. the order is ignored.
-            For **finite** MPS, `None` defaults to ``range(j0, L)``,
-            where `j0` is chosen such that `term_R` starts one site right of the `term_L`.
-            For **infinite** MPS, `None` defaults to ``range(L, 11*L, L)``, i.e.,
-            one term per MPS unit cell for a distance of up to 10 unit cells.
-        autoJW : bool
-            Whether to automatically take care of Jordan-Wigner strings.
-        opstr : str
-            Force an intermediate operator string to be used inbetween the terms.
-            (Even used within the `term_list_L/R` for terms with smaller-than maximal support.)
-            Can only be used in combination with ``autoJW=False``.
-
-        Returns
-        -------
-        corrs : 1D array
-            Values of the correlation function, one for each entry in the list `j_R`.
-
-            .. warning ::
-
-                The :class:`MPSEnvironment` variant of this method takes the accumulated MPS
-                :attr:`~tenpy.networks.mps.MPS.norm` into account, which is non-trivial e.g. when you
-                used `apply_local_op` with non-unitary operators.
-
-                In contrast, the :class:`MPS` variant of this method *ignores* the `norm`,
-                i.e. returns the expectation value for the normalized state.
-
-        See Also
-        --------
-        term_correlation_function_right : version for a single term in both `term_list_L/R`.
-
-        """
-        assert opstr is None or not autoJW
-        min_L, max_L = term_list_L.limits()
-        min_R, max_R = term_list_R.limits()  # note: min_R can be negative!
-        if j_R is None:
-            if self.finite:
-                j0 = i_L + max_L + 1 - min_L
-                j_R = range(j0, self.L - max(0, max_R))
-            else:
-                j_R = range(self.L, 11 * self.L, self.L)
-        else:
-            j_R = np.sort(j_R)
-        j0 = j_R[0]
-        if i_L + max_L >= j0 + min_R:
-            raise ValueError('i_L/i_R not such that term_list_L is left of term_list_R')
-        if autoJW:
-            opstr_fill = {True: 'JW', False: 'Id'}  # key: whether JW is needed
-        else:
-            opstr_fill = {False: 'Id' if opstr is None else opstr}
-            # True key not needed: we don't check for JW!
-        all_ops_R = []
-        need_JW_R = []
-        for term_R in term_list_R.terms:
-            ops_R, j_min, need_JW = self._term_to_ops_list(term_R, autoJW, j0)
-            need_JW_R.append(need_JW)
-            if j_min > j0 + min_R:
-                # fill ops_R such that the left-most op acts at site `j0 + min_R`
-                ops_R = [opstr_fill[need_JW]] * (j_min - (j0 + min_R)) + ops_R
-            all_ops_R.append(ops_R)
-        i = i_L + max_L + 1  # CL is contraction strictly left of site i
-        CLs = {}  # (need_JW, qtotal...) -> sum_CL
-        # where sum_CL = sum(CL(term_L) * strength) for term, strength in term_list_L
-        # with given `qtotal`
-        for term_L, strength in term_list_L:
-            ops_L, i_min, need_JW = self._term_to_ops_list(term_L, autoJW, i_L, None)
-            if i_min + len(ops_L) < i:
-                ops_L = ops_L + [opstr_fill[need_JW]] * (i - (i_min + len(ops_L)))
-            CL = self._corr_ops_LP(ops_L, i_min)
-            key = (need_JW,) + tuple(CL.qtotal)
-            if key not in CLs:
-                CLs[key] = strength * CL
-            else:
-                CLs[key] = CLs[key] + strength * CL
-        bra, ket = self._get_bra_ket()
-        axes_contr = [['vL*'] + ket._get_p_label('*'), ['vR*'] + ket._p_label]
-        result = []
-        for j in j_R:
-            j = j + min_R  # start ops_R on site `j`
-            assert i <= j
-            for k in range(i, j):
-                assert i == k
-                # contract CL with tensors on site `k`
-                B_ket = ket.get_B(k, form='B')
-                B_bra = bra.get_B(k, form='B')
-                for key, CL in CLs.items():
-                    need_JW = key[0]
-                    CL = npc.tensordot(CL, B_ket, axes=['vR', 'vL'])
-                    if opstr_fill[need_JW] != 'Id':
-                        opstr_k = self.get_site(k).get_op(opstr_fill[need_JW])
-                        CL = npc.tensordot(opstr_k, CL, axes=['p*', 'p'])
-                    CLs[key] = npc.tensordot(B_bra.conj(), CL, axes=axes_contr)
-                i = k + 1
-            res = 0.0
-            for ops_R, need_JW, term_R, strength in zip(all_ops_R, need_JW_R, term_list_R.terms, term_list_R.strength):
-                chinfo = self.sites[0].leg.chinfo
-                if not chinfo.trivial_shift:
-                    # recalculate operators
-                    ops_R, j_min, need_JW = self._term_to_ops_list(term_R, autoJW, j)  # <- note the j
-                    if j_min > j + min_R:
-                        ops_R = [opstr_fill[need_JW]] * (j_min - (j + min_R)) + ops_R
-                CR = self._corr_ops_RP(ops_R, j)
-                key = (need_JW,) + tuple(chinfo.make_valid(-CR.qtotal))
-                CL = CLs.get(key, None)
-                if CL is None:
-                    continue  # nothing to pair up with
-                res = res + strength * npc.inner(CL, CR, axes=[['vR', 'vR*'], ['vL', 'vL*']])
-            result.append(res)
-        return self._normalize_exp_val(result)
-
-    def _term_to_ops_list(self, term, autoJW=True, i_offset=0, JW_from_right=False):
-        """Translate a `term` to a list of operators (one per site).
-
-        Parameters
-        ----------
-        term : list of (str, int)
-            List of tuples ``op, i`` where `i` is the MPS index of the site the operator
-            named `op` acts on.
-            The order inside `term` determines the order in which they act
-            (in the mathematical convention: the last operator in `term` is right-most,
-            so it acts first on a ket).
-            If autoJW is False, we also accept npc arrays for `op`.
-        autoJW : bool
-            If True (default), automatically insert Jordan Wigner strings for Fermions as needed.
-        i_offset : int
-            Offset to be added to the site-indices in the `term`.
-        JW_from_right : bool | None
-            If set to True, a JW-string is coming in from the right. Corresponding `JW` operators
-            are added to `ops`.
-            If `None`, use
-
-        Returns
-        -------
-        ops : list of :class:`~tenpy.linalg.np_conserved.Array`
-            Operators, one per site starting with `i_min`, i.e. ``ops[i]`` acts on `i_min`+`i`.
-        i_min : int
-            Index of the left-most site on which `ops` act (including the `i_offset`).
-        has_extra_JW : bool
-            True if there is an odd number of terms which require a Jordan-Wigner string,
-            i.e., if there is a JW string coming out to the left.
-            If `JW_from_right` was initially `None`, it is the value chosen for `JW_from_right`.
-
-        """
-        assert not (JW_from_right and not autoJW)
-        term = list(term)
-        i_min = min([t[1] for t in term])
-        i_max = max([t[1] for t in term])
-        ops = [[] for i in range(i_max - i_min + 1)]
-        count_JW = 0
-        for op, i in term:
-            j = i - i_min  # index in ops
-            ops[j].append(op)
-            if autoJW and self.sites[self._to_valid_site_index(i + i_offset)].op_needs_JW(op):
-                count_JW += 1
-                for k in range(j):
-                    ops[k].append('JW')
-        if JW_from_right is None:
-            JW_from_right = count_JW % 2 == 1
-            if JW_from_right:
-                count_JW -= 1  # still return True for `has_extra_JW`
-        if JW_from_right:
-            count_JW += 1
-            for op_i in ops:
-                op_i.append('JW')
-        for j in range(len(ops)):
-            ops[j] = self.get_site(j + i_min + i_offset).multiply_operators(ops[j])
-        return ops, i_min + i_offset, (count_JW % 2 == 1)
-
-    def _replace_p_label(self, A, s):
+    def _replace_p_label(self, A: ct.Tensor, s: str) -> ct.Tensor:
         """Return npc Array `A` with replaced label, ``'p' -> 'p'+s``.
 
         This is done for each of the 'physical labels' in :attr:`_p_label`. With a clever use of
         this function, the re-implementation of various functions (like get_theta) in derived
         classes with multiple legs per site can be avoided.
         """
-        return A.replace_label('p', 'p' + s)
-        #  return A.replace_labels(self._p_label, self._get_p_label(s))
+        return A.copy(deep=False).relabel({old: new for old, new in zip(self._p_label, self._get_p_label(s))})
 
-    def _get_p_label(self, s):
+    def _get_p_label(self, s: str) -> list[str]:
         """Return  self._p_label with additional string `s`."""
         return ['p' + s]
         #  return [lbl + s for lbl in self._p_label]
 
-    def _get_p_labels(self, ks, star=False):
+    def _get_p_labels(self, ks: list[str], star: bool = False) -> list[str]:
         """Join ``self._get_p_label(str(k)) for k in range(ks)`` to a single list."""
         if star:
             return ['p' + str(k) + '*' for k in range(ks)]
@@ -2361,28 +2240,18 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def _contract_with_LP(self, C, i):
-        """Contract `theta` with `self.get_LP(i)`.
-
-        If `bra` = `ket`, this is a trivial relabeling of legs `vL` -> `vR*`.
-        """
-        ...
-
-    @abstractmethod
-    def _contract_with_RP(self, C, i):
-        """Contract `C` with `self.get_RP(i)`.
-
-        If `bra` = `ket`, this is a trivial relabeling of legs `vR` -> `vL*`.
-        """
-        ...
-
-    @abstractmethod
     def _get_bra_ket(self) -> tuple[MPS, MPS]:
         """Return bra and ket providing :meth:`get_B` for expectation values."""
         ...
         # for MPS: return self, self
         # for MPSEnvironment: return self.bra, self.ket
         # but don't put this as attributes to avoid cyclic references...
+
+    @abstractmethod
+    def get_LP(self, i: int) -> ct.SymmetricTensor: ...
+
+    @abstractmethod
+    def get_RP(self, i: int) -> ct.SymmetricTensor: ...
 
 
 class MPS(BaseMPSExpectationValue):
