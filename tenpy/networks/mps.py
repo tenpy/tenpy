@@ -5493,7 +5493,7 @@ class MPS(BaseMPSExpectationValue):
                 total_weight = np.abs(total_weight) ** 2
         return sigmas, total_weight
 
-    def norm_test(self):
+    def norm_test(self) -> np.ndarray:
         """Check that self is in canonical form.
 
         Returns
@@ -5515,28 +5515,31 @@ class MPS(BaseMPSExpectationValue):
 
         """
         err = np.empty((self.L, 2), dtype=float)
-        lbl_R = (self._get_p_label('0') + ['vR'], self._get_p_label('0*') + ['vR*'])
-        lbl_L = (['vL'] + self._get_p_label('0'), ['vL*'] + self._get_p_label('0*'))
         for i in range(self.L):
             th = self.get_theta(i, 1)
-            rho_L = npc.tensordot(th, th.conj(), axes=lbl_R)
+            # use the planar diagrams to account for charged tensors
+            rho_L = mps_contraction_diagram_operations['TM @ RP2'].evaluate(RP=self.get_RP(i), ket=th, bra=th.hc)
+            # same leg arrangement as obtained for S (diagonal tensor): vL in domain and vL* in codomain
+            rho_L = ct.planar_permute_legs(rho_L, codomain='vL*')
             S = self.get_SL(i)
-            if isinstance(S, npc.Array):  # during DMRG with mixer, S may be a 2D npc.Array
-                if S.rank != 2:
-                    raise ValueError('Expect 2D npc.Array or 1D numpy ndarray')
-                rho_L2 = npc.tensordot(S, S.conj(), axes=['vR', 'vR*'])
+            if isinstance(S, ct.DiagonalTensor):
+                # transpose to get vR = vL* to the codomain
+                rho_L2 = S.T.relabel({'vR': 'vL*'}) ** 2
             else:
-                rho_L2 = npc.diag(S**2, rho_L.get_leg('vL'), dtype=rho_L.dtype)
-            err[i, 0] = npc.norm(rho_L - rho_L2)
-            rho_R = npc.tensordot(th, th.conj(), axes=lbl_L)
+                assert S.num_legs == 2
+                S = S.T
+                rho_L2 = ct.compose(S.hc, S)
+            err[i, 0] = ct.norm(rho_L - rho_L2)
+
+            rho_R = mps_contraction_diagram_operations['LP2 @ TM'].evaluate(LP=self.get_LP(i), ket=th, bra=th.hc)
+            rho_R = ct.planar_permute_legs(rho_R, codomain='vR*')
             S = self.get_SR(i)
-            if isinstance(S, npc.Array):
-                if S.rank != 2:
-                    raise ValueError('Expect 2D npc.Array or 1D numpy ndarray')
-                rho_R2 = npc.tensordot(S, S.conj(), axes=['vL', 'vL*'])
+            if isinstance(S, ct.DiagonalTensor):
+                rho_R2 = S.relabel({'vL': 'vR*'}) ** 2
             else:
-                rho_R2 = npc.diag(S**2, rho_R.get_leg('vR'), dtype=rho_L.dtype)
-            err[i, 1] = npc.norm(rho_R - rho_R2)
+                assert S.num_legs == 2
+                rho_R2 = ct.compose(S.hc, S)
+            err[i, 1] = ct.norm(rho_R - rho_R2)
         return err
 
     def canonical_form(self, **kwargs):
@@ -5550,7 +5553,9 @@ class MPS(BaseMPSExpectationValue):
         else:
             return self.canonical_form_infinite1(**kwargs)
 
-    def canonical_form_finite(self, renormalize=True, cutoff=0.0, envs_to_update=None):
+    def canonical_form_finite(
+        self, renormalize: bool = True, cutoff: float = 0.0, envs_to_update: None | list[MPSEnvironment] = None
+    ) -> tuple[ct.SymmetricTensor, ct.SymmetricTensor] | None:
         """Bring a finite (or segment) MPS into canonical form; in place.
 
         If any site is in :attr:`form` ``None``, it does *not* use any of the singular values `S`
@@ -5568,7 +5573,7 @@ class MPS(BaseMPSExpectationValue):
             Whether a change in the norm should be discarded or used to *update* :attr:`norm`.
             Note that even `renormalize=True` *does not reset* the :attr:`norm` to 1.
             To do that, you would rather have to set ``psi.norm = 1`` explicitly!
-        cutoff : float | None
+        cutoff : float
             Cutoff of singular values used in the SVDs.
         envs_to_update : None | list of :class:`MPSEnvironment`
             Clear the environments; for segment also update the left/rightmost LP/RP.
@@ -5587,14 +5592,15 @@ class MPS(BaseMPSExpectationValue):
         # normalize very left singular values
         S = self.get_SL(0)
         if self.bc == 'segment':
-            if S is None:
+            if S is None or self.get_SR(L - 1) is None:
                 raise ValueError('Need S[0] and S[L] for segment boundary conditions.')
-            self.set_SL(0, S / np.linalg.norm(S))
+            S = ct.DiagonalTensor.from_eye(S.legs[0], S.backend, S.labels, S.dtype, S.device)
+            self.set_SL(0, S / ct.norm(S))
             S = self.get_SR(L - 1)
-            self.set_SR(L - 1, S / np.linalg.norm(S))
+            self.set_SR(L - 1, S / ct.norm(S))
         else:  # bc == 'finite':
-            self.set_SL(0, np.array([1.0]))  # trivial singular value on very left/right
-            self.set_SR(L - 1, np.array([1.0]))
+            # already set in __init__
+            pass
         # sweep from left to right to bring it into left canonical form.
         if any([(f is None) for f in self.form]):
             # ignore any 'S' and canonical form
@@ -5604,52 +5610,49 @@ class MPS(BaseMPSExpectationValue):
             # we actually had a canonical form before, so we should *not* ignore the 'S'
             M = self.get_B(0, form='Th')
             form = 'B'  # for other 'M'
-        Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
+
+        Q, R = ct.qr(M, new_labels=['vR', 'vL'])
         # Q = unitary, R has to be multiplied to the right
-        self.set_B(0, Q.split_legs(0), form='A')
+        self.set_B(0, Q, form='A')
         for i in range(1, L - 1):
             M = self.get_B(i, form)
-            M = npc.tensordot(R, M, axes=['vR', 'vL'])
-            Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
+            M = ct.tensors.partial_compose(M, R, 'vL')
+            Q, R = ct.qr(M, new_labels=['vR', 'vL'])
             # Q is unitary, i.e. left canonical, R has to be multiplied to the right
-            self.set_B(i, Q.split_legs(0), form='A')
+            self.set_B(i, Q, form='A')
         M = self.get_B(L - 1, form)
-        M = npc.tensordot(R, M, axes=['vR', 'vL'])
+        M = ct.tensors.partial_compose(M, R, 'vL')
+
         if self.bc == 'segment':
             # also need to calculate new singular values on the very right
-            U, S, VR_segment = npc.svd(
-                M.combine_legs(['vL'] + self._p_label),
-                cutoff=cutoff,
-                qtotal_LR=[M.qtotal, None],
-                inner_labels=['vR', 'vL'],
-            )
-            S /= np.linalg.norm(S)
+            U, S, VR_segment = ct.truncated_svd(M, new_labels=['vR', 'vL'], charge_leg_top=False, svd_min=cutoff)
+            S /= ct.norm(S)
             self.set_SR(L - 1, S)
-            M = U.scale_axis(S, 1).split_legs(0)
+            M = ct.scale_axis(U, S, 'vR')
         else:
             VR_segment = None
         # sweep from right to left, calculating all the singular values
-        U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1), cutoff=cutoff, inner_labels=['vR', 'vL'])
+        U, S, V = ct.truncated_svd(ct.planar_permute_legs(M, codomain=['vL']), new_labels=['vR', 'vL'], svd_min=cutoff)
+        V = ct.planar_permute_legs(V, codomain=['vL', 'p'])
         if not renormalize:
-            self.norm = self.norm * np.linalg.norm(S)
-        S = S / np.linalg.norm(S)  # normalize
+            self.norm = self.norm * ct.norm(S)
+        S = S / ct.norm(S)  # normalize
         self.set_SL(L - 1, S)
-        self.set_B(L - 1, V.split_legs(1), form='B')
+        self.set_B(L - 1, V, form='B')
         for i in range(L - 2, -1, -1):
             M = self.get_B(i, 'A')
-            M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
-            U, S, V = npc.svd(
-                M.combine_legs(['vR'] + self._p_label, qconj=-1),
-                cutoff=cutoff,
-                qtotal_LR=[None, M.qtotal],
-                inner_labels=['vR', 'vL'],
+            M = ct.compose(M, ct.scale_axis(U, S, 'vR'))
+            U, S, V = ct.truncated_svd(
+                ct.planar_permute_legs(M, codomain=['vL']), new_labels=['vR', 'vL'], svd_min=cutoff
             )
-            S = S / np.linalg.norm(S)  # normalize
+            V = ct.planar_permute_legs(V, codomain=['vL', 'p'])
+            S = S / ct.norm(S)  # normalize
             self.set_SL(i, S)
-            self.set_B(i, V.split_legs(1), form='B')
+            self.set_B(i, V, form='B')
         if self.bc == 'finite':
-            assert len(S) == 1
-            self._B[0] *= U[0, 0]  # just a trivial phase factor, but better keep it
+            assert np.sum(S.legs[0].multiplicities) == 1
+            self._B[0] = ct.scale_axis(self._B[0], U, 'vL')  # just a trivial phase factor, but better keep it
+
         # done with getting to canonical form
         if envs_to_update is not None and self.bc == 'segment':
             for env in envs_to_update:
@@ -5667,8 +5670,8 @@ class MPS(BaseMPSExpectationValue):
         if self.bc == 'segment':
             old_UL, old_VR = self.segment_boundaries
             if old_UL is not None:
-                new_UL = npc.tensordot(old_UL, U, axes=['vR', 'vL'])
-                new_VR = npc.tensordot(VR_segment, old_VR, axes=['vR', 'vL'])
+                new_UL = ct.compose(old_UL, U)
+                new_VR = ct.compose(VR_segment, old_VR)
                 self.segment_boundaries = (new_UL, new_VR)
             else:
                 self.segment_boundaries = (U, VR_segment)
@@ -5704,6 +5707,7 @@ class MPS(BaseMPSExpectationValue):
             (which indicates a degenerate "cat" state, e.g., for spontaneous symmetry breaking).
 
         """
+        # TODO
         assert not self.finite
         L = self.L
         i1 = np.argmin(self.chi) % L  # start at this bond
@@ -5786,6 +5790,7 @@ class MPS(BaseMPSExpectationValue):
             Truncation cutoff for small singular values.
 
         """
+        # TODO
         assert not self.finite
         assert cutoff <= tol
         if arnoldi_params is None:
@@ -5832,6 +5837,7 @@ class MPS(BaseMPSExpectationValue):
         self._B[-1] = npc.tensordot(self._B[-1], U, axes=['vR', 'vL'])
 
     def _canonical_form_left_orthogonalize(self, L, tol, arnoldi_params):
+        # TODO
         max_iters = 10_000
         for _ in range(max_iters):
             L /= npc.norm(L)
@@ -5860,6 +5866,7 @@ class MPS(BaseMPSExpectationValue):
         raise RuntimeError(msg)
 
     def _canonical_form_right_orthogonalize(self, R, tol, arnoldi_params):
+        # TODO
         max_iters = 10_000
         for _ in range(max_iters):
             R /= npc.norm(R)
@@ -5889,6 +5896,7 @@ class MPS(BaseMPSExpectationValue):
 
     def _canonical_form_qr_L2R(self, L):
         """QR-decompose ``L B[0] B[1] ... B[-1] -> Qs[0]... Qs[-1] L`` for Bs in ``self._B``."""
+        # TODO
         Qs = [None] * self.L
         for i in range(self.L):
             LB = npc.tensordot(L, self._B[i], axes=['vR', 'vL'])
@@ -5899,6 +5907,7 @@ class MPS(BaseMPSExpectationValue):
 
     def _canonical_form_qr_R2L(self, R):
         """QR-decompose ``B[0] B[1] ... B[-1] R -> R Qs[0]... Qs[-1]`` for Bs in ``self._B``."""
+        # TODO
         Qs = [None] * self.L
         for i in reversed(range(self.L)):
             BR = npc.tensordot(self._B[i], R, axes=['vR', 'vL'])
@@ -5907,7 +5916,9 @@ class MPS(BaseMPSExpectationValue):
             Qs[i] = Q.split_legs()
         return Qs, R
 
-    def correlation_length2(self, target=1, tol_ev0=1.0e-8, charge_sector=0, return_charges=False):
+    def correlation_length2(
+        self, target: int = 1, tol_ev0: float | None = 1.0e-8, charge_sector=0, return_charges: bool = False
+    ) -> float | np.ndarray | tuple[float | np.ndarray, ct.SectorArray]:
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
         Assumes that `self` is in canonical form.
@@ -5936,13 +5947,13 @@ class MPS(BaseMPSExpectationValue):
             Print warning if largest eigenvalue deviates from 1 by more than `tol_ev0`.
             If `None`, **assume** dominant eigenvector in 0-charge-sector to be 1 for
             non-zero `charge_sector`.
-        charge_sector : None | list of int | ``0`` | list of list of int
-            Selects the charge sector (=list of int) in which we look for the dominant eigenvalue
+        charge_sector : None | :class:`~cyten.Sector` | ``0`` | :class:`~cyten.SectorArray`
+            Selects the charge sector in which we look for the dominant eigenvalue
             of the TransferMatrix.
-            ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
-            Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in charge sector 0.
-            If you pass a list of charge sectors (i.e. 2D array of int),
-            this function returns `target` dominant eigenvalues in each of those sectors.
+            ``None`` stands for *all* sectors, ``0`` stands for the trivial charge sector.
+            Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in trivial sector.
+            If you pass a sector array, this function returns `target` dominant eigenvalues in
+            each of those sectors.
         return_charges : bool
             If True, return the charge sectors along with the eigenvalues.
 
@@ -5952,8 +5963,8 @@ class MPS(BaseMPSExpectationValue):
             If `target` = 1, return just the correlation length,
             otherwise an array of the `target` largest correlation lengths.
             It is measured in units of the horizontal spacing of the lattice.
-        charge_sectors :  list of charge sectors, optional
-            For each entry in `xi` the charge sector, i.e., qtotal of the dominant eigenvalue.
+        charge_sectors :  :class:`~cyten.SectorArray`, optional
+            For each entry in `xi` the charge sector, i.e., the sector of the dominant eigenvalue.
             Only returned if `return_charges`.
 
         See Also
@@ -5971,7 +5982,9 @@ class MPS(BaseMPSExpectationValue):
             return xi, charges
         return xi
 
-    def correlation_length(self, target=1, tol_ev0=1.0e-8, charge_sector=0, return_charges=False):
+    def correlation_length(
+        self, target: int = 1, tol_ev0: float | None = 1.0e-8, charge_sector=0, return_charges: bool = False
+    ) -> float | np.ndarray | tuple[float | np.ndarray, ct.SectorArray]:
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
         .. deprecated ::
@@ -6013,6 +6026,7 @@ class MPS(BaseMPSExpectationValue):
         Returns like :meth:`correlation_length`, in particular *without* accounting for
         lattice geometry.
         """
+        # TODO
         assert not self.finite
         zero_charge = self.chinfo.make_valid()
         if any(chi == 1 for chi in self.chi):
@@ -6105,7 +6119,7 @@ class MPS(BaseMPSExpectationValue):
                 return xis[0]
             return xis
 
-    def correlation_length_charge_sectors(self, drop_symmetric=True, include_0=True):
+    def correlation_length_charge_sectors(self, drop_symmetric: bool = True, include_0: bool = True) -> ct.SectorArray:
         """Return possible `charge_sector` argument for :meth:`correlation_length`.
 
         The :meth:`correlation_length` is calculated from eigenvalues of the transfer matrix.
@@ -6129,18 +6143,18 @@ class MPS(BaseMPSExpectationValue):
             See above.
 
         """
-        if self.chinfo.qnumber == 0:
-            return []
+        # TODO drop include_0 argument?
         vR = self.get_B(self.L - 1).get_leg('vR')
-        pipe = npc.LegPipe([vR, vR.conj()], qconj=-1).conj()
-        charges = pipe.charges  # this is lexsorted
+        tp = ct.TensorProduct([vR, vR.dual])
+        sectors = tp.sector_decomposition
         if not drop_symmetric:
-            return charges
-        conj_charges = self.chinfo.make_valid(-charges)
-        perm = np.lexsort(conj_charges.T)
-        keep = perm <= np.arange(len(perm))
-        # note: the equal is necessary to include 0 and e.g. 2 for a Z_4 charge.
-        return charges[keep]
+            return sectors
+        keep = []
+        for i, sector in enumerate(sectors):
+            idx = tp.sector_decomposition_where(self.symmetry.dual_sector(sector))
+            if idx is None and idx >= i:
+                keep.append(i)
+        return sectors[keep]
 
     def add(self, other, alpha, beta, cutoff=1.0e-15):
         """Return an MPS which represents ``alpha|self> + beta |others>``.
@@ -6168,6 +6182,7 @@ class MPS(BaseMPSExpectationValue):
             Has same total charge as `self`.
 
         """
+        # TODO
         L = self.L
         assert other.L == L and L >= 2  # (if you need this, generalize this function...)
         assert self.finite
@@ -6233,6 +6248,7 @@ class MPS(BaseMPSExpectationValue):
             Error from truncating eigenvalues of reduced density matrices. Not the easiest to interpret.
 
         """
+        # TODO
         L = self.L
         assert self.finite
         assert self.bc == 'finite'
@@ -6373,6 +6389,7 @@ class MPS(BaseMPSExpectationValue):
         number of sites ``n`` from the largest of these ``m``.
 
         """
+        # TODO what operators to allow? multi-site tensors (-> convert), couplings?
         if not self.finite and not understood_infinite:
             warnings.warn(
                 'For infinite MPS, apply_local_op acts on *each* unit cell in parallel.'
@@ -6460,7 +6477,12 @@ class MPS(BaseMPSExpectationValue):
         if not unitary:
             self.canonical_form(renormalize=renormalize)
 
-    def apply_product_op(self, ops, unitary=None, renormalize=False):
+    def apply_product_op(
+        self,
+        ops: str | ct.SymmetricTensor | list[str | ct.SymmetricTensor],
+        unitary: None | bool = None,
+        renormalize: bool = False,
+    ):
         """Apply a (global) product of local onsite operators to `self`. In place.
 
         Note that this destroys the canonical form if any local operator is non-unitary.
@@ -6478,7 +6500,7 @@ class MPS(BaseMPSExpectationValue):
 
         Parameters
         ----------
-        ops : (list of) str | npc.Array
+        ops : (list of) str | :class:`~cyten.SymmetricTensor`
             List of onsite operators to apply on each site, with legs ``'p', 'p*'``.
             Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
             :attr:`sites`.
@@ -6501,12 +6523,15 @@ class MPS(BaseMPSExpectationValue):
                 if op == 'Id':
                     continue  # nothing to do here...
                 op = self.sites[i].get_op(op)
+            assert op.num_codomain_legs == op.num_domain_legs == 1
+            assert op.labels == ['p', 'p*']
             if unitary is None:
-                op_op_dagger = npc.tensordot(op, op.conj(), axes=['p*', 'p'])
-                if npc.norm(op_op_dagger - npc.eye_like(op_op_dagger)) > 1.0e-14:
+                op_op_dagger = ct.compose(op, op.hc)
+                eye = ct.SymmetricTensor.from_eye(op.codomain, op.backend, op.labels, op.dtype, op.device)
+                if ct.norm(op_op_dagger - eye) > 1.0e-14:
                     unitary = False
             # actually apply the operator at site i
-            self._B[i] = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
+            self._B[i] = ct.tensors.partial_compose(self._B[i], op, 'p')
         if not unitary:
             self.canonical_form(renormalize=renormalize)
 
@@ -6536,6 +6561,7 @@ class MPS(BaseMPSExpectationValue):
             Ignored if ``canonicalize=False``.
 
         """
+        # TODO
         ops, i_min, has_extra_JW = self._term_to_ops_list(term, autoJW, i_offset, False)
         if has_extra_JW:
             if self.bc == 'infinite':
@@ -6556,7 +6582,7 @@ class MPS(BaseMPSExpectationValue):
         if canonicalize:
             self.canonical_form(renormalize=renormalize)
 
-    def perturb(self, randomize_params=None, close_1=True, canonicalize=None):
+    def perturb(self, randomize_params: dict = None, close_1: bool = True, canonicalize: bool = None):
         """Locally perturb the state a little bit; in place.
 
         Parameters
@@ -6578,9 +6604,9 @@ class MPS(BaseMPSExpectationValue):
         if randomize_params is None:
             randomize_params = {}
         if close_1:
-            func = 'U_close_1' if self.dtype.kind == 'c' else 'O_close_1'
+            func = 'U_close_1' if self.dtype.is_complex else 'O_close_1'
         else:
-            func = 'CUE' if self.dtype.kind == 'c' else 'CRE'
+            func = 'CUE' if self.dtype.is_complex else 'CRE'
         randomize_params.setdefault('distribution_func', func)
         eng = RandomUnitaryEvolution(self, randomize_params)
         eng.run()
@@ -6686,7 +6712,7 @@ class MPS(BaseMPSExpectationValue):
                                              labels=['p1', 'p0', 'p0*', 'p1*'])
 
         """
-        if not self.chinfo.trivial_shift:
+        if not self.symmetry.trivial_shift:
             # I (Jakob) dont think this is possible in general and would require very complicated
             # specialization on the details of the symmetry.
             # If the conserved charge transforms non-trivially under spatial translations, then
@@ -6699,47 +6725,29 @@ class MPS(BaseMPSExpectationValue):
             # -> swap has no well defined qtotal! (p charge rule for a swap-Array depends on q1, q2)
             raise RuntimeError('Can not swap sites if conserved charge has non-trivial shift.')
 
+        # TODO get rid of swap_op argument, add overbraid argument?
+        overbraid = True  # i+1 over i; convention according to BraidInstruction
+
         if trunc_par is None:
             trunc_par = {}
-        siteL, siteR = self.get_site(i), self.get_site(i + 1)
-        if isinstance(swap_op, str):
-            dL, dR = siteL.dim, siteR.dim
-            # site.JW_exponent is just the `n_i` in the equations of the note above.
-            n_i = np.outer(siteL.JW_exponent, np.ones(dR)).reshape(dL * dR)
-            n_j = np.outer(np.ones(dL), siteR.JW_exponent).reshape(dL * dR)
-            if np.any(n_i * n_j):
-                if swap_op == 'auto':
-                    swap_op_diag = (-1.0) ** (n_i * n_j)
-                elif swap_op == 'autoInv':
-                    swap_op_diag = (-1.0) ** (n_i * n_j) * (-1.0j) ** n_i * (-1.0j) ** n_j
-                else:
-                    raise ValueError("don't understand swap_op = " + repr(swap_op))
-                legs = [siteL.leg, siteR.leg, siteL.leg.conj(), siteR.leg.conj()]
-                swap_op = npc.Array.from_ndarray(
-                    np.diag(swap_op_diag).reshape([dL, dR, dL, dR]), legs, labels=['p1', 'p0', 'p0*', 'p1*']
-                )
-            else:  # at least one site isn't Fermions -> commutes
-                swap_op = None  # continue with transposition as for Bosons
-        theta = self.get_theta(i, n=2)
+        levels = [None, 0, 1, None]
+        if not overbraid:
+            levels = levels[::-1]
+
         C = self.get_theta(i, n=2, formL=0.0)  # inversion free, see also TEBDEngine.update_bond()
-        if swap_op is None:
-            # just replace the labels, effectively this is a transposition.
-            theta.ireplace_labels(['p0', 'p1'], ['p1', 'p0'])
-            C.ireplace_labels(['p0', 'p1'], ['p1', 'p0'])
-        elif isinstance(swap_op, npc.Array):
-            theta = npc.tensordot(swap_op, theta, axes=[['p0*', 'p1*'], ['p0', 'p1']])
-            C = npc.tensordot(swap_op, C, axes=(['p0*', 'p1*'], ['p0', 'p1']))
-        else:
-            raise ValueError('Invalid swap_op: got ' + repr(swap_op))
-        theta = theta.combine_legs([('vL', 'p0'), ('vR', 'p1')], qconj=[+1, -1])
-        U, S, V, err, renormalize = npc.svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
-        B_R = V.split_legs(1).ireplace_label('p1', 'p')
-        B_L = npc.tensordot(C.combine_legs(('vR', 'p1'), pipes=theta.legs[1]), V.conj(), axes=['(vR.p1)', '(vR*.p1*)'])
-        B_L.ireplace_labels(['vL*', 'p0'], ['vR', 'p'])
+        C.relabel({'p0': 'p1', 'p1': 'p0'})
+        C = ct.permute_legs(C, codomain=['vL', 'p0'], domain=['vR', 'p1'], levels=levels, bend_right=True)
+        theta = ct.tensors.partial_compose(C, self.get_SL(i), 'vL')
+        U, S, V, err, renormalize = ct.truncated_svd(theta, **trunc_par, new_labels=['vR', 'vL'])
+        B_L = ct.compose(C, V.hc, relabel1={'p0': 'p'}, relabel2={'vL*': 'vR'})
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
+        B_R = ct.planar_permute_legs(V, codomain=['vL', 'p1'])
+        B_R.relabel({'p1': 'p'})
+
         self.set_SR(i, S)
         self.set_B(i, B_L, 'B')
         self.set_B(i + 1, B_R, 'B')
+        siteL, siteR = self.get_site(i), self.get_site(i + 1)
         self.sites[self._to_valid_site_index(i)] = siteR  # swap 'sites' as well
         self.sites[self._to_valid_site_index(i + 1)] = siteL
         return err
@@ -6764,6 +6772,7 @@ class MPS(BaseMPSExpectationValue):
             The error of the represented state introduced by the truncation after the swaps.
 
         """
+        # TODO add levels for sites -> get overbraids for the swaps
         perm = list(perm)  # gets modified, so we should copy
         # In order to keep sites close together, we always scan from the left,
         # keeping everything up to `i` in strictly ascending order.
@@ -6841,6 +6850,7 @@ class MPS(BaseMPSExpectationValue):
             performing the truncation.
 
         """
+        # TODO
         from ..models.lattice import Lattice  # dynamical import to avoid import loops
 
         if self.finite:
@@ -6899,7 +6909,7 @@ class MPS(BaseMPSExpectationValue):
         U *= np.sqrt(U.shape[0]) / npc.norm(U)
         return U, W / np.sum(np.abs(W)), sUs_blocked.legs[0], ov[0], trunc_err
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Some status information about the MPS."""
         res = [f'MPS, L={self.L:d}, bc={self.bc!r}.']
         res.append('chi: ' + str(self.chi))
@@ -6958,6 +6968,7 @@ class MPS(BaseMPSExpectationValue):
             Parameters for truncation, see :cfg:config:`truncation`.
 
         """
+        # TODO
         trunc_err = TruncationError()
         if self.bc == 'finite':
             # Do QR starting from the left
@@ -6995,7 +7006,7 @@ class MPS(BaseMPSExpectationValue):
             raise NotImplementedError('unsupported boundary conditions ' + repr(self.bc))
         return trunc_err
 
-    def _parse_form(self, form):
+    def _parse_form(self, form) -> list[tuple[float, float]]:
         """Parse `form` = (list of) {tuple | key of _valid_forms} to list of tuples"""
         if isinstance(form, tuple):
             return [form] * self.L
@@ -7006,57 +7017,54 @@ class MPS(BaseMPSExpectationValue):
             raise ValueError('Wrong len of `form`: ' + repr(form))
         return [self._to_valid_form(f) for f in form]
 
-    def _to_valid_form(self, form):
+    def _to_valid_form(self, form) -> tuple[float, float]:
         """Parse `form` = {tuple | key of _valid_forms} to a tuple"""
         if isinstance(form, tuple):
             return form
         return self._valid_forms[form]
 
-    def _scale_axis_B(self, B, S, form_diff, axis_B, cutoff):
+    def _scale_axis_B(self, B: ct.Tensor, S: ct.Tensor, form_diff: float, axis_B: str, cutoff: float) -> ct.Tensor:
         """Scale an axis of B with S to bring it in desired form.
 
-        If S is just 1D (as usual, e.g. during TEBD), this function just performs
-        ``B.scale_axis(S**form_diff, axis_B)``.
+        If S is just a diagonal tensor (as usual, e.g. during TEBD), this function just performs
+        ``scale_axis(B, S**form_diff, axis_B)``.
 
         However, during the DMRG with mixer, S might actually be a 2D matrix.
         For ``form_diff = -1``, we need to calculate the inverse of S, more precisely the
-        (Moore-Penrose) pseudo inverse, see :func:`~tenpy.linalg.np_conserved.pinv`.
+        (Moore-Penrose) pseudo inverse, see :func:`~cyten.tensors.pinv`.
         The cutoff is only used in that case.
 
         Returns scaled B.
         """
         if form_diff == 0:
             return B  # nothing to do
-        if not isinstance(S, npc.Array):
-            # the usual case: S is a 1D array with singular values
+        if isinstance(S, ct.DiagonalTensor):
+            # the usual case: S is a diagonal tensor with singular values
             if form_diff == -1.0:
                 S = 1.0 / S
             elif form_diff != 1.0:
                 S = S**form_diff
-            return B.scale_axis(S, axis_B)
-        else:
-            # e.g. during DMRG with a DensityMatrixMixer
-            if S.rank != 2:
-                raise ValueError('Expect 2D npc.Array or 1D numpy ndarray')
-            if form_diff == -1:
-                S = npc.pinv(S, cutoff)
-            elif form_diff != 1.0:
-                raise ValueError("Can't scale/tensordot a 2D `S` for non-integer `form_diff`")
+            return ct.scale_axis(B, S, axis_B)
 
-            # Hack: mpo.MPOEnvironment.full_contraction uses ``axis_B == 'vL*'``
-            if axis_B == 'vL' or axis_B == 'vL*':
-                B = npc.tensordot(S, B, axes=[1, axis_B]).replace_label(0, axis_B)
-            elif axis_B == 'vR' or axis_B == 'vR*':
-                B = npc.tensordot(B, S, axes=[axis_B, 0]).replace_label(-1, axis_B)
-            else:
-                raise ValueError('This should never happen: unexpected leg for scaling with S')
-            return B
+        if S.num_legs != 2 or S.num_codomain_legs != 1:
+            # we assume this for the partial compose; using tdot instead of partial compose generally involves
+            # bends during and after the tdot to get back to the original configuration, so we avoid it
+            raise ValueError('Expect tensor with two legs split between domain and codomain')
+        if form_diff == -1:
+            S = ct.tensors.pinv(S, cutoff)
+        elif form_diff != 1.0:
+            raise ValueError("Can't scale/tensordot a non-diagonal `S` for non-integer `form_diff`")
+        if axis_B == 'vR':
+            # special case since domain only has a single leg
+            return ct.tensors.compose(B, S)
+        return ct.tensors.partial_compose(B, S, axis_B)
 
     def _canonical_form_dominant_gram_matrix(self, bond0, transpose, tol_xi, guess=None):
         """Find dominant eigenvector of the transfer matrix starting between sites (bond0-1,bond0).
 
         Find right (transpose=False) or left (transpose=True) eigenvector of the transfermatrix.
         """
+        # TODO
         TM = TransferMatrix(self, self, bond0, bond0, transpose=transpose, charge_sector=0)
         if guess is None:
             diag = self.get_SL(bond0) ** 2 if transpose else 1.0
@@ -7094,6 +7102,7 @@ class MPS(BaseMPSExpectationValue):
         Then ``Gr -> Wr``.
         Return Wr normalized to ``sum(Wr) = chi``.
         """
+        # TODO
         Gr.itranspose(['vL', 'vL*'])
         W, XH = npc.eigh(Gr)  # -> XH has legs vL vL* = vL vR
         if np.sign(W[np.argmax(np.abs(W))]) == -1:  # fix sign
@@ -7131,6 +7140,7 @@ class MPS(BaseMPSExpectationValue):
         diag(Wr) -> Y 1/sqrt(Wr) diag(Wr) 1/sqrt(W) Y^H = diag(1)
         i.e., we brought the bond to canonical form and `S` is the Schmidt spectrum.
         """
+        # TODO
         sqrt_Wr = np.sqrt(Wr)
         Gl.itranspose(['vR*', 'vR'])
         rhor = Gl.scale_axis(sqrt_Wr, 0).iscale_axis(sqrt_Wr, 1)
@@ -7159,7 +7169,7 @@ class MPS(BaseMPSExpectationValue):
         # Gl is diag(S**2) up to numerical errors...
         return Gl, Yl, Yr
 
-    def _gauge_compatible_vL_vR(self, other):
+    def _gauge_compatible_vL_vR(self, other: MPS) -> MPS:
         """If necessary, gauge total charge of `other` to match the vL, vR legs of self.
 
         Returns a shallow copy where legs are adjusted.
@@ -7174,12 +7184,12 @@ class MPS(BaseMPSExpectationValue):
             other.gauge_total_charge(None, vL, vR)
         return other
 
-    def outer_virtual_legs(self):
+    def outer_virtual_legs(self) -> tuple[ct.ElementarySpace, ct.ElementarySpace]:
         """Return the virtual legs on the left and right of the MPS.
 
         Returns
         -------
-        vL, vR : :class:`~tenpy.linalg.charges.LegCharge`
+        vL, vR : :class:`~cyten.symmetries.spaces.ElementarySpace`
             Outermost virtual legs of the MPS. Preserved for a segment MPS even when calling
             :meth:`canonical_form` on the segment.
 
@@ -7199,13 +7209,16 @@ class MPS(BaseMPSExpectationValue):
     def _normalize_exp_val(self, value):
         return np.real_if_close(value)  # ignore self.norm
 
-    def _contract_with_LP(self, C, i):
-        C.ireplace_labels(['vL'], ['vR*'])
-        return C
+    def get_LP(self, i):
+        leg = self.get_SL(i).get_leg('vL')
+        return ct.Identity(leg, self.backend, self.dtype, self.device, ['vR*', 'vR'])
 
-    def _contract_with_RP(self, C, i):
-        C.ireplace_labels(['vR'], ['vL*'])
-        return C
+    def get_RP(self, i):
+        leg = self.get_SR(i).get_leg('vR')
+        return ct.Identity(leg, self.backend, self.dtype, self.device, ['vL*', 'vL'])
+
+
+# FIXME stopped here
 
 
 class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
