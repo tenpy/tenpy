@@ -4138,7 +4138,7 @@ class MPS(BaseMPSExpectationValue):
             new_B = self.get_B(i, form=new_form, copy=False)  # calculates the desired form.
             self.set_B(i, new_B, form=new_form)
 
-    def enlarge_mps_unit_cell(self, factor=2):
+    def enlarge_mps_unit_cell(self, factor: int = 2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
         Parameters
@@ -4162,7 +4162,7 @@ class MPS(BaseMPSExpectationValue):
         self.unit_cell_width *= factor
         self.test_sanity()
 
-    def roll_mps_unit_cell(self, shift=1):
+    def roll_mps_unit_cell(self, shift: int = 1):
         """Shift the section we define as unit cell of an infinite MPS; in place.
 
         Suppose we have a unit cell with tensors ``[A, B, C, D]`` (repeated on both sites).
@@ -4183,10 +4183,8 @@ class MPS(BaseMPSExpectationValue):
         self.form = [self.form[i] for i in valid_inds]
         self._B = [self.get_B(i) for i in inds]
         self._S = [self.get_SL(i) for i in inds]
-        if self.finite:
-            self._S.append([self.get_SR(inds[-1])])
 
-    def overlap_translate_finite(self, psi, shift=1):
+    def overlap_translate_finite(self, psi: MPS, shift: int = 1) -> float | complex:
         r"""Contract ``<self|T^N|psi>`` for translation `T` with finite, periodic boundaries.
 
         Looks like this for ``shift=1``, with the open virtual legs contracted in the end::
@@ -4212,7 +4210,7 @@ class MPS(BaseMPSExpectationValue):
 
         Returns
         -------
-        self_Tn_psi : float
+        self_Tn_psi : float or complex
             Contraction of ``<self|T^N|psi>``.
 
         See Also
@@ -4222,6 +4220,7 @@ class MPS(BaseMPSExpectationValue):
         roll_mps_unit_cell : Effectively applies ``T^shift`` on infinite MPS.
 
         """
+        # TODO not sure how to generalize
         assert self.bc == psi.bc == 'finite'
         L = self.L
         assert L == psi.L
@@ -4278,6 +4277,7 @@ class MPS(BaseMPSExpectationValue):
             ``new_S = concatenate(old_S, zeros)[perm]``.
 
         """
+        # TODO
         self.convert_form('B')
         if len(extra_legs) != self.L + (1 if self.finite else 0):
             raise ValueError('wrong len of extra_legs.')
@@ -4373,6 +4373,7 @@ class MPS(BaseMPSExpectationValue):
         (L-1)/2 (odd L) as a fixpoint.
         For infinite MPS, the bond between MPS unit cells is another fix point.
         """
+        # TODO
         if not self.chinfo.trivial_shift:
             # Similar to swap_sites, I (Jakob) dont think this is even possible.
             raise RuntimeError('Can not invert if conserved charge has non-trivial shift.')
@@ -4403,6 +4404,7 @@ class MPS(BaseMPSExpectationValue):
         group_split : Reverts the grouping.
 
         """
+        # TODO
         self.convert_form('B')
         if grouped_sites is None:
             grouped_sites = npc.group_sites(self.sites, n, charges='same')
@@ -4451,6 +4453,7 @@ class MPS(BaseMPSExpectationValue):
         group_sites : Should have been used before to combine sites.
 
         """
+        # TODO
         if trunc_par is None:
             trunc_par = {}
         trunc_par = asConfig(trunc_par, 'trunc_params')
@@ -4510,7 +4513,7 @@ class MPS(BaseMPSExpectationValue):
         # note: grouping / un-grouping leaves unit_cell_width unchanged
         return trunc_err
 
-    def get_grouped_mps(self, blocklen):
+    def get_grouped_mps(self, blocklen: int) -> MPS:
         r"""Like :meth:`group_sites`, but make a copy.
 
         Parameters
@@ -4528,7 +4531,7 @@ class MPS(BaseMPSExpectationValue):
         groupedMPS.group_sites(n=blocklen)
         return groupedMPS
 
-    def extract_segment(self, first, last):
+    def extract_segment(self, first: int, last: int) -> MPS:
         """Extract an segment from a finite or infinite MPS.
 
         Parameters
@@ -4561,15 +4564,26 @@ class MPS(BaseMPSExpectationValue):
                     V_R = None
             if U_L is not None or V_R is not None:
                 if U_L is None:
-                    U_L = npc.eye_like(B[0], 'vL', labels=['vL', 'vR'])
+                    U_L = ct.Identity(
+                        B[0].get_leg('vL'), backend=cp.backend, dtype=cp.dtype, device=cp.device, labels=['vL', 'vR']
+                    )
                 if V_R is None:
-                    V_R = npc.eye_like(B[-1], 'vR', labels=['vR', 'vL']).itranspose()
+                    V_R = ct.Identity(
+                        B[-1].get_leg('vR'), backend=cp.backend, dtype=cp.dtype, device=cp.device, labels=['vL', 'vR']
+                    )
                 cp.segment_boundaries = (U_L, V_R)
         return cp
 
     def extract_enlarged_segment(
-        self, psi_left, psi_right, first, last, add_unitcells=None, new_first_last=None, cutoff=1.0e-14
-    ):
+        self,
+        psi_left: MPS,
+        psi_right: MPS,
+        first: int,
+        last: int,
+        add_unitcells: int | tuple[int, int] = None,
+        new_first_last: tuple[int, int] = None,
+        cutoff: float = 1.0e-14,
+    ) -> tuple[MPS, int, int]:
         """Extract an enlarged segment from an initially smaller segment MPS.
 
         With :meth:`extract_segment`, we obtain a segment MPS on a small subsystem, or "segment"
@@ -4686,10 +4700,10 @@ class MPS(BaseMPSExpectationValue):
         U_L, V_R = self.segment_boundaries
         if U_L is not None and new_first < first:
             k = first - 1 - new_first
-            Bs[k] = npc.tensordot(Bs[k], U_L, axes=['vR', 'vL'])
+            Bs[k] = ct.tensors.compose(Bs[k], U_L)
         if V_R is not None and last < new_last:
             k = last + 1 - new_first
-            Bs[k] = npc.tensordot(V_R, Bs[k], axes=['vR', 'vL'])
+            Bs[k] = ct.tensors.partial_compose(Bs[k], V_R, 'vL')
 
         # initialize MPS
         bc = 'segment'
@@ -4704,9 +4718,9 @@ class MPS(BaseMPSExpectationValue):
         if new_first == first or new_last == last:
             U_L_new, V_R_new = psi_new.segment_boundaries
             if U_L is not None and new_first == first:
-                U_L_new = npc.tensordot(U_L, U_L_new, axes=['vR', 'vL'])
+                U_L_new = ct.tensors.compose(U_L, U_L_new)
             if V_R is not None and new_last == last:
-                V_R_new = npc.tensordot(V_R_new, V_R, axes=['vR', 'vL'])
+                V_R_new = ct.tensors.compose(V_R_new, V_R)
             psi_new.segment_boundaries = (U_L, V_R)
 
         return psi_new, new_first, new_last
@@ -4730,6 +4744,7 @@ class MPS(BaseMPSExpectationValue):
             The sum of the `qtotal` of the individual `B` tensors.
 
         """
+        # TODO
         tensors = self._B
         U, V = self.segment_boundaries
         if U is not None:
@@ -4764,6 +4779,7 @@ class MPS(BaseMPSExpectationValue):
             :attr:`segment_boundaries`.
 
         """
+        # TODO
         if self.chinfo.qnumber == 0:
             return
         if self.segment_boundaries[0] is not None:
@@ -4807,7 +4823,9 @@ class MPS(BaseMPSExpectationValue):
             self._B[0].get_leg('vL').test_contractible(self._B[-1].get_leg('vR'))
         # done
 
-    def entanglement_entropy(self, n=1, bonds=None, for_matrix_S=False):
+    def entanglement_entropy(
+        self, n: int | float = 1, bonds: None | int | Iterable[int] = None, for_matrix_S: bool = False
+    ) -> np.ndarray:
         r"""Calculate the (half-chain) entanglement entropy for all nontrivial bonds.
 
         Consider a bipartition of the system into :math:`A = \{ j: j <= i_b \}` and
@@ -4823,7 +4841,7 @@ class MPS(BaseMPSExpectationValue):
 
         Parameters
         ----------
-        n : int/float
+        n : int | float
             Selects which entropy to calculate;
             `n=1` (default) is the usual von-Neumann entanglement entropy.
         bonds : ``None`` | (iterable of) int
@@ -4854,7 +4872,7 @@ class MPS(BaseMPSExpectationValue):
         if bonds is None:
             nt = self.nontrivial_bonds
             bonds = range(nt.start, nt.stop)
-        if isinstance(bonds, int):
+        elif isinstance(bonds, int):
             bonds = [bonds]
         res = []
         for ib in bonds:
@@ -4862,18 +4880,21 @@ class MPS(BaseMPSExpectationValue):
                 s = self.get_SR(ib - 1)
             else:
                 s = self.get_SL(ib)
-            if len(s.shape) == 1:
-                res.append(entropy(s**2, n))
+            if isinstance(s, ct.DiagonalTensor):
+                res.append(ct.entropy(s, n))
             else:
                 if for_matrix_S:
                     # explicitly calculate Schmidt values by diagonalizing (s^dagger s)
-                    s = npc.eigvalsh(npc.tensordot(s.conj(), s, axes=[0, 0]))
-                    res.append(entropy(s, n))
+                    # FIXME define eigvalsh in cyten
+                    s = ct.eigvalsh(ct.compose(ct.dagger(s), s))[0]
+                    res.append(ct.entropy(s, n))
                 else:
                     raise ValueError('entropy with non-diagonal schmidt values')
         return np.array(res)
 
-    def entanglement_entropy_segment(self, segment=[0], first_site=None, n=1):
+    def entanglement_entropy_segment(
+        self, segment: list[int] = [0], first_site: None | int | Iterable[int] = None, n: int | float = 1
+    ) -> np.ndarray:
         r"""Calculate entanglement entropy for general geometry of the bipartition.
 
         This function is similar as :meth:`entanglement_entropy`,
@@ -4909,6 +4930,8 @@ class MPS(BaseMPSExpectationValue):
                 first_site = range(0, self.L - segment[-1])
             else:
                 first_site = range(self.L)
+        elif isinstance(first_site, int):
+            first_site = [first_site]
         comb_legs = [self._get_p_labels(len(segment), False), self._get_p_labels(len(segment), True)]
         res = []
         for i0 in first_site:
@@ -4918,7 +4941,7 @@ class MPS(BaseMPSExpectationValue):
             res.append(entropy(p, n))
         return np.array(res)
 
-    def entanglement_entropy_segment2(self, segment, n=1):
+    def entanglement_entropy_segment2(self, segment: list[int], n: int | float = 1) -> float:
         r"""Calculate entanglement entropy for general geometry of the bipartition.
 
         This function is similar to :meth:`entanglement_entropy_segment`,
@@ -4947,6 +4970,11 @@ class MPS(BaseMPSExpectationValue):
             (or equivalently it's complement).
 
         """
+        # TODO I don't understand this; why not just directly construct the segment idcs for B
+        # and use entanglement_entropy_segment again?
+        # segment_B = [i for i in range(self.L) if i not in segment]
+        # return self.entanglement_entropy_segment(segment=segment_B, first_site=0, n=n)[0]
+
         segment = np.sort(segment)
         if len(segment) < 8:
             warnings.warn('inefficient: use `entanglement_entropy_segment` instead!', stacklevel=2)
@@ -4976,7 +5004,9 @@ class MPS(BaseMPSExpectationValue):
         p = npc.eigvalsh(rho)
         return entropy(p, n)
 
-    def entanglement_spectrum(self, by_charge=False):
+    def entanglement_spectrum(
+        self, by_charge: bool = False
+    ) -> list[np.ndarray] | list[list[tuple[ct.Sector, np.ndarray]]]:
         r"""Return entanglement energy spectrum.
 
         Parameters
@@ -4995,6 +5025,7 @@ class MPS(BaseMPSExpectationValue):
             for each possible charge on that bond.
 
         """
+        # TODO
         if by_charge:
             res = []
             for i in range(self.L + 1)[self.nontrivial_bonds]:
@@ -5009,7 +5040,7 @@ class MPS(BaseMPSExpectationValue):
         else:
             return [np.sort(-2.0 * np.log(ss)) for ss in self._S[self.nontrivial_bonds]]
 
-    def get_rho_segment(self, segment):
+    def get_rho_segment(self, segment: Iterable[int]) -> ct.Tensor:
         """Return reduced density matrix for a segment.
 
         Note that the dimension of rho_A scales exponentially in the length of the segment.
@@ -5027,6 +5058,7 @@ class MPS(BaseMPSExpectationValue):
             Labels ``'p0', 'p1', ..., 'pk', 'p0*', 'p1*', ..., 'pk*'`` with ``k=len(segment)``.
 
         """
+        # TODO
         if len(segment) > 12:
             warnings.warn(f"{len(segment):d} sites in the segment, that's much!", stacklevel=2)
         if len(segment) > 20:
@@ -5055,7 +5087,7 @@ class MPS(BaseMPSExpectationValue):
         rho = npc.tensordot(rho, B.conj(), axes=(['vR*', 'vR'], ['vL*', 'vR*']))
         return rho
 
-    def probability_per_charge(self, bond=0):
+    def probability_per_charge(self, bond: int = 0) -> tuple[ct.SectorArray, np.ndarray]:
         """Return probabilities of charge value on the left of a given bond.
 
         For example for particle number conservation, define
@@ -5077,6 +5109,7 @@ class MPS(BaseMPSExpectationValue):
             For each row of `charge_values` the probability for these values of charge fluctuations.
 
         """
+        # TODO
         if self.bc == 'segment' and bond == self.L:
             S = self.get_SR(self.L - 1) ** 2
             leg = self.get_B(self.L - 1, form=None).get_leg('vR').conj()
@@ -5095,7 +5128,7 @@ class MPS(BaseMPSExpectationValue):
             warnings.warn('Probability_per_charge: Sum of probabilities not 1. Canonical form?', stacklevel=2)
         return leg.charges.copy(), ps
 
-    def average_charge(self, bond=0):
+    def average_charge(self, bond: int = 0) -> np.ndarray:
         r"""Return the average charge for the block on the left of a given bond.
 
         For example for particle number conservation, define
@@ -5116,9 +5149,9 @@ class MPS(BaseMPSExpectationValue):
 
         """
         charges, ps = self.probability_per_charge(bond)
-        return np.sum(ps[:, np.newaxis] * charges, axis=0)
+        return np.sum(ps[:, np.newaxis] * np.asarray(charges), axis=0)
 
-    def charge_variance(self, bond=0):
+    def charge_variance(self, bond: int = 0) -> np.ndarray:
         r"""Return the charge variance on the left of a given bond.
 
         For example for particle number conservation, define
@@ -5140,77 +5173,59 @@ class MPS(BaseMPSExpectationValue):
         """
         charges_mean = self.average_charge(bond)
         charges, ps = self.probability_per_charge(bond)
-        return np.sum(ps[:, np.newaxis] * (charges - charges_mean[np.newaxis, :]) ** 2, axis=0)
+        return np.sum(ps[:, np.newaxis] * (np.asarray(charges) - charges_mean[np.newaxis, :]) ** 2, axis=0)
 
     @staticmethod
-    def get_charge_tree_for_given_charge_sector(sites: list, charge_sector: tuple):
+    def get_charge_tree_for_given_charge_sector(sites: list[ct.Site], charge_sector: ct.Sector) -> list[ct.SectorArray]:
         r"""Construct the charge-tree for a given charge sector.
 
         This is a tree of possible charges for each site s.t. the MPS lies in the given ``charge_sector``.
 
         Parameters
         ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~cyten.models.degrees_of_freedom.Site`
             The sites defining the local Hilbert space. The sites should conserve *some* charge,
             otherwise projecting onto a charge sector is meaningless.
-        charge_sector : tuple of int
+        charge_sector : :class:`~cyten.Sector`
             The charge sector corresponding to the conserved charge of the ``sites``
 
         Returns
         -------
-        charge_tree : list of dict of tuples
-            A tree of possible charges (at the sites) for the desired ``charge_sector``.
+        charge_tree : list of :class:`~cyten.SectorArray`
+            A tree of possible charges (at the bonds) for the desired ``charge_sector``.
             I.e. consider the state :math:`\ket{++}`. The desired charge tree for the sector ``(0,)``
             is ``[{(0,)}, {(1,), (-1,)}, {(0,)}]``.
 
         """
         L = len(sites)
         assert L > 0, 'sites must contain a :class:`Site` with conserved charges'
-        # check that all have same chiinfo
-        chinfo = sites[0].leg.chinfo
-        assert all(s.leg.chinfo == chinfo for s in sites), 'Charge Info for all sites must be identical'
+        sym = sites[0].symmetry
+        assert all(site.symmetry == sym for site in sites[1:]), 'Symmetry for all sites must be identical'
 
-        charge_sector_left = chinfo.make_valid(None)  # zero charges
-        charge_sector_right = chinfo.make_valid(charge_sector)
-        assert charge_sector_right.ndim == 1
-
-        # create a "charge-tree" from the right (starting at the desired charge sector)
-        Q_from_right = [None] * L + [set([tuple(charge_sector_right)])]  # all bonds 0, ... L
-
-        for i in reversed(range(L)):  # loop from right to left over all sites
-            Q_R = np.array(list(Q_from_right[i + 1]))  # the dictionary of charges (Q_R) to the right of site i
-            Q_L = set()
-            # loop over possible/allowed changes of charges:
-            for Q_p in sites[i].leg.charges:  # i.e. site.leg.charges=[[-1], [1]] for a SpinHalfSite
-                # add all "combinations of charges" -> Q_p[np.newaxis] to use broadcasting; store results in a set
-                Q_L_add = chinfo.make_valid(Q_R - Q_p[np.newaxis])  # from right to left in the tree we must subtract
-                Q_L_add = set([tuple(q) for q in Q_L_add])
-                Q_L = Q_L.union(Q_L_add)
-            Q_from_right[i] = Q_L
-
-        if tuple(charge_sector_left) not in Q_from_right[0]:
-            raise ValueError(
-                "can't get desired charge sector {charge_sector!r} for the given charges on physical sites!"
+        # use spaces to construct the overlapping charge sectors from left and right, similar to how
+        # it is done in from_desired_bond_dimension, but we may set the all multiplicities to 1
+        virtual_spaces = [ct.ElementarySpace.from_trivial_sector(dim=1, symmetry=sym)] + [None] * (L - 1)
+        virtual_spaces.append(ct.ElementarySpace.from_defining_sectors(sym, [charge_sector], multiplicities=[1]))
+        charge_err = f"can't get desired charge sector {charge_sector!r} for the given charges on physical sites!"
+        for i in range((L + 1) // 2):
+            # range is chosen such that the left and right parts always meet
+            # in the center and we get a consistency condition in the charges
+            new_space_left = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
+            new_space_left = new_space_left.as_ElementarySpace()
+            # set all multiplicites to 1 such that we don't cut any sectors in _truncate_virtual_space
+            new_space_left.multiplicities = np.ones_like(new_space_left.multiplicities, dtype=int)
+            virtual_spaces[i + 1] = _truncate_virtual_space(
+                new_space_left, virtual_spaces[i + 1], chi=1000, err=charge_err
             )
+            new_space_right = ct.TensorProduct([virtual_spaces[-1 - i], sites[-1 - i].leg.dual], sym)
+            new_space_right = new_space_right.as_ElementarySpace()
+            new_space_right.multiplicities = np.ones_like(new_space_right.multiplicities, dtype=int)
+            virtual_spaces[-2 - i] = _truncate_virtual_space(
+                new_space_right, virtual_spaces[-2 - i], chi=1000, err=charge_err
+            )
+        return [vs.sector_decomposition for vs in virtual_spaces]
 
-        # create a "charge-tree" from the left (starting with no charges), similar logic to above
-        Q_from_left = [set([tuple(charge_sector_left)])] + [None] * L
-        for i in range(L):
-            Q_L = np.array(list(Q_from_left[i]))
-            Q_R = set()
-            for Q_p in sites[i].leg.charges:
-                Q_R_add = chinfo.make_valid(Q_L + Q_p[np.newaxis])  # from left to right in the tree we must add
-                Q_R_add = set([tuple(q) for q in Q_R_add])
-                Q_R = Q_R.union(Q_R_add)
-
-            # only keep entries in the left tree that can also be reached from the right
-            Q_from_left[i + 1] = Q_R.intersection(Q_from_right[i + 1])
-
-        assert Q_from_left[-1] == Q_from_right[-1], "Left `charge_sector` doesn't meet the one on the right"
-        # Q_from_left is already the intersection of the full tree from the left and from the right, hence return it
-        return Q_from_left
-
-    def mutinf_two_site(self, max_range=None, n=1):
+    def mutinf_two_site(self, max_range: int = None, n: int | float = 1):
         """Calculate the two-site mutual information :math:`I(i:j)`.
 
         Calculates :math:`I(i:j) = S(i) + S(j) - S(i,j)`,
@@ -5222,7 +5237,7 @@ class MPS(BaseMPSExpectationValue):
         max_range : int
             Maximal distance ``|i-j|`` for which the mutual information should be calculated.
             ``None`` defaults to `L-1`.
-        n : float
+        n : int | float
             Selects the entropy to use, see :func:`~tenpy.tools.math.entropy`.
 
         Returns
@@ -5234,6 +5249,7 @@ class MPS(BaseMPSExpectationValue):
             sites ``i, j = coords[k]``.
 
         """
+        # TODO
         #  Basically the code of get_rho_segment and entanglement_entropy,
         #  but optimized to run in O(L*max_range)
         if max_range is None:
@@ -5297,6 +5313,7 @@ class MPS(BaseMPSExpectationValue):
             the largest eigenvalue of the TransferMatrix.
 
         """
+        # TODO
         if self.bc != other.bc:
             raise ValueError("can't take overlap between MPS with different bc")
         if self.finite:
@@ -5354,6 +5371,7 @@ class MPS(BaseMPSExpectationValue):
         tenpy.networks.mpo.MPO.expectation_value : expectation value density of an MPO.
 
         """
+        # TODO
         from . import mpo, terms
 
         L = self.L
@@ -5424,6 +5442,7 @@ class MPS(BaseMPSExpectationValue):
             including the phase. If complex_amplitude is True, we return ``weight**2``.
 
         """
+        # TODO
         if tuple(self._p_label) != ('p',):
             raise NotImplementedError("Only works for a single physical 'p' leg")
         if last_site is None:
