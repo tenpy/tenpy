@@ -202,29 +202,45 @@ __all__ = [
 
 mps_contraction_diagram_operations: dict[str, ct.PlanarDiagram] = {
     'LP2 @ TM': ct.PlanarDiagram(
-        tensors='LP[vR*, vR], ket[vL, p, vR], bra[vR*, p*, vL*]',
-        definition='LP:vR @ ket:vL, ket:p @ bra:p*, LP:vR* @ bra:vL*',
+        tensors='LP[vR*, vR], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        definition='LP:vR @ ket:vL, ket:p @ bra:p*, LP:vR* @ bra:vL*, ket:! @ bra:!, ket:vR -> vR, bra:vR* -> vR*',
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
+        allow_multiple_charged_tensors=True,
     ),
     'LP2 @ bra-W-ket2': ct.PlanarDiagram(
-        tensors='LP[vR*, vR], W[p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
-        definition='LP:vR @ ket:vL, ket:p @ W:p*, LP:vR* @ bra:vL*, bra:p* @ W:p',
+        tensors='LP[vR*, vR], W[p, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        definition=(
+            'LP:vR @ ket:vL, ket:p @ W:p*, LP:vR* @ bra:vL*, bra:p* @ W:p, ket:! @ bra:!, ket:vR -> vR, bra:vR* -> vR*'
+        ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
+        allow_multiple_charged_tensors=True,
     ),
     'LP3 @ bra-W-ket3': ct.PlanarDiagram(
-        tensors='LP[vR*, wR, vR], W[wL, p, wR, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
-        definition='LP:vR @ ket:vL, ket:p @ W:p*, LP:wR @ W:wL, LP:vR* @ bra:vL*, W:p @ bra:p*',
+        tensors='LP[vR*, wR, vR], W[wL, p, wR, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        definition=(
+            'LP:vR @ ket:vL, ket:p @ W:p*, LP:wR @ W:wL, LP:vR* @ bra:vL*, W:p @ bra:p*, ket:! @ bra:!, '
+            'ket:vR -> vR, bra:vR* -> vR*, W:wR -> wR'
+        ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL', 'wR']),
+        allow_multiple_charged_tensors=True,
     ),
     'LP2 @ bra-W-ket3': ct.PlanarDiagram(
-        tensors='LP[vR*, vR], W[p, wR, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
-        definition='LP:vR @ ket:vL, ket:p @ W:p*, LP:vR* @ bra:vL*, W:p @ bra:p*',
+        tensors='LP[vR*, vR], W[p, wR, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        definition=(
+            'LP:vR @ ket:vL, ket:p @ W:p*, LP:vR* @ bra:vL*, W:p @ bra:p*, ket:! @ bra:!, '
+            'ket:vR -> vR, bra:vR* -> vR*, W:wR -> wR'
+        ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wR']),
+        allow_multiple_charged_tensors=True,
     ),
     'LP3 @ bra-W-ket2': ct.PlanarDiagram(
-        tensors='LP[vR*, wR, vR], W[wL, p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
-        definition='LP:vR @ ket:vL, ket:p @ W:p*, LP:wR @ W:wL, LP:vR* @ bra:vL*, W:p @ bra:p*',
+        tensors='LP[vR*, wR, vR], W[wL, p, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        definition=(
+            'LP:vR @ ket:vL, ket:p @ W:p*, LP:wR @ W:wL, LP:vR* @ bra:vL*, W:p @ bra:p*, ket:! @ bra:!, '
+            'ket:vR -> vR, bra:vR* -> vR*'
+        ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL', 'wR']),
+        allow_multiple_charged_tensors=True,
     ),
     'LP2 @ RP2': ct.PlanarDiagram(
         tensors='LP[vR*, vR], RP[vL*, vL]',
@@ -237,24 +253,36 @@ mps_contraction_diagram_operations: dict[str, ct.PlanarDiagram] = {
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], w=['wL', 'wR']),
     ),
     'TM @ RP2': ct.PlanarDiagram(
-        tensors='RP[vL*, vL], ket[vL, p, vR], bra[vR*, p*, vL*]',
-        definition='RP:vL @ ket:vR, ket:p @ bra:p*, RP:vL* @ bra:vR*',
+        tensors='RP[vL*, vL], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        definition='RP:vL @ ket:vR, ket:p @ bra:p*, RP:vL* @ bra:vR*, ket:! @ bra:!, ket:vL -> vL, bra:vL* -> vL*',
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
+        allow_multiple_charged_tensors=True,
     ),
     'bra-W-ket2 @ RP2': ct.PlanarDiagram(
-        tensors='RP[vL*, vL], W[p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
-        definition='RP:vL @ ket:vR, ket:p @ W:p*, RP:vL* @ bra:vR*, bra:p* @ W:p',
+        tensors='RP[vL*, vL], W[p, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        definition=(
+            'RP:vL @ ket:vR, ket:p @ W:p*, RP:vL* @ bra:vR*, bra:p* @ W:p, ket:! @ bra:!, ket:vL -> vL, bra:vL* -> vL*'
+        ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
+        allow_multiple_charged_tensors=True,
     ),
     'bra-W-ket3 @ RP3': ct.PlanarDiagram(
-        tensors='RP[vL*, vL, wL], W[wL, p, wR, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
-        definition='RP:vL @ ket:vR, ket:p @ W:p*, RP:wL @ W:wR, RP:vL* @ bra:vR*, W:p @ bra:p*',
+        tensors='RP[vL*, vL, wL], W[wL, p, wR, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        definition=(
+            'RP:vL @ ket:vR, ket:p @ W:p*, RP:wL @ W:wR, RP:vL* @ bra:vR*, W:p @ bra:p*, ket:! @ bra:!, '
+            'ket:vL -> vL, bra:vL* -> vL*, W:wL -> wL'
+        ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL', 'wR']),
+        allow_multiple_charged_tensors=True,
     ),
     'bra-W-ket3 @ RP2': ct.PlanarDiagram(
-        tensors='RP[vL*, vL], W[wL, p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
-        definition='RP:vL @ ket:vR, ket:p @ W:p*, RP:vL* @ bra:vR*, W:p @ bra:p*',
+        tensors='RP[vL*, vL], W[wL, p, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        definition=(
+            'RP:vL @ ket:vR, ket:p @ W:p*, RP:vL* @ bra:vR*, W:p @ bra:p*, ket:! @ bra:!, '
+            'ket:vL -> vL, bra:vL* -> vL*, W:wL -> wL'
+        ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL']),
+        allow_multiple_charged_tensors=True,
     ),
 }
 
