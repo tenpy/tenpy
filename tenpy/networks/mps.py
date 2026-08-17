@@ -168,7 +168,7 @@ import cyten as ct
 from ..linalg.truncation import TruncationError
 from ..tools import hdf5_io
 from ..tools.cache import DictCache
-from ..tools.math import entropy, lcm
+from ..tools.math import lcm
 from ..tools.misc import BetaWarning, argsort, get_recursive, inverse_permutation, to_array, to_iterable
 from ..tools.params import asConfig
 
@@ -2378,9 +2378,8 @@ class MPS(BaseMPSExpectationValue):
         self.segment_boundaries = (None, None)
 
         # make copies of Bs and SVs
-        # TODO best way to store to avoid as many bends as possible when doing contractions?
         # do a planar_permute_legs here to the best arrangement
-        self._B = [B.copy(deep=True, dtype=dtype) for B in Bs]
+        self._B = [ct.planar_permute_legs(B.copy(deep=True, dtype=dtype), codomain=self._B_labels[:-1]) for B in Bs]
         num_S = self.L + 1 if self.finite else self.L
         self._S = [None] * (num_S)
         for i in range(self.L + 1)[self.nontrivial_bonds]:
@@ -2397,6 +2396,9 @@ class MPS(BaseMPSExpectationValue):
                 dtype=dtype.to_real,
                 device=device,
             )
+            # need to normalize w.r.t. the quantum dimension
+            self._S[0] /= ct.norm(self._S[0])
+            self._S[-1] /= ct.norm(self._S[-1])
         self._transfermatrix_keep = 1
         self.test_sanity()
 
@@ -3540,17 +3542,20 @@ class MPS(BaseMPSExpectationValue):
         assert psi.L == L
         return psi
 
-    # FIXME stopped here
-
     @classmethod
     def from_product_mps_covering(
-        cls, mps_covering, index_map, bc='finite', unit_cell_width=None, understood_shift_symmetry: bool = False
-    ):
+        cls,
+        mps_covering: list[MPS],
+        index_map: list[tuple[int]],
+        bc: Literal['finite', 'segment', 'infinite'] = 'finite',
+        unit_cell_width: int = None,
+        understood_shift_symmetry: bool = False,
+    ) -> MPS:
         """Create an MPS as a product of (many) local mps covering all sites to be created.
 
         This is a generalization of :meth:`from_singlets` to allow arbitrary local, entangled
         states over multiple sites. Those local states are represented by MPS in `mps_covering`,
-        such that each site in the final MPS gets it state from exactly one local MPS.
+        such that each site in the final MPS gets its state from exactly one local MPS.
 
         For example to reproduce :meth:`from_singlets`,
         you define L/2 local two-site mps in a singlet state, and use the `pairs` as `index_map`.
@@ -3711,7 +3716,7 @@ class MPS(BaseMPSExpectationValue):
         norm=1.0,
         unit_cell_width=None,
         understood_shift_symmetry: bool = False,
-    ):
+    ) -> MPS:
         """Generates an MPS from a product state list which is projected onto a given charge sector.
 
         Parameters
@@ -3749,29 +3754,32 @@ class MPS(BaseMPSExpectationValue):
     @classmethod
     def _project_onto_sector_from_charge_tree(
         cls,
-        sites,
-        p_state_list,
-        charge_tree,
-        dtype=float,
-        bc='finite',
+        sites: list[ct.Site],
+        p_state_list: list[list | np.ndarray] | np.ndarray,
+        charge_tree: list[ct.SectorArray],
+        dtype: ct.Dtype = None,
+        bc: Literal['finite', 'segment', 'infinite'] = 'finite',
         form='B',
-        norm=1.0,
-        unit_cell_width=None,
+        norm: float = 1.0,
+        unit_cell_width: int = None,
+        device: str = None,
         understood_shift_symmetry: bool = False,
-    ):
+    ) -> MPS:
         """Select entries in a product state that are in a charge tree.
 
         Parameters
         ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~cyten.models.degrees_of_freedom.Site`
             The sites defining the local Hilbert space. The sites should conserve *some* charge,
             otherwise projecting onto a charge sector is meaningless.
         p_state_list : list | np.ndarray
-            list defining the product state out of which to project
-        charge_tree : list
-            a list containing a set of possible charges at each site
+            List defining the product state out of which to project.
+        charge_tree : list[:class:`~cyten.SectorArray`]
+            List containing the possible charge sectors at each bond.
         dtype : type
             The data type of the ``B``-tensors, defaults to float
+        device : str, optional
+            Device of the resulting MPS.
         bc, form, norm, unit_cell_width
             Same argument as for :class:`~tenpy.networks.mps.MPS`.
 
@@ -3780,6 +3788,47 @@ class MPS(BaseMPSExpectationValue):
         projected_state : :class:`~tenpy.networks.mps.MPS`
 
         """
+        # TODO charge_tree is a bad name, but we keep it for backwards compatibilty?
+        # TODO go through every method again and determine which ones are intended for which BC
+        # TODO here `norm` argument, inconsistent with other methods; remove here or add to others?
+
+        p_state_list = np.array(p_state_list)  # convert (possible list) to ndarray for indexing
+        sym = sites[0].symmetry
+        assert sym.is_abelian, 'can only construct product states for Abelian symmetries'
+        assert all(s.symmetry == sym for s in sites[1:]), 'Symmetry for all sites must be identical'
+
+        virtual_spaces = [
+            ct.ElementarySpace.from_defining_sectors(sym, sectors, unique_sectors=True) for sectors in charge_tree
+        ]
+        Bflat = []
+        for i, (site, leg_L, leg_R) in enumerate(zip(sites, virtual_spaces[:-1], virtual_spaces[1:])):
+            # use p, vL, vR order for from_Bflat_virtual_spaces
+            B = np.zeros((site.dim, leg_L.dim, leg_R.dim))
+            for j in range(site.dim):
+                value = p_state_list[i, j]
+                sector_p = site.leg.idx_to_sector(j)
+                for vL in range(leg_L.dim):
+                    sector_L = virtual_spaces[i].idx_to_sector(vL)
+                    sector_R = sym.fusion_outcomes(sector_L, sector_p)
+                    idx = virtual_spaces[i + 1].sector_decomposition_where(sector_R)
+                    if idx is not None:
+                        vR = virtual_spaces[i + 1].apply_basis_perm(idx, inverse=False)
+                        B[j, vL, vR] = value
+                Bflat.append(B)
+
+        return cls.from_Bflat_virtual_spaces(
+            sites,
+            virtual_spaces,
+            Bflat,
+            bc=bc,
+            dtype=dtype,
+            form=form,
+            norm=norm,
+            unit_cell_width=unit_cell_width,
+            device=device,
+            understood_shift_symmetry=understood_shift_symmetry,
+        )
+
         p_state_list = np.array(p_state_list)  # convert (possible list) to ndarray for indexing
         # check chinfo
         chinfo = sites[0].leg.chinfo
@@ -3833,17 +3882,17 @@ class MPS(BaseMPSExpectationValue):
         return projected_state
 
     @property
-    def L(self):
+    def L(self) -> int:
         """Number of physical sites; for an iMPS the len of the MPS unit cell."""
         return len(self.sites)
 
     @property
-    def dim(self):
+    def dim(self) -> list[int | float]:
         """List of local physical dimensions."""
         return [site.dim for site in self.sites]
 
     @property
-    def finite(self):
+    def finite(self) -> bool:
         """Distinguish MPS vs iMPS.
 
         True for an MPS (``bc='finite', 'segment'``), False for an iMPS (``bc='infinite'``).
@@ -3852,12 +3901,13 @@ class MPS(BaseMPSExpectationValue):
         return self.bc != 'infinite'
 
     @property
-    def chi(self):
+    def chi(self) -> list[int]:
         """Dimensions of the (nontrivial) virtual bonds."""
-        # s.shape[0] == len(s) for 1D numpy array, but works also for a 2D npc Array.
-        return [min(s.shape) for s in self._S[self.nontrivial_bonds]]
+        return [np.sum(s.get_leg('vL').multiplicities, dtype=int) for s in self._S[self.nontrivial_bonds]]
 
-    def get_B(self, i, form='B', copy=False, cutoff=1.0e-16, label_p=None):
+    def get_B(
+        self, i: int, form='B', copy: bool = False, cutoff: float = 1.0e-16, label_p: str | None = None
+    ) -> ct.Tensor:
         """Return (view of) `B` at site `i` in canonical form.
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
@@ -3868,25 +3918,25 @@ class MPS(BaseMPSExpectationValue):
             Index choosing the site.
         form : ``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)
             The (canonical) form of the returned B.
-            For ``None``, return the matrix in whatever form it is.
-            If any of the tuple entry is None, also don't scale on the corresponding axis.
+            For ``None``, return the tensor in whatever form it is.
+            If any of the tuple entries is ``None``, the corresponding axis is not scaled.
         copy : bool
             If we should always to return a copy.
-            Otherwise, if the `form` does not need to be modified and we dont need to shift any
-            charges, we return the stored Array. Then it should not be inplace modified after!
+            Otherwise, if the `form` does not need to be modified and we do not need to shift any
+            charges, we return the stored tensor. Then it should not be inplace modified after!
         cutoff : float
             During DMRG with a mixer, `S` may be a matrix for which we need the inverse.
             This is calculated as the Penrose pseudo-inverse, which uses a cutoff for the
             singular values.
         label_p : None | str
             Ignored by default (``None``).
-            Otherwise replace the physical label ``'p'`` with ``'p'+label_p'``.
+            Otherwise replace the physical label ``'p'`` with ``'p'+label_p``.
             (For derived classes with more than one "physical" leg, replace all the physical leg
             labels accordingly.)
 
         Returns
         -------
-        B : :class:`~tenpy.linalg.np_conserved.Array`
+        B : :class:`~cyten.Tensor`
             The MPS 'matrix' `B` at site `i` with leg labels ``'vL', 'p', 'vR'``.
             May be a view of the matrix (if ``copy=False``),
             or a copy (if the form changed or ``copy=True``).
@@ -3914,7 +3964,7 @@ class MPS(BaseMPSExpectationValue):
             B = self._replace_p_label(B, label_p)
         return B
 
-    def set_B(self, i, B, form='B'):
+    def set_B(self, i: int, B: ct.Tensor, form='B'):
         """Set `B` at site `i`.
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
@@ -3923,9 +3973,9 @@ class MPS(BaseMPSExpectationValue):
         ----------
         i : int
             Index choosing the site.
-        B : :class:`~tenpy.linalg.np_conserved.Array`
+        B : :class:`~cyten.Tensor`
             The 'matrix' at site `i`. No copy is made!
-            Should have leg labels ``'vL', 'p', 'vR'`` (not necessarily in that order).
+            Should have leg labels ``'vL', 'p', 'vR'`` (up tp cyclic permutations in that order).
         form : ``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)
             The (canonical) form of the `B` to set.
             ``None`` stands for non-canonical form.
@@ -3934,89 +3984,94 @@ class MPS(BaseMPSExpectationValue):
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         B = self.shift_Tensor_unit_cells(B, -num_unit_cells)
         self.form[i_in_unit_cell] = self._to_valid_form(form)
-        self.dtype = np.promote_types(self.dtype, B.dtype)
-        self._B[i_in_unit_cell] = B.itranspose(self._B_labels)
+        self.dtype = ct.Dtype.common(self.dtype, B.dtype)
+        self._B[i_in_unit_cell] = ct.planar_permute_legs(B, codomain=self._B_labels[:-1])
 
-    def set_svd_theta(self, i, theta, trunc_par=None, update_norm=False):
+    def set_svd_theta(
+        self,
+        i: int,
+        theta: ct.Tensor,
+        trunc_par: dict | None = None,
+        update_norm: bool = False,
+        charge_leg_right: bool = True,
+    ) -> float | None:
         """SVD a two-site wave function `theta` and save it in `self`.
 
         Parameters
         ----------
         i : int
-            `theta` is the wave function on sites `i`, `i` + 1.
+            `theta` is the wave function on sites `i`, `i + 1`.
         theta : :class:`~tenpy.linalg.np_conserved.Array`
-            The two-site wave function with labels combined into ``"(vL.p0)", "(p1.vR)"``,
+            The two-site wave function with labels ``'vL', 'p0', 'p1', 'vR'``,
             ready for svd.
         trunc_par : None | dict
             Parameters for truncation, see :cfg:config:`truncation`.
             If ``None``, no truncation is done.
         update_norm : bool
             If ``True``, multiply the norm of `theta` into :attr:`norm`.
+        charge_leg_right : bool
+            For a theta that is a :class:`~cyten.ChargedTensor`, determines if the charge leg
+            should be part of the tensor at site `i + 1` (`True`) or at site `i` (`False`).
 
         """
-        self.dtype = np.promote_types(self.dtype, theta.dtype)
-        qtotal_LR = [self.get_B(i).qtotal, None]
+        self.dtype = ct.Dtype.common(self.dtype, theta.dtype)
+        theta = ct.planar_permute_legs(theta, codomain=['vL', 'p0'])
         if trunc_par is None:
-            U, S, VH = npc.svd(theta, qtotal_LR=qtotal_LR, inner_labels=['vR', 'vL'])
+            U, S, Vh = ct.svd(theta, new_labels=['vR', 'vL'], charge_leg_top=charge_leg_right)
             renorm = np.linalg.norm(S)
             S /= renorm
             err = None
             if update_norm:
                 self.norm *= renorm
         else:
-            U, S, VH, err, renorm = npc.svd_theta(theta, trunc_par, qtotal_LR)
+            U, S, Vh, err, renorm = ct.truncated_svd(
+                theta, new_labels=['vR', 'vL'], charge_leg_top=charge_leg_right, **trunc_par
+            )
             if update_norm:
                 self.norm *= renorm
-        U = U.split_legs().ireplace_label('p0', 'p')
-        VH = VH.split_legs().ireplace_label('p1', 'p')
-        self.set_B(i, U.itranspose(self._B_labels), form='A')
-        self.set_B(i + 1, VH.itranspose(self._B_labels), form='B')
+        Vh = ct.planar_permute_legs(Vh, codomain=['vL', 'p1'])
+        self.set_B(i, U.relabel({'p0': 'p'}), form='A')
+        self.set_B(i + 1, Vh.relabel({'p1': 'p'}), form='B')
         self.set_SR(i, S)
         return err
 
-    def get_SL(self, i):
+    def get_SL(self, i: int) -> ct.Tensor:
         """Return singular values on the left of site `i`.
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_bond_index(i, is_left=True, return_num_unit_cells=True)
         S = self._S[i_in_unit_cell]
-        if isinstance(S, npc.Array):
-            S = self.shift_Tensor_unit_cells(S, num_unit_cells, inplace=False)
-        return S
+        return self.shift_Tensor_unit_cells(S, num_unit_cells, inplace=False)
 
-    def get_SR(self, i):
+    def get_SR(self, i: int) -> ct.Tensor:
         """Return singular values on the right of site `i`.
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_bond_index(i, is_left=False, return_num_unit_cells=True)
         S = self._S[i_in_unit_cell]
-        if isinstance(S, npc.Array):
-            S = self.shift_Tensor_unit_cells(S, num_unit_cells, inplace=False)
-        return S
+        return self.shift_Tensor_unit_cells(S, num_unit_cells, inplace=False)
 
-    def set_SL(self, i, S):
+    def set_SL(self, i: int, S: ct.Tensor):
         """Set singular values on the left of site `i`. No copy is made!
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_bond_index(i, is_left=True, return_num_unit_cells=True)
-        if isinstance(S, npc.Array):
-            S = self.shift_Tensor_unit_cells(S, -num_unit_cells)
-        self._S[i_in_unit_cell] = S
+        self._S[i_in_unit_cell] = self.shift_Tensor_unit_cells(S, -num_unit_cells)
 
-    def set_SR(self, i, S):
+    def set_SR(self, i: int, S: ct.Tensor):
         """Set singular values on the right of site `i`. No copy is made!
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
         """
         i_in_unit_cell, num_unit_cells = self._to_valid_bond_index(i, is_left=False, return_num_unit_cells=True)
-        if isinstance(S, npc.Array):
-            S = self.shift_Tensor_unit_cells(S, -num_unit_cells)
-        self._S[i_in_unit_cell] = S
+        self._S[i_in_unit_cell] = self.shift_Tensor_unit_cells(S, -num_unit_cells)
 
-    def get_theta(self, i, n=2, cutoff=1.0e-16, formL=1.0, formR=1.0):
+    def get_theta(
+        self, i: int, n: int = 2, cutoff: float = 1.0e-16, formL: float = 1.0, formR: float = 1.0
+    ) -> ct.Tensor:
         """Calculates the `n`-site wavefunction on ``sites[i:i+n]``.
 
         Parameters
@@ -4036,7 +4091,7 @@ class MPS(BaseMPSExpectationValue):
 
         Returns
         -------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~cyten.Tensor`
             The n-site wave function with leg labels ``vL, p0, p1, .... p{n-1}, vR``.
             In Vidal's notation (with s=lambda, G=Gamma):
             ``theta = s**form_L G_i s G_{i+1} s ... G_{i+n-1} s**form_R``.
@@ -4051,7 +4106,7 @@ class MPS(BaseMPSExpectationValue):
             if self.form[self._to_valid_site_index(j)] is None:
                 raise ValueError("can't calculate theta for non-canonical form")
         if n == 1:
-            return self.get_B(i, (1.0, 1.0), True, cutoff, '0')
+            return self.get_B(i, (formL, formR), True, cutoff, '0')
         elif n < 1:
             raise ValueError('n needs to be larger than 0')
         # n >= 2: contract some B's
@@ -4061,7 +4116,7 @@ class MPS(BaseMPSExpectationValue):
             new_fR = None if k + 1 < n else formR  # right form as stored, except for last B
             B = self.get_B(i + k, (1.0 - old_fR, new_fR), False, cutoff, str(k))
             _, old_fR = self.form[self._to_valid_site_index(i + k)]
-            theta = npc.tensordot(theta, B, axes=['vR', 'vL'])
+            theta = ct.tensors.partial_compose(B, theta, 'vL')
         return theta
 
     def convert_form(self, new_form='B'):
