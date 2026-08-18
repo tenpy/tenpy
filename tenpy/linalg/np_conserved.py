@@ -3564,7 +3564,7 @@ def inner(a, b, axes='labels', do_conj=False):
 
     Returns
     -------
-    inner_product : dtype
+    inner_product : 0D array
         A scalar (of common dtype of `a` and `b`) giving the full contraction of `a` and `b`.
 
     """
@@ -3694,7 +3694,7 @@ def svd(
 
     Parameters
     ----------
-    a : :class:`Array`, shape ``(M, N)``
+    a : (M, N) :class:`Array`
         The matrix to be decomposed.
     full_matrices : bool
         If ``False`` (default), `U` and `V` have shapes ``(M, K)`` and ``(K, N)``,
@@ -4143,8 +4143,8 @@ def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None, pos_diag_R=Fal
 
     Parameters
     ----------
-    a : :class:`Array`
-        The matrix to be decomposed, shape ``(M,N)``.
+    a : (M, N) :class:`Array`
+        The matrix to be decomposed.
     mode : 'reduced', 'complete'
         'reduced': return `q` and `r` with shapes (M,K) and (K,N), where K=min(M,N)
         'complete': return `q` with shape (M,M).
@@ -4166,10 +4166,10 @@ def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None, pos_diag_R=Fal
 
     Returns
     -------
-    Q : :class:`Array`
+    Q : (M, K) :class:`Array`
         If `mode` is 'complete', a unitary matrix.
         For `mode` 'reduced' an isometry such that :math:`q^{*}_{j,i} q_{j,k} = \delta_{i,k}`.
-    R : :class:`Array`
+    R : (K, N) :class:`Array`
         Upper triangular matrix if both legs of A are sorted by charges;
         Otherwise a simple transposition (performed when sorting by charges) brings it to
         upper triangular form.
@@ -4291,9 +4291,9 @@ def lq(a, mode='reduced', inner_labels=[None, None], cutoff=None, pos_diag_L=Fal
 def orthogonal_columns(a, new_label=None):
     """Find orthogonal columns for a given matrix.
 
-    Given `a` of shape `(M,N)` with M >= N and *assuming* full rank N of `a`, this function
-    considers the columns of `a` as basis vectors and finds orthogonal columns completing it.
-    The resulting `ortho` will be a (M, (M-N)) matrix.
+    Given `a` of shape ``(M, N)`` with ``M >= N`` and *assuming* full rank ``N`` of `a`, this
+    function considers the columns of `a` as basis vectors and finds orthogonal columns completing
+    it. The resulting `ortho` will be a ``(M, (M-N))`` matrix.
     A simple (and more expensive) implementation based on :meth:`qr` would look like this:
 
         def orthogonal_columns(a, new_label):
@@ -4306,8 +4306,8 @@ def orthogonal_columns(a, new_label=None):
 
     Parameters
     ----------
-    a : :class:`Array`
-        A square matrix to be exponentiated, shape ``(M,N)`` with N <= M.
+    a : (M, N) :class:`Array`
+        A square matrix to be exponentiated, with ``N <= M``.
     new_label : None | str
         New right label for the returned `ortho`. ``None`` defaults to the right label of `A`.
 

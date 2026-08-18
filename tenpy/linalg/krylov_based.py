@@ -100,9 +100,9 @@ class KrylovBased:
         The starting vector; normalized copy.
     N_min, N_max, P_tol, min_gap, _cutoff, E_shift:
         Parameters as described in the options.
-    Es : ndarray, shape(N_max, N_max)
+    Es : (N_max, N_max) ndarray
         ``Es[n, :]`` contains the energies of ``_h_krylov[:n+1, :n+1]`` in step `n`.
-    _h_krylov : ndarray, shape (N_max + 1, N_max +1)
+    _h_krylov : (N_max + 1, N_max + 1) ndarray
         The matrix representing `H` projected onto the orthonormalized Krylov basis.
     _psi0_norm : float
         Initial norm of the `psi0` parameter. Note that ``self.psi0`` gets normalized.

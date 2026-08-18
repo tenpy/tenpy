@@ -48,10 +48,10 @@ which transform the anti-commutation relations from real to momentum space and v
 
 
 In the :class:`MixedXKLattice`, we consider one ring in the cylinder as `unit-cell` of a 1D lattice,
-since all of the 'sites' inside a ring need to have different charges if we conserve total `k_y`.
+since all of the ``sites`` inside a ring need to have different charges if we conserve total `k_y`.
 The unit-cell index `u` inside a ring is defined as :math:`u = k* N_{orb} + l`.
 Methods for conversion are provided.
-Note that the sites in the DMRG "snake" might be shuffled once more due to the
+Note that the ``sites`` in the DMRG "snake" might be shuffled once more due to the
 `ring_order` parameter, ultimately given in the lattice attribute
 :attr:`~tenpy.models.lattice.Lattice.order`.
 The Jordan-Wigner strings follow the *final* DMRG snake.
@@ -104,7 +104,7 @@ class MixedXKLattice(Lattice):
         The circumference of the cylinder: the number of possible `k` values.
     N_orb: int
         Number of orbitals. A single 'ring' of the cylinder contains ``N_orb*Ly`` sites.
-    sites : list of :class:`~tenpy.networks.site.Site`
+    ``sites`` : list of :class:`~tenpy.networks.site.Site`
         The sites making up the unit cell, in the order specified by ring_order.
     ring_order : 1D array, len Ly*N_orb
         Gives the order of the sites within a ring for the DMRG snake;
@@ -112,8 +112,8 @@ class MixedXKLattice(Lattice):
         Defaults to ``np.arange(Ly*N_orb)``.
     orbital_names : None | list of str
         Names for the orbitals, e.g. ``['spin', 'valley', 'ky']``
-    orbital_values : array, shape (len(sites), len(orbital_names))
-        Values for the orbitals, one row for each site in `sites`.
+    orbital_values : (``len(sites)``, ``len(orbital_names)``) array
+        Values for the orbitals, one row for each site in ``sites``.
     **kwargs :
         Further keyword arguments given to :class:`~tenpy.models.lattice.Lattice`.
 
@@ -122,16 +122,16 @@ class MixedXKLattice(Lattice):
     Ly : int
         The circumference of the cylinder: the number of possible `k` values.
     N_orb: int
-        Number of orbitals. A single 'ring' of the cylinder contains ``N_orb*Ly`` sites.
-    ring_order : 1D array, len ``Ly*N_orb``
+        Number of orbitals. A single 'ring' of the cylinder contains ``N_orb * Ly`` sites.
+    ring_order : ``(Ly * N_orb,)`` 1D array
         Gives the order of the sites within a ring for the DMRG snake;
         sites are labeled by the index ``u = k*N_orb + l`` of the :attr:`unit_cell`.
         Defaults to ``np.arange(Ly*N_orb)``.
-    delta_q : ndarray, shape (L_y, Ly, Ly)
+    delta_q : (Ly, Ly, Ly) ndarray
         ``delta_q[q][k1, k2]`` is the Kronecker :math:`\delta_{k1+q \mod Ly, k2}`.
     orbital_names : None | list of str
         Names for the orbitals, e.g. ``['spin', 'valley', 'ky']``
-    orbital_values : None | array, shape (len(sites), len(orbital_names))
+    orbital_values : None | (``len(sites)``, ``len(orbital_names)``) array
         Values for the orbitals, one row for each site in the *unit cell*.
 
     """
@@ -183,7 +183,7 @@ class MixedXKLattice(Lattice):
         chinfo : :class:`~tenpy.linalg.charges.ChargeInfo`
             The nature of the charges. If `conserve_k` is True, the charge ``"ky"`` for the
             momentum around the cylinder is added.
-        charges : array_like of shape (N_orb, chinfo.qnumber)
+        charges : (N_orb, chinfo.qnumber) array
             For each of the orbitals the value of each charges (except ``"ky"``),
             when the orbital is occupied.
         ring_order : 1D array, len Ly*N_orb
@@ -377,7 +377,7 @@ class MixedXKModel(CouplingMPOModel):
             The number of fermionic orbitals for each k-value.
         chinfo : :class:`~tenpy.linalg.charges.ChargeInfo`
             The charges to be conserved, excluding the momentum in y direction "ky".
-        charges : array_like of shape (N_orb, chinfo.qnumber)
+        charges : (N_orb, chinfo.qnumber) array
             For each of the orbitals the value of each charges (except ``"ky"``),
             when the orbital is occupied.
 
@@ -402,7 +402,7 @@ class MixedXKModel(CouplingMPOModel):
 
         Parameters
         ----------
-        couplings : ndarray, shape (N_rings, Ly, N_orb, Ly, N_orb)
+        couplings : (N_rings, Ly, N_orb, Ly, N_orb) ndarray
             Prefactors for a hopping terms of the form
             :math:`\sum_x \mathtt{couplings[x, k1, l1, k2, l2]} c^\dagger_{x,k1,l1} c_{x,k2,l2}`.
             Should fulfill ``couplings[x, k1, l1, k2, l2] == conj(couplings[x, k2, l2, k1, l1])``
@@ -430,7 +430,7 @@ class MixedXKModel(CouplingMPOModel):
 
         Parameters
         ----------
-        couplings : ndarray, shape (Nx, Ly, N_orb, Ly, N_orb)
+        couplings : (Nx, Ly, N_orb, Ly, N_orb) ndarray
             Prefactors for a hopping term of the form
             :math:`\sum_x couplings[x, k1, j1, k2, j2] c^\dagger_{x,k1,l1} c_{x+dx,k2,l2} + h.c.`.
             Here, ``Nx = lat.N_rings if lat.bc_MPS == 'infinite' else lat.N_rings - abs(dx)``
@@ -458,7 +458,7 @@ class MixedXKModel(CouplingMPOModel):
 
         Parameters
         ----------
-        couplings : ndarray, shape (N_rings, Ly, N_orb, Ly, N_orb, Ly, N_orb, Ly, N_orb)
+        couplings : (N_rings, Ly, N_orb, Ly, N_orb, Ly, N_orb, Ly, N_orb) ndarray
             Prefactors for an interaction term of the form
 
             .. math ::
@@ -492,7 +492,7 @@ class MixedXKModel(CouplingMPOModel):
 
         Parameters
         ----------
-        couplings : ndarray, shape (Nx, Ly, N_orb, Ly, N_orb, Ly, N_orb, Ly, N_orb)
+        couplings : (Nx, Ly, N_orb, Ly, N_orb, Ly, N_orb, Ly, N_orb) ndarray
             ``couplings[x, k1, j1, k2, j2, k3, j3, k4, j4]`` is the prefactor for a term
 
             .. math ::
@@ -542,7 +542,7 @@ class MixedXKModel(CouplingMPOModel):
 
         Parameters
         ----------
-        A : array_like, shape (N_orb, N_orb)
+        A : (N_orb, N_orb) array_like
             Matrix elements (with respect to the orbitals) of the operator to be measured.
         A_coord : (int, int)
             ``x, y`` coordinates of the operator in real-space.
@@ -591,11 +591,11 @@ class MixedXKModel(CouplingMPOModel):
 
         Parameters
         ----------
-        A : array_like, shape (N_orb, N_orb)
+        A : (N_orb, N_orb) array_like
             Matrix elements with respect to the orbitals for the first operator.
         A_coord : (int, int)
             ``x, y`` coordinates of the operator in real-space.
-        B : array_like, shape (N_orb, N_orb)
+        B : (N_orb, N_orb) array_like
             Matrix elements with respect to the orbitals for the second operator.
         B_coord : (int, int)
             ``x, y`` coordinates of the operator in real-space.
@@ -620,7 +620,7 @@ class MixedXKModel(CouplingMPOModel):
 
         Parameters
         ----------
-        orbital_coeffs : list of array_like, shape (N_orb, N_orb)
+        orbital_coeffs : list of (N_orb, N_orb) array
             Matrix elements with respect to the orbitals for each of the operators.
         rs_coord : list of tuple
             For each operator iin `orbital_coeffs` the according real-space coordinates ``x, y``.

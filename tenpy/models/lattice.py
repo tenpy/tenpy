@@ -147,7 +147,7 @@ class Lattice:
     basis : ndarray (dim, Dim)
         translation vectors shifting the unit cell. The row `i` gives the vector shifting in
         direction `i`.
-    unit_cell_positions : ndarray, shape (len(unit_cell), Dim)
+    unit_cell_positions : (len(unit_cell), Dim) ndarray
         for each site in the unit cell a vector giving its position within the unit cell.
     position_disorder : ``None`` | ndarray
         If ``None`` (default) the lattice positions are regular.
@@ -172,7 +172,8 @@ class Lattice:
         index array for reshape/reordering in :meth:`mps2lat_vals`
     _mps_fix_u : tuple of ndarray (N_cells, ) np.intp
         for each site of the unit cell an index array selecting the mps indices of that site.
-    _mps2lat_vals_idx_fix_u : tuple of ndarray of shape `Ls`
+    _mps2lat_vals_idx_fix_u : tuple of ndarray
+        Each ndarray has shape `Ls`.
         similar as `_mps2lat_vals_idx`, but for a fixed `u` picking a site from the unit cell.
 
     """
@@ -481,7 +482,7 @@ class Lattice:
 
         Returns
         -------
-        order : array, shape (N, D+1), dtype np.intp
+        order : (N, D + 1) ndarray[np.intp]
             the order to be used for :attr:`order`.
 
         See Also
@@ -701,7 +702,7 @@ class Lattice:
 
         Equivalent to ``[self.site(i) for i in range(self.N_sites)]``.
 
-        This should be used for `sites` of 1D tensor networks (MPS, MPO,...).
+        This should be used for ``sites`` of 1D tensor networks (MPS, MPO,...).
         """
         if self._mps_sites_cache is None:
             self._mps_sites_cache = []
@@ -1255,7 +1256,7 @@ class Lattice:
 
         Parameters
         ----------
-        dx : 2D array, shape (N_ops, :attr:`dim`)
+        dx : (N_ops, :attr:`dim`) 2D array
             ``dx[i, :]`` is the translation vector in the lattice for the `i`-th operator.
             Corresponds to the `dx` of each operator given in the argument `ops` of
             :meth:`tenpy.models.model.CouplingModel.add_multi_coupling`.
@@ -1659,7 +1660,7 @@ class Lattice:
         self._strides = np.array(strides, np.intp)
 
     def with_grouped_sites(self, grouped_sites):
-        """Return a lattice with sites given by `grouped_sites`.
+        """Return a lattice with sites given by ``grouped_sites``.
 
         .. todo :
             We could actually keep the lattice structure if the order is (default) Cstyle.
@@ -1667,12 +1668,12 @@ class Lattice:
         Attributes
         ----------
         grouped_sites : list of :class:`~tenpy.networks.site.GroupedSite`
-            The sites grouped together.
+            The grouped site objects.
 
         Returns
         -------
         :class:`~tenpy.models.lattice.TrivialLattice`
-            A trivial lattice with the `grouped_sites` as sites and the same :attr:`bc_MPS` as `self`.
+            A trivial lattice with the ``grouped_sites`` as sites and the same :attr:`bc_MPS` as `self`.
 
         """
         res = TrivialLattice(grouped_sites, bc_MPS=self.bc_MPS, bc='periodic')
@@ -2141,7 +2142,7 @@ class IrregularLattice(Lattice):
 
         Returns
         -------
-        order : array, shape (N, D+1)
+        order : (N, D+1) array
             The order to be used for :attr:`order`, i.e. `order` with added/removed sites
             as specified by :attr:`remove` and :attr:`add`.
 
@@ -2342,7 +2343,7 @@ class HelicalLattice(Lattice):
 
         Returns
         -------
-        order : array, shape (N, D+1)
+        order : (N, D+1) array
             The order to be used for :attr:`order`, i.e. `order` with added/removed sites
             as specified by :attr:`remove` and :attr:`add`.
 
@@ -3362,7 +3363,7 @@ class SimpleBZ:
         Parameters
         ----------
         points : array_like
-            points of shape (..., 2) for 2D or shape(...) for 1D that will be checked
+            points of shape ``(..., 2)`` for 2D or shape ``(...)`` for 1D that will be checked
 
         Returns
         -------
@@ -3592,7 +3593,7 @@ def get_order(shape, snake_winding, priority=None):
 
     Returns
     -------
-    order : ndarray (np.prod(shape), len(shape))
+    order : ndarray ``(np.prod(shape), len(shape))``
         An order of the sites for :attr:`Lattice.order` in the specified `ordering`.
 
     See Also
@@ -3702,7 +3703,7 @@ def get_order_grouped(shape, groups, priority=None):
 
     Returns
     -------
-    order : ndarray (np.prod(shape), len(shape))
+    order : ndarray ``(np.prod(shape), len(shape))``
         An order of the sites for :attr:`Lattice.order` in the specified `ordering`.
 
     See Also

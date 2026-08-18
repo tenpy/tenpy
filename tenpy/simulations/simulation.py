@@ -1354,7 +1354,7 @@ def init_simulation_from_checkpoint(
 
     Returns
     -------
-    results :
+    ``results`` : dict
         The results from running the simulation, i.e.,
         what :meth:`~tenpy.simulations.Simulation.resume_run()` returned.
 
@@ -1413,7 +1413,7 @@ def resume_from_checkpoint(
 
     Returns
     -------
-    results :
+    ``results`` : dict
         The results from running the simulation, i.e.,
         what :meth:`~tenpy.simulations.Simulation.resume_run()` returned.
 

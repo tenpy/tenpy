@@ -14,20 +14,20 @@ positional arguments:
 options:
     -h, --help
         show this help message and exit
-    --import-module MODULE, -i MODULE
+    --import-module, -i MODULE
         Import the given python MODULE before setting up the simulation. This is useful if the
         module contains user-defined subclasses. Use python-style names like `numpy` without the
         .py ending.
-    --sim-class SIM_CLASS, -c SIM_CLASS
+    --sim-class, -c SIM_CLASS
         selects the Simulation (sub)class, e.g. 'GroundStateSearch' (default) or
         'RealTimeEvolution'.
-    --merge MERGE, -m MERGE
+    --merge, -m MERGE
         Selects how to merge conflicts in case of multiple yaml files. Options are 'error',
         'first' or 'last'.
     --RAM
         Estimates the required RAM. This argument does not execute any simulation, but just
         initializes it to predict the necessary RAM in MB and then exits.
-    --option KEY VALUE, -o KEY VALUE
+    --option, -o KEY VALUE
         Allows overwriting some options from the yaml files. KEY can be recursive separated by
         `.`, e.g. ``algorithm_params.trunc_params.chi``. VALUE is initialized by python's
         ``eval(VALUE)`` with `np`, `scipy` and `tenpy` defined. Thus ``'1.2'`` and

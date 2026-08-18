@@ -299,7 +299,7 @@ class FlatLinearOperator(ScipyLinearOperator):
 
     Attributes
     ----------
-    possible_charge_sectors : ndarray[QTYPE, ndim=2]
+    possible_charge_sectors : ndarray[``QTYPE``, ndim=2]
         Each row corresponds to one possible choice for `charge_sector`.
     shape : (int, int)
         The dimensions represented by `self` for flat numpy arrays.
