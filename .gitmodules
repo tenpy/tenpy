@@ -7,3 +7,4 @@
 [submodule "cyten"]
 	path = cyten
 	url = https://github.com/tenpy/cyten
+	branch = main

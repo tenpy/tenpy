@@ -42,9 +42,10 @@ import warnings
 
 import cyten.tensors.sparse
 import numpy as np
+from cyten.block_backends import Dtype
 from cyten.models.couplings import Coupling
 from cyten.symmetries import ElementarySpace
-from cyten.tensors import SymmetricTensor, permute_legs, tensor_from_grid
+from cyten.tensors import SymmetricTensor, dagger, permute_legs, tensor_from_grid
 from scipy.linalg import expm
 from scipy.special import comb
 
@@ -156,8 +157,9 @@ class MPO(MPSGeometry):
         mps_unit_cell_width=None,
     ):
         super().__init__(sites, bc, unit_cell_width=mps_unit_cell_width)
-        self.dtype = dtype = np.result_type(*[W.dtype for W in Ws])
-        self._W = [W.astype(dtype, copy=True) for W in Ws]
+        common_dtype = Dtype.common(*[W.dtype for W in Ws])
+        self.dtype = dtype = common_dtype.to_numpy_dtype()
+        self._W = [W.as_dtype(common_dtype) for W in Ws]
         self.IdL = self._get_Id(IdL, len(sites))
         self.IdR = self._get_Id(IdR, len(sites))
         self.grouped = 1
@@ -547,7 +549,7 @@ class MPO(MPSGeometry):
         obj.sites = hdf5_loader.load(subpath + 'sites')
         obj.chinfo = hdf5_loader.load(subpath + 'chinfo')
         obj._W = hdf5_loader.load(subpath + 'tensors')
-        obj.dtype = np.result_type(*[W.dtype for W in obj._W])
+        obj.dtype = Dtype.common(*[W.dtype for W in obj._W]).to_numpy_dtype()
         obj.IdL = hdf5_loader.load(subpath + 'index_identity_left')
         obj.IdR = hdf5_loader.load(subpath + 'index_identity_right')
         obj.grouped = hdf5_loader.get_attr(h5gr, 'grouped')
@@ -748,11 +750,12 @@ class MPO(MPSGeometry):
         for i in range(self.L):
             S = self.sites[i]
             W = self.get_W(i)
-            S.leg.test_equal(W.get_leg('p'))
-            S.leg.test_contractible(W.get_leg('p*'))
+            if S.leg != W.get_leg_co_domain('p') or S.leg != W.get_leg_co_domain('p*'):
+                raise ValueError(f'incompatible physical leg on site {i:d}')
             if self.bc == 'infinite' or i + 1 < self.L:
                 W2 = self.get_W(i + 1)
-                W.get_leg('wR').test_contractible(W2.get_leg('wL'))
+                if W.get_leg_co_domain('wR') != W2.get_leg_co_domain('wL'):
+                    raise ValueError(f'incompatible virtual leg between sites {i:d} and {i + 1:d}')
         if not (len(self.IdL) == len(self.IdR) == self.L + 1):
             raise ValueError('wrong len of `IdL`/`IdR`')
 
@@ -1487,25 +1490,21 @@ class MPO(MPSGeometry):
         """Return hermitian conjugate copy of self."""
         if self.explicit_plus_hc:
             return self.copy()
-        # complex conjugate and transpose everything
-        Ws = [w.conj().itranspose(['wL*', 'wR*', 'p', 'p*']) for w in self._W]
-        # and now revert conjugation of the wL/wR legs
-        # rename labels 'wL*' -> 'wL', 'wR*' -> 'wR'
-        for w in Ws:
-            w.ireplace_labels(['wL*', 'wR*'], ['wL', 'wR'])
-        # flip charges and qconj back
-        for i in range(self.L - 1):
-            Ws[i].legs[1] = wR = Ws[i].legs[1].flip_charges_qconj()
-            Ws[i + 1].legs[0] = wR.conj()
-        Ws[-1].legs[1] = wR = Ws[-1].legs[1].flip_charges_qconj()
-        if self.finite:
-            Ws[0].legs[0] = Ws[0].legs[0].flip_charges_qconj()
-        else:
-            Ws[0].legs[0] = wR.conj()
-        # could keep graph in principle and only conjugate the operators
-        # but its probably not worth the effort since building it is very fast
+        if self.bc != 'finite':
+            raise NotImplementedError("MPO.dagger() for bc != 'finite' is not yet supported")
+        # for finite bc, the `_W` tensors have the same structure as a cyten Coupling's
+        # `factorization` (trivial boundary legs), so we can round-trip through `Coupling` to
+        # get the hermitian conjugate at the tensor level.
+        coupling = Coupling(sites=list(self.sites), factorization=list(self._W))
+        hc_coupling = Coupling.from_tensor(dagger(coupling.to_tensor()), sites=list(self.sites))
         return MPO(
-            self.sites, Ws, self.bc, self.IdL, self.IdR, self.max_range, mps_unit_cell_width=self.unit_cell_width
+            self.sites,
+            hc_coupling.factorization,
+            self.bc,
+            self.IdL,
+            self.IdR,
+            self.max_range,
+            mps_unit_cell_width=self.unit_cell_width,
         )
 
     def is_hermitian(self, eps=1.0e-10, max_range=None):
@@ -2529,7 +2528,7 @@ class MPOGraph(MPSGeometry):
         self._add_coupling_state(i, key, trivial)
         self._add_coupling_state(i + 1, key, trivial)
         if key not in self._coupling_graph[i].get(key, {}):
-            self._add_coupling_edge(i, key, key, site.identity_tensor(trivial, trivial))
+            self._add_coupling_edge(i, key, key, site.identity_tensor(trivial))
 
     def add_coupling_as_term(self, coupling, positions=None, strength=1.0, split=None):
         """Add a cyten Coupling to the graph as a single term.

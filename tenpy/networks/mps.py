@@ -153,20 +153,20 @@ import warnings
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable
 
+# from .site import group_sites
+import cyten.tensors.sparse
 import numpy as np
 
-#from ..linalg import sparse
-#from ..linalg.charges import DipolarChargeInfo
-#from ..linalg.krylov_based import Arnoldi
-#from ..linalg.random_matrix import GOE, GUE
-from ..linalg.truncation import TruncationError #, _machine_prec_trunc_par, eigh_rho, svd_theta
+# from ..linalg import sparse
+# from ..linalg.charges import DipolarChargeInfo
+# from ..linalg.krylov_based import Arnoldi
+# from ..linalg.random_matrix import GOE, GUE
+from ..linalg.truncation import TruncationError  # , _machine_prec_trunc_par, eigh_rho, svd_theta
 from ..tools import hdf5_io
 from ..tools.cache import DictCache
 from ..tools.math import entropy, lcm
 from ..tools.misc import BetaWarning, argsort, get_recursive, inverse_permutation, to_array, to_iterable
 from ..tools.params import asConfig
-#from .site import group_sites
-import cyten.tensors.sparse
 
 logger = logging.getLogger(__name__)
 
@@ -434,6 +434,8 @@ class MPSGeometry:
 
         """
         dx_0 = num_unit_cells * self.unit_cell_width
+        if dx_0 == 0:
+            return arr if inplace else arr.copy()
         return arr.shift_charges_horizontal(dx_0, inplace=inplace)
 
     def get_site(self, i):
@@ -6856,7 +6858,7 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         return C
 
 
-class TransferMatrix(cyten.tensors.sparse.LinearOperator): # TODO: adapt for LinearOperator
+class TransferMatrix(cyten.tensors.sparse.LinearOperator):  # TODO: adapt for LinearOperator
     r"""Transfer matrix of two MPS (bra & ket).
 
     For an iMPS in the thermodynamic limit, we often need to find the 'dominant `RP`' (and `LP`).

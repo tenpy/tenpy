@@ -36,14 +36,15 @@ import warnings
 from functools import wraps
 
 import numpy as np
-
-#from ..linalg import np_conserved as npc
-#from ..linalg.charges import LegCharge
-from ..networks import mpo  # used to construct the Hamiltonian as MPO
 from cyten.models.couplings import Coupling
-from cyten.tensors import dagger
 from cyten.models.degrees_of_freedom import FermionicDOF, Site
-#from ..networks.site import group_sites  # np_conserved-only
+from cyten.tensors import dagger
+
+# from ..linalg import np_conserved as npc
+# from ..linalg.charges import LegCharge
+from ..networks import mpo  # used to construct the Hamiltonian as MPO
+
+# from ..networks.site import group_sites  # np_conserved-only
 from ..networks.terms import (
     CouplingTerms,
     ExponentiallyDecayingTerms,
@@ -1080,6 +1081,7 @@ class CouplingModel(Model):
         earlier TeNPy versions.
         It creates a Cyten Coupling object and passes it to the new add_coupling method for each
         position on the lattice.
+
         Parameters
         ----------
         strength : scalar | array
@@ -1115,9 +1117,7 @@ class CouplingModel(Model):
 
         """
         if op_string is not None:
-            raise NotImplementedError(
-                "`op_string` (explicit Jordan-Wigner strings) is not yet supported here."
-            )
+            raise NotImplementedError('`op_string` (explicit Jordan-Wigner strings) is not yet supported here.')
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
         if not np.any(np.asarray(strength) != 0.0):
             return
@@ -1130,7 +1130,7 @@ class CouplingModel(Model):
             if isinstance(site, FermionicDOF):
                 raise NotImplementedError(
                     f"add_twosite_coupling doesn't support fermionic sites yet. "
-                    f"Identity insertion betweennon-adjacent MPS sites requires operators with built-in "
+                    f'Identity insertion betweennon-adjacent MPS sites requires operators with built-in '
                     f"Jordan-Wigner strings (like 'cyten.models.couplings.hopping'). Named operator doesn't have this."
                     f"Fix: Build the Coupling manually and use 'add_coupling(coupling, indices)' instead."
                 )
@@ -1145,9 +1145,7 @@ class CouplingModel(Model):
         if plus_hc:
             hc_coupling = self._coupling_hermitian_conjugate(coupling, name=f'hc({category})')
             for i, j, current_strength in zip(mps_i, mps_j, strength_vals):
-                self.add_coupling(
-                    hc_coupling, [int(i), int(j)], strength=np.conj(current_strength), category=category
-                )
+                self.add_coupling(hc_coupling, [int(i), int(j)], strength=np.conj(current_strength), category=category)
         # done
 
     def add_coupling(self, coupling, indices, strength=1.0, category=None, split=None):
@@ -1287,7 +1285,6 @@ class CouplingModel(Model):
             split.append(split_idx)
         return to_single_coupling(couplings, sites_arg, prefactors, split, bc=self.lat.bc_MPS, name=name)
 
-
     def add_coupling_term(self, strength, i, j, op_i, op_j, op_string='Id', category=None, plus_hc=False):
         """Add a two-site coupling term on given MPS sites.
 
@@ -1396,8 +1393,8 @@ class CouplingModel(Model):
         """
         if op_string is not None:
             raise NotImplementedError(
-                "`op_string` (explicit Jordan-Wigner strings) is not yet supported here; build the "
-                "Coupling directly and use add_coupling(coupling, indices) instead."
+                '`op_string` (explicit Jordan-Wigner strings) is not yet supported here; build the '
+                'Coupling directly and use add_coupling(coupling, indices) instead.'
             )
         all_ops = [t[0] for t in ops]
         all_us = np.array([t[2] for t in ops], np.intp)
@@ -1793,6 +1790,60 @@ class CouplingModel(Model):
         if not self.exp_decaying_terms.is_empty:
             raise ValueError("Can't `calc_H_bond` with non-empty `exp_decaying_terms`.")
 
+        if self._cyten_couplings:
+            # cyten-native path: couplings were added via add_coupling (possibly through the
+            # add_twosite_coupling/add_multi_coupling wrappers), and stored as placed cyten
+            # Couplings rather than in `coupling_terms`/`onsite_terms`. Since H_bond only needs
+            # nearest-neighbor terms, sum each placed Coupling's dense tensor directly onto the
+            # bond it acts on; onsite (single-site) terms get distributed onto a neighboring
+            # bond (tensored with an identity), mirroring OnsiteTerms.add_to_nn_bond_Arrays.
+            if self.lat.bc_MPS != 'finite':
+                raise NotImplementedError("add_coupling-based CouplingModel currently only supports bc_MPS='finite'")
+            L = self.lat.N_sites
+            sites = self.lat.mps_sites()
+            H_bond = [None] * L
+            for coupling, positions, strength, split in self._cyten_couplings:
+                if len(positions) == 2 and positions[1] - positions[0] == 1:
+                    i, j = positions  # coupling.to_tensor() already has p0 <-> i, p1 <-> j
+                    term = strength * coupling.to_tensor()
+                    H_bond[j] = term if H_bond[j] is None else H_bond[j] + term
+                elif len(positions) == 1:
+                    i = positions[0]
+                    onsite = (strength * coupling.to_tensor()).to_numpy(['p0', 'p0*'])
+                    if i == 0:
+                        placements = [(1, True)]  # (bond, onsite_acts_on_left_site_of_bond)
+                    elif i == L - 1:
+                        placements = [(L - 1, False)]
+                    else:
+                        placements = [(i, False), (i + 1, True)]
+                    for bond, onsite_on_left in placements:
+                        factor = 1.0 if len(placements) == 1 else 0.5
+                        other_site = sites[i + 1] if onsite_on_left else sites[i - 1]
+                        Id = np.eye(other_site.dim)
+                        if onsite_on_left:
+                            h = np.tensordot(factor * onsite, Id, axes=0)
+                            two_site_sites = [sites[i], other_site]
+                        else:
+                            h = np.tensordot(Id, factor * onsite, axes=0)
+                            two_site_sites = [other_site, sites[i]]
+                        h = np.transpose(h, [0, 2, 3, 1])
+                        term = Coupling.from_dense_block(h, two_site_sites, understood_braiding=True).to_tensor()
+                        H_bond[bond] = term if H_bond[bond] is None else H_bond[bond] + term
+                else:
+                    raise ValueError(
+                        "Can't initialize H_bond for a NearestNeighborModel "
+                        'with non-nearest neighbor couplings added. '
+                        "If you just need the MPO (for DMRG,TDVP,...), just don't "
+                        'subclass the NearestNeighborModel, '
+                        "e.g., don't subclass SpinChain, but SpinModel."
+                    )
+            assert H_bond[0] is None
+            if self.explicit_plus_hc:
+                for i, Hb in enumerate(H_bond):
+                    if Hb is not None:
+                        H_bond[i] = Hb + dagger(Hb)
+            return H_bond
+
         sites = self.lat.mps_sites()
         finite = self.lat.bc_MPS == 'finite'
 
@@ -1843,6 +1894,46 @@ class CouplingModel(Model):
             MPO representation of the Hamiltonian.
 
         """
+        if self._cyten_couplings:
+            # cyten-native path: couplings were added via add_coupling (possibly through the
+            # add_twosite_coupling/add_multi_coupling wrappers), and are stored as placed
+            # cyten Couplings rather than in `onsite_terms`/`coupling_terms`. Combine them into
+            # a single Coupling via the (finite-only) coupling-graph machinery and wrap it as
+            # an MPO directly.
+            if self.lat.bc_MPS != 'finite':
+                raise NotImplementedError("add_coupling-based CouplingModel currently only supports bc_MPS='finite'")
+            sites = self.lat.mps_sites()
+            couplings, positions, strengths, splits = [], [], [], []
+            for coupling, pos, strength, split in self._cyten_couplings:
+                couplings.append(coupling)
+                positions.append(pos)
+                strengths.append(strength)
+                splits.append(split)
+            graph = mpo.MPOGraph.from_couplings(
+                couplings,
+                sites,
+                self.lat.bc_MPS,
+                positions,
+                strengths,
+                splits,
+                unit_cell_width=self.lat.mps_unit_cell_width,
+            )
+            combined = graph.build_coupling()
+            L = len(combined.factorization)
+            IdL = [0] + [None] * L
+            IdR = [None] * L + [0]
+            max_range = max(pos[-1] - pos[0] for pos in positions)
+            return mpo.MPO(
+                sites,
+                combined.factorization,
+                bc=self.lat.bc_MPS,
+                IdL=IdL,
+                IdR=IdR,
+                max_range=max_range,
+                explicit_plus_hc=self.explicit_plus_hc,
+                mps_unit_cell_width=self.lat.mps_unit_cell_width,
+            )
+
         ot = self.all_onsite_terms()
         ot.remove_zeros(tol_zero)
         ct = self.all_coupling_terms()

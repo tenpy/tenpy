@@ -6,22 +6,37 @@ import itertools
 import numpy as np
 import numpy.testing as npt
 import pytest
-#import tenpy.linalg.np_conserved as npc
-#import tenpy.networks.site
-
-#from tenpy.algorithms.exact_diag import ExactDiag, get_numpy_Hamiltonian
-from tenpy.models import lattice, model
-#from tenpy.models.spins import DipolarSpinChain
-#from tenpy.models.xxz_chain import XXZChain
-
-from cyten.models.sites import SpinSite
 from cyten.models.couplings import Coupling, heisenberg_coupling, spin_field_coupling, spin_spin_coupling
 
-#spin_half_site = tenpy.networks.site.SpinHalfSite('Sz', sort_charge=False)
+# from tenpy.models.spins import DipolarSpinChain
+# from tenpy.models.xxz_chain import XXZChain
+from cyten.models.sites import SpinSite
+from cyten.tensors import almost_equal, dagger
 
-#fermion_site = tenpy.networks.site.FermionSite('N')
+# import tenpy.linalg.np_conserved as npc
+# import tenpy.networks.site
+# from tenpy.algorithms.exact_diag import ExactDiag, get_numpy_Hamiltonian
+from tenpy.models import lattice, model
+
+# spin_half_site = tenpy.networks.site.SpinHalfSite('Sz', sort_charge=False)
+
+# fermion_site = tenpy.networks.site.FermionSite('N')
 
 __all__ = ['check_model_sanity', 'check_general_model']
+
+
+def _mpo_is_hermitian(H_MPO, eps=1.0e-10):
+    """Check hermiticity of a finite `H_MPO` at the dense-tensor level.
+
+    ``MPO.is_hermitian()``/``MPO.overlap()`` still rely on np_conserved-only methods that
+    haven't been ported to cyten tensors; for the (currently finite-only) models under test we
+    can instead just contract the whole MPO into a single Coupling and compare to its dagger.
+    """
+    if H_MPO.bc != 'finite':
+        raise NotImplementedError('hermiticity check only implemented for bc="finite"')
+    coupling = Coupling(sites=list(H_MPO.sites), factorization=list(H_MPO._W))
+    op = coupling.to_tensor()
+    return almost_equal(op, dagger(op), atol=eps, rtol=eps)
 
 
 def check_model_sanity(M, hermitian=True):
@@ -32,15 +47,13 @@ def check_model_sanity(M, hermitian=True):
         model.NearestNeighborModel.test_sanity(M)
         if hermitian:
             for i, H in enumerate(M.H_bond):
-                if H is not None:
-                    err = npc.norm(H - H.conj().transpose(H.get_leg_labels()))
-                    if err > 1.0e-14:
-                        print(H)
-                        raise ValueError(f'H on bond {i:d} not hermitian')
+                if H is not None and not almost_equal(H, dagger(H)):
+                    print(H)
+                    raise ValueError(f'H on bond {i:d} not hermitian')
     if isinstance(M, model.MPOModel):
         model.MPOModel.test_sanity(M)
         if hermitian:
-            assert M.H_MPO.is_hermitian()
+            assert _mpo_is_hermitian(M.H_MPO)
 
 
 def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True):
@@ -1150,6 +1163,7 @@ def test_add_coupling_error_paths():
 
     # fermionic sites: named-operator path refuses (gap-bridging would need JW dressing)
     from cyten.models.sites import SpinlessFermionSite
+
     fsite = SpinlessFermionSite(num_species=1, conserve='N')
     flat = lattice.Chain(L, fsite, bc='open', bc_MPS='finite')
     Mf = model.CouplingModel(flat)

@@ -1,20 +1,16 @@
 # Copyright (C) TeNPy Developers, Apache license
 import pytest
-
-pytest.skip(allow_module_level=True)
-import numpy as np
 from test_model import check_general_model
 
-from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.models import spins
 
 
 def test_SpinModel():
-    check_general_model(spins.SpinModel, {'lattice': 'Square', 'Lx': 2, 'Ly': 3, 'sort_charge': True}, {})
+    check_general_model(spins.SpinModel, {'lattice': 'Square', 'Lx': 2, 'Ly': 3, 'bc_MPS': 'finite'}, {})
 
 
 def test_SpinChain():
-    check_general_model(spins.SpinChain, {'sort_charge': True}, {'conserve': [None, 'parity', 'Sz'], 'S': [0.5, 1, 2]})
+    check_general_model(spins.SpinChain, {'bc_MPS': 'finite'}, {'conserve': [None, 'parity', 'Sz'], 'S': [0.5, 1, 2]})
     check_general_model(
         spins.SpinChain,
         {
@@ -22,13 +18,22 @@ def test_SpinChain():
             'Jx': -4.0,
             'Jz': -0.4,
             'L': 4,
-            'sort_charge': True,
+            'bc_MPS': 'finite',
         },
-        {'conserve': [None, 'parity'], 'bc_MPS': ['finite', 'infinite']},
+        {'conserve': [None, 'parity']},
     )
 
 
+@pytest.mark.skip('dipole conservation is not (yet) supported by the cyten symmetry framework')
 def test_DipolarSpinChain():
+    # imports kept local (rather than module-level as in the original) since
+    # tenpy.algorithms.exact_diag still transitively imports the gutted np_conserved module;
+    # a module-level import would break collection of this whole test file even though this
+    # test itself is skipped.
+    import numpy as np
+
+    from tenpy.algorithms.exact_diag import ExactDiag
+
     # check dipolar charges on Chain for one specific case
     L = 6  # use size small enough for ED
     model = spins.DipolarSpinChain(dict(S=1, J4=1, conserve='dipole', L=L))

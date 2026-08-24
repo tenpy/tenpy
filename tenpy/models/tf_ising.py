@@ -9,8 +9,10 @@ We choose the field along z to allow to conserve the parity, if desired.
 # Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
+from cyten.models.couplings import spin_field_coupling, spin_spin_coupling
+from cyten.models.sites import SpinSite
 
-from ..networks.site import SpinHalfSite
+from ..tools.misc import to_array
 from .lattice import Chain
 from .model import CouplingMPOModel, NearestNeighborModel
 
@@ -42,9 +44,7 @@ class TFIModel(CouplingMPOModel):
         :include: CouplingMPOModel
 
         conserve : None | 'parity'
-            What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
-        sort_charge : bool
-            Whether to sort by charges of physical legs. `True` by default.
+            What should be conserved. See :class:`~cyten.models.sites.SpinSite`.
         J, g : float | array
             Coupling as defined for the Hamiltonian above.
             Defaults to ``J=g=1``
@@ -57,17 +57,25 @@ class TFIModel(CouplingMPOModel):
         if conserve == 'best':
             conserve = 'parity'
             self.logger.info('%s: set conserve to %s', self.name, conserve)
-        sort_charge = model_params.get('sort_charge', True, bool)
-        site = SpinHalfSite(conserve=conserve, sort_charge=sort_charge)
+        site = SpinSite(S=0.5, conserve=conserve)
         return site
 
     def init_terms(self, model_params):
         J = np.asarray(model_params.get('J', 1.0, 'real_or_array'))
-        g = np.asarray(model_params.get('g', 1.0, 'real_or_array'))
+        g = to_array(model_params.get('g', 1.0, 'real_or_array'), self.lat.Ls)
         for u in range(len(self.lat.unit_cell)):
-            self.add_onsite(-g, u, 'Sigmaz')
+            site = self.lat.unit_cell[u]
+            # sigma^z = 2 * S^z
+            field = spin_field_coupling([site], hz=2.0)
+            for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
+                self.add_coupling(field, [i], strength=-g[tuple(i_lat)])
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            self.add_coupling(-J, u1, 'Sigmax', u2, 'Sigmax', dx)
+            site1, site2 = self.lat.unit_cell[u1], self.lat.unit_cell[u2]
+            # sigma^x_i sigma^x_j = 4 * S^x_i S^x_j
+            coupling = spin_spin_coupling([site1, site2], Jx=4.0)
+            mps_i, mps_j, strength_vals = self.lat.possible_couplings(u1, u2, dx, J)
+            for i, j, strength in zip(mps_i, mps_j, strength_vals):
+                self.add_coupling(coupling, [int(i), int(j)], strength=-strength)
         # done
 
 
