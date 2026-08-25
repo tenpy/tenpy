@@ -12,6 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       COV_PERCENT: ${{ steps.save-coverage.outputs.COV_PERCENT }}
+    defaults:
+      run:
+        # needed so micromamba activation from setup-micromamba takes effect
+        shell: bash -el {0}
 
     steps:
       - name: Checkout
@@ -44,8 +48,9 @@ jobs:
         # Note: This runs in the repo root directory, which contains the uncompiled tenpy package.
         #       To use the version we just installed, it is important to run `coverage`
         #       instead of `python -m coverage`.
+        # Note: only cover tenpy tests, not cyten!
         run: |
-          coverage run -m pytest .
+          coverage run -m pytest tests
           coverage report -m --skip-covered --sort=miss
           coverage json
 
@@ -68,7 +73,7 @@ jobs:
     steps:
       - name: create PR comment
         if: ${{ github.event_name == 'pull_request' }}
-        uses: mshick/add-pr-comment@v4
+        uses: mshick/add-pr-comment@v3
         with:
           message: |
             Thank you for working on this Pull request!
@@ -77,7 +82,7 @@ jobs:
       - name: Create badge
         # Only on pushes to the main branch
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        uses: schneegans/dynamic-badges-action@v1.7.0
+        uses: schneegans/dynamic-badges-action@v1.9.0
         with:
           auth: ${{ secrets.JAKOB_UNFRIED_GIST_TOKEN }}
           gistID: 9e2e197d6a2e6e2c9440b2c0eda04d5c

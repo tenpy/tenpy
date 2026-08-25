@@ -153,20 +153,21 @@ import warnings
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable
 
+# from .site import group_sites
+import cyten.tensors.sparse
 import numpy as np
 
-#from ..linalg import sparse
-#from ..linalg.charges import DipolarChargeInfo
-#from ..linalg.krylov_based import Arnoldi
-#from ..linalg.random_matrix import GOE, GUE
-from ..linalg.truncation import TruncationError #, _machine_prec_trunc_par, eigh_rho, svd_theta
+# from ..linalg import sparse
+# from ..linalg.charges import DipolarChargeInfo
+from cyten.tensors.krylov_based import Arnoldi
+from cyten.tools.random_matrix import GOE, GUE
+
+from ..linalg.truncation import TruncationError  # , _machine_prec_trunc_par, eigh_rho, svd_theta
 from ..tools import hdf5_io
 from ..tools.cache import DictCache
 from ..tools.math import entropy, lcm
 from ..tools.misc import BetaWarning, argsort, get_recursive, inverse_permutation, to_array, to_iterable
 from ..tools.params import asConfig
-#from .site import group_sites
-import cyten.tensors.sparse
 
 logger = logging.getLogger(__name__)
 
@@ -1634,7 +1635,7 @@ class MPS(BaseMPSExpectationValue):
                 'boundary conditions is not yet extensively tested. '
                 'Proceed with care, and compare to simulations without that symmetry enforced. '
             )
-            if isinstance(self.chinfo, DipolarChargeInfo):
+            if isinstance(self.chinfo, npc.DipolarChargeInfo):
                 msg += (
                     'Note also that dipole symmetries tend to fragment the Hilbert space and '
                     'it is vital to select an initial state in the correct charge sector. '
@@ -2940,7 +2941,7 @@ class MPS(BaseMPSExpectationValue):
             if update_norm:
                 self.norm *= renorm
         else:
-            U, S, VH, err, renorm = svd_theta(theta, trunc_par, qtotal_LR)
+            U, S, VH, err, renorm = npc.svd_theta(theta, trunc_par, qtotal_LR)
             if update_norm:
                 self.norm *= renorm
         U = U.split_legs().ireplace_label('p0', 'p')
@@ -3326,7 +3327,7 @@ class MPS(BaseMPSExpectationValue):
         """
         self.convert_form('B')
         if grouped_sites is None:
-            grouped_sites = group_sites(self.sites, n, charges='same')
+            grouped_sites = npc.group_sites(self.sites, n, charges='same')
         else:
             assert grouped_sites[0].n_sites == n
         Bs = []
@@ -3407,7 +3408,7 @@ class MPS(BaseMPSExpectationValue):
                 # split off the right-most physical leg and vR from theta
                 # theta: vL p0 ... pj vR
                 theta = theta.combine_legs(combine, qconj=[+1, -1])
-                U, S, V, err, _ = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
+                U, S, V, err, _ = npc.svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
                 Ss_new.append(S)
                 trunc_err += err
                 theta = U.scale_axis(S, 'vR').split_legs(0)  # vL p0 ... pj-1 vR
@@ -4683,7 +4684,7 @@ class MPS(BaseMPSExpectationValue):
         tol : float
             Precision down to which the state should be in canonical form.
         arnoldi_params : dict
-            Parameters for :class:`~tenpy.linalg.lanczos.Arnoldi`.
+            Parameters for :class:`~cyten.tensors.krylov_based.Arnoldi`.
         cutoff :
             Truncation cutoff for small singular values.
 
@@ -5198,7 +5199,7 @@ class MPS(BaseMPSExpectationValue):
                 if npc.norm(proj_rho) < 1.0e-12:
                     new_B = exact_B.split_legs()
                 else:
-                    w_enl_trunc, B_enl_trunc, err_trunc = eigh_rho(proj_rho, trunc_par=site_trunc_par, sort='m>')
+                    w_enl_trunc, B_enl_trunc, err_trunc = npc.eigh_rho(proj_rho, trunc_par=site_trunc_par, sort='m>')
                     new_B = npc.concatenate([exact_B, B_enl_trunc.conj().transpose()], axis=0).split_legs()
                     eig_error += err_trunc
 
@@ -5634,7 +5635,7 @@ class MPS(BaseMPSExpectationValue):
         else:
             raise ValueError('Invalid swap_op: got ' + repr(swap_op))
         theta = theta.combine_legs([('vL', 'p0'), ('vR', 'p1')], qconj=[+1, -1])
-        U, S, V, err, renormalize = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
+        U, S, V, err, renormalize = npc.svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
         B_R = V.split_legs(1).ireplace_label('p1', 'p')
         B_L = npc.tensordot(C.combine_legs(('vR', 'p1'), pipes=theta.legs[1]), V.conj(), axes=['(vR.p1)', '(vR*.p1*)'])
         B_L.ireplace_labels(['vL*', 'p0'], ['vR', 'p'])
@@ -5874,7 +5875,7 @@ class MPS(BaseMPSExpectationValue):
             # Do SVD from right to left & truncate
             for i in range(self.L - 1, 0, -1):
                 B = B.combine_legs(['p', 'vR'])
-                U, S, VH, err, norm_new = svd_theta(B, trunc_par)
+                U, S, VH, err, norm_new = npc.svd_theta(B, trunc_par)
                 trunc_err += err
                 self.norm *= norm_new
                 VH = VH.split_legs()
@@ -5888,7 +5889,7 @@ class MPS(BaseMPSExpectationValue):
             for i in range(self.L):
                 theta = self.get_theta(i, n=2)
                 theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
-                self.set_svd_theta(i, theta, _machine_prec_trunc_par, update_norm=False)
+                self.set_svd_theta(i, theta, npc._machine_prec_trunc_par, update_norm=False)
             for i in range(self.L - 1, -1, -1):
                 theta = self.get_theta(i, n=2)
                 theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
@@ -6856,7 +6857,7 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         return C
 
 
-class TransferMatrix(cyten.tensors.sparse.LinearOperator): # TODO: adapt for LinearOperator
+class TransferMatrix(cyten.tensors.sparse.LinearOperator):  # TODO: adapt for LinearOperator
     r"""Transfer matrix of two MPS (bra & ket).
 
     For an iMPS in the thermodynamic limit, we often need to find the 'dominant `RP`' (and `LP`).
@@ -6994,7 +6995,7 @@ class TransferMatrix(cyten.tensors.sparse.LinearOperator): # TODO: adapt for Lin
         dtype = np.promote_types(M[0].dtype, N[0].dtype)
         self.pipe = pipe
         self.label_split = label_split
-        self.flat_linop = sparse.FlatLinearOperator(self.matvec, pipe, dtype, charge_sector, label)
+        self.flat_linop = npc.FlatLinearOperator(self.matvec, pipe, dtype, charge_sector, label)
         chinfo = M[0].chinfo
         self.qtotal = chinfo.make_valid(np.sum([B.qtotal for B in M + N], axis=0))
         if infinite and np.any(self.qtotal != 0):

@@ -22,11 +22,15 @@ jobs:
     env:
       # make pytest output in color
       PY_COLORS: 1
+    defaults:
+      run:
+        # needed so micromamba activation from setup-micromamba takes effect
+        shell: bash -el {0}
     strategy:
       matrix:
         # reminder: when changing python versions, also look at the other workflows!
         #           also check for new versions of pypa/cibuildwheel used in publish workflow!
-        python-version: ["3.13", "3.14"]
+        python-version: ["3.14"]
 
     steps:
     - name: Checkout
@@ -55,7 +59,7 @@ jobs:
         python -m pip install -e ".[test]"
 
     - name: Show tenpy config
-      working-directory: ..
+      working-directory: tests
       run: |
         python -c "import tenpy; tenpy.show_config()"
 

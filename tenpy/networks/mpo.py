@@ -40,22 +40,24 @@ import copy
 import logging
 import warnings
 
+import cyten.tensors.sparse
 import numpy as np
+
+# from ..linalg import np_conserved as npc
+from cyten.tools.krylov_based import GMRES
 from scipy.linalg import expm
 from scipy.special import comb
 
-#from ..linalg import np_conserved as npc
-#from ..linalg.krylov_based import GMRES
-#from ..linalg.sparse import FlatLinearOperator, NpcLinearOperator, ShiftNpcLinearOperator
-from ..linalg.truncation import TruncationError   #, svd_theta
+# from ..linalg.sparse import FlatLinearOperator, NpcLinearOperator, ShiftNpcLinearOperator
+from ..linalg.truncation import TruncationError  # , svd_theta
 from ..tools.math import lcm
 from ..tools.misc import add_with_None_0, inverse_permutation, to_iterable
 from ..tools.params import asConfig
 from ..tools.string import vert_join
 from .mps import BaseEnvironment, MPSGeometry, TransferMatrix
-#from .site import group_sites
+
+# from .site import group_sites
 from .terms import TermList
-import cyten.tensors.sparse
 
 logger = logging.getLogger(__name__)
 
@@ -757,7 +759,7 @@ class MPO(MPSGeometry):
 
         """
         if grouped_sites is None:
-            grouped_sites = group_sites(self.sites, n, charges='same')
+            grouped_sites = npc.group_sites(self.sites, n, charges='same')
         else:
             assert grouped_sites[0].n_sites == n
         if self.max_range is not None and self.max_range != np.inf:
@@ -1650,7 +1652,7 @@ class MPO(MPSGeometry):
             if i == 0 and bc == 'finite':
                 B = B.take_slice(self.get_IdL(i), 'wL')
                 B = B.combine_legs([['vL', 'p'], ['wR', 'vR']], qconj=[+1, -1])
-                U, S, VH, err, norm_new = svd_theta(B, relax_trunc)
+                U, S, VH, err, norm_new = npc.svd_theta(B, relax_trunc)
                 trunc_err += err
                 psi.norm *= norm_new
                 U = U.split_legs()
@@ -1662,7 +1664,7 @@ class MPO(MPSGeometry):
                 B = npc.tensordot(VH, B, axes=(['wR', 'vR'], ['wL', 'vL']))
                 B = B.take_slice(self.get_IdR(i), 'wR')
                 B = B.combine_legs(['vL', 'p'], qconj=[-1])
-                U, S, VH, err, norm_new = svd_theta(B, relax_trunc, [B.qtotal, None])
+                U, S, VH, err, norm_new = npc.svd_theta(B, relax_trunc, [B.qtotal, None])
                 trunc_err += err
                 psi.norm *= norm_new
                 U = U.split_legs()
@@ -1671,7 +1673,7 @@ class MPO(MPSGeometry):
             else:
                 B = npc.tensordot(VH, B, axes=(['wR', 'vR'], ['wL', 'vL']))
                 B = B.combine_legs([['vL', 'p'], ['wR', 'vR']], qconj=[1, -1])
-                U, S, VH, err, norm_new = svd_theta(B, relax_trunc)
+                U, S, VH, err, norm_new = npc.svd_theta(B, relax_trunc)
                 trunc_err += err
                 psi.norm *= norm_new
                 U = U.split_legs()
@@ -2748,7 +2750,7 @@ class MPOEnvironment(BaseEnvironment):
         force_init_method : {None, 'iter', 'TM'}
             Force method 'TM' or 'iter' as described above for **infinite** MPS.
         gmres_options : dict
-            Further optional parameters for :class:`tenpy.linalg.krylov_based.GMRES`.
+            Further optional parameters for :class:`cyten.tensors.krylov_based.GMRES`.
             Only relevant for **infinite** MPS if method 'iter' is used to get `init_LP`/`init_RP`.
 
         """
@@ -3304,7 +3306,7 @@ class MPOEnvironmentBuilder:
             at most linearly with system size. For higher-order scaling,
             expectation values must be computed via explicit contractions.
         gmres_options : dict
-            Further optional parameters passed to :class:`tenpy.linalg.krylov_based.GMRES`.
+            Further optional parameters passed to :class:`cyten.tensors.krylov_based.GMRES`.
         tol_id : float
             Cycles with smaller norm are discarded.
 
@@ -3594,7 +3596,7 @@ class MPOEnvironmentBuilder:
             unit_cell_width=self.ket.unit_cell_width,
         )
         # GMRES solver
-        A = ShiftNpcLinearOperator(TWjj, -1.0)
+        A = npc.ShiftNpcLinearOperator(TWjj, -1.0)
         solver = GMRES(A, b, b, options=options)  # makes internal copy
         x_sol, res, _, _ = solver.run()
         if res > options['res']:
@@ -3755,7 +3757,9 @@ class MPOTransferMatrix(cyten.sparse.LinearOperator):  # TODO: update for Linear
                 guess = guess.transpose(['vR*', 'wR', 'vR'])  # copy!
             self._project(guess)
         self.guess = guess
-        self.flat_linop, self.flat_guess = FlatLinearOperator.from_guess_with_pipe(self.matvec, self.guess, dtype=dtype)
+        self.flat_linop, self.flat_guess = npc.FlatLinearOperator.from_guess_with_pipe(
+            self.matvec, self.guess, dtype=dtype
+        )
         self._explicit_plus_hc = H.explicit_plus_hc
 
     def matvec(self, vec, project=True):
