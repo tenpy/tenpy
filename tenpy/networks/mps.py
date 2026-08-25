@@ -5055,7 +5055,7 @@ class MPS(BaseMPSExpectationValue):
         -------
         rho : :class:`~tenpy.linalg.np_conserved.Array`
             Reduced density matrix of the segment sites.
-            Labels ``'p0', 'p1', ..., 'pk', 'p0*', 'p1*', ..., 'pk*'`` with ``k=len(segment)``.
+            Labels ``'p0', 'p1', ..., 'pk', 'pk*', ..., 'p1*', 'p*'`` with ``k=len(segment)``.
 
         """
         # TODO
@@ -5066,8 +5066,16 @@ class MPS(BaseMPSExpectationValue):
         segment = np.sort(segment)
         if np.all(segment[1:] == segment[:-1] + 1):  # consecutive
             theta = self.get_theta(segment[0], segment[-1] - segment[0] + 1)
-            rho = npc.tensordot(theta, theta.conj(), axes=(['vL', 'vR'], ['vL*', 'vR*']))
+            theta = ct.planar_permute_legs(theta, domain=['vL', 'vR'])
+            rho = ct.compose(theta, theta.hc)
             return rho
+        # 1. We cannot use planar diagrams here since the number of open physical legs changes
+        # 2. We thus need to consider symmetric and charged tensors by hand
+        # 3. For the partial traces over the physical legs, it is more efficient to start
+        #    contracting from the left (avoids braiding with open physical legs)
+        # 4. In order to avoid explicitly calling partial_trace
+        #    (we cannot call tdot since there is braiding involved which in general needs levels),
+        #    we should braid the B tensors before the contraction
         rho = self.get_theta(segment[0], 1)
         rho = npc.tensordot(rho, rho.conj(), axes=('vL', 'vL*'))
         k = 1
@@ -7969,11 +7977,11 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         return C
 
 
-class TransferMatrix(cyten.tensors.sparse.LinearOperator):  # TODO: adapt for LinearOperator
+class TransferMatrix(ct.tensors.sparse.LinearOperator):  # TODO: adapt for LinearOperator
     r"""Transfer matrix of two MPS (bra & ket).
 
     For an iMPS in the thermodynamic limit, we often need to find the 'dominant `RP`' (and `LP`).
-    This mean nothing else than to take the transfer matrix of the unit cell and find the
+    This means nothing else than to take the transfer matrix of the unit cell and find the
     (right/left) eigenvector with the largest (magnitude) eigenvalue, since it will dominate
     :math:`(TM)^n RP` (or :math:`LP (TM)^n`) in the limit :math:`n \rightarrow \infty` - whatever
     the initial `RP` is. This class provides exactly that functionality with :meth:`eigenvectors`.
@@ -8006,9 +8014,9 @@ class TransferMatrix(cyten.tensors.sparse.LinearOperator):  # TODO: adapt for Li
         We start the `M` of the ket at site `shift_ket` (i.e. the `i` in the above network).
     transpose : bool
         Whether `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
-    charge_sector : None | charges | ``0``
-        Selects the charge sector of the vector onto which the Linear operator acts.
-        ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
+    charge_sector : None | :class:``~cyten.Sector`` | ``0``
+        Selects the charge sector of the vector onto which the linear operator acts.
+        ``None`` stands for *all* sectors, ``0`` stands for the trivial charge sector.
         Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in charge sector 0.
         Note that you can update the `charge_sector` after initialization
         via the :attr:`charge_sector` property.
@@ -8045,11 +8053,20 @@ class TransferMatrix(cyten.tensors.sparse.LinearOperator):  # TODO: adapt for Li
 
     """
 
-    def __init__(self, bra, ket, shift_bra=0, shift_ket=0, transpose=False, charge_sector=0, form='B'):
+    def __init__(
+        self,
+        bra: MPS,
+        ket: MPS,
+        shift_bra: int = 0,
+        shift_ket: int = 0,
+        transpose: bool = False,
+        charge_sector: None | ct.Sector | 0 = 0,
+        form='B',
+    ):
         L = lcm(bra.L, ket.L)
         unit_cell_width = ket.unit_cell_width * (L // ket.L)
-        if ket.chinfo != bra.chinfo:
-            raise ValueError('incompatible charges')
+        if ket.symmetry != bra.symmetry:
+            raise ValueError('incompatible symmetries')
         self.shift_bra = shift_bra
         self.shift_ket = shift_ket
         assert ket._p_label == bra._p_label
@@ -8062,7 +8079,15 @@ class TransferMatrix(cyten.tensors.sparse.LinearOperator):  # TODO: adapt for Li
         )
 
     def _init_from_Ns_Ms(
-        self, bra_N, ket_M, transpose, charge_sector, p_label, infinite=True, conjugate_Ns=True, unit_cell_width=None
+        self,
+        bra_N: list[ct.Tensor],
+        ket_M: list[ct.Tensor],
+        transpose: bool,
+        charge_sector: None | ct.Sector | 0,
+        p_label: list[str],
+        infinite: bool = True,
+        conjugate_Ns: bool = True,
+        unit_cell_width: int = None,
     ):
         """Initialize directly from N and M.
 
@@ -8129,18 +8154,25 @@ class TransferMatrix(cyten.tensors.sparse.LinearOperator):  # TODO: adapt for Li
 
     @classmethod
     def from_Ns_Ms(
-        cls, bra_N, ket_M, transpose=False, charge_sector=0, p_label=['p'], conjugate_Ns=True, unit_cell_width=None
+        cls,
+        bra_N: list[ct.Tensor],
+        ket_M: list[ct.Tensor],
+        transpose: bool = False,
+        charge_sector: None | ct.Sector | 0 = 0,
+        p_label: list[str] = ['p'],
+        conjugate_Ns: bool = True,
+        unit_cell_width: int = None,
     ):
         """Initialize a TransferMatrix directly from the MPS tensors.
 
         Parameters
         ----------
-        bra_N, ket_M : list of :class:`~tenpy.linalg.np_conserved.Array`
+        bra_N, ket_M : list of :class:`~cyten.tensors.Tensor`
             Plain tensors of the bra and ket, in a list going left to right,
             the bra not conjugated.
         transpose : bool
             Whether `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
-        charge_sector : None | charges | ``0``
+        charge_sector : None | :class:``~cyten.Sector`` | ``0``
             Selects the charge sector of the vector onto which the Linear operator acts.
             ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
             Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in charge sector 0.
