@@ -13,7 +13,8 @@ on:
 
 jobs:
   build:
-    if: github.event.pull_request.draft == false
+    if: false   # disable for now
+    # if: github.event.pull_request.draft == false
 
     runs-on: ubuntu-latest
     env:

@@ -9,7 +9,7 @@ description = "Simulation of quantum many-body systems with tensor networks in P
 readme = {file = "README.rst", content-type = "text/x-rst"}
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 authors = [
     {name = "TeNPy Developer Team"},
 ]
@@ -26,10 +26,6 @@ classifiers = [
     "Programming Language :: C",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Operating System :: Unix",
     "Operating System :: MacOS",
@@ -116,6 +112,7 @@ testpaths = ["tests"]
 line-length = 120
 target-version = "py310"
 exclude = ["doc/sphinx_ext/*", "doc/toycodes", "doc/notebooks"]
+builtins = ["npc"]  # TODO ignore npc not present until we ported everyting to the new C++ cyten backend
 
 [tool.ruff.lint]
 # Note: we use flake8 to lint docstrings, see .flake8
@@ -150,6 +147,7 @@ ignore = [
     "D417",  # Missing argument description
     "D203",  # We use D211 instead (we put no blank line before class docstring)
     "D213",  # We use D214 instead (our multi-line docs start in the first line)
+    "F821",  # undefined name
 ]
 
 [tool.ruff.lint.per-file-ignores]

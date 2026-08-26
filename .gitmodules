@@ -5,6 +5,6 @@
 	path = doc/toycodes
 	url = https://github.com/tenpy/tenpy_toycodes
 [submodule "cyten"]
-	path = cyten
+	path = cyten_repo
 	url = https://github.com/tenpy/cyten
 	branch = main

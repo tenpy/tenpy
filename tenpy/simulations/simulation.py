@@ -278,7 +278,7 @@ class Simulation:
     def __exit__(self, exc_type, exc_value, traceback):
         self.cache.__exit__(exc_type, exc_value, traceback)  # exit cache context
         if exc_type is not None:
-            self.logger.exception(
+            self.logger.exception(  # noqa: LOG004
                 'simulation abort with the following exception', exc_info=(exc_type, exc_value, traceback)
             )
         self.options.warn_unused(True)

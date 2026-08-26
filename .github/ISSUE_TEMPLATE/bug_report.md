@@ -14,6 +14,7 @@ What algorithm are you calling / what are you trying to do?
 Show how you call the code that is failing. Include it in backticks like this:
 ```python
 import tenpy
+
 tenpy.show_config()
 ```
 If you think it's helpfull, you can also include output.
