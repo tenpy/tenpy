@@ -18,8 +18,11 @@ This might be used to obtain the spectrum, the ground state or highly excited st
 import warnings
 
 import numpy as np
+from cyten.symmetries import SymmetryError
+from cyten.symmetries.spaces import AbelianLegPipe, TensorProduct
+from cyten.tensors import HermitianNumpyArrayLinearOperator, slice_leg
+from cyten.tensors import eigh as cyten_eigh
 
-# from ..linalg import np_conserved as npc
 from ..models.model import CouplingModel
 from ..networks.mps import MPS
 from ..tools.misc import inverse_permutation
@@ -35,77 +38,118 @@ class ExactDiag:
     model : :class:`~tenpy.models.MPOmodel` | :class:`~tenpy.models.CouplingModel`
         The model which is to be diagonalized.
     charge_sector : ``None`` | charges
-        If not ``None``, project onto the given charge sector.
-    sparse : bool
-        If ``True``, don't sort/bunch the LegPipe used to combine the physical legs.
-        This results in array `blocks` with just one entry, requires much more charge data,
-        and is not what `np_conserved` was designed for, so it's not recommended.
+        If not ``None``, restrict :meth:`groundstate`/:meth:`sparse_diag` to the given charge
+        sector. Note that (unlike the old `np_conserved` version) this does *not* reduce the size
+        of `full_H` itself -- :func:`~cyten.tensors.eigh` is already block-diagonal in the coupled
+        sector, so there is nothing to gain from projecting beforehand; :meth:`sparse_diag`, via
+        :class:`~cyten.tensors.HermitianNumpyArrayLinearOperator`, is what actually restricts the
+        work to one sector.
     max_size : int
         The `build_H_*` functions will do nothing (but emit a warning) if the total size of the
         Hamiltonian would be larger than this.
 
     Attributes
     ----------
-    model : :class:`~tenpy.models.MPOmodel` | :class:`~tenpy.models.CouplingModel`
-        The model which is to be diagonalized.
-    chinfo : :class:`~tenpy.linalg.charges.ChargeInfo`
-        The nature of the charge (which is the same for all sites).
+    model : :class:`~tenpy.models.MPOmodel` | :class:`~tenpy.models.CouplingModel` | ``None``
+        The model which is to be diagonalized, if constructed via :meth:`__init__`.
+        ``None`` if constructed via :meth:`from_hamiltonian`.
+    symmetry : :class:`~cyten.symmetries.Symmetry`
+        The symmetry of the sites (which is the same for all sites).
     charge_sector : ``None`` | charges
-        If not ``None``, we project onto the given charge sector.
+        If not ``None``, we restrict to the given charge sector, see above.
     max_size : int
         The ``build_H_*`` functions will do nothing (but emit a warning) if the total size of the
         Hamiltonian would be larger than this.
-    full_H : :class:`~tenpy.linalg.np_conserved.Array` | ``None``
-        The full Hamiltonian to be diagonalized
-        with legs ``'(p0.p1....)', '(p0*,p1*...)'`` (in that order).
-        ``None`` if the ``build_H_*`` functions haven't been called yet, or if `max_size` would
-        have been exceeded.
+    full_H : :class:`~cyten.tensors.SymmetricTensor` | ``None``
+        The full Hamiltonian to be diagonalized, physical legs ``p0, ..., p{L-1}`` in the
+        codomain and their duals in the domain. ``None`` if the ``build_H_*`` functions haven't
+        been called yet, or if `max_size` would have been exceeded.
     E : ndarray | ``None``
-        1D array of eigenvalues.
-    V : :class:`~tenpy.linalg.np_conserved.Array` | ``None``
-        Eigenvectors. First leg 'ps' are physical legs,
-        the second leg ``'ps*'`` corresponds to the eigenvalues.
-    _sites : list of :class:`~tenpy.networks.site.Site`
+        1D array of eigenvalues, index-aligned with the ``'eig'`` leg of `V`.
+    V : :class:`~cyten.tensors.SymmetricTensor` | ``None``
+        Eigenvectors, as returned by :func:`~cyten.tensors.eigh`. Physical legs as in `full_H`,
+        plus a new leg ``'eig'`` corresponding to the eigenvalues.
+    _sites : list of :class:`~cyten.models.sites.Site`
         The sites in the given order.
     _labels_p : list or str
         The labels use for the physical legs; just ``['p0', 'p1', ...., 'p{L-1}']``.
     _labels_pconj : list or str
         Just each of `_labels_p` with an ``*``.
-    _pipe : :class:`~tenpy.linalg.charges.LegPipe`
-        The pipe from the single physical legs to the full combined leg.
-    _pipe_conj : :class:`~tenpy.linalg.charges.LegPipe`
-        Just ``_pipe.conj()``.
+    _pipe : :class:`~cyten.symmetries.spaces.TensorProduct`
+        The (uncombined) tensor product of the physical legs.
+    _pipe_conj : :class:`~cyten.symmetries.spaces.TensorProduct`
+        Just ``_pipe.dual``.
     _mask : 1D bool ndarray | ``None``
-        Bool mask, which of the indices of the pipe are in the desired `charge_sector`.
+        Only set for an abelian `symmetry` with a fixed `charge_sector`: bool mask, which of the
+        (Kronecker-product) basis states of the combined physical legs are in `charge_sector`.
+        For non-abelian symmetries a per-basis-state charge does not exist, so this stays ``None``
+        even when `charge_sector` is fixed.
 
     """
 
-    def __init__(self, model, charge_sector=None, sparse=False, max_size=2e6):
+    def __init__(self, model, charge_sector=None, max_size=2e6):
         if model.lat.bc_MPS != 'finite':
             raise ValueError('Full diagonalization works only on finite systems')
         self.model = model
-        self.chinfo = model.lat.unit_cell[0].leg.chinfo
+        self._init_from_sites(model.lat.mps_sites(), charge_sector, max_size)
+
+    def _init_from_sites(self, sites, charge_sector, max_size):
         self.full_H = None
         self.E = None
         self.V = None
         self.max_size = max_size
-        self._labels_p = ['p' + str(i) for i in range(model.lat.N_sites)]
+        self._sites = list(sites)
+        self._labels_p = ['p' + str(i) for i in range(len(self._sites))]
         self._labels_pconj = [l + '*' for l in self._labels_p]
-        self._sites = model.lat.mps_sites()
-        legs = [s.leg for s in self._sites]
-        self._pipe = npc.LegPipe(legs, qconj=1, sort=(not sparse), bunch=(not sparse))
-        self._pipe_conj = self._pipe.conj()
+        self.symmetry = self._sites[0].leg.symmetry
+        if not self.symmetry.can_be_dropped:
+            raise SymmetryError(
+                f'ExactDiag needs a symmetry with a dense basis; {self.symmetry} has none. '
+                'Anyonic symmetries are not supported.'
+            )
+        self._pipe = TensorProduct([s.leg for s in self._sites])
+        self._pipe_conj = self._pipe.dual
         if charge_sector is not None:
-            self.charge_sector = self.chinfo.make_valid(charge_sector)
-            self._mask = np.all(self._pipe.to_qflat() == self.charge_sector[np.newaxis, :], axis=1)
-            if np.sum(self._mask) == 0:
+            self.charge_sector = np.asarray(charge_sector)
+            sectors = self.possible_charge_sectors()
+            if not np.any(np.all(sectors == self.charge_sector[np.newaxis, :], axis=1)):
                 raise ValueError('The chosen charge sector is empty.')
+            self._mask = None
+            if self.symmetry.is_abelian:
+                pipe = AbelianLegPipe([s.leg for s in self._sites])
+                sectors_of_basis = np.asarray(pipe.sectors_of_basis)
+                self._mask = np.all(sectors_of_basis == self.charge_sector[np.newaxis, :], axis=1)
         else:
             self.charge_sector = None
             self._mask = None
 
     def possible_charge_sectors(self):
-        return self._pipe.charge_sectors()
+        return np.asarray(self._pipe.sector_decomposition)
+
+    @classmethod
+    def from_hamiltonian(cls, H, sites, charge_sector=None, max_size=2e6):
+        """Initialize directly from a cyten Hamiltonian tensor and its sites.
+
+        Entry point while ``tenpy.models`` is not ported to cyten yet, so :meth:`__init__` cannot
+        be exercised without a model.
+
+        Parameters
+        ----------
+        H : :class:`~cyten.tensors.SymmetricTensor`
+            The Hamiltonian, e.g. from ``Coupling.to_tensor()``, with the physical legs
+            ``p0, ..., p{L-1}`` in the codomain and their duals in the domain.
+        sites : list of :class:`~cyten.models.sites.Site`
+            The sites, in MPS order.
+        charge_sector, max_size :
+            As for :meth:`__init__`.
+
+        """
+        res = cls.__new__(cls)
+        res.model = None
+        res._init_from_sites(sites, charge_sector, max_size)
+        if not res._exceeds_max_size():
+            res._set_full_H(H)
+        return res
 
     @classmethod
     def from_infinite_model(cls, model, first=0, last=None, enlarge=None, **kwargs):
@@ -212,16 +256,18 @@ class ExactDiag:
                 full_H += Hb
         self._set_full_H(full_H)
 
-    def full_diagonalization(self, *args, **kwargs):
+    def full_diagonalization(self, **kwargs):
         """Full diagonalization to obtain all eigenvalues and eigenvectors.
 
-        Arguments are given to :class:`~tenpy.linalg.np_conserved.eigh`.
+        Sets :attr:`V` and :attr:`E`. Keyword arguments are given to :func:`~cyten.tensors.eigh`
+        (in addition to ``new_labels='eig', new_leg_dual=False``, which cannot be overridden).
         """
         if self.full_H is None:
             raise ValueError('You need to call one of `build_full_H_*` first!')
-        E, V = npc.eigh(self.full_H, *args, **kwargs)
-        V.iset_leg_labels(['ps', 'ps*'])
-        self.E = E
+        kwargs.setdefault('new_labels', 'eig')
+        kwargs['new_leg_dual'] = False
+        W, V = cyten_eigh(self.full_H, **kwargs)
+        self.E = W.diagonal_as_numpy()
         self.V = V
 
     def groundstate(self, charge_sector=None):
@@ -230,30 +276,37 @@ class ExactDiag:
         Parameters
         ----------
         charge_sector : None | 1D ndarray
-            By default (``None``), consider all charge sectors.
-            Alternatively, give the `qtotal` which the returned state should have.
+            By default (``None``), consider all charge sectors, or -- if a `charge_sector` was
+            fixed at construction -- that one. Alternatively, explicitly give the sector which the
+            returned state should have; requires that no `charge_sector` was fixed at construction.
 
         Returns
         -------
         E0 : float
             Ground state energy (possibly in the given sector).
-        psi0 : :class:`~tenpy.linalg.np_conserved.Array`
-            Ground state (possibly in the given sector).
+        psi0 : :class:`~cyten.tensors.ChargedTensor`
+            Ground state (possibly in the given sector), with ``charged_state=None``, i.e. it
+            carries the definite charge of its :attr:`~cyten.tensors.ChargedTensor.charge_leg`
+            rather than being trivial. Physical legs ``p0, ..., p{L-1}``.
 
         """
         if self.E is None or self.V is None:
             raise ValueError('You need to call `full_diagonalization` first!')
         if charge_sector is None:
+            charge_sector = self.charge_sector  # may still be None -> global minimum
+        elif self.charge_sector is not None:
+            raise ValueError('``self.charge_sector`` was specified before.')
+        if charge_sector is None:
             i0 = np.argmin(self.E)
         else:
-            if self.charge_sector is not None:
-                raise ValueError('``self.charge_sector`` was specified before.')
-            charge_sector = self.chinfo.make_valid(charge_sector)
-            mask = np.all(self._pipe.to_qflat() == charge_sector[np.newaxis, :], axis=1)
+            charge_sector = np.asarray(charge_sector)
+            sectors_of_basis = np.asarray(self.V.domain.factors[0].sectors_of_basis)
+            mask = np.all(sectors_of_basis == charge_sector[np.newaxis, :], axis=1)
             if np.sum(mask) == 0:
                 raise ValueError('The chosen charge sector is empty.')
             i0 = np.argmin(np.where(mask, self.E, np.max(self.E) + 1.0))
-        return self.E[i0], self.V.take_slice(i0, axes='ps*')
+        i0 = int(i0)
+        return self.E[i0], slice_leg(self.V, 'eig', i0)
 
     def exp_H(self, dt):
         """Return ``U(dt) := exp(-i H dt)``."""
@@ -310,23 +363,46 @@ class ExactDiag:
         psi = psi.split_legs([0])  # split the combined leg into the physical legs of the sites
         return MPS.from_full(self._sites, psi, form=canonical_form, unit_cell_width=self.model.lat.mps_unit_cell_width)
 
-    def matvec(self, psi):
-        """Allow to use `self` as LinearOperator for lanczos.
-
-        Just applies `full_H` to (the first axis of) the given `psi`.
-        """
-        return npc.tensordot(self.full_H, psi, axes=1)
-
     def sparse_diag(self, k, *args, **kwargs):
-        """Call :func:`~tenpy.linalg.np_conserved.speigs`."""
-        return npc.speigs(self.full_H, self.charge_sector, k, *args, **kwargs)
+        """The `k` lowest eigenvalues and eigenvectors, via :mod:`cyten.tensors.sparse`.
+
+        Wraps :class:`~cyten.tensors.HermitianNumpyArrayLinearOperator`, which restricts to
+        :attr:`charge_sector` (all sectors if it is ``None``) and calls
+        :func:`scipy.sparse.linalg.eigsh` under the hood. Note that cyten does not yet support
+        restricting to a single, higher-dimensional sector (e.g. non-trivial SU(2) sectors) this
+        way; ``charge_sector=None`` and one-dimensional sectors work.
+
+        Parameters
+        ----------
+        k : int
+            The number of eigenvalues/eigenvectors to compute.
+        *args, **kwargs :
+            Further arguments given to
+            :meth:`~cyten.tensors.HermitianNumpyArrayLinearOperator.eigenvectors`.
+
+        Returns
+        -------
+        E : 1D ndarray
+            The `k` energies, ascending.
+        psi : list of :class:`~cyten.tensors.ChargedTensor`
+            The corresponding eigenstates, physical legs ``p0, ..., p{L-1}``.
+
+        """
+        if self.full_H is None:
+            raise ValueError('You need to call one of `build_full_H_*` first!')
+        op = HermitianNumpyArrayLinearOperator.from_Tensor(
+            self.full_H, legs1=self._labels_pconj, legs2=self._labels_p, charge_sector=self.charge_sector
+        )
+        kwargs.setdefault('which', 'SA')
+        return op.eigenvectors(k, *args, **kwargs)
 
     def _set_full_H(self, full_H):
         if self.full_H is not None:
             warnings.warn('full_H calculated multiple times!?', stacklevel=2)
-        if self.charge_sector is not None:
-            full_H.legs = [l.to_LegCharge() for l in full_H.legs]  # avoids warnings of project
-            full_H = full_H[self._mask, self._mask]
+        # The np_conserved version projected onto `charge_sector` here. cyten cannot: Mask and
+        # DiagonalTensor reject LegPipes, so `full_H` would first have to be flattened onto a single
+        # abstract leg -- and then the eigenvectors could no longer be split back into the sites.
+        # `charge_sector` therefore restricts `groundstate` instead; `eigh` is block-wise anyway.
         self.full_H = full_H
 
     def _exceeds_max_size(self):

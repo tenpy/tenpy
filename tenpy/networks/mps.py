@@ -159,11 +159,11 @@ from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable, Sequence
 from typing import Literal
 
+import cyten as ct
+
 # from .site import group_sites
 import cyten.tensors.sparse
 import numpy as np
-
-import cyten as ct
 
 from ..linalg.truncation import TruncationError
 from ..tools import hdf5_io
