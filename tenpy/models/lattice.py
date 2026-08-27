@@ -25,7 +25,7 @@ import logging
 import numpy as np
 from scipy.spatial import ConvexHull, Voronoi
 
-#from ..linalg.charges import DipolarChargeInfo
+# from ..linalg.charges import DipolarChargeInfo
 from ..networks.mps import MPS  # only to check boundary conditions
 from ..tools.misc import find_subclass, get_close, inverse_permutation, to_array, to_iterable
 
@@ -213,8 +213,8 @@ class Lattice:
         if self.bc.shape != (self.dim,):
             raise ValueError('Wrong len of bc')
         assert self.bc.dtype == bool
-        #chinfo = None
-        #for site in self.unit_cell:
+        # chinfo = None
+        # for site in self.unit_cell:
         #    if not isinstance(site, Site):
         #        continue
         #    if chinfo is None:
@@ -708,7 +708,7 @@ class Lattice:
                 site = self.unit_cell[lat_indx[-1]]
                 dx = np.copy(lat_indx)
                 dx[-1] = 0
-                #if isinstance(site, Site) and not site.leg.chinfo.trivial_shift:  # it can be None
+                # if isinstance(site, Site) and not site.leg.chinfo.trivial_shift:  # it can be None
                 #    leg = site.leg.apply_charge_mapping(site.leg.chinfo.shift_charges, func_kwargs=dict(dx=dx))
                 #    site = copy.copy(site).change_charge(leg)
                 self._mps_sites_cache.append(site)

@@ -186,7 +186,7 @@ __all__ = [
 ]
 
 
-# FIXME start a changelog
+# TODO_MPS start a changelog
 #   - BaseMPSExpectationValue moved behavior from _contract_with_LP to get_LP.
 #     If the LP is trivial (e.g. in <psi|op_local|psi>), we now get get_Lp(...) == ct.Identity
 #     which allows us to exploit that the contraction is trivial also.
@@ -1442,7 +1442,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 j_R = range(self.L, 11 * self.L, self.L)
         else:
             j_R = np.sort(j_R)
-        coupling_L, sites_L = term_list_L.to_coupling(offset=i_L)  # FIXME implement this
+        coupling_L, sites_L = term_list_L.to_coupling(offset=i_L)  # TODO_MPS implement this
         coupling_R, sites_R = term_list_L.to_coupling(offset=j_R[0])
         result = self.correlation_function(
             op1=coupling_L,
@@ -1614,8 +1614,8 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             W = ops[0]
             diagram = 'LP3 @ bra-W-ket3'
         tensors = dict(
-            LP=LP,  # FIXME define labelling convention
-            ket=ket.get_B(sites[0], form=form_on_first_site),  # FIXME define labelling convention
+            LP=LP,  # TODO_MPS define labelling convention
+            ket=ket.get_B(sites[0], form=form_on_first_site),  # TODO_MPS define labelling convention
             bra=bra.get_B(sites[0], form=form_on_first_site).hc,
             W=W,
         )
@@ -4890,7 +4890,7 @@ class MPS(BaseMPSExpectationValue):
             else:
                 if for_matrix_S:
                     # explicitly calculate Schmidt values by diagonalizing (s^dagger s)
-                    # FIXME define eigvalsh in cyten
+                    # TODO_MPS define eigvalsh in cyten
                     s = ct.eigvalsh(ct.compose(ct.dagger(s), s))[0]
                     res.append(ct.entropy(s, n))
                 else:
@@ -7231,7 +7231,7 @@ class MPS(BaseMPSExpectationValue):
         return ct.Identity(leg, self.backend, self.dtype, self.device, ['vL*', 'vL'])
 
 
-# FIXME stopped here
+# TODO_MPS stopped here
 
 
 class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
@@ -7970,13 +7970,13 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         return np.real_if_close(value) * (self.bra.norm * self.ket.norm)
 
     def _contract_with_LP(self, C, i):
-        # FIXME get rid of these? replace with having _get_LP -> ct.Identity
+        # TODO_MPS get rid of these? replace with having _get_LP -> ct.Identity
         LP = self.get_LP(i, store=True)
         C = npc.tensordot(LP, C, axes=['vR', 'vL'])  # axes_p + (vR*, vR)
         return C
 
     def _contract_with_RP(self, C, i):
-        # FIXME get rid of these? replace with having _get_LP -> ct.Identity
+        # TODO_MPS get rid of these? replace with having _get_LP -> ct.Identity
         RP = self.get_RP(i, store=True)
         C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vL, vL*)
         return C

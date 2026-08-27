@@ -55,6 +55,7 @@ from . import (
     # toric_code,
     # xxz_chain,
 )
+
 # The model modules above are still
 # np_conserved-based and do not yet work in cyten.
 # from .aklt import *
@@ -64,8 +65,10 @@ from . import (
 # from .hofstadter import *
 # from .hubbard import *
 from .lattice import *
+
 # from .mixed_xk import *
 from .model import *
+
 # from .molecular import *
 # from .pxp import *
 # from .spins import *

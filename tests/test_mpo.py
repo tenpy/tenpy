@@ -9,10 +9,10 @@ from cyten.models.couplings import Coupling, heisenberg_coupling, spin_field_cou
 # from tenpy.networks.terms import CouplingTerms, MultiCouplingTerms, OnsiteTerms, TermList
 from cyten.models.sites import SpinSite
 
-#pytest.skip(allow_module_level=True)
+# pytest.skip(allow_module_level=True)
 # from random_test import random_MPS
-#from tenpy.algorithms.exact_diag import ExactDiag
-#from tenpy.linalg import np_conserved as npc
+# from tenpy.algorithms.exact_diag import ExactDiag
+# from tenpy.linalg import np_conserved as npc
 # from tenpy.models.spins import SpinChain
 # from tenpy.models.xxz_chain import XXZChain
 from tenpy.networks import mpo
@@ -20,6 +20,7 @@ from tenpy.networks.terms import to_single_coupling
 
 # spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 spin_half = SpinSite(S=0.5, conserve=None)
+
 
 def test_MPO():
     pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
@@ -57,7 +58,6 @@ def test_MPO():
             assert H2.L == 2
 
 
-
 def test_MPOGraph():
     L = 4
     site = SpinSite(S=0.5, conserve=None)
@@ -84,13 +84,16 @@ def test_MPOGraph():
 
     with pytest.raises(ValueError):
         mpo.MPOGraph([site] * L, bc='finite', unit_cell_width=L).add_coupling_as_term(
-            c_nn, positions=[1, 0])  # descending
+            c_nn, positions=[1, 0]
+        )  # descending
     with pytest.raises(ValueError):
         mpo.MPOGraph([site] * L, bc='finite', unit_cell_width=L).add_coupling_as_term(
-            c_nn, positions=[0])  # wrong count
+            c_nn, positions=[0]
+        )  # wrong count
     with pytest.raises(ValueError):
         mpo.MPOGraph([site] * L, bc='finite', unit_cell_width=L).add_coupling_as_term(
-            c_nn, positions=[0, 1], split=5)  # out of range
+            c_nn, positions=[0, 1], split=5
+        )  # out of range
 
 
 def test_MPOGraph_term_conversion():
@@ -371,7 +374,6 @@ def test_MPO_addition():
 
 @pytest.mark.parametrize('sites', [None, [0], [1], [0, 1, 2, 3], [2, 3], [3, 2]])
 def test_MPO_plus_identity(sites, alpha=0.7, beta=0.42):
-
     pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
     s = spin_half
 
@@ -604,8 +606,7 @@ def test_MPO_from_wavepacket(L=10):
     print(C_expexcted)
 
 
-
-#Will remove once this works in exact_diag
+# Will remove once this works in exact_diag
 def _dense_Hamiltonian(site, L, terms):
     """Reference dense Hamiltonian built directly from `site`'s own operators.
 
@@ -614,7 +615,7 @@ def _dense_Hamiltonian(site, L, terms):
     """
     ops = {name: site.get_op(name).to_numpy() for name in ('Sx', 'Sy', 'Sz')}
     Id = np.eye(site.dim)
-    dim = site.dim ** L
+    dim = site.dim**L
     H = np.zeros((dim, dim), dtype=complex)
     for strength, positions_ops in terms:
         factors = [Id] * L
@@ -626,16 +627,17 @@ def _dense_Hamiltonian(site, L, terms):
         H += strength * term
     return H
 
-#Will remove once this works in exact_diag
+
+# Will remove once this works in exact_diag
 def _coupling_to_dense(coupling, L):
     """Contract a Coupling's factorization into a dense (dim**L, dim**L) matrix."""
     labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
     dim = coupling.sites[0].dim
     return coupling.to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
 
+
 def test_to_single_coupling_heisenberg_and_field():
     """to_single_coupling should reproduce a hand-built sum of Heisenberg + field terms."""
-
 
     L = 4
     site = SpinSite(S=0.5, conserve=None)
@@ -673,8 +675,9 @@ def test_to_single_coupling_gap_and_split():
     sites_arg = [[0, 2], [1]]  # c_nn has an identity inserted at site 1
     prefactors = [0.7, 0.3]
 
-    H_expected = _dense_Hamiltonian(site, L, [(0.7, {0: 'Sx', 2: 'Sx'}), (0.7, {0: 'Sy', 2: 'Sy'}),
-                                               (0.7, {0: 'Sz', 2: 'Sz'}), (0.3, {1: 'Sz'})])
+    H_expected = _dense_Hamiltonian(
+        site, L, [(0.7, {0: 'Sx', 2: 'Sx'}), (0.7, {0: 'Sy', 2: 'Sy'}), (0.7, {0: 'Sz', 2: 'Sz'}), (0.3, {1: 'Sz'})]
+    )
 
     for split in ([1, 0], [0, 0]):  # scale the tensor at site 0 or at site 2
         result = to_single_coupling(couplings, sites_arg, prefactors, split, name='gap')
@@ -692,5 +695,3 @@ def test_to_single_coupling_bad_input():
     with pytest.raises(ValueError):
         # site 1 is never touched
         to_single_coupling([c_field, c_field], [[0], [2]], [1.0, 1.0], [0, 0])
-
-
