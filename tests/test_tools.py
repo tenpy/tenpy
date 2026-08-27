@@ -212,9 +212,7 @@ def test_approximate_sum_of_exp(N=100):
 
 
 def test_find_subclass():
-    with pytest.raises(AttributeError):
-        _ = tenpy.models
-    pytest.xfail('models not updated yet')
+    import tenpy.models
 
     BaseCls = tenpy.models.lattice.Lattice
     SimpleLattice = tenpy.models.lattice.SimpleLattice  # direct sublcass of Lattice
@@ -316,11 +314,8 @@ def test_setup_logging():
 
 
 def test_fixes_consistency_check_IrregularLattice():
+    pytest.skip('needs working DMRG and models')
     # tests if the bug reported at https://tenpy.johannes-hauschild.de/viewtopic.php?t=757 is fixed.
-
-    with pytest.raises(AttributeError):
-        _ = tenpy.models
-    pytest.xfail('models not updated yet')
 
     class SpinModel_triangular_finite(tenpy.models.CouplingMPOModel):
         def init_sites(self, model_params):
@@ -330,7 +325,7 @@ def test_fixes_consistency_check_IrregularLattice():
             self.add_onsite(-1, 0, 'Sz')
 
         def init_lattice(self, model_params):
-            regular_lat = tenpy.Triangular(5, 5, self.init_sites(model_params))
+            regular_lat = tenpy.models.lattice.Triangular(5, 5, self.init_sites(model_params))
             return tenpy.IrregularLattice(regular_lat, remove=[(0, 0, 0)])
 
     model = SpinModel_triangular_finite({})

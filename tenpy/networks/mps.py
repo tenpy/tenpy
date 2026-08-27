@@ -460,14 +460,19 @@ class MPSGeometry:
         return self._to_valid_site_index(i_site + int(not is_left), return_num_unit_cells)
 
     def shift_charges_unit_cells(self, charges, num_unit_cells):
-        raise NotImplementedError('TODO: shift-symmetry')
+        if not self.symmetry.trivial_shift:
+            raise NotImplementedError('TODO: shift-symmetry')
+        return charges
 
     def shift_Site_unit_cells(self, site, num_unit_cells):
-        # TODO reactivate this in get_site
-        raise NotImplementedError('TODO: shift-symmetry')
+        if not self.symmetry.trivial_shift:
+            raise NotImplementedError('TODO: shift-symmetry')
+        return site
 
     def shift_Tensor_unit_cells(self, arr, num_unit_cells, inplace: bool = False):
-        raise NotImplementedError('TODO: shift-symmetry')
+        if not self.symmetry.trivial_shift:
+            raise NotImplementedError('TODO: shift-symmetry')
+        return arr  # TODO: reactivate when we have shift symmetry
 
     def get_site(self, i: int) -> ct.Site:
         """Get the `i`-th site.

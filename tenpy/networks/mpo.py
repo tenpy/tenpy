@@ -46,7 +46,7 @@ from cyten.block_backends import Dtype
 from cyten.models.couplings import Coupling
 from cyten.symmetries import ElementarySpace
 from cyten.tensors import SymmetricTensor, dagger, permute_legs, tensor_from_grid
-from cyten.tools.krylov_based import GMRES
+from cyten.tensors.krylov_based import GMRES
 from scipy.linalg import expm
 from scipy.special import comb
 
