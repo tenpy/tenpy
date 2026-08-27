@@ -28,9 +28,11 @@ import warnings
 
 import numpy as np
 
-from ..linalg import np_conserved as npc
-from ..linalg.sparse import NpcLinearOperator, OrthogonalNpcLinearOperator, SumNpcLinearOperator
-from ..linalg.truncation import TruncationError, decompose_theta_qr_based, svd_theta, truncate
+# from ..linalg import np_conserved as npc
+# from ..linalg.sparse import NpcLinearOperator, OrthogonalNpcLinearOperator, SumNpcLinearOperator
+from cyten.tensors.planar import PlanarLinearOperator
+
+from ..linalg.truncation import TruncationError  # ,  decompose_theta_qr_based, svd_theta, truncate
 from ..networks.mpo import MPOEnvironment
 from ..networks.mps import MPSEnvironment
 from ..tools.misc import consistency_check, find_subclass
@@ -517,7 +519,7 @@ class Sweep(Algorithm):
         self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right)
         # note: this order of wrapping is most effective.
         if hasattr(self.env, 'H') and self.env.H.explicit_plus_hc:
-            self.eff_H = SumNpcLinearOperator(self.eff_H, self.eff_H.adjoint())
+            self.eff_H = npc.SumNpcLinearOperator(self.eff_H, self.eff_H.adjoint())
         if len(self.ortho_to_envs) > 0:
             self._wrap_ortho_eff_H()
 
@@ -537,7 +539,7 @@ class Sweep(Algorithm):
                 theta = self.eff_H.combine_theta(theta)
             theta.itranspose(self.eff_H.acts_on)
             ortho_vecs.append(theta)
-        self.eff_H = OrthogonalNpcLinearOperator(self.eff_H, ortho_vecs)
+        self.eff_H = npc.OrthogonalNpcLinearOperator(self.eff_H, ortho_vecs)
 
     def update_local(self, theta, **kwargs):
         """Perform algorithm-specific local update.
@@ -932,7 +934,7 @@ class IterativeSweeps(Sweep):
         self.mixer_cleanup()
 
 
-class EffectiveH(NpcLinearOperator):
+class EffectiveH(PlanarLinearOperator):
     """Prototype class for local effective Hamiltonians used in sweep algorithms.
 
     As an example, the local effective Hamiltonian for a two-site (DMRG) algorithm
@@ -2054,7 +2056,7 @@ class DensityMatrixMixer(Mixer):
         val_L[val_L < 0.0] = 0.0  # for stability reasons
         val_L /= np.sum(val_L)
         S_a = np.sqrt(val_L)
-        keep_L, _, err_L = truncate(S_a, engine.trunc_params)
+        keep_L, _, err_L = npc.truncate(S_a, engine.trunc_params)
         U.iproject(keep_L, axes='vR')  # in place
         U = U.gauge_total_charge(1, qtotal_L)
         # rho_R ~=  theta^T theta^* = V^* S U^T U* S V^T = V^* S S V^T  (for mixer -> 0)
@@ -2064,7 +2066,7 @@ class DensityMatrixMixer(Mixer):
         VH = Vc.itranspose(['vL', '(p1.vR)'])
         val_R[val_R < 0.0] = 0.0  # for stability reasons
         val_R /= np.sum(val_R)
-        keep_R, _, err_R = truncate(np.sqrt(val_R), engine.trunc_params)
+        keep_R, _, err_R = npc.truncate(np.sqrt(val_R), engine.trunc_params)
         VH.iproject(keep_R, axes='vL')
         VH = VH.gauge_total_charge(0, qtotal_R)
 
@@ -2162,7 +2164,7 @@ class SubspaceExpansion(Mixer):
                 theta_expand = npc.concatenate(stack, axis='wR')
                 IdL = 0  # of the new, concatenated leg.
             theta_expand = theta_expand.combine_legs(['wR', 'vR'], qconj=-1)
-            U, S, VH, err, _ = svd_theta(
+            U, S, VH, err, _ = npc.svd_theta(
                 theta_expand, engine.trunc_params, qtotal_LR=[theta.qtotal, None], inner_labels=['vR', 'vL']
             )
             VH = VH.split_legs('(wR.vR)')
@@ -2192,7 +2194,7 @@ class SubspaceExpansion(Mixer):
                 theta_expand = npc.concatenate(stack, axis='wR')
                 IdR = 0  # of the new, concatenated leg.
             theta_expand = theta_expand.combine_legs(['vL', 'wL'], qconj=+1)
-            U, S, VH, err, _ = svd_theta(
+            U, S, VH, err, _ = npc.svd_theta(
                 theta_expand, engine.trunc_params, qtotal_LR=[None, theta.qtotal], inner_labels=['vR', 'vL']
             )
             U = U.split_legs('(vL.wL)')
@@ -2357,7 +2359,7 @@ class VariationalCompression(IterativeSweeps):
         i0 = self.i0
         new_psi = self.psi
         old_A0 = new_psi.get_B(i0, form='A')
-        U, S, VH, err, renormalize = svd_theta(
+        U, S, VH, err, renormalize = npc.svd_theta(
             theta, self.trunc_params, qtotal_LR=[old_A0.qtotal, None], inner_labels=['vR', 'vL']
         )
         U.ireplace_label('(vL.p0)', '(vL.p)')
@@ -2558,7 +2560,7 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
         expand = self._expansion_rate(i0)
         use_eig_based_svd = self.options.get('use_eig_based_svd', False, bool)
 
-        T_Lc, S, T_Rc, form, err, renormalize = decompose_theta_qr_based(
+        T_Lc, S, T_Rc, form, err, renormalize = npc.decompose_theta_qr_based(
             old_qtotal_L=old_T_L.qtotal,
             old_qtotal_R=old_T_R.qtotal,
             old_bond_leg=old_bond_leg,

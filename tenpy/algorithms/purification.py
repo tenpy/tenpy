@@ -6,7 +6,7 @@ import logging
 
 import numpy as np
 
-from ..linalg import np_conserved as npc
+# from ..linalg import np_conserved as npc
 from ..linalg.truncation import TruncationError, svd_theta
 from . import tebd
 from .disentangler import get_disentangler

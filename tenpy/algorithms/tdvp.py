@@ -35,7 +35,7 @@ Much of the code is very similar to DMRG, and also based on the
 import logging
 import warnings
 
-from ..linalg import np_conserved as npc
+# from ..linalg import np_conserved as npc
 from ..linalg.krylov_based import LanczosEvolution
 from ..linalg.truncation import TruncationError, svd_theta
 from ..tools.misc import consistency_check

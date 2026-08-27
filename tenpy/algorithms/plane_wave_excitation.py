@@ -30,10 +30,12 @@ import numpy as np
 
 from ..algorithms.algorithm import Algorithm
 from ..algorithms.mps_common import ZeroSiteH
-from ..linalg import np_conserved as npc
+
+# from ..linalg import np_conserved as npc
 from ..linalg.charges import LegPipe
 from ..linalg.krylov_based import GMRES, Arnoldi, LanczosGroundState
-from ..linalg.sparse import BoostNpcLinearOperator, NpcLinearOperator, SumNpcLinearOperator
+
+# from ..linalg.sparse import BoostNpcLinearOperator, NpcLinearOperator, SumNpcLinearOperator
 from ..networks.momentum_mps import MomentumMPS
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 

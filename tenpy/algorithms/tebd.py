@@ -46,7 +46,7 @@ import warnings
 
 import numpy as np
 
-from ..linalg import np_conserved as npc
+# from ..linalg import np_conserved as npc
 from ..linalg import random_matrix
 from ..linalg.truncation import TruncationError, decompose_theta_qr_based, svd_theta
 from ..tools.misc import consistency_check

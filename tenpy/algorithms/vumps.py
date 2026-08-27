@@ -39,9 +39,10 @@ import warnings
 
 import numpy as np
 
-from ..linalg import np_conserved as npc
+# from ..linalg import np_conserved as npc
 from ..linalg.krylov_based import LanczosGroundState
-from ..linalg.sparse import SumNpcLinearOperator
+
+# from ..linalg.sparse import SumNpcLinearOperator
 from ..linalg.truncation import svd_theta
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS

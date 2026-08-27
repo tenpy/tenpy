@@ -39,7 +39,7 @@ import warnings
 
 import numpy as np
 
-from ..linalg import np_conserved as npc
+# from ..linalg import np_conserved as npc
 from ..linalg.krylov_based import LanczosGroundState, lanczos_arpack
 from ..linalg.truncation import svd_theta
 from ..tools.math import entropy

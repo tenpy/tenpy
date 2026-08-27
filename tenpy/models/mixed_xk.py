@@ -68,7 +68,7 @@ import itertools as it
 
 import numpy as np
 
-from ..linalg import np_conserved as npc
+# from ..linalg import np_conserved as npc
 from ..networks.site import FermionSite
 from ..networks.terms import TermList
 from ..tools.misc import inverse_permutation, to_array, to_iterable
