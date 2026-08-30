@@ -364,11 +364,11 @@ def pad(a, w_l=0, v_l=0, w_r=0, v_r=0, axis=0):
         the array to be padded
     w_l : int
         the width to be padded in the front
-    v_l : dtype
+    v_l : scalar
         the value to be inserted before `a`
     w_r : int
         the width to be padded after the last index
-    v_r : dtype
+    v_r : scalar
         the value to be inserted after `a`
     axis : int
         the axis along which to pad

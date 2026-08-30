@@ -265,7 +265,7 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
 
     Parameters
     ----------
-    theta : :class:`~tenpy.linalg.np_conserved.Array`, shape ``(M, N)``
+    theta : (M, N) :class:`~tenpy.linalg.np_conserved.Array`
         The matrix, on which the singular value decomposition (SVD) is performed.
         Usually, `theta` represents the wavefunction, such that the SVD is a Schmidt decomposition.
     trunc_par : dict
@@ -323,7 +323,7 @@ def eigh_rho(rho, trunc_par, UPLO='L', sort=None):
 
     Parameters
     ----------
-    rho : :class:`~tenpy.linalg.np_conserved.Array`, shape ``(M, M)``
+    rho : (M, N) :class:`~tenpy.linalg.np_conserved.Array`
         The matrix, on which the eigenvalue decomposition (EIG) is performed.
         Usually, `rho` represents a density matrix and is assumed to be hermitian AND positive
         so that the eigenvalues are non-negative.

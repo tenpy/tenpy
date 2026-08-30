@@ -4446,7 +4446,7 @@ class MPS(BaseMPSExpectationValue):
 
         Returns
         -------
-        norm_error: array, shape (L, 2)
+        norm_error: (L, 2) array
             For each site the norm error to the left and right.
             The error ``norm_error[i, 0]`` is defined as the norm-difference between
             the following networks::

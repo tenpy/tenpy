@@ -43,7 +43,7 @@ def matvec_to_array(H):
 
     Returns
     -------
-    H_dense : ndarray, shape ``(H.dim, H.dim)``
+    H_dense : (H.dim, H.dim) ndarray
         a dense array version of `H`.
 
     """
