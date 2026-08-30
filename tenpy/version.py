@@ -20,7 +20,7 @@ __all__ = ['version', 'released', 'short_version', 'git_revision', 'full_version
 
 # hard-coded version for people without git...
 #: current release version as a string
-version = '1.1.1'
+version = '1.1.99991'
 
 #: whether this is a released version or modified
 released = False
