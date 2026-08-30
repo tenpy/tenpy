@@ -387,3 +387,12 @@ def test_set_common_charges():
     assert f1.charge_to_JW_parity is not None
     f1.test_sanity()
     f2.test_sanity()
+
+
+def test_fixes_630():
+    # See PR #630
+    ferm_site = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
+    spin_site = site.SpinHalfSite(conserve='Sz')
+    site.set_common_charges([ferm_site, spin_site], new_charges='same')
+    grouped_site = site.GroupedSite([ferm_site, spin_site], labels=['e', 'i'], charges='same')
+    grouped_site.test_sanity()
