@@ -7,8 +7,11 @@ on:
   release:
     types: [created]
 
+  # when a commit is pushed to the release branch, build all artifacts but do not publish
   # when a tagged commit is pushed to *any* branch (-> publish to testPyPI)
   push:
+    branches:
+      - release
     tags:
       - '**'  # on any tag
 
@@ -76,17 +79,19 @@ jobs:
         python -m twine check --strict dist/*
         python -m twine check --strict dist-wheels/*
 
-    # Publish to TestPyPI, only  if it is *not* a release
+    # For an untagged push, we stop here, after building and testing the wheels
+
+    # Publish to TestPyPI, only on non-release tag
     #  For a release, pushing the unreleased tag should have already caused this workflow to
     #  publish to TestPyPI. Thus, we can not publish the same version number again.
     - name: Publish wheels to TestPyPI
-      if: github.event_name != 'release'
+      if: github.event_name != 'release' && github.ref != 'refs/heads/release'
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         repository-url: https://test.pypi.org/legacy/
         packages-dir: dist-wheels/
     - name: Publish sdist to TestPyPI
-      if: github.event_name != 'release'
+      if: github.event_name != 'release' && github.ref != 'refs/heads/release'
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         repository-url: https://test.pypi.org/legacy/

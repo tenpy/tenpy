@@ -3,9 +3,10 @@ Checklist for a new release
 
 Follow this checklist when creating a new release, i.e. updating the version number.
 
-#. Make a new branch. Jakob usually uses the ``release`` branch.
-   This makes it so that you can rewrite history as needed, if publishing fails.
-   See troubleshooting section below if you need that.
+#. You should work in the ``release`` branch.
+   Make sure that it is up to date with main.
+   The publish action is configured to build and test wheels on any push to this branch.
+   Working in a separate branch also allows you to rewrite history if something goes wrong.
    It is probably a good idea to open a PR, to keep track.
 
 #. Check deprecated features, e.g. full-text search for ``.. deprecated ::``, ``DeprecationWarning``
