@@ -1,6 +1,8 @@
 """A collection of tests to check the functionality of `tenpy.vumps`"""
 # Copyright (C) TeNPy Developers, Apache license
 
+import platform
+
 import numpy as np
 import pytest
 from scipy import integrate
@@ -35,6 +37,9 @@ params = [
 
 @pytest.mark.parametrize('L, engine, mixer', params)
 @pytest.mark.slow
+@pytest.mark.skipif(
+    platform.system() == 'Darwin', reason='VUMPS seems not stable on MacOS, possibly due to LAPACK, see issue 648'
+)
 def test_vumps(L, engine, mixer, g=1.2):
     model_params = dict(L=L, J=1.0, g=g, bc_MPS='infinite', conserve=None)
     M = TFIChain(model_params)
