@@ -202,45 +202,36 @@ __all__ = [
 
 mps_contraction_diagram_operations: dict[str, ct.PlanarDiagram] = {
     'LP2 @ TM': ct.PlanarDiagram(
-        tensors='LP[vR*, vR], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
-        definition='LP:vR @ ket:vL, ket:p @ bra:p*, LP:vR* @ bra:vL*, ket:! @ bra:!, ket:vR -> vR, bra:vR* -> vR*',
+        tensors='LP[vR*, vR], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='LP:vR @ ket:vL, ket:p @ bra:p*, LP:vR* @ bra:vL*, ket:vR -> vR, bra:vR* -> vR*',
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
-        allow_multiple_charged_tensors=True,
     ),
     'LP2 @ bra-W-ket2': ct.PlanarDiagram(
-        tensors='LP[vR*, vR], W[p, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
-        definition=(
-            'LP:vR @ ket:vL, ket:p @ W:p*, LP:vR* @ bra:vL*, bra:p* @ W:p, ket:! @ bra:!, ket:vR -> vR, bra:vR* -> vR*'
-        ),
+        tensors='LP[vR*, vR], W[p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition=('LP:vR @ ket:vL, ket:p @ W:p*, LP:vR* @ bra:vL*, bra:p* @ W:p, ket:vR -> vR, bra:vR* -> vR*'),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
-        allow_multiple_charged_tensors=True,
     ),
     'LP3 @ bra-W-ket3': ct.PlanarDiagram(
-        tensors='LP[vR*, wR, vR], W[wL, p, wR, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        tensors='LP[vR*, wR, vR], W[wL, p, wR, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
         definition=(
-            'LP:vR @ ket:vL, ket:p @ W:p*, LP:wR @ W:wL, LP:vR* @ bra:vL*, W:p @ bra:p*, ket:! @ bra:!, '
+            'LP:vR @ ket:vL, ket:p @ W:p*, LP:wR @ W:wL, LP:vR* @ bra:vL*, W:p @ bra:p*, '
             'ket:vR -> vR, bra:vR* -> vR*, W:wR -> wR'
         ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL', 'wR']),
-        allow_multiple_charged_tensors=True,
     ),
     'LP2 @ bra-W-ket3': ct.PlanarDiagram(
-        tensors='LP[vR*, vR], W[p, wR, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        tensors='LP[vR*, vR], W[p, wR, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
         definition=(
-            'LP:vR @ ket:vL, ket:p @ W:p*, LP:vR* @ bra:vL*, W:p @ bra:p*, ket:! @ bra:!, '
-            'ket:vR -> vR, bra:vR* -> vR*, W:wR -> wR'
+            'LP:vR @ ket:vL, ket:p @ W:p*, LP:vR* @ bra:vL*, W:p @ bra:p*, ket:vR -> vR, bra:vR* -> vR*, W:wR -> wR'
         ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wR']),
-        allow_multiple_charged_tensors=True,
     ),
     'LP3 @ bra-W-ket2': ct.PlanarDiagram(
-        tensors='LP[vR*, wR, vR], W[wL, p, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        tensors='LP[vR*, wR, vR], W[wL, p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
         definition=(
-            'LP:vR @ ket:vL, ket:p @ W:p*, LP:wR @ W:wL, LP:vR* @ bra:vL*, W:p @ bra:p*, ket:! @ bra:!, '
-            'ket:vR -> vR, bra:vR* -> vR*'
+            'LP:vR @ ket:vL, ket:p @ W:p*, LP:wR @ W:wL, LP:vR* @ bra:vL*, W:p @ bra:p*, ket:vR -> vR, bra:vR* -> vR*'
         ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL', 'wR']),
-        allow_multiple_charged_tensors=True,
     ),
     'LP2 @ RP2': ct.PlanarDiagram(
         tensors='LP[vR*, vR], RP[vL*, vL]',
@@ -253,36 +244,29 @@ mps_contraction_diagram_operations: dict[str, ct.PlanarDiagram] = {
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], w=['wL', 'wR']),
     ),
     'TM @ RP2': ct.PlanarDiagram(
-        tensors='RP[vL*, vL], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
-        definition='RP:vL @ ket:vR, ket:p @ bra:p*, RP:vL* @ bra:vR*, ket:! @ bra:!, ket:vL -> vL, bra:vL* -> vL*',
+        tensors='RP[vL*, vL], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='RP:vL @ ket:vR, ket:p @ bra:p*, RP:vL* @ bra:vR*, ket:vL -> vL, bra:vL* -> vL*',
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
-        allow_multiple_charged_tensors=True,
     ),
     'bra-W-ket2 @ RP2': ct.PlanarDiagram(
-        tensors='RP[vL*, vL], W[p, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
-        definition=(
-            'RP:vL @ ket:vR, ket:p @ W:p*, RP:vL* @ bra:vR*, bra:p* @ W:p, ket:! @ bra:!, ket:vL -> vL, bra:vL* -> vL*'
-        ),
+        tensors='RP[vL*, vL], W[p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition=('RP:vL @ ket:vR, ket:p @ W:p*, RP:vL* @ bra:vR*, bra:p* @ W:p, ket:vL -> vL, bra:vL* -> vL*'),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
-        allow_multiple_charged_tensors=True,
     ),
     'bra-W-ket3 @ RP3': ct.PlanarDiagram(
-        tensors='RP[vL*, vL, wL], W[wL, p, wR, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        tensors='RP[vL*, vL, wL], W[wL, p, wR, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
         definition=(
-            'RP:vL @ ket:vR, ket:p @ W:p*, RP:wL @ W:wR, RP:vL* @ bra:vR*, W:p @ bra:p*, ket:! @ bra:!, '
+            'RP:vL @ ket:vR, ket:p @ W:p*, RP:wL @ W:wR, RP:vL* @ bra:vR*, W:p @ bra:p*, '
             'ket:vL -> vL, bra:vL* -> vL*, W:wL -> wL'
         ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL', 'wR']),
-        allow_multiple_charged_tensors=True,
     ),
     'bra-W-ket3 @ RP2': ct.PlanarDiagram(
-        tensors='RP[vL*, vL], W[wL, p, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        tensors='RP[vL*, vL], W[wL, p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
         definition=(
-            'RP:vL @ ket:vR, ket:p @ W:p*, RP:vL* @ bra:vR*, W:p @ bra:p*, ket:! @ bra:!, '
-            'ket:vL -> vL, bra:vL* -> vL*, W:wL -> wL'
+            'RP:vL @ ket:vR, ket:p @ W:p*, RP:vL* @ bra:vR*, W:p @ bra:p*, ket:vL -> vL, bra:vL* -> vL*, W:wL -> wL'
         ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL']),
-        allow_multiple_charged_tensors=True,
     ),
 }
 
@@ -548,7 +532,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             Must have the same length as ``sites``. Must fulfill ``offsets[j][i + 1] > offsets[j][i]``
             If list of int: Apply the offsets to every entry in ``sites``.
             If ``None`` (default), ``op`` acts on consecutive sites, which is equivalent to
-            ``offsets = range(len(op))``.
+            ``offsets = range(op.num_sites)`` for couplings.
 
         Returns
         -------
@@ -679,7 +663,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             Must have the same length as ``sites``. Must fulfill ``offsets[j][i + 1] > offsets[j][i]``
             If list of int: Apply the offsets to every entry in ``sites``.
             If ``None`` (default), ``op`` acts on consecutive sites, which is equivalent to
-            ``offsets = range(len(op))``.
+            ``offsets = range(op.num_sites)`` for couplings.
         axes : None | (list of str, list of str)
             Two lists of each `n` leg labels giving the physical legs of the operator used for
             contraction. The first `n` legs are contracted with conjugated `B`,
@@ -1081,6 +1065,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 C_gtr = self._corr_right(
                     op_L=op1, op_R=op2, sites_L=sites_i, sites_R=sites_j_gtr, split=False, opstr=opstr
                 )
+                C_gtr = np.array([val.to_numpy() for val in C_gtr])
                 C[x, mask_j_gtr] = C_gtr
                 if hermitian:
                     C[mask_j_gtr, x] = np.conj(C_gtr)
@@ -1094,6 +1079,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 C_sml = self._corr_left(
                     op_L=op2, op_R=op1, sites_L=sites_j_sml[perm], sites_R=sites_i, split=False, opstr=opstr
                 )
+                C_sml = np.array([val.to_numpy() for val in C_sml])
                 C[x, np.where(mask_j_sml)[0][perm]] = C_sml
 
             # overlapping sites_i and sites_j
@@ -1107,12 +1093,12 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                     continue
                 op1 = self.get_op([op1], sites_i[0], return_four_legged=True)
                 if not isinstance(op1, ct.Coupling):
-                    op1 = ct.Coupling(sites_i, [op1])
+                    op1 = ct.Coupling([self.sites[s] for s in sites_i], [op1])
                 op2 = self.get_op([op2], sites_j[0], return_four_legged=True)
                 if not isinstance(op2, ct.Coupling):
-                    op2 = ct.Coupling(sites_j, [op2])
+                    op2 = ct.Coupling([self.sites[s] for s in sites_j], [op2])
                 op_combined, sites_combined = self._multiply_couplings(op1, op2, sites_i, sites_j)
-                C[x, y] = self.expectation_value(op=op_combined, sites=0, offsets=sites_combined)
+                C[x, y] = self.expectation_value(op=op_combined, sites=0, offsets=sites_combined)[0].to_numpy()
                 if hermitian:
                     C[y, x] = np.conj(C[x, y])
         return self._normalize_exp_val(C)
@@ -1134,7 +1120,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         sites_L : list of int
             Sites on which the left part of ``coupling`` acts for each evaluation of the correlator;
             the ``i``th tensor of the left part acts on site ``sites_L[i]``.
-            Must fulfill ``0 < len(sites_L) < len(couplings) - 1`` and must be sorted.
+            Must fulfill ``0 < len(sites_L) < couplings.num_sites - 1`` and must be sorted.
         distance : list of int
             Distances between the left and right parts of the coupling for each evaluation of the
             correlaton function. Each entry corresponds to the number of sites between the final
@@ -1150,7 +1136,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             of ``coupling`` acts on site ``sites_L[-1] + 1 + distances[j] + offsets_R[j][i]``.
             Must have the same length as ``distances`` and must fulfill ``offsets_R[j][i + 1] > offsets_R[j][i]``.
             The offsets applied to each entry in ``distance`` must fulfill
-            ``len(coupling) == len(sites_L) + len(offsets_R[i])``.
+            ``coupling.num_sites == len(sites_L) + len(offsets_R[i])``.
             If list of int: Apply offsets to every entry in ``distances``.
         opstr : None | (list of) { :class:`~cyten.Tensor` | str }
             Ignored by default (``None``).
@@ -1208,7 +1194,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         sites_R : list of int
             Sites on which the right part of ``coupling`` acts for each evaluation of the correlator;
             the ``i`` th tensor of the right part acts on site ``sites_R[i]``.
-            Must fulfill ``0 < len(sites_R) < len(couplings) - 1`` and must be sorted.
+            Must fulfill ``0 < len(sites_R) < couplings.num_sites - 1`` and must be sorted.
         distance : list of int
             Distances between the left and right parts of the coupling for each evaluation of the
             correlaton function. Each entry corresponds to the number of sites between the final
@@ -1224,7 +1210,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             of ``coupling`` acts on site ``sites_R[0] - 1 - distances[j] + offsets_L[j][i]``.
             Must have the same length as ``distances`` and must fulfill ``offsets_L[j][i + 1] > offsets_L[j][i]``.
             The offsets applied to each entry in ``distance`` must fulfill
-            ``len(coupling) == len(sites_R) + len(offsets_L[i])``.
+            ``coupling.num_sites == len(sites_R) + len(offsets_L[i])``.
             If list of int: Apply offsets to every entry in ``distances``.
         opstr : None | (list of) { :class:`~cyten.Tensor` | str }
             Ignored by default (``None``).
@@ -1258,8 +1244,8 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         sites_L = self._correlation_function_split_args(
             coupling=coupling, sites=sites_R, distances=distances, offsets=offsets_L, right=False
         )
-        coupling_left = coupling.factorization[: offsets_L.shape[1]]
-        coupling_right = coupling.factorization[offsets_L.shape[1] :]
+        coupling_left = coupling.factorization[: sites_L.shape[1]]
+        coupling_right = coupling.factorization[sites_L.shape[1] :]
         result = self._corr_left(
             op_L=coupling_left, op_R=coupling_right, sites_L=sites_L, sites_R=sites_R, split=True, opstr=opstr
         )
@@ -1497,9 +1483,11 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 if op is not None:
                     ket_B = ct.tensors.partial_compose(ket_B, op, tensor1_first_leg='p')
                 LP = mps_contraction_diagram_operations['LP2 @ TM'].evaluate(
-                    LP=LP,
-                    ket=ket_B,
-                    bra=bra.get_B(site + i),
+                    dict(
+                        LP=LP,
+                        ket=ket_B,
+                        bra=bra.get_B(site + i).hc,
+                    )
                 )
             return LP
         for i in range(num):
@@ -1508,7 +1496,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             if op is not None:
                 identity = ct.tensors.partial_compose(identity, op, tensor1_first_leg='p*')
             LP = mps_contraction_diagram_operations['LP3 @ bra-W-ket3'].evaluate(
-                LP=LP, ket=ket.get_B(site + i), bra=bra.get_B(site + i), W=identity
+                dict(LP=LP, ket=ket.get_B(site + i), bra=bra.get_B(site + i).hc, W=identity)
             )
         return LP
 
@@ -1554,9 +1542,11 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 if op is not None:
                     ket_B = ct.tensors.partial_compose(ket_B, op, tensor1_first_leg='p')
                 RP = mps_contraction_diagram_operations['TM @ RP2'].evaluate(
-                    RP=RP,
-                    ket=ket_B,
-                    bra=bra.get_B(site - i),
+                    dict(
+                        RP=RP,
+                        ket=ket_B,
+                        bra=bra.get_B(site - i).hc,
+                    )
                 )
             return RP
         for i in range(num):
@@ -1565,7 +1555,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             if op is not None:
                 identity = ct.tensors.partial_compose(identity, op, tensor1_first_leg='p*')
             RP = mps_contraction_diagram_operations['bra-W-ket3 @ RP3'].evaluate(
-                RP=RP, ket=ket.get_B(site - i), bra=bra.get_B(site - i), W=identity
+                dict(RP=RP, ket=ket.get_B(site - i), bra=bra.get_B(site - i).hc, W=identity)
             )
         return RP
 
@@ -1629,7 +1619,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 # OPTIMIZE reuse old identities for identical sites?
                 W = ket.get_site(site).identity_tensor(w=W.get_leg('wR'))
             new_LP = mps_contraction_diagram_operations['LP3 @ bra-W-ket3'].evaluate(
-                LP=new_LP, ket=ket.get_B(site), bra=bra.get_B(site).hc, W=W
+                dict(LP=new_LP, ket=ket.get_B(site), bra=bra.get_B(site).hc, W=W)
             )
         return new_LP
 
@@ -1693,13 +1683,15 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 # OPTIMIZE reuse old identities for identical sites?
                 W = ket.get_site(site).identity_tensor(w=W.get_leg('wL'))
             new_RP = mps_contraction_diagram_operations['bra-W-ket3 @ RP3'].evaluate(
-                RP=new_RP, ket=ket.get_B(site), bra=bra.get_B(site).hc, W=W
+                dict(RP=new_RP, ket=ket.get_B(site), bra=bra.get_B(site).hc, W=W)
             )
         new_RP = mps_contraction_diagram_operations['bra-W-ket3 @ RP3'].evaluate(
-            RP=new_RP,
-            ket=ket.get_B(sites[0], form=form_on_first_site),
-            bra=bra.get_B(sites[0], form=form_on_first_site).hc,
-            W=W,
+            dict(
+                RP=new_RP,
+                ket=ket.get_B(sites[0], form=form_on_first_site),
+                bra=bra.get_B(sites[0], form=form_on_first_site).hc,
+                W=W,
+            )
         )
         return new_RP
 
@@ -1713,7 +1705,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             # can only be on-site operator
             n = 1
         else:
-            n = len(op.factorization)
+            n = op.num_sites
 
         bc_err = 'Specified sites and offsets are inconsistent with operator length and boundary conditions'
         if sites is None:
@@ -1772,7 +1764,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             LP=LP, bra=bra, ket=ket, ops=op.factorization, sites=sites, form_on_first_site='Th'
         )
         LP = ct.squeeze_legs(LP, 'wR')
-        return mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(LP=LP, RP=self.get_RP(sites[-1]))
+        return mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(dict(LP=LP, RP=self.get_RP(sites[-1])))
 
     def _expectation_value_onsite_op(self, bra: MPS, ket: MPS, op: ct.Tensor, site: int) -> complex | float:
         """Expectation value ``<bra|op|ket>`` with ``op`` being an on-site :class:cyten.Tensor.
@@ -1789,12 +1781,14 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         """
         res = mps_contraction_diagram_operations['LP2 @ bra-W-ket2'].evaluate(
-            LP=self.get_LP(site),
-            ket=ket.get_theta(site),
-            bra=bra.get_theta(site).hc,
-            W=op,
+            dict(
+                LP=self.get_LP(site),
+                ket=ket.get_theta(site, n=1).relabel({'p0': 'p'}),
+                bra=bra.get_theta(site, n=1).relabel({'p0': 'p'}).hc,
+                W=op,
+            )
         )
-        return mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(LP=res, RP=self.get_RP(site))
+        return mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(dict(LP=res, RP=self.get_RP(site)))
 
     def _correlation_function_args(
         self,
@@ -1808,8 +1802,8 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         """Get default arguments of self.correlation_function()."""
         # Note: we do not get op1 and op2 here since when they are str,
         # they can still correspond to different tensors on different sites
-        width1 = len(op1) if isinstance(op1, ct.Coupling) else 1
-        width2 = len(op2) if isinstance(op2, ct.Coupling) else 1
+        width1 = op1.num_sites if isinstance(op1, ct.Coupling) else 1
+        width2 = op2.num_sites if isinstance(op2, ct.Coupling) else 1
         if sites1 is None:
             sites1 = range(0, self.L - width1 + 1)
         elif isinstance(sites1, int):
@@ -1819,7 +1813,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         elif isinstance(sites2, int):
             sites2 = range(0, sites2)
 
-        site_list = [sites1, sites2]
+        site_list = np.asarray([sites1, sites2])
         offset_list = [offsets1, offsets2]
         widths = [width1, width2]
         offset_err = 'specified offsets are not sorted'
@@ -1864,7 +1858,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             assert len(distances) == offsets.shape[0], 'number of specified distances and offsets must match'
             assert np.all(offsets[:, :-1] <= offsets[:, 1:]), offset_err
         msg = 'coupling inconsistent with specified number of sites and offsets'
-        assert len(coupling) == len(sites) + offsets.shape[1], msg
+        assert coupling.num_sites == len(sites) + offsets.shape[1], msg
         # shift offsets such that they include the distances; then all
         # information is in the offsets and distances can be ignored
         dist_offset_err = (
@@ -1923,14 +1917,14 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             current_site += translate
 
             if not isinstance(op_R, list):
-                op_R = self.get_op([op_R], sites_R[i, 0])
+                op_R = self.get_op([op_R], sites_R[i, 0], return_four_legged=True)
                 op_R = op_R.factorization if isinstance(op_R, ct.Coupling) else [op_R]
             res_i = self._contract_tensors_LP(
-                LP=LP, bta=bra, ket=ket, ops=op_R, sites=sites_R[i, :], form_on_first_site='B'
+                LP=LP, bra=bra, ket=ket, ops=op_R, sites=sites_R[i, :], form_on_first_site='B'
             )
             res_i = ct.squeeze_legs(res_i, 'wR')
             RP = self.get_RP(sites_R[i, -1])
-            res.append(mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(LP=res_i, RP=RP))
+            res.append(mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(dict(LP=res_i, RP=RP)))
         return res
 
     def _corr_left(
@@ -1970,14 +1964,14 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             current_site -= translate
 
             if not isinstance(op_L, list):
-                op_L = self.get_op([op_L], sites_L[i, 0])
+                op_L = self.get_op([op_L], sites_L[i, 0], return_four_legged=True)
                 op_L = op_L.factorization if isinstance(op_L, ct.Coupling) else [op_L]
             res_i = self._contract_tensors_RP(
-                RP=RP, bta=bra, ket=ket, ops=op_L, sites=sites_L[i, :], form_on_first_site='Th'
+                RP=RP, bra=bra, ket=ket, ops=op_L, sites=sites_L[i, :], form_on_first_site='Th'
             )
             res_i = ct.squeeze_legs(res_i, 'wL')
             LP = self.get_LP(sites_L[i, 0])
-            res.append(mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(LP=LP, RP=res_i))
+            res.append(mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(dict(LP=LP, RP=res_i)))
         return res
 
     def _multiply_couplings(
@@ -2023,28 +2017,28 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             Sites on which the tensors in `new_coupling.factorization` act.
 
         """
-        new_idcs = sorted(set(*sites1, *sites2))
+        new_idcs = sorted(set(sites1 + sites2))
         new_sites = []  # actual sites, not site indices
         i1 = 0  # index in coupling1
         i2 = 0  # index in coupling2
         Ws = []
         for site_idx in new_idcs:
-            if i1 < len(coupling1) and site_idx == sites1[i1]:
+            if i1 < coupling1.num_sites and site_idx == sites1[i1]:
                 W1 = coupling1.factorization[i1]
                 new_sites.append(coupling1.sites[i1])
                 i1 += 1
             else:
                 assert site_idx == sites2[i2]
                 new_sites.append(coupling2.sites[i2])
-                if i1 == 0 or i1 == len(coupling1):
+                if i1 == 0 or i1 == coupling1.num_sites:
                     # site_idx before or after coupling1 -> no need to contract with identity
                     W1 = None
                 else:
                     W1 = new_sites[-1].identity_tensor(w=Ws[-1].get_leg('wR'))
-            if i2 < len(coupling2) and site_idx == sites2[i2]:
+            if i2 < coupling2.num_sites and site_idx == sites2[i2]:
                 W2 = coupling2.factorization[i2]
                 i2 += 1
-            elif i2 == 0 or i2 == len(coupling2):
+            elif i2 == 0 or i2 == coupling2.num_sites:
                 W2 = None
             else:
                 W2 = new_sites[-1].identity_tensor(w=Ws[-1].get_leg('wR'))
@@ -2059,11 +2053,11 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 # left or right leg, add a trivial one.
                 if i1 == 1:
                     W1 = ct.squeeze_legs(W1, 'wL')
-                if i1 == len(coupling1):
+                if i1 == coupling1.num_sites:
                     W1 = ct.squeeze_legs(W1, 'wR')
                 if i2 == 1:
                     W2 = ct.squeeze_legs(W2, 'wL')
-                if i2 == len(coupling2):
+                if i2 == coupling2.num_sites:
                     W2 = ct.squeeze_legs(W2, 'wR')
 
                 relabel1 = {}
@@ -2096,8 +2090,8 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 if not W.has_label('wR'):
                     W = ct.add_trivial_leg(W, domain_pos=1, label='wR')
             Ws.append(W)
-        assert i1 == len(coupling1)
-        assert i2 == len(coupling2)
+        assert i1 == coupling1.num_sites
+        assert i2 == coupling2.num_sites
         new_coupling = ct.Coupling(new_sites, Ws)
         return new_coupling, new_idcs
 
@@ -2219,19 +2213,20 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         op = op_list[i_in_op_list]
         if isinstance(op, str):
             op = self.get_site(i).get_op(op)
-        if op is not None and not op.symmetry.trivial_shift:
-            # TODO this was an elif before. Should we ignore shifts for onsite operators?
-            # shift every tensor in a coupling?
-            raise NotImplementedError('TODO: shift-symmetry')
-        if return_four_legged:
-            for op_i in op:
-                if not isinstance(op_i, ct.Tensor):
-                    continue
-                if 'wL' not in op_i.labels:
-                    op_i = ct.add_trivial_leg(op_i, codomain_pos=0, label='wL')
-                if 'wR' not in op_i.labels:
-                    op_i = ct.add_trivial_leg(op_i, domain_pos=1, label='wR')
-                assert op_i.labels_are('wL', 'wR', 'p', 'p*')
+        if op is not None:
+            sym = op.sites[0].symmetry if isinstance(op, ct.Coupling) else op.symmetry
+            if not sym.trivial_shift:
+                # TODO this was an elif before. Should we ignore shifts for onsite operators?
+                # shift every tensor in a coupling?
+                raise NotImplementedError('TODO: shift-symmetry')
+        if return_four_legged and isinstance(op, ct.Tensor):
+            if isinstance(op, ct.DiagonalTensor):
+                op = op.as_SymmetricTensor()
+            if 'wL' not in op.labels:
+                op = ct.add_trivial_leg(op, codomain_pos=0, label='wL')
+            if 'wR' not in op.labels:
+                op = ct.add_trivial_leg(op, domain_pos=1, label='wR')
+            assert op.labels_are('wL', 'wR', 'p', 'p*')
         return op
 
     @abstractmethod
@@ -2775,7 +2770,7 @@ class MPS(BaseMPSExpectationValue):
             if isinstance(p_st, str):
                 p_st = site.state_labels[p_st]  # translate labels into "int"
             if isinstance(p_st, int):
-                charge_p = site.leg.defining_sectors[p_st]
+                charge_p = site.leg.idx_to_sector(p_st)
                 chargeR = sym.fusion_outcomes(virtual_spaces[-1].defining_sectors[0], charge_p)
                 virtual_spaces.append(ct.ElementarySpace.from_defining_sectors(sym, chargeR))
                 B = np.zeros((site.dim, 1, 1))
@@ -2785,9 +2780,11 @@ class MPS(BaseMPSExpectationValue):
                     raise ValueError('p_state incompatible with local dim:' + repr(p_st))
                 # look at all charges where p_st is nonzero and fuse them with the left charge,
                 # we must have unique fusion product on right leg if product state
-                charge_p = site.leg.defining_sectors[p_st != 0]
-                chargeR = sym.fusion_outcomes_broadcast(virtual_spaces[-1].defining_sectors, charge_p)
-                assert np.all(chargeR == chargeR[0]), (
+                charge_p = [site.leg.idx_to_sector(i) for i, p in enumerate(p_st) if p != 0]
+                # need to make sure to have the correct number of charges for fusion_outcomes_broadcast
+                chargeL_ = [virtual_spaces[-1].defining_sectors[0]] * len(charge_p)
+                chargeR = sym.fusion_outcomes_broadcast(chargeL_, charge_p)
+                assert np.all([charge == chargeR[0] for charge in chargeR]), (
                     f'specified on-site state incompatible with product state for {sym}'
                 )
                 virtual_spaces.append(ct.ElementarySpace.from_defining_sectors(sym, chargeR[0]))
@@ -3060,7 +3057,7 @@ class MPS(BaseMPSExpectationValue):
 
         """
         sites = list(sites)
-        backend = ct.backends.get_same_backend(sites)
+        backend = ct.backends.get_same_backend(*sites)
         L = len(sites)
         sym = sites[0].symmetry
         if bc == 'infinite':
@@ -3167,7 +3164,7 @@ class MPS(BaseMPSExpectationValue):
             'Use from_Bflat_virtual_spaces for non-Abelian symmetries'
         )
         assert sym.is_abelian, sym_err
-        backend = ct.backends.get_same_backend(sites)
+        backend = ct.backends.get_same_backend(*sites)
         Bflat = list(Bflat)
         if len(Bflat) != len(sites):
             raise ValueError('Length of Bflat does not match number of sites.')
@@ -3276,7 +3273,7 @@ class MPS(BaseMPSExpectationValue):
         sites = list(sites)
         sym = sites[0].symmetry
         assert sym.can_be_dropped
-        backend = ct.backends.get_same_backend(sites)
+        backend = ct.backends.get_same_backend(*sites)
         L = len(sites)
         Bflat = list(Bflat)
         if len(Bflat) != L:
@@ -3314,6 +3311,7 @@ class MPS(BaseMPSExpectationValue):
                 device=device,
                 understood_braiding=True,
             )
+            Bs.append(B)
         if SVs is None:
             new_SVs = [
                 ct.DiagonalTensor.from_eye(leg, backend, ['vL', 'vR'], dtype.to_real, device) for leg in virtual_spaces
@@ -3436,7 +3434,7 @@ class MPS(BaseMPSExpectationValue):
         B_list = [None] * L
         S_list = [None] * (L + 1)
         for i in range(L - 1, 0, -1):
-            psi, S, B = ct.truncated_svd(psi, new_labels=['vR', 'vL'], svd_min=cutoff)
+            psi, S, B, _, _ = ct.truncated_svd(psi, new_labels=['vR', 'vL'], svd_min=cutoff)
             # bring S and B to default form
             S /= ct.norm(S)
             B = ct.planar_permute_legs(B, domain=['vR'])
@@ -5529,9 +5527,9 @@ class MPS(BaseMPSExpectationValue):
         """
         err = np.empty((self.L, 2), dtype=float)
         for i in range(self.L):
-            th = self.get_theta(i, 1)
+            th = self.get_theta(i, 1).relabel({'p0': 'p'})
             # use the planar diagrams to account for charged tensors
-            rho_L = mps_contraction_diagram_operations['TM @ RP2'].evaluate(RP=self.get_RP(i), ket=th, bra=th.hc)
+            rho_L = mps_contraction_diagram_operations['TM @ RP2'].evaluate(dict(RP=self.get_RP(i), ket=th, bra=th.hc))
             # same leg arrangement as obtained for S (diagonal tensor): vL in domain and vL* in codomain
             rho_L = ct.planar_permute_legs(rho_L, codomain='vL*')
             S = self.get_SL(i)
@@ -5542,17 +5540,17 @@ class MPS(BaseMPSExpectationValue):
                 assert S.num_legs == 2
                 S = S.T
                 rho_L2 = ct.compose(S.hc, S)
-            err[i, 0] = ct.norm(rho_L - rho_L2)
+            err[i, 0] = ct.norm(rho_L - rho_L2).to_numpy()
 
-            rho_R = mps_contraction_diagram_operations['LP2 @ TM'].evaluate(LP=self.get_LP(i), ket=th, bra=th.hc)
+            rho_R = mps_contraction_diagram_operations['LP2 @ TM'].evaluate(dict(LP=self.get_LP(i), ket=th, bra=th.hc))
             rho_R = ct.planar_permute_legs(rho_R, codomain='vR*')
             S = self.get_SR(i)
             if isinstance(S, ct.DiagonalTensor):
-                rho_R2 = S.relabel({'vL': 'vR*'}) ** 2
+                rho_R2 = (S**2).relabel({'vL': 'vR*'})
             else:
                 assert S.num_legs == 2
                 rho_R2 = ct.compose(S.hc, S)
-            err[i, 1] = ct.norm(rho_R - rho_R2)
+            err[i, 1] = ct.norm(rho_R - rho_R2).to_numpy()
         return err
 
     def canonical_form(self, **kwargs):
@@ -5638,14 +5636,16 @@ class MPS(BaseMPSExpectationValue):
 
         if self.bc == 'segment':
             # also need to calculate new singular values on the very right
-            U, S, VR_segment = ct.truncated_svd(M, new_labels=['vR', 'vL'], charge_leg_top=False, svd_min=cutoff)
+            U, S, VR_segment, _, _ = ct.truncated_svd(M, new_labels=['vR', 'vL'], charge_leg_top=False, svd_min=cutoff)
             S /= ct.norm(S)
             self.set_SR(L - 1, S)
             M = ct.scale_axis(U, S, 'vR')
         else:
             VR_segment = None
         # sweep from right to left, calculating all the singular values
-        U, S, V = ct.truncated_svd(ct.planar_permute_legs(M, codomain=['vL']), new_labels=['vR', 'vL'], svd_min=cutoff)
+        U, S, V, _, _ = ct.truncated_svd(
+            ct.planar_permute_legs(M, codomain=['vL']), new_labels=['vR', 'vL'], svd_min=cutoff
+        )
         V = ct.planar_permute_legs(V, codomain=['vL', 'p'])
         if not renormalize:
             self.norm = self.norm * ct.norm(S)
@@ -5655,7 +5655,7 @@ class MPS(BaseMPSExpectationValue):
         for i in range(L - 2, -1, -1):
             M = self.get_B(i, 'A')
             M = ct.compose(M, ct.scale_axis(U, S, 'vR'))
-            U, S, V = ct.truncated_svd(
+            U, S, V, _, _ = ct.truncated_svd(
                 ct.planar_permute_legs(M, codomain=['vL']), new_labels=['vR', 'vL'], svd_min=cutoff
             )
             V = ct.planar_permute_legs(V, codomain=['vL', 'p'])
