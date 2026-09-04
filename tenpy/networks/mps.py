@@ -171,6 +171,7 @@ from ..tools.cache import DictCache
 from ..tools.math import lcm
 from ..tools.misc import BetaWarning, argsort, get_recursive, inverse_permutation, to_array, to_iterable
 from ..tools.params import asConfig
+from .terms import TermList
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +197,7 @@ __all__ = [
 #     the `sites` argument and added an `offsets` argument. The legs of the coupling now act on
 #     `[site + i for i in offsets]`, where site is in `sites`; identities act between the
 #     individual tensors of a coupling.
-#   - MPS now consist of SymmetricTensors as Bs, where the final tensor may also be a ChargedTensor
+#   - MPS now consist of SymmetricTensors as Bs, where the final tensor may also be a HiddenLegTensor
 #     to absorb the total charge of a unit cell for iMPS. The singular values are DiagonalTensors.
 
 
@@ -269,6 +270,8 @@ mps_contraction_diagram_operations: dict[str, ct.PlanarDiagram] = {
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL']),
     ),
 }
+
+MPS_TOTAL_CHARGE_LABEL = 'unit_cell_charge'
 
 
 class MPSGeometry:
@@ -487,7 +490,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         op: str | ct.Coupling,
         sites: list[int] | int = None,
         offsets: list[list[int]] | list[int] = None,
-    ) -> np.ndarray:
+    ) -> list[ct.BlockBackend.Scalar]:
         """Expectation value ``<bra|op|ket>`` of an (n-site) operator.
 
         Calculates n-site expectation values of operators sandwiched between bra and ket.
@@ -536,7 +539,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         Returns
         -------
-        exp_vals : 1D ndarray
+        exp_vals : list of :class:`~cyten.BlockBackend.Scalar`
             Expectation values, ``exp_vals[i] = <bra|op|ket>``, where ``op`` acts on site(s)
             ``[j1, j2, ..., j{n-1}]=[sites[i] + j for j in offsets[i]]``.
 
@@ -631,7 +634,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         sites: list[int] | int = None,
         offsets: list[list[int]] | list[int] = None,
         axes: tuple[list[str], list[str]] = None,
-    ) -> np.ndarray:
+    ) -> list[ct.BlockBackend.Scalar]:
         """Expectation value ``<bra|op|ket>`` of an (n-site) operator.
 
         Same as :meth:`expectation_value`, but for operators that are tensors rather than couplings.
@@ -673,7 +676,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         Returns
         -------
-        exp_vals : 1D ndarray
+        exp_vals : list of :class:`~cyten.BlockBackend.Scalar`
             Expectation values, ``exp_vals[i] = <bra|op|ket>``, where ``op`` acts on site(s)
             ``[j1, j2, ..., j{n-1}]=[sites[i] + j for j in offsets[i]]``.
 
@@ -1594,7 +1597,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         """
         assert len(sites) == len(ops), 'inconsistent number of sites and tensors'
-        assert sites == sorted(sites), 'specified sites must be sorted'
+        assert np.all(sites == sorted(sites)), 'specified sites must be sorted'
 
         # if LP has two legs, remove trivial leg of left-most op and use different planar diagram
         if LP.num_legs == 2:
@@ -1658,7 +1661,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         """
         assert len(sites) == len(ops), 'inconsistent number of sites and tensors'
-        assert sites == sorted(sites), 'specified sites must be sorted'
+        assert np.all(sites == sorted(sites)), 'specified sites must be sorted'
 
         # if RP has two legs, remove trivial leg of right-most op and use different planar diagram
         if RP.num_legs == 2:
@@ -1667,10 +1670,11 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         else:
             W = ops[-1]
             diagram = 'bra-W-ket3 @ RP3'
+        form = form_on_first_site if len(sites) == 1 else 'B'
         tensors = dict(
             RP=RP,
-            ket=ket.get_B(sites[-1]),
-            bra=bra.get_B(sites[-1]).hc,
+            ket=ket.get_B(sites[-1], form=form),
+            bra=bra.get_B(sites[-1], form=form).hc,
             W=W,
         )
         new_RP = mps_contraction_diagram_operations[diagram].evaluate(tensors)
@@ -1685,14 +1689,15 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             new_RP = mps_contraction_diagram_operations['bra-W-ket3 @ RP3'].evaluate(
                 dict(RP=new_RP, ket=ket.get_B(site), bra=bra.get_B(site).hc, W=W)
             )
-        new_RP = mps_contraction_diagram_operations['bra-W-ket3 @ RP3'].evaluate(
-            dict(
-                RP=new_RP,
-                ket=ket.get_B(sites[0], form=form_on_first_site),
-                bra=bra.get_B(sites[0], form=form_on_first_site).hc,
-                W=W,
+        if len(sites) > 1:
+            new_RP = mps_contraction_diagram_operations['bra-W-ket3 @ RP3'].evaluate(
+                dict(
+                    RP=new_RP,
+                    ket=ket.get_B(sites[0], form=form_on_first_site),
+                    bra=bra.get_B(sites[0], form=form_on_first_site).hc,
+                    W=ops[0],
+                )
             )
-        )
         return new_RP
 
     def _expectation_value_args(
@@ -2017,7 +2022,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             Sites on which the tensors in `new_coupling.factorization` act.
 
         """
-        new_idcs = sorted(set(sites1 + sites2))
+        new_idcs = sorted(set(list(sites1) + list(sites2)))
         new_sites = []  # actual sites, not site indices
         i1 = 0  # index in coupling1
         i2 = 0  # index in coupling2
@@ -2066,7 +2071,8 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 pipes_relabel = {}
                 pipe_dualities = []
                 if W1.has_label('wR'):
-                    W1 = ct.move_leg(W1, 'wR', codomain_pos=2, bend_right=True)
+                    codom_pos = 2 if W1.has_label('wL') else 1
+                    W1 = ct.move_leg(W1, 'wR', codomain_pos=codom_pos, bend_right=True)
                     if W2.has_label('wR'):
                         relabel1['wR'] = 'wR1'
                         relabel2['wR'] = 'wR2'
@@ -2083,12 +2089,18 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                         pipe_dualities.append(False)
                 W = ct.compose(W1, W2, relabel1=relabel1, relabel2=relabel2)
                 if len(pipes) > 0:
+                    # order in the pipes chosen such that the legs end up in the correct positions
                     W = ct.planar.planar_combine_legs(W, *pipes, pipe_dualities=pipe_dualities)
                     W.relabel(pipes_relabel)
                 if not W.has_label('wL'):
                     W = ct.add_trivial_leg(W, codomain_pos=0, label='wL')
+                elif '(wL2.wL1)' not in pipes_relabel:
+                    # a single wL has been there (no piping) -> move to correct position
+                    W = ct.move_leg(W, 'wL', codomain_pos=0, bend_right=False)
                 if not W.has_label('wR'):
                     W = ct.add_trivial_leg(W, domain_pos=1, label='wR')
+                elif '(wR1.wR2)' not in pipes_relabel:
+                    W = ct.move_leg(W, 'wR', domain_pos=1, bend_right=True)
             Ws.append(W)
         assert i1 == coupling1.num_sites
         assert i2 == coupling2.num_sites
@@ -2230,7 +2242,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         return op
 
     @abstractmethod
-    def _normalize_exp_val(self, value: Sequence[complex]) -> np.ndarray:
+    def _normalize_exp_val(self, value: Sequence[ct.BlockBackend.Scalar]) -> list[ct.BlockBackend.Scalar]:
         """Post processing of result values of :meth:`expectation_value`.
 
         Should always convert to numpy array and ensure real values.
@@ -2416,7 +2428,8 @@ class MPS(BaseMPSExpectationValue):
                 assert len(f) == 2
         for i, B in enumerate(self._B):
             if not B.labels_are(*self._B_labels):
-                raise ValueError(f'B has wrong labels {B.labels!r}, expected {self._B_labels!r}')
+                if not (self.bc == 'infinite' and B.labels_are(*self._B_labels, f'!{MPS_TOTAL_CHARGE_LABEL}')):
+                    raise ValueError(f'B has wrong labels {B.labels!r}, expected {self._B_labels!r}')
             i2 = (i + 1) if self.finite else (i + 1) % self.L
             if isinstance(self._S[i2], ct.DiagonalTensor):
                 if (
@@ -2790,6 +2803,10 @@ class MPS(BaseMPSExpectationValue):
                 virtual_spaces.append(ct.ElementarySpace.from_defining_sectors(sym, chargeR[0]))
                 B = np.array(p_st).reshape((site.dim, 1, 1))
             Bs.append(B)
+        total_charge = None
+        if bc == 'infinite':
+            total_charge = sym.fusion_outcomes(virtual_spaces[-1].defining_sectors[0], sym.dual_sector(chargeL))[0]
+            virtual_spaces = virtual_spaces[:-1]
         return cls.from_Bflat_virtual_spaces(
             sites,
             virtual_spaces,
@@ -2797,6 +2814,7 @@ class MPS(BaseMPSExpectationValue):
             SVs=None,
             bc=bc,
             dtype=dtype,
+            total_charge=total_charge,
             form=form,
             unit_cell_width=unit_cell_width,
             device=device,
@@ -3064,6 +3082,11 @@ class MPS(BaseMPSExpectationValue):
             if len(virtual_spaces) != L:
                 raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
             virtual_spaces.append(virtual_spaces[0])
+            if total_charge is None:
+                total_charge = sym.trivial_sector
+            else:
+                err = f'{total_charge} is not a valid charge sector of the symmetry {sym}'
+                assert sym.is_valid_sector(total_charge), err
         elif bc != 'infinite' and len(virtual_spaces) != L + 1:
             raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
         if device is None:
@@ -3074,20 +3097,27 @@ class MPS(BaseMPSExpectationValue):
         Bs = []
         SVs = []
         for i in range(L):
-            codomain = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
+            labels = ['vL', 'p', 'vR']
+            if bc == 'infinite' and i == L - 1 and total_charge != sym.trivial_sector:
+                # due to QR, we construct the random tensor with bent down charge leg and then bend it up
+                labels = [MPS_TOTAL_CHARGE_LABEL] + labels
+                charge_leg = ct.ElementarySpace.from_defining_sectors(sym, total_charge)
+                codomain = ct.TensorProduct([charge_leg, virtual_spaces[i], sites[i].leg], sym)
+            else:
+                codomain = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
             domain = ct.TensorProduct([virtual_spaces[i + 1]], sym)
-            B = ct.SymmetricTensor.from_random_uniform(
-                codomain, domain, backend, ['vL', 'p', 'vR'], dtype=dtype, device=device
-            )
+            B = ct.SymmetricTensor.from_random_uniform(codomain, domain, backend, labels, dtype=dtype, device=device)
             B, _ = ct.qr(B, new_labels=['vR', 'vL'])
+            if B.has_label(MPS_TOTAL_CHARGE_LABEL):
+                B = ct.move_leg(B, MPS_TOTAL_CHARGE_LABEL, domain_pos=0, bend_right=False)
+                B = ct.HiddenLegTensor(B, [MPS_TOTAL_CHARGE_LABEL])
+            Bs.append(B)
             SV = ct.DiagonalTensor.from_random_uniform(
                 virtual_spaces[i], backend, ['vL', 'vR'], dtype=dtype.to_real, device=device
             )
             SVs.append(SV / ct.norm(SV))
         if bc == 'infinite':
             SVs.append(SVs[0])
-            # TODO generate ChargedTensor
-            raise NotImplementedError
         else:
             SV = ct.DiagonalTensor.from_random_uniform(
                 virtual_spaces[-1], backend, ['vL', 'vR'], dtype=dtype.to_real, device=device
@@ -3114,6 +3144,7 @@ class MPS(BaseMPSExpectationValue):
         SVs: Iterable[np.ndarray | ct.Block] | None = None,
         bc: Literal['finite', 'segment', 'infinite'] = 'finite',
         dtype: ct.Dtype = None,
+        total_charge: ct.Sector = None,
         form='B',
         legL: ct.Sector | ct.ElementarySpace | None = None,
         unit_cell_width: int = None,
@@ -3139,6 +3170,9 @@ class MPS(BaseMPSExpectationValue):
             MPS boundary conditions. See docstring of :class:`MPS`.
         dtype : :class:`~cyten.Dtype`, optional
             The data type of the tensors. Defaults to the common dtype of `Bflat`.
+        total_charge : :class:`~cyten.Sector`, optional
+            Total charge of the unit cell for infinite boundary conditions. Is ignored for finite
+            and segemnt boundary conditions. Defaults to the trivial charge sector.
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
             Defines the canonical form of `Bflat`. See module doc-string.
             A single choice holds for all of the entries.
@@ -3210,6 +3244,7 @@ class MPS(BaseMPSExpectationValue):
             SVs,
             bc,
             dtype=dtype,
+            total_charge=total_charge,
             form=form,
             unit_cell_width=unit_cell_width,
             device=device,
@@ -3278,8 +3313,14 @@ class MPS(BaseMPSExpectationValue):
         Bflat = list(Bflat)
         if len(Bflat) != L:
             raise ValueError('Length of Bflat does not match number of sites.')
-        if bc == 'infinite' and len(virtual_spaces) != L:
-            raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
+        if bc == 'infinite':
+            if len(virtual_spaces) != L:
+                raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
+            if total_charge is None:
+                total_charge = sym.trivial_sector
+            else:
+                err = f'{total_charge} is not a valid charge sector of the symmetry {sym}'
+                assert sym.is_valid_sector(total_charge), err
         elif bc != 'infinite' and len(virtual_spaces) != L + 1:
             raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
         if device is None:
@@ -3292,25 +3333,40 @@ class MPS(BaseMPSExpectationValue):
 
         Bs = []
         for i, B in enumerate(Bflat):
-            codomain = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
-            if bc == 'infinite' and i == L - 1:
-                domain = ct.TensorProduct([virtual_spaces[0]], sym)
-            else:
-                domain = ct.TensorProduct([virtual_spaces[i + 1]], sym)
             if isinstance(B, np.ndarray):
                 B = backend.block_backend.block_from_numpy(B, dtype=dtype, device=device)
             # convert to vL, p, vR
-            B = backend.block_backend.permute_axes(B, [1, 0, 2])
+            # we allow the user to specify all 4 legs in case for a nontrivial total charge (iMPS)
+            B_shape = backend.block_backend.get_shape(B)
+            perm = [1, 0, 2]
+            if len(B_shape) == 4:
+                perm.append(3)
+            B = backend.block_backend.permute_axes(B, perm)
+            codomain = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
+            labels = ['vL', 'p', 'vR']
+            if bc == 'infinite' and i == L - 1:
+                if total_charge == sym.trivial_sector:
+                    domain = ct.TensorProduct([virtual_spaces[0]], sym)
+                else:
+                    labels.append(MPS_TOTAL_CHARGE_LABEL)
+                    charge_leg = ct.ElementarySpace.from_defining_sectors(sym, total_charge)
+                    domain = ct.TensorProduct([charge_leg, virtual_spaces[0]], sym)
+                    if len(B_shape) == 3:
+                        B = backend.block_backend.reshape(B, (*B_shape, 1))
+            else:
+                domain = ct.TensorProduct([virtual_spaces[i + 1]], sym)
             B = ct.SymmetricTensor.from_dense_block(
                 B,
                 codomain,
                 domain,
                 backend,
-                labels=['vL', 'p', 'vR'],
+                labels=labels,
                 dtype=dtype,
                 device=device,
                 understood_braiding=True,
             )
+            if B.has_label(MPS_TOTAL_CHARGE_LABEL):
+                B = ct.HiddenLegTensor(B, [MPS_TOTAL_CHARGE_LABEL])
             Bs.append(B)
         if SVs is None:
             new_SVs = [
@@ -3330,11 +3386,6 @@ class MPS(BaseMPSExpectationValue):
                         S, virtual_spaces[i], backend, ['vL', 'vR'], dtype=dtype.to_real, device=device
                     )
                 )
-
-        if bc == 'infinite':
-            # for an iMPS, the last leg has to match the first one.
-            # so we need to gauge `qtotal` of the last `B` such that the right leg matches.
-            raise NotImplementedError
         res = cls(
             sites,
             Bs,
@@ -4150,6 +4201,7 @@ class MPS(BaseMPSExpectationValue):
             The new number of sites in the unit cell will be increased from `L` to ``factor*L``.
 
         """
+        # TODO should we combine the total charge leg into a single one for infinite BC?
         if int(factor) != factor:
             raise ValueError('`factor` should be integer!')
         if factor <= 1:
@@ -4178,6 +4230,7 @@ class MPS(BaseMPSExpectationValue):
             By how many sites to move the tensors to the right.
 
         """
+        # TODO should shift the total charge leg to the last tensor?
         if self.finite:
             raise ValueError('makes only sense for infinite boundary conditions')
         inds = np.arange(self.L) - shift
@@ -4377,7 +4430,7 @@ class MPS(BaseMPSExpectationValue):
         For infinite MPS, the bond between MPS unit cells is another fix point.
         """
         # TODO
-        if not self.chinfo.trivial_shift:
+        if not self.symmetry.trivial_shift:
             # Similar to swap_sites, I (Jakob) dont think this is even possible.
             raise RuntimeError('Can not invert if conserved charge has non-trivial shift.')
 
