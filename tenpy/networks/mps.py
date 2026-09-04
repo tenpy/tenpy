@@ -7284,9 +7284,6 @@ class MPS(BaseMPSExpectationValue):
         return ct.Identity(leg, self.backend, self.dtype, self.device, ['vL*', 'vL'])
 
 
-# TODO_MPS stopped here
-
-
 class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
     """Base class for :class:`MPSEnvironment` storing partial contractions between MPS.
 
@@ -7306,7 +7303,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
     ----------
     bra : :class:`~tenpy.networks.mps.MPS`
         The MPS to project on. Should be given in usual 'ket' form;
-        we call `conj()` on the matrices directly.
+        we call `hc` on the matrices directly.
         Stored in place, without making copies.
         If necessary to match charges, we call :meth:`~tenpy.networks.mps.MPS.gauge_total_charge`.
     ket : :class:`~tenpy.networks.mpo.MPO` | None
@@ -7330,11 +7327,11 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         Cache for saving the environment tensors.
     _LP_keys, _RP_keys : list of str
         Map indices to keys for the :attr:`cache`.
-    _LP : list of {``None`` | }
+    _LP : list of {``None`` | :class:`~cyten.tensors.SymmetricTensor`}
         Left parts of the environment, len `L`.
         ``LP[i]`` contains the contraction strictly left of site `i`
         (or ``None``, if we don't have it calculated).
-    _RP : list of {``None`` | :class:`~tenpy.linalg.np_conserved.Array`}
+    _RP : list of {``None`` | :class:`~cyten.tensors.SymmetricTensor`}
         Right parts of the environment, len `L`.
         ``RP[i]`` contains the contraction strictly right of site `i`
         (or ``None``, if we don't have it calculated).
@@ -7349,14 +7346,16 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
 
     """
 
-    def __init__(self, bra, ket, cache=None, **init_env_data):
+    def __init__(self, bra: MPS, ket: MPS | None, cache: DictCache | None = None, **init_env_data):
         if ket is None:
             ket = bra
         if ket is not bra:
             bra = ket._gauge_compatible_vL_vR(bra)  # ensure matching charges
         self.bra = bra
         self.ket = ket
-        self.dtype = np.promote_types(bra.dtype, ket.dtype)
+        self.dtype = ct.Dtype.common(bra.dtype, ket.dtype)
+        self.backend = ct.backends.get_same_backend(bra, ket)
+        self.device = ct.tensors.get_same_device(bra, ket)
         L = lcm(bra.L, ket.L)
         if hasattr(self, 'H'):
             L = lcm(self.H.L, L)
@@ -7386,14 +7385,21 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         self.init_first_LP_last_RP(**init_env_data)
         self.test_sanity()
 
-    def init_first_LP_last_RP(self, init_LP=None, init_RP=None, age_LP=0, age_RP=0, start_env_sites=0):
+    def init_first_LP_last_RP(
+        self,
+        init_LP: None | ct.SymmetricTensor = None,
+        init_RP: None | ct.SymmetricTensor = None,
+        age_LP: int = 0,
+        age_RP: int = 0,
+        start_env_sites: int = 0,
+    ):
         """(Re)initialize first LP and last RP from the given data.
 
         Parameters
         ----------
-        init_LP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
+        init_LP : ``None`` | :class:`~cyten.tensors.SymmetricTensor`
             Initial very left part ``LP``. If ``None``, build one with :meth:`init_LP`.
-        init_RP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
+        init_RP : ``None`` | :class:`~cyten.tensors.SymmetricTensor`
             Initial very right part ``RP``. If ``None``, build one with :meth:`init_RP`.
         age_LP : int
             The number of physical sites involved into the contraction of `init_LP`.
@@ -7410,18 +7416,36 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             init_LP = self.init_LP(0, start_env_sites)
             age_LP = start_env_sites
         else:
+            # TODO we assume that init_LP has vR leg in domain, vR* leg in codomain (similar for init_RP)
+            # Is this always valid? The leg positions should match those that we get after contractions
+            # with planar diagrams when computing the next LP / RP
             if ket_U is not None:
-                init_LP = npc.tensordot(init_LP, ket_U, axes=['vR', 'vL'])
+                # need compose or partial_compose depending on the number of legs
+                if init_LP.num_domain_legs > 1:
+                    ct.tensors.partial_compose(init_LP, ket_U, 'vR')
+                else:
+                    ct.compose(init_LP, ket_U)
             if bra_U is not None:
-                init_LP = npc.tensordot(bra_U.conj(), init_LP, axes=['vL*', 'vR*'])
+                if init_LP.num_codomain_legs > 1:
+                    ct.tensors.partial_compose(init_LP, bra_U.hc, 'vR*')
+                else:
+                    ct.compose(bra_U.hc, init_LP)
         if init_RP is None:
             init_RP = self.init_RP(self.L - 1, start_env_sites)
             age_RP = start_env_sites
         else:
             if ket_V is not None:
-                init_RP = npc.tensordot(ket_V, init_RP, axes=['vR', 'vL'])
+                ket_V = ket_V.T
+                if init_RP.num_domain_legs > 1:
+                    ct.tensors.partial_compose(init_RP, ket_V, 'vL')
+                else:
+                    ct.compose(init_RP, ket_V)
             if bra_V is not None:
-                init_RP = npc.tensordot(init_RP, bra_V.conj(), axes=['vL*', 'vR*'])
+                bra_V = bra_V.T
+                if init_RP.num_codomain_legs > 1:
+                    ct.tensors.partial_compose(init_RP, bra_V.hc, 'vL*')
+                else:
+                    ct.compose(bra_V.hc, init_RP)
         self.set_LP(0, init_LP, age=age_LP)
         self.set_RP(self.L - 1, init_RP, age=age_RP)
 
@@ -7434,7 +7458,9 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         assert any(key in self.cache for key in self._LP_keys)
         assert any(key in self.cache for key in self._RP_keys)
 
-    def _check_compatible_legs(self, init_LP, init_RP, start_env_sites):
+    def _check_compatible_legs(
+        self, init_LP: None | ct.SymmetricTensor, init_RP: None | ct.SymmetricTensor, start_env_sites: int
+    ) -> tuple[None | ct.SymmetricTensor, None | ct.SymmetricTensor]:
         if init_LP is not None or init_RP is not None:
             if start_env_sites == 0:
                 vL_ket, vR_ket = self.ket.outer_virtual_legs()
@@ -7446,9 +7472,9 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
                 vR_bra = self.bra.get_B(self.L - 1 + start_env_sites, 'B').get_leg('vR')
         if init_LP is not None:
             incompatible_legs = []
-            if init_LP.get_leg('vR') != vL_ket.conj():
+            if init_LP.get_leg('vR') != vL_ket.dual:
                 incompatible_legs.append('vR')
-            if init_LP.get_leg('vR*') != vL_bra:
+            if init_LP.get_leg('vR*') != vL_bra.dual:
                 incompatible_legs.append('vR*')
             if incompatible_legs:
                 msg = f'dropping `init_LP` with incompatible virtual legs: {", ".join(incompatible_legs)}'
@@ -7456,9 +7482,9 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
                 init_LP = None
         if init_RP is not None:
             incompatible_legs = []
-            if init_RP.get_leg('vL') != vR_ket.conj():
+            if init_RP.get_leg('vL') != vR_ket.dual:
                 incompatible_legs.append('vL')
-            if init_RP.get_leg('vL*') != vR_bra:
+            if init_RP.get_leg('vL*') != vR_bra.dual:
                 incompatible_legs.append('vL*')
             if incompatible_legs:
                 msg = f'dropping `init_RP` with incompatible virtual legs: {", ".join(incompatible_legs)}'
@@ -7466,7 +7492,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
                 init_RP = None
         return init_LP, init_RP
 
-    def init_LP(self, i, start_env_sites=0):
+    def init_LP(self, i: int, start_env_sites: int = 0) -> ct.SymmetricTensor:
         """Build initial left part ``LP``.
 
         If `bra` and `ket` are the same and in left canonical form, this is the environment
@@ -7484,7 +7510,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
 
         Returns
         -------
-        init_LP : :class:`~tenpy.linalg.np_conserved.Array`
+        init_LP : :class:`~cyten.tensors.SymmetricTensor`
             Identity contractible with the `vL` leg of ``ket.get_B(i)``, labels ``'vR*', 'vR'``.
 
         """
@@ -7493,21 +7519,22 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             U_ket, V_ket = self.ket.segment_boundaries
             if U_bra is not None or U_ket is not None:
                 if U_bra is not None and U_ket is not None:
-                    init_LP = npc.tensordot(U_bra.conj(), U_ket, axes=['vL*', 'vL'])
+                    init_LP = ct.compose(U_bra.hc, U_ket)
                 elif U_bra is not None:
-                    init_LP = U_bra.conj().ireplace_label('vL*', 'vR')
+                    init_LP = U_bra.hc.relabel({'vL*': 'vR'})
                 else:
-                    init_LP = U_ket.replace_label('vL', 'vR*')
+                    init_LP = U_ket.relabel({'vL': 'vR*'})
                 return init_LP
         leg_ket = self.ket.get_B(i - start_env_sites, None).get_leg('vL')
         leg_bra = self.bra.get_B(i - start_env_sites, None).get_leg('vL')
-        leg_ket.test_equal(leg_bra)
-        init_LP = npc.diag(1.0, leg_ket, dtype=self.dtype, labels=['vR*', 'vR'])
+        if not leg_ket == leg_bra:
+            raise ValueError(f'Incompatible legs {leg_ket} and {leg_bra} cannot be contracted')
+        init_LP = ct.Identity(leg_ket, backend=self.backend, dtype=self.dtype, device=self.device, labels=['vR*', 'vR'])
         for j in range(i - start_env_sites, i):
             init_LP = self._contract_LP(j, init_LP)
         return init_LP
 
-    def init_RP(self, i, start_env_sites=0):
+    def init_RP(self, i: int, start_env_sites: int = 0) -> ct.SymmetricTensor:
         """Build initial right part ``RP`` for an MPS/MPOEnvironment.
 
         If `bra` and `ket` are the same and in right canonical form, this is the environment
@@ -7525,7 +7552,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
 
         Returns
         -------
-        init_RP : :class:`~tenpy.linalg.np_conserved.Array`
+        init_RP : :class:`~cyten.tensors.SymmetricTensor`
             Identity contractible with the `vR` leg of ``ket.get_B(i)``, labels ``'vL*', 'vL'``.
 
         """
@@ -7533,22 +7560,25 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             U_bra, V_bra = self.bra.segment_boundaries
             U_ket, V_ket = self.ket.segment_boundaries
             if V_bra is not None or V_ket is not None:
+                V_ket = V_ket.T
+                V_bra = V_bra.T
                 if V_bra is not None and V_ket is not None:
-                    init_RP = npc.tensordot(V_bra.conj(), V_ket, axes=['vR*', 'vR'])
+                    init_RP = ct.compose(V_bra.hc, V_ket)
                 elif V_bra is not None:
-                    init_RP = V_bra.conj().ireplace_label('vR*', 'vL')
+                    init_RP = V_bra.hc.relabel({'vR*': 'vL'})
                 else:
-                    init_RP = V_ket.replace_label('vR', 'vL*')
+                    init_RP = V_ket.relabel({'vR': 'vL*'})
                 return init_RP
         leg_ket = self.ket.get_B(i + start_env_sites, None).get_leg('vR')
         leg_bra = self.bra.get_B(i + start_env_sites, None).get_leg('vR')
-        leg_ket.test_equal(leg_bra)
-        init_RP = npc.diag(1.0, leg_ket, dtype=self.dtype, labels=['vL*', 'vL'])
+        if not leg_ket == leg_bra:
+            raise ValueError(f'Incompatible legs {leg_ket} and {leg_bra} cannot be contracted')
+        init_RP = ct.Identity(leg_ket, backend=self.backend, dtype=self.dtype, device=self.device, labels=['vL*', 'vL'])
         for j in range(i + start_env_sites, i, -1):
             init_RP = self._contract_RP(j, init_RP)
         return init_RP
 
-    def get_LP(self, i, store=True):
+    def get_LP(self, i: int, store: bool = True) -> ct.SymmetricTensor:
         """Calculate LP at given site from nearest available one.
 
         The returned ``LP_i`` corresponds to the following contraction,
@@ -7571,7 +7601,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
 
         Returns
         -------
-        LP_i : :class:`~tenpy.linalg.np_conserved.Array`
+        LP_i : :class:`~cyten.tensors.SymmetricTensor`
             Contraction of everything left of site `i`,
             with labels ``'vR*', 'vR'`` for `bra`, `ket`.
 
@@ -7595,7 +7625,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
                 self.set_LP(j + 1, LP, age=age)
         return LP
 
-    def get_RP(self, i, store=True):
+    def get_RP(self, i: int, store: bool = True) -> ct.SymmetricTensor:
         """Calculate RP at given site from nearest available one.
 
         The returned ``RP_i`` corresponds to the following contraction,
@@ -7618,7 +7648,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
 
         Returns
         -------
-        RP_i : :class:`~tenpy.linalg.np_conserved.Array`
+        RP_i : :class:`~cyten.tensors.SymmetricTensor`
             Contraction of everything left of site `i`,
             with labels ``'vL', 'vL*'`` for `ket`, `bra`.
 
@@ -7642,21 +7672,21 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
                 self.set_RP(j - 1, RP, age=age)
         return RP
 
-    def get_LP_age(self, i):
+    def get_LP_age(self, i: int) -> int:
         """Return number of physical sites in the contractions of get_LP(i).
 
         Might be ``None``.
         """
         return self._LP_age[self._to_valid_site_index(i)]
 
-    def get_RP_age(self, i):
+    def get_RP_age(self, i: int) -> int:
         """Return number of physical sites in the contractions of get_RP(i).
 
         Might be ``None``.
         """
         return self._RP_age[self._to_valid_site_index(i)]
 
-    def set_LP(self, i, LP, age):
+    def set_LP(self, i: int, LP: ct.SymmetricTensor, age: int):
         """Store part to the left of site `i`. No copy is made!
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
@@ -7665,7 +7695,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         self.cache[self._LP_keys[i]] = self.shift_Tensor_unit_cells(LP, -num_unit_cells)
         self._LP_age[i] = age
 
-    def set_RP(self, i, RP, age):
+    def set_RP(self, i: int, RP: ct.SymmetricTensor, age: int):
         """Store part to the right of site `i`. No copy is made!
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
@@ -7674,13 +7704,13 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         self.cache[self._RP_keys[i]] = self.shift_Tensor_unit_cells(RP, -num_unit_cells)
         self._RP_age[i] = age
 
-    def del_LP(self, i):
+    def del_LP(self, i: int):
         """Delete stored part strictly to the left of site `i`."""
         i = self._to_valid_site_index(i)
         del self.cache[self._LP_keys[i]]
         self._LP_age[i] = None
 
-    def del_RP(self, i):
+    def del_RP(self, i: int):
         """Delete stored part strictly to the right of site `i`."""
         i = self._to_valid_site_index(i)
         del self.cache[self._RP_keys[i]]
@@ -7694,15 +7724,21 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         self._LP_age[1:] = [None] * (self.L - 1)
         self._RP_age[:-1] = [None] * (self.L - 1)
 
-    def has_LP(self, i):
+    def has_LP(self, i: int) -> bool:
         """Return True if `LP` left of site `i` is stored."""
         return self._LP_keys[self._to_valid_site_index(i)] in self.cache
 
-    def has_RP(self, i):
+    def has_RP(self, i: int) -> bool:
         """Return True if `RP` right of site `i` is stored."""
         return self._RP_keys[self._to_valid_site_index(i)] in self.cache
 
-    def cache_optimize(self, short_term_LP=[], short_term_RP=[], preload_LP=None, preload_RP=None):
+    def cache_optimize(
+        self,
+        short_term_LP: list[int] = [],
+        short_term_RP: list[int] = [],
+        preload_LP: int | None = None,
+        preload_RP: int | None = None,
+    ):
         """Update `short_term_keys` for the cache and possibly preload tensors.
 
         Parameters
@@ -7730,7 +7766,9 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         )
         self.cache.preload(*preload)
 
-    def get_initialization_data(self, first=0, last=None, include_bra=False, include_ket=False):
+    def get_initialization_data(
+        self, first: int = 0, last: int | None = None, include_bra: bool = False, include_ket: bool = False
+    ) -> dict:
         """Return data for (re-)initialization of the environment.
 
         Parameters
@@ -7746,7 +7784,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         init_env_data : dict
             A dictionary with the following entries.
 
-            init_LP, init_RP : :class:`~tenpy.linalg.np_conserved.Array`
+            init_LP, init_RP : :class:`~cyten.tensors.SymmetricTensor`
                 `LP` on the left of site `first` and `RP` on the right of site `last`, which can be
                 used as `init_LP` and `init_RP` for the initialization of a new environment.
             age_LP, age_RP : int
@@ -7769,19 +7807,33 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         ket_U, ket_V = self.ket.segment_boundaries
         if first == 0:
             if ket_U is not None:
-                LP = npc.tensordot(LP, ket_U.conj(), axes=['vR', 'vR*'])
-                LP.ireplace_label('vL*', 'vR')
+                if LP.num_domain_legs > 1:
+                    ct.tensors.partial_compose(LP, ket_U.hc, 'vR')
+                else:
+                    ct.compose(LP, ket_U.hc)
+                LP.relabel({'vL*': 'vR'})
             if bra_U is not None:
-                LP = npc.tensordot(bra_U, LP, axes=['vR', 'vR*'])
-                LP.ireplace_label('vL', 'vR*')
+                if LP.num_codomain_legs > 1:
+                    ct.tensors.partial_compose(LP, bra_U, 'vR*')
+                else:
+                    ct.compose(bra_U, LP)
+                LP.relabel({'vL': 'vR*'})
         if last == self.ket.L - 1:
             if ket_V is not None:
-                RP = npc.tensordot(ket_V.conj(), RP, axes=['vL*', 'vL'])
-                RP.ireplace_label('vR*', 'vL')
+                ket_V = ket_V.T
+                if RP.num_domain_legs > 1:
+                    ct.tensors.partial_compose(RP, ket_V.hc, 'vL')
+                else:
+                    ct.compose(RP, ket_V.hc)
+                RP.relabel({'vR*': 'vL'})
         if last == self.bra.L - 1:
             if bra_V is not None:
-                RP = npc.tensordot(RP, bra_V, axes=['vL*', 'vL'])
-                RP.ireplace_label('vR', 'vL*')
+                bra_V = bra_V.T
+                if RP.num_codomain_legs > 1:
+                    ct.tensors.partial_compose(RP, bra_V, 'vL*')
+                else:
+                    ct.compose(bra_V, RP)
+                RP.relabel({'vR': 'vL*'})
         data = {
             'init_LP': LP,
             'age_LP': self.get_LP_age(first),
@@ -7807,7 +7859,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         return data
 
     @abstractmethod
-    def full_contraction(self, i0):
+    def full_contraction(self, i0: int) -> ct.BlockBackend.Scalar:
         """Calculate the overlap by a full contraction of the network.
 
         This function contracts ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)``
@@ -7825,7 +7877,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         """
         ...  # can use _full_contraction_LP_RP
 
-    def _full_contraction_LP_RP(self, i0):
+    def _full_contraction_LP_RP(self, i0: int) -> tuple[ct.SymmetricTensor, ct.SymmetricTensor]:
         if self.ket.finite and i0 + 1 == self.L:
             # special case to handle `_to_valid_site_index` correctly:
             # get_LP(L) is not valid for finite b.c, so we use need to calculate it explicitly.
@@ -7835,19 +7887,26 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             LP = self.get_LP(i0 + 1, store=False)
         # multiply with `S` on bra and ket side
         S_bra = self.bra.get_SR(i0).conj()
-        if isinstance(S_bra, npc.Array):
-            LP = npc.tensordot(S_bra, LP, axes=['vL*', 'vR*'])
+        if isinstance(S_bra, ct.DiagonalTensor):
+            LP = ct.scale_axis(LP, S_bra, 'vR*')
         else:
-            LP = LP.scale_axis(S_bra, 'vR*')
+            S_bra = S_bra.T
+            if LP.num_codomain_legs > 1:
+                ct.tensors.partial_compose(LP, S_bra, 'vR*')
+            else:
+                ct.compose(S_bra, LP)
         S_ket = self.ket.get_SR(i0)
-        if isinstance(S_ket, npc.Array):
-            LP = npc.tensordot(LP, S_ket, axes=['vR', 'vL'])
+        if isinstance(S_ket, ct.DiagonalTensor):
+            LP = ct.scale_axis(LP, S_ket, 'vR')
         else:
-            LP = LP.scale_axis(S_ket, 'vR')
+            if LP.num_domain_legs > 1:
+                ct.tensors.partial_compose(LP, S_ket, 'vR')
+            else:
+                ct.compose(LP, S_ket)
         RP = self.get_RP(i0, store=False)
         return LP, RP
 
-    def expectation_value_terms_sum(self, term_list):
+    def expectation_value_terms_sum(self, term_list: TermList):
         """Calculate expectation values for a bunch of terms and sum them up.
 
         This is equivalent to the following expression::
@@ -7882,6 +7941,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         tenpy.networks.mpo.MPO.expectation_value : expectation value density of an MPO.
 
         """
+        # TODO
         # this implementation assumes that bra and ket are different. the implementation in MPS
         # overrides this.
         from . import mpo
@@ -7899,16 +7959,16 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         return np.real_if_close(terms_sum), mpo_
 
     @abstractmethod
-    def _contract_LP(self, i, LP):
+    def _contract_LP(self, i: int, LP: ct.SymmetricTensor) -> ct.SymmetricTensor:
         """Contract LP with the tensors on site `i` to form ``self.get_LP(i+1)``"""
         ...
 
     @abstractmethod
-    def _contract_RP(self, i, RP):
+    def _contract_RP(self, i: int, RP: ct.SymmetricTensor) -> ct.SymmetricTensor:
         """Contract RP with the tensors on site `i` to form ``self.get_RP(i-1)``"""
         ...
 
-    def _to_valid_index(self, i):
+    def _to_valid_index(self, i: int) -> int:
         """Make sure `i` is a valid index of a site.
 
         .. deprecated :: 1.2.0
@@ -7925,29 +7985,48 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         i, _ = self._to_valid_site_index(i)
         return i
 
-    def _update_gauge_LP(self, i, U, update_bra, update_ket):
+    def _update_gauge_LP(self, i: int, U: ct.SymmetricTensor, update_bra: bool, update_ket: bool):
         """Update LP[i] following the MPS gauge ``A[i-1] A[i] -> (A[i-1] U) (Udagger A[i])``."""
+        # TODO we assume that LP has vR leg in domain, vR* leg in codomain (similar for RP below)
+        # Is this always valid? The leg positions should match those that we get after contractions
+        # with planar diagrams when computing the next LP / RP
         assert update_bra or update_ket
         if not self.has_LP(i):
             return
         LP = self.get_LP(i)
         if update_ket:
-            LP = npc.tensordot(LP, U, axes=['vR', 'vL'])
+            if LP.num_domain_legs > 1:
+                ct.tensors.partial_compose(LP, U, 'vR')
+            else:
+                ct.compose(LP, U)
         if update_bra:
-            LP = npc.tensordot(U.conj(), LP, axes=['vL*', 'vR*'])
+            if LP.num_codomain_legs > 1:
+                ct.tensors.partial_compose(LP, U.hc, 'vR*')
+            else:
+                ct.compose(U.hc, LP)
         self.set_LP(i, LP, self.get_LP_age(i))
 
-    def _update_gauge_RP(self, i, V, update_bra, update_ket):
+    def _update_gauge_RP(self, i: int, V: ct.SymmetricTensor, update_bra: bool, update_ket: bool):
         """Update RP[i] following the MPS gauge ``B[i] B[i+1] -> (B[i] Vdagger) (V B[i+1])``."""
         assert update_bra or update_ket
         if not self.has_RP(i):
             return
         RP = self.get_RP(i)
+        V = V.T
         if update_ket:
-            RP = npc.tensordot(V, RP, axes=['vR', 'vL'])
+            if RP.num_domain_legs > 1:
+                ct.tensors.partial_compose(RP, V, 'vL')
+            else:
+                ct.compose(RP, V)
         if update_bra:
-            RP = npc.tensordot(RP, V.conj(), axes=['vL*', 'vR*'])
+            if RP.num_codomain_legs > 1:
+                ct.tensors.partial_compose(RP, V.hc, 'vL*')
+            else:
+                ct.compose(V.hc, RP)
         self.set_RP(i, RP, self.get_RP_age(i))
+
+
+# TODO_MPS stopped here
 
 
 class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
