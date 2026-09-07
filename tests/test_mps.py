@@ -364,6 +364,7 @@ def test_compute_K():
     'bc, method',
     [
         ('finite', 'canonical_form_finite'),
+        ('segment', 'canonical_form_finite'),
         ('infinite', 'canonical_form_infinite1'),
         ('infinite', 'canonical_form_infinite2'),
     ],
@@ -382,6 +383,12 @@ def test_canonical_form(bc, method):
     psi.test_sanity()
     assert abs(psi.norm - norm) < 1.0e-14 * norm
     psi.norm = 1.0  # normalized psi
+    if bc == 'segment':  # boundary Schmidt states
+        U, VR = psi.segment_boundaries
+        B0 = npc.tensordot(U.conj(), psi2.get_B(0, None), axes=['vL*', 'vL'])
+        BL = npc.tensordot(VR.conj(), psi2.get_B(psi2.L - 1, None), axes=['vR*', 'vR'])
+        psi2.set_B(0, B0.ireplace_label('vR*', 'vL'), form=None)
+        psi2.set_B(psi2.L - 1, BL.ireplace_label('vL*', 'vR'), form=None)
     ov = psi.overlap(psi2, ignore_form=True, understood_infinite=True)
     print('normalized states: overlap <psi_canonical|psi> = 1.-', 1.0 - ov)
     assert abs(ov - 1.0) < 1.0e-14
