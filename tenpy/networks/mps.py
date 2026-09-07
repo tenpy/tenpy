@@ -7974,9 +7974,6 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         self.set_RP(i, RP, self.get_RP_age(i))
 
 
-# TODO_MPS stopped here
-
-
 class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
     """Class storing partial contractions between two different MPS and providing expectation values.
 
@@ -8019,47 +8016,41 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
 
         """
         LP, RP = self._full_contraction_LP_RP(i0)
-        contr = npc.inner(LP, RP, axes=[['vR*', 'vR'], ['vL*', 'vL']], do_conj=False)
+        contr = mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(dict(LP=LP, RP=RP))
         return contr * self.bra.norm * self.ket.norm
 
     def _contract_LP(self, i, LP):
-        LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
-        axes = (self.ket._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
-        # for a usual MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
-        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
+        # TODO this is not a planar diagram to make it also work for, e.g., purification MPS
+        LP = ct.planar_contraction(LP, self.ket.get_B(i, form='A'), ['vR'], ['vL'])
+        LP = ct.planar_contraction(
+            LP, self.bra.get_B(i, form='A').hc, ['vR*'] + self.ket._p_label, ['vL*'] + self.ket._get_p_label('*')
+        )
         return LP  # labels 'vR*', 'vR'
 
     def _contract_RP(self, i, RP):
-        RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
-        axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
-        # for a usual MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
-        RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
+        # TODO this is not a planar diagram to make it also work for, e.g., purification MPS
+        RP = ct.planar_contraction(RP, self.ket.get_B(i, form='B'), ['vL'], ['vR'])
+        RP = ct.planar_contraction(
+            RP, self.bra.get_B(i, form='B').hc, ['vL*'] + self.ket._p_label, ['vR*'] + self.ket._get_p_label('*')
+        )
         return RP  # labels 'vL', 'vL*'
 
     # methods for Expectation values
     def _get_bra_ket(self):
         return self.bra, self.ket
 
-    def _normalize_exp_val(self, value):
+    def _normalize_exp_val(self, value: Sequence[ct.BlockBackend.Scalar]) -> list[ct.BlockBackend.Scalar]:
         # this ensures that
         #     MPSEnvironment(psi, psi.apply_local_op('B', i)).expectation_value('A', j)
         # gives the same as
         #     psi.correlation_function('A', 'B', sites1=[i], sites2=[j])
         # and psi.apply_local_op('Adagger', i).overlap(psi.apply_local_op('B', j)
         # for initially normalized psi
+        # TODO real_if_close for scalars? Right now we only have .real()?
         return np.real_if_close(value) * (self.bra.norm * self.ket.norm)
 
-    def _contract_with_LP(self, C, i):
-        # TODO_MPS get rid of these? replace with having _get_LP -> ct.Identity
-        LP = self.get_LP(i, store=True)
-        C = npc.tensordot(LP, C, axes=['vR', 'vL'])  # axes_p + (vR*, vR)
-        return C
 
-    def _contract_with_RP(self, C, i):
-        # TODO_MPS get rid of these? replace with having _get_LP -> ct.Identity
-        RP = self.get_RP(i, store=True)
-        C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vL, vL*)
-        return C
+# TODO_MPS stopped here
 
 
 class TransferMatrix(ct.tensors.sparse.LinearOperator):  # TODO: adapt for LinearOperator
