@@ -3351,6 +3351,7 @@ class MPS(BaseMPSExpectationValue):
                     labels.append(MPS_TOTAL_CHARGE_LABEL)
                     charge_leg = ct.ElementarySpace.from_defining_sectors(sym, total_charge)
                     domain = ct.TensorProduct([charge_leg, virtual_spaces[0]], sym)
+                    B_shape = [B_shape[p] for p in perm]
                     if len(B_shape) == 3:
                         B = backend.block_backend.reshape(B, (*B_shape, 1))
             else:
@@ -5404,7 +5405,7 @@ class MPS(BaseMPSExpectationValue):
             ov, _ = TM.eigenvectors(**kwargs)
             return ov[0] * self.norm * other.norm
 
-    def expectation_value_terms_sum(self, term_list):
+    def expectation_value_terms_sum(self, term_list: TermList):
         """Calculate expectation values for a bunch of terms and sum them up.
 
         This is equivalent to the following expression::
@@ -7355,7 +7356,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         self.ket = ket
         self.dtype = ct.Dtype.common(bra.dtype, ket.dtype)
         self.backend = ct.backends.get_same_backend(bra, ket)
-        self.device = ct.tensors.get_same_device(bra, ket)
+        self.device = ct.tensors.get_same_device(bra._B[0], ket._B[0])
         L = lcm(bra.L, ket.L)
         if hasattr(self, 'H'):
             L = lcm(self.H.L, L)
@@ -7416,36 +7417,19 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             init_LP = self.init_LP(0, start_env_sites)
             age_LP = start_env_sites
         else:
-            # TODO we assume that init_LP has vR leg in domain, vR* leg in codomain (similar for init_RP)
-            # Is this always valid? The leg positions should match those that we get after contractions
-            # with planar diagrams when computing the next LP / RP
+            # use planar_contraction in order to avoid distinguishing where which legs are
             if ket_U is not None:
-                # need compose or partial_compose depending on the number of legs
-                if init_LP.num_domain_legs > 1:
-                    ct.tensors.partial_compose(init_LP, ket_U, 'vR')
-                else:
-                    ct.compose(init_LP, ket_U)
+                init_LP = ct.planar_contraction(init_LP, ket_U, ['vR'], ['vL'])
             if bra_U is not None:
-                if init_LP.num_codomain_legs > 1:
-                    ct.tensors.partial_compose(init_LP, bra_U.hc, 'vR*')
-                else:
-                    ct.compose(bra_U.hc, init_LP)
+                init_LP = ct.planar_contraction(init_LP, bra_U.hc, ['vR*'], ['vL*'])
         if init_RP is None:
             init_RP = self.init_RP(self.L - 1, start_env_sites)
             age_RP = start_env_sites
         else:
             if ket_V is not None:
-                ket_V = ket_V.T
-                if init_RP.num_domain_legs > 1:
-                    ct.tensors.partial_compose(init_RP, ket_V, 'vL')
-                else:
-                    ct.compose(init_RP, ket_V)
+                init_RP = ct.planar_contraction(init_RP, ket_V, ['vL'], ['vR'])
             if bra_V is not None:
-                bra_V = bra_V.T
-                if init_RP.num_codomain_legs > 1:
-                    ct.tensors.partial_compose(init_RP, bra_V.hc, 'vL*')
-                else:
-                    ct.compose(bra_V.hc, init_RP)
+                init_RP = ct.planar_contraction(init_RP, bra_V.hc, ['vL*'], ['vR*'])
         self.set_LP(0, init_LP, age=age_LP)
         self.set_RP(self.L - 1, init_RP, age=age_RP)
 
@@ -7560,14 +7544,12 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             U_bra, V_bra = self.bra.segment_boundaries
             U_ket, V_ket = self.ket.segment_boundaries
             if V_bra is not None or V_ket is not None:
-                V_ket = V_ket.T
-                V_bra = V_bra.T
                 if V_bra is not None and V_ket is not None:
-                    init_RP = ct.compose(V_bra.hc, V_ket)
+                    init_RP = ct.compose(V_ket, V_bra.hc).T
                 elif V_bra is not None:
-                    init_RP = V_bra.hc.relabel({'vR*': 'vL'})
+                    init_RP = V_bra.T.hc.relabel({'vR*': 'vL'})
                 else:
-                    init_RP = V_ket.relabel({'vR': 'vL*'})
+                    init_RP = V_ket.T.relabel({'vR': 'vL*'})
                 return init_RP
         leg_ket = self.ket.get_B(i + start_env_sites, None).get_leg('vR')
         leg_bra = self.bra.get_B(i + start_env_sites, None).get_leg('vR')
@@ -7807,32 +7789,18 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         ket_U, ket_V = self.ket.segment_boundaries
         if first == 0:
             if ket_U is not None:
-                if LP.num_domain_legs > 1:
-                    ct.tensors.partial_compose(LP, ket_U.hc, 'vR')
-                else:
-                    ct.compose(LP, ket_U.hc)
+                LP = ct.planar_contraction(LP, ket_U.hc, ['vR'], ['vR*'])
                 LP.relabel({'vL*': 'vR'})
             if bra_U is not None:
-                if LP.num_codomain_legs > 1:
-                    ct.tensors.partial_compose(LP, bra_U, 'vR*')
-                else:
-                    ct.compose(bra_U, LP)
+                LP = ct.planar_contraction(LP, bra_U, ['vR*'], ['vR'])
                 LP.relabel({'vL': 'vR*'})
         if last == self.ket.L - 1:
             if ket_V is not None:
-                ket_V = ket_V.T
-                if RP.num_domain_legs > 1:
-                    ct.tensors.partial_compose(RP, ket_V.hc, 'vL')
-                else:
-                    ct.compose(RP, ket_V.hc)
+                RP = ct.planar_contraction(RP, ket_V.hc, ['vL'], ['vL*'])
                 RP.relabel({'vR*': 'vL'})
         if last == self.bra.L - 1:
             if bra_V is not None:
-                bra_V = bra_V.T
-                if RP.num_codomain_legs > 1:
-                    ct.tensors.partial_compose(RP, bra_V, 'vL*')
-                else:
-                    ct.compose(bra_V, RP)
+                RP = ct.planar_contraction(RP, bra_V, ['vL*'], ['vL'])
                 RP.relabel({'vR': 'vL*'})
         data = {
             'init_LP': LP,
@@ -7886,23 +7854,16 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         else:
             LP = self.get_LP(i0 + 1, store=False)
         # multiply with `S` on bra and ket side
-        S_bra = self.bra.get_SR(i0).conj()
+        S_bra = self.bra.get_SR(i0).hc
         if isinstance(S_bra, ct.DiagonalTensor):
             LP = ct.scale_axis(LP, S_bra, 'vR*')
         else:
-            S_bra = S_bra.T
-            if LP.num_codomain_legs > 1:
-                ct.tensors.partial_compose(LP, S_bra, 'vR*')
-            else:
-                ct.compose(S_bra, LP)
+            LP = ct.planar_contraction(LP, S_bra, ['vR*'], ['vL*'])
         S_ket = self.ket.get_SR(i0)
         if isinstance(S_ket, ct.DiagonalTensor):
             LP = ct.scale_axis(LP, S_ket, 'vR')
         else:
-            if LP.num_domain_legs > 1:
-                ct.tensors.partial_compose(LP, S_ket, 'vR')
-            else:
-                ct.compose(LP, S_ket)
+            LP = ct.planar_contraction(LP, S_ket, ['vR'], ['vL'])
         RP = self.get_RP(i0, store=False)
         return LP, RP
 
@@ -7995,15 +7956,9 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             return
         LP = self.get_LP(i)
         if update_ket:
-            if LP.num_domain_legs > 1:
-                ct.tensors.partial_compose(LP, U, 'vR')
-            else:
-                ct.compose(LP, U)
+            LP = ct.planar_contraction(LP, U, ['vR'], ['vL'])
         if update_bra:
-            if LP.num_codomain_legs > 1:
-                ct.tensors.partial_compose(LP, U.hc, 'vR*')
-            else:
-                ct.compose(U.hc, LP)
+            LP = ct.planar_contraction(LP, U.hc, ['vR*'], ['vL*'])
         self.set_LP(i, LP, self.get_LP_age(i))
 
     def _update_gauge_RP(self, i: int, V: ct.SymmetricTensor, update_bra: bool, update_ket: bool):
@@ -8012,17 +7967,10 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         if not self.has_RP(i):
             return
         RP = self.get_RP(i)
-        V = V.T
         if update_ket:
-            if RP.num_domain_legs > 1:
-                ct.tensors.partial_compose(RP, V, 'vL')
-            else:
-                ct.compose(RP, V)
+            RP = ct.planar_contraction(RP, V, ['vL'], ['vR'])
         if update_bra:
-            if RP.num_codomain_legs > 1:
-                ct.tensors.partial_compose(RP, V.hc, 'vL*')
-            else:
-                ct.compose(V.hc, RP)
+            RP = ct.planar_contraction(RP, V.hc, ['vL*'], ['vR*'])
         self.set_RP(i, RP, self.get_RP_age(i))
 
 
