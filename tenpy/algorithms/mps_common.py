@@ -26,10 +26,11 @@ import logging
 import time
 import warnings
 
-import numpy as np
-
 # from ..linalg import np_conserved as npc
 # from ..linalg.sparse import NpcLinearOperator, OrthogonalNpcLinearOperator, SumNpcLinearOperator
+import cyten as ct
+import cyten.tensors.sparse as ct_sparse
+import numpy as np
 from cyten.tensors.planar import PlanarLinearOperator
 
 from ..linalg.truncation import TruncationError  # ,  decompose_theta_qr_based, svd_theta, truncate
@@ -519,7 +520,7 @@ class Sweep(Algorithm):
         self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right)
         # note: this order of wrapping is most effective.
         if hasattr(self.env, 'H') and self.env.H.explicit_plus_hc:
-            self.eff_H = npc.SumNpcLinearOperator(self.eff_H, self.eff_H.adjoint())
+            self.eff_H = ct_sparse.SumLinearOperator(self.eff_H, self.eff_H.adjoint())
         if len(self.ortho_to_envs) > 0:
             self._wrap_ortho_eff_H()
 
@@ -532,14 +533,14 @@ class Sweep(Algorithm):
             theta = o_env.ket.get_theta(i0, n=self.eff_H.length)
             LP = o_env.get_LP(i0, store=True)
             RP = o_env.get_RP(i0 + self.eff_H.length - 1, store=True)
-            theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
-            theta = npc.tensordot(theta, RP, axes=('vR', 'vL'))
-            theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+            theta = ct.tdot(LP, theta, ['vR'], ['vL'])
+            theta = ct.tdot(theta, RP, ['vR'], ['vL'])
+            theta = theta.relabel({'vR*': 'vL', 'vL*': 'vR'})
             if self.eff_H.combine:
                 theta = self.eff_H.combine_theta(theta)
-            theta.itranspose(self.eff_H.acts_on)
+            theta = ct.permute_legs(theta, codomain=self.eff_H.acts_on, domain=[])
             ortho_vecs.append(theta)
-        self.eff_H = npc.OrthogonalNpcLinearOperator(self.eff_H, ortho_vecs)
+        self.eff_H = ct_sparse.ProjectedLinearOperator(self.eff_H, ortho_vecs)
 
     def update_local(self, theta, **kwargs):
         """Perform algorithm-specific local update.
@@ -1002,6 +1003,12 @@ class EffectiveH(PlanarLinearOperator):
         """
         raise NotImplementedError('This function should be implemented in derived classes')
 
+    def to_matrix(self):
+        """Contract `self` to a matrix."""
+        tensor = self.to_tensor()
+        n = len(tensor.labels) // 2
+        return ct.combine_legs(tensor, tensor.labels[:n], tensor.labels[n:])
+
     def update_LP(self, env, i, U=None):
         """Equivalent to ``env.get_LP(i, store=True)``; optimized for `combine`.
 
@@ -1090,15 +1097,37 @@ class OneSiteH(EffectiveH):
     length = 1
     acts_on = ['vL', 'p0', 'vR']
 
+    op_diagram = ct.PlanarDiagram(
+        tensors='Lp[vR*, wR, vR], W0[wL, p, wR, p*], Rp[vL*, vL, wL]',
+        definition=(
+            'Lp:vR* -> vL, Lp:wR @ W0:wL, Lp:vR -> vL*, '
+            'W0:p -> p0, W0:wR @ Rp:wL, W0:p* -> p0*, '
+            'Rp:vL* -> vR, Rp:vL -> vR*'
+        ),
+        dims=dict(chi=['vR', 'vR*', 'vL', 'vL*'], w=['wL', 'wR'], d=['p', 'p*']),
+    )
+    matvec_diagram = op_diagram.add_tensor(
+        tensor='theta[vL, p0, vR]',
+        extra_definition='theta:vL @ Lp:vR, theta:p0 @ W0:p*, theta:vR @ Rp:vL',
+        extra_dims=dict(chi=['vL', 'vR'], d=['p0']),
+    )
+
     def __init__(self, env, i0, combine=False, move_right=True):
         self.i0 = i0
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0)
-        self.W0 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
+        self.W0 = env.H.get_W(i0)
         self.dtype = env.H.dtype
         self.combine = combine
         self.move_right = move_right
-        self.N = self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len * self.RP.get_leg('vL').ind_len
+        self.N = self.LP.get_leg('vR').dim * self.W0.get_leg('p').dim * self.RP.get_leg('vL').dim
+        PlanarLinearOperator.__init__(
+            self,
+            op_diagram=self.op_diagram,
+            matvec_diagram=self.matvec_diagram,
+            op_tensors=dict(Lp=self.LP, W0=self.W0, Rp=self.RP),
+            vec_name='theta',
+        )
         if combine:
             self.combine_Heff(env)
 
@@ -1108,13 +1137,20 @@ class OneSiteH(EffectiveH):
         if combine:
             raise NotImplementedError("Shouldn't need this for vumps")
         self.i0 = i0
-        self.LP = LP.itranspose(['vR*', 'wR', 'vR'])
-        self.RP = RP.itranspose(['wL', 'vL', 'vL*'])
-        self.W0 = W0.replace_labels(['p', 'p*'], ['p0', 'p0*'])
+        self.LP = ct.permute_legs(LP, codomain=['vR*', 'wR', 'vR'], domain=[])
+        self.RP = ct.permute_legs(RP, codomain=['vL*', 'vL', 'wL'], domain=[])
+        self.W0 = W0
         self.dtype = LP.dtype
         self.combine = combine
         self.move_right = move_right
-        self.N = self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len * self.RP.get_leg('vL').ind_len
+        self.N = self.LP.get_leg('vR').dim * self.W0.get_leg('p').dim * self.RP.get_leg('vL').dim
+        PlanarLinearOperator.__init__(
+            self,
+            op_diagram=self.op_diagram,
+            matvec_diagram=self.matvec_diagram,
+            op_tensors=dict(Lp=self.LP, W0=self.W0, Rp=self.RP),
+            vec_name='theta',
+        )
         return self
 
     def matvec(self, theta):
@@ -1132,24 +1168,16 @@ class OneSiteH(EffectiveH):
             Product of `theta` and the effective Hamiltonian.
 
         """
-        labels = theta.get_leg_labels()
+        labels = theta.labels
+        if self.combine:
+            theta = ct.split_legs(theta)
+        theta = PlanarLinearOperator.matvec(self, theta)
         if self.combine:
             if self.move_right:
-                theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
-                # '(vR*.p0)', 'wR', 'vR'
-                theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])
-                theta.ireplace_labels(['(vR*.p0)', 'vL*'], ['(vL.p0)', 'vR'])
+                theta = ct.combine_legs(theta, ['vL', 'p0'], pipes=[self.pipeL])
             else:
-                theta = npc.tensordot(theta, self.RHeff, axes=['(p0.vR)', '(p0*.vL)'])
-                # 'vL', 'wL', '(p0.vL*)'
-                theta = npc.tensordot(self.LP, theta, axes=[['vR', 'wR'], ['vL', 'wL']])
-                theta.ireplace_labels(['vR*', '(p0.vL*)'], ['vL', '(p0.vR)'])
-        else:
-            theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
-            theta = npc.tensordot(self.W0, theta, axes=[['wL', 'p0*'], ['wR', 'p0']])
-            theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])
-            theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-        theta.itranspose(labels)  # if necessary, transpose
+                theta = ct.combine_legs(theta, ['p0', 'vR'], pipes=[self.pipeR])
+        theta = ct.permute_legs(theta, codomain=labels, domain=[])  # if necessary, transpose
         return theta
 
     def combine_Heff(self, env):
@@ -1189,25 +1217,10 @@ class OneSiteH(EffectiveH):
         """
         if self.combine:
             if self.move_right:
-                theta = theta.combine_legs(['vL', 'p0'], pipes=self.pipeL)
+                theta = ct.combine_legs(theta, ['vL', 'p0'], pipes=[self.pipeL])
             else:
-                theta = theta.combine_legs(['p0', 'vR'], pipes=self.pipeR)
-        return theta.itranspose(self.acts_on)
-
-    def to_matrix(self):
-        """Contract `self` to a matrix."""
-        if self.combine:
-            if self.move_right:
-                contr = npc.tensordot(self.LHeff, self.RP, axes=['wR', 'wL'])
-                contr = contr.combine_legs([['(vR*.p0)', 'vL*'], ['(vR.p0*)', 'vL']], qconj=[+1, -1])
-            else:
-                contr = npc.tensordot(self.LP, self.RHeff, axes=['wR', 'wL'])
-                contr = contr.combine_legs([['vR*', '(p0.vL*)'], ['vR', '(p0*.vL)']], qconj=[+1, -1])
-        else:
-            contr = npc.tensordot(self.LP, self.W0, axes=['wR', 'wL'])
-            contr = npc.tensordot(contr, self.RP, axes=['wR', 'wL'])
-            contr = contr.combine_legs([['vR*', 'p0', 'vL*'], ['vR', 'p0*', 'vL']], qconj=[+1, -1])
-        return contr
+                theta = ct.combine_legs(theta, ['p0', 'vR'], pipes=[self.pipeR])
+        return ct.permute_legs(theta, codomain=self.acts_on, domain=[])
 
     def adjoint(self):
         """Return the hermitian conjugate of `self`."""
@@ -1301,21 +1314,41 @@ class TwoSiteH(EffectiveH):
     length = 2
     acts_on = ['vL', 'p0', 'p1', 'vR']
 
+    op_diagram = ct.PlanarDiagram(
+        tensors='Lp[vR*, wR, vR], W0[wL, p, wR, p*], W1[wL, p, wR, p*], Rp[vL*, vL, wL]',
+        definition=(
+            'Lp:vR* -> vL, Lp:wR @ W0:wL, Lp:vR -> vL*, '
+            'W0:p -> p0, W0:wR @ W1:wL, W0:p* -> p0*, '
+            'W1:p -> p1, W1:wR @ Rp:wL, W1:p* -> p1*, '
+            'Rp:vL* -> vR, Rp:vL -> vR*'
+        ),
+        dims=dict(chi=['vR', 'vR*', 'vL', 'vL*'], w=['wL', 'wR'], d=['p', 'p*']),
+    )
+    matvec_diagram = op_diagram.add_tensor(
+        tensor='theta[vL, p0, p1, vR]',
+        extra_definition='theta:vL @ Lp:vR, theta:p0 @ W0:p*, theta:p1 @ W1:p*, theta:vR @ Rp:vL',
+        extra_dims=dict(chi=['vL', 'vR'], d=['p0', 'p1']),
+    )
+
     def __init__(self, env, i0, combine=False, move_right=True):
         self.i0 = i0
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0 + 1)
-        self.W0 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
-        # 'wL', 'wR', 'p0', 'p0*'
-        self.W1 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
-        # 'wL', 'wR', 'p1', 'p1*'
+        self.W0 = env.H.get_W(i0)
+        # 'wL', 'wR', 'p', 'p*'
+        self.W1 = env.H.get_W(i0 + 1)
+        # 'wL', 'wR', 'p', 'p*'
         self.dtype = env.H.dtype
         self.combine = combine
         self.N = (
-            self.LP.get_leg('vR').ind_len
-            * self.W0.get_leg('p0').ind_len
-            * self.W1.get_leg('p1').ind_len
-            * self.RP.get_leg('vL').ind_len
+            self.LP.get_leg('vR').dim * self.W0.get_leg('p').dim * self.W1.get_leg('p').dim * self.RP.get_leg('vL').dim
+        )
+        PlanarLinearOperator.__init__(
+            self,
+            op_diagram=self.op_diagram,
+            matvec_diagram=self.matvec_diagram,
+            op_tensors=dict(Lp=self.LP, W0=self.W0, W1=self.W1, Rp=self.RP),
+            vec_name='theta',
         )
         if combine:
             self.combine_Heff(env)
@@ -1334,18 +1367,13 @@ class TwoSiteH(EffectiveH):
             Product of `theta` and the effective Hamiltonian.
 
         """
-        labels = theta.get_leg_labels()
+        labels = theta.labels
         if self.combine:
-            theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
-            theta = npc.tensordot(theta, self.RHeff, axes=[['wR', '(p1.vR)'], ['wL', '(p1*.vL)']])
-            theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
-        else:
-            theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
-            theta = npc.tensordot(self.W0, theta, axes=[['wL', 'p0*'], ['wR', 'p0']])
-            theta = npc.tensordot(theta, self.W1, axes=[['wR', 'p1'], ['wL', 'p1*']])
-            theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])
-            theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-        theta.itranspose(labels)  # if necessary, transpose
+            theta = ct.split_legs(theta)
+        theta = PlanarLinearOperator.matvec(self, theta)
+        if self.combine:
+            theta = ct.combine_legs(theta, ['vL', 'p0'], ['p1', 'vR'], pipes=[self.pipeL, self.pipeR])
+        theta = ct.permute_legs(theta, codomain=labels, domain=[])  # if necessary, transpose
         # This is where we would truncate. Separate mode from combine?
         return theta
 
@@ -1388,20 +1416,8 @@ class TwoSiteH(EffectiveH):
 
         """
         if self.combine:
-            theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[self.pipeL, self.pipeR])
-        return theta.itranspose(self.acts_on)
-
-    def to_matrix(self):
-        """Contract `self` to a matrix."""
-        if self.combine:
-            contr = npc.tensordot(self.LHeff, self.RHeff, axes=['wR', 'wL'])
-            contr = contr.combine_legs([['(vR*.p0)', '(p1.vL*)'], ['(vR.p0*)', '(p1*.vL)']], qconj=[+1, -1])
-        else:
-            contr = npc.tensordot(self.LP, self.W0, axes=['wR', 'wL'])
-            contr = npc.tensordot(contr, self.W1, axes=['wR', 'wL'])
-            contr = npc.tensordot(contr, self.RP, axes=['wR', 'wL'])
-            contr = contr.combine_legs([['vR*', 'p0', 'p1', 'vL*'], ['vR', 'p0*', 'p1*', 'vL']], qconj=[+1, -1])
-        return contr
+            theta = ct.combine_legs(theta, ['vL', 'p0'], ['p1', 'vR'], pipes=[self.pipeL, self.pipeR])
+        return ct.permute_legs(theta, codomain=self.acts_on, domain=[])
 
     def adjoint(self):
         """Return the hermitian conjugate of `self`."""
@@ -1479,21 +1495,46 @@ class ZeroSiteH(EffectiveH):
     length = 0
     acts_on = ['vL', 'vR']
 
+    op_diagram = ct.PlanarDiagram(
+        tensors='Lp[vR*, wR, vR], Rp[vL*, vL, wL]',
+        definition='Lp:vR* -> vL, Lp:wR @ Rp:wL, Lp:vR -> vL*, Rp:vL* -> vR, Rp:vL -> vR*',
+        dims=dict(chi=['vR', 'vR*', 'vL', 'vL*'], w=['wL', 'wR']),
+    )
+    matvec_diagram = op_diagram.add_tensor(
+        tensor='theta[vL, vR]',
+        extra_definition='theta:vL @ Lp:vR, theta:vR @ Rp:vL',
+        extra_dims=dict(chi=['vL', 'vR']),
+    )
+
     def __init__(self, env, i0):
         self.i0 = i0
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0 - 1)
         self.dtype = env.H.dtype
-        self.N = self.LP.get_leg('vR').ind_len * self.RP.get_leg('vL').ind_len
+        self.N = self.LP.get_leg('vR').dim * self.RP.get_leg('vL').dim
+        PlanarLinearOperator.__init__(
+            self,
+            op_diagram=self.op_diagram,
+            matvec_diagram=self.matvec_diagram,
+            op_tensors=dict(Lp=self.LP, Rp=self.RP),
+            vec_name='theta',
+        )
 
     @classmethod
     def from_LP_RP(cls, LP, RP, i0=0):
         self = cls.__new__(cls)
         self.i0 = i0
-        self.LP = LP.itranspose(['vR*', 'wR', 'vR'])
-        self.RP = RP.itranspose(['wL', 'vL', 'vL*'])
+        self.LP = ct.permute_legs(LP, codomain=['vR*', 'wR', 'vR'], domain=[])
+        self.RP = ct.permute_legs(RP, codomain=['vL*', 'vL', 'wL'], domain=[])
         self.dtype = LP.dtype
-        self.N = LP.get_leg('vR').ind_len * RP.get_leg('vL').ind_len
+        self.N = LP.get_leg('vR').dim * RP.get_leg('vL').dim
+        PlanarLinearOperator.__init__(
+            self,
+            op_diagram=self.op_diagram,
+            matvec_diagram=self.matvec_diagram,
+            op_tensors=dict(Lp=self.LP, Rp=self.RP),
+            vec_name='theta',
+        )
         return self
 
     def matvec(self, theta):
@@ -1510,18 +1551,10 @@ class ZeroSiteH(EffectiveH):
             Product of `theta` and the effective Hamiltonian.
 
         """
-        labels = theta.get_leg_labels()
-        theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
-        theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])
-        theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-        theta.itranspose(labels)  # if necessary, transpose
+        labels = theta.labels
+        theta = PlanarLinearOperator.matvec(self, theta)
+        theta = ct.permute_legs(theta, codomain=labels, domain=[])  # if necessary, transpose
         return theta
-
-    def to_matrix(self):
-        """Contract `self` to a matrix."""
-        contr = npc.tensordot(self.LP, self.RP, axes=['wR', 'wL'])
-        contr = contr.combine_legs([['vR*', 'vL*'], ['vR', 'vL']], qconj=[+1, -1])
-        return contr
 
     def adjoint(self):
         """Return the hermitian conjugate of `self`."""
@@ -1539,8 +1572,28 @@ class DummyTwoSiteH(EffectiveH):
 
     length = 2
 
+    # a single trivial "Id" tensor to which theta:vL is contracted; the other legs of theta are
+    # left open. PlanarDiagram requires the new tensor of add_tensor to connect to the existing
+    # diagram, so a fully disconnected (i.e. truly empty) op_diagram is not possible.
+    op_diagram = ct.PlanarDiagram(tensors='Id[a]', definition='Id:a -> a', dims=dict(x=['a']))
+    matvec_diagram = op_diagram.add_tensor(
+        tensor='theta[vL, p0, p1, vR]',
+        extra_definition='theta:vL @ Id:a, theta:p0 -> p0, theta:p1 -> p1, theta:vR -> vR',
+        extra_dims=dict(x=['vL'], chi=['vR'], d=['p0', 'p1']),
+    )
+
     def __init__(self, *args, **kwargs):
-        pass
+        backend = ct.get_backend('no_symmetry', 'numpy')
+        sym = ct.NoSymmetry().as_Symmetry()
+        leg = ct.ElementarySpace.from_trivial_sector(1, symmetry=sym)
+        Id = ct.SymmetricTensor.from_eye([leg], backend=backend, labels=['a'])
+        PlanarLinearOperator.__init__(
+            self,
+            op_diagram=self.op_diagram,
+            matvec_diagram=self.matvec_diagram,
+            op_tensors=dict(Id=Id),
+            vec_name='theta',
+        )
 
     def combine_theta(self, theta):
         return theta
