@@ -3436,7 +3436,7 @@ class MPS(BaseMPSExpectationValue):
         B_list = [None] * L
         S_list = [None] * (L + 1)
         for i in range(L - 1, 0, -1):
-            psi, S, B = ct.truncated_svd(psi, new_labels=['vR', 'vL'], svd_min=cutoff)
+            psi, S, B, err, renorm = ct.truncated_svd(psi, new_labels=['vR', 'vL'], svd_min=cutoff)
             # bring S and B to default form
             S /= ct.norm(S)
             B = ct.planar_permute_legs(B, domain=['vR'])
