@@ -4,6 +4,7 @@
 import copy
 from functools import reduce
 
+import cyten as ct
 import numpy as np
 import pytest
 from cyten.models.sites import FibonacciAnyonSite, SpinSite
@@ -94,9 +95,9 @@ def test_exact_diag_full(conserve, L):
     E0, psi0 = ED.groundstate()
     np.testing.assert_allclose(E0, np.min(np.linalg.eigvalsh(H_ref)), atol=1e-10)
     sectors = ED.possible_charge_sectors()
-    ground_sector = np.asarray(psi0.charge_leg.sector_decomposition)[0]
+    ground_sector = np.asarray(psi0.get_leg('!slice').dual.sector_decomposition)[0]
     assert np.any(np.all(sectors == ground_sector[np.newaxis, :], axis=1))
-    _assert_eigenvector(H, E0, psi0.invariant_part)
+    _assert_eigenvector(H, E0, psi0)
 
 
 # the SU(2) Clebsch-Gordans go through sympy, which trips over a deprecation in mpmath
@@ -115,8 +116,8 @@ def test_exact_diag_groundstate_per_sector(conserve, L):
     E0s = []
     for sector in ED.possible_charge_sectors():
         E0, psi0 = ED.groundstate(sector)
-        np.testing.assert_array_equal(np.asarray(psi0.charge_leg.sector_decomposition)[0], sector)
-        _assert_eigenvector(H, E0, psi0.invariant_part)
+        np.testing.assert_array_equal(np.asarray(psi0.get_leg('!slice').dual.sector_decomposition)[0], sector)
+        _assert_eigenvector(H, E0, psi0)
 
         # cross-check the selection against the full spectrum, without calling groundstate() again
         mask = np.all(sectors_of_basis == sector[np.newaxis, :], axis=1)
@@ -152,11 +153,56 @@ def test_exact_diag_charge_sector(conserve, L):
         ED.full_diagonalization()
         E0, psi0 = ED.groundstate()
         np.testing.assert_allclose(E0, expected_E0, atol=1e-10)
-        np.testing.assert_array_equal(np.asarray(psi0.charge_leg.sector_decomposition)[0], sector)
+        np.testing.assert_array_equal(np.asarray(psi0.get_leg('!slice').dual.sector_decomposition)[0], sector)
 
         # a charge_sector was already fixed at construction -- can't ask for another one
         with pytest.raises(ValueError, match='specified before'):
             ED.groundstate(sector)
+
+
+@pytest.mark.parametrize('conserve', ['Sz', 'parity', 'None'])
+@pytest.mark.parametrize('L', [3, 4])
+def test_exact_diag_mps_roundtrip(conserve, L):
+    if conserve == 'Sz' and L == 3:
+        pytest.skip('no charge-neutral sector for Sz, L=3; from_full needs neutral states')
+    site = SpinSite(0.5, conserve=conserve)
+    H, _ = _heisenberg_tensor(site, L)
+    sites = [site] * L
+    ED = exact_diag.ExactDiag.from_hamiltonian(H, sites)
+    ED.full_diagonalization()
+
+    # a charge-neutral random state in the p0..p{L-1} basis (nonzero only if a neutral sector exists)
+    psi_full = SymmetricTensor.from_random_uniform(
+        [site.leg] * L, [], labels=[[f'p{i}' for i in range(L)], []], dtype=ct.Dtype.float64
+    )
+    psi_full = psi_full / norm(psi_full)
+    mps = ED.full_to_mps(psi_full)
+    assert mps.bc == 'finite'
+    psi_back = ED.mps_to_full(mps)
+    np.testing.assert_allclose(
+        psi_back.to_numpy().reshape(-1),
+        psi_full.to_numpy().reshape(-1),
+        atol=1e-10,
+    )
+
+
+@pytest.mark.parametrize('conserve', ['Sz', 'parity', 'None'])
+@pytest.mark.parametrize('L', [3, 4])
+def test_exact_diag_exp_H(conserve, L):
+    from scipy.linalg import expm
+
+    site = SpinSite(0.5, conserve=conserve)
+    H, H_ref = _heisenberg_tensor(site, L)
+    sites = [site] * L
+    ED = exact_diag.ExactDiag.from_hamiltonian(H, sites)
+    ED.full_diagonalization()
+    dt = 0.1
+    U = ED.exp_H(dt)
+    # match cyten's block convention: domain axes reversed (as in _heisenberg_tensor)
+    expect_block = np.transpose(
+        np.reshape(expm(-1.0j * dt * H_ref), [2] * (2 * L)), [*range(L), *reversed(range(L, 2 * L))]
+    )
+    np.testing.assert_allclose(U.to_numpy(), expect_block, atol=1e-10)
 
 
 @pytest.mark.parametrize('conserve', ['Sz', 'parity', 'None'])
