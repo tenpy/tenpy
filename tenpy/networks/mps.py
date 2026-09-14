@@ -1866,9 +1866,6 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         assert coupling.num_sites == len(sites) + offsets.shape[1], msg
         # shift offsets such that they include the distances; then all
         # information is in the offsets and distances can be ignored
-        dist_offset_err = (
-            'specified distances and offsets are inconsistent; the right and left parts of a couplings cannot overlap'
-        )
         distances = np.asarray(distances)
         if right:
             offsets += distances[:, np.newaxis] + sites[-1] + 1
