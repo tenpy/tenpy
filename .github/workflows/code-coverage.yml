@@ -37,7 +37,7 @@ jobs:
         # --no-build-isolation avoids pip pulling a CUDA torch wheel that needs the CUDA toolkit
         run: |
           pip install --no-build-isolation -e ".[test]"
-        working-directory: ./cyten
+        working-directory: ./cyten_repo
 
       - name: Build and install tenpy
         run: |
