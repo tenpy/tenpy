@@ -171,6 +171,7 @@ from ..tools.cache import DictCache
 from ..tools.math import lcm
 from ..tools.misc import BetaWarning, argsort, get_recursive, inverse_permutation, to_array, to_iterable
 from ..tools.params import asConfig
+from .terms import TermList
 
 logger = logging.getLogger(__name__)
 
@@ -196,51 +197,42 @@ __all__ = [
 #     the `sites` argument and added an `offsets` argument. The legs of the coupling now act on
 #     `[site + i for i in offsets]`, where site is in `sites`; identities act between the
 #     individual tensors of a coupling.
-#   - MPS now consist of SymmetricTensors as Bs, where the final tensor may also be a ChargedTensor
+#   - MPS now consist of SymmetricTensors as Bs, where the final tensor may also be a HiddenLegTensor
 #     to absorb the total charge of a unit cell for iMPS. The singular values are DiagonalTensors.
 
 
 mps_contraction_diagram_operations: dict[str, ct.PlanarDiagram] = {
     'LP2 @ TM': ct.PlanarDiagram(
-        tensors='LP[vR*, vR], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
-        definition='LP:vR @ ket:vL, ket:p @ bra:p*, LP:vR* @ bra:vL*, ket:! @ bra:!, ket:vR -> vR, bra:vR* -> vR*',
+        tensors='LP[vR*, vR], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='LP:vR @ ket:vL, ket:p @ bra:p*, LP:vR* @ bra:vL*, ket:vR -> vR, bra:vR* -> vR*',
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
-        allow_multiple_charged_tensors=True,
     ),
     'LP2 @ bra-W-ket2': ct.PlanarDiagram(
-        tensors='LP[vR*, vR], W[p, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
-        definition=(
-            'LP:vR @ ket:vL, ket:p @ W:p*, LP:vR* @ bra:vL*, bra:p* @ W:p, ket:! @ bra:!, ket:vR -> vR, bra:vR* -> vR*'
-        ),
+        tensors='LP[vR*, vR], W[p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition=('LP:vR @ ket:vL, ket:p @ W:p*, LP:vR* @ bra:vL*, bra:p* @ W:p, ket:vR -> vR, bra:vR* -> vR*'),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
-        allow_multiple_charged_tensors=True,
     ),
     'LP3 @ bra-W-ket3': ct.PlanarDiagram(
-        tensors='LP[vR*, wR, vR], W[wL, p, wR, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        tensors='LP[vR*, wR, vR], W[wL, p, wR, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
         definition=(
-            'LP:vR @ ket:vL, ket:p @ W:p*, LP:wR @ W:wL, LP:vR* @ bra:vL*, W:p @ bra:p*, ket:! @ bra:!, '
+            'LP:vR @ ket:vL, ket:p @ W:p*, LP:wR @ W:wL, LP:vR* @ bra:vL*, W:p @ bra:p*, '
             'ket:vR -> vR, bra:vR* -> vR*, W:wR -> wR'
         ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL', 'wR']),
-        allow_multiple_charged_tensors=True,
     ),
     'LP2 @ bra-W-ket3': ct.PlanarDiagram(
-        tensors='LP[vR*, vR], W[p, wR, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        tensors='LP[vR*, vR], W[p, wR, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
         definition=(
-            'LP:vR @ ket:vL, ket:p @ W:p*, LP:vR* @ bra:vL*, W:p @ bra:p*, ket:! @ bra:!, '
-            'ket:vR -> vR, bra:vR* -> vR*, W:wR -> wR'
+            'LP:vR @ ket:vL, ket:p @ W:p*, LP:vR* @ bra:vL*, W:p @ bra:p*, ket:vR -> vR, bra:vR* -> vR*, W:wR -> wR'
         ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wR']),
-        allow_multiple_charged_tensors=True,
     ),
     'LP3 @ bra-W-ket2': ct.PlanarDiagram(
-        tensors='LP[vR*, wR, vR], W[wL, p, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        tensors='LP[vR*, wR, vR], W[wL, p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
         definition=(
-            'LP:vR @ ket:vL, ket:p @ W:p*, LP:wR @ W:wL, LP:vR* @ bra:vL*, W:p @ bra:p*, ket:! @ bra:!, '
-            'ket:vR -> vR, bra:vR* -> vR*'
+            'LP:vR @ ket:vL, ket:p @ W:p*, LP:wR @ W:wL, LP:vR* @ bra:vL*, W:p @ bra:p*, ket:vR -> vR, bra:vR* -> vR*'
         ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL', 'wR']),
-        allow_multiple_charged_tensors=True,
     ),
     'LP2 @ RP2': ct.PlanarDiagram(
         tensors='LP[vR*, vR], RP[vL*, vL]',
@@ -253,38 +245,33 @@ mps_contraction_diagram_operations: dict[str, ct.PlanarDiagram] = {
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], w=['wL', 'wR']),
     ),
     'TM @ RP2': ct.PlanarDiagram(
-        tensors='RP[vL*, vL], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
-        definition='RP:vL @ ket:vR, ket:p @ bra:p*, RP:vL* @ bra:vR*, ket:! @ bra:!, ket:vL -> vL, bra:vL* -> vL*',
+        tensors='RP[vL*, vL], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='RP:vL @ ket:vR, ket:p @ bra:p*, RP:vL* @ bra:vR*, ket:vL -> vL, bra:vL* -> vL*',
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
-        allow_multiple_charged_tensors=True,
     ),
     'bra-W-ket2 @ RP2': ct.PlanarDiagram(
-        tensors='RP[vL*, vL], W[p, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
-        definition=(
-            'RP:vL @ ket:vR, ket:p @ W:p*, RP:vL* @ bra:vR*, bra:p* @ W:p, ket:! @ bra:!, ket:vL -> vL, bra:vL* -> vL*'
-        ),
+        tensors='RP[vL*, vL], W[p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition=('RP:vL @ ket:vR, ket:p @ W:p*, RP:vL* @ bra:vR*, bra:p* @ W:p, ket:vL -> vL, bra:vL* -> vL*'),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
-        allow_multiple_charged_tensors=True,
     ),
     'bra-W-ket3 @ RP3': ct.PlanarDiagram(
-        tensors='RP[vL*, vL, wL], W[wL, p, wR, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        tensors='RP[vL*, vL, wL], W[wL, p, wR, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
         definition=(
-            'RP:vL @ ket:vR, ket:p @ W:p*, RP:wL @ W:wR, RP:vL* @ bra:vR*, W:p @ bra:p*, ket:! @ bra:!, '
+            'RP:vL @ ket:vR, ket:p @ W:p*, RP:wL @ W:wR, RP:vL* @ bra:vR*, W:p @ bra:p*, '
             'ket:vL -> vL, bra:vL* -> vL*, W:wL -> wL'
         ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL', 'wR']),
-        allow_multiple_charged_tensors=True,
     ),
     'bra-W-ket3 @ RP2': ct.PlanarDiagram(
-        tensors='RP[vL*, vL], W[wL, p, p*], ket[vL, p, vR, !], bra[vR*, p*, vL*, !]',
+        tensors='RP[vL*, vL], W[wL, p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
         definition=(
-            'RP:vL @ ket:vR, ket:p @ W:p*, RP:vL* @ bra:vR*, W:p @ bra:p*, ket:! @ bra:!, '
-            'ket:vL -> vL, bra:vL* -> vL*, W:wL -> wL'
+            'RP:vL @ ket:vR, ket:p @ W:p*, RP:vL* @ bra:vR*, W:p @ bra:p*, ket:vL -> vL, bra:vL* -> vL*, W:wL -> wL'
         ),
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], w=['wL']),
-        allow_multiple_charged_tensors=True,
     ),
 }
+
+MPS_TOTAL_CHARGE_LABEL = 'unit_cell_charge'
 
 
 class MPSGeometry:
@@ -503,7 +490,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         op: str | ct.Coupling,
         sites: list[int] | int = None,
         offsets: list[list[int]] | list[int] = None,
-    ) -> np.ndarray:
+    ) -> list[ct.BlockBackend.Scalar]:
         """Expectation value ``<bra|op|ket>`` of an (n-site) operator.
 
         Calculates n-site expectation values of operators sandwiched between bra and ket.
@@ -548,11 +535,11 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             Must have the same length as ``sites``. Must fulfill ``offsets[j][i + 1] > offsets[j][i]``
             If list of int: Apply the offsets to every entry in ``sites``.
             If ``None`` (default), ``op`` acts on consecutive sites, which is equivalent to
-            ``offsets = range(len(op))``.
+            ``offsets = range(op.num_sites)`` for couplings.
 
         Returns
         -------
-        exp_vals : 1D ndarray
+        exp_vals : list of :class:`~cyten.BlockBackend.Scalar`
             Expectation values, ``exp_vals[i] = <bra|op|ket>``, where ``op`` acts on site(s)
             ``[j1, j2, ..., j{n-1}]=[sites[i] + j for j in offsets[i]]``.
 
@@ -647,7 +634,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         sites: list[int] | int = None,
         offsets: list[list[int]] | list[int] = None,
         axes: tuple[list[str], list[str]] = None,
-    ) -> np.ndarray:
+    ) -> list[ct.BlockBackend.Scalar]:
         """Expectation value ``<bra|op|ket>`` of an (n-site) operator.
 
         Same as :meth:`expectation_value`, but for operators that are tensors rather than couplings.
@@ -679,7 +666,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             Must have the same length as ``sites``. Must fulfill ``offsets[j][i + 1] > offsets[j][i]``
             If list of int: Apply the offsets to every entry in ``sites``.
             If ``None`` (default), ``op`` acts on consecutive sites, which is equivalent to
-            ``offsets = range(len(op))``.
+            ``offsets = range(op.num_sites)`` for couplings.
         axes : None | (list of str, list of str)
             Two lists of each `n` leg labels giving the physical legs of the operator used for
             contraction. The first `n` legs are contracted with conjugated `B`,
@@ -689,7 +676,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         Returns
         -------
-        exp_vals : 1D ndarray
+        exp_vals : list of :class:`~cyten.BlockBackend.Scalar`
             Expectation values, ``exp_vals[i] = <bra|op|ket>``, where ``op`` acts on site(s)
             ``[j1, j2, ..., j{n-1}]=[sites[i] + j for j in offsets[i]]``.
 
@@ -1081,6 +1068,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 C_gtr = self._corr_right(
                     op_L=op1, op_R=op2, sites_L=sites_i, sites_R=sites_j_gtr, split=False, opstr=opstr
                 )
+                C_gtr = np.array([val.to_numpy() for val in C_gtr])
                 C[x, mask_j_gtr] = C_gtr
                 if hermitian:
                     C[mask_j_gtr, x] = np.conj(C_gtr)
@@ -1094,6 +1082,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 C_sml = self._corr_left(
                     op_L=op2, op_R=op1, sites_L=sites_j_sml[perm], sites_R=sites_i, split=False, opstr=opstr
                 )
+                C_sml = np.array([val.to_numpy() for val in C_sml])
                 C[x, np.where(mask_j_sml)[0][perm]] = C_sml
 
             # overlapping sites_i and sites_j
@@ -1107,12 +1096,12 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                     continue
                 op1 = self.get_op([op1], sites_i[0], return_four_legged=True)
                 if not isinstance(op1, ct.Coupling):
-                    op1 = ct.Coupling(sites_i, [op1])
+                    op1 = ct.Coupling([self.sites[s] for s in sites_i], [op1])
                 op2 = self.get_op([op2], sites_j[0], return_four_legged=True)
                 if not isinstance(op2, ct.Coupling):
-                    op2 = ct.Coupling(sites_j, [op2])
+                    op2 = ct.Coupling([self.sites[s] for s in sites_j], [op2])
                 op_combined, sites_combined = self._multiply_couplings(op1, op2, sites_i, sites_j)
-                C[x, y] = self.expectation_value(op=op_combined, sites=0, offsets=sites_combined)
+                C[x, y] = self.expectation_value(op=op_combined, sites=0, offsets=sites_combined)[0].to_numpy()
                 if hermitian:
                     C[y, x] = np.conj(C[x, y])
         return self._normalize_exp_val(C)
@@ -1134,7 +1123,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         sites_L : list of int
             Sites on which the left part of ``coupling`` acts for each evaluation of the correlator;
             the ``i``th tensor of the left part acts on site ``sites_L[i]``.
-            Must fulfill ``0 < len(sites_L) < len(couplings) - 1`` and must be sorted.
+            Must fulfill ``0 < len(sites_L) < couplings.num_sites - 1`` and must be sorted.
         distance : list of int
             Distances between the left and right parts of the coupling for each evaluation of the
             correlaton function. Each entry corresponds to the number of sites between the final
@@ -1150,7 +1139,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             of ``coupling`` acts on site ``sites_L[-1] + 1 + distances[j] + offsets_R[j][i]``.
             Must have the same length as ``distances`` and must fulfill ``offsets_R[j][i + 1] > offsets_R[j][i]``.
             The offsets applied to each entry in ``distance`` must fulfill
-            ``len(coupling) == len(sites_L) + len(offsets_R[i])``.
+            ``coupling.num_sites == len(sites_L) + len(offsets_R[i])``.
             If list of int: Apply offsets to every entry in ``distances``.
         opstr : None | (list of) { :class:`~cyten.Tensor` | str }
             Ignored by default (``None``).
@@ -1208,7 +1197,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         sites_R : list of int
             Sites on which the right part of ``coupling`` acts for each evaluation of the correlator;
             the ``i`` th tensor of the right part acts on site ``sites_R[i]``.
-            Must fulfill ``0 < len(sites_R) < len(couplings) - 1`` and must be sorted.
+            Must fulfill ``0 < len(sites_R) < couplings.num_sites - 1`` and must be sorted.
         distance : list of int
             Distances between the left and right parts of the coupling for each evaluation of the
             correlaton function. Each entry corresponds to the number of sites between the final
@@ -1224,7 +1213,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             of ``coupling`` acts on site ``sites_R[0] - 1 - distances[j] + offsets_L[j][i]``.
             Must have the same length as ``distances`` and must fulfill ``offsets_L[j][i + 1] > offsets_L[j][i]``.
             The offsets applied to each entry in ``distance`` must fulfill
-            ``len(coupling) == len(sites_R) + len(offsets_L[i])``.
+            ``coupling.num_sites == len(sites_R) + len(offsets_L[i])``.
             If list of int: Apply offsets to every entry in ``distances``.
         opstr : None | (list of) { :class:`~cyten.Tensor` | str }
             Ignored by default (``None``).
@@ -1258,8 +1247,8 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         sites_L = self._correlation_function_split_args(
             coupling=coupling, sites=sites_R, distances=distances, offsets=offsets_L, right=False
         )
-        coupling_left = coupling.factorization[: offsets_L.shape[1]]
-        coupling_right = coupling.factorization[offsets_L.shape[1] :]
+        coupling_left = coupling.factorization[: sites_L.shape[1]]
+        coupling_right = coupling.factorization[sites_L.shape[1] :]
         result = self._corr_left(
             op_L=coupling_left, op_R=coupling_right, sites_L=sites_L, sites_R=sites_R, split=True, opstr=opstr
         )
@@ -1497,9 +1486,11 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 if op is not None:
                     ket_B = ct.tensors.partial_compose(ket_B, op, tensor1_first_leg='p')
                 LP = mps_contraction_diagram_operations['LP2 @ TM'].evaluate(
-                    LP=LP,
-                    ket=ket_B,
-                    bra=bra.get_B(site + i),
+                    dict(
+                        LP=LP,
+                        ket=ket_B,
+                        bra=bra.get_B(site + i).hc,
+                    )
                 )
             return LP
         for i in range(num):
@@ -1508,7 +1499,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             if op is not None:
                 identity = ct.tensors.partial_compose(identity, op, tensor1_first_leg='p*')
             LP = mps_contraction_diagram_operations['LP3 @ bra-W-ket3'].evaluate(
-                LP=LP, ket=ket.get_B(site + i), bra=bra.get_B(site + i), W=identity
+                dict(LP=LP, ket=ket.get_B(site + i), bra=bra.get_B(site + i).hc, W=identity)
             )
         return LP
 
@@ -1554,9 +1545,11 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 if op is not None:
                     ket_B = ct.tensors.partial_compose(ket_B, op, tensor1_first_leg='p')
                 RP = mps_contraction_diagram_operations['TM @ RP2'].evaluate(
-                    RP=RP,
-                    ket=ket_B,
-                    bra=bra.get_B(site - i),
+                    dict(
+                        RP=RP,
+                        ket=ket_B,
+                        bra=bra.get_B(site - i).hc,
+                    )
                 )
             return RP
         for i in range(num):
@@ -1565,7 +1558,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             if op is not None:
                 identity = ct.tensors.partial_compose(identity, op, tensor1_first_leg='p*')
             RP = mps_contraction_diagram_operations['bra-W-ket3 @ RP3'].evaluate(
-                RP=RP, ket=ket.get_B(site - i), bra=bra.get_B(site - i), W=identity
+                dict(RP=RP, ket=ket.get_B(site - i), bra=bra.get_B(site - i).hc, W=identity)
             )
         return RP
 
@@ -1604,7 +1597,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         """
         assert len(sites) == len(ops), 'inconsistent number of sites and tensors'
-        assert sites == sorted(sites), 'specified sites must be sorted'
+        assert np.all(sites == sorted(sites)), 'specified sites must be sorted'
 
         # if LP has two legs, remove trivial leg of left-most op and use different planar diagram
         if LP.num_legs == 2:
@@ -1629,7 +1622,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 # OPTIMIZE reuse old identities for identical sites?
                 W = ket.get_site(site).identity_tensor(w=W.get_leg('wR'))
             new_LP = mps_contraction_diagram_operations['LP3 @ bra-W-ket3'].evaluate(
-                LP=new_LP, ket=ket.get_B(site), bra=bra.get_B(site).hc, W=W
+                dict(LP=new_LP, ket=ket.get_B(site), bra=bra.get_B(site).hc, W=W)
             )
         return new_LP
 
@@ -1668,7 +1661,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         """
         assert len(sites) == len(ops), 'inconsistent number of sites and tensors'
-        assert sites == sorted(sites), 'specified sites must be sorted'
+        assert np.all(sites == sorted(sites)), 'specified sites must be sorted'
 
         # if RP has two legs, remove trivial leg of right-most op and use different planar diagram
         if RP.num_legs == 2:
@@ -1677,10 +1670,11 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         else:
             W = ops[-1]
             diagram = 'bra-W-ket3 @ RP3'
+        form = form_on_first_site if len(sites) == 1 else 'B'
         tensors = dict(
             RP=RP,
-            ket=ket.get_B(sites[-1]),
-            bra=bra.get_B(sites[-1]).hc,
+            ket=ket.get_B(sites[-1], form=form),
+            bra=bra.get_B(sites[-1], form=form).hc,
             W=W,
         )
         new_RP = mps_contraction_diagram_operations[diagram].evaluate(tensors)
@@ -1693,14 +1687,17 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 # OPTIMIZE reuse old identities for identical sites?
                 W = ket.get_site(site).identity_tensor(w=W.get_leg('wL'))
             new_RP = mps_contraction_diagram_operations['bra-W-ket3 @ RP3'].evaluate(
-                RP=new_RP, ket=ket.get_B(site), bra=bra.get_B(site).hc, W=W
+                dict(RP=new_RP, ket=ket.get_B(site), bra=bra.get_B(site).hc, W=W)
             )
-        new_RP = mps_contraction_diagram_operations['bra-W-ket3 @ RP3'].evaluate(
-            RP=new_RP,
-            ket=ket.get_B(sites[0], form=form_on_first_site),
-            bra=bra.get_B(sites[0], form=form_on_first_site).hc,
-            W=W,
-        )
+        if len(sites) > 1:
+            new_RP = mps_contraction_diagram_operations['bra-W-ket3 @ RP3'].evaluate(
+                dict(
+                    RP=new_RP,
+                    ket=ket.get_B(sites[0], form=form_on_first_site),
+                    bra=bra.get_B(sites[0], form=form_on_first_site).hc,
+                    W=ops[0],
+                )
+            )
         return new_RP
 
     def _expectation_value_args(
@@ -1713,7 +1710,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             # can only be on-site operator
             n = 1
         else:
-            n = len(op.factorization)
+            n = op.num_sites
 
         bc_err = 'Specified sites and offsets are inconsistent with operator length and boundary conditions'
         if sites is None:
@@ -1772,7 +1769,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             LP=LP, bra=bra, ket=ket, ops=op.factorization, sites=sites, form_on_first_site='Th'
         )
         LP = ct.squeeze_legs(LP, 'wR')
-        return mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(LP=LP, RP=self.get_RP(sites[-1]))
+        return mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(dict(LP=LP, RP=self.get_RP(sites[-1])))
 
     def _expectation_value_onsite_op(self, bra: MPS, ket: MPS, op: ct.Tensor, site: int) -> complex | float:
         """Expectation value ``<bra|op|ket>`` with ``op`` being an on-site :class:cyten.Tensor.
@@ -1789,12 +1786,14 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         """
         res = mps_contraction_diagram_operations['LP2 @ bra-W-ket2'].evaluate(
-            LP=self.get_LP(site),
-            ket=ket.get_theta(site),
-            bra=bra.get_theta(site).hc,
-            W=op,
+            dict(
+                LP=self.get_LP(site),
+                ket=ket.get_theta(site, n=1).relabel({'p0': 'p'}),
+                bra=bra.get_theta(site, n=1).relabel({'p0': 'p'}).hc,
+                W=op,
+            )
         )
-        return mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(LP=res, RP=self.get_RP(site))
+        return mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(dict(LP=res, RP=self.get_RP(site)))
 
     def _correlation_function_args(
         self,
@@ -1808,8 +1807,8 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         """Get default arguments of self.correlation_function()."""
         # Note: we do not get op1 and op2 here since when they are str,
         # they can still correspond to different tensors on different sites
-        width1 = len(op1) if isinstance(op1, ct.Coupling) else 1
-        width2 = len(op2) if isinstance(op2, ct.Coupling) else 1
+        width1 = op1.num_sites if isinstance(op1, ct.Coupling) else 1
+        width2 = op2.num_sites if isinstance(op2, ct.Coupling) else 1
         if sites1 is None:
             sites1 = range(0, self.L - width1 + 1)
         elif isinstance(sites1, int):
@@ -1819,7 +1818,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         elif isinstance(sites2, int):
             sites2 = range(0, sites2)
 
-        site_list = [sites1, sites2]
+        site_list = np.asarray([sites1, sites2])
         offset_list = [offsets1, offsets2]
         widths = [width1, width2]
         offset_err = 'specified offsets are not sorted'
@@ -1864,7 +1863,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             assert len(distances) == offsets.shape[0], 'number of specified distances and offsets must match'
             assert np.all(offsets[:, :-1] <= offsets[:, 1:]), offset_err
         msg = 'coupling inconsistent with specified number of sites and offsets'
-        assert len(coupling) == len(sites) + offsets.shape[1], msg
+        assert coupling.num_sites == len(sites) + offsets.shape[1], msg
         # shift offsets such that they include the distances; then all
         # information is in the offsets and distances can be ignored
         dist_offset_err = (
@@ -1923,14 +1922,14 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             current_site += translate
 
             if not isinstance(op_R, list):
-                op_R = self.get_op([op_R], sites_R[i, 0])
+                op_R = self.get_op([op_R], sites_R[i, 0], return_four_legged=True)
                 op_R = op_R.factorization if isinstance(op_R, ct.Coupling) else [op_R]
             res_i = self._contract_tensors_LP(
-                LP=LP, bta=bra, ket=ket, ops=op_R, sites=sites_R[i, :], form_on_first_site='B'
+                LP=LP, bra=bra, ket=ket, ops=op_R, sites=sites_R[i, :], form_on_first_site='B'
             )
             res_i = ct.squeeze_legs(res_i, 'wR')
             RP = self.get_RP(sites_R[i, -1])
-            res.append(mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(LP=res_i, RP=RP))
+            res.append(mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(dict(LP=res_i, RP=RP)))
         return res
 
     def _corr_left(
@@ -1970,14 +1969,14 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             current_site -= translate
 
             if not isinstance(op_L, list):
-                op_L = self.get_op([op_L], sites_L[i, 0])
+                op_L = self.get_op([op_L], sites_L[i, 0], return_four_legged=True)
                 op_L = op_L.factorization if isinstance(op_L, ct.Coupling) else [op_L]
             res_i = self._contract_tensors_RP(
-                RP=RP, bta=bra, ket=ket, ops=op_L, sites=sites_L[i, :], form_on_first_site='Th'
+                RP=RP, bra=bra, ket=ket, ops=op_L, sites=sites_L[i, :], form_on_first_site='Th'
             )
             res_i = ct.squeeze_legs(res_i, 'wL')
             LP = self.get_LP(sites_L[i, 0])
-            res.append(mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(LP=LP, RP=res_i))
+            res.append(mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(dict(LP=LP, RP=res_i)))
         return res
 
     def _multiply_couplings(
@@ -2023,28 +2022,28 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             Sites on which the tensors in `new_coupling.factorization` act.
 
         """
-        new_idcs = sorted(set(*sites1, *sites2))
+        new_idcs = sorted(set(list(sites1) + list(sites2)))
         new_sites = []  # actual sites, not site indices
         i1 = 0  # index in coupling1
         i2 = 0  # index in coupling2
         Ws = []
         for site_idx in new_idcs:
-            if i1 < len(coupling1) and site_idx == sites1[i1]:
+            if i1 < coupling1.num_sites and site_idx == sites1[i1]:
                 W1 = coupling1.factorization[i1]
                 new_sites.append(coupling1.sites[i1])
                 i1 += 1
             else:
                 assert site_idx == sites2[i2]
                 new_sites.append(coupling2.sites[i2])
-                if i1 == 0 or i1 == len(coupling1):
+                if i1 == 0 or i1 == coupling1.num_sites:
                     # site_idx before or after coupling1 -> no need to contract with identity
                     W1 = None
                 else:
                     W1 = new_sites[-1].identity_tensor(w=Ws[-1].get_leg('wR'))
-            if i2 < len(coupling2) and site_idx == sites2[i2]:
+            if i2 < coupling2.num_sites and site_idx == sites2[i2]:
                 W2 = coupling2.factorization[i2]
                 i2 += 1
-            elif i2 == 0 or i2 == len(coupling2):
+            elif i2 == 0 or i2 == coupling2.num_sites:
                 W2 = None
             else:
                 W2 = new_sites[-1].identity_tensor(w=Ws[-1].get_leg('wR'))
@@ -2059,11 +2058,11 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 # left or right leg, add a trivial one.
                 if i1 == 1:
                     W1 = ct.squeeze_legs(W1, 'wL')
-                if i1 == len(coupling1):
+                if i1 == coupling1.num_sites:
                     W1 = ct.squeeze_legs(W1, 'wR')
                 if i2 == 1:
                     W2 = ct.squeeze_legs(W2, 'wL')
-                if i2 == len(coupling2):
+                if i2 == coupling2.num_sites:
                     W2 = ct.squeeze_legs(W2, 'wR')
 
                 relabel1 = {}
@@ -2072,7 +2071,8 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 pipes_relabel = {}
                 pipe_dualities = []
                 if W1.has_label('wR'):
-                    W1 = ct.move_leg(W1, 'wR', codomain_pos=2, bend_right=True)
+                    codom_pos = 2 if W1.has_label('wL') else 1
+                    W1 = ct.move_leg(W1, 'wR', codomain_pos=codom_pos, bend_right=True)
                     if W2.has_label('wR'):
                         relabel1['wR'] = 'wR1'
                         relabel2['wR'] = 'wR2'
@@ -2089,15 +2089,21 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                         pipe_dualities.append(False)
                 W = ct.compose(W1, W2, relabel1=relabel1, relabel2=relabel2)
                 if len(pipes) > 0:
+                    # order in the pipes chosen such that the legs end up in the correct positions
                     W = ct.planar.planar_combine_legs(W, *pipes, pipe_dualities=pipe_dualities)
                     W.relabel(pipes_relabel)
                 if not W.has_label('wL'):
                     W = ct.add_trivial_leg(W, codomain_pos=0, label='wL')
+                elif '(wL2.wL1)' not in pipes_relabel:
+                    # a single wL has been there (no piping) -> move to correct position
+                    W = ct.move_leg(W, 'wL', codomain_pos=0, bend_right=False)
                 if not W.has_label('wR'):
                     W = ct.add_trivial_leg(W, domain_pos=1, label='wR')
+                elif '(wR1.wR2)' not in pipes_relabel:
+                    W = ct.move_leg(W, 'wR', domain_pos=1, bend_right=True)
             Ws.append(W)
-        assert i1 == len(coupling1)
-        assert i2 == len(coupling2)
+        assert i1 == coupling1.num_sites
+        assert i2 == coupling2.num_sites
         new_coupling = ct.Coupling(new_sites, Ws)
         return new_coupling, new_idcs
 
@@ -2219,23 +2225,24 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         op = op_list[i_in_op_list]
         if isinstance(op, str):
             op = self.get_site(i).get_op(op)
-        if op is not None and not op.symmetry.trivial_shift:
-            # TODO this was an elif before. Should we ignore shifts for onsite operators?
-            # shift every tensor in a coupling?
-            raise NotImplementedError('TODO: shift-symmetry')
-        if return_four_legged:
-            for op_i in op:
-                if not isinstance(op_i, ct.Tensor):
-                    continue
-                if 'wL' not in op_i.labels:
-                    op_i = ct.add_trivial_leg(op_i, codomain_pos=0, label='wL')
-                if 'wR' not in op_i.labels:
-                    op_i = ct.add_trivial_leg(op_i, domain_pos=1, label='wR')
-                assert op_i.labels_are('wL', 'wR', 'p', 'p*')
+        if op is not None:
+            sym = op.sites[0].symmetry if isinstance(op, ct.Coupling) else op.symmetry
+            if not sym.trivial_shift:
+                # TODO this was an elif before. Should we ignore shifts for onsite operators?
+                # shift every tensor in a coupling?
+                raise NotImplementedError('TODO: shift-symmetry')
+        if return_four_legged and isinstance(op, ct.Tensor):
+            if isinstance(op, ct.DiagonalTensor):
+                op = op.as_SymmetricTensor()
+            if 'wL' not in op.labels:
+                op = ct.add_trivial_leg(op, codomain_pos=0, label='wL')
+            if 'wR' not in op.labels:
+                op = ct.add_trivial_leg(op, domain_pos=1, label='wR')
+            assert op.labels_are('wL', 'wR', 'p', 'p*')
         return op
 
     @abstractmethod
-    def _normalize_exp_val(self, value: Sequence[complex]) -> np.ndarray:
+    def _normalize_exp_val(self, value: Sequence[ct.BlockBackend.Scalar]) -> list[ct.BlockBackend.Scalar]:
         """Post processing of result values of :meth:`expectation_value`.
 
         Should always convert to numpy array and ensure real values.
@@ -2421,7 +2428,8 @@ class MPS(BaseMPSExpectationValue):
                 assert len(f) == 2
         for i, B in enumerate(self._B):
             if not B.labels_are(*self._B_labels):
-                raise ValueError(f'B has wrong labels {B.labels!r}, expected {self._B_labels!r}')
+                if not (self.bc == 'infinite' and B.labels_are(*self._B_labels, f'!{MPS_TOTAL_CHARGE_LABEL}')):
+                    raise ValueError(f'B has wrong labels {B.labels!r}, expected {self._B_labels!r}')
             i2 = (i + 1) if self.finite else (i + 1) % self.L
             if isinstance(self._S[i2], ct.DiagonalTensor):
                 if (
@@ -2775,7 +2783,7 @@ class MPS(BaseMPSExpectationValue):
             if isinstance(p_st, str):
                 p_st = site.state_labels[p_st]  # translate labels into "int"
             if isinstance(p_st, int):
-                charge_p = site.leg.defining_sectors[p_st]
+                charge_p = site.leg.idx_to_sector(p_st)
                 chargeR = sym.fusion_outcomes(virtual_spaces[-1].defining_sectors[0], charge_p)
                 virtual_spaces.append(ct.ElementarySpace.from_defining_sectors(sym, chargeR))
                 B = np.zeros((site.dim, 1, 1))
@@ -2785,14 +2793,20 @@ class MPS(BaseMPSExpectationValue):
                     raise ValueError('p_state incompatible with local dim:' + repr(p_st))
                 # look at all charges where p_st is nonzero and fuse them with the left charge,
                 # we must have unique fusion product on right leg if product state
-                charge_p = site.leg.defining_sectors[p_st != 0]
-                chargeR = sym.fusion_outcomes_broadcast(virtual_spaces[-1].defining_sectors, charge_p)
-                assert np.all(chargeR == chargeR[0]), (
+                charge_p = [site.leg.idx_to_sector(i) for i, p in enumerate(p_st) if p != 0]
+                # need to make sure to have the correct number of charges for fusion_outcomes_broadcast
+                chargeL_ = [virtual_spaces[-1].defining_sectors[0]] * len(charge_p)
+                chargeR = sym.fusion_outcomes_broadcast(chargeL_, charge_p)
+                assert np.all([charge == chargeR[0] for charge in chargeR]), (
                     f'specified on-site state incompatible with product state for {sym}'
                 )
                 virtual_spaces.append(ct.ElementarySpace.from_defining_sectors(sym, chargeR[0]))
                 B = np.array(p_st).reshape((site.dim, 1, 1))
             Bs.append(B)
+        total_charge = None
+        if bc == 'infinite':
+            total_charge = sym.fusion_outcomes(virtual_spaces[-1].defining_sectors[0], sym.dual_sector(chargeL))[0]
+            virtual_spaces = virtual_spaces[:-1]
         return cls.from_Bflat_virtual_spaces(
             sites,
             virtual_spaces,
@@ -2800,6 +2814,7 @@ class MPS(BaseMPSExpectationValue):
             SVs=None,
             bc=bc,
             dtype=dtype,
+            total_charge=total_charge,
             form=form,
             unit_cell_width=unit_cell_width,
             device=device,
@@ -3060,13 +3075,18 @@ class MPS(BaseMPSExpectationValue):
 
         """
         sites = list(sites)
-        backend = ct.backends.get_same_backend(sites)
+        backend = ct.backends.get_same_backend(*sites)
         L = len(sites)
         sym = sites[0].symmetry
         if bc == 'infinite':
             if len(virtual_spaces) != L:
                 raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
             virtual_spaces.append(virtual_spaces[0])
+            if total_charge is None:
+                total_charge = sym.trivial_sector
+            else:
+                err = f'{total_charge} is not a valid charge sector of the symmetry {sym}'
+                assert sym.is_valid_sector(total_charge), err
         elif bc != 'infinite' and len(virtual_spaces) != L + 1:
             raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
         if device is None:
@@ -3077,20 +3097,27 @@ class MPS(BaseMPSExpectationValue):
         Bs = []
         SVs = []
         for i in range(L):
-            codomain = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
+            labels = ['vL', 'p', 'vR']
+            if bc == 'infinite' and i == L - 1 and total_charge != sym.trivial_sector:
+                # due to QR, we construct the random tensor with bent down charge leg and then bend it up
+                labels = [MPS_TOTAL_CHARGE_LABEL] + labels
+                charge_leg = ct.ElementarySpace.from_defining_sectors(sym, total_charge)
+                codomain = ct.TensorProduct([charge_leg, virtual_spaces[i], sites[i].leg], sym)
+            else:
+                codomain = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
             domain = ct.TensorProduct([virtual_spaces[i + 1]], sym)
-            B = ct.SymmetricTensor.from_random_uniform(
-                codomain, domain, backend, ['vL', 'p', 'vR'], dtype=dtype, device=device
-            )
+            B = ct.SymmetricTensor.from_random_uniform(codomain, domain, backend, labels, dtype=dtype, device=device)
             B, _ = ct.qr(B, new_labels=['vR', 'vL'])
+            if B.has_label(MPS_TOTAL_CHARGE_LABEL):
+                B = ct.move_leg(B, MPS_TOTAL_CHARGE_LABEL, domain_pos=0, bend_right=False)
+                B = ct.HiddenLegTensor(B, [MPS_TOTAL_CHARGE_LABEL])
+            Bs.append(B)
             SV = ct.DiagonalTensor.from_random_uniform(
                 virtual_spaces[i], backend, ['vL', 'vR'], dtype=dtype.to_real, device=device
             )
             SVs.append(SV / ct.norm(SV))
         if bc == 'infinite':
             SVs.append(SVs[0])
-            # TODO generate ChargedTensor
-            raise NotImplementedError
         else:
             SV = ct.DiagonalTensor.from_random_uniform(
                 virtual_spaces[-1], backend, ['vL', 'vR'], dtype=dtype.to_real, device=device
@@ -3117,6 +3144,7 @@ class MPS(BaseMPSExpectationValue):
         SVs: Iterable[np.ndarray | ct.Block] | None = None,
         bc: Literal['finite', 'segment', 'infinite'] = 'finite',
         dtype: ct.Dtype = None,
+        total_charge: ct.Sector = None,
         form='B',
         legL: ct.Sector | ct.ElementarySpace | None = None,
         unit_cell_width: int = None,
@@ -3142,6 +3170,9 @@ class MPS(BaseMPSExpectationValue):
             MPS boundary conditions. See docstring of :class:`MPS`.
         dtype : :class:`~cyten.Dtype`, optional
             The data type of the tensors. Defaults to the common dtype of `Bflat`.
+        total_charge : :class:`~cyten.Sector`, optional
+            Total charge of the unit cell for infinite boundary conditions. Is ignored for finite
+            and segemnt boundary conditions. Defaults to the trivial charge sector.
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
             Defines the canonical form of `Bflat`. See module doc-string.
             A single choice holds for all of the entries.
@@ -3167,7 +3198,7 @@ class MPS(BaseMPSExpectationValue):
             'Use from_Bflat_virtual_spaces for non-Abelian symmetries'
         )
         assert sym.is_abelian, sym_err
-        backend = ct.backends.get_same_backend(sites)
+        backend = ct.backends.get_same_backend(*sites)
         Bflat = list(Bflat)
         if len(Bflat) != len(sites):
             raise ValueError('Length of Bflat does not match number of sites.')
@@ -3213,6 +3244,7 @@ class MPS(BaseMPSExpectationValue):
             SVs,
             bc,
             dtype=dtype,
+            total_charge=total_charge,
             form=form,
             unit_cell_width=unit_cell_width,
             device=device,
@@ -3276,13 +3308,19 @@ class MPS(BaseMPSExpectationValue):
         sites = list(sites)
         sym = sites[0].symmetry
         assert sym.can_be_dropped
-        backend = ct.backends.get_same_backend(sites)
+        backend = ct.backends.get_same_backend(*sites)
         L = len(sites)
         Bflat = list(Bflat)
         if len(Bflat) != L:
             raise ValueError('Length of Bflat does not match number of sites.')
-        if bc == 'infinite' and len(virtual_spaces) != L:
-            raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
+        if bc == 'infinite':
+            if len(virtual_spaces) != L:
+                raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
+            if total_charge is None:
+                total_charge = sym.trivial_sector
+            else:
+                err = f'{total_charge} is not a valid charge sector of the symmetry {sym}'
+                assert sym.is_valid_sector(total_charge), err
         elif bc != 'infinite' and len(virtual_spaces) != L + 1:
             raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
         if device is None:
@@ -3295,25 +3333,42 @@ class MPS(BaseMPSExpectationValue):
 
         Bs = []
         for i, B in enumerate(Bflat):
-            codomain = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
-            if bc == 'infinite' and i == L - 1:
-                domain = ct.TensorProduct([virtual_spaces[0]], sym)
-            else:
-                domain = ct.TensorProduct([virtual_spaces[i + 1]], sym)
             if isinstance(B, np.ndarray):
                 B = backend.block_backend.block_from_numpy(B, dtype=dtype, device=device)
             # convert to vL, p, vR
-            B = backend.block_backend.permute_axes(B, [1, 0, 2])
+            # we allow the user to specify all 4 legs in case for a nontrivial total charge (iMPS)
+            B_shape = backend.block_backend.get_shape(B)
+            perm = [1, 0, 2]
+            if len(B_shape) == 4:
+                perm.append(3)
+            B = backend.block_backend.permute_axes(B, perm)
+            codomain = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
+            labels = ['vL', 'p', 'vR']
+            if bc == 'infinite' and i == L - 1:
+                if total_charge == sym.trivial_sector:
+                    domain = ct.TensorProduct([virtual_spaces[0]], sym)
+                else:
+                    labels.append(MPS_TOTAL_CHARGE_LABEL)
+                    charge_leg = ct.ElementarySpace.from_defining_sectors(sym, total_charge)
+                    domain = ct.TensorProduct([charge_leg, virtual_spaces[0]], sym)
+                    B_shape = [B_shape[p] for p in perm]
+                    if len(B_shape) == 3:
+                        B = backend.block_backend.reshape(B, (*B_shape, 1))
+            else:
+                domain = ct.TensorProduct([virtual_spaces[i + 1]], sym)
             B = ct.SymmetricTensor.from_dense_block(
                 B,
                 codomain,
                 domain,
                 backend,
-                labels=['vL', 'p', 'vR'],
+                labels=labels,
                 dtype=dtype,
                 device=device,
                 understood_braiding=True,
             )
+            if B.has_label(MPS_TOTAL_CHARGE_LABEL):
+                B = ct.HiddenLegTensor(B, [MPS_TOTAL_CHARGE_LABEL])
+            Bs.append(B)
         if SVs is None:
             new_SVs = [
                 ct.DiagonalTensor.from_eye(leg, backend, ['vL', 'vR'], dtype.to_real, device) for leg in virtual_spaces
@@ -3332,11 +3387,6 @@ class MPS(BaseMPSExpectationValue):
                         S, virtual_spaces[i], backend, ['vL', 'vR'], dtype=dtype.to_real, device=device
                     )
                 )
-
-        if bc == 'infinite':
-            # for an iMPS, the last leg has to match the first one.
-            # so we need to gauge `qtotal` of the last `B` such that the right leg matches.
-            raise NotImplementedError
         res = cls(
             sites,
             Bs,
@@ -3436,7 +3486,7 @@ class MPS(BaseMPSExpectationValue):
         B_list = [None] * L
         S_list = [None] * (L + 1)
         for i in range(L - 1, 0, -1):
-            psi, S, B = ct.truncated_svd(psi, new_labels=['vR', 'vL'], svd_min=cutoff)
+            psi, S, B, _, _ = ct.truncated_svd(psi, new_labels=['vR', 'vL'], svd_min=cutoff)
             # bring S and B to default form
             S /= ct.norm(S)
             B = ct.planar_permute_legs(B, domain=['vR'])
@@ -4152,6 +4202,7 @@ class MPS(BaseMPSExpectationValue):
             The new number of sites in the unit cell will be increased from `L` to ``factor*L``.
 
         """
+        # TODO should we combine the total charge leg into a single one for infinite BC?
         if int(factor) != factor:
             raise ValueError('`factor` should be integer!')
         if factor <= 1:
@@ -4180,6 +4231,7 @@ class MPS(BaseMPSExpectationValue):
             By how many sites to move the tensors to the right.
 
         """
+        # TODO should shift the total charge leg to the last tensor?
         if self.finite:
             raise ValueError('makes only sense for infinite boundary conditions')
         inds = np.arange(self.L) - shift
@@ -4379,7 +4431,7 @@ class MPS(BaseMPSExpectationValue):
         For infinite MPS, the bond between MPS unit cells is another fix point.
         """
         # TODO
-        if not self.chinfo.trivial_shift:
+        if not self.symmetry.trivial_shift:
             # Similar to swap_sites, I (Jakob) dont think this is even possible.
             raise RuntimeError('Can not invert if conserved charge has non-trivial shift.')
 
@@ -5353,7 +5405,7 @@ class MPS(BaseMPSExpectationValue):
             ov, _ = TM.eigenvectors(**kwargs)
             return ov[0] * self.norm * other.norm
 
-    def expectation_value_terms_sum(self, term_list):
+    def expectation_value_terms_sum(self, term_list: TermList):
         """Calculate expectation values for a bunch of terms and sum them up.
 
         This is equivalent to the following expression::
@@ -5529,9 +5581,9 @@ class MPS(BaseMPSExpectationValue):
         """
         err = np.empty((self.L, 2), dtype=float)
         for i in range(self.L):
-            th = self.get_theta(i, 1)
+            th = self.get_theta(i, 1).relabel({'p0': 'p'})
             # use the planar diagrams to account for charged tensors
-            rho_L = mps_contraction_diagram_operations['TM @ RP2'].evaluate(RP=self.get_RP(i), ket=th, bra=th.hc)
+            rho_L = mps_contraction_diagram_operations['TM @ RP2'].evaluate(dict(RP=self.get_RP(i), ket=th, bra=th.hc))
             # same leg arrangement as obtained for S (diagonal tensor): vL in domain and vL* in codomain
             rho_L = ct.planar_permute_legs(rho_L, codomain='vL*')
             S = self.get_SL(i)
@@ -5542,17 +5594,17 @@ class MPS(BaseMPSExpectationValue):
                 assert S.num_legs == 2
                 S = S.T
                 rho_L2 = ct.compose(S.hc, S)
-            err[i, 0] = ct.norm(rho_L - rho_L2)
+            err[i, 0] = ct.norm(rho_L - rho_L2).to_numpy()
 
-            rho_R = mps_contraction_diagram_operations['LP2 @ TM'].evaluate(LP=self.get_LP(i), ket=th, bra=th.hc)
+            rho_R = mps_contraction_diagram_operations['LP2 @ TM'].evaluate(dict(LP=self.get_LP(i), ket=th, bra=th.hc))
             rho_R = ct.planar_permute_legs(rho_R, codomain='vR*')
             S = self.get_SR(i)
             if isinstance(S, ct.DiagonalTensor):
-                rho_R2 = S.relabel({'vL': 'vR*'}) ** 2
+                rho_R2 = (S**2).relabel({'vL': 'vR*'})
             else:
                 assert S.num_legs == 2
                 rho_R2 = ct.compose(S.hc, S)
-            err[i, 1] = ct.norm(rho_R - rho_R2)
+            err[i, 1] = ct.norm(rho_R - rho_R2).to_numpy()
         return err
 
     def canonical_form(self, **kwargs):
@@ -5638,14 +5690,16 @@ class MPS(BaseMPSExpectationValue):
 
         if self.bc == 'segment':
             # also need to calculate new singular values on the very right
-            U, S, VR_segment = ct.truncated_svd(M, new_labels=['vR', 'vL'], charge_leg_top=False, svd_min=cutoff)
+            U, S, VR_segment, _, _ = ct.truncated_svd(M, new_labels=['vR', 'vL'], charge_leg_top=False, svd_min=cutoff)
             S /= ct.norm(S)
             self.set_SR(L - 1, S)
             M = ct.scale_axis(U, S, 'vR')
         else:
             VR_segment = None
         # sweep from right to left, calculating all the singular values
-        U, S, V = ct.truncated_svd(ct.planar_permute_legs(M, codomain=['vL']), new_labels=['vR', 'vL'], svd_min=cutoff)
+        U, S, V, _, _ = ct.truncated_svd(
+            ct.planar_permute_legs(M, codomain=['vL']), new_labels=['vR', 'vL'], svd_min=cutoff
+        )
         V = ct.planar_permute_legs(V, codomain=['vL', 'p'])
         if not renormalize:
             self.norm = self.norm * ct.norm(S)
@@ -5655,7 +5709,7 @@ class MPS(BaseMPSExpectationValue):
         for i in range(L - 2, -1, -1):
             M = self.get_B(i, 'A')
             M = ct.compose(M, ct.scale_axis(U, S, 'vR'))
-            U, S, V = ct.truncated_svd(
+            U, S, V, _, _ = ct.truncated_svd(
                 ct.planar_permute_legs(M, codomain=['vL']), new_labels=['vR', 'vL'], svd_min=cutoff
             )
             V = ct.planar_permute_legs(V, codomain=['vL', 'p'])
@@ -7231,9 +7285,6 @@ class MPS(BaseMPSExpectationValue):
         return ct.Identity(leg, self.backend, self.dtype, self.device, ['vL*', 'vL'])
 
 
-# TODO_MPS stopped here
-
-
 class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
     """Base class for :class:`MPSEnvironment` storing partial contractions between MPS.
 
@@ -7253,7 +7304,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
     ----------
     bra : :class:`~tenpy.networks.mps.MPS`
         The MPS to project on. Should be given in usual 'ket' form;
-        we call `conj()` on the matrices directly.
+        we call `hc` on the matrices directly.
         Stored in place, without making copies.
         If necessary to match charges, we call :meth:`~tenpy.networks.mps.MPS.gauge_total_charge`.
     ket : :class:`~tenpy.networks.mpo.MPO` | None
@@ -7277,11 +7328,11 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         Cache for saving the environment tensors.
     _LP_keys, _RP_keys : list of str
         Map indices to keys for the :attr:`cache`.
-    _LP : list of {``None`` | }
+    _LP : list of {``None`` | :class:`~cyten.tensors.SymmetricTensor`}
         Left parts of the environment, len `L`.
         ``LP[i]`` contains the contraction strictly left of site `i`
         (or ``None``, if we don't have it calculated).
-    _RP : list of {``None`` | :class:`~tenpy.linalg.np_conserved.Array`}
+    _RP : list of {``None`` | :class:`~cyten.tensors.SymmetricTensor`}
         Right parts of the environment, len `L`.
         ``RP[i]`` contains the contraction strictly right of site `i`
         (or ``None``, if we don't have it calculated).
@@ -7296,14 +7347,16 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
 
     """
 
-    def __init__(self, bra, ket, cache=None, **init_env_data):
+    def __init__(self, bra: MPS, ket: MPS | None, cache: DictCache | None = None, **init_env_data):
         if ket is None:
             ket = bra
         if ket is not bra:
             bra = ket._gauge_compatible_vL_vR(bra)  # ensure matching charges
         self.bra = bra
         self.ket = ket
-        self.dtype = np.promote_types(bra.dtype, ket.dtype)
+        self.dtype = ct.Dtype.common(bra.dtype, ket.dtype)
+        self.backend = ct.backends.get_same_backend(bra, ket)
+        self.device = ct.tensors.get_same_device(bra._B[0], ket._B[0])
         L = lcm(bra.L, ket.L)
         if hasattr(self, 'H'):
             L = lcm(self.H.L, L)
@@ -7333,14 +7386,21 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         self.init_first_LP_last_RP(**init_env_data)
         self.test_sanity()
 
-    def init_first_LP_last_RP(self, init_LP=None, init_RP=None, age_LP=0, age_RP=0, start_env_sites=0):
+    def init_first_LP_last_RP(
+        self,
+        init_LP: None | ct.SymmetricTensor = None,
+        init_RP: None | ct.SymmetricTensor = None,
+        age_LP: int = 0,
+        age_RP: int = 0,
+        start_env_sites: int = 0,
+    ):
         """(Re)initialize first LP and last RP from the given data.
 
         Parameters
         ----------
-        init_LP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
+        init_LP : ``None`` | :class:`~cyten.tensors.SymmetricTensor`
             Initial very left part ``LP``. If ``None``, build one with :meth:`init_LP`.
-        init_RP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
+        init_RP : ``None`` | :class:`~cyten.tensors.SymmetricTensor`
             Initial very right part ``RP``. If ``None``, build one with :meth:`init_RP`.
         age_LP : int
             The number of physical sites involved into the contraction of `init_LP`.
@@ -7357,18 +7417,19 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             init_LP = self.init_LP(0, start_env_sites)
             age_LP = start_env_sites
         else:
+            # use planar_contraction in order to avoid distinguishing where which legs are
             if ket_U is not None:
-                init_LP = npc.tensordot(init_LP, ket_U, axes=['vR', 'vL'])
+                init_LP = ct.planar_contraction(init_LP, ket_U, ['vR'], ['vL'])
             if bra_U is not None:
-                init_LP = npc.tensordot(bra_U.conj(), init_LP, axes=['vL*', 'vR*'])
+                init_LP = ct.planar_contraction(init_LP, bra_U.hc, ['vR*'], ['vL*'])
         if init_RP is None:
             init_RP = self.init_RP(self.L - 1, start_env_sites)
             age_RP = start_env_sites
         else:
             if ket_V is not None:
-                init_RP = npc.tensordot(ket_V, init_RP, axes=['vR', 'vL'])
+                init_RP = ct.planar_contraction(init_RP, ket_V, ['vL'], ['vR'])
             if bra_V is not None:
-                init_RP = npc.tensordot(init_RP, bra_V.conj(), axes=['vL*', 'vR*'])
+                init_RP = ct.planar_contraction(init_RP, bra_V.hc, ['vL*'], ['vR*'])
         self.set_LP(0, init_LP, age=age_LP)
         self.set_RP(self.L - 1, init_RP, age=age_RP)
 
@@ -7381,7 +7442,9 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         assert any(key in self.cache for key in self._LP_keys)
         assert any(key in self.cache for key in self._RP_keys)
 
-    def _check_compatible_legs(self, init_LP, init_RP, start_env_sites):
+    def _check_compatible_legs(
+        self, init_LP: None | ct.SymmetricTensor, init_RP: None | ct.SymmetricTensor, start_env_sites: int
+    ) -> tuple[None | ct.SymmetricTensor, None | ct.SymmetricTensor]:
         if init_LP is not None or init_RP is not None:
             if start_env_sites == 0:
                 vL_ket, vR_ket = self.ket.outer_virtual_legs()
@@ -7393,9 +7456,9 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
                 vR_bra = self.bra.get_B(self.L - 1 + start_env_sites, 'B').get_leg('vR')
         if init_LP is not None:
             incompatible_legs = []
-            if init_LP.get_leg('vR') != vL_ket.conj():
+            if init_LP.get_leg('vR') != vL_ket.dual:
                 incompatible_legs.append('vR')
-            if init_LP.get_leg('vR*') != vL_bra:
+            if init_LP.get_leg('vR*') != vL_bra.dual:
                 incompatible_legs.append('vR*')
             if incompatible_legs:
                 msg = f'dropping `init_LP` with incompatible virtual legs: {", ".join(incompatible_legs)}'
@@ -7403,9 +7466,9 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
                 init_LP = None
         if init_RP is not None:
             incompatible_legs = []
-            if init_RP.get_leg('vL') != vR_ket.conj():
+            if init_RP.get_leg('vL') != vR_ket.dual:
                 incompatible_legs.append('vL')
-            if init_RP.get_leg('vL*') != vR_bra:
+            if init_RP.get_leg('vL*') != vR_bra.dual:
                 incompatible_legs.append('vL*')
             if incompatible_legs:
                 msg = f'dropping `init_RP` with incompatible virtual legs: {", ".join(incompatible_legs)}'
@@ -7413,7 +7476,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
                 init_RP = None
         return init_LP, init_RP
 
-    def init_LP(self, i, start_env_sites=0):
+    def init_LP(self, i: int, start_env_sites: int = 0) -> ct.SymmetricTensor:
         """Build initial left part ``LP``.
 
         If `bra` and `ket` are the same and in left canonical form, this is the environment
@@ -7431,7 +7494,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
 
         Returns
         -------
-        init_LP : :class:`~tenpy.linalg.np_conserved.Array`
+        init_LP : :class:`~cyten.tensors.SymmetricTensor`
             Identity contractible with the `vL` leg of ``ket.get_B(i)``, labels ``'vR*', 'vR'``.
 
         """
@@ -7440,21 +7503,22 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             U_ket, V_ket = self.ket.segment_boundaries
             if U_bra is not None or U_ket is not None:
                 if U_bra is not None and U_ket is not None:
-                    init_LP = npc.tensordot(U_bra.conj(), U_ket, axes=['vL*', 'vL'])
+                    init_LP = ct.compose(U_bra.hc, U_ket)
                 elif U_bra is not None:
-                    init_LP = U_bra.conj().ireplace_label('vL*', 'vR')
+                    init_LP = U_bra.hc.relabel({'vL*': 'vR'})
                 else:
-                    init_LP = U_ket.replace_label('vL', 'vR*')
+                    init_LP = U_ket.relabel({'vL': 'vR*'})
                 return init_LP
         leg_ket = self.ket.get_B(i - start_env_sites, None).get_leg('vL')
         leg_bra = self.bra.get_B(i - start_env_sites, None).get_leg('vL')
-        leg_ket.test_equal(leg_bra)
-        init_LP = npc.diag(1.0, leg_ket, dtype=self.dtype, labels=['vR*', 'vR'])
+        if not leg_ket == leg_bra:
+            raise ValueError(f'Incompatible legs {leg_ket} and {leg_bra} cannot be contracted')
+        init_LP = ct.Identity(leg_ket, backend=self.backend, dtype=self.dtype, device=self.device, labels=['vR*', 'vR'])
         for j in range(i - start_env_sites, i):
             init_LP = self._contract_LP(j, init_LP)
         return init_LP
 
-    def init_RP(self, i, start_env_sites=0):
+    def init_RP(self, i: int, start_env_sites: int = 0) -> ct.SymmetricTensor:
         """Build initial right part ``RP`` for an MPS/MPOEnvironment.
 
         If `bra` and `ket` are the same and in right canonical form, this is the environment
@@ -7472,7 +7536,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
 
         Returns
         -------
-        init_RP : :class:`~tenpy.linalg.np_conserved.Array`
+        init_RP : :class:`~cyten.tensors.SymmetricTensor`
             Identity contractible with the `vR` leg of ``ket.get_B(i)``, labels ``'vL*', 'vL'``.
 
         """
@@ -7481,21 +7545,22 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
             U_ket, V_ket = self.ket.segment_boundaries
             if V_bra is not None or V_ket is not None:
                 if V_bra is not None and V_ket is not None:
-                    init_RP = npc.tensordot(V_bra.conj(), V_ket, axes=['vR*', 'vR'])
+                    init_RP = ct.compose(V_ket, V_bra.hc).T
                 elif V_bra is not None:
-                    init_RP = V_bra.conj().ireplace_label('vR*', 'vL')
+                    init_RP = V_bra.T.hc.relabel({'vR*': 'vL'})
                 else:
-                    init_RP = V_ket.replace_label('vR', 'vL*')
+                    init_RP = V_ket.T.relabel({'vR': 'vL*'})
                 return init_RP
         leg_ket = self.ket.get_B(i + start_env_sites, None).get_leg('vR')
         leg_bra = self.bra.get_B(i + start_env_sites, None).get_leg('vR')
-        leg_ket.test_equal(leg_bra)
-        init_RP = npc.diag(1.0, leg_ket, dtype=self.dtype, labels=['vL*', 'vL'])
+        if not leg_ket == leg_bra:
+            raise ValueError(f'Incompatible legs {leg_ket} and {leg_bra} cannot be contracted')
+        init_RP = ct.Identity(leg_ket, backend=self.backend, dtype=self.dtype, device=self.device, labels=['vL*', 'vL'])
         for j in range(i + start_env_sites, i, -1):
             init_RP = self._contract_RP(j, init_RP)
         return init_RP
 
-    def get_LP(self, i, store=True):
+    def get_LP(self, i: int, store: bool = True) -> ct.SymmetricTensor:
         """Calculate LP at given site from nearest available one.
 
         The returned ``LP_i`` corresponds to the following contraction,
@@ -7518,7 +7583,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
 
         Returns
         -------
-        LP_i : :class:`~tenpy.linalg.np_conserved.Array`
+        LP_i : :class:`~cyten.tensors.SymmetricTensor`
             Contraction of everything left of site `i`,
             with labels ``'vR*', 'vR'`` for `bra`, `ket`.
 
@@ -7542,7 +7607,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
                 self.set_LP(j + 1, LP, age=age)
         return LP
 
-    def get_RP(self, i, store=True):
+    def get_RP(self, i: int, store: bool = True) -> ct.SymmetricTensor:
         """Calculate RP at given site from nearest available one.
 
         The returned ``RP_i`` corresponds to the following contraction,
@@ -7565,7 +7630,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
 
         Returns
         -------
-        RP_i : :class:`~tenpy.linalg.np_conserved.Array`
+        RP_i : :class:`~cyten.tensors.SymmetricTensor`
             Contraction of everything left of site `i`,
             with labels ``'vL', 'vL*'`` for `ket`, `bra`.
 
@@ -7589,21 +7654,21 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
                 self.set_RP(j - 1, RP, age=age)
         return RP
 
-    def get_LP_age(self, i):
+    def get_LP_age(self, i: int) -> int:
         """Return number of physical sites in the contractions of get_LP(i).
 
         Might be ``None``.
         """
         return self._LP_age[self._to_valid_site_index(i)]
 
-    def get_RP_age(self, i):
+    def get_RP_age(self, i: int) -> int:
         """Return number of physical sites in the contractions of get_RP(i).
 
         Might be ``None``.
         """
         return self._RP_age[self._to_valid_site_index(i)]
 
-    def set_LP(self, i, LP, age):
+    def set_LP(self, i: int, LP: ct.SymmetricTensor, age: int):
         """Store part to the left of site `i`. No copy is made!
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
@@ -7612,7 +7677,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         self.cache[self._LP_keys[i]] = self.shift_Tensor_unit_cells(LP, -num_unit_cells)
         self._LP_age[i] = age
 
-    def set_RP(self, i, RP, age):
+    def set_RP(self, i: int, RP: ct.SymmetricTensor, age: int):
         """Store part to the right of site `i`. No copy is made!
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
@@ -7621,13 +7686,13 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         self.cache[self._RP_keys[i]] = self.shift_Tensor_unit_cells(RP, -num_unit_cells)
         self._RP_age[i] = age
 
-    def del_LP(self, i):
+    def del_LP(self, i: int):
         """Delete stored part strictly to the left of site `i`."""
         i = self._to_valid_site_index(i)
         del self.cache[self._LP_keys[i]]
         self._LP_age[i] = None
 
-    def del_RP(self, i):
+    def del_RP(self, i: int):
         """Delete stored part strictly to the right of site `i`."""
         i = self._to_valid_site_index(i)
         del self.cache[self._RP_keys[i]]
@@ -7641,15 +7706,21 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         self._LP_age[1:] = [None] * (self.L - 1)
         self._RP_age[:-1] = [None] * (self.L - 1)
 
-    def has_LP(self, i):
+    def has_LP(self, i: int) -> bool:
         """Return True if `LP` left of site `i` is stored."""
         return self._LP_keys[self._to_valid_site_index(i)] in self.cache
 
-    def has_RP(self, i):
+    def has_RP(self, i: int) -> bool:
         """Return True if `RP` right of site `i` is stored."""
         return self._RP_keys[self._to_valid_site_index(i)] in self.cache
 
-    def cache_optimize(self, short_term_LP=[], short_term_RP=[], preload_LP=None, preload_RP=None):
+    def cache_optimize(
+        self,
+        short_term_LP: list[int] = [],
+        short_term_RP: list[int] = [],
+        preload_LP: int | None = None,
+        preload_RP: int | None = None,
+    ):
         """Update `short_term_keys` for the cache and possibly preload tensors.
 
         Parameters
@@ -7677,7 +7748,9 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         )
         self.cache.preload(*preload)
 
-    def get_initialization_data(self, first=0, last=None, include_bra=False, include_ket=False):
+    def get_initialization_data(
+        self, first: int = 0, last: int | None = None, include_bra: bool = False, include_ket: bool = False
+    ) -> dict:
         """Return data for (re-)initialization of the environment.
 
         Parameters
@@ -7693,7 +7766,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         init_env_data : dict
             A dictionary with the following entries.
 
-            init_LP, init_RP : :class:`~tenpy.linalg.np_conserved.Array`
+            init_LP, init_RP : :class:`~cyten.tensors.SymmetricTensor`
                 `LP` on the left of site `first` and `RP` on the right of site `last`, which can be
                 used as `init_LP` and `init_RP` for the initialization of a new environment.
             age_LP, age_RP : int
@@ -7716,19 +7789,19 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         ket_U, ket_V = self.ket.segment_boundaries
         if first == 0:
             if ket_U is not None:
-                LP = npc.tensordot(LP, ket_U.conj(), axes=['vR', 'vR*'])
-                LP.ireplace_label('vL*', 'vR')
+                LP = ct.planar_contraction(LP, ket_U.hc, ['vR'], ['vR*'])
+                LP.relabel({'vL*': 'vR'})
             if bra_U is not None:
-                LP = npc.tensordot(bra_U, LP, axes=['vR', 'vR*'])
-                LP.ireplace_label('vL', 'vR*')
+                LP = ct.planar_contraction(LP, bra_U, ['vR*'], ['vR'])
+                LP.relabel({'vL': 'vR*'})
         if last == self.ket.L - 1:
             if ket_V is not None:
-                RP = npc.tensordot(ket_V.conj(), RP, axes=['vL*', 'vL'])
-                RP.ireplace_label('vR*', 'vL')
+                RP = ct.planar_contraction(RP, ket_V.hc, ['vL'], ['vL*'])
+                RP.relabel({'vR*': 'vL'})
         if last == self.bra.L - 1:
             if bra_V is not None:
-                RP = npc.tensordot(RP, bra_V, axes=['vL*', 'vL'])
-                RP.ireplace_label('vR', 'vL*')
+                RP = ct.planar_contraction(RP, bra_V, ['vL*'], ['vL'])
+                RP.relabel({'vR': 'vL*'})
         data = {
             'init_LP': LP,
             'age_LP': self.get_LP_age(first),
@@ -7754,7 +7827,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         return data
 
     @abstractmethod
-    def full_contraction(self, i0):
+    def full_contraction(self, i0: int) -> ct.BlockBackend.Scalar:
         """Calculate the overlap by a full contraction of the network.
 
         This function contracts ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)``
@@ -7772,7 +7845,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         """
         ...  # can use _full_contraction_LP_RP
 
-    def _full_contraction_LP_RP(self, i0):
+    def _full_contraction_LP_RP(self, i0: int) -> tuple[ct.SymmetricTensor, ct.SymmetricTensor]:
         if self.ket.finite and i0 + 1 == self.L:
             # special case to handle `_to_valid_site_index` correctly:
             # get_LP(L) is not valid for finite b.c, so we use need to calculate it explicitly.
@@ -7781,20 +7854,20 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         else:
             LP = self.get_LP(i0 + 1, store=False)
         # multiply with `S` on bra and ket side
-        S_bra = self.bra.get_SR(i0).conj()
-        if isinstance(S_bra, npc.Array):
-            LP = npc.tensordot(S_bra, LP, axes=['vL*', 'vR*'])
+        S_bra = self.bra.get_SR(i0).hc
+        if isinstance(S_bra, ct.DiagonalTensor):
+            LP = ct.scale_axis(LP, S_bra, 'vR*')
         else:
-            LP = LP.scale_axis(S_bra, 'vR*')
+            LP = ct.planar_contraction(LP, S_bra, ['vR*'], ['vL*'])
         S_ket = self.ket.get_SR(i0)
-        if isinstance(S_ket, npc.Array):
-            LP = npc.tensordot(LP, S_ket, axes=['vR', 'vL'])
+        if isinstance(S_ket, ct.DiagonalTensor):
+            LP = ct.scale_axis(LP, S_ket, 'vR')
         else:
-            LP = LP.scale_axis(S_ket, 'vR')
+            LP = ct.planar_contraction(LP, S_ket, ['vR'], ['vL'])
         RP = self.get_RP(i0, store=False)
         return LP, RP
 
-    def expectation_value_terms_sum(self, term_list):
+    def expectation_value_terms_sum(self, term_list: TermList):
         """Calculate expectation values for a bunch of terms and sum them up.
 
         This is equivalent to the following expression::
@@ -7829,6 +7902,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         tenpy.networks.mpo.MPO.expectation_value : expectation value density of an MPO.
 
         """
+        # TODO
         # this implementation assumes that bra and ket are different. the implementation in MPS
         # overrides this.
         from . import mpo
@@ -7846,16 +7920,16 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         return np.real_if_close(terms_sum), mpo_
 
     @abstractmethod
-    def _contract_LP(self, i, LP):
+    def _contract_LP(self, i: int, LP: ct.SymmetricTensor) -> ct.SymmetricTensor:
         """Contract LP with the tensors on site `i` to form ``self.get_LP(i+1)``"""
         ...
 
     @abstractmethod
-    def _contract_RP(self, i, RP):
+    def _contract_RP(self, i: int, RP: ct.SymmetricTensor) -> ct.SymmetricTensor:
         """Contract RP with the tensors on site `i` to form ``self.get_RP(i-1)``"""
         ...
 
-    def _to_valid_index(self, i):
+    def _to_valid_index(self, i: int) -> int:
         """Make sure `i` is a valid index of a site.
 
         .. deprecated :: 1.2.0
@@ -7872,28 +7946,31 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         i, _ = self._to_valid_site_index(i)
         return i
 
-    def _update_gauge_LP(self, i, U, update_bra, update_ket):
+    def _update_gauge_LP(self, i: int, U: ct.SymmetricTensor, update_bra: bool, update_ket: bool):
         """Update LP[i] following the MPS gauge ``A[i-1] A[i] -> (A[i-1] U) (Udagger A[i])``."""
+        # TODO we assume that LP has vR leg in domain, vR* leg in codomain (similar for RP below)
+        # Is this always valid? The leg positions should match those that we get after contractions
+        # with planar diagrams when computing the next LP / RP
         assert update_bra or update_ket
         if not self.has_LP(i):
             return
         LP = self.get_LP(i)
         if update_ket:
-            LP = npc.tensordot(LP, U, axes=['vR', 'vL'])
+            LP = ct.planar_contraction(LP, U, ['vR'], ['vL'])
         if update_bra:
-            LP = npc.tensordot(U.conj(), LP, axes=['vL*', 'vR*'])
+            LP = ct.planar_contraction(LP, U.hc, ['vR*'], ['vL*'])
         self.set_LP(i, LP, self.get_LP_age(i))
 
-    def _update_gauge_RP(self, i, V, update_bra, update_ket):
+    def _update_gauge_RP(self, i: int, V: ct.SymmetricTensor, update_bra: bool, update_ket: bool):
         """Update RP[i] following the MPS gauge ``B[i] B[i+1] -> (B[i] Vdagger) (V B[i+1])``."""
         assert update_bra or update_ket
         if not self.has_RP(i):
             return
         RP = self.get_RP(i)
         if update_ket:
-            RP = npc.tensordot(V, RP, axes=['vR', 'vL'])
+            RP = ct.planar_contraction(RP, V, ['vL'], ['vR'])
         if update_bra:
-            RP = npc.tensordot(RP, V.conj(), axes=['vL*', 'vR*'])
+            RP = ct.planar_contraction(RP, V.hc, ['vL*'], ['vR*'])
         self.set_RP(i, RP, self.get_RP_age(i))
 
 
@@ -7939,47 +8016,41 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
 
         """
         LP, RP = self._full_contraction_LP_RP(i0)
-        contr = npc.inner(LP, RP, axes=[['vR*', 'vR'], ['vL*', 'vL']], do_conj=False)
+        contr = mps_contraction_diagram_operations['LP2 @ RP2'].evaluate(dict(LP=LP, RP=RP))
         return contr * self.bra.norm * self.ket.norm
 
     def _contract_LP(self, i, LP):
-        LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
-        axes = (self.ket._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
-        # for a usual MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
-        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
+        # TODO this is not a planar diagram to make it also work for, e.g., purification MPS
+        LP = ct.planar_contraction(LP, self.ket.get_B(i, form='A'), ['vR'], ['vL'])
+        LP = ct.planar_contraction(
+            LP, self.bra.get_B(i, form='A').hc, ['vR*'] + self.ket._p_label, ['vL*'] + self.ket._get_p_label('*')
+        )
         return LP  # labels 'vR*', 'vR'
 
     def _contract_RP(self, i, RP):
-        RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
-        axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
-        # for a usual MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
-        RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
+        # TODO this is not a planar diagram to make it also work for, e.g., purification MPS
+        RP = ct.planar_contraction(RP, self.ket.get_B(i, form='B'), ['vL'], ['vR'])
+        RP = ct.planar_contraction(
+            RP, self.bra.get_B(i, form='B').hc, ['vL*'] + self.ket._p_label, ['vR*'] + self.ket._get_p_label('*')
+        )
         return RP  # labels 'vL', 'vL*'
 
     # methods for Expectation values
     def _get_bra_ket(self):
         return self.bra, self.ket
 
-    def _normalize_exp_val(self, value):
+    def _normalize_exp_val(self, value: Sequence[ct.BlockBackend.Scalar]) -> list[ct.BlockBackend.Scalar]:
         # this ensures that
         #     MPSEnvironment(psi, psi.apply_local_op('B', i)).expectation_value('A', j)
         # gives the same as
         #     psi.correlation_function('A', 'B', sites1=[i], sites2=[j])
         # and psi.apply_local_op('Adagger', i).overlap(psi.apply_local_op('B', j)
         # for initially normalized psi
+        # TODO real_if_close for scalars? Right now we only have .real()?
         return np.real_if_close(value) * (self.bra.norm * self.ket.norm)
 
-    def _contract_with_LP(self, C, i):
-        # TODO_MPS get rid of these? replace with having _get_LP -> ct.Identity
-        LP = self.get_LP(i, store=True)
-        C = npc.tensordot(LP, C, axes=['vR', 'vL'])  # axes_p + (vR*, vR)
-        return C
 
-    def _contract_with_RP(self, C, i):
-        # TODO_MPS get rid of these? replace with having _get_LP -> ct.Identity
-        RP = self.get_RP(i, store=True)
-        C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vL, vL*)
-        return C
+# TODO_MPS stopped here
 
 
 class TransferMatrix(ct.tensors.sparse.LinearOperator):  # TODO: adapt for LinearOperator
