@@ -1078,7 +1078,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             mask_j_sml = sites2[:, -1] < sites_i[0]
             if not hermitian and np.any(mask_j_sml):
                 sites_j_sml = sites2[mask_j_sml, :]
-                perm = np.lexsort(sites_j_sml.T)
+                perm = np.lexsort(-1 * sites_j_sml.T)
                 C_sml = self._corr_left(
                     op_L=op2, op_R=op1, sites_L=sites_j_sml[perm], sites_R=sites_i, split=False, opstr=opstr
                 )
@@ -1494,7 +1494,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 )
             return LP
         for i in range(num):
-            identity = ket.get_site(site + i).identity_tensor(w=LP.get_leg('wR'))
+            identity = ket.get_site(site + i).identity_tensor(w=LP.get_leg('wR').dual)
             op = self.get_op(opstr, site + i)
             if op is not None:
                 identity = ct.tensors.partial_compose(identity, op, tensor1_first_leg='p*')
@@ -1620,7 +1620,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 i += 1
             else:
                 # OPTIMIZE reuse old identities for identical sites?
-                W = ket.get_site(site).identity_tensor(w=W.get_leg('wR'))
+                W = ket.get_site(site).identity_tensor(w=W.get_leg('wR').dual)
             new_LP = mps_contraction_diagram_operations['LP3 @ bra-W-ket3'].evaluate(
                 dict(LP=new_LP, ket=ket.get_B(site), bra=bra.get_B(site).hc, W=W)
             )
@@ -1875,14 +1875,12 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             # sort with respect to the first entry in each offset (= the distance between the left and right part)
             # TODO expand description in correlation_function_split_right
             offsets = offsets[np.lexsort(offsets[:, ::-1].T)]
-            assert offsets[0, 0] >= 0, dist_offset_err  # smallest distance >= 0
         else:
-            offsets -= distances[:, np.newaxis] + sites[-1] - 1
+            offsets += -1 * distances[:, np.newaxis] + sites[-1] - 1
             # sort with respect to the last entry in each offset (= the distance between the left and right part),
             # with the smaller distances coming first, i.e., larger sites first
             # TODO expand description in correlation_function_split_left
             offsets = offsets[np.lexsort(-1 * offsets.T)]
-            assert offsets[0, -1] <= 0, dist_offset_err  # smallest distance <= 0 (left direction)
         return offsets
 
     def _corr_right(
@@ -2023,47 +2021,52 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         """
         new_idcs = sorted(set(list(sites1) + list(sites2)))
+        sites1_idcs = []
+        sites2_idcs = []
         new_sites = []  # actual sites, not site indices
         i1 = 0  # index in coupling1
         i2 = 0  # index in coupling2
-        Ws = []
-        for site_idx in new_idcs:
+        for i, site_idx in enumerate(new_idcs):
             if i1 < coupling1.num_sites and site_idx == sites1[i1]:
-                W1 = coupling1.factorization[i1]
                 new_sites.append(coupling1.sites[i1])
                 i1 += 1
+                sites1_idcs.append(i)
+                if i2 < coupling2.num_sites and site_idx == sites2[i2]:
+                    i2 += 1
+                    sites2_idcs.append(i)
             else:
                 assert site_idx == sites2[i2]
                 new_sites.append(coupling2.sites[i2])
-                if i1 == 0 or i1 == coupling1.num_sites:
-                    # site_idx before or after coupling1 -> no need to contract with identity
-                    W1 = None
-                else:
-                    W1 = new_sites[-1].identity_tensor(w=Ws[-1].get_leg('wR'))
-            if i2 < coupling2.num_sites and site_idx == sites2[i2]:
-                W2 = coupling2.factorization[i2]
                 i2 += 1
-            elif i2 == 0 or i2 == coupling2.num_sites:
-                W2 = None
-            else:
-                W2 = new_sites[-1].identity_tensor(w=Ws[-1].get_leg('wR'))
+                sites2_idcs.append(i)
 
+        start_idcs = [new_idcs.index(sites1[0]), new_idcs.index(sites2[0])]
+        stop_idcs = [new_idcs.index(sites1[-1]), new_idcs.index(sites2[-1])]
+        overlap_idcs = [max(start_idcs), min(stop_idcs)]
+
+        # only adds identities in between
+        Ws1 = coupling1.stretch_with_identities(new_sites, sites1_idcs)
+        Ws1 = [None] * start_idcs[0] + Ws1.factorization  + [None] * (len(new_idcs) - 1 - stop_idcs[0])
+        Ws2 = coupling1.stretch_with_identities(new_sites, sites2_idcs)
+        Ws2 = [None] * start_idcs[1] + Ws2.factorization + [None] * (len(new_idcs) - 1 - stop_idcs[1])
+
+        Ws_combined = []
+        for idx, (W1, W2) in enumerate(zip(Ws1, Ws2)):
             if W1 is None:
                 W = W2
             elif W2 is None:
                 W = W1
             else:
-                # contract W1 and W2: remove all trivial legs of W1 and W2 if they are the first or last tensor
-                # of their coupling. If we have two left or right legs after composing, pipe them. If we have no
-                # left or right leg, add a trivial one.
-                if i1 == 1:
-                    W1 = ct.squeeze_legs(W1, 'wL')
-                if i1 == coupling1.num_sites:
-                    W1 = ct.squeeze_legs(W1, 'wR')
-                if i2 == 1:
-                    W2 = ct.squeeze_legs(W2, 'wL')
-                if i2 == coupling2.num_sites:
-                    W2 = ct.squeeze_legs(W2, 'wR')
+                if idx == overlap_idcs[0]:
+                    if start_idcs[0] >= start_idcs[1]:
+                        W1 = ct.squeeze_legs(W1, 'wL')
+                    else:
+                        W2 = ct.squeeze_legs(W2, 'wL')
+                if idx == overlap_idcs[1]:
+                    if stop_idcs[0] <= stop_idcs[1]:
+                        W1 = ct.squeeze_legs(W1, 'wR')
+                    else:
+                        W2 = ct.squeeze_legs(W2, 'wR')
 
                 relabel1 = {}
                 relabel2 = {}
@@ -2092,19 +2095,13 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                     # order in the pipes chosen such that the legs end up in the correct positions
                     W = ct.planar.planar_combine_legs(W, *pipes, pipe_dualities=pipe_dualities)
                     W.relabel(pipes_relabel)
-                if not W.has_label('wL'):
-                    W = ct.add_trivial_leg(W, codomain_pos=0, label='wL')
-                elif '(wL2.wL1)' not in pipes_relabel:
+                if '(wL2.wL1)' not in pipes_relabel:
                     # a single wL has been there (no piping) -> move to correct position
                     W = ct.move_leg(W, 'wL', codomain_pos=0, bend_right=False)
-                if not W.has_label('wR'):
-                    W = ct.add_trivial_leg(W, domain_pos=1, label='wR')
-                elif '(wR1.wR2)' not in pipes_relabel:
+                if '(wR1.wR2)' not in pipes_relabel:
                     W = ct.move_leg(W, 'wR', domain_pos=1, bend_right=True)
-            Ws.append(W)
-        assert i1 == coupling1.num_sites
-        assert i2 == coupling2.num_sites
-        new_coupling = ct.Coupling(new_sites, Ws)
+            Ws_combined.append(W)
+        new_coupling = ct.Coupling(new_sites, Ws_combined)
         return new_coupling, new_idcs
 
     def _term_to_coupling(
@@ -5718,7 +5715,7 @@ class MPS(BaseMPSExpectationValue):
             self.set_B(i, V, form='B')
         if self.bc == 'finite':
             assert np.sum(S.legs[0].multiplicities) == 1
-            self._B[0] = ct.scale_axis(self._B[0], U, 'vL')  # just a trivial phase factor, but better keep it
+            self._B[0] = ct.tensors.partial_compose(self._B[0], U, 'vL')  # just a trivial phase factor, but better keep it
 
         # done with getting to canonical form
         if envs_to_update is not None and self.bc == 'segment':
@@ -7948,9 +7945,6 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
 
     def _update_gauge_LP(self, i: int, U: ct.SymmetricTensor, update_bra: bool, update_ket: bool):
         """Update LP[i] following the MPS gauge ``A[i-1] A[i] -> (A[i-1] U) (Udagger A[i])``."""
-        # TODO we assume that LP has vR leg in domain, vR* leg in codomain (similar for RP below)
-        # Is this always valid? The leg positions should match those that we get after contractions
-        # with planar diagrams when computing the next LP / RP
         assert update_bra or update_ket
         if not self.has_LP(i):
             return
