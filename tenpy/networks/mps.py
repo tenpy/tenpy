@@ -7304,8 +7304,6 @@ class MPS(BaseMPSExpectationValue):
 
         Returns a shallow copy where legs are adjusted.
         """
-        if self.chinfo.qnumber == 0:
-            return other
         need_gauge = self.outer_virtual_legs() != other.outer_virtual_legs()
         if need_gauge:
             vL, vR = self.outer_virtual_legs()
@@ -8085,12 +8083,14 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
 
     def _contract_LP(self, i, LP):
         # labels 'vR*', 'vR'
+        # TODO is this planar also for purification MPS?
         return mps_contraction_diagram_operations['LP2 @ TM'].evaluate(
             dict(LP=LP, ket=self.ket.get_B(i, form='A'), bra=self.bra.get_B(i, form='A').hc)
         )
 
     def _contract_RP(self, i, RP):
         # labels 'vL', 'vL*'
+        # TODO is this planar also for purification MPS?
         return mps_contraction_diagram_operations['TM @ RP2'].evaluate(
             dict(RP=RP, ket=self.ket.get_B(i, form='B'), bra=self.bra.get_B(i, form='B').hc)
         )

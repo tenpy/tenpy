@@ -162,8 +162,8 @@ class Sweep(Algorithm):
     @property
     def S_inv_cutoff(self):
         # high cutoff for regular inverse of S, higher cutoff if we need to (pseudo-) invert
-        # a matrix (S can be 2D while the mixer is on)
-        return 1.0e-8 if any(isinstance(S, npc.Array) for S in self.psi._S) else 1.0e-15
+        # a matrix (S is not a plain DiagonalTensor while the mixer is on)
+        return 1.0e-8 if any(S is not None and not isinstance(S, ct.DiagonalTensor) for S in self.psi._S) else 1.0e-15
 
     def get_resume_data(self, sequential_simulations=False):
         data = super().get_resume_data(sequential_simulations)
@@ -713,15 +713,15 @@ class Sweep(Algorithm):
         # RP environments transform like B tensors on the vL(*) leg(s)
 
         if self.psi.finite:
-            assert self.psi.get_SL(0).ndim == 1
-            assert self.psi.get_SR(self.psi.L - 1).ndim == 1
+            assert isinstance(self.psi.get_SL(0), ct.DiagonalTensor)
+            assert isinstance(self.psi.get_SR(self.psi.L - 1), ct.DiagonalTensor)
             first = 1
         else:
             first = 0
 
         for i in range(first, self.psi.L):  # converting S to the left of site i
             S = self.psi.get_SL(i)
-            if S.ndim == 1:
+            if isinstance(S, ct.DiagonalTensor):
                 # nothing to do
                 continue
             U, S, V = npc.svd(S, full_matrices=False, inner_labels=['vR', 'vL'])
@@ -2400,34 +2400,34 @@ class VariationalCompression(IterativeSweeps):
         th = self.env.ket.get_theta(i0, n=2)  # ket is old psi
         LP = self.env.get_LP(i0)
         RP = self.env.get_RP(i0 + 1)
-        th = npc.tensordot(LP, th, ['vR', 'vL'])
-        th = npc.tensordot(th, RP, ['vR', 'vL'])
-        th.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-        th = th.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
+        th = ct.tdot(LP, th, ['vR'], ['vL'])
+        th = ct.tdot(th, RP, ['vR'], ['vL'])
+        th = th.relabel({'vR*': 'vL', 'vL*': 'vR'})
+        th = ct.permute_legs(th, codomain=['vL', 'p0'], domain=['p1', 'vR'])
+        th = ct.combine_legs(th, ['vL', 'p0'], ['p1', 'vR'])
         return self.update_new_psi(th)
 
     def update_new_psi(self, theta):
         """Given a new two-site wave function `theta`, split it and save it in :attr:`psi`."""
         i0 = self.i0
         new_psi = self.psi
-        old_A0 = new_psi.get_B(i0, form='A')
-        U, S, VH, err, renormalize = npc.svd_theta(
-            theta, self.trunc_params, qtotal_LR=[old_A0.qtotal, None], inner_labels=['vR', 'vL']
-        )
-        U.ireplace_label('(vL.p0)', '(vL.p)')
-        VH.ireplace_label('(p1.vR)', '(p.vR)')
-        A0 = U.split_legs(['(vL.p)'])
-        B1 = VH.split_legs(['(p.vR)'])
+        U, S, VH, err, renormalize = self.svd_theta(theta)
+        U = ct.split_legs(U)
+        VH = ct.split_legs(VH)
         self.renormalize.append(renormalize)
         # first compare to old best guess to check convergence of the sweeps
         if self._tol_theta_diff is not None and self.update_LP_RP[0] is False:
             theta_old = new_psi.get_theta(i0)
-            theta_new_trunc = npc.tensordot(A0.scale_axis(S, 'vR'), B1, ['vR', 'vL'])
-            theta_new_trunc.iset_leg_labels(['vL', 'p0', 'p1', 'vR'])
-            ov = npc.inner(theta_new_trunc, theta_old, do_conj=True, axes='labels')
+            theta_new_trunc = ct.tdot(ct.scale_axis(U, S, 'vR'), VH, ['vR'], ['vL'])
+            theta_new_trunc = ct.permute_legs(
+                theta_new_trunc, codomain=theta_old.codomain_labels, domain=theta_old.domain_labels
+            )
+            ov = ct.inner(theta_new_trunc, theta_old)
             theta_diff = 1.0 - abs(ov)
             self._theta_diff.append(theta_diff)
         # now set the new tensors to the MPS
+        A0 = U.relabel({'p0': 'p'})
+        B1 = VH.relabel({'p1': 'p'})
         new_psi.set_B(i0, A0, form='A')  # left-canonical
         new_psi.set_B(i0 + 1, B1, form='B')  # right-canonical
         new_psi.set_SR(i0, S)
