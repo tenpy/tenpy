@@ -490,7 +490,8 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         op: str | ct.Coupling,
         sites: list[int] | int = None,
         offsets: list[list[int]] | list[int] = None,
-    ) -> list[ct.BlockBackend.Scalar]:
+        return_scalar: bool = False,
+    ) -> np.ndarray | list[ct.BlockBackend.Scalar]:
         """Expectation value ``<bra|op|ket>`` of an (n-site) operator.
 
         Calculates n-site expectation values of operators sandwiched between bra and ket.
@@ -536,10 +537,12 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             If list of int: Apply the offsets to every entry in ``sites``.
             If ``None`` (default), ``op`` acts on consecutive sites, which is equivalent to
             ``offsets = range(op.num_sites)`` for couplings.
+        return_scalar : bool
+            Whether to return a list of :class:`~cyten.BlockBackend.Scalar` or a numpy array.
 
         Returns
         -------
-        exp_vals : list of :class:`~cyten.BlockBackend.Scalar`
+        exp_vals : numpy.ndarray | list of :class:`~cyten.BlockBackend.Scalar`
             Expectation values, ``exp_vals[i] = <bra|op|ket>``, where ``op`` acts on site(s)
             ``[j1, j2, ..., j{n-1}]=[sites[i] + j for j in offsets[i]]``.
 
@@ -626,7 +629,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 res.append(self._expectation_value_coupling(bra=bra, ket=ket, op=op, sites=actual_sites))
             else:
                 res.append(self._expectation_value_onsite_op(bra=bra, ket=ket, op=op, site=actual_sites[0]))
-        return self._normalize_exp_val(res)
+        return self._normalize_exp_val(res, return_scalar=return_scalar)
 
     def expectation_value_tensor(
         self,
@@ -634,7 +637,8 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         sites: list[int] | int = None,
         offsets: list[list[int]] | list[int] = None,
         axes: tuple[list[str], list[str]] = None,
-    ) -> list[ct.BlockBackend.Scalar]:
+        return_scalar: bool = False,
+    ) -> np.ndarray | list[ct.BlockBackend.Scalar]:
         """Expectation value ``<bra|op|ket>`` of an (n-site) operator.
 
         Same as :meth:`expectation_value`, but for operators that are tensors rather than couplings.
@@ -673,10 +677,12 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             the second `n` legs with the non-conjugated `B`.
             ``None`` defaults to ``(['p'], ['p*'])`` for single site (``n == 1``), or
             ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for ``n > 1``.
+        return_scalar : bool
+            Whether to return a list of :class:`~cyten.BlockBackend.Scalar` or a numpy array.
 
         Returns
         -------
-        exp_vals : list of :class:`~cyten.BlockBackend.Scalar`
+        exp_vals : numpy.ndarray | list of :class:`~cyten.BlockBackend.Scalar`
             Expectation values, ``exp_vals[i] = <bra|op|ket>``, where ``op`` acts on site(s)
             ``[j1, j2, ..., j{n-1}]=[sites[i] + j for j in offsets[i]]``.
 
@@ -723,10 +729,15 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         else:
             assert op.labels_are(*new_axes[0], *new_axes[1])
         return self.expectation_value(
-            op=ct.Coupling.from_tensor(op, sites=[ket.get_site(i) for i in site_list]), sites=sites, offsets=offsets
+            op=ct.Coupling.from_tensor(op, sites=[ket.get_site(i) for i in site_list]),
+            sites=sites,
+            offsets=offsets,
+            return_scalar=return_scalar,
         )
 
-    def expectation_value_multi_sites(self, operators: list[str | ct.Tensor], i0: int) -> float | complex:
+    def expectation_value_multi_sites(
+        self, operators: list[str | ct.Tensor], i0: int, return_scalar: bool = False
+    ) -> ct.BlockBackend.Scalar | float | complex:
         r"""Expectation value  ``<bra|op0_{i0}op1_{i0+1}...opN_{i0+N}|ket>``.
 
         Calculates the expectation value of a tensor product of single-site operators
@@ -753,10 +764,12 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         i0 : int
             The left most index on which an operator acts, i.e.,
             ``operators[i]`` acts on site ``i + i0``.
+        return_scalar : bool
+            Whether to return a :class:`~cyten.BlockBackend.Scalar`.
 
         Returns
         -------
-        exp_val : float | complex
+        exp_val : :class:`~cyten.BlockBackend.Scalar` | float | complex
             The expectation value of the tensorproduct of the given onsite operators,
             ``<bra|operators[0]_{i0} operators[1]_{i0+1} ... |ket>``.
 
@@ -771,9 +784,11 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         """
         term = [(op, i0 + i) for i, op in enumerate(operators)]
-        return self.expectation_value_term(term)
+        return self.expectation_value_term(term, return_scalar=return_scalar)
 
-    def expectation_value_term(self, term: list[tuple[str | ct.Tensor, int]]) -> float | complex:
+    def expectation_value_term(
+        self, term: list[tuple[str | ct.Tensor, int]], return_scalar: bool = False
+    ) -> ct.BlockBackend.Scalar | float | complex:
         r"""Expectation value  ``<bra|op_{i0}op_{i1}...op_{iN}|ket>``.
 
         Calculates the expectation value of a tensor product of single-site operators
@@ -797,10 +812,12 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             tensors. The order inside `term` determines the order in which they act
             (in the mathematical convention: the last operator in `term` is right-most,
             so it acts first on a ket).
+        return_scalar : bool
+            Whether to return a :class:`~cyten.BlockBackend.Scalar`.
 
         Returns
         -------
-        exp_val : float | complex
+        exp_val : :class:`~cyten.BlockBackend.Scalar` | float | complex
             The expectation value of the tensorproduct of the given onsite operators,
             ``<bra|op_i0 op_i1 ... op_iN |ket>``.
 
@@ -836,7 +853,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         # translate term to coupling and use self.expectation_value
         coupling, sites = self._term_to_coupling(term, i_offset=0)
         exp_val = self.expectation_value(op=coupling, sites=0, offsets=sites)
-        return self._normalize_exp_val(exp_val)
+        return self._normalize_exp_val(exp_val, return_scalar=return_scalar)
 
     def correlation_function(
         self,
@@ -848,7 +865,8 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         offsets2: None | list[list[int]] | list[int] = None,
         opstr: None | str | ct.Tensor | list[str | ct.Tensor] = None,
         hermitian: bool = False,
-    ) -> np.ndarray:
+        return_scalar: bool = False,
+    ) -> np.ndarray | list[list[ct.BlockBackend.Scalar]]:
         r"""Correlation function of couplings and onsite operators.
 
         We evaluate ``<bra|op1_i op2_j|ket>`` for on-site operators and
@@ -964,6 +982,8 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             ``Op1[i]^\dagger == Op2[i]`` (which is not checked explicitly!), the resulting
             ``C[x, y]`` will be hermitian. We can use that to avoid calculations, so
             ``hermitian=True`` will run faster.
+        return_scalar : bool
+            Whether to return a list of lists of :class:`~cyten.BlockBackend.Scalar` or a 2d numpy array.
 
         .. warning ::
 
@@ -975,7 +995,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         Returns
         -------
-        C : 2D ndarray
+        C : 2D ndarray | list of lists of :class:`~cyten.BlockBackend.Scalar`
             The correlation function ``C[x, y] = <bra|op1_i op2_j|ket>``, where ``op1_i`` acts on
             sites ``i = [sites1[x] + k for k in offsets1[x]]`` and ``op2[j]`` on sites
             ``j = [sites2[y] + k for k in offsets2[y]]``.
@@ -1059,7 +1079,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         if hermitian and np.any(sites1 != sites2):
             warnings.warn('MPS correlation function cannot use the hermitian flag', stacklevel=2)
             hermitian = False
-        C = np.empty((len(sites1), len(sites2)), dtype=complex)
+        C = np.empty((len(sites1), len(sites2)), dtype=object)
         for x, sites_i in enumerate(sites1):
             # all sites_j > sites_i
             mask_j_gtr = sites2[:, 0] > sites_i[-1]
@@ -1068,10 +1088,9 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 C_gtr = self._corr_right(
                     op_L=op1, op_R=op2, sites_L=sites_i, sites_R=sites_j_gtr, split=False, opstr=opstr
                 )
-                C_gtr = np.array([val.to_numpy() for val in C_gtr])
                 C[x, mask_j_gtr] = C_gtr
                 if hermitian:
-                    C[mask_j_gtr, x] = np.conj(C_gtr)
+                    C[mask_j_gtr, x] = [val.conj() for val in C_gtr]
 
             # since j refers to multiple sites, we can have the case of op2 being on fully on the left, the
             # next entry having overlap with op1, and the entry after that again being fully on the left.
@@ -1082,7 +1101,6 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 C_sml = self._corr_left(
                     op_L=op2, op_R=op1, sites_L=sites_j_sml[perm], sites_R=sites_i, split=False, opstr=opstr
                 )
-                C_sml = np.array([val.to_numpy() for val in C_sml])
                 C[x, np.where(mask_j_sml)[0][perm]] = C_sml
 
             # overlapping sites_i and sites_j
@@ -1101,10 +1119,11 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 if not isinstance(op2, ct.Coupling):
                     op2 = ct.Coupling([self.sites[s] for s in sites_j], [op2])
                 op_combined, sites_combined = self._multiply_couplings(op1, op2, sites_i, sites_j)
-                C[x, y] = self.expectation_value(op=op_combined, sites=0, offsets=sites_combined)[0].to_numpy()
+                C[x, y] = self.expectation_value(op=op_combined, sites=0, offsets=sites_combined)[0]
                 if hermitian:
-                    C[y, x] = np.conj(C[x, y])
-        return self._normalize_exp_val(C)
+                    C[y, x] = C[x, y].conj()
+        C = [list(row) for row in C]
+        return self._normalize_exp_val(C, return_scalar=return_scalar)
 
     def correlation_function_split_right(
         self,
@@ -1113,7 +1132,8 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         distances: list[int],
         offsets_R: list[list[int]] | list[int],
         opstr: None | str | ct.Tensor | list[str | ct.Tensor] = None,
-    ) -> np.ndarray:
+        return_scalar: bool = False,
+    ) -> np.ndarray | list[ct.BlockBackend.Scalar]:
         r"""Correlation function of single coupling that is split into a fixed left and a moving right part.
 
         Parameters
@@ -1147,10 +1167,12 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             If less than :attr:`L` operators are given, we repeat them periodically.
             If given as a list, ``opstr[r]`` is inserted at site ``r`` (independent of ``sites_L``,
             ``distances``, and ``offsets_R``).
+        return_scalar : bool
+            Whether to return a list of :class:`~cyten.BlockBackend.Scalar` or a 1D numpy array.
 
         Returns
         -------
-        corrs : 1D ndarray
+        corrs : 1D ndarray | list of :class:`~cyten.BlockBackend.Scalar`
             Correlators with ``corrs[i] = <bra|op1 op2|ket>``, where ``op1`` is the left part of
             ``coupling`` acting on site(s) ``sites_L``, and ``op2`` is the right part acting on
             site(s) ``[sites_L[-1] + 1 + distances[i] + j for j in offsets_R[i]]``.
@@ -1178,7 +1200,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         result = self._corr_right(
             op_L=coupling_left, op_R=coupling_right, sites_L=sites_L, sites_R=sites_R, split=True, opstr=opstr
         )
-        return self._normalize_exp_val(result)
+        return self._normalize_exp_val(result, return_scalar=return_scalar)
 
     def correlation_function_split_left(
         self,
@@ -1187,7 +1209,8 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         distances: list[int],
         offsets_L: list[list[int]] | list[int],
         opstr: None | str | ct.Tensor | list[str | ct.Tensor] = None,
-    ) -> np.ndarray:
+        return_scalar: bool = False,
+    ) -> np.ndarray | list[ct.BlockBackend.Scalar]:
         r"""Correlation function of single coupling that is split into a fixed right and a moving left part.
 
         Parameters
@@ -1221,10 +1244,12 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             If less than :attr:`L` operators are given, we repeat them periodically.
             If given as a list, ``opstr[r]`` is inserted at site ``r`` (independent of ``sites_R``,
             ``distances``, and ``offsets_L``).
+        return_scalar : bool
+            Whether to return a list of :class:`~cyten.BlockBackend.Scalar` or a 1D numpy array.
 
         Returns
         -------
-        corrs : 1D ndarray
+        corrs : 1D ndarray | list of :class:`~cyten.BlockBackend.Scalar`
             Correlators with ``corrs[i] = <bra|op1 op2|ket>``, where ``op1`` is the left part of
             ``coupling`` acting on site(s) ``[sites_R[0] - 1 - distances[i] + j for j in offsets_L[i]]``,
             and ``op2`` is the right part acting on site(s) ``sites_L``.
@@ -1252,7 +1277,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         result = self._corr_left(
             op_L=coupling_left, op_R=coupling_right, sites_L=sites_L, sites_R=sites_R, split=True, opstr=opstr
         )
-        return self._normalize_exp_val(result)
+        return self._normalize_exp_val(result, return_scalar=return_scalar)
 
     def term_correlation_function_right(self, term_L, term_R, i_L=0, j_R=None, autoJW=True, opstr=None):
         """Correlation function between (multi-site) terms, moving the right term, fix left term.
@@ -2236,10 +2261,12 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         return op
 
     @abstractmethod
-    def _normalize_exp_val(self, value: Sequence[ct.BlockBackend.Scalar]) -> list[ct.BlockBackend.Scalar]:
+    def _normalize_exp_val(
+        self, value: Sequence[ct.BlockBackend.Scalar], return_scalar: bool = False
+    ) -> np.ndarray | list[ct.BlockBackend.Scalar]:
         """Post processing of result values of :meth:`expectation_value`.
 
-        Should always convert to numpy array and ensure real values.
+        May return :class:`~cyten.BlockBackend.Scalar` or convert to numpy array and cast to real values if applicable.
         Optionally (depending on concrete subclass), considers state norms or not.
         E.g., in :class:`MPS` we ignore the norm but consider the norms in :class:`MPSEnvironment`.
         """
@@ -7267,8 +7294,10 @@ class MPS(BaseMPSExpectationValue):
     def _get_bra_ket(self):
         return self, self
 
-    def _normalize_exp_val(self, value):
-        return np.real_if_close(value)  # ignore self.norm
+    def _normalize_exp_val(self, value, return_scalar=False):
+        if return_scalar:
+            return _real_if_close_nested(value)
+        return np.real_if_close(np.asarray(value))  # ignore self.norm
 
     def get_LP(self, i):
         leg = self.get_SL(i).get_leg('vL')
@@ -8030,15 +8059,16 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
     def _get_bra_ket(self):
         return self.bra, self.ket
 
-    def _normalize_exp_val(self, value: Sequence[ct.BlockBackend.Scalar]) -> list[ct.BlockBackend.Scalar]:
+    def _normalize_exp_val(self, value, return_scalar=False):
         # this ensures that
         #     MPSEnvironment(psi, psi.apply_local_op('B', i)).expectation_value('A', j)
         # gives the same as
         #     psi.correlation_function('A', 'B', sites1=[i], sites2=[j])
         # and psi.apply_local_op('Adagger', i).overlap(psi.apply_local_op('B', j)
         # for initially normalized psi
-        # TODO real_if_close for scalars? Right now we only have .real()?
-        return np.real_if_close(value) * (self.bra.norm * self.ket.norm)
+        if return_scalar:
+            return _real_if_close_nested(value, self.bra.norm * self.ket.norm)
+        return np.real_if_close(np.asarray(value)) * (self.bra.norm * self.ket.norm)
 
 
 # TODO_MPS stopped here
@@ -8817,6 +8847,13 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
             all_sites.remove(site)
 
     return initial_state
+
+
+def _real_if_close_nested(value, factor: float = 1.0):
+    ".real_if_close() * factor for each entry in nested lists of :class:`~cyten.BlockBackend.Scalar`."
+    if isinstance(value, list):
+        return [_real_if_close_nested(val, factor) for val in value]
+    return value.real_if_close() * factor
 
 
 def _truncate_virtual_space(
