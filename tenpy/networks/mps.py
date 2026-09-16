@@ -2068,7 +2068,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         # only adds identities in between
         Ws1 = coupling1.stretch_with_identities(new_sites, sites1_idcs)
-        Ws1 = [None] * start_idcs[0] + Ws1.factorization  + [None] * (len(new_idcs) - 1 - stop_idcs[0])
+        Ws1 = [None] * start_idcs[0] + Ws1.factorization + [None] * (len(new_idcs) - 1 - stop_idcs[0])
         Ws2 = coupling1.stretch_with_identities(new_sites, sites2_idcs)
         Ws2 = [None] * start_idcs[1] + Ws2.factorization + [None] * (len(new_idcs) - 1 - stop_idcs[1])
 
@@ -5739,7 +5739,9 @@ class MPS(BaseMPSExpectationValue):
             self.set_B(i, V, form='B')
         if self.bc == 'finite':
             assert np.sum(S.legs[0].multiplicities) == 1
-            self._B[0] = ct.tensors.partial_compose(self._B[0], U, 'vL')  # just a trivial phase factor, but better keep it
+            self._B[0] = ct.tensors.partial_compose(
+                self._B[0], U, 'vL'
+            )  # just a trivial phase factor, but better keep it
 
         # done with getting to canonical form
         if envs_to_update is not None and self.bc == 'segment':
@@ -8040,20 +8042,16 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         return contr * self.bra.norm * self.ket.norm
 
     def _contract_LP(self, i, LP):
-        # TODO this is not a planar diagram to make it also work for, e.g., purification MPS
-        LP = ct.planar_contraction(LP, self.ket.get_B(i, form='A'), ['vR'], ['vL'])
-        LP = ct.planar_contraction(
-            LP, self.bra.get_B(i, form='A').hc, ['vR*'] + self.ket._p_label, ['vL*'] + self.ket._get_p_label('*')
+        # labels 'vR*', 'vR'
+        return mps_contraction_diagram_operations['LP2 @ TM'].evaluate(
+            dict(LP=LP, ket=self.ket.get_B(i, form='A'), bra=self.bra.get_B(i, form='A').hc)
         )
-        return LP  # labels 'vR*', 'vR'
 
     def _contract_RP(self, i, RP):
-        # TODO this is not a planar diagram to make it also work for, e.g., purification MPS
-        RP = ct.planar_contraction(RP, self.ket.get_B(i, form='B'), ['vL'], ['vR'])
-        RP = ct.planar_contraction(
-            RP, self.bra.get_B(i, form='B').hc, ['vL*'] + self.ket._p_label, ['vR*'] + self.ket._get_p_label('*')
+        # labels 'vL', 'vL*'
+        return mps_contraction_diagram_operations['TM @ RP2'].evaluate(
+            dict(RP=RP, ket=self.ket.get_B(i, form='B'), bra=self.bra.get_B(i, form='B').hc)
         )
-        return RP  # labels 'vL', 'vL*'
 
     # methods for Expectation values
     def _get_bra_ket(self):
@@ -8435,7 +8433,7 @@ class InitialStateBuilder:
     #: logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
     logger = logging.getLogger(__name__ + '.InitialStateBuilder')
 
-    def __init__(self, lattice, options, model_dtype=np.float64):
+    def __init__(self, lattice, options, model_dtype=ct.Dtype.float64):
         self.lattice = lattice
         self.options = asConfig(options, self.__class__.__name__)
         self.model_dtype = model_dtype
