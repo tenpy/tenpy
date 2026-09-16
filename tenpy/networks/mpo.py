@@ -154,7 +154,7 @@ class MPO(MPSGeometry):
     ):
         super().__init__(sites, bc, unit_cell_width=mps_unit_cell_width)
         common_dtype = Dtype.common(*[W.dtype for W in Ws])
-        self.dtype = dtype = common_dtype.to_numpy_dtype()
+        self.dtype = common_dtype.to_numpy_dtype()
         self._W = [W.as_dtype(common_dtype) for W in Ws]
         self.IdL = self._get_Id(IdL, len(sites))
         self.IdR = self._get_Id(IdR, len(sites))
@@ -2709,35 +2709,6 @@ class MPOGraph(MPSGeometry):
                 self.add(k, keyL, keyR, opname, 1.0, check_op=check_op, skip_existing=skip_existing)
             keyR = keyL
         return keyR
-
-    def add_missing_IdL_IdR(self, insert_all_id=True):
-        """Add missing identity ('Id') edges connecting ``'IdL'->'IdL'`` and ``'IdR'->'IdR'``.
-
-        This function should be called *after* all other operators have been inserted.
-
-        Parameters
-        ----------
-        insert_all_id : bool
-            If ``True``, insert 'Id' edges on *all* bonds.
-            If ``False`` and boundary conditions are finite, only insert
-            ``'IdL'->'IdL'`` to the left of the rightmost existing 'IdL' and
-            ``'IdR'->'IdR'`` to the right of the leftmost existing 'IdR'.
-            The latter avoid "dead ends" in the MPO, but some functions (like `make_WI`) expect
-            'IdL'/'IdR' to exist on all bonds.
-
-        """
-        if self.bc == 'infinite' or insert_all_id:
-            max_IdL = self.L
-            min_IdR = 0
-        else:
-            max_IdL = max([0] + [i for i, s in enumerate(self.states[:-1]) if 'IdL' in s])
-            min_IdR = min([self.L] + [i for i, s in enumerate(self.states[:-1]) if 'IdR' in s])
-        for k in range(0, max_IdL):
-            if not self.has_edge(k, 'IdL', 'IdL'):
-                self.add(k, 'IdL', 'IdL', 'Id', 1.0)
-        for k in range(min_IdR, self.L):
-            if not self.has_edge(k, 'IdR', 'IdR'):
-                self.add(k, 'IdR', 'IdR', 'Id', 1.0)
 
     def add_missing_IdL_IdR_for_couplings(self):
         """Add the ``'IdL'``/``'IdR'`` identity pass-through edges to the cyten-native graph.
