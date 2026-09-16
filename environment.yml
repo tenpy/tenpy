@@ -7,19 +7,27 @@ dependencies:
   - setuptools>=68.0.0
   - pybind11>=3.0
   - scikit-build-core
+  - setuptools-scm
   - numpy>=2.0
   - scipy
   - openblas
   - cmake
+  - doxygen  # required: generates pybind/docstrings/ DOC() headers at build time
   - pytorch
   - pytest>=6.0
   - sympy # TODO this is leftover of cyten/symmetries/_su2data.py
 
-  - hdf5=2.1  # temporary pin to avoid incompatible version
-  - h5py=3.16
-  - pyyaml
+  # developer tools
+  - ipython
   - ruff
-  - pre-commit
   - flake8
   - flake8-rst-docstrings
   - sphinx-lint
+  # I/O
+  - hdf5=2.1  # temporary pin to avoid incompatible version
+  - h5py=3.16
+  - pyyaml
+  - toml
+  # pip last: packages after a `pip:` block are ignored by conda
+  - pip:
+    - breathe  # conda-forge version seems incompatible

@@ -3,6 +3,9 @@ name: Notify about Coverage
 
 on:
   pull_request:
+    branches:
+      - main
+      - v2_main
   push:
     branches:
       - main
