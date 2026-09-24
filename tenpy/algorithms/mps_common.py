@@ -1116,7 +1116,7 @@ class OneSiteH(EffectiveH):
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0)
         self.W0 = env.H.get_W(i0)
-        self.dtype = env.H.dtype
+        self.dtype = ct.Dtype.from_numpy_dtype(env.H.dtype)
         self.combine = combine
         self.move_right = move_right
         self.N = self.LP.get_leg('vR').dim * self.W0.get_leg('p').dim * self.RP.get_leg('vL').dim
@@ -1337,7 +1337,7 @@ class TwoSiteH(EffectiveH):
         # 'wL', 'wR', 'p', 'p*'
         self.W1 = env.H.get_W(i0 + 1)
         # 'wL', 'wR', 'p', 'p*'
-        self.dtype = env.H.dtype
+        self.dtype = ct.Dtype.from_numpy_dtype(env.H.dtype)
         self.combine = combine
         self.N = (
             self.LP.get_leg('vR').dim * self.W0.get_leg('p').dim * self.W1.get_leg('p').dim * self.RP.get_leg('vL').dim
@@ -1509,7 +1509,7 @@ class ZeroSiteH(EffectiveH):
         self.i0 = i0
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0 - 1)
-        self.dtype = env.H.dtype
+        self.dtype = ct.Dtype.from_numpy_dtype(env.H.dtype)
         self.N = self.LP.get_leg('vR').dim * self.RP.get_leg('vL').dim
         PlanarLinearOperator.__init__(
             self,
