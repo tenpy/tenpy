@@ -32,3 +32,4 @@ coverage.*
 .ipynb_checkpoints
 *.ipynb
 *.pkl
+.claude/settings.local.json
