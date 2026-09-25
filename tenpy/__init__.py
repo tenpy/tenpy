@@ -129,8 +129,10 @@ from .simulations.measurement import (
     m_entropy,
     m_evolved_time,
     m_measurement_index,
+    m_n_site_variance,
     m_onsite_expectation_value,
     m_simulation_parameter,
+    m_two_site_variance,
 )
 from .simulations.simulation import (
     Simulation,
@@ -324,6 +326,8 @@ __all__ = [
     'm_bond_energies',
     'm_simulation_parameter',
     'm_energy_MPO',
+    'm_two_site_variance',
+    'm_n_site_variance',
     'm_entropy',
     'm_onsite_expectation_value',
     'm_correlation_length',
