@@ -198,7 +198,12 @@ __all__ = [
 #     `[site + i for i in offsets]`, where site is in `sites`; identities act between the
 #     individual tensors of a coupling.
 #   - MPS now consist of SymmetricTensors as Bs, where the final tensor may also be a HiddenLegTensor
-#     to absorb the total charge of a unit cell for iMPS. The singular values are DiagonalTensors.
+#     to absorb the total charge of a unit cell for iMPS. The total charge leg points towards the
+#     tensor, like vR. The singular values are DiagonalTensors.
+#     Although not the intended convention, other tensors apart from the final one may also be
+#     HiddenLegTensors. For finite MPS, we choose the convention to always have a trivial final leg,
+#     such that to total charge is carried by a hidden leg on the last tensor. This is similar for
+#     segment MPS, with the difference being a nontrivial final leg
 
 
 mps_contraction_diagram_operations: dict[str, ct.PlanarDiagram] = {
@@ -2413,6 +2418,28 @@ class MPS(BaseMPSExpectationValue):
         # make copies of Bs and SVs
         # do a planar_permute_legs here to the best arrangement
         self._B = [ct.planar_permute_legs(B.copy(deep=True, dtype=dtype), codomain=self._B_labels[:-1]) for B in Bs]
+        if self.bc == 'finite':
+            # final bond must be trivial -> check if there is a non-trivial one and if so, make it a total charge leg
+            B_final = self._B[-1]
+            if not B_final.get_leg('vR').is_trivial:
+                combine = [l for l in B_final.labels if MPS_TOTAL_CHARGE_LABEL in l]
+                if len(combine) > 0:
+                    unhide = {l: l[1:] for l in combine if '!' in l}
+                    if len(unhide) > 0:
+                        B_final.relabel(unhide)
+                        combine = [unhide.get(l, l) for l in combine]
+                    B_final = ct.combine_legs(B_final, [*combine, 'vR'])
+                    label = ct.tensors._tensors._combine_leg_labels([*combine, 'vR'])
+                else:
+                    label = 'vR'
+                B_final.relabel({label: MPS_TOTAL_CHARGE_LABEL})
+                B_final = ct.add_trivial_leg(B_final, domain_pos=B_final.num_domain_legs, label='vR', is_dual=False)
+                if isinstance(B_final, ct.HiddenLegTensor):
+                    B_final.relabel({MPS_TOTAL_CHARGE_LABEL: '!' + MPS_TOTAL_CHARGE_LABEL})
+                else:
+                    B_final = ct.HiddenLegTensor(B_final, [MPS_TOTAL_CHARGE_LABEL])
+                self._B[-1] = B_final
+
         num_S = self.L + 1 if self.finite else self.L
         self._S = [None] * (num_S)
         for i in range(self.L + 1)[self.nontrivial_bonds]:
@@ -2423,7 +2450,7 @@ class MPS(BaseMPSExpectationValue):
                 leg=Bs[0].get_leg('vL'), backend=backend, labels=['vL', 'vR'], dtype=dtype.to_real, device=device
             )
             self._S[-1] = ct.DiagonalTensor.from_eye(
-                leg=Bs[-1].get_leg_co_domain('vR'),
+                leg=ct.ElementarySpace.from_trivial_sector(symmetry=self.symmetry),
                 backend=backend,
                 labels=['vL', 'vR'],
                 dtype=dtype.to_real,
@@ -2448,8 +2475,9 @@ class MPS(BaseMPSExpectationValue):
                 assert isinstance(f, tuple)
                 assert len(f) == 2
         for i, B in enumerate(self._B):
+            assert isinstance(B, ct.SymmetricTensor)
             if not B.labels_are(*self._B_labels):
-                if not (self.bc == 'infinite' and B.labels_are(*self._B_labels, f'!{MPS_TOTAL_CHARGE_LABEL}')):
+                if not (isinstance(B, ct.HiddenLegTensor) and set(self._B_labels) == set([B.labels[i] for i in B.public_leg_idcs()])):
                     raise ValueError(f'B has wrong labels {B.labels!r}, expected {self._B_labels!r}')
             i2 = (i + 1) if self.finite else (i + 1) % self.L
             if isinstance(self._S[i2], ct.DiagonalTensor):
@@ -2473,8 +2501,10 @@ class MPS(BaseMPSExpectationValue):
                 # (but not necessarily A-B, as we have it on the first bond at DMRG checkpoints)
             assert self.form[i] in self._valid_forms.values()
         if self.bc == 'finite':
-            if np.sum(self._S[0].leg.multiplicities) != 1 or np.sum(self._S[-1].leg.multiplicities) != 1:
-                raise ValueError('non-trivial outer bonds for finite MPS')
+            if not self._S[-1].leg.is_trivial:
+                raise ValueError('for finite MPS, the final bond must always be trivial')
+            if np.sum(self._S[0].leg.multiplicities) != 1:
+                raise ValueError('non-trivial left bonds for finite MPS')
 
     def copy(self) -> MPS:
         """Returns a copy of `self`.
