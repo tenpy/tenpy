@@ -40,7 +40,6 @@ def test_mps():
         if L > 1:
             npt.assert_equal(psi.entanglement_entropy(), 0.0)  # product state has no entanglement.
         E = psi.expectation_value('Sz')
-        E = np.array([e.to_numpy() for e in E])
         npt.assert_array_almost_equal_nulp(E, ([0.5, -0.5] * L)[:L], 100)
 
         C = psi.correlation_function('Sz', 'Sz')
@@ -50,14 +49,12 @@ def test_mps():
         if L > 2:
             # test couplings
             E2 = psi.expectation_value(SzSz)
-            E2 = np.array([e.to_numpy() for e in E2])
             npt.assert_array_almost_equal_nulp(E2, [-0.25] * (L - 1), 100)
 
             C2 = psi.correlation_function(SzSz, SzSz)
             npt.assert_array_almost_equal_nulp(C2, np.outer(E2, E2), 100)
 
             E3 = psi.expectation_value(SzSz, sites=list(range(L - 2)), offsets=[0, 2])
-            E3 = np.array([e.to_numpy() for e in E3])
             npt.assert_array_almost_equal_nulp(E3, [0.25] * (L - 2), 100)
             C3 = psi.correlation_function(
                 SzSz, SzSz, sites1=list(range(L - 2)), sites2=list(range(L - 2)), offsets1=[0, 2], offsets2=[0, 2]
@@ -65,9 +62,7 @@ def test_mps():
             npt.assert_array_almost_equal_nulp(C3, np.outer(E3, E3), 100)
 
             E4 = psi.correlation_function_split_left(SzSz, sites_R=[L - 1], distances=list(range(L - 1)), offsets_L=[0])
-            E4 = np.array([e.to_numpy() for e in E4])
             E5 = psi.correlation_function_split_right(SzSz, sites_L=[0], distances=list(range(L - 1)), offsets_R=[0])
-            E5 = np.array([e.to_numpy() for e in E5])
             npt.assert_array_almost_equal_nulp(E4, ([-0.25, 0.25] * L)[: L - 1], 100)
             npt.assert_array_almost_equal_nulp(E4, E5, 100)
         psi.test_sanity()
@@ -518,7 +513,6 @@ def test_enlarge_mps_unit_cell():
     psi.enlarge_mps_unit_cell(3)
     psi.test_sanity()
     expval = psi.expectation_value('Sigmaz')
-    expval = [e.to_numpy() for e in expval]
     npt.assert_equal(expval, [1.0, -1.0, 1.0] * 3)
     # done
 
