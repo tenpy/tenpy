@@ -1201,8 +1201,7 @@ class CouplingModel(Model):
             placed_split = split
         else:
             permutation = list(np.argsort(positions))
-            num_swaps = self._count_inversions(permutation)
-            placed_coupling = coupling.permute(permutation, coupling._levels, [None] * num_swaps)
+            placed_coupling = coupling.permute(permutation, coupling._levels)
             placed_split = None if split is None else permutation.index(split)
         self._cyten_couplings.append((placed_coupling, sorted_positions, strength, placed_split))
 
@@ -1247,17 +1246,6 @@ class CouplingModel(Model):
         *any* Coupling, not just ones built via :meth:`_coupling_from_opnames`.
         """
         return Coupling.from_tensor(dagger(coupling.to_tensor()), coupling.sites, name=name)
-
-    @staticmethod
-    def _count_inversions(permutation):
-        """Number of pairs ``i < j`` with ``permutation[i] > permutation[j]``.
-
-        Equal to the number of elementary adjacent transpositions needed to realize
-        `permutation` (see :func:`~cyten.models.couplings._adjacent_transpositions`), i.e. the
-        length of `over_braid` that :meth:`~cyten.models.couplings.Coupling.permute` expects.
-        """
-        n = len(permutation)
-        return sum(1 for i in range(n) for j in range(i + 1, n) if permutation[i] > permutation[j])
 
     def calc_H_coupling(self, name=None):
         """Calculate the cyten Coupling representation of the Hamiltonian.
