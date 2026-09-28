@@ -4273,20 +4273,29 @@ class MPS(BaseMPSExpectationValue):
     def enlarge_mps_unit_cell(self, factor: int = 2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
+        For tensors with hidden charge legs, the new charge labels are `old_label + 'i'`, with `i`
+        the index of the unit cell (starting from 0).
+
         Parameters
         ----------
         factor : int
             The new number of sites in the unit cell will be increased from `L` to ``factor*L``.
 
         """
-        # TODO should we combine the total charge leg into a single one for infinite BC?
         if int(factor) != factor:
             raise ValueError('`factor` should be integer!')
         if factor <= 1:
             raise ValueError("can't shrink!")
         if self.bc == 'segment':
             raise ValueError("can't enlarge segment MPS")
+        rename_idcs = [i for i, B in enumerate(self._B) if isinstance(B, ct.HiddenLegTensor)]
         self._B = [self.get_B(j, form=None) for j in range(0, factor * self.L)]
+        for idx in rename_idcs:
+            labels =[self._B[idx].labels[i] for i in self._B[idx].hidden_leg_idcs()]
+            for i in range(factor):
+                # TODO do we want to keep the condition MPS_TOTAL_CHARGE_LABEL in l?
+                # We would not want to relabel the (hidden) q leg for purification MPS
+                self._B[i * self.L + idx].relabel({l: l + str(i) for l in labels if MPS_TOTAL_CHARGE_LABEL in l})
         self._S = [self.get_SL(j) for j in range(0, factor * self.L)]
         if self.finite:
             self._S.append([self.get_SR(factor * self.L - 1)])
@@ -6302,7 +6311,7 @@ class MPS(BaseMPSExpectationValue):
                 keep.append(i)
         return sectors[keep]
 
-    def add(self, other, alpha, beta, cutoff=1.0e-15):
+    def add(self, other: MPS, alpha: complex | float, beta: complex | float, cutoff: float | None = 1.0e-15) -> MPS:
         """Return an MPS which represents ``alpha|self> + beta |others>``.
 
         Works only for 'finite', 'segment' boundary conditions.
