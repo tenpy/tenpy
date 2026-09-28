@@ -6337,39 +6337,37 @@ class MPS(BaseMPSExpectationValue):
             Has same total charge as `self`.
 
         """
-        # TODO
         L = self.L
         assert other.L == L and L >= 2  # (if you need this, generalize this function...)
         assert self.finite
         assert self.bc == other.bc
-        other = self._gauge_compatible_vL_vR(other)
-        legs = ['vL', 'vR'] + self._p_label
+        assert self.symmetry == other.symmetry
+        assert self.backend == other.backend
+
+        # TODO gauge to move total charge to final tensor
+        # other = self._gauge_compatible_vL_vR(other)
         # alpha and beta appear only on the first site
         alpha = alpha * self.norm
         beta = beta * other.norm
-        theta_self = self.get_B(0, 'Th').transpose(legs)
-        theta_other = other.get_B(0, 'Th').transpose(legs)
-        last_B_self = self.get_B(L - 1).transpose(legs)
-        last_B_other = other.get_B(L - 1).transpose(legs)
+        theta_self = self.get_B(0, 'Th')
+        theta_other = other.get_B(0, 'Th')
+        last_B_self = self.get_B(L - 1)
+        last_B_other = other.get_B(L - 1)
         U, V = self.segment_boundaries
         if U is not None:
-            theta_self = npc.tensordot(U, theta_self, axes=['vR', 'vL']).transpose(legs)
-            last_B_self = npc.tensordot(last_B_self, V, axes=['vR', 'vL']).transpose(legs)
+            theta_self = ct.tensors.partial_compose(theta_self, U, 'vL')
+            last_B_self = ct.planar_contraction(last_B_self, V, ['vR'], ['vL'])
         U, V = other.segment_boundaries
         if U is not None:
-            theta_other = npc.tensordot(U, theta_other, axes=['vR', 'vL']).transpose(legs)
-            last_B_other = npc.tensordot(last_B_other, V, axes=['vR', 'vL']).transpose(legs)
-        Bs = [npc.grid_concat([[alpha * theta_self, beta * theta_other]], axes=[0, 1])]
+            theta_other = ct.tensors.partial_compose(theta_other, U, 'vL')
+            last_B_other = ct.planar_contraction(last_B_other, V, ['vR'], ['vL'])
+        Bs = [ct.tensor_from_grid([[alpha * theta_self, beta * theta_other]], labels=theta_self.labels)]
         for i in range(1, L - 1):
-            B1 = self.get_B(i).transpose(legs)
-            B2 = other.get_B(i).transpose(legs)
-            grid = [
-                [B1, npc.zeros([B1.get_leg('vL'), B2.get_leg('vR')] + B1.legs[2:])],
-                [npc.zeros([B2.get_leg('vL'), B1.get_leg('vR')] + B1.legs[2:]), B2],
-            ]
-            Bs.append(npc.grid_concat(grid, [0, 1]))
-        Bs.append(npc.grid_concat([[last_B_self], [last_B_other]], axes=[0, 1]))
-        Ss = [np.ones(Bs[0].shape[0])] + [np.ones(B.shape[1]) for B in Bs]
+            # TODO we should make sure that the hidden legs are by convention not in the positions along which we stack
+            Bs.append(ct.tensor_from_grid([[self.get_B(i), None], [None, other.get_B(i)]], labels=self.get_B(i).labels))
+        Bs.append(ct.tensor_from_grid([[last_B_self], [last_B_other]], labels=last_B_self.labels))
+        Ss = [ct.DiagonalTensor.from_eye(leg=B.get_leg('vL'), backend=self.backend, labels=['vL', 'vR'], dtype=self.dtype.to_real, device=self.device) for B in Bs]
+        Ss.append(ct.DiagonalTensor.from_eye(leg=Bs[-1].get_leg_co_domain('vR'), backend=self.backend, labels=['vL', 'vR'], dtype=self.dtype.to_real, device=self.device))
         # new class instance
         psi = self.__class__(self.sites, Bs, Ss, self.bc, form=None, unit_cell_width=self.unit_cell_width)
         # bring to canonical form, calculate Ss
