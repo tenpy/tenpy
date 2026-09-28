@@ -34,10 +34,12 @@ __all__ = ['ExactDiag', 'get_full_wavefunction', 'get_numpy_Hamiltonian', 'get_s
 class ExactDiag:
     """(Full) exact diagonalization of the Hamiltonian.
 
+    See classmethods for construction, e.g., :meth:`from_model`.
+
     Parameters
     ----------
-    model : :class:`~tenpy.models.MPOmodel` | :class:`~tenpy.models.CouplingModel`
-        The model which is to be diagonalized.
+    sites : list of :class:`~tenpy.models.sites.Site`
+        The sites of the system in MPS order.
     charge_sector : ``None`` | charges
         If not ``None``, restrict :meth:`groundstate`/:meth:`sparse_diag` to the given charge
         sector. Note that (unlike the old `np_conserved` version) this does *not* reduce the size
@@ -52,8 +54,8 @@ class ExactDiag:
     Attributes
     ----------
     model : :class:`~tenpy.models.MPOmodel` | :class:`~tenpy.models.CouplingModel` | ``None``
-        The model which is to be diagonalized, if constructed via :meth:`__init__`.
-        ``None`` if constructed via :meth:`from_hamiltonian`.
+        The model which is to be diagonalized, if constructed via :meth:`from_model`.
+        ``None`` otherwise.
     symmetry : :class:`~cyten.symmetries.Symmetry`
         The symmetry of the sites (which is the same for all sites).
     charge_sector : ``None`` | charges
@@ -88,13 +90,8 @@ class ExactDiag:
 
     """
 
-    def __init__(self, model, charge_sector=None, max_size=2e6):
-        if model.lat.bc_MPS != 'finite':
-            raise ValueError('Full diagonalization works only on finite systems')
-        self.model = model
-        self._init_from_sites(model.lat.mps_sites(), charge_sector, max_size)
-
-    def _init_from_sites(self, sites, charge_sector, max_size):
+    def __init__(self, sites, charge_sector=None, max_size=2e6):
+        self.model = None
         self.full_H = None
         self.E = None
         self.V = None
@@ -124,6 +121,15 @@ class ExactDiag:
             self.charge_sector = None
             self._mask = None
 
+    @classmethod
+    def from_model(cls, model, charge_sector=None, max_size=2e6):
+        """Initialize from a finite model."""
+        if model.lat.bc_MPS != 'finite':
+            raise ValueError('Full diagonalization works only on finite systems')
+        res = cls(model.lat.mps_sites(), charge_sector, max_size)
+        res.model = model
+        return res
+
     def possible_charge_sectors(self):
         return np.asarray(self._pipe.sector_decomposition)
 
@@ -131,8 +137,7 @@ class ExactDiag:
     def from_hamiltonian(cls, H, sites, charge_sector=None, max_size=2e6):
         """Initialize directly from a cyten Hamiltonian tensor and its sites.
 
-        Entry point while ``tenpy.models`` is not ported to cyten yet, so :meth:`__init__` cannot
-        be exercised without a model.
+        Entry point while ``tenpy.models`` is not ported to cyten yet.
 
         Parameters
         ----------
@@ -145,9 +150,7 @@ class ExactDiag:
             As for :meth:`__init__`.
 
         """
-        res = cls.__new__(cls)
-        res.model = None
-        res._init_from_sites(sites, charge_sector, max_size)
+        res = cls(sites, charge_sector, max_size)
         if not res._exceeds_max_size():
             res._set_full_H(H)
         return res
@@ -177,7 +180,7 @@ class ExactDiag:
         model_segment.H_MPO.bc = 'finite'
         if hasattr(model_segment, 'H_bond'):
             del model_segment.H_bond  # invalid since it wouldn't terminate onsite terms correctly
-        return cls(model_segment, **kwargs)
+        return cls.from_model(model_segment, **kwargs)
 
     @classmethod
     def from_H_mpo(cls, H_MPO, *args, **kwargs):
@@ -188,9 +191,9 @@ class ExactDiag:
         H_MPO : :class:`~tenpy.networks.mpo.MPO`
             The MPO representing the Hamiltonian.
         *args :
-            Further keyword arguments as for the ``__init__`` of the class.
+            Further keyword arguments as for :meth:`from_model`.
         **kwargs :
-            Further keyword arguments as for the ``__init__`` of the class.
+            Further keyword arguments as for :meth:`from_model`.
 
         """
         from ..models.lattice import TrivialLattice
@@ -198,7 +201,7 @@ class ExactDiag:
 
         assert H_MPO.bc == 'finite'
         M = MPOModel(TrivialLattice(H_MPO.sites), H_MPO)
-        return cls(M, *args, **kwargs)
+        return cls.from_model(M, *args, **kwargs)
 
     def build_full_H_from_mpo(self):
         """Calculate self.full_H from the MPO (``H_MPO``) of the model."""
@@ -263,7 +266,7 @@ class ExactDiag:
                 full_H += Hb
         self._set_full_H(full_H)
 
-    def full_diagonalization(self, **kwargs):
+    def full_diagonalization(self, new_labels='eig', sort='<'):
         """Full diagonalization to obtain all eigenvalues and eigenvectors.
 
         Sets :attr:`V` and :attr:`E`. Keyword arguments are given to :func:`~cyten.tensors.eigh`
@@ -276,9 +279,7 @@ class ExactDiag:
                 'cyten eigh requires full_H.domain == full_H.codomain; the `build_full_H_*` methods '
                 'are not migrated to cyten yet - use `ExactDiag.from_hamiltonian`.'
             )
-        kwargs.setdefault('new_labels', 'eig')
-        kwargs['new_leg_dual'] = False
-        W, V = cyten_eigh(self.full_H, **kwargs)
+        W, V = cyten_eigh(self.full_H, new_labels, new_leg_dual=False, sort=sort)
         self.E = W.diagonal_as_numpy()
         self.V = V
 
