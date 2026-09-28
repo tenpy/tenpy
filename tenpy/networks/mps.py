@@ -2995,8 +2995,8 @@ class MPS(BaseMPSExpectationValue):
             specified by `chis` instead. `None` (default) is equivalent to specifying the trivial
             sector.
         total_charge : :class:`~cyten.Sector`, optional
-            Total charge of the unit cell for infinite boundary conditions. Is ignored for finite
-            and segemnt boundary conditions. Defaults to the trivial charge sector.
+            Total charge of the unit cell for infinite or segment boundary conditions. Is ignored
+            for finite boundary conditions. Defaults to the trivial charge sector.
         unit_cell_width : int, optional
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
         device : str, optional
@@ -3039,6 +3039,14 @@ class MPS(BaseMPSExpectationValue):
                 vs_right = ct.ElementarySpace.from_defining_sectors(sym, [chargeR], multiplicities=[mults[1]])
             virtual_spaces.append(vs_right)
 
+        if bc == 'segment' or bc == 'infinite':
+            if total_charge is None:
+                total_charge_leg = ct.ElementarySpace.from_trivial_sector(symmetry=sym)
+            else:
+                err = f'{total_charge} is not a valid charge sector of the symmetry {sym}'
+                assert sym.is_valid_sector(total_charge), err
+                total_charge_leg = ct.ElementarySpace.from_defining_sectors(sym, [total_charge])
+
         # idea: compute allowed charge sectors and multplicities based on fusion
         # and then adjust multiplicities to fit the bond dimensions
         if bc == 'finite' or bc == 'segment':
@@ -3055,7 +3063,10 @@ class MPS(BaseMPSExpectationValue):
                     new_space_left, virtual_spaces[i + 1], chi=chis[i + 1], err=charge_err
                 )
                 # due to direction / duality of the legs, need to use dual leg of the site
-                new_space_right = ct.TensorProduct([virtual_spaces[-1 - i], sites[-1 - i].leg.dual], sym)
+                legs = [virtual_spaces[-1 - i], sites[-1 - i].leg.dual]
+                if i == 0 and bc == 'segment':
+                    legs.append(total_charge_leg)
+                new_space_right = ct.TensorProduct(legs, sym)
                 new_space_right = new_space_right.as_ElementarySpace()
                 virtual_spaces[-2 - i] = _truncate_virtual_space(
                     new_space_right, virtual_spaces[-2 - i], chi=chis[-2 - i], err=charge_err
@@ -3064,9 +3075,13 @@ class MPS(BaseMPSExpectationValue):
             # grow the virtual spaces until they are close enough to a stationary distribution
             # of multiplicities and then truncate -> should not lead to cutting charges that
             # make fusion inconsistent if chi is large enough
+            total_charge_leg = total_charge_leg.dual
             for _ in range(100):  # TODO make this limit larger or smaller?
                 for i in range(L):
-                    new_space = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
+                    legs = [virtual_spaces[i], sites[i].leg]
+                    if i == L - 1:
+                        legs.append(total_charge_leg)
+                    new_space = ct.TensorProduct(legs, sym)
                     virtual_spaces[(i + 1) % L] = new_space.as_ElementarySpace()
                 if all([np.sum(space.multiplicities) > 3 * chi for space, chi in zip(virtual_spaces, chis)]):
                     break
@@ -3112,8 +3127,8 @@ class MPS(BaseMPSExpectationValue):
             The data type of the tensors. By default, the data type is chosen to be float for
             symmetries with real topological data, and complex otherwise.
         total_charge : :class:`~cyten.Sector`, optional
-            Total charge of the unit cell for infinite boundary conditions. Is ignored for finite
-            and segemnt boundary conditions. Defaults to the trivial charge sector.
+            Total charge of the unit cell for infinite or segment boundary conditions. Is ignored
+            for finite boundary conditions. Defaults to the trivial charge sector.
         unit_cell_width : int, optional
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
         device : str, optional
@@ -3133,13 +3148,14 @@ class MPS(BaseMPSExpectationValue):
             if len(virtual_spaces) != L:
                 raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
             virtual_spaces.append(virtual_spaces[0])
+        elif bc != 'infinite' and len(virtual_spaces) != L + 1:
+            raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
+        if bc == 'infinite' or bc == 'segment':
             if total_charge is None:
                 total_charge = sym.trivial_sector
             else:
                 err = f'{total_charge} is not a valid charge sector of the symmetry {sym}'
                 assert sym.is_valid_sector(total_charge), err
-        elif bc != 'infinite' and len(virtual_spaces) != L + 1:
-            raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
         if device is None:
             device = sites[0].default_device
         if dtype is None:
@@ -3149,11 +3165,11 @@ class MPS(BaseMPSExpectationValue):
         SVs = []
         for i in range(L):
             labels = ['vL', 'p', 'vR']
-            if bc == 'infinite' and i == L - 1 and total_charge != sym.trivial_sector:
+            if bc in ['infinite', 'segment'] and i == L - 1 and total_charge != sym.trivial_sector:
                 # due to QR, we construct the random tensor with bent down charge leg and then bend it up
                 labels = [MPS_TOTAL_CHARGE_LABEL] + labels
                 charge_leg = ct.ElementarySpace.from_defining_sectors(sym, total_charge)
-                codomain = ct.TensorProduct([charge_leg, virtual_spaces[i], sites[i].leg], sym)
+                codomain = ct.TensorProduct([charge_leg.dual, virtual_spaces[i], sites[i].leg], sym)
             else:
                 codomain = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
             domain = ct.TensorProduct([virtual_spaces[i + 1]], sym)
@@ -3222,8 +3238,8 @@ class MPS(BaseMPSExpectationValue):
         dtype : :class:`~cyten.Dtype`, optional
             The data type of the tensors. Defaults to the common dtype of `Bflat`.
         total_charge : :class:`~cyten.Sector`, optional
-            Total charge of the unit cell for infinite boundary conditions. Is ignored for finite
-            and segemnt boundary conditions. Defaults to the trivial charge sector.
+            Total charge of the unit cell for infinite or segment boundary conditions. Is ignored
+            for finite boundary conditions. Defaults to the trivial charge sector.
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
             Defines the canonical form of `Bflat`. See module doc-string.
             A single choice holds for all of the entries.
@@ -3260,10 +3276,16 @@ class MPS(BaseMPSExpectationValue):
         else:
             assert sym.is_valid_sector(legL), f'{legL} is not a valid charge sector of the symmetry {sym}'
             legL = ct.ElementarySpace.from_defining_sectors(sym, [legL])
+        if bc == 'infinite' or bc == 'segment':
+            if total_charge is None:
+                total_charge = sym.trivial_sector
+            else:
+                err = f'{total_charge} is not a valid charge sector of the symmetry {sym}'
+                assert sym.is_valid_sector(total_charge), err
 
         virtual_spaces = [legL]
         CUTOFF = 1e-12  # TODO keep it? adjust based on dtype?
-        for B, site in zip(Bflat, sites):
+        for i, (B, site) in enumerate(zip(Bflat, sites)):
             # TODO is it necessary to cast to np array here? Or do we have the necessary methods in the block_backends?
             # TODO here we use `not isinstance(B, np.ndarray)`, should be converted to `isinstance(B, ct.Block)`?
             if not isinstance(B, np.ndarray):
@@ -3282,6 +3304,8 @@ class MPS(BaseMPSExpectationValue):
                 charge_site = site.leg.idx_to_sector(val_max[0])
                 new_charges.append(sym.fusion_outcomes(charge_L, charge_site)[0])
             new_charges = np.asarray(new_charges, dtype=int)
+            if i == len(sites) - 1 and bc in ['infinite', 'segment']:
+                new_charges = sym.fusion_outcomes(new_charges, sym.dual_sector(total_charge))
             virtual_spaces.append(ct.ElementarySpace.from_defining_sectors(sym, new_charges, unique_sectors=False))
 
         if bc == 'infinite':
@@ -3340,8 +3364,8 @@ class MPS(BaseMPSExpectationValue):
         dtype : :class:`~cyten.Dtype`, optional
             The data type of the tensors. Defaults to the common dtype of `Bflat`.
         total_charge : :class:`~cyten.Sector`, optional
-            Total charge of the unit cell for infinite boundary conditions. Is ignored for finite
-            and segemnt boundary conditions. Defaults to the trivial charge sector.
+            Total charge of the unit cell for infinite or segment boundary conditions. Is ignored
+            for finite boundary conditions. Defaults to the trivial charge sector.
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
             Defines the canonical form of `Bflat`. See module doc-string.
             A single choice holds for all of the entries.
@@ -3367,13 +3391,14 @@ class MPS(BaseMPSExpectationValue):
         if bc == 'infinite':
             if len(virtual_spaces) != L:
                 raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
+        elif bc != 'infinite' and len(virtual_spaces) != L + 1:
+            raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
+        if bc == 'infinite' or bc == 'segment':
             if total_charge is None:
                 total_charge = sym.trivial_sector
             else:
                 err = f'{total_charge} is not a valid charge sector of the symmetry {sym}'
                 assert sym.is_valid_sector(total_charge), err
-        elif bc != 'infinite' and len(virtual_spaces) != L + 1:
-            raise ValueError('Length of virtual spaces inconsistent with the number of sites.')
         if device is None:
             device = sites[0].default_device
         if dtype is None:
@@ -3395,13 +3420,14 @@ class MPS(BaseMPSExpectationValue):
             B = backend.block_backend.permute_axes(B, perm)
             codomain = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
             labels = ['vL', 'p', 'vR']
-            if bc == 'infinite' and i == L - 1:
+            if bc in ['infinite', 'segment'] and i == L - 1:
+                idx = 0 if bc == 'infinite' else L
                 if total_charge == sym.trivial_sector:
-                    domain = ct.TensorProduct([virtual_spaces[0]], sym)
+                    domain = ct.TensorProduct([virtual_spaces[idx]], sym)
                 else:
                     labels.append(MPS_TOTAL_CHARGE_LABEL)
                     charge_leg = ct.ElementarySpace.from_defining_sectors(sym, total_charge)
-                    domain = ct.TensorProduct([charge_leg, virtual_spaces[0]], sym)
+                    domain = ct.TensorProduct([charge_leg, virtual_spaces[idx]], sym)
                     B_shape = [B_shape[p] for p in perm]
                     if len(B_shape) == 3:
                         B = backend.block_backend.reshape(B, (*B_shape, 1))
