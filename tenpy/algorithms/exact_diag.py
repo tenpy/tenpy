@@ -17,6 +17,7 @@ This might be used to obtain the spectrum, the ground state or highly excited st
 
 import warnings
 
+import cyten as ct
 import numpy as np
 from cyten.symmetries import SymmetryError
 from cyten.symmetries.spaces import AbelianLegPipe, TensorProduct
@@ -33,10 +34,12 @@ __all__ = ['ExactDiag', 'get_full_wavefunction', 'get_numpy_Hamiltonian', 'get_s
 class ExactDiag:
     """(Full) exact diagonalization of the Hamiltonian.
 
+    See classmethods for construction, e.g., :meth:`from_model`.
+
     Parameters
     ----------
-    model : :class:`~tenpy.models.MPOmodel` | :class:`~tenpy.models.CouplingModel`
-        The model which is to be diagonalized.
+    sites : list of :class:`~tenpy.models.sites.Site`
+        The sites of the system in MPS order.
     charge_sector : ``None`` | charges
         If not ``None``, restrict :meth:`groundstate`/:meth:`sparse_diag` to the given charge
         sector. Note that (unlike the old `np_conserved` version) this does *not* reduce the size
@@ -51,8 +54,8 @@ class ExactDiag:
     Attributes
     ----------
     model : :class:`~tenpy.models.MPOmodel` | :class:`~tenpy.models.CouplingModel` | ``None``
-        The model which is to be diagonalized, if constructed via :meth:`__init__`.
-        ``None`` if constructed via :meth:`from_hamiltonian`.
+        The model which is to be diagonalized, if constructed via :meth:`from_model`.
+        ``None`` otherwise.
     symmetry : :class:`~cyten.symmetries.Symmetry`
         The symmetry of the sites (which is the same for all sites).
     charge_sector : ``None`` | charges
@@ -87,13 +90,8 @@ class ExactDiag:
 
     """
 
-    def __init__(self, model, charge_sector=None, max_size=2e6):
-        if model.lat.bc_MPS != 'finite':
-            raise ValueError('Full diagonalization works only on finite systems')
-        self.model = model
-        self._init_from_sites(model.lat.mps_sites(), charge_sector, max_size)
-
-    def _init_from_sites(self, sites, charge_sector, max_size):
+    def __init__(self, sites, charge_sector=None, max_size=2e6):
+        self.model = None
         self.full_H = None
         self.E = None
         self.V = None
@@ -123,6 +121,15 @@ class ExactDiag:
             self.charge_sector = None
             self._mask = None
 
+    @classmethod
+    def from_model(cls, model, charge_sector=None, max_size=2e6):
+        """Initialize from a finite model."""
+        if model.lat.bc_MPS != 'finite':
+            raise ValueError('Full diagonalization works only on finite systems')
+        res = cls(model.lat.mps_sites(), charge_sector, max_size)
+        res.model = model
+        return res
+
     def possible_charge_sectors(self):
         return np.asarray(self._pipe.sector_decomposition)
 
@@ -130,8 +137,7 @@ class ExactDiag:
     def from_hamiltonian(cls, H, sites, charge_sector=None, max_size=2e6):
         """Initialize directly from a cyten Hamiltonian tensor and its sites.
 
-        Entry point while ``tenpy.models`` is not ported to cyten yet, so :meth:`__init__` cannot
-        be exercised without a model.
+        Entry point while ``tenpy.models`` is not ported to cyten yet.
 
         Parameters
         ----------
@@ -144,9 +150,7 @@ class ExactDiag:
             As for :meth:`__init__`.
 
         """
-        res = cls.__new__(cls)
-        res.model = None
-        res._init_from_sites(sites, charge_sector, max_size)
+        res = cls(sites, charge_sector, max_size)
         if not res._exceeds_max_size():
             res._set_full_H(H)
         return res
@@ -176,7 +180,7 @@ class ExactDiag:
         model_segment.H_MPO.bc = 'finite'
         if hasattr(model_segment, 'H_bond'):
             del model_segment.H_bond  # invalid since it wouldn't terminate onsite terms correctly
-        return cls(model_segment, **kwargs)
+        return cls.from_model(model_segment, **kwargs)
 
     @classmethod
     def from_H_mpo(cls, H_MPO, *args, **kwargs):
@@ -187,9 +191,9 @@ class ExactDiag:
         H_MPO : :class:`~tenpy.networks.mpo.MPO`
             The MPO representing the Hamiltonian.
         *args :
-            Further keyword arguments as for the ``__init__`` of the class.
+            Further keyword arguments as for :meth:`from_model`.
         **kwargs :
-            Further keyword arguments as for the ``__init__`` of the class.
+            Further keyword arguments as for :meth:`from_model`.
 
         """
         from ..models.lattice import TrivialLattice
@@ -197,10 +201,13 @@ class ExactDiag:
 
         assert H_MPO.bc == 'finite'
         M = MPOModel(TrivialLattice(H_MPO.sites), H_MPO)
-        return cls(M, *args, **kwargs)
+        return cls.from_model(M, *args, **kwargs)
 
     def build_full_H_from_mpo(self):
         """Calculate self.full_H from the MPO (``H_MPO``) of the model."""
+        raise NotImplementedError(
+            'requires the cyten MPO/models layer, which is not ported yet - use `ExactDiag.from_hamiltonian`.'
+        )
         if self._exceeds_max_size():
             return
         mpo = self.model.H_MPO
@@ -221,6 +228,9 @@ class ExactDiag:
 
     def build_full_H_from_bonds(self):
         """Calculate self.full_H from bond terms (``H_bond``) of the model."""
+        raise NotImplementedError(
+            'requires the cyten MPO/models layer, which is not ported yet - use `ExactDiag.from_hamiltonian`.'
+        )
         if self._exceeds_max_size():
             return
         sites = self.model.lat.mps_sites()
@@ -256,7 +266,7 @@ class ExactDiag:
                 full_H += Hb
         self._set_full_H(full_H)
 
-    def full_diagonalization(self, **kwargs):
+    def full_diagonalization(self, new_labels='eig', sort='<'):
         """Full diagonalization to obtain all eigenvalues and eigenvectors.
 
         Sets :attr:`V` and :attr:`E`. Keyword arguments are given to :func:`~cyten.tensors.eigh`
@@ -264,9 +274,12 @@ class ExactDiag:
         """
         if self.full_H is None:
             raise ValueError('You need to call one of `build_full_H_*` first!')
-        kwargs.setdefault('new_labels', 'eig')
-        kwargs['new_leg_dual'] = False
-        W, V = cyten_eigh(self.full_H, **kwargs)
+        if self.full_H.domain != self.full_H.codomain:
+            raise NotImplementedError(
+                'cyten eigh requires full_H.domain == full_H.codomain; the `build_full_H_*` methods '
+                'are not migrated to cyten yet - use `ExactDiag.from_hamiltonian`.'
+            )
+        W, V = cyten_eigh(self.full_H, new_labels, new_leg_dual=False, sort=sort)
         self.E = W.diagonal_as_numpy()
         self.V = V
 
@@ -284,10 +297,9 @@ class ExactDiag:
         -------
         E0 : float
             Ground state energy (possibly in the given sector).
-        psi0 : :class:`~cyten.tensors.ChargedTensor`
-            Ground state (possibly in the given sector), with ``charged_state=None``, i.e. it
-            carries the definite charge of its :attr:`~cyten.tensors.ChargedTensor.charge_leg`
-            rather than being trivial. Physical legs ``p0, ..., p{L-1}``.
+        psi0 : :class:`~cyten.tensors.HiddenLegTensor`
+            Ground state (possibly in the given sector), with a hidden ``'!slice'`` leg carrying
+            its definite charge. Physical legs ``p0, ..., p{L-1}``.
 
         """
         if self.E is None or self.V is None:
@@ -312,7 +324,10 @@ class ExactDiag:
         """Return ``U(dt) := exp(-i H dt)``."""
         if self.E is None or self.V is None:
             raise ValueError('You need to call `full_diagonalization` first!')
-        return npc.tensordot(self.V.scale_axis(np.exp(-1.0j * dt * self.E), 'ps*'), self.V.conj(), axes=['ps*', 'ps'])
+        D = ct.DiagonalTensor.from_diag_block(
+            np.exp(-1.0j * dt * self.E), leg=self.V.get_leg('eig'), labels=['eig', 'eig*']
+        )
+        return ct.tdot(ct.scale_axis(self.V, D, 'eig'), self.V.hc, 'eig', 'eig*')
 
     def mps_to_full(self, mps):
         """Contract an MPS along the virtual bonds and combine its legs.
@@ -324,28 +339,24 @@ class ExactDiag:
 
         Returns
         -------
-        psi : :class:`~tenpy.linalg.np_conserved.Array`
+        psi : :class:`~cyten.tensors.SymmetricTensor`
             The MPS contracted along the virtual bonds.
 
         """
         if mps.bc != 'finite':
             raise ValueError('Full diagonalization works only on finite systems')
         psi = mps.get_theta(0, mps.L)  # does exactly what we need
-        psi = psi.take_slice([0, 0], ['vL', 'vR'])
-        psi = psi.combine_legs(range(mps.L))
-        if self.charge_sector is not None:
-            psi.legs[0] = psi.legs[0].to_LegCharge()
-            psi = psi[self._mask]
-        return psi
+        psi = ct.squeeze_legs(psi, ['vL', 'vR'])
+        return ct.combine_legs(psi, list(range(mps.L)))
 
     def full_to_mps(self, psi, canonical_form='B'):
         """Convert a full state (with a single leg) to an MPS.
 
         Parameters
         ----------
-        psi : :class:`~tenpy.linalg.np_conserved.Array`
+        psi : :class:`~cyten.tensors.SymmetricTensor`
             The state (with a single leg) which should be splitted into an MPS.
-        canonical_from : :class:`~tenpy.linalg.np_conserved.Array`
+        canonical_form : str
             The form in which the MPS will be afterwards.
 
         Returns
@@ -354,14 +365,14 @@ class ExactDiag:
             An normalized MPS representation in canonical form.
 
         """
-        if not isinstance(psi.legs[0], npc.LegPipe):
-            # projected onto charge_sector: need to restore the LegPipe.
-            full_psi = npc.zeros([self._pipe], psi.dtype, psi.qtotal)
-            full_psi[self._mask] = psi
-            psi = full_psi
-        psi.iset_leg_labels(['(' + '.'.join(self._labels_p) + ')'])
-        psi = psi.split_legs([0])  # split the combined leg into the physical legs of the sites
-        return MPS.from_full(self._sites, psi, form=canonical_form, unit_cell_width=self.model.lat.mps_unit_cell_width)
+        if isinstance(psi, ct.HiddenLegTensor):
+            # e.g. from groundstate(): strip the hidden '!slice' leg, requires charge-neutrality.
+            psi = ct.squeeze_legs(psi, ['!slice'])
+        if not psi.has_pipes:  # plain state with legs p0..p{L-1}: combine into one pipe first
+            psi = ct.combine_legs(psi, list(range(len(self._sites))))
+        psi = ct.split_legs(psi, 0)  # split the combined leg into the physical legs of the sites
+        unit_cell_width = len(self._sites) if self.model is None else self.model.lat.mps_unit_cell_width
+        return MPS.from_full(self._sites, psi, form=canonical_form, unit_cell_width=unit_cell_width)
 
     def sparse_diag(self, k, *args, **kwargs):
         """The `k` lowest eigenvalues and eigenvectors, via :mod:`cyten.tensors.sparse`.
@@ -439,11 +450,12 @@ def get_full_wavefunction(psi: MPS, undo_sort_charge: bool = True):
         raise NotImplementedError
     p = psi._p_label[0]
     theta = psi.get_theta(0, psi.L)
-    theta = theta.itranspose(['vL'] + [f'{p}{n}' for n in range(psi.L)] + ['vR'])
-    theta = theta.to_ndarray()
+    theta = ct.permute_legs(theta, ['vL'] + [f'{p}{n}' for n in range(psi.L)] + ['vR'])
+    assert theta.labels == ['vL'] + [f'{p}{n}' for n in range(psi.L)] + ['vR']
+    theta = theta.to_numpy()
     theta = np.squeeze(theta, (0, -1))  # squeeze vL, vR
     if undo_sort_charge:
-        perms = [inverse_permutation(site.perm) for site in psi.sites]
+        perms = [inverse_permutation(site.leg.basis_perm) for site in psi.sites]
         theta = theta[np.ix_(*perms)]
     return np.reshape(theta, -1)
 
@@ -523,6 +535,9 @@ def _get_numpy_Hamiltonian_ExactDiag_full_H(model, from_mpo: bool, undo_sort_cha
 
 def _get_Hamiltonian_from_couplings(model, sparse: bool, undo_sort_charge: bool):
     """Helper to get either dense numpy or sparse scipy matrix of the Hamiltonian."""
+    raise NotImplementedError(
+        'requires the cyten MPO/models layer, which is not ported yet - use `ExactDiag.from_hamiltonian`.'
+    )
     if not isinstance(model, CouplingModel):
         raise ValueError('Must be a coupling model.')
 
