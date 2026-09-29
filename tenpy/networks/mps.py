@@ -2441,6 +2441,16 @@ class MPS(BaseMPSExpectationValue):
                 else:
                     B_final = ct.HiddenLegTensor(B_final, [MPS_TOTAL_CHARGE_LABEL])
                 self._B[-1] = B_final
+        if not self.symmetry.is_abelian:
+            higher_dim = False
+            for B in self._B:
+                if any([B.get_leg(leg).dim > 1 for leg in B.labels if MPS_TOTAL_CHARGE_LABEL in leg]):
+                    higher_dim = True
+                    break
+            if higher_dim:
+                warnings.warn(
+                    'MPS has a higher-dimensional total charge and corresponds to a density matrix, not a pure state!'
+                )
 
         num_S = self.L + 1 if self.finite else self.L
         self._S = [None] * (num_S)
