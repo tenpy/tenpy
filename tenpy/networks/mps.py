@@ -187,6 +187,8 @@ __all__ = [
 ]
 
 
+# TODO should MPS.norm be a Scalar? - At the moment we initialize it as float
+
 # TODO_MPS start a changelog
 #   - BaseMPSExpectationValue moved behavior from _contract_with_LP to get_LP.
 #     If the LP is trivial (e.g. in <psi|op_local|psi>), we now get get_Lp(...) == ct.Identity
@@ -2961,6 +2963,7 @@ class MPS(BaseMPSExpectationValue):
         chargeL: ct.Sector | ct.ElementarySpace | None = None,
         chargeR: ct.Sector | ct.ElementarySpace | None = None,
         total_charge: ct.Sector = None,
+        norm: float = 1.0,
         unit_cell_width: int = None,
         device: str = None,
         understood_shift_symmetry: bool = False,
@@ -2997,6 +3000,8 @@ class MPS(BaseMPSExpectationValue):
         total_charge : :class:`~cyten.Sector`, optional
             Total charge of the unit cell for infinite or segment boundary conditions. Is ignored
             for finite boundary conditions. Defaults to the trivial charge sector.
+        norm : float
+            Norm of the resulting MPS.
         unit_cell_width : int, optional
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
         device : str, optional
@@ -3095,7 +3100,7 @@ class MPS(BaseMPSExpectationValue):
                 virtual_spaces[i] = _truncate_virtual_space(virtual_spaces[i], chi=chis[i])
 
         res = cls.from_desired_virtual_spaces(
-            sites, virtual_spaces, bc, dtype, total_charge, unit_cell_width, device, understood_shift_symmetry
+            sites, virtual_spaces, bc, dtype, total_charge, norm, unit_cell_width, device, understood_shift_symmetry
         )
         logger.info('Generated MPS of bond dimension %r from random matrices.', list(res.chi))
         return res
@@ -3108,6 +3113,7 @@ class MPS(BaseMPSExpectationValue):
         bc: Literal['finite', 'segment', 'infinite'] = 'finite',
         dtype: ct.Dtype = None,
         total_charge: ct.Sector = None,
+        norm: float = 1.0,
         unit_cell_width: int = None,
         device: str = None,
         understood_shift_symmetry: bool = False,
@@ -3129,6 +3135,8 @@ class MPS(BaseMPSExpectationValue):
         total_charge : :class:`~cyten.Sector`, optional
             Total charge of the unit cell for infinite or segment boundary conditions. Is ignored
             for finite boundary conditions. Defaults to the trivial charge sector.
+        norm : float
+            Norm of the resulting MPS.
         unit_cell_width : int, optional
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
         device : str, optional
@@ -3197,7 +3205,7 @@ class MPS(BaseMPSExpectationValue):
             SVs,
             bc,
             form=None,
-            norm=1.0,
+            norm=norm,
             unit_cell_width=unit_cell_width,
             understood_shift_symmetry=understood_shift_symmetry,
         )
@@ -3215,6 +3223,7 @@ class MPS(BaseMPSExpectationValue):
         total_charge: ct.Sector = None,
         form='B',
         legL: ct.Sector | ct.ElementarySpace | None = None,
+        norm: float = 1.0,
         unit_cell_width: int = None,
         device: str = None,
         understood_shift_symmetry: bool = False,
@@ -3248,6 +3257,8 @@ class MPS(BaseMPSExpectationValue):
             Symmetry sector or space at bond 0. A given sector is converted to a space containing
             this sector with multiplicity one. `None` (default) is equivalent to specifying the
             trivial sector.
+        norm : float
+            Norm of the resulting MPS.
         unit_cell_width : int, optional
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
         device : str, optional
@@ -3324,6 +3335,7 @@ class MPS(BaseMPSExpectationValue):
             dtype=dtype,
             total_charge=total_charge,
             form=form,
+            norm=norm,
             unit_cell_width=unit_cell_width,
             device=device,
             understood_shift_symmetry=understood_shift_symmetry,
@@ -3340,6 +3352,7 @@ class MPS(BaseMPSExpectationValue):
         dtype: ct.Dtype = None,
         total_charge: ct.Sector = None,
         form='B',
+        norm: float = 1.0,
         unit_cell_width: int = None,
         device: str = None,
         understood_shift_symmetry: bool = False,
@@ -3372,6 +3385,8 @@ class MPS(BaseMPSExpectationValue):
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
             Defines the canonical form of `Bflat`. See module doc-string.
             A single choice holds for all of the entries.
+        norm : float
+            Norm of the resulting MPS.
         unit_cell_width : int, optional
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
         device : str, optional
@@ -3471,7 +3486,7 @@ class MPS(BaseMPSExpectationValue):
             new_SVs,
             bc,
             form,
-            norm=1.0,
+            norm=norm,
             unit_cell_width=unit_cell_width,
             understood_shift_symmetry=understood_shift_symmetry,
         )
