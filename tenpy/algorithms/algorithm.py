@@ -6,11 +6,11 @@ import time
 
 import numpy as np
 
-from ..linalg.truncation import TruncationError
 from ..tools.cache import DictCache
 from ..tools.events import EventHandler
 from ..tools.misc import consistency_check
 from ..tools.params import asConfig
+from ..tools.truncation_error import TruncationError
 
 logger = logging.getLogger(__name__)
 

@@ -16,7 +16,6 @@ import logging
 # note that the order matters!
 from . import (
     algorithms,
-    linalg,
     models,
     networks,
     simulations,

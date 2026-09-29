@@ -50,11 +50,11 @@ from cyten.tensors.krylov_based import GMRES
 from scipy.linalg import expm
 from scipy.special import comb
 
-from ..linalg.truncation import TruncationError
 from ..tools.math import lcm
 from ..tools.misc import add_with_None_0, inverse_permutation, to_iterable
 from ..tools.params import asConfig
 from ..tools.string import vert_join
+from ..tools.truncation_error import TruncationError
 from .mps import BaseEnvironment, MPSGeometry, TransferMatrix
 
 # from .site import group_sites

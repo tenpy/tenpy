@@ -2,10 +2,7 @@ r"""Truncation of Schmidt values.
 
 Often, it is necessary to truncate the number of states on a virtual bond of an MPS,
 keeping only the state with the largest Schmidt values.
-The function :func:`truncate` picks exactly those from a given Schmidt spectrum
-:math:`\lambda_a`, depending on some parameters explained in the doc-string of the function.
-
-Further, we provide :class:`TruncationError` for a simple way to keep track of the
+We provide :class:`TruncationError` for a simple way to keep track of the
 total truncation error.
 
 The SVD on a virtual bond of an MPS actually gives a Schmidt decomposition
@@ -37,8 +34,9 @@ is the discarded part (orthogonal to the kept part) and the
     which is arbitrary > 0)
 
 .. warning ::
-    This module takes only track of the errors coming from the truncation of Schmidt values.
-    There might be other sources of error as well, for example TEBD has also an discretization
+    The :class:`TruncationError` error only accounts for the errors coming from the truncation of
+    Schmidt values.
+    There might be other sources of error as well, for example TEBD has also a discretization
     error depending on the chosen time step.
 """
 # Copyright (C) TeNPy Developers, Apache license

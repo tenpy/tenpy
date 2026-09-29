@@ -165,12 +165,12 @@ import cyten as ct
 import cyten.tensors.sparse
 import numpy as np
 
-from ..linalg.truncation import TruncationError
 from ..tools import hdf5_io
 from ..tools.cache import DictCache
 from ..tools.math import lcm
 from ..tools.misc import BetaWarning, argsort, get_recursive, inverse_permutation, to_array, to_iterable
 from ..tools.params import asConfig
+from ..tools.truncation_error import TruncationError
 from .terms import TermList
 
 logger = logging.getLogger(__name__)

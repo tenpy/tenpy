@@ -24,7 +24,6 @@ import numpy as np
 
 from .. import version
 from ..algorithms.algorithm import Algorithm
-from ..linalg.truncation import TruncationError
 from ..models.model import Model, NearestNeighborModel
 from ..networks.mps import InitialStateBuilder
 from ..tools import hdf5_io
@@ -40,6 +39,7 @@ from ..tools.misc import (
 )
 from ..tools.misc import setup_logging as setup_logging_
 from ..tools.params import asConfig
+from ..tools.truncation_error import TruncationError
 from .measurement import (
     _m_model_method,
     _m_model_method_wrapped,
