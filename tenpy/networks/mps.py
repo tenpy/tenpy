@@ -4292,7 +4292,7 @@ class MPS(BaseMPSExpectationValue):
         valid_inds = inds % self.L
         self.sites = [self.sites[i] for i in valid_inds]
         self.form = [self.form[i] for i in valid_inds]
-        self._B = [self.get_B(i) for i in inds]
+        self._B = [self.get_B(i, form=None) for i in inds]
         self._S = [self.get_SL(i) for i in inds]
 
     def overlap_translate_finite(self, psi: MPS, shift: int = 1) -> float | complex:
@@ -4836,7 +4836,7 @@ class MPS(BaseMPSExpectationValue):
                 U_L_new = ct.tensors.compose(U_L, U_L_new)
             if V_R is not None and new_last == last:
                 V_R_new = ct.tensors.compose(V_R_new, V_R)
-            psi_new.segment_boundaries = (U_L, V_R)
+            psi_new.segment_boundaries = (U_L_new, V_R_new)
 
         return psi_new, new_first, new_last
 
