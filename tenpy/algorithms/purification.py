@@ -181,7 +181,7 @@ class PurificationTEBD(tebd.TEBDEngine):
 
         Returns
         -------
-        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        trunc_err : :class:`~tenpy.TruncationError`
             The error of the represented state which is introduced by the truncation
             during this update step.
 
@@ -243,7 +243,7 @@ class PurificationTEBD(tebd.TEBDEngine):
 
         Returns
         -------
-        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        trunc_err : :class:`~tenpy.TruncationError`
             The error of the represented state which is introduced by the truncation
             during this update step.
 
@@ -466,7 +466,7 @@ class PurificationTEBD2(PurificationTEBD):
 
         Returns
         -------
-        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        trunc_err : :class:`~tenpy.TruncationError`
             The error of the represented state which is introduced due to the truncation during
             this sequence of update steps.
 
@@ -498,7 +498,7 @@ class PurificationTEBD2(PurificationTEBD):
 
         Returns
         -------
-        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        trunc_err : :class:`~tenpy.TruncationError`
             The error of the represented state which is introduced due to the truncation
             during this sequence of update steps.
 

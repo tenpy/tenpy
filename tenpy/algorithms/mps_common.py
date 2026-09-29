@@ -789,7 +789,7 @@ class IterativeSweeps(Sweep):
         max_trunc_err : float
             Threshold for raising errors on too large truncation errors. Default ``0.0001``.
             See :meth:`~tenpy.tools.misc.consistency_check`.
-            If the any truncation error :attr:`~tenpy.algorithms.truncation.TruncationError.eps`
+            If the any truncation error :attr:`~tenpy.TruncationError.eps`
             on the final sweep exceeds this value, we raise.
             Can be downgraded to a warning by setting this option to ``None``.
 
@@ -1697,7 +1697,7 @@ class Mixer:
             Singular values (1D ndarray) or general bond matrix (2D Array, labels ``'vL', 'vR'``).
         VH : :class:`~tenpy.linalg.np_conserved.Array`
             Right isometry as defined above. Labels ``'vL', '(p.vR)'``.
-        err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        err : :class:`~tenpy.TruncationError`
             The truncation error introduced.
         S_approx : ndarray
             Approximation of the singular values of `theta`. Exact if available.
@@ -1756,7 +1756,7 @@ class Mixer:
         VH : :class:`~tenpy.linalg.np_conserved.Array`
             Right part as defined above. Isometric for a left move. Labels ``'vL', '(p.vR)'``
             for a right move or ``'(vL.p)', 'vR'`` for a left move.
-        err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        err : :class:`~tenpy.TruncationError`
             The truncation error introduced.
 
         """
@@ -2294,7 +2294,7 @@ class VariationalCompression(IterativeSweeps):
 
         Returns
         -------
-        max_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        max_trunc_err : :class:`~tenpy.TruncationError`
             The maximal truncation error of a two-site wave function.
 
         """

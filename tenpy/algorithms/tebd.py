@@ -88,7 +88,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
     _U_param : dict
         A dictionary containing the information of the latest created `_U`.
         We don't recalculate `_U` if those parameters didn't change.
-    _trunc_err_bonds : list of :class:`~tenpy.algorithms.truncation.TruncationError`
+    _trunc_err_bonds : list of :class:`~tenpy.TruncationError`
         The *local* truncation error introduced at each bond, ignoring the errors at other bonds.
         The `i`-th entry is left of site `i`.
     _update_index : None | (int, int)
@@ -355,7 +355,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
 
         Returns
         -------
-        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        trunc_err : :class:`~tenpy.TruncationError`
             The error of the represented state which is introduced due to the truncation during
             this sequence of evolution steps.
 
@@ -398,7 +398,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
 
         Returns
         -------
-        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        trunc_err : :class:`~tenpy.TruncationError`
             The error of the represented state which is introduced due to the truncation
             during this sequence of update steps.
 
@@ -434,7 +434,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
 
         Returns
         -------
-        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        trunc_err : :class:`~tenpy.TruncationError`
             The error of the represented state which is introduced by the truncation
             during this update step.
 
@@ -505,7 +505,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
 
         Returns
         -------
-        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        trunc_err : :class:`~tenpy.TruncationError`
             The error of the represented state which is introduced due to the truncation during
             this sequence of update steps.
 
@@ -559,7 +559,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
 
         Returns
         -------
-        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        trunc_err : :class:`~tenpy.TruncationError`
             The error of the represented state which is introduced by the truncation
             during this update step.
 
@@ -908,7 +908,7 @@ class RandomUnitaryEvolution(TEBDEngine):
 
         Returns
         -------
-        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        trunc_err : :class:`~tenpy.TruncationError`
             The error of the represented state which is introduced due to the truncation during
             this sequence of update steps.
 

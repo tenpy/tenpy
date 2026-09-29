@@ -865,7 +865,7 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
             matrix with labels ``'vL', 'vR'``; see comment above.
         VH : :class:`~tenpy.linalg.np_conserved.Array`
             Right-canonical part of `theta`. Labels ``'vL', '(p.vR)'``.
-        err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        err : :class:`~tenpy.TruncationError`
             The truncation error introduced.
         S_approx : ndarray
             Just the `S` if a 1D ndarray, or an approximation of the correct S (which was used for

@@ -408,7 +408,7 @@ class TimeEvolutionAlgorithm(Algorithm):
         preserve_norm : bool
             Whether the state will be normalized to its initial norm after each time step.
             Per default, this is ``False`` for real time evolution and ``True`` for imaginary time.
-        start_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        start_trunc_err : :class:`~tenpy.TruncationError`
             Initial truncation error for :attr:`trunc_err`.
 
     Attributes
@@ -417,7 +417,7 @@ class TimeEvolutionAlgorithm(Algorithm):
         Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
         Note that the real-part of `t` is increasing for a real-time evolution,
         while the imaginary-part of `t` is *decreasing* for a imaginary time evolution.
-    trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+    trunc_err : :class:`~tenpy.TruncationError`
         Upper bound for the accumulated error of the represented state,
         which is introduced due to the truncation during the sequence of update steps.
 
@@ -529,7 +529,7 @@ class TimeEvolutionAlgorithm(Algorithm):
 
         Returns
         -------
-        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        trunc_err : :class:`~tenpy.TruncationError`
             Sum of truncation errors introduced during evolution.
 
         """

@@ -4566,7 +4566,7 @@ class MPS(BaseMPSExpectationValue):
 
         Returns
         -------
-        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        trunc_err : :class:`~tenpy.TruncationError`
             The error introduced by the truncation for the splitting.
 
         See Also
@@ -6803,7 +6803,7 @@ class MPS(BaseMPSExpectationValue):
 
         Returns
         -------
-        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        trunc_err : :class:`~tenpy.TruncationError`
             The error of the represented state introduced by the truncation after the swap.
 
         """
@@ -6875,7 +6875,7 @@ class MPS(BaseMPSExpectationValue):
 
         Returns
         -------
-        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        trunc_err : :class:`~tenpy.TruncationError`
             The error of the represented state introduced by the truncation after the swaps.
 
         """
@@ -6952,7 +6952,7 @@ class MPS(BaseMPSExpectationValue):
             The eigenvalue of the mixed transfer matrix `<psi|T|psi>` per :attr:`L` sites.
             An absolute value different smaller than 1 indicates that the state is not invariant
             under the permutation or that the truncation error `trunc_err` was too large!
-        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        trunc_err : :class:`~tenpy.TruncationError`
             The error of the represented state introduced by the truncation after swaps when
             performing the truncation.
 
@@ -7045,7 +7045,7 @@ class MPS(BaseMPSExpectationValue):
 
         Returns
         -------
-        max_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        max_trunc_err : :class:`~tenpy.TruncationError`
             The maximal truncation error of a two-site wave function.
 
         """
