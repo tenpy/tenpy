@@ -39,10 +39,6 @@ import warnings
 
 import numpy as np
 
-# from ..linalg import np_conserved as npc
-from ..linalg.krylov_based import LanczosGroundState, lanczos_arpack
-from ..linalg.truncation import svd_theta
-from ..tools.math import entropy
 from ..tools.params import asConfig
 from ..tools.process import memory_usage
 from . import mps_common

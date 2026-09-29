@@ -1,17 +1,11 @@
 """A collection of tests to check the functionality of `tenpy.dmrg`"""
 
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
-
-pytest.skip(allow_module_level=True)
-
 import warnings
 
 import numpy as np
 import pytest
-import tenpy.linalg.np_conserved as npc
 from scipy import integrate
-from tenpy.networks.site import SpinHalfSite
 
 from tenpy.algorithms import dmrg, dmrg_parallel
 from tenpy.algorithms.exact_diag import ExactDiag
@@ -113,6 +107,7 @@ def test_dmrg(bc_MPS, combine, mixer, n, g=1.2):
         assert abs((Edmrg - Edmrg3) / Edmrg3) < max(1.0e-10, np.max(psi.norm_test()))
 
 
+@pytest.mark.skip(reason='Not ported yet')
 @pytest.mark.slow
 def test_dmrg_rerun(L=2):
     bc_MPS = 'infinite'
@@ -143,6 +138,7 @@ params = [
 ]
 
 
+@pytest.mark.skip(reason='Not ported yet')
 @pytest.mark.slow
 @pytest.mark.parametrize('engine, diag_method', params)
 def test_dmrg_diag_method(engine, diag_method, tol=1.0e-6):
@@ -183,6 +179,7 @@ def test_dmrg_diag_method(engine, diag_method, tol=1.0e-6):
     assert abs(abs(ov) - 1) < tol
 
 
+@pytest.mark.skip(reason='Not ported yet')
 @pytest.mark.slow
 def test_dmrg_excited(eps=1.0e-12):
     # checks ground state and 2 excited states (in same symmetry sector) for a small system
@@ -230,6 +227,7 @@ def test_dmrg_excited(eps=1.0e-12):
     assert abs(abs(ov) - 1.0) < eps  # unique groundstate: finite size gap!
 
 
+@pytest.mark.skip(reason='Not ported yet')
 @pytest.mark.slow
 def test_enlarge_mps_unit_cell():
     g = 1.3  # deep in the paramagnetic phase
@@ -268,6 +266,7 @@ def test_chi_list():
     assert dmrg.chi_list(27, 12, 5) == {0: 12, 5: 24, 10: 27}
 
 
+@pytest.mark.skip(reason='Not ported yet')
 @pytest.mark.slow
 @pytest.mark.parametrize('N, bc_MPS', [(6, 'finite'), (2, 'infinite')])
 def test_dmrg_explicit_plus_hc(N, bc_MPS, tol=1.0e-13, bc='finite'):
@@ -302,6 +301,7 @@ def test_dmrg_explicit_plus_hc(N, bc_MPS, tol=1.0e-13, bc='finite'):
     assert abs(ov - 1) < tol
 
 
+@pytest.mark.skip(reason='Not ported yet')
 @pytest.mark.parametrize('N, bc_MPS', [(6, 'finite'), (2, 'infinite')])
 def test_dmrg_dipole_conservation(N, bc_MPS, S=1, tol=1.0e-13, J4=0.0):
     dmrg_params = dict(N_sweeps_check=2, mixer=True, trunc_params={'chi_max': 50}, max_sweeps=20)
@@ -344,6 +344,7 @@ def test_dmrg_dipole_conservation(N, bc_MPS, S=1, tol=1.0e-13, J4=0.0):
     assert abs(E - E_dip) < tol
 
 
+@pytest.mark.skip(reason='Not ported yet')
 @pytest.mark.parametrize('L, bc_MPS', [(12, 'finite'), (4, 'infinite')])
 def test_dmrg_mixer_cleanup(L, bc_MPS):
     model_params = dict(L=L, Jx=1.0, Jy=1.0, Jz=2.5, hz=5.125, bc_MPS=bc_MPS, conserve='parity')
@@ -402,6 +403,7 @@ class _TransverseClusterModel(CouplingModel, MPOModel):
         MPOModel.__init__(self, lat, self.calc_H_MPO())
 
 
+@pytest.mark.skip(reason='Not ported yet')
 @pytest.mark.parametrize('model', ['tfi', 'cluster'])
 def test_segment_dmrg(model):
     if model == 'tfi':
