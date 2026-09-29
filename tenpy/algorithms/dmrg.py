@@ -619,20 +619,16 @@ class DMRGEngine(IterativeSweeps):
             j = 0
             A = psi.get_B(j, form='A')
             th = psi.get_B(j, form='Th')
-            U, S, V = npc.svd(
-                th.combine_legs(psi._p_label + ['vR'], qconj=-1),
-                cutoff=0,
-                qtotal_LR=[None, th.qtotal],
-                inner_labels=['vR', 'vL'],
-            )
-            S = S / np.linalg.norm(S)
+            th = ct.permute_legs(th, codomain=['vL'])
+            U, S, V = ct.svd(th, new_labels=['vL', 'vR'])
+            S = S / ct.norm(S)
             psi.set_SL(j, S)
-            A_new = npc.tensordot(U.conj().replace_label('vR*', 'vL'), A, ['vL*', 'vL'])
+            A_new = ct.planar_contraction(U.hc, A, ['vL*'], ['vL'], relabel1={'vR*': 'vL'})
             psi.set_B(j, A_new, form='A')
 
             old_UL, old_VR = psi.segment_boundaries
             if old_UL is not None:
-                new_UL = npc.tensordot(old_UL, U, axes=['vR', 'vL'])
+                new_UL = ct.planar_contraction(old_UL, U, ['vR'], ['vL'])
                 psi.segment_boundaries = (new_UL, old_VR)
 
             for env in self._all_envs:
@@ -646,20 +642,16 @@ class DMRGEngine(IterativeSweeps):
             j = psi.L - 1
             B = psi.get_B(j, form='B')
             th = psi.get_B(j, form='Th')
-            U, S, V = npc.svd(
-                th.combine_legs(['vL'] + psi._p_label, qconj=+1),
-                cutoff=0,
-                qtotal_LR=[th.qtotal, None],
-                inner_labels=['vR', 'vL'],
-            )
-            S = S / np.linalg.norm(S)
+            th = ct.permute_legs(th, domain=['vR'])
+            U, S, V = ct.svd(th, new_labels=['vL', 'vR'])
+            S = S / ct.norm(S)
             psi.set_SR(j, S)
-            B_new = npc.tensordot(B, V.conj().replace_label('vL*', 'vR'), ['vR', 'vR*'])
+            B_new = ct.planar_contraction(B, V.hc, ['vR'], ['vR*'], relabel2={'vL*': 'vR'})
             psi.set_B(j, B_new, form='B')
 
             old_UL, old_VR = psi.segment_boundaries
             if old_VR is not None:
-                new_VR = npc.tensordot(V, old_VR, axes=['vR', 'vL'])
+                new_VR = ct.planar_contraction(V, old_VR, ['vR'], ['vL'])
                 psi.segment_boundaries = (old_UL, new_VR)
 
             for env in self._all_envs:
