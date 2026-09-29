@@ -41,7 +41,7 @@ import cyten as ct
 import numpy as np
 
 from ..networks.mps import MPS_TOTAL_CHARGE_LABEL
-from ..tools import asConfig, memory_usage
+from ..tools import TruncationError, asConfig, memory_usage
 from . import mps_common
 from .mps_common import IterativeSweeps, OneSiteH, TwoSiteH
 
@@ -523,13 +523,17 @@ class DMRGEngine(IterativeSweeps):
         self._meas_E_trunc = meas_E_trunc
         return super().sweep(optimize)
 
-    def update_local(self, theta, optimize=True):
-        """Perform site-update on the site ``i0``.
+    def update_local(self, theta: ct.Tensor, optimize=True):
+        """Perform site-update on the site given by the current value of :attr:`i0`.
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`cyten.Tensor`
             Initial guess for the ground state of the effective Hamiltonian.
+            Leg configuration depends on two-site or one-site update, and on :attr:`combine`.
+            Two-site: if :attr:`combine` then ``(vL.p0), (p1.vR)`` else ``vL, p0, p1, vR``.
+            One-site: if not :attr:`combine` then ``vL, p0, vR`` elif :attr:`move_right`
+            then ``(vL.p0), vR`` else ``vL, (p0.vR)``.
         optimize : bool
             Whether we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
@@ -548,7 +552,7 @@ class DMRGEngine(IterativeSweeps):
             age : int
                 Current size of the DMRG simulation: number of physical sites involved
                 into the contraction.
-            U, VH: :class:`~tenpy.linalg.np_conserved.Array`
+            U, VH: :class:`cyten.Tensor`
                 `U` and `VH` returned by :meth:`mixed_svd`.
             ov_change: float
                 Change in the wave function ``1. - abs(<theta_guess|theta>)``
@@ -562,10 +566,8 @@ class DMRGEngine(IterativeSweeps):
             E0, theta, N, ov_change = self.diag(theta)
         else:
             E0, N, ov_change = None, 0, 0.0
-        theta = self.prepare_svd(theta)
         U, S, VH, err, S_approx = self.mixed_svd(theta)
-        self._entropy_approx[(i0 + n_opt - 1) % self.psi.L] = entropy(S_approx**2)
-        self.set_B(U, S, VH)
+        self._entropy_approx[(i0 + n_opt - 1) % self.psi.L] = ct.entropy(S_approx**2)
         update_data = {'E0': E0, 'err': err, 'N': N, 'age': age, 'U': U, 'VH': VH, 'ov_change': ov_change}
         return update_data
 
@@ -665,6 +667,14 @@ class DMRGEngine(IterativeSweeps):
                 update_bra = env.bra is psi
                 env._update_gauge_RP(j, V, update_bra, update_ket)
             # No need to clear the environments on the other bonds!
+
+    def mixed_svd(self, theta: ct.Tensor) -> tuple[ct.Tensor, ct.Tensor, ct.Tensor, TruncationError, ct.DiagonalTensor]:
+        """Perform truncated or mixed SVD of the local update `theta` and update the MPS accordingly.
+
+        For details, see the concrete implementations :meth:`TwoSiteDMRGEngine.mixed_svd`
+        and :meth:`SingleSiteDMRGEngine.mixed_svd`.
+        """
+        raise NotImplementedError('To be implemented in subclasses')
 
     def diag(self, theta_guess):
         """Diagonalize the effective Hamiltonian represented by self.
