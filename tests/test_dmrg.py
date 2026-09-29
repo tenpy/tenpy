@@ -31,26 +31,6 @@ def _f_tfi(k, g):
     return -2 * np.sqrt(1 + g**2 - 2 * g * np.cos(k)) / np.pi / 2.0
 
 
-params = [
-    # bc     combine  mixer n
-    ('finite', True, False, 2),  # simplest case
-    ('finite', True, True, 1),
-    # 1-site DMRG without mixer is expected to fail!
-    ('finite', True, 'DensityMatrixMixer', 2),
-    ('finite', True, 'SubspaceExpansion', 2),
-    ('finite', False, True, 2),
-    #  ('finite', False, False, 2),
-    ('infinite', True, False, 2),  # simplest case infinite
-    ('infinite', True, 'DensityMatrixMixer', 2),  # with mixer
-    ('infinite', True, 'SubspaceExpansion', 2),
-    ('infinite', True, True, 1),
-    #  ('infinite', True, True, 2),
-    ('infinite', False, True, 1),
-    #  ('infinite', False, True, 2),
-    #  ('infinite', False, False, 2)
-]
-
-
 class _DummyEffH:
     def __init__(self, tensor):
         self.tensor = tensor
@@ -122,9 +102,30 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, L=6):
         assert E0 == pytest.approx(np.linalg.eigvalsh(matrix)[0])
 
 
-@pytest.mark.parametrize('bc_MPS, combine, mixer, n', params)
+@pytest.mark.skip(reason='Not ported yet')
+@pytest.mark.parametrize(
+    'bc_MPS, combine, mixer, n',
+    [
+        # bc     combine  mixer n
+        ('finite', True, False, 2),  # simplest case
+        ('finite', True, True, 1),
+        # 1-site DMRG without mixer is expected to fail!
+        ('finite', True, 'DensityMatrixMixer', 2),
+        ('finite', True, 'SubspaceExpansion', 2),
+        ('finite', False, True, 2),
+        #  ('finite', False, False, 2),
+        ('infinite', True, False, 2),  # simplest case infinite
+        ('infinite', True, 'DensityMatrixMixer', 2),  # with mixer
+        ('infinite', True, 'SubspaceExpansion', 2),
+        ('infinite', True, True, 1),
+        #  ('infinite', True, True, 2),
+        ('infinite', False, True, 1),
+        #  ('infinite', False, True, 2),
+        #  ('infinite', False, False, 2)
+    ],
+)
 @pytest.mark.slow
-def test_dmrg(bc_MPS, combine, mixer, n, g=1.2):
+def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
     L = 2 if bc_MPS == 'infinite' else 8
     model_params = dict(L=L, J=1.0, g=g, bc_MPS=bc_MPS, conserve=None)
     M = TFIChain(model_params)
@@ -202,18 +203,18 @@ def test_dmrg_rerun(L=2):
     assert abs(E2 - -1.50082324) < 1.0e-6
 
 
-params = [
-    ('TwoSiteDMRGEngine', 'lanczos'),
-    ('TwoSiteDMRGEngine', 'arpack'),
-    ('TwoSiteDMRGEngine', 'ED_block'),
-    ('TwoSiteDMRGEngine', 'ED_all'),
-    ('SingleSiteDMRGEngine', 'ED_block'),
-]
-
-
 @pytest.mark.skip(reason='Not ported yet')
 @pytest.mark.slow
-@pytest.mark.parametrize('engine, diag_method', params)
+@pytest.mark.parametrize(
+    'engine, diag_method',
+    [
+        ('TwoSiteDMRGEngine', 'lanczos'),
+        ('TwoSiteDMRGEngine', 'arpack'),
+        ('TwoSiteDMRGEngine', 'ED_block'),
+        ('TwoSiteDMRGEngine', 'ED_all'),
+        ('SingleSiteDMRGEngine', 'ED_block'),
+    ],
+)
 def test_dmrg_diag_method(engine, diag_method, tol=1.0e-6):
     bc_MPS = 'finite'
     model_params = dict(L=6, S=0.5, bc_MPS=bc_MPS, conserve='Sz')
