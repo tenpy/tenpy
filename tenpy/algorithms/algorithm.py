@@ -7,6 +7,8 @@ import time
 import cyten as ct
 import numpy as np
 
+from ..models import Model
+from ..networks import MPS
 from ..tools import DictCache, EventHandler, TruncationError, asConfig, consistency_check
 
 logger = logging.getLogger(__name__)
@@ -77,7 +79,7 @@ class Algorithm:
 
     """
 
-    def __init__(self, psi, model, options, *, resume_data=None, cache=None):
+    def __init__(self, psi: MPS, model: Model, options, *, resume_data=None, cache=None):
         self.options = asConfig(options, self.__class__.__name__)
         self.trunc_params = self.options.subconfig('trunc_params')
         self.psi = psi

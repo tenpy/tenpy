@@ -668,7 +668,7 @@ class DMRGEngine(IterativeSweeps):
         """
         raise NotImplementedError('To be implemented in subclasses')
 
-    def diag(self, theta_guess):
+    def diag(self, theta_guess: ct.Tensor):
         """Diagonalize the effective Hamiltonian represented by self.
 
         .. cfg:configoptions :: DMRGEngine
@@ -713,14 +713,14 @@ class DMRGEngine(IterativeSweeps):
 
         Parameters
         ----------
-        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
+        theta_guess : :class:`cyten.Tensor`
             Initial guess for the ground state of the effective Hamiltonian.
 
         Returns
         -------
         E0 : float
             Energy of the found ground state.
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`cyten.Tensor`
             Ground state of the effective Hamiltonian.
         N : int
             Number of Lanczos iterations used. ``-1`` if unknown.
@@ -729,25 +729,29 @@ class DMRGEngine(IterativeSweeps):
 
         """
         N = -1  # (unknown)
+        assert theta_guess.labels_are('vL', *(f'p{i}' for i in range(self.n_optimize)), 'vR')
+
+        diag_method = self.diag_method
 
         if self.diag_method == 'default':
             # use ED for small matrix dimensions, but lanczos by default
             max_N = self.options.get('max_N_for_ED', 400, int)
             if self.eff_H.N < max_N:
-                E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
+                diag_method = 'ED_block'
             else:
-                E, theta, N = LanczosGroundState(self.eff_H, theta_guess, self.lanczos_params).run()
-        elif self.diag_method == 'lanczos':
-            E, theta, N = LanczosGroundState(self.eff_H, theta_guess, self.lanczos_params).run()
-        elif self.diag_method == 'arpack':
-            E, theta = lanczos_arpack(self.eff_H, theta_guess, self.lanczos_params)
-        elif self.diag_method == 'ED_block':
+                diag_method = 'lanczos'
+        if diag_method == 'lanczos':
+            eng = ct.tensors.LanczosGroundState(self.eff_H, theta_guess, self.lanczos_params)
+            E, theta, N = eng.run()
+        if diag_method == 'arpack':
+            E, theta = ct.tensors.lanczos_arpack(self.eff_H, theta_guess, self.lanczos_params)
+        if diag_method == 'ED_block':
             E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
-        elif self.diag_method == 'ED_all':
+        if diag_method == 'ED_all':
             E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=False)
         else:
             raise ValueError('Unknown diagonalization method: ' + repr(self.diag_method))
-        ov_change = 1.0 - abs(npc.inner(theta_guess, theta, 'labels', do_conj=True))
+        ov_change = 1.0 - abs(ct.inner(theta_guess, theta))
         return E, theta, N, ov_change
 
     def plot_update_stats(self, axes, xaxis='time', yaxis='E', y_exact=None, **kwargs):
@@ -1045,7 +1049,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
             S_a = S
             if move_right:
                 # theta @ B = U @ S @ VH @ B = U @ S @ (VH B)
-                B = ct.planar_contraction(VH, self.psi.get_B(i_R, form='B'), 'vR', 'vL')
+                B = ct.planar_contraction(VH, self.psi.get_B(i_R, form='B'), ['vR'], ['vL'])
                 if self.combine:
                     U.relabel({'(vL.p0)': '(vL.p)'})
                     A = ct.split_legs(U, '(vL.p)')
@@ -1054,7 +1058,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
                     A = U
             else:
                 # A @ theta = A @ U @ S @ VH = (A @ U) @ S @ VH
-                A = ct.planar_contraction(self.psi.get_B(i_L, form='A'), U, 'vR', 'vL')
+                A = ct.planar_contraction(self.psi.get_B(i_L, form='A'), U, ['vR'], ['vL'])
                 if self.combine:
                     VH.relabel({'(p0.vR)': '(p.vR)'})
                     B = ct.split_legs(VH, '(p.vR)')

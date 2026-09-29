@@ -133,6 +133,8 @@ class Sweep(Algorithm):
 
     DefaultMixer = None
     use_mixer_by_default = False  # The default for the "mixer" config option
+    EffectiveH: type[EffectiveH]
+    eff_H: EffectiveH
 
     def __init__(self, psi, model, options, *, orthogonal_to=None, **kwargs):
         if not hasattr(self, 'EffectiveH'):
