@@ -865,7 +865,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
     use_mixer_by_default = False
 
     def mixed_svd(self, theta):
-        """Get (truncated) `B` from the new theta (as returned by diag).
+        """Perform truncated or mixed SVD of the local update `theta` and update the MPS accordingly.
 
         The goal is to split theta and truncate it::
 
@@ -889,11 +889,13 @@ class TwoSiteDMRGEngine(DMRGEngine):
         -------
         U : :class:`cyten.Tensor`
             Left isometric factor of `theta`. Labels ``vL, p, vR``.
+            The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
         S : :class:`cyten.Tensor` (two legs)
-            Singular values (or general, non-diagonal bond matrix, if mixer is on).
-            Labels ``vL, vR``.
+            Singular values (or general, non-diagonal bond matrix, if mixer is on). Labels ``vL, vR``.
+            The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
         VH : :class:`cyten.Tensor`
             Right isometric factor of `theta`. Labels ``vL, p, vR``.
+            The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
         err : :class:`~tenpy.TruncationError`
             The truncation error introduced.
         S_approx : ndarray
@@ -926,27 +928,13 @@ class TwoSiteDMRGEngine(DMRGEngine):
             U, S, VH, err, S_a = mixer.mix_and_decompose_2site(
                 engine=self, theta=theta, i0=self.i0, mix_left=update_LP, mix_right=update_RP, qtotal_LR=qtotal_LR
             )
-        return U, S, VH, err, S_a
 
-    def set_B(self, U, S, VH):
-        """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
-
-        Parameters
-        ----------
-        U, VH : :class:`cyten.Tensor`
-            Left and Right-canonical matrices as returned by the SVD.
-        S : :class:`cyten.Tensor`
-            The middle part returned by the SVD, ``theta = U S VH``.
-            Without a mixer just the singular values, with enabled `mixer` a 2D array.
-
-        """
-        B0 = U.split_legs(['(vL.p)'])
-        B1 = VH.split_legs(['(p.vR)'])
-        i0 = self.i0
-        self.psi.set_B(i0, B0, form='A')  # left-canonical
-        self.psi.set_B(i0 + 1, B1, form='B')  # right-canonical
+        # Update MPS
+        self.psi.set_B(i0, U, form='A')  # left-canonical
         self.psi.set_SR(i0, S)
-        # environments are cleaned/updated in :meth:`update_env`
+        self.psi.set_B(i0 + 1, VH, form='B')  # right-canonical
+
+        return U, S, VH, err, S_a
 
 
 class SingleSiteDMRGEngine(DMRGEngine):
@@ -973,7 +961,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
     use_mixer_by_default = True
 
     def mixed_svd(self, theta):
-        """Get (truncated) `B` from the new theta (as returned by diag).
+        """Perform truncated or mixed SVD of the local update `theta` and update the MPS accordingly.
 
         The goal is to split theta and truncate it. For a move to the right::
 
@@ -1007,11 +995,13 @@ class SingleSiteDMRGEngine(DMRGEngine):
         -------
         U : :class:`cyten.Tensor`
             New left-canonical tensor. Labels ``vL, p, vR``.
+            The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
         S : :class:`cyten.Tensor`
-            Singular values or general bond matrix, if mixer is on.
-            Labels ``'vL', 'vR'``.
+            Singular values or general bond matrix, if mixer is on. Labels ``'vL', 'vR'``.
+            The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
         VH : :class:`cyten.Tensor`
             New right-canonical tensor. Labels ``vL, p, vR``.
+            The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
         err : :class:`~tenpy.runcationError`
             The truncation error introduced.
         S_approx : :class:`cyten.DiagonalTensor`
@@ -1025,27 +1015,28 @@ class SingleSiteDMRGEngine(DMRGEngine):
         mixer = self.mixer
         move_right = self.move_right
         update_LP, update_RP = self.update_LP_RP
+        i_L, i_R = self._update_env_inds()  # left and right updated sites
 
         if self.move_right and update_RP:
             # make sure that `next_B` is in right-canonical form
-            assert self.psi.form[(self.i0 + 1) % self.psi.L] == (0.0, 1.0)
+            assert self.psi.form[i_R % self.psi.L] == (0.0, 1.0)
         if not self.move_right and update_LP:
             # make sure that `next_A` is in left-canonical form
-            assert self.psi.form[(self.i0 - 1) % self.psi.L] == (1.0, 0.0)
+            assert self.psi.form[i_L % self.psi.L] == (1.0, 0.0)
 
         if mixer is None:
             U, S, VH, err, _ = self.svd_theta(theta)
             S_a = S
             if move_right:
                 # theta @ B = U @ S @ VH @ B = U @ S @ (VH B)
-                next_B = self.psi.get_B(self.i0 + 1, form='B')
+                next_B = self.psi.get_B(i_R, form='B')
                 VH = ct.planar_contraction(VH, next_B, 'vR', 'vL')
                 if self.combine:
                     U = ct.split_legs(U, '(vL.p0)')
                 U.relabel({'p0': 'p'})
             else:
                 # A @ theta = A @ U @ S @ VH = (A @ U) @ S @ VH
-                next_A = self.psi.get_B(self.i0 - 1, form='A')
+                next_A = self.psi.get_B(i_L, form='A')
                 U = ct.planar_contraction(next_A, U, 'vR', 'vL')
                 if self.combine:
                     VH = ct.split_legs(VH, '(p0.vR)')
@@ -1081,27 +1072,12 @@ class SingleSiteDMRGEngine(DMRGEngine):
             )
             U.ireplace_label('(vL.p0)', '(vL.p)')
             VH.ireplace_label('(p1.vR)', '(p.vR)')
-        return U, S, VH, err, S_a
 
-    def set_B(self, U, S, VH):
-        """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
-
-        Parameters
-        ----------
-        U, VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Left and Right-canonical matrices as returned by the SVD.
-        S : 1D array | 2D :class:`~tenpy.linalg.np_conserved.Array`
-            The middle part returned by the SVD, ``theta = U S VH``.
-            Without a mixer just the singular values, with enabled `mixer` a 2D array.
-
-        """
-        i_L, i_R = self._update_env_inds()  # left and right updated sites
-        A0 = U.split_legs(['(vL.p)'])
-        B1 = VH.split_legs(['(p.vR)'])
-        self.psi.set_B(i_L, A0, form='A')  # left-canonical
-        self.psi.set_B(i_R, B1, form='B')  # right-canonical
+        self.psi.set_B(i_L, U, form='A')  # left-canonical
         self.psi.set_SR(i_L, S)
-        # environments are cleaned/updated in :meth:`update_env`
+        self.psi.set_B(i_R, VH, form='B')  # right-canonical
+
+        return U, S, VH, err, S_a
 
     def mixer_activate(self):
         super().mixer_activate()
