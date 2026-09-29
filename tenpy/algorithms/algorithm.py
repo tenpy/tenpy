@@ -4,6 +4,7 @@
 import logging
 import time
 
+import cyten as ct
 import numpy as np
 
 from ..tools.cache import DictCache
@@ -336,6 +337,52 @@ class Algorithm:
         RAM_MB = RAM / 1024**2
         logger.info('Total RAM estimate: %8d MB', RAM_MB)
         return RAM_MB
+
+    def svd_theta(self, theta: ct.Tensor) -> tuple[ct.Tensor, ct.DiagonalTensor, ct.Tensor, TruncationError, float]:
+        """Perform a truncated SVD on the given tensor `theta`.
+
+        This is essentially a wrapper around :func:`cyten.truncated_svd` that uses the
+        :attr:`trunc_params` and sets new labels ``vR, vL``, as expected for MPS.
+
+        Parameters
+        ----------
+        theta : :class:`cyten.Tensor`
+            The tensor to be decomposed.
+            Like for :func:`cyten.truncated_svd`, the legs should already be arranged between
+            codomain and domain, to determine how the SVD should split them.
+
+        Returns
+        -------
+        U : :class:`cyten.Tensor`
+            Left-canonical part of `theta`.
+        S : :class:`cyten.DiagonalTensor`
+            Singular values.
+        Vh : :class:`cyten.Tensor`
+            Right-canonical part of `theta`.
+        err : :class:`~tenpy.TruncationError`
+            The truncation error introduced.
+        renormalize : float
+            Factor, by which S was renormalized.
+
+        """
+        chi_max = self.trunc_params.get('chi_max', 100, int)
+        chi_min = self.trunc_params.get('chi_min', None, int)
+        deg_tol = self.trunc_params.get('degeneracy_tol', None, 'real')
+        svd_min = self.trunc_params.get('svd_min', 1.0e-14, 'real')
+        trunc_cut = self.trunc_params.get('trunc_cut', 1.0e-14, 'real')
+        U, S, Vh, rel_err, renormalize = ct.truncated_svd(
+            theta,
+            new_labels=['vR', 'vL'],
+            new_leg_dual=False,
+            charge_leg_top=True,
+            normalize_to=1.0,
+            chi_max=chi_max,
+            chi_min=chi_min,
+            deg_tol=deg_tol,
+            trunc_cut=trunc_cut,
+            svd_min=svd_min,
+        )
+        return U, S, Vh, TruncationError.from_Frobenius_distance(rel_err), renormalize
 
 
 class TimeEvolutionAlgorithm(Algorithm):

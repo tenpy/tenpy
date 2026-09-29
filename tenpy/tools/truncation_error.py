@@ -102,6 +102,27 @@ class TruncationError(Hdf5Exportable):
         return cls(eps, 1.0 - 2.0 * eps)
 
     @classmethod
+    def from_Frobenius_distance(cls, norm_difference, norm_old=1.0):
+        r"""Contruct TruncationError from the norm difference between original and truncated tensor.
+
+        Parameters
+        ----------
+        norm_difference : float
+            Difference in Frobenius norm due to truncation,
+            :math:`\vert \theta - U S V^\dagger \vert = \sqrt{\sum_{a \text{ discarded}} \lambda_a^2}`.
+        norm_old : float
+            Norm before truncation, :math:`\vert \theta \vert = \sqrt{\sum_{a} \lambda_a^2}`.
+
+        Returns
+        -------
+        TruncationError
+            The corresponding truncation error.
+
+        """
+        eps = (norm_difference / norm_old) ** 2
+        return cls(eps, 1.0 - 2.0 * eps)
+
+    @classmethod
     def from_S(cls, S_discarded, norm_old=None):
         r"""Construct TruncationError from discarded singular values.
 
