@@ -888,13 +888,13 @@ class TwoSiteDMRGEngine(DMRGEngine):
         Returns
         -------
         U : :class:`cyten.Tensor`
-            Left isometric factor of `theta`. Labels ``vL, p, vR``.
+            Left isometric factor of `theta`. Legs ``(vL.p), vR`` if :attr:`combine` else ``vL, p, vR``.
             The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
         S : :class:`cyten.Tensor` (two legs)
-            Singular values (or general, non-diagonal bond matrix, if mixer is on). Labels ``vL, vR``.
+            Singular values (or general, non-diagonal bond matrix, if mixer is on). Legs ``vL, vR``.
             The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
         VH : :class:`cyten.Tensor`
-            Right isometric factor of `theta`. Labels ``vL, p, vR``.
+            Right isometric factor of `theta`. Legs ``vL, (p.vR)`` if :attr:`combine` else ``vL, p, vR``.
             The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
         err : :class:`~tenpy.TruncationError`
             The truncation error introduced.
@@ -906,6 +906,10 @@ class TwoSiteDMRGEngine(DMRGEngine):
         i0 = self.i0
         update_LP, update_RP = self.update_LP_RP
         mixer = self.mixer
+
+        # we calculate A S B as the new tensors for the MPS, they will end up with split legs always
+        # we keep U and VH with possibly combined legs around for the return value
+
         if mixer is None:
             if self.combine:
                 theta = ct.planar_permute_legs(theta, codomain=['(vL.p0)'], domain=['(p1.vR)'])
@@ -913,13 +917,21 @@ class TwoSiteDMRGEngine(DMRGEngine):
                 theta = ct.planar_permute_legs(theta, codomain=['vL', 'p0'], domain=['vR', 'p1'])
             U, S, VH, err, _ = self.svd_theta(theta)
             if self.combine:
-                U = ct.split_legs(U, ['(vL.p0)'])
-                VH = ct.split_legs(VH, ['(p1.vR)'])
-            S_a = S
-            U.relabel({'p0': 'p'})
-            VH.relabel({'p1': 'p'})
+                U.relabel({'(vL.p0)': '(vL.p)'})
+                VH.relabel({'(p1.vR)': '(p.vR)'})
+                A = ct.split_legs(U, ['(vL.p)'])
+                B = ct.split_legs(VH, ['(p.vR)'])
+            else:
+                U.relabel({'p0': 'p'})
+                VH.relabel({'p1': 'p'})
+                A = U
+                B = VH
+            S_a = S  # have exact singular values
         else:
             raise NotImplementedError('Mixer is not ported yet. Note that outputs need to have split legs now!!')
+            # TODO set A, B with split legs, for updating the MPS and if combine,
+            #      also set U, VH with combined legs, for update_LP/RP
+
             # choose qtotal_LR to be "the same as before", if possible
             # note that for diag_method='ED_all', the qtotal of theta may change.
             # we absorb that change into the right tensor (arbitrary choice).
@@ -930,9 +942,9 @@ class TwoSiteDMRGEngine(DMRGEngine):
             )
 
         # Update MPS
-        self.psi.set_B(i0, U, form='A')  # left-canonical
+        self.psi.set_B(i0, A, form='A')  # left-canonical
         self.psi.set_SR(i0, S)
-        self.psi.set_B(i0 + 1, VH, form='B')  # right-canonical
+        self.psi.set_B(i0 + 1, B, form='B')  # right-canonical
 
         return U, S, VH, err, S_a
 
@@ -994,13 +1006,13 @@ class SingleSiteDMRGEngine(DMRGEngine):
         Returns
         -------
         U : :class:`cyten.Tensor`
-            New left-canonical tensor. Labels ``vL, p, vR``.
+            New left-canonical tensor. Legs ``(vL.p), vR`` if :attr:`combine` else ``vL, p, vR``.
             The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
         S : :class:`cyten.Tensor`
             Singular values or general bond matrix, if mixer is on. Labels ``'vL', 'vR'``.
             The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
         VH : :class:`cyten.Tensor`
-            New right-canonical tensor. Labels ``vL, p, vR``.
+            New right-canonical tensor. Legs ``vL, (p.vR)`` if :attr:`combine` else ``vL, p, vR``.
             The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
         err : :class:`~tenpy.runcationError`
             The truncation error introduced.
@@ -1024,23 +1036,30 @@ class SingleSiteDMRGEngine(DMRGEngine):
             # make sure that `next_A` is in left-canonical form
             assert self.psi.form[i_L % self.psi.L] == (1.0, 0.0)
 
+        # we calculate A S B as the new tensors for the MPS, they will end up with split legs always
+        # we keep U and VH with possibly combined legs around for the return value
+
         if mixer is None:
             U, S, VH, err, _ = self.svd_theta(theta)
             S_a = S
             if move_right:
                 # theta @ B = U @ S @ VH @ B = U @ S @ (VH B)
-                next_B = self.psi.get_B(i_R, form='B')
-                VH = ct.planar_contraction(VH, next_B, 'vR', 'vL')
+                B = ct.planar_contraction(VH, self.psi.get_B(i_R, form='B'), 'vR', 'vL')
                 if self.combine:
-                    U = ct.split_legs(U, '(vL.p0)')
-                U.relabel({'p0': 'p'})
+                    U.relabel({'(vL.p0)': '(vL.p)'})
+                    A = ct.split_legs(U, '(vL.p)')
+                else:
+                    U.relabel({'p0': 'p'})
+                    A = U
             else:
                 # A @ theta = A @ U @ S @ VH = (A @ U) @ S @ VH
-                next_A = self.psi.get_B(i_L, form='A')
-                U = ct.planar_contraction(next_A, U, 'vR', 'vL')
+                A = ct.planar_contraction(self.psi.get_B(i_L, form='A'), U, 'vR', 'vL')
                 if self.combine:
-                    VH = ct.split_legs(VH, '(p0.vR)')
-                VH.relabel({'p0': 'p'})
+                    VH.relabel({'(p0.vR)': '(p.vR)'})
+                    B = ct.split_legs(VH, '(p.vR)')
+                else:
+                    VH.relabel({'p0': 'p'})
+                    B = VH
         elif mixer.can_decompose_1site:
             raise NotImplementedError('Mixer is not ported yet. Note that outputs need to have split legs now!!')
             U, S, VH, err = mixer.mix_and_decompose_1site(engine=self, theta=theta, i0=self.i0, move_right=move_right)
@@ -1073,9 +1092,9 @@ class SingleSiteDMRGEngine(DMRGEngine):
             U.ireplace_label('(vL.p0)', '(vL.p)')
             VH.ireplace_label('(p1.vR)', '(p.vR)')
 
-        self.psi.set_B(i_L, U, form='A')  # left-canonical
+        self.psi.set_B(i_L, A, form='A')  # left-canonical
         self.psi.set_SR(i_L, S)
-        self.psi.set_B(i_R, VH, form='B')  # right-canonical
+        self.psi.set_B(i_R, B, form='B')  # right-canonical
 
         return U, S, VH, err, S_a
 
