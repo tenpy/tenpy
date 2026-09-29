@@ -3,8 +3,10 @@
 # Copyright (C) TeNPy Developers, Apache license
 import warnings
 
+import cyten as ct
 import numpy as np
 import pytest
+from cyten.models import sites
 from scipy import integrate
 
 from tenpy.algorithms import dmrg, dmrg_parallel
@@ -47,6 +49,77 @@ params = [
     #  ('infinite', False, True, 2),
     #  ('infinite', False, False, 2)
 ]
+
+
+class _DummyEffH:
+    def __init__(self, tensor):
+        self.tensor = tensor
+
+    def to_tensor(self):
+        return self.tensor
+
+
+@pytest.mark.filterwarnings('ignore:bitcount function is deprecated:DeprecationWarning')
+@pytest.mark.parametrize(
+    'site_kind, conserve', [('spin', None), ('spin', 'parity'), ('spin', 'Sz'), ('spin', 'SU2'), ('golden', None)]
+)
+@pytest.mark.parametrize('keep_sector', [False, 'trivial', 'random_nontrivial'])
+def test_full_diag_effH(site_kind, conserve, keep_sector, L=6):
+    if site_kind == 'spin':
+        site = sites.SpinSite(0.5, conserve=conserve)
+    else:
+        site = sites.GoldenSite()
+    legs = [site.leg] * L
+    labels = [*(f'p{i}' for i in range(L)), *(f'p{i}*' for i in range(L - 1, -1, -1))]
+    full_H = ct.SymmetricTensor.from_random_normal(legs, legs, labels=labels)
+    full_H += full_H.hc
+
+    E, V = ct.eigh(full_H, new_labels='eig', new_leg_dual=False)
+    target_sector = None
+    if keep_sector == 'random_nontrivial':
+        sectors = [
+            sector for sector in E.get_leg('eig').sector_decomposition if sector != full_H.symmetry.trivial_sector
+        ]
+        if not sectors:
+            return  # No nontrivial sector without an explicit symmetry.
+        target_sector = sectors[np.random.default_rng(1234).integers(len(sectors))]
+        theta_guess = V.slice_leg('eig', full_H.symmetry.dual_sector(target_sector), multiplicity=0)
+        # note: theta_guess is already an eigenstate now, but since the function never uses its
+        #       values, that is not a problem
+        # verify the construction worked:
+        assert theta_guess.as_SymmetricTensor().get_leg('slice').sector_decomposition[0] == target_sector
+    else:
+        theta_guess = ct.SymmetricTensor.from_random_normal(legs, labels=[f'p{i}' for i in range(L)])
+
+    E0, theta = dmrg.full_diag_effH(
+        _DummyEffH(full_H), theta_guess, keep_sector=keep_sector is not False, charge_label='slice'
+    )
+
+    # expected labels
+    if keep_sector:
+        assert theta.labels == theta_guess.labels
+    elif isinstance(theta, ct.HiddenLegTensor):
+        # TODO this is a bit confusing...
+        assert theta.labels == [*theta_guess.labels, '!slice']
+    else:
+        assert theta.labels == theta_guess.labels
+
+    if keep_sector is False:
+        _, expected_E0 = E.sector_argmin()
+    elif keep_sector == 'trivial':
+        _, expected_E0 = E.sector_argmin(full_H.symmetry.trivial_sector)
+    else:
+        _, expected_E0 = E.sector_argmin(target_sector)
+    assert E0 == pytest.approx(expected_E0)
+
+    if full_H.symmetry.can_be_dropped and keep_sector is False:
+        # TODO does/should cyten expose a convenience method to do this special kind of reshape?
+        matrix = (
+            full_H.to_numpy(understood_braiding=True)
+            .transpose(*range(L), *reversed(range(L, 2 * L)))
+            .reshape(2**L, 2**L)
+        )
+        assert E0 == pytest.approx(np.linalg.eigvalsh(matrix)[0])
 
 
 @pytest.mark.parametrize('bc_MPS, combine, mixer, n', params)

@@ -37,8 +37,10 @@ import logging
 import time
 import warnings
 
+import cyten as ct
 import numpy as np
 
+from ..networks.mps import MPS_TOTAL_CHARGE_LABEL
 from ..tools.params import asConfig
 from ..tools.process import memory_usage
 from . import mps_common
@@ -1170,7 +1172,7 @@ def chi_list(chi_max, dchi=20, nsweeps=20):
     return chi_list
 
 
-def full_diag_effH(effH, theta_guess, keep_sector=True):
+def full_diag_effH(effH, theta_guess, keep_sector=True, charge_label=MPS_TOTAL_CHARGE_LABEL):
     """Perform an exact diagonalization of `effH`.
 
     This function offers an alternative to :func:`~tenpy.linalg.lanczos.lanczos`.
@@ -1179,34 +1181,50 @@ def full_diag_effH(effH, theta_guess, keep_sector=True):
     ----------
     effH : :class:`~tenpy.algorithms.mps_common.EffectiveH`
         The effective Hamiltonian.
-    theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
+    theta_guess : :class:`cyten.Tensor`
         Current guess to select the charge sector. Labels as specified by ``effH.acts_on``.
+    keep_sector : bool, optional
+        Whether to keep the charge sector specified by ``theta_guess``. Default is True.
+    charge_label : str
+        The label of any hidden charge legs.
+        If ``keep_sector`` is True, this is used to determine the sector from ``theta_guess``.
+        If ``keep_sector`` is False, and the groundstate happens to carry charge, the
+        resulting HiddenLegTensor will carry the charge on a leg with this label.
+
+    Returns
+    -------
+    E0 : float
+        The energy of `theta`.
+    theta : :class:`cyten.Tensor`
+        The ground state (possibly restricted to the sector specified by `theta_guess`).
 
     """
-    theta_guess = theta_guess.combine_legs(effH.acts_on, qconj=+1)
-    fullH = effH.to_matrix()
+    fullH: ct.SymmetricTensor = effH.to_tensor()
+    E, V = ct.eigh(fullH, new_labels='eig*', new_leg_dual=False)
+    # V: ct.SymmetricTensor
+
     if keep_sector:
-        # diagonalize only the block of the charge sector in which `theta_guess` is.
-        leg = theta_guess.legs[0]
-        qi = leg.get_qindex_of_charges(theta_guess.qtotal)
-        block = fullH.get_block(np.array([qi, qi], np.intp))
-        if block is None:
-            warnings.warn(
-                'H is zero in the given block, nothing to diagonalize.We just return the initial state again.'
-            )
-            E0 = 0
-            theta = theta_guess
+        if isinstance(theta_guess, ct.HiddenLegTensor):
+            sector = theta_guess.as_SymmetricTensor().get_leg(charge_label).sector_decomposition[0]
         else:
-            E, V = np.linalg.eigh(block)
-            E0 = E[0]
-            theta = theta_guess.zeros_like()
-            theta.dtype = np.promote_types(fullH.dtype, theta_guess.dtype)
-            theta_block = theta.get_block(np.array([qi], np.intp), insert=True)
-            theta_block[:] = V[:, 0]  # copy data into theta
-    else:  # allow to change charge sector!
-        E, V = npc.eigh(fullH)
-        i0 = np.argmin(E)
-        E0 = E[i0]
-        theta = V.take_slice(i0, 1)
-    theta = theta.split_legs([0]).iset_leg_labels(effH.acts_on)
+            sector = fullH.symmetry.trivial_sector
+        # OPTIMIZE this does not exploit that we project onto a *sector*
+        #          knowing this, we could get away by diagonalizing only in a restricted space,
+        #          i.e. project first, than diagonalize.
+        #          for the abelian backend at least (like tenpy v1 did here), this means
+        #          we can simply pick one block from fullH (after combining legs!) and diag only that
+        #          for FTBackend, it is currently not clear to me, what we could do
+
+    else:
+        # do not restrict the sector
+        sector = None
+
+    gs_projector, E0 = E.sector_argmin(sector)
+    theta: ct.Tensor = ct.compose(V, gs_projector.hc)
+
+    if gs_projector.small_leg.sector_decomposition[0] == fullH.symmetry.trivial_sector:
+        theta = ct.squeeze_legs(theta, 'eig*')
+    else:
+        theta = ct.HiddenLegTensor.from_tensor(theta.relabel({'eig*': charge_label}), [charge_label])
+
     return E0, theta
