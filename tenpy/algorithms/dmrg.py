@@ -864,13 +864,6 @@ class TwoSiteDMRGEngine(DMRGEngine):
     DefaultMixer = mps_common.DensityMatrixMixer
     use_mixer_by_default = False
 
-    def prepare_svd(self, theta):
-        """Transform theta into matrix for svd."""
-        if self.combine:
-            return theta  # Theta is already combined.
-        else:
-            return theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1], qconj=[+1, -1])
-
     def mixed_svd(self, theta):
         """Get (truncated) `B` from the new theta (as returned by diag).
 
@@ -888,19 +881,20 @@ class TwoSiteDMRGEngine(DMRGEngine):
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            The optimized wave function, prepared for svd.
+        theta : :class:`cyten.Tensor`
+            The optimized new wave function.
+            Legs ``(vL.p0), (p1.vR)`` if :attr:`combine` else ``vL, p0, p1, vR``.
 
         Returns
         -------
-        U : :class:`~tenpy.linalg.np_conserved.Array`
-            Left-canonical part of `theta`. Labels ``'(vL.p)', 'vR'``.
-        S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
-            Without mixer just the singular values of the array; with mixer it might be a general
-            matrix with labels ``'vL', 'vR'``; see comment above.
-        VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Right-canonical part of `theta`. Labels ``'vL', '(p.vR)'``.
-        err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        U : :class:`cyten.Tensor`
+            Left isometric factor of `theta`. Labels ``vL, p, vR``.
+        S : :class:`cyten.Tensor` (two legs)
+            Singular values (or general, non-diagonal bond matrix, if mixer is on).
+            Labels ``vL, vR``.
+        VH : :class:`cyten.Tensor`
+            Right isometric factor of `theta`. Labels ``vL, p, vR``.
+        err : :class:`~tenpy.TruncationError`
             The truncation error introduced.
         S_approx : ndarray
             Just the `S` if a 1D ndarray, or an approximation of the correct S (which was used for
@@ -911,12 +905,19 @@ class TwoSiteDMRGEngine(DMRGEngine):
         update_LP, update_RP = self.update_LP_RP
         mixer = self.mixer
         if mixer is None:
-            qtotal_i0 = self.env.bra.get_B(i0, form=None).qtotal
-            U, S, VH, err, _ = svd_theta(
-                theta, self.trunc_params, qtotal_LR=[qtotal_i0, None], inner_labels=['vR', 'vL']
-            )
+            if self.combine:
+                theta = ct.planar_permute_legs(theta, codomain=['(vL.p0)'], domain=['(p1.vR)'])
+            else:
+                theta = ct.planar_permute_legs(theta, codomain=['vL', 'p0'], domain=['vR', 'p1'])
+            U, S, VH, err, _ = self.svd_theta(theta)
+            if self.combine:
+                U = ct.split_legs(U, ['(vL.p0)'])
+                VH = ct.split_legs(VH, ['(p1.vR)'])
             S_a = S
+            U.relabel({'p0': 'p'})
+            VH.relabel({'p1': 'p'})
         else:
+            raise NotImplementedError('Mixer is not ported yet. Note that outputs need to have split legs now!!')
             # choose qtotal_LR to be "the same as before", if possible
             # note that for diag_method='ED_all', the qtotal of theta may change.
             # we absorb that change into the right tensor (arbitrary choice).
@@ -925,8 +926,6 @@ class TwoSiteDMRGEngine(DMRGEngine):
             U, S, VH, err, S_a = mixer.mix_and_decompose_2site(
                 engine=self, theta=theta, i0=self.i0, mix_left=update_LP, mix_right=update_RP, qtotal_LR=qtotal_LR
             )
-        U.ireplace_label('(vL.p0)', '(vL.p)')
-        VH.ireplace_label('(p1.vR)', '(p.vR)')
         return U, S, VH, err, S_a
 
     def set_B(self, U, S, VH):
@@ -934,9 +933,9 @@ class TwoSiteDMRGEngine(DMRGEngine):
 
         Parameters
         ----------
-        U, VH : :class:`~tenpy.linalg.np_conserved.Array`
+        U, VH : :class:`cyten.Tensor`
             Left and Right-canonical matrices as returned by the SVD.
-        S : 1D array | 2D :class:`~tenpy.linalg.np_conserved.Array`
+        S : :class:`cyten.Tensor`
             The middle part returned by the SVD, ``theta = U S VH``.
             Without a mixer just the singular values, with enabled `mixer` a 2D array.
 
@@ -973,36 +972,18 @@ class SingleSiteDMRGEngine(DMRGEngine):
     DefaultMixer = mps_common.SubspaceExpansion
     use_mixer_by_default = True
 
-    def prepare_svd(self, theta):
-        """Transform theta into matrix for svd.
-
-        In contrast with the 2-site engine, the matrix here depends on the direction we move, as we
-        need `'p'` to point away from the direction we are going in.
-        """
-        if self.combine:
-            if self.move_right:
-                theta.itranspose(['(vL.p0)', 'vR'])  # ensure the order.
-            else:
-                theta.itranspose(['vL', '(p0.vR)'])  # ensure the order.
-        else:
-            if self.move_right:
-                theta = theta.combine_legs(['vL', 'p0'], qconj=+1, new_axes=0)
-            else:
-                theta = theta.combine_legs(['p0', 'vR'], qconj=-1, new_axes=1)
-        return theta
-
     def mixed_svd(self, theta):
         """Get (truncated) `B` from the new theta (as returned by diag).
 
         The goal is to split theta and truncate it. For a move to the right::
 
-            |             -- theta -- next_B --   ==>    -- U -- S -- VH --
-            |                  |        |                   |         |
+            |             -- theta -- next_B --   ==>              -- U -- S -- VH --
+            |                  |        |                             |         |
 
         For a move to the left::
 
-            |   -- next_A -- theta --   ==>    -- U -- S -- VH --
-            |        |         |                  |         |
+            |   -- next_A -- theta --             ==>    -- U -- S -- VH --
+            |        |         |                            |         |
 
         Note that `theta` lives on the same site :attr:`i0` in both cases,
         but the sites of `next_A` and `next_B` depend on whether we move right or left.
@@ -1016,88 +997,83 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            The optimized wave function, prepared for svd with :meth:`prepare_svd`,
-            i.e., with combined legs.
+        theta : :class:`cyten.Tensor`
+            The optimized wave function.
+            Labels ``(vL.p0), vR`` is :attr:`combine` and :attr:`move_right`,
+            *or* ``vL, (p0.vR)`` if :attr:`combine` and not :attr:`move_right`,
+            *or* ``vL, p0, vR`` if not :attr:`combine`.
 
         Returns
         -------
-        U : :class:`~tenpy.linalg.np_conserved.Array`
-            Left-canonical part of `theta`. Labels ``'(vL.p)', 'vR'``
-        S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
-            Without mixer just the singular values of the array; with mixer it might be a general
-            matrix with labels ``'vL', 'vR'``; see comment above.
-        VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Right-canonical part of `theta`. Labels ``'vL', '(p.vR)'``.
-        err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        U : :class:`cyten.Tensor`
+            New left-canonical tensor. Labels ``vL, p, vR``.
+        S : :class:`cyten.Tensor`
+            Singular values or general bond matrix, if mixer is on.
+            Labels ``'vL', 'vR'``.
+        VH : :class:`cyten.Tensor`
+            New right-canonical tensor. Labels ``vL, p, vR``.
+        err : :class:`~tenpy.runcationError`
             The truncation error introduced.
-        S_approx : ndarray
-            Just the `S` if a 1D ndarray, or an approximation of the correct S (which was used for
-            truncation) in case `S` is 2D Array.
+        S_approx : :class:`cyten.DiagonalTensor`
+            An approximation of the singular values of the truncated `theta`.
+            If exact singular values are available, e.g. if the mixer is off,
+            both `S` and `S_approx` are exact singular values.
+            Otherwise, `S` serves in the decomposition `theta = U S VH`
+            and `S_approx` provides an approximation of the singular values.
 
         """
         mixer = self.mixer
         move_right = self.move_right
         update_LP, update_RP = self.update_LP_RP
-        if self.move_right:
-            next_B = self.psi.get_B(self.i0 + 1, form='B')
-            next_B = next_B.combine_legs(['p', 'vR'], qconj=-1, new_axes=1)
-            if update_RP:
-                # make sure that `next_B` is in right-canonical form
-                assert self.psi.form[(self.i0 + 1) % self.psi.L] == (0.0, 1.0)
-        else:
-            next_A = self.psi.get_B(self.i0 - 1, form='A')
-            next_A = next_A.combine_legs(['vL', 'p'], qconj=1, new_axes=0)
-            if update_LP:
-                # make sure that `next_A` is in left-canonical form
-                assert self.psi.form[(self.i0 - 1) % self.psi.L] == (1.0, 0.0)
+
+        if self.move_right and update_RP:
+            # make sure that `next_B` is in right-canonical form
+            assert self.psi.form[(self.i0 + 1) % self.psi.L] == (0.0, 1.0)
+        if not self.move_right and update_LP:
+            # make sure that `next_A` is in left-canonical form
+            assert self.psi.form[(self.i0 - 1) % self.psi.L] == (1.0, 0.0)
 
         if mixer is None:
-            qtotal = [theta.qtotal, None] if move_right else [None, theta.qtotal]
-            U, S, VH, err, _ = svd_theta(theta, self.trunc_params, qtotal_LR=qtotal, inner_labels=['vR', 'vL'])
+            U, S, VH, err, _ = self.svd_theta(theta)
             S_a = S
-            # absorb VH/U into next_B/next_A for right/left move
             if move_right:
-                # VH is at most truncation, so VH-next_B is still right-canonical,
-                # (unless next_B wasn't, but then we don't need to update_RP)
-                VH = npc.tensordot(VH, next_B, ['vR', 'vL'])
-                U.ireplace_label('(vL.p0)', '(vL.p)')
+                # theta @ B = U @ S @ VH @ B = U @ S @ (VH B)
+                next_B = self.psi.get_B(self.i0 + 1, form='B')
+                VH = ct.planar_contraction(VH, next_B, 'vR', 'vL')
+                if self.combine:
+                    U = ct.split_legs(U, '(vL.p0)')
+                U.relabel({'p0': 'p'})
             else:
-                # U is at most truncation, so next_A-U is still left-canonical,
-                # (unless next_A wasn't, but then we don't need to update_RP)
-                U = npc.tensordot(next_A, U, ['vR', 'vL'])
-                VH.ireplace_label('(p0.vR)', '(p.vR)')
+                # A @ theta = A @ U @ S @ VH = (A @ U) @ S @ VH
+                next_A = self.psi.get_B(self.i0 - 1, form='A')
+                U = ct.planar_contraction(next_A, U, 'vR', 'vL')
+                if self.combine:
+                    VH = ct.split_legs(VH, '(p0.vR)')
+                VH.relabel({'p0': 'p'})
         elif mixer.can_decompose_1site:
+            raise NotImplementedError('Mixer is not ported yet. Note that outputs need to have split legs now!!')
             U, S, VH, err = mixer.mix_and_decompose_1site(engine=self, theta=theta, i0=self.i0, move_right=move_right)
             S_a = S
             # absorb VH/U into S
             if move_right:
-                # note: if update_RP, the `next_B` is a right-canonical B from the MPS.
-                # Hence we *did* a subspace expansion on it, during the update when we put it
-                # into the MPS.
-                if isinstance(S, npc.Array):
-                    S = npc.tensordot(S, VH, ['vR', 'vL'])
-                else:
-                    S = VH.iscale_axis(S, 'vL')
+                S = ct.tdot(S, VH, 'vR', 'vL')
                 VH = next_B
                 U.ireplace_label('(vL.p0)', '(vL.p)')
             else:
-                if isinstance(S, npc.Array):
-                    S = npc.tensordot(U, S, ['vR', 'vL'])
-                else:
-                    S = U.iscale_axis(S, 'vR')
+                S = ct.tensordot(U, S, 'vR', 'vL')
                 U = next_A
                 VH.ireplace_label('(p0.vR)', '(p.vR)')
         else:
+            raise NotImplementedError('Mixer is not ported yet. Note that outputs need to have split legs now!!')
             # just use two-site theta
             if self.move_right:
                 next_B.ireplace_label('(p.vR)', '(p1.vR)')
-                theta = npc.tensordot(theta, next_B, axes=['vR', 'vL'])
+                theta = ct.tdot(theta, next_B, 'vR', 'vL')
                 i0 = self.i0
             else:
                 next_A.ireplace_label('(vL.p)', '(vL.p0)')
                 theta.ireplace_label('(p0.vR)', '(p1.vR)')
-                theta = npc.tensordot(next_A, theta, axes=['vR', 'vL'])
+                theta = ct.tensordot(next_A, theta, 'vR', 'vL')
                 i0 = self.i0 - 1
             qtotal_LR = [self.psi.get_B(i0, form=None).qtotal, self.psi.get_B(i0 + 1, form=None).qtotal]
             U, S, VH, err, S_a = mixer.mixed_svd_2site(
