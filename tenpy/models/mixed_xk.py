@@ -71,7 +71,7 @@ import numpy as np
 # from ..linalg import np_conserved as npc
 from ..networks.site import FermionSite
 from ..networks.terms import TermList
-from ..tools.misc import inverse_permutation, to_array, to_iterable
+from ..tools import inverse_permutation, to_array, to_iterable
 from .lattice import Lattice
 from .model import CouplingMPOModel
 

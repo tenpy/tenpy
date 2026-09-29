@@ -122,7 +122,7 @@ import copy
 
 import numpy as np
 
-from ..tools.math import entropy
+from ..tools import entropy
 from .mps import MPS
 
 __all__ = ['PurificationMPS', 'convert_model_purification_canonical_conserve_ancilla_charge']

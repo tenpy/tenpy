@@ -13,9 +13,7 @@ from ..algorithms.mps_common import ZeroSiteH
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS, InitialStateBuilder
 from ..networks.uniform_mps import UniformMPS
-from ..tools import hdf5_io, string
-from ..tools.misc import find_subclass
-from ..tools.params import asConfig
+from ..tools import asConfig, find_subclass, hdf5_io, string
 from . import simulation
 from .simulation import *  # noqa F403
 

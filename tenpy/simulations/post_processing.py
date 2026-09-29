@@ -19,10 +19,16 @@ from pathlib import Path
 import numpy as np
 
 from ..models import Model
-from ..tools import hdf5_io
-from ..tools.misc import find_subclass, get_recursive, set_recursive, to_iterable
-from ..tools.params import Config
-from ..tools.spectral_function_tools import plot_correlations_on_lattice, spectral_function
+from ..tools import (
+    Config,
+    find_subclass,
+    get_recursive,
+    hdf5_io,
+    plot_correlations_on_lattice,
+    set_recursive,
+    spectral_function,
+    to_iterable,
+)
 
 try:
     import h5py

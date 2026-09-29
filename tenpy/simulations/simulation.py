@@ -26,20 +26,20 @@ from .. import version
 from ..algorithms.algorithm import Algorithm
 from ..models.model import Model, NearestNeighborModel
 from ..networks.mps import InitialStateBuilder
-from ..tools import hdf5_io
-from ..tools.cache import CacheFile
-from ..tools.events import EventHandler
-from ..tools.misc import (
+from ..tools import (
+    CacheFile,
+    EventHandler,
+    TruncationError,
+    asConfig,
     convert_memory_units,
     find_subclass,
     get_recursive,
+    hdf5_io,
     merge_recursive,
     set_recursive,
     update_recursive,
 )
-from ..tools.misc import setup_logging as setup_logging_
-from ..tools.params import asConfig
-from ..tools.truncation_error import TruncationError
+from ..tools import setup_logging as setup_logging_
 from .measurement import (
     _m_model_method,
     _m_model_method_wrapped,

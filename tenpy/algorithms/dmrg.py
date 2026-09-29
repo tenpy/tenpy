@@ -41,8 +41,7 @@ import cyten as ct
 import numpy as np
 
 from ..networks.mps import MPS_TOTAL_CHARGE_LABEL
-from ..tools.params import asConfig
-from ..tools.process import memory_usage
+from ..tools import asConfig, memory_usage
 from . import mps_common
 from .mps_common import IterativeSweeps, OneSiteH, TwoSiteH
 

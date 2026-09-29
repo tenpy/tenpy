@@ -9,8 +9,7 @@ import warnings
 import numpy as np
 
 from ..networks.mps import MPS, MPSEnvironment
-from ..tools import hdf5_io
-from ..tools.misc import consistency_check, to_iterable
+from ..tools import consistency_check, hdf5_io, to_iterable
 from . import simulation
 from .simulation import *  # noqa F403
 

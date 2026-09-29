@@ -12,7 +12,7 @@ import numpy as np
 from cyten.models.couplings import spin_field_coupling, spin_spin_coupling
 from cyten.models.sites import SpinSite
 
-from ..tools.misc import to_array
+from ..tools import to_array
 from .lattice import Chain
 from .model import CouplingMPOModel, NearestNeighborModel
 

@@ -27,7 +27,7 @@ from scipy.spatial import ConvexHull, Voronoi
 
 # from ..linalg.charges import DipolarChargeInfo
 from ..networks.mps import MPS  # only to check boundary conditions
-from ..tools.misc import find_subclass, get_close, inverse_permutation, to_array, to_iterable
+from ..tools import find_subclass, get_close, inverse_permutation, to_array, to_iterable
 
 logger = logging.getLogger(__name__)
 

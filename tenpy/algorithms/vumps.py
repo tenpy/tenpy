@@ -47,9 +47,7 @@ from ..linalg.truncation import svd_theta
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS
 from ..networks.uniform_mps import UniformMPS
-from ..tools.math import entropy
-from ..tools.params import asConfig
-from ..tools.process import memory_usage
+from ..tools import asConfig, entropy, memory_usage
 from .mps_common import DensityMatrixMixer, IterativeSweeps, OneSiteH, SubspaceExpansion, TwoSiteH, ZeroSiteH
 from .plane_wave_excitation import append_left_env, append_right_env, construct_orthogonal
 

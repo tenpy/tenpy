@@ -7,11 +7,7 @@ import time
 import cyten as ct
 import numpy as np
 
-from ..tools.cache import DictCache
-from ..tools.events import EventHandler
-from ..tools.misc import consistency_check
-from ..tools.params import asConfig
-from ..tools.truncation_error import TruncationError
+from ..tools import DictCache, EventHandler, TruncationError, asConfig, consistency_check
 
 logger = logging.getLogger(__name__)
 

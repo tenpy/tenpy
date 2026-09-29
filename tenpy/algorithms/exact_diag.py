@@ -26,7 +26,7 @@ from cyten.tensors import eigh as cyten_eigh
 
 from ..models.model import CouplingModel
 from ..networks.mps import MPS
-from ..tools.misc import inverse_permutation
+from ..tools import inverse_permutation
 
 __all__ = ['ExactDiag', 'get_full_wavefunction', 'get_numpy_Hamiltonian', 'get_scipy_sparse_Hamiltonian']
 

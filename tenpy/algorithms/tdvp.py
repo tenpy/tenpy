@@ -38,8 +38,7 @@ import warnings
 # from ..linalg import np_conserved as npc
 from ..linalg.krylov_based import LanczosEvolution
 from ..linalg.truncation import TruncationError, svd_theta
-from ..tools.misc import consistency_check
-from ..tools.params import asConfig
+from ..tools import asConfig, consistency_check
 from .algorithm import TimeDependentHAlgorithm, TimeEvolutionAlgorithm
 from .mps_common import OneSiteH, Sweep, TwoSiteH, ZeroSiteH
 

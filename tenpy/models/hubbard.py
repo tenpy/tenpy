@@ -4,7 +4,7 @@
 import numpy as np
 
 from ..networks.site import BosonSite, FermionSite, SpinHalfFermionSite, spin_half_species
-from ..tools.params import asConfig
+from ..tools import asConfig
 from .lattice import Chain
 from .model import CouplingMPOModel, NearestNeighborModel
 

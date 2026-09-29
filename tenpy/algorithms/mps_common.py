@@ -34,10 +34,7 @@ from cyten.tensors.planar import PlanarLinearOperator
 
 from ..networks.mpo import MPOEnvironment
 from ..networks.mps import MPSEnvironment
-from ..tools.misc import consistency_check, find_subclass
-from ..tools.params import asConfig
-from ..tools.process import memory_usage
-from ..tools.truncation_error import TruncationError
+from ..tools import TruncationError, asConfig, consistency_check, find_subclass, memory_usage
 from .algorithm import Algorithm
 
 logger = logging.getLogger(__name__)

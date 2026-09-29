@@ -53,9 +53,7 @@ from ..networks.terms import (
     order_combine_term,
     to_single_coupling,
 )
-from ..tools.hdf5_io import Hdf5Exportable
-from ..tools.misc import add_with_None_0, to_array
-from ..tools.params import asConfig
+from ..tools import Hdf5Exportable, add_with_None_0, asConfig, to_array
 from .lattice import HelicalLattice, IrregularLattice, Lattice, MultiSpeciesLattice, get_lattice
 
 logger = logging.getLogger(__name__)

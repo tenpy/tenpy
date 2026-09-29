@@ -18,7 +18,7 @@ import warnings
 import numpy as np
 
 from ..networks.mpo import MPOEnvironment
-from ..tools.misc import get_recursive
+from ..tools import get_recursive
 
 __all__ = [
     'measurement_wrapper',

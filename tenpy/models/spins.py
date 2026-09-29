@@ -9,7 +9,7 @@ from cyten.models.couplings import Coupling
 from cyten.models.sites import SpinSite
 from cyten.tensors import dagger
 
-from ..tools.misc import to_array
+from ..tools import to_array
 from .lattice import Chain
 from .model import CouplingMPOModel, NearestNeighborModel
 

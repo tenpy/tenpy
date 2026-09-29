@@ -27,7 +27,7 @@ import warnings
 
 import numpy as np
 
-from ..tools.misc import BetaWarning
+from ..tools import BetaWarning
 
 logger = logging.getLogger(__name__)
 

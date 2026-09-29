@@ -8,8 +8,7 @@ this module is more to serve as a pedagogical example for a model.
 from cyten.models.couplings import spin_field_coupling, spin_spin_coupling
 from cyten.models.sites import SpinSite
 
-from ..tools.misc import to_array
-from ..tools.params import asConfig
+from ..tools import asConfig, to_array
 from .lattice import Chain
 from .model import CouplingModel, CouplingMPOModel, MPOModel, NearestNeighborModel
 

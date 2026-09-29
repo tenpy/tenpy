@@ -43,7 +43,9 @@ is the discarded part (orthogonal to the kept part) and the
 
 import numpy as np
 
-from ..tools.hdf5_io import Hdf5Exportable
+from .hdf5_io import Hdf5Exportable
+
+__all__ = ['TruncationError']
 
 
 class TruncationError(Hdf5Exportable):
