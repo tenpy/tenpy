@@ -4176,6 +4176,7 @@ class MPS(BaseMPSExpectationValue):
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
         """
+        assert S.labels == ['vL', 'vR']
         i_in_unit_cell, num_unit_cells = self._to_valid_bond_index(i, is_left=True, return_num_unit_cells=True)
         self._S[i_in_unit_cell] = self.shift_Tensor_unit_cells(S, -num_unit_cells)
 
@@ -4184,6 +4185,7 @@ class MPS(BaseMPSExpectationValue):
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
         """
+        assert S.labels == ['vL', 'vR']
         i_in_unit_cell, num_unit_cells = self._to_valid_bond_index(i, is_left=False, return_num_unit_cells=True)
         self._S[i_in_unit_cell] = self.shift_Tensor_unit_cells(S, -num_unit_cells)
 
