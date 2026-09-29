@@ -7366,11 +7366,11 @@ class MPS(BaseMPSExpectationValue):
 
     def get_LP(self, i):
         leg = self.get_SL(i).get_leg('vL')
-        return ct.Identity(leg, self.backend, self.dtype, self.device, ['vR*', 'vR'])
+        return ct.Identity(leg, self.backend, self.dtype, self.device, ['vR*', 'vR']).as_SymmetricTensor()  # TODO
 
     def get_RP(self, i):
         leg = self.get_SR(i).get_leg('vR')
-        return ct.Identity(leg, self.backend, self.dtype, self.device, ['vL*', 'vL'])
+        return ct.Identity(leg, self.backend, self.dtype, self.device, ['vL*', 'vL']).as_SymmetricTensor()  # TODO
 
 
 class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
@@ -7602,6 +7602,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         if not leg_ket == leg_bra:
             raise ValueError(f'Incompatible legs {leg_ket} and {leg_bra} cannot be contracted')
         init_LP = ct.Identity(leg_ket, backend=self.backend, dtype=self.dtype, device=self.device, labels=['vR*', 'vR'])
+        init_LP = init_LP.as_SymmetricTensor()  # TODO remove
         for j in range(i - start_env_sites, i):
             init_LP = self._contract_LP(j, init_LP)
         return init_LP
@@ -7644,6 +7645,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         if not leg_ket == leg_bra:
             raise ValueError(f'Incompatible legs {leg_ket} and {leg_bra} cannot be contracted')
         init_RP = ct.Identity(leg_ket, backend=self.backend, dtype=self.dtype, device=self.device, labels=['vL*', 'vL'])
+        init_RP = init_RP.as_SymmetricTensor()  # TODO remove
         for j in range(i + start_env_sites, i, -1):
             init_RP = self._contract_RP(j, init_RP)
         return init_RP
