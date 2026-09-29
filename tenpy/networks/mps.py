@@ -4088,6 +4088,7 @@ class MPS(BaseMPSExpectationValue):
             ``None`` stands for non-canonical form.
 
         """
+        assert B.labels_are('vL', 'p', 'vR', planar=True)
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         B = self.shift_Tensor_unit_cells(B, -num_unit_cells)
         self.form[i_in_unit_cell] = self._to_valid_form(form)
