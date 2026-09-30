@@ -4908,65 +4908,93 @@ class MPS(BaseMPSExpectationValue):
                 total_charge = self.symmetry.fusion_outcomes(total_charge, charge)[0]
         return total_charge
 
+    def gauge_total_charge(self, cutoff: float = 1.0e-14):
+        """Collect all total charge legs on the last tensor of the (unit cell of the) MPS; in place.
+
+        The total charge of the MPS is carried by hidden legs whose labels contain
+        :data:`MPS_TOTAL_CHARGE_LABEL`. This method sweeps from left to right through the MPS,
+        merges all such legs found on a tensor into a single leg and moves it to the next tensor
+        with :func:`~cyten.move_hidden_leg`. On the last tensor, the remaining legs are merged into
+        a single hidden leg ``'!' + MPS_TOTAL_CHARGE_LABEL``, such that the outer virtual legs of
+        the MPS (and the bond crossing the unit cell boundary for infinite MPS) are not modified.
+
+        Moving a charge leg `h` across a bond changes the bipartition from ``(left + h) | right``
+        to ``left | (h + right)``. For ``dim(h) == 1``, the bond space is just charge-shifted and
+        the singular values are unchanged. For ``dim(h) > 1`` (non-abelian multiplets), the new
+        Schmidt rank can be anything between ``chi / dim(h)`` and ``chi * dim(h)``. We then perform
+        a SVD on each bond we cross to obtain the minimal bond spaces. If the MPS is in canonical
+        form, these give the correct singular values and the sites we cross are left in form ``'A'``.
+        Otherwise, the singular values are only placeholders and the sites are left in form ``None``.
+
+        Acts in place, i.e. changes the B tensors and singular values. Use :meth:`_gauged` if a
+        (shallow) copy is needed.
+
         Parameters
         ----------
-        qtotal : (list of) charges
-            If a single set of charges is given, it is the desired total charge of the MPS
-            (which :meth:`get_total_charge` will return afterwards).
-            By default (``None``), use 0 charges, unless vL_leg and vR_leg are specified, in which
-            case we adjust the total charge to match these legs.
-        vL_leg, vR_leg: None | LegCharge
-            Desired new virtual leg on the very left and right.
-            Needs to have the same block structure as the current legs, but can have shifted
-            charge entries.
-            For infinite MPS, we need `vL_leg` to be the conjugate leg of `vR_leg`.
-            For segment MPS, these legs are the *outer-most* legs, possibly including the
-            :attr:`segment_boundaries`.
+        cutoff : float
+            Cutoff for the singular values when moving charge legs with ``dim > 1``.
 
         """
-        # TODO
-        if self.chinfo.qnumber == 0:
+        # TODO: Moving charge legs with dim > 1 is not supported yet and raises a NotImplementedError
+        if self.is_gauged:
             return
-        if self.segment_boundaries[0] is not None:
-            raise NotImplementedError('could be implemented.... do you need this?')
-        if vL_leg is not None:
-            vL_chdiff = vL_leg.get_charge(0) - self._B[0].get_leg('vL').get_charge(0)
-        if vR_leg is not None:
-            vR_chdiff = vR_leg.get_charge(0) - self._B[-1].get_leg('vR').get_charge(0)
-        if qtotal is None:
-            if vL_leg is not None and vR_leg is not None:
-                qtotal = self.get_total_charge() + vL_chdiff + vR_chdiff
-        qtotal = self.chinfo.make_valid(qtotal)
-        if qtotal.ndim == 1:
-            qtotal_factor = np.array([0] * (self.L - 1) + [1], npc.QTYPE)
-            qtotal = qtotal_factor[:, np.newaxis] * qtotal[np.newaxis, :]
-        if qtotal.shape != (self.L, self.chinfo.qnumber):
-            raise ValueError('wrong shape of `qtotal`')
-        if vL_leg is not None:
-            B = self._B[0]
-            if np.any(vL_chdiff != 0):
-                # adjust left leg
-                self._B[0] = B.gauge_total_charge('vL', B.qtotal + vL_chdiff, vL_leg.qconj)
-            self._B[0].get_leg('vL').test_equal(vL_leg)
-        for i in range(self.L):
-            B = self._B[i]
-            desired_qtotal = qtotal[i]
-            chdiff = B.qtotal - desired_qtotal
-            if np.any(chdiff != 0):
-                self._B[i] = B.gauge_total_charge('vR', desired_qtotal)
-                if i + 1 != self.L:  # this 'vR' is contracted with the 'vL' of the next B
-                    # so we need to adjust the next B as well
-                    nextB = self._B[i + 1]
-                    self._B[i + 1] = nextB.gauge_total_charge('vL', nextB.qtotal + chdiff)
-                    self._B[i].get_leg('vR').test_contractible(self._B[i + 1].get_leg('vL'))
-        # just to check
-        assert np.all(self.get_total_charge() == self.chinfo.make_valid(np.sum(qtotal, 0)))
-        if vR_leg is not None:
-            # check that the charges match
-            self._B[-1].get_leg('vR').test_equal(vR_leg)
-        if self.bc == 'infinite':
-            self._B[0].get_leg('vL').test_contractible(self._B[-1].get_leg('vR'))
-        # done
+        label = '!' + MPS_TOTAL_CHARGE_LABEL
+        tmp_label = label + '_gauge'  # contains MPS_TOTAL_CHARGE_LABEL -> merged on next site
+        L = self.L
+        for i in range(L):
+            labels = _charge_leg_labels(self._B[i])
+            if len(labels) == 0:
+                continue
+            if i == L - 1:
+                self._B[i] = _merge_charge_legs(self._B[i], labels, label)
+                break
+            h_dim = np.prod([self._B[i].get_leg(l).dim for l in labels])  # dim of the merged charge leg
+            canonical = self.form[i] is not None and self.form[i + 1] is not None
+            B = self.get_B(i, 'B') if h_dim > 1 and canonical else self._B[i]
+            B = _merge_charge_legs(B, labels, tmp_label)
+            if h_dim == 1:
+                # exact relabeling of the bond: move through the singular values to keep them consistent
+                S = self._S[i + 1]
+                is_diagonal = isinstance(S, ct.DiagonalTensor)
+                if is_diagonal:
+                    S = S.as_SymmetricTensor()
+                B, S = ct.move_hidden_leg(B, S, 'vR', 'vL', tmp_label, target_domain_pos=0)
+                S, B_next = ct.move_hidden_leg(S, self._B[i + 1], 'vR', 'vL', tmp_label, target_domain_pos=0)
+                self._B[i] = B
+                self._B[i + 1] = B_next
+                self._S[i + 1] = ct.DiagonalTensor.from_tensor(S) if is_diagonal else S
+                continue
+            # dim > 1: the bond V \otimes h is not minimal and S \otimes id_h are no Schmidt values -> SVD
+            raise NotImplementedError(
+                'Moving total charge legs with dim > 1 requires cyten operations (e.g. partial_compose, '
+                'scale_axis) to return HiddenLegTensors.'
+            )
+            B_next = self.get_B(i + 1, 'B') if canonical else self._B[i + 1]
+            B, B_next = ct.move_hidden_leg(B, B_next, 'vR', 'vL', tmp_label, target_domain_pos=0)
+            theta = ct.scale_axis(B, self.get_SL(i), 'vL') if canonical else B
+            theta = ct.planar_permute_legs(theta, codomain=['vL', 'p'])
+            U, S, V, _, _ = ct.truncated_svd(theta, new_labels=['vR', 'vL'], svd_min=cutoff)
+            B_next = ct.tensors.partial_compose(B_next, V, 'vL')  # absorbs the pipe
+            if canonical:
+                self.set_B(i, U, form='A')
+                self.set_SR(i, S)
+                self.set_B(i + 1, B_next, form='B')
+            else:  # S is not used for non-canonical forms; keep it as a normalized placeholder
+                self.set_B(i, U, form=None)
+                self.set_SR(i, S / ct.norm(S))
+                self.set_B(i + 1, ct.scale_axis(B_next, S, 'vL'), form=None)
+        self.test_sanity()
+
+    def _gauged(self) -> MPS:
+        """Return `self` if :attr:`is_gauged`, otherwise a gauged shallow copy."""
+        if self.is_gauged:
+            return self
+        res = copy.copy(self)
+        res._B = res._B[:]
+        res._S = res._S[:]
+        res.form = res.form[:]
+        res.gauge_total_charge()
+        return res
 
     def entanglement_entropy(
         self, n: int | float = 1, bonds: None | int | Iterable[int] = None, for_matrix_S: bool = False
@@ -7296,19 +7324,6 @@ class MPS(BaseMPSExpectationValue):
         Gl /= npc.trace(Gl)
         # Gl is diag(S**2) up to numerical errors...
         return Gl, Yl, Yr
-
-    def _gauge_compatible_vL_vR(self, other: MPS) -> MPS:
-        """If necessary, gauge total charge of `other` to match the vL, vR legs of self.
-
-        Returns a shallow copy where legs are adjusted.
-        """
-        need_gauge = self.outer_virtual_legs() != other.outer_virtual_legs()
-        if need_gauge:
-            vL, vR = self.outer_virtual_legs()
-            other = copy.copy(other)  # make shallow copy
-            other._B = other._B[:]
-            other.gauge_total_charge(None, vL, vR)
-        return other
 
     def outer_virtual_legs(self) -> tuple[ct.ElementarySpace, ct.ElementarySpace]:
         """Return the virtual legs on the left and right of the MPS.
