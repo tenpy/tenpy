@@ -2719,7 +2719,7 @@ class MPS(BaseMPSExpectationValue):
         elif p_state.ndim == len(lat.shape) + 1:
             # extra dimension could be from purely 1D array entries
             # make sure this is the case by converting to float
-            p_state = np.array(p_state, kwargs.get('dtype', np.float64))
+            p_state = np.array(p_state, kwargs.get('dtype', ct.Dtype.float64).to_numpy_dtype())
             # tile to lattice shape, ignore last dimension
             p_state = to_array(p_state, shape=lat.shape + (None,), allow_incommensurate=allow_incommensurate)
             inds = tuple(lat.order.T) + (slice(None),)
@@ -2852,13 +2852,16 @@ class MPS(BaseMPSExpectationValue):
             # the permutation from public to internal basis is applied in from_dense_block
             if isinstance(p_st, str):
                 p_st = site.state_labels[p_st]  # translate labels into "int"
-            if isinstance(p_st, int):
+            try:
+                iter(p_st)
+            except TypeError:
+                # just an int for p_st
                 charge_p = site.leg.idx_to_sector(p_st)
                 chargeR = sym.fusion_outcomes(virtual_spaces[-1].defining_sectors[0], charge_p)
                 virtual_spaces.append(ct.ElementarySpace.from_defining_sectors(sym, chargeR))
                 B = np.zeros((site.dim, 1, 1))
                 B[p_st, 0, 0] = 1.0
-            else:
+            else:  # iter works
                 if len(p_st) != site.dim:
                     raise ValueError('p_state incompatible with local dim:' + repr(p_st))
                 # look at all charges where p_st is nonzero and fuse them with the left charge,
@@ -3194,7 +3197,7 @@ class MPS(BaseMPSExpectationValue):
             if bc in ['infinite', 'segment'] and i == L - 1 and total_charge != sym.trivial_sector:
                 # due to QR, we construct the random tensor with bent down charge leg and then bend it up
                 labels = [MPS_TOTAL_CHARGE_LABEL] + labels
-                charge_leg = ct.ElementarySpace.from_defining_sectors(sym, total_charge)
+                charge_leg = ct.ElementarySpace.from_defining_sectors(sym, [total_charge])
                 codomain = ct.TensorProduct([charge_leg.dual, left_leg, sites[i].leg], sym)
             else:
                 codomain = ct.TensorProduct([left_leg, sites[i].leg], sym)
@@ -3459,7 +3462,7 @@ class MPS(BaseMPSExpectationValue):
                     domain = ct.TensorProduct([virtual_spaces[idx]], sym)
                 else:
                     labels.append(MPS_TOTAL_CHARGE_LABEL)
-                    charge_leg = ct.ElementarySpace.from_defining_sectors(sym, total_charge)
+                    charge_leg = ct.ElementarySpace.from_defining_sectors(sym, [total_charge])
                     domain = ct.TensorProduct([charge_leg, virtual_spaces[idx]], sym)
                     B_shape = [B_shape[p] for p in perm]
                     if len(B_shape) == 3:
@@ -3943,7 +3946,8 @@ class MPS(BaseMPSExpectationValue):
             The sites defining the local Hilbert space. The sites should conserve *some* charge,
             otherwise projecting onto a charge sector is meaningless.
         p_state_list : list | np.ndarray
-            List defining the product state out of which to project.
+            List defining the product state out of which to project. ``p_state_list[i]`` is the
+            local state on site ``i`` in the public basis of ``sites[i].leg``.
         charge_tree : list[:class:`~cyten.SectorArray`]
             List containing the possible charge sectors at each bond.
         dtype : type
@@ -3958,31 +3962,35 @@ class MPS(BaseMPSExpectationValue):
         projected_state : :class:`~tenpy.networks.mps.MPS`
 
         """
-        p_state_list = np.array(p_state_list)  # convert (possible list) to ndarray for indexing
+        p_state_list = np.asarray(p_state_list)  # convert (possible list) to ndarray for indexing
         sym = sites[0].symmetry
         assert sym.is_abelian, 'can only construct product states for Abelian symmetries'
         assert all(s.symmetry == sym for s in sites[1:]), 'Symmetry for all sites must be identical'
+        assert bc in ['finite', 'segment'], 'charge trees are only defined for finite or segment MPS'
+        if dtype is None:
+            np_dtype = np.result_type(p_state_list.dtype, np.float64)
+        else:
+            np_dtype = dtype.to_numpy_dtype()
 
         virtual_spaces = [
             ct.ElementarySpace.from_defining_sectors(sym, sectors, unique_sectors=True) for sectors in charge_tree
         ]
         Bflat = []
         for i, (site, leg_L, leg_R) in enumerate(zip(sites, virtual_spaces[:-1], virtual_spaces[1:])):
+            # each charge appears exactly once on the bonds -> map sectors to (public) basis indices
+            idx_R = {tuple(leg_R.idx_to_sector(vR)): vR for vR in range(leg_R.dim)}
+            sectors_L = [leg_L.idx_to_sector(vL) for vL in range(leg_L.dim)]
             # use p, vL, vR order for from_Bflat_virtual_spaces
-            B = np.zeros((site.dim, leg_L.dim, leg_R.dim))
+            B = np.zeros((site.dim, leg_L.dim, leg_R.dim), dtype=np_dtype)
             for j in range(site.dim):
-                value = p_state_list[i, j]
                 sector_p = site.leg.idx_to_sector(j)
-                for vL in range(leg_L.dim):
-                    sector_L = virtual_spaces[i].idx_to_sector(vL)
-                    sector_R = sym.fusion_outcomes(sector_L, sector_p)[0]
-                    idx = virtual_spaces[i + 1].sector_decomposition_where(sector_R)
-                    if idx is not None:
-                        vR = virtual_spaces[i + 1].apply_basis_perm(idx, inverse=False)
-                        B[j, vL, vR] = value
+                for vL, sector_L in enumerate(sectors_L):
+                    vR = idx_R.get(tuple(sym.fusion_outcomes(sector_L, sector_p)[0]))
+                    if vR is not None:
+                        B[j, vL, vR] = p_state_list[i, j]
             Bflat.append(B)
 
-        return cls.from_Bflat_virtual_spaces(
+        projected_state = cls.from_Bflat_virtual_spaces(
             sites,
             virtual_spaces,
             Bflat,
@@ -3994,6 +4002,10 @@ class MPS(BaseMPSExpectationValue):
             device=device,
             understood_shift_symmetry=understood_shift_symmetry,
         )
+        if max(projected_state.chi) == 1:
+            # from_Bflat_virtual_spaces only brings the MPS into canonical form for chi > 1
+            projected_state.canonical_form()
+        return projected_state
 
     @property
     def L(self) -> int:
@@ -5353,18 +5365,16 @@ class MPS(BaseMPSExpectationValue):
         for i in range((L + 1) // 2):
             # range is chosen such that the left and right parts always meet
             # in the center and we get a consistency condition in the charges
-            new_space_left = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym)
-            new_space_left = new_space_left.as_ElementarySpace()
-            # set all multiplicites to 1 such that we don't cut any sectors in _truncate_virtual_space
-            new_space_left.multiplicities = np.ones_like(new_space_left.multiplicities, dtype=int)
+            new_space_left = ct.TensorProduct([virtual_spaces[i], sites[i].leg], sym).as_ElementarySpace()
+            # keep each sector once, i.e., set all multiplicities to 1
+            new_space_left = ct.ElementarySpace(sym, new_space_left.sector_decomposition)
             virtual_spaces[i + 1] = _truncate_virtual_space(
-                new_space_left, virtual_spaces[i + 1], chi=1000, err=charge_err
+                new_space_left, virtual_spaces[i + 1], chi=None, err=charge_err
             )
             new_space_right = ct.TensorProduct([virtual_spaces[-1 - i], sites[-1 - i].leg.dual], sym)
-            new_space_right = new_space_right.as_ElementarySpace()
-            new_space_right.multiplicities = np.ones_like(new_space_right.multiplicities, dtype=int)
+            new_space_right = ct.ElementarySpace(sym, new_space_right.as_ElementarySpace().sector_decomposition)
             virtual_spaces[-2 - i] = _truncate_virtual_space(
-                new_space_right, virtual_spaces[-2 - i], chi=1000, err=charge_err
+                new_space_right, virtual_spaces[-2 - i], chi=None, err=charge_err
             )
         return [vs.sector_decomposition for vs in virtual_spaces]
 
@@ -5729,6 +5739,7 @@ class MPS(BaseMPSExpectationValue):
             with legs ``'vL', 'vR'``.
 
         """
+        # TODO the decompositions do not return HiddenLegTensors -> fix in cyten
         assert self.finite
         L = self.L
         assert L > 1  # otherwise implement yourself...
@@ -5775,6 +5786,8 @@ class MPS(BaseMPSExpectationValue):
         if self.bc == 'segment':
             # also need to calculate new singular values on the very right
             U, S, VR_segment, _, _ = ct.truncated_svd(M, new_labels=['vR', 'vL'], charge_leg_top=False, svd_min=cutoff)
+            if not renormalize:
+                self.norm = self.norm * ct.norm(S)
             S /= ct.norm(S)
             self.set_SR(L - 1, S)
             M = ct.scale_axis(U, S, 'vR')
@@ -5785,7 +5798,7 @@ class MPS(BaseMPSExpectationValue):
             ct.planar_permute_legs(M, codomain=['vL']), new_labels=['vR', 'vL'], svd_min=cutoff
         )
         V = ct.planar_permute_legs(V, codomain=['vL', 'p'])
-        if not renormalize:
+        if not renormalize and self.bc == 'finite':
             self.norm = self.norm * ct.norm(S)
         S = S / ct.norm(S)  # normalize
         self.set_SL(L - 1, S)
@@ -8884,15 +8897,18 @@ def _real_if_close_nested(value, factor: float = 1.0):
 
 
 def _truncate_virtual_space(
-    space1: ct.ElementarySpace, space2: ct.ElementarySpace | None, chi: int, err: str = ''
+    space1: ct.ElementarySpace, space2: ct.ElementarySpace | None, chi: int | None, err: str = ''
 ) -> ct.ElementarySpace:
-    """Return a common subspace of `space1` and `space2` whose multiplicities sum at most to `chi`."""
+    """Return a common subspace of `space1` and `space2` whose multiplicities sum at most to `chi`.
+
+    If `chi` is ``None``, the common subspace is not truncated.
+    """
     if space2 is not None:
         space1 = ct.ElementarySpace.from_largest_common_subspace(space1, space2)
         if len(space1.sector_decomposition) == 0:
             raise ValueError(err)
     chi_current = np.sum(space1.multiplicities)
-    if chi_current > chi:
+    if chi is not None and chi_current > chi:
         # rescale the multiplicities and add the remaining part to the highest multiplicity
         new_mults = space1.multiplicities * chi // chi_current
         diff = chi - np.sum(new_mults)
