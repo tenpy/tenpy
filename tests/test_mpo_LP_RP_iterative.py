@@ -7,12 +7,12 @@ import pytest
 pytest.skip(allow_module_level=True)
 
 import pytest
+from tenpy.linalg import np_conserved as npc
 
 # networks
 from tenpy.networks.site import SpinHalfSite
 
 from tenpy.algorithms.dmrg import TwoSiteDMRGEngine as dmrg_eng
-from tenpy.linalg import np_conserved as npc
 from tenpy.models.lattice import Square
 from tenpy.models.model import CouplingModel, MPOModel
 from tenpy.models.tf_ising import TFIChain

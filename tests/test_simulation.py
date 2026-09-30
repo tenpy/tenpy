@@ -11,10 +11,10 @@ import sys
 
 import numpy as np
 import pytest
+from tenpy.algorithms.truncation import TruncationError
 
 import tenpy
 from tenpy.algorithms.algorithm import Algorithm
-from tenpy.algorithms.truncation import TruncationError
 from tenpy.simulations.ground_state_search import GroundStateSearch
 from tenpy.simulations.simulation import *
 from tenpy.simulations.time_evolution import RealTimeEvolution, SpectralSimulation, SpectralSimulationEvolveBraKet

@@ -7,9 +7,9 @@ pytest.skip(allow_module_level=True)
 
 import numpy as np
 from random_test import random_Array
+from tenpy.linalg import np_conserved as npc
 
 from tenpy.algorithms.network_contractor import contract, ncon
-from tenpy.linalg import np_conserved as npc
 
 # Construct toy tensors
 # =====================

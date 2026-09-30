@@ -5,9 +5,9 @@ import pytest
 pytest.skip(allow_module_level=True)
 import numpy as np
 import pytest
+from tenpy.linalg.truncation import TruncationError
 
 from tenpy.algorithms import tdvp, tebd
-from tenpy.linalg.truncation import TruncationError
 from tenpy.models.spins import SpinChain
 from tenpy.networks.mps import MPS
 
