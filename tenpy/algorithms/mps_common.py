@@ -2216,9 +2216,7 @@ class SubspaceExpansion(Mixer):
                 theta_expand = npc.concatenate(stack, axis='wR')
                 IdL = 0  # of the new, concatenated leg.
             theta_expand = theta_expand.combine_legs(['wR', 'vR'], qconj=-1)
-            U, S, VH, err, _ = npc.svd_theta(
-                theta_expand, engine.trunc_params, qtotal_LR=[theta.qtotal, None], inner_labels=['vR', 'vL']
-            )
+            U, S, VH, err, _ = engine.svd_theta(theta_expand)
             VH = VH.split_legs('(wR.vR)')
             VH = VH.take_slice(IdL, 'wR')  # project back such that U-S-VH is original theta
         else:  # move left
@@ -2246,9 +2244,7 @@ class SubspaceExpansion(Mixer):
                 theta_expand = npc.concatenate(stack, axis='wR')
                 IdR = 0  # of the new, concatenated leg.
             theta_expand = theta_expand.combine_legs(['vL', 'wL'], qconj=+1)
-            U, S, VH, err, _ = npc.svd_theta(
-                theta_expand, engine.trunc_params, qtotal_LR=[None, theta.qtotal], inner_labels=['vR', 'vL']
-            )
+            U, S, VH, err, _ = engine.svd_theta(theta_expand)
             U = U.split_legs('(vL.wL)')
             U = U.take_slice(IdR, 'wL')  # project back such that U-S-VH is original theta
 

@@ -124,6 +124,7 @@ from .tools.misc import (
     setup_logging,
 )
 from .tools.params import Config, asConfig, load_yaml_with_py_eval
+from .tools.truncation import TruncationError, svd_theta
 
 run_simulation = None  # dummy
 run_seq_simulations = None  # dummy
@@ -320,6 +321,8 @@ __all__ = [
     # from tenpy.__init__, i.e. defined below
     'show_config',
     'console_main',
+    'TruncationErrror',
+    'svd_theta',
 ]
 
 

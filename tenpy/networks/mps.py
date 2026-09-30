@@ -175,6 +175,7 @@ from ..tools import (
     hdf5_io,
     inverse_permutation,
     lcm,
+    svd_theta,
     to_array,
     to_iterable,
 )
@@ -4162,14 +4163,9 @@ class MPS(BaseMPSExpectationValue):
             if update_norm:
                 self.norm *= renorm
         else:
-            U, S, Vh, err, _ = ct.truncated_svd(
-                theta, new_labels=['vR', 'vL'], charge_leg_top=charge_leg_right, **trunc_par
-            )
-            err = TruncationError(err, 1.0 - 2.0 * err)
-            renorm = ct.norm(S)
-            S /= renorm
+            U, S, Vh, err, renormalize = svd_theta(theta, trunc_par)
             if update_norm:
-                self.norm *= renorm
+                self.norm *= renormalize
         Vh = ct.planar_permute_legs(Vh, codomain=['vL', 'p1'])
         self.set_B(i, U.relabel({'p0': 'p'}), form='A')
         self.set_B(i + 1, Vh.relabel({'p1': 'p'}), form='B')
@@ -4643,7 +4639,7 @@ class MPS(BaseMPSExpectationValue):
                 # split off the right-most physical leg and vR from theta
                 # theta: vL p0 ... pj vR
                 theta = theta.combine_legs(combine, qconj=[+1, -1])
-                U, S, V, err, _ = npc.svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
+                U, S, V, err, _ = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
                 Ss_new.append(S)
                 trunc_err += err
                 theta = U.scale_axis(S, 'vR').split_legs(0)  # vL p0 ... pj-1 vR
@@ -7124,7 +7120,7 @@ class MPS(BaseMPSExpectationValue):
             # Do SVD from right to left & truncate
             for i in range(self.L - 1, 0, -1):
                 B = B.combine_legs(['p', 'vR'])
-                U, S, VH, err, norm_new = npc.svd_theta(B, trunc_par)
+                U, S, VH, err, norm_new = svd_theta(B, trunc_par)
                 trunc_err += err
                 self.norm *= norm_new
                 VH = VH.split_legs()

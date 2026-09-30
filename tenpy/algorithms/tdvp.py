@@ -37,7 +37,7 @@ import warnings
 
 # from ..linalg import np_conserved as npc
 from ..linalg.krylov_based import LanczosEvolution
-from ..linalg.truncation import TruncationError, svd_theta
+from ..linalg.truncation import TruncationError
 from ..tools import asConfig, consistency_check
 from .algorithm import TimeDependentHAlgorithm, TimeEvolutionAlgorithm
 from .mps_common import OneSiteH, Sweep, TwoSiteH, ZeroSiteH
@@ -245,8 +245,7 @@ class TwoSiteTDVPEngine(TDVPEngine):
             theta.itranspose(['(vL.p0)', '(p1.vR)'])  # shouldn't do anything
         else:
             theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1], qconj=[+1, -1])
-        qtotal_i0 = self.psi.get_B(i0, form=None).qtotal
-        U, S, VH, err, _ = svd_theta(theta, self.trunc_params, qtotal_LR=[qtotal_i0, None], inner_labels=['vR', 'vL'])
+        U, S, VH, err, _ = self.svd_theta(theta)
         B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
         B1 = VH.split_legs(['(p1.vR)']).replace_label('p1', 'p')
 

@@ -43,7 +43,6 @@ import numpy as np
 from ..linalg.krylov_based import LanczosGroundState
 
 # from ..linalg.sparse import SumNpcLinearOperator
-from ..linalg.truncation import svd_theta
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS
 from ..networks.uniform_mps import UniformMPS
@@ -874,10 +873,7 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         mixer = self.mixer
         if mixer is None:
             # simple case: real svd, defined elsewhere.
-            qtotal_i0 = self.env.bra.get_B(i0, form=None).qtotal
-            U, S, VH, err, _ = svd_theta(
-                theta, self.trunc_params, qtotal_LR=[qtotal_i0, None], inner_labels=['vR', 'vL']
-            )
+            U, S, VH, err, _ = self.svd_theta(theta)
             S_a = S
             S = npc.diag(S, U.split_legs().get_leg('vR').conj(), labels=['vL', 'vR'])
         else:

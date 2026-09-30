@@ -48,7 +48,7 @@ import numpy as np
 
 # from ..linalg import np_conserved as npc
 from ..linalg import random_matrix
-from ..linalg.truncation import TruncationError, decompose_theta_qr_based, svd_theta
+from ..linalg.truncation import TruncationError, decompose_theta_qr_based
 from ..tools import consistency_check
 from .algorithm import TimeDependentHAlgorithm, TimeEvolutionAlgorithm
 
@@ -454,9 +454,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
 
         theta = theta.combine_legs([('vL', 'p0'), ('p1', 'vR')], qconj=[+1, -1])
         # Perform the SVD and truncate the wavefunction
-        U, S, V, trunc_err, renormalize = svd_theta(
-            theta, self.trunc_params, [self.psi.get_B(i0, None).qtotal, None], inner_labels=['vR', 'vL']
-        )
+        U, S, V, trunc_err, renormalize = self.svd_theta(theta)
 
         # Split tensor and update matrices
         B_R = V.split_legs(1).ireplace_label('p1', 'p')
@@ -571,7 +569,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
         theta = theta.combine_legs([('vL', 'p0'), ('vR', 'p1')], qconj=[+1, -1])
         # Perform the SVD and truncate the wavefunction
-        U, S, V, trunc_err, renormalize = svd_theta(theta, self.trunc_params, inner_labels=['vR', 'vL'])
+        U, S, V, trunc_err, renormalize = self.svd_theta(theta)
         self.psi.norm *= renormalize
         # Split legs and update matrices
         B_R = V.split_legs(1).ireplace_label('p1', 'p')

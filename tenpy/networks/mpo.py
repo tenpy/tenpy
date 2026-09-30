@@ -50,7 +50,16 @@ from cyten.tensors.krylov_based import GMRES
 from scipy.linalg import expm
 from scipy.special import comb
 
-from ..tools import TruncationError, add_with_None_0, asConfig, inverse_permutation, lcm, to_iterable, vert_join
+from ..tools import (
+    TruncationError,
+    add_with_None_0,
+    asConfig,
+    inverse_permutation,
+    lcm,
+    svd_theta,
+    to_iterable,
+    vert_join,
+)
 from .mps import BaseEnvironment, MPSGeometry, TransferMatrix
 
 # from .site import group_sites
@@ -1720,7 +1729,7 @@ class MPO(MPSGeometry):
             if i == 0 and bc == 'finite':
                 B = B.take_slice(self.get_IdL(i), 'wL')
                 B = B.combine_legs([['vL', 'p'], ['wR', 'vR']], qconj=[+1, -1])
-                U, S, VH, err, norm_new = npc.svd_theta(B, relax_trunc)
+                U, S, VH, err, norm_new = svd_theta(B, relax_trunc)
                 trunc_err += err
                 psi.norm *= norm_new
                 U = U.split_legs()
@@ -1732,7 +1741,7 @@ class MPO(MPSGeometry):
                 B = npc.tensordot(VH, B, axes=(['wR', 'vR'], ['wL', 'vL']))
                 B = B.take_slice(self.get_IdR(i), 'wR')
                 B = B.combine_legs(['vL', 'p'], qconj=[-1])
-                U, S, VH, err, norm_new = npc.svd_theta(B, relax_trunc, [B.qtotal, None])
+                U, S, VH, err, norm_new = svd_theta(B, relax_trunc, [B.qtotal, None])
                 trunc_err += err
                 psi.norm *= norm_new
                 U = U.split_legs()
@@ -1741,7 +1750,7 @@ class MPO(MPSGeometry):
             else:
                 B = npc.tensordot(VH, B, axes=(['wR', 'vR'], ['wL', 'vL']))
                 B = B.combine_legs([['vL', 'p'], ['wR', 'vR']], qconj=[1, -1])
-                U, S, VH, err, norm_new = npc.svd_theta(B, relax_trunc)
+                U, S, VH, err, norm_new = svd_theta(B, relax_trunc)
                 trunc_err += err
                 psi.norm *= norm_new
                 U = U.split_legs()

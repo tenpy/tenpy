@@ -40,7 +40,7 @@ from . import (
     spectral_function_tools,
     string,
     thread,
-    truncation_error,
+    truncation,
 )
 from .cache import *
 from .docs import *
@@ -56,7 +56,7 @@ from .process import *
 from .spectral_function_tools import *
 from .string import *
 from .thread import *
-from .truncation_error import *
+from .truncation import *
 
 __all__ = [
     *events.__all__,
@@ -72,6 +72,6 @@ __all__ = [
     *thread.__all__,
     *spectral_function_tools.__all__,
     *prediction.__all__,
-    *truncation_error.__all__,
+    *truncation.__all__,
     *docs.__all__,
 ]

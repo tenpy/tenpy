@@ -9,7 +9,7 @@ import numpy as np
 
 from ..models import Model
 from ..networks import MPS
-from ..tools import DictCache, EventHandler, TruncationError, asConfig, consistency_check
+from ..tools import DictCache, EventHandler, TruncationError, asConfig, consistency_check, svd_theta
 
 logger = logging.getLogger(__name__)
 
@@ -339,48 +339,22 @@ class Algorithm:
     def svd_theta(self, theta: ct.Tensor) -> tuple[ct.Tensor, ct.DiagonalTensor, ct.Tensor, TruncationError, float]:
         """Perform a truncated SVD on the given tensor `theta`.
 
-        This is essentially a wrapper around :func:`cyten.truncated_svd` that uses the
-        :attr:`trunc_params` and sets new labels ``vR, vL``, as expected for MPS.
-
-        Parameters
-        ----------
-        theta : :class:`cyten.Tensor`
-            The tensor to be decomposed.
-            Like for :func:`cyten.truncated_svd`, the legs should already be arranged between
-            codomain and domain, to determine how the SVD should split them.
+        This is essentially a thin wrapper around :func:`tenpy.svd_theta`, using
+        the :attr:`trunc_params` of the engine and forcing the new labels ``vR, vL``.
 
         Returns
         -------
-        U : :class:`cyten.Tensor`
-            Left-canonical part of `theta`.
-        S : :class:`cyten.DiagonalTensor`
-            Singular values.
-        Vh : :class:`cyten.Tensor`
-            Right-canonical part of `theta`.
+        U, S, Vh
+            A renormalized factorization of `theta`, with ``norm(S) == 1``
+            such that `renormalize * U @ S @ Vh` is the closest low-rank approximation of `theta`.
         err : :class:`~tenpy.TruncationError`
-            The truncation error introduced.
+                The truncation error introduced.
         renormalize : float
-            Factor, by which S was renormalized.
+            Factor, by which S was renormalized, i.e. the norm of the closest low-rank approximation.
+            Equal to ``theta.norm() * sqrt(1 - err.eps) <= theta.norm()``.
 
         """
-        chi_max = self.trunc_params.get('chi_max', 100, int)
-        chi_min = self.trunc_params.get('chi_min', None, int)
-        degeneracy_tol = self.trunc_params.get('degeneracy_tol', None, 'real')
-        svd_min = self.trunc_params.get('svd_min', 1.0e-14, 'real')
-        trunc_cut = self.trunc_params.get('trunc_cut', 1.0e-14, 'real')
-        U, S, Vh, rel_err, renormalize = ct.truncated_svd(
-            theta,
-            new_labels=['vR', 'vL'],
-            new_leg_dual=False,
-            charge_leg_top=True,
-            normalize_to=1.0,
-            chi_max=chi_max,
-            chi_min=1 if chi_min is None else chi_min,
-            degeneracy_tol=0 if degeneracy_tol is None else degeneracy_tol,
-            trunc_cut=trunc_cut,
-            svd_min=svd_min,
-        )
-        return U, S, Vh, TruncationError.from_Frobenius_distance(rel_err), renormalize
+        return svd_theta(theta, self.trunc_params, new_labels=['vR', 'vL'])
 
 
 class TimeEvolutionAlgorithm(Algorithm):
