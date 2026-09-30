@@ -7241,8 +7241,6 @@ class MPS(BaseMPSExpectationValue):
 
         Returns a shallow copy where legs are adjusted.
         """
-        if self.chinfo.qnumber == 0:
-            return other
         need_gauge = self.outer_virtual_legs() != other.outer_virtual_legs()
         if need_gauge:
             vL, vR = self.outer_virtual_legs()
@@ -8021,7 +8019,7 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
 
     def _contract_LP(self, i, LP):
         # TODO this is not a planar diagram to make it also work for, e.g., purification MPS
-        LP = ct.planar_contraction(LP, self.ket.get_B(i, form='A'), ['vR'], ['vL'])
+        LP = ct.planar_contraction(LP.as_SymmetricTensor(), self.ket.get_B(i, form='A'), ['vR'], ['vL'])
         LP = ct.planar_contraction(
             LP, self.bra.get_B(i, form='A').hc, ['vR*'] + self.ket._p_label, ['vL*'] + self.ket._get_p_label('*')
         )
@@ -8029,7 +8027,7 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
 
     def _contract_RP(self, i, RP):
         # TODO this is not a planar diagram to make it also work for, e.g., purification MPS
-        RP = ct.planar_contraction(RP, self.ket.get_B(i, form='B'), ['vL'], ['vR'])
+        RP = ct.planar_contraction(RP.as_SymmetricTensor(), self.ket.get_B(i, form='B'), ['vL'], ['vR'])
         RP = ct.planar_contraction(
             RP, self.bra.get_B(i, form='B').hc, ['vL*'] + self.ket._p_label, ['vR*'] + self.ket._get_p_label('*')
         )
