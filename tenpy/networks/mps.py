@@ -2513,6 +2513,29 @@ class MPS(BaseMPSExpectationValue):
             if not self._S[0].leg.is_trivial or not self._S[-1].leg.is_trivial:
                 raise ValueError('for finite MPS, the first and the final bonds must always be trivial')
 
+    @property
+    def is_gauged(self) -> bool:
+        """Whether the only charge leg (if any) is ``'!' + MPS_TOTAL_CHARGE_LABEL`` on the last tensor.
+
+        See :meth:`gauge_total_charge`.
+        """
+        if any(len(_charge_leg_labels(B)) > 0 for B in self._B[:-1]):
+            return False
+        return _charge_leg_labels(self._B[-1]) in ([], ['!' + MPS_TOTAL_CHARGE_LABEL])
+
+    @property
+    def total_charge_leg(self) -> ct.Leg | None:
+        """The total charge leg on the last tensor, ``None`` for a trivial total charge.
+
+        For infinite MPS, this is the total charge of a unit cell.
+        Requires :attr:`is_gauged`, see :meth:`gauge_total_charge`.
+        """
+        if not self.is_gauged:
+            raise ValueError('MPS is not gauged, call `gauge_total_charge` first')
+        label = '!' + MPS_TOTAL_CHARGE_LABEL
+        B = self._B[-1]
+        return B.get_leg(label) if B.has_label(label) else None
+
     def copy(self) -> MPS:
         """Returns a copy of `self`.
 
@@ -4286,7 +4309,7 @@ class MPS(BaseMPSExpectationValue):
                 self._B[i * self.L + idx].relabel({l: l + str(i) for l in labels if MPS_TOTAL_CHARGE_LABEL in l})
         self._S = [self.get_SL(j) for j in range(0, factor * self.L)]
         if self.finite:
-            self._S.append([self.get_SR(factor * self.L - 1)])
+            self._S.append(self.get_SR(factor * self.L - 1))
         self.sites = [self.get_site(j) for j in range(0, factor * self.L)]
         self.form = factor * self.form
         self.unit_cell_width *= factor
