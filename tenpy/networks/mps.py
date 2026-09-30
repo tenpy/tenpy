@@ -4281,7 +4281,7 @@ class MPS(BaseMPSExpectationValue):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
         For tensors with hidden charge legs, the new charge labels are `old_label + 'i'`, with `i`
-        the index of the unit cell (starting from 0).
+        the index of the unit cell (starting from 0). The resulting MPS is not gauged.
 
         Parameters
         ----------
@@ -4317,6 +4317,7 @@ class MPS(BaseMPSExpectationValue):
         Suppose we have a unit cell with tensors ``[A, B, C, D]`` (repeated on both sites).
         With ``shift = 1``, the new unit cell will be ``[D, A, B, C]``,
         whereas ``shift = -1`` will give ``[B, C, D, A]``.
+        The resulting MPS is not gauged.
 
         Parameters
         ----------
@@ -4879,43 +4880,33 @@ class MPS(BaseMPSExpectationValue):
 
         return psi_new, new_first, new_last
 
-    def get_total_charge(self, only_physical_legs=False):
-        """Calculate and return the `qtotal` of the whole MPS (when contracted).
+    def get_total_charge(self) -> ct.Sector:
+        """Return the total charge of the MPS, i.e., of a unit cell for infinite MPS.
 
-        If set, the :attr:`segment_boundaries` are included (unless `only_physical_legs` is True).
+        The total charge is carried by the hidden total charge legs, see :meth:`gauge_total_charge`.
+        The MPS does not need to be gauged; the charges of all total charge legs are fused.
+        For finite MPS, the outer virtual legs are trivial, such that this is the charge of the
+        physical legs. For segment MPS, it does not include the charges of the outer virtual legs.
 
-        Parameters
-        ----------
-        only_physical_legs : bool
-            For ``'finite'`` boundary conditions, the total charge can be gauged away
-            by changing the LegCharge of the trivial legs on the left and right of the MPS.
-            This option allows to project out the trivial legs to get the actual "physical"
-            total charge.
+        TODO: Only implemented for total charge legs with dim 1, which have a unique fusion outcome.
+        For dim > 1, the total charge can consist of several sectors.
 
         Returns
         -------
-        qtotal : charges
-            The sum of the `qtotal` of the individual `B` tensors.
+        total_charge : :class:`~cyten.Sector`
+            The total charge, the trivial sector if there are no total charge legs.
 
         """
-        # TODO
-        tensors = self._B
-        U, V = self.segment_boundaries
-        if U is not None:
-            assert V is not None
-            tensors = tensors + [U, V]
-        qtotal = np.sum([B.qtotal for B in tensors], axis=0)
-        if only_physical_legs:
-            if self.bc != 'finite':
-                raise ValueError('`only_physical_legs` not supported for bc=' + repr(self.bc))
-            qtotal -= self._B[0].get_leg('vL').get_charge(0)
-            qtotal -= self._B[-1].get_leg('vR').get_charge(0)  # takes qconj into account
-        return self.chinfo.make_valid(qtotal)
-
-    def gauge_total_charge(self, qtotal=None, vL_leg=None, vR_leg=None):
-        """Gauge the legcharges of the virtual bonds s.t. MPS has given `qtotal`; in place.
-
-        Acts in place, i.e. changes the B tensors. Make a (shallow) copy if needed.
+        total_charge = self.symmetry.trivial_sector
+        for B in self._B:
+            for label in _charge_leg_labels(B):
+                leg = B.get_leg(label)
+                if leg.dim != 1:
+                    raise NotImplementedError('Only implemented for total charge legs with dim 1.')
+                # the charge leg points towards the tensor (like vR) -> the charge is the dual sector
+                charge = leg.dual.sector_decomposition[0]
+                total_charge = self.symmetry.fusion_outcomes(total_charge, charge)[0]
+        return total_charge
 
         Parameters
         ----------
