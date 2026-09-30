@@ -212,7 +212,10 @@ __all__ = [
 #     Although not the intended convention, other tensors apart from the final one may also be
 #     HiddenLegTensors. For finite MPS, we choose the convention to always have a trivial final leg,
 #     such that to total charge is carried by a hidden leg on the last tensor. This is similar for
-#     segment MPS, with the difference being a nontrivial final leg
+#     segment MPS, with the difference being a nontrivial final leg. It can be checked whether an
+#     MPS is of this form using the new property is_gauged.
+#     MPS.gauge_total_charge (which replaces the old gauge_total_charge and _gauge_compatible_vL_vR)
+#     restores this convention by moving all total charge legs to the last tensor and merging them.
 
 
 mps_contraction_diagram_operations: dict[str, ct.PlanarDiagram] = {
@@ -2428,36 +2431,21 @@ class MPS(BaseMPSExpectationValue):
         # do a planar_permute_legs here to the best arrangement
         self._B = [ct.planar_permute_legs(B.copy(deep=True, dtype=dtype), codomain=self._B_labels[:-1]) for B in Bs]
         if self.bc == 'finite':
-            # final bond must be trivial -> check if there is a non-trivial one and if so, make it a total charge leg
+            # the final bond must be trivial -> a non-trivial one becomes (part of) the total charge
             B_final = self._B[-1]
             if not B_final.get_leg('vR').is_trivial:
-                combine = [l for l in B_final.labels if MPS_TOTAL_CHARGE_LABEL in l]
-                if len(combine) > 0:
-                    unhide = {l: l[1:] for l in combine if '!' in l}
-                    if len(unhide) > 0:
-                        B_final.relabel(unhide)
-                        combine = [unhide.get(l, l) for l in combine]
-                    B_final = ct.combine_legs(B_final, [*combine, 'vR'])
-                    label = ct.tensors._tensors._combine_leg_labels([*combine, 'vR'])
-                else:
-                    label = 'vR'
-                B_final.relabel({label: MPS_TOTAL_CHARGE_LABEL})
+                vR_charge_label = MPS_TOTAL_CHARGE_LABEL + '_vR'
+                B_final.relabel({'vR': vR_charge_label})
                 B_final = ct.add_trivial_leg(B_final, domain_pos=B_final.num_domain_legs, label='vR', is_dual=False)
                 if isinstance(B_final, ct.HiddenLegTensor):
-                    B_final.relabel({MPS_TOTAL_CHARGE_LABEL: '!' + MPS_TOTAL_CHARGE_LABEL})
+                    B_final.relabel({vR_charge_label: '!' + vR_charge_label})
                 else:
-                    B_final = ct.HiddenLegTensor(B_final, [MPS_TOTAL_CHARGE_LABEL])
-                self._B[-1] = B_final
-        if not self.symmetry.is_abelian:
-            higher_dim = False
-            for B in self._B:
-                if any([B.get_leg(leg).dim > 1 for leg in B.labels if MPS_TOTAL_CHARGE_LABEL in leg]):
-                    higher_dim = True
-                    break
-            if higher_dim:
-                warnings.warn(
-                    'MPS has a higher-dimensional total charge and corresponds to a density matrix, not a pure state!'
-                )
+                    B_final = ct.HiddenLegTensor(B_final, [vR_charge_label])
+                self._B[-1] = _merge_charge_legs(B_final, _charge_leg_labels(B_final), '!' + MPS_TOTAL_CHARGE_LABEL)
+        if any(B.get_leg(l).dim > 1 for B in self._B for l in _charge_leg_labels(B)):
+            warnings.warn(
+                'MPS has a higher-dimensional total charge and corresponds to a density matrix, not a pure state!'
+            )
 
         num_S = self.L + 1 if self.finite else self.L
         self._S = [None] * (num_S)
@@ -8887,6 +8875,56 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
             all_sites.remove(site)
 
     return initial_state
+
+
+def _charge_leg_labels(B: ct.Tensor) -> list[str]:
+    """Labels of the hidden legs of `B` containing :data:`MPS_TOTAL_CHARGE_LABEL`."""
+    if not isinstance(B, ct.HiddenLegTensor):
+        return []
+    return [B.labels[i] for i in B.hidden_leg_idcs() if MPS_TOTAL_CHARGE_LABEL in B.labels[i]]
+
+
+def _flatten_domain_pipe(B: ct.SymmetricTensor, domain_pos: int) -> ct.SymmetricTensor:
+    """Replace a one-dimensional pipe in the domain of `B` by the equivalent :class:`~cyten.ElementarySpace`.
+
+    Only the leg changes, the data is unchanged (like in :func:`~cyten.move_hidden_leg`).
+    A :class:`~cyten.HiddenLegTensor` `B` gives a :class:`~cyten.HiddenLegTensor` with the same hidden legs.
+    """
+    pipe = B.domain.factors[domain_pos]
+    assert isinstance(pipe, ct.LegPipe) and pipe.dim == 1
+    leg = pipe.as_ElementarySpace(pipe.is_dual)
+    leg = ct.ElementarySpace(B.symmetry, leg.defining_sectors, leg.multiplicities, leg.is_dual)
+    factors = list(B.domain.factors)
+    factors[domain_pos] = leg
+    domain = ct.TensorProduct(factors, B.symmetry, B.domain.sector_decomposition, B.domain.multiplicities)
+    if not isinstance(B, ct.HiddenLegTensor):
+        return ct.SymmetricTensor(B.data, B.codomain, domain, B.backend, B.labels)
+    hidden_idcs = B.hidden_leg_idcs()
+    labels = [l[1:] if i in hidden_idcs else l for i, l in enumerate(B.labels)]  # strip '!'
+    T = ct.SymmetricTensor(B.data, B.codomain, domain, B.backend, labels)
+    return ct.HiddenLegTensor(T, [labels[i] for i in hidden_idcs])
+
+
+def _merge_charge_legs(B: ct.HiddenLegTensor, labels: list[str], new_label: str) -> ct.HiddenLegTensor:
+    """Combine the hidden legs `labels` of `B` into a single hidden leg `new_label`.
+
+    The new leg is placed on the very left in the domain. Other hidden legs of `B` are kept.
+    If `labels` is already ``[new_label]``, `B` is returned unchanged, i.e., the leg is not moved.
+    """
+    if labels == [new_label]:
+        return B
+    other_hidden = [B.labels[i][1:] for i in B.hidden_leg_idcs() if B.labels[i] not in labels]
+    B = B.as_SymmetricTensor().copy(deep=False)  # strips all '!'
+    labels = [l[1:] for l in labels]
+    if len(labels) > 1:
+        B = ct.combine_legs(B, labels, pipe_dualities=True)
+        B.relabel({ct.tensors._tensors._combine_leg_labels(labels): new_label[1:]})
+    else:
+        B.relabel({labels[0]: new_label[1:]})
+    B = ct.move_leg(B, new_label[1:], domain_pos=0, bend_right=False)
+    if len(labels) > 1 and B.get_leg(new_label[1:]).dim == 1:
+        B = _flatten_domain_pipe(B, 0)  # such that equal charges give equal legs
+    return ct.HiddenLegTensor(B, [new_label[1:], *other_hidden])
 
 
 def _real_if_close_nested(value, factor: float = 1.0):
