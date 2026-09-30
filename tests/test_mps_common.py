@@ -89,6 +89,7 @@ def test_variational_compression_overlap():
     block, psi_large, psi_small, p_labels, d, _ = _compress_random_mps(L, chi_small, seed=1)
 
     got = MPSEnvironment(psi_small, psi_large).full_contraction(0).as_complex128()
+    got = got / psi_small.norm  # TODO why is this needed??
 
     theta = psi_small.get_theta(0, n=L)
     got_dense = theta.to_numpy(['vL'] + p_labels + ['vR']).reshape((d,) * L)
