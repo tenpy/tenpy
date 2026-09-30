@@ -6381,16 +6381,16 @@ class MPS(BaseMPSExpectationValue):
         assert self.symmetry == other.symmetry
         assert self.backend == other.backend
 
-        # TODO gauge to move total charge to final tensor
-        # other = self._gauge_compatible_vL_vR(other)
+        psi_self = self._gauged()
+        other = other._gauged()
         # alpha and beta appear only on the first site
-        alpha = alpha * self.norm
+        alpha = alpha * psi_self.norm
         beta = beta * other.norm
-        theta_self = self.get_B(0, 'Th')
+        theta_self = psi_self.get_B(0, 'Th')
         theta_other = other.get_B(0, 'Th')
-        last_B_self = self.get_B(L - 1)
+        last_B_self = psi_self.get_B(L - 1)
         last_B_other = other.get_B(L - 1)
-        U, V = self.segment_boundaries
+        U, V = psi_self.segment_boundaries
         if U is not None:
             theta_self = ct.tensors.partial_compose(theta_self, U, 'vL')
             last_B_self = ct.planar_contraction(last_B_self, V, ['vR'], ['vL'])
@@ -6400,8 +6400,8 @@ class MPS(BaseMPSExpectationValue):
             last_B_other = ct.planar_contraction(last_B_other, V, ['vR'], ['vL'])
         Bs = [ct.tensor_from_grid([[alpha * theta_self, beta * theta_other]], labels=theta_self.labels)]
         for i in range(1, L - 1):
-            # TODO we should make sure that the hidden legs are by convention not in the positions along which we stack
-            Bs.append(ct.tensor_from_grid([[self.get_B(i), None], [None, other.get_B(i)]], labels=self.get_B(i).labels))
+            B_self = psi_self.get_B(i)
+            Bs.append(ct.tensor_from_grid([[B_self, None], [None, other.get_B(i)]], labels=B_self.labels))
         Bs.append(ct.tensor_from_grid([[last_B_self], [last_B_other]], labels=last_B_self.labels))
         Ss = [
             ct.DiagonalTensor.from_eye(
