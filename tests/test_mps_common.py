@@ -8,6 +8,7 @@ from cyten.models.sites import SpinSite
 
 from tenpy.algorithms.mps_common import VariationalCompression
 from tenpy.networks.mps import MPS
+from tenpy.tools import TruncationError
 
 
 def test_variational_compression():
@@ -50,14 +51,13 @@ def test_variational_compression():
     # hard-coded reference: numpy SVD of the dense array at the only bond that needs truncating
     mat = block.reshape(d**2, d**2)
     S_ideal = np.linalg.svd(mat, compute_uv=False)
-    S_ideal /= np.linalg.norm(S_ideal)
-    eps_ideal = np.sum(S_ideal[chi_small:] ** 2)
+    err_ideal = TruncationError.from_S(S_ideal[chi_small:], norm_old=np.linalg.norm(S_ideal))
 
-    npt.assert_allclose(trunc_err.eps, eps_ideal, atol=1e-10)
+    npt.assert_allclose(trunc_err.eps, err_ideal.eps, atol=1e-10)
 
     # contract the compressed MPS back to a dense array and check its fidelity loss directly
     theta = psi_small.get_theta(0, n=L)
     got = theta.to_numpy(['vL'] + p_labels + ['vR']).reshape((d,) * L)
     overlap = np.vdot(got.ravel(), block.ravel())
     fidelity_loss = 1.0 - abs(overlap) ** 2 / (np.linalg.norm(got) ** 2 * np.linalg.norm(block) ** 2)
-    npt.assert_allclose(fidelity_loss, eps_ideal, atol=1e-10)
+    npt.assert_allclose(fidelity_loss, err_ideal.eps, atol=1e-10)

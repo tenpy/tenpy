@@ -124,7 +124,7 @@ class TruncationError(Hdf5Exportable):
             The corresponding truncation error.
 
         """
-        eps = (norm_difference / norm_old) ** 2
+        eps = norm_difference / norm_old
         return cls(eps, 1.0 - 2.0 * eps)
 
     @classmethod

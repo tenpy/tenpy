@@ -365,7 +365,7 @@ class Algorithm:
         """
         chi_max = self.trunc_params.get('chi_max', 100, int)
         chi_min = self.trunc_params.get('chi_min', None, int)
-        deg_tol = self.trunc_params.get('degeneracy_tol', None, 'real')
+        degeneracy_tol = self.trunc_params.get('degeneracy_tol', None, 'real')
         svd_min = self.trunc_params.get('svd_min', 1.0e-14, 'real')
         trunc_cut = self.trunc_params.get('trunc_cut', 1.0e-14, 'real')
         U, S, Vh, rel_err, renormalize = ct.truncated_svd(
@@ -375,8 +375,8 @@ class Algorithm:
             charge_leg_top=True,
             normalize_to=1.0,
             chi_max=chi_max,
-            chi_min=chi_min,
-            deg_tol=deg_tol,
+            chi_min=1 if chi_min is None else chi_min,
+            degeneracy_tol=0 if degeneracy_tol is None else degeneracy_tol,
             trunc_cut=trunc_cut,
             svd_min=svd_min,
         )
