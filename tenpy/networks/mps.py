@@ -2310,7 +2310,7 @@ class MPS(BaseMPSExpectationValue):
 
     Parameters
     ----------
-    sites : list of :class:`~tenpy.networks.site.Site`
+    sites : list of :class:`cyten.Site`
         Defines the local Hilbert space for each site.
     Bs : list of :class:`~cyten.Tensor`
         The 'matrices' of the MPS. Labels are ``vL, p, vR`` (up to cyclic permutation).

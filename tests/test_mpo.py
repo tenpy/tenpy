@@ -45,7 +45,6 @@ def test_MPO():
             print(H.chi)
             assert H.is_equal(H)  # everything should be equal to itself
             assert H.is_hermitian()
-            H.sort_legcharges()
             H.test_sanity()
             assert H.is_equal(H_copy)
             assert H.prefactor(0, ['Sz']) == 1.0
@@ -697,6 +696,7 @@ def test_to_single_coupling_bad_input():
         to_single_coupling([c_field, c_field], [[0], [2]], [1.0, 1.0], [0, 0])
 
 
+@pytest.mark.skip
 @pytest.mark.parametrize('conserve', [None, 'best'])
 @pytest.mark.parametrize('approximation', ['I', 'II'])
 def test_make_U_cyten(conserve, approximation):

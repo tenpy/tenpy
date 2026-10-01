@@ -1337,7 +1337,7 @@ class TwoSiteH(EffectiveH):
         # 'wL', 'wR', 'p', 'p*'
         self.W1 = env.H.get_W(i0 + 1)
         # 'wL', 'wR', 'p', 'p*'
-        self.dtype = ct.Dtype.from_numpy_dtype(env.H.dtype)
+        self.dtype = env.H.dtype
         self.combine = combine
         self.N = (
             self.LP.get_leg('vR').dim * self.W0.get_leg('p').dim * self.W1.get_leg('p').dim * self.RP.get_leg('vL').dim

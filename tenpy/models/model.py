@@ -1905,15 +1905,12 @@ class CouplingModel(Model):
                 unit_cell_width=self.lat.mps_unit_cell_width,
             )
             combined = graph.build_coupling()
-            IdL = graph.IdL
-            IdR = graph.IdR
+
             max_range = max(pos[-1] - pos[0] for pos in positions)
             return mpo.MPO(
                 sites,
                 combined.factorization,
                 bc=self.lat.bc_MPS,
-                IdL=IdL,
-                IdR=IdR,
                 max_range=max_range,
                 explicit_plus_hc=self.explicit_plus_hc,
                 mps_unit_cell_width=self.lat.mps_unit_cell_width,
@@ -2064,9 +2061,6 @@ class CouplingMPOModel(CouplingModel, MPOModel):
     -------
     .. cfg:config :: CouplingMPOModel
 
-        sort_mpo_legs : bool = False
-            Whether the virtual legs of the MPO should be sorted by charges,
-            see :meth:`~tenpy.networks.mpo.MPO.sort_legcharges`.
         explicit_plus_hc : bool
             Whether the Hermitian conjugate of the MPO is computed at runtime,
             rather than saved in the MPO.
@@ -2126,8 +2120,6 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         in `init_terms` by defining your own model, as outlined in :doc:`/intro/model`.
         """
         H_MPO = self.calc_H_MPO()
-        if self.options.get('sort_mpo_legs', False, bool):
-            H_MPO.sort_legcharges()
         MPOModel.__init__(self, self.lat, H_MPO)
         if isinstance(self, NearestNeighborModel):
             NearestNeighborModel.__init__(self, self.lat, self.calc_H_bond())
