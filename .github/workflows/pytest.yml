@@ -47,6 +47,12 @@ jobs:
           python=${{ matrix.python-version }}
         cache-environment: true
 
+    - name: Build and install hdf5_io
+      # build deps (pybind11, scikit-build-core, cmake, pytorch, ...) come from environment.yml
+      run: |
+        pip install --no-build-isolation -e ".[test]"
+      working-directory: ./cyten_repo/external/hdf5_io
+
     - name: Build and install cyten
       # build deps (pybind11, scikit-build-core, cmake, pytorch, ...) come from environment.yml
       # --no-build-isolation avoids pip pulling a CUDA torch wheel that needs the CUDA toolkit
