@@ -44,8 +44,17 @@ import cyten.tensors.sparse
 import numpy as np
 from cyten.block_backends import Dtype
 from cyten.models.couplings import Coupling
-from cyten.symmetries import ElementarySpace
-from cyten.tensors import SymmetricTensor, dagger, permute_legs, tensor_from_grid
+from cyten.symmetries import DirectSumSpace, ElementarySpace
+from cyten.tensors import (
+    Mask,
+    SymmetricTensor,
+    apply_mask,
+    dagger,
+    enlarge_leg,
+    linear_combination,
+    permute_legs,
+    tensor_from_grid,
+)
 from cyten.tensors.krylov_based import GMRES
 from scipy.linalg import expm
 from scipy.special import comb
@@ -754,7 +763,12 @@ class MPO(MPSGeometry):
     @property
     def chi(self):
         """Dimensions of the virtual bonds."""
-        return [W.get_leg('wL').ind_len for W in self._W] + [self._W[-1].get_leg('wR').ind_len]
+
+        # cyten legs expose ``dim``; legacy npc legs used ``ind_len``.
+        def _dim(leg):
+            return getattr(leg, 'dim', None) or leg.ind_len
+
+        return [_dim(W.get_leg('wL')) for W in self._W] + [_dim(self._W[-1].get_leg('wR'))]
 
     def get_W(self, i, copy=False):
         """Return `W` at site `i`."""
@@ -992,43 +1006,75 @@ class MPO(MPSGeometry):
                 'the `explicit_plus_hc=True` flag!\n'
                 'See also https://github.com/tenpy/tenpy/issues/265'
             )
-        U = [
-            self.get_W(i).astype(np.result_type(dt, self.dtype), copy=True).itranspose(['wL', 'wR', 'p', 'p*'])
-            for i in range(self.L)
-        ]
+        out_dtype = Dtype.from_numpy_dtype(np.result_type(dt, self.dtype))
+        U = [self.get_W(i).as_dtype(out_dtype) for i in range(self.L)]
 
         IdLR = []
-        for i in range(0, self.L):  # correct?
+        for i in range(self.L):
             U1 = U[i]
             U2 = U[(i + 1) % self.L]
             IdL = self.IdL[i + 1]
             IdR = self.IdR[i + 1]
-            assert IdL is not None and IdR is not None
-            U1[:, IdL, :, :] = U1[:, IdL, :, :] + dt * U1[:, IdR, :, :]
-            keep = np.ones(U1.shape[1], dtype=bool)
-            keep[IdR] = False
-            U1.iproject(keep, 1)
-            if self.finite and i + 1 == self.L:
-                keep = np.ones(U2.shape[0], dtype=bool)
-                assert self.IdR[0] is not None
-                keep[self.IdR[0]] = False
-            U2.iproject(keep, 0)
 
-            if IdL > IdR:
-                IdLR.append(IdL - 1)
+            if IdL is None or IdR is None:
+                # Finite projected boundary bond: already a single identity wire.
+                if IdL is not None:
+                    IdLR.append(IdL)
+                elif IdR is not None:
+                    IdLR.append(IdR)
+                else:
+                    IdLR.append(0)
+                continue
+
+            wR = U1.get_leg('wR')
+            if not isinstance(wR, DirectSumSpace):
+                raise TypeError(
+                    'make_U_I requires DirectSumSpace virtual legs (from tensor_from_grid); '
+                    f'got {type(wR).__name__} on bond {i + 1}'
+                )
+            n = len(wR.spaces)
+            IdL_n = IdL if IdL >= 0 else IdL + n
+            IdR_n = IdR if IdR >= 0 else IdR + n
+
+            # U1[:, IdL] += dt * U1[:, IdR] via Mask extract / embed
+            col_IdR = apply_mask(U1, wR.projection_onto_summand(IdR_n), 'wR')
+            col_on_IdL = enlarge_leg(col_IdR, wR.inclusion_of_summand(IdL_n), 'wR')
+            U1 = linear_combination(1.0, U1, dt, col_on_IdL)
+
+            keep_idx = [k for k in range(n) if k != IdR_n]
+            proj_keep = wR.projection_onto_summands(keep_idx)
+            U1 = apply_mask(U1, proj_keep, 'wR')
+
+            # Same bond on the next site's wL (or wrap for infinite).
+            if not (self.finite and i + 1 == self.L):
+                wL2 = U2.get_leg('wL')
+                if not isinstance(wL2, DirectSumSpace):
+                    raise TypeError(f'make_U_I: expected DirectSumSpace on wL of site {(i + 1) % self.L}')
+                U2 = apply_mask(U2, wL2.projection_onto_summands(keep_idx), 'wL')
+                U[(i + 1) % self.L] = U2
+
+            U[i] = U1
+            if IdL_n > IdR_n:
+                IdLR.append(IdL_n - 1)
             else:
-                IdLR.append(IdL)
+                IdLR.append(IdL_n)
 
-        IdL = self.IdL[0]
-        IdR = self.IdR[0]
-        assert IdL is not None and IdR is not None
-        if IdL > IdR:
-            IdLR_0 = IdL - 1
+        IdL0 = self.IdL[0]
+        IdR0 = self.IdR[0]
+        if IdL0 is not None and IdR0 is not None:
+            if IdL0 > IdR0:
+                IdLR_0 = IdL0 - 1
+            else:
+                IdLR_0 = IdL0
+        elif IdL0 is not None:
+            IdLR_0 = IdL0
+        elif IdR0 is not None:
+            IdLR_0 = IdR0
         else:
-            IdLR_0 = IdL
+            IdLR_0 = 0
         IdLR = [IdLR_0] + IdLR
 
-        return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf, mps_unit_cell_width=self.unit_cell_width)  # no graph
+        return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf, mps_unit_cell_width=self.unit_cell_width)
 
     def make_U_II(self, dt):
         r"""Creates the :math:`U_{II}` propagator.
@@ -1050,53 +1096,83 @@ class MPO(MPSGeometry):
                 'the `explicit_plus_hc=True` flag!\n'
                 'See also https://github.com/tenpy/tenpy/issues/265'
             )
-        dtype = np.result_type(dt, self.dtype)
+        out_dtype = Dtype.from_numpy_dtype(np.result_type(dt, self.dtype))
         IdL = self.IdL
         IdR = self.IdR
 
-        chinfo = self.chinfo
-        trivial = chinfo.make_valid()
+        parts = []
+        for i in range(self.L):
+            W = self.get_W(i).as_dtype(out_dtype)
+            A, B, C, D = _partition_W_cyten(W, IdL[i], IdR[i], IdL[i + 1], IdR[i + 1])
+            D_np = D.to_numpy(leg_order=['wL', 'wR', 'p', 'p*'], understood_braiding=True)[0, 0]
+            if C is not None:
+                C_np = C.to_numpy(leg_order=['wL', 'wR', 'p', 'p*'], understood_braiding=True)[0]
+            else:
+                C_np = np.zeros((0, D_np.shape[0], D_np.shape[1]), dtype=D_np.dtype)
+            if B is not None:
+                B_np = B.to_numpy(leg_order=['wL', 'wR', 'p', 'p*'], understood_braiding=True)[:, 0]
+            else:
+                B_np = np.zeros((0, D_np.shape[0], D_np.shape[1]), dtype=D_np.dtype)
+            if A is not None:
+                A_np = A.to_numpy(leg_order=['wL', 'wR', 'p', 'p*'], understood_braiding=True)
+            else:
+                A_np = np.zeros((B_np.shape[0], C_np.shape[0], D_np.shape[0], D_np.shape[1]), dtype=D_np.dtype)
+            W_II_np = make_W_II(dt, A_np, B_np, C_np, D_np)
+            # make_W_II uses (wL, wR, p, p*); from_dense_block uses label order (wL, p, wR, p*).
+            W_II_np = np.transpose(W_II_np, (0, 2, 1, 3))
+            parts.append((W, A, B, C, D, W_II_np))
+
+        # Shared virtual bond spaces Id ⊕ other (co-domain view, is_dual=False), one per bond.
+        sym = parts[0][0].symmetry
+        Id_sp = ElementarySpace.from_trivial_sector(1, symmetry=sym, is_dual=False)
+        null = ElementarySpace.from_null_space(sym, is_dual=False)
+        others = [null] * (self.L + 1)
+        for i, (W, A, B, C, D, _) in enumerate(parts):
+            # left bond i
+            if A is not None:
+                oL = A.get_leg('wL')
+            elif B is not None:
+                oL = B.get_leg('wL')
+            else:
+                oL = null
+            if oL.is_dual:
+                oL = oL.with_opposite_duality()
+            if oL.dim > 0:
+                others[i] = oL
+            # right bond i+1
+            if A is not None:
+                oR = A.get_leg('wR')
+            elif C is not None:
+                oR = C.get_leg('wR')
+            else:
+                oR = null
+            if oR.is_dual:
+                oR = oR.with_opposite_duality()
+            if oR.dim > 0:
+                others[i + 1] = oR
+
+        bonds = []
+        for o in others:
+            bonds.append(Id_sp if o.dim == 0 else Id_sp.direct_sum(o))
+
         U = []
-        for i in range(0, self.L):
-            labels = ['wL', 'wR', 'p', 'p*']
-            W = self.get_W(i).itranspose(labels)
-            assert np.all(W.qtotal == trivial)
-            DL, DR, _, _ = W.shape
-            Wflat = W.to_ndarray()
-            proj_L = np.ones(DL, dtype=np.bool_)
-            proj_L[IdL[i]] = False
-            proj_L[IdR[i]] = False
-            proj_R = np.ones(DR, dtype=np.bool_)
-            proj_R[IdL[i + 1]] = False
-            proj_R[IdR[i + 1]] = False
-
-            # Extract (A, B, C, D)
-            D = Wflat[IdL[i], IdR[i + 1], :, :]
-            C = Wflat[IdL[i], proj_R, :, :]
-            B = Wflat[proj_L, IdR[i + 1], :, :]
-            A = Wflat[proj_L, :, :, :][:, proj_R, :, :]  # numpy indexing requires two steps
-
-            W_II = make_W_II(dt, A, B, C, D)
-
-            leg_L, leg_R, leg_p, leg_pconj = W.legs
-            new_leg_L = npc.LegCharge.from_qflat(chinfo, [chinfo.make_valid()], leg_L.qconj)
-            new_leg_L = new_leg_L.extend(leg_L.project(proj_L)[2])
-            new_leg_R = npc.LegCharge.from_qflat(chinfo, [chinfo.make_valid()], leg_R.qconj)
-            new_leg_R = new_leg_R.extend(leg_R.project(proj_R)[2])
-
-            W_II = npc.Array.from_ndarray(
-                W_II,
-                [new_leg_L, new_leg_R, leg_p, leg_pconj],
-                dtype=dtype,
-                qtotal=trivial,
-                labels=labels,
+        for i, (W, A, B, C, D, W_II_np) in enumerate(parts):
+            p_space = W.get_leg_co_domain('p')
+            pstar_space = W.get_leg_co_domain('p*')
+            new_L = bonds[i]
+            new_R = bonds[i + 1]
+            W_II = SymmetricTensor.from_dense_block(
+                W_II_np,
+                [new_L, p_space],
+                [pstar_space, new_R],
+                backend=W.backend,
+                labels=['wL', 'p', 'wR', 'p*'],
+                dtype=out_dtype,
+                understood_braiding=True,
             )
-            # TODO: could sort by charges.
             U.append(W_II)
         Id = [0] * (self.L + 1)
-        return MPO(
-            self.sites, U, self.bc, Id, Id, max_range=self.max_range, mps_unit_cell_width=self.unit_cell_width
-        )  # no graph
+        return MPO(self.sites, U, self.bc, Id, Id, max_range=self.max_range, mps_unit_cell_width=self.unit_cell_width)
 
     def expectation_value(self, psi, tol=1.0e-10, max_range=100, init_env_data={}):
         """Calculate ``<psi|self|psi>/<psi|psi>`` (or density for infinite).
@@ -2906,6 +2982,8 @@ class MPOGraph(MPSGeometry):
 
         L = self.L
         ordered_states = []
+        IdL = [None] * (L + 1)
+        IdR = [None] * (L + 1)
         for bond in range(L + 1):
             if bond == 0:
                 keys = ['IdL']
@@ -2913,7 +2991,10 @@ class MPOGraph(MPSGeometry):
                 keys = ['IdR']
             else:
                 keys = sorted(self._coupling_states[bond].keys(), key=repr)
-            ordered_states.append({key: idx for idx, key in enumerate(keys)})
+            ordered = {key: idx for idx, key in enumerate(keys)}
+            ordered_states.append(ordered)
+            IdL[bond] = ordered.get('IdL', None)
+            IdR[bond] = ordered.get('IdR', None)
 
         factorization = []
         for i in range(L):
@@ -2928,6 +3009,10 @@ class MPOGraph(MPSGeometry):
                     grid[a][b] = tensor
             factorization.append(tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*']))
 
+        # Summand indices into the DirectSumSpace virtual legs of ``factorization``.
+        self.IdL = IdL
+        self.IdR = IdR
+        self._ordered_states = ordered_states
         return Coupling(sites=list(self.sites), factorization=factorization, name=name)
 
     def __repr__(self):
@@ -4558,6 +4643,7 @@ def _partition_W(W, IdL_L, IdR_L, IdL_R, IdR_R):
     0 A B
     0 0 1
 
+    Legacy npc path; prefer :func:`_partition_W_cyten` for cyten tensors.
     """
     DL, DR, d, d = W.shape
     proj_L = np.ones(DL, dtype=np.bool_)
@@ -4578,3 +4664,63 @@ def _partition_W(W, IdL_L, IdR_L, IdL_R, IdR_R):
     A_npc = W.copy()
     A_npc.iproject([proj_L, proj_R], ['wL', 'wR'])
     return A_npc, B_npc, C_npc, D_npc
+
+
+def _other_summand_indices(space, IdL, IdR):
+    """Indices of summands that are neither IdL nor IdR on a DirectSumSpace."""
+    if not isinstance(space, DirectSumSpace):
+        return []
+    n = len(space.spaces)
+    skip = set()
+    if IdL is not None:
+        skip.add(IdL if IdL >= 0 else IdL + n)
+    if IdR is not None:
+        skip.add(IdR if IdR >= 0 else IdR + n)
+    return [k for k in range(n) if k not in skip]
+
+
+def _partition_W_cyten(W, IdL_L, IdR_L, IdL_R, IdR_R):
+    """Split a cyten MPO tensor into A/B/C/D using DirectSumSpace projections.
+
+    Returns
+    -------
+    A, B, C, D
+        ``SymmetricTensor`` blocks. ``A``/``B``/``C`` may be ``None`` when the
+        corresponding ``other`` space is empty. ``D`` always has 1D trivial
+        virtual legs (IdL × IdR).
+
+    """
+    backend = W.backend
+    wL = W.get_leg('wL')
+    wR = W.get_leg('wR')
+
+    def _proj_one(leg, idx, which):
+        if not isinstance(leg, DirectSumSpace):
+            # Projected finite boundary: already a single identity wire.
+            return Mask.from_eye(leg, is_projection=True, backend=backend)
+        if idx is None:
+            if len(leg.spaces) != 1:
+                raise ValueError(f'{which}: expected single summand when index is None')
+            return leg.projection_onto_summand(0, backend=backend)
+        return leg.projection_onto_summand(idx, backend=backend)
+
+    def _proj_other(leg, IdL, IdR, which):
+        other = _other_summand_indices(leg, IdL, IdR)
+        if not other:
+            return None
+        return leg.projection_onto_summands(other, backend=backend)
+
+    proj_IdL_L = _proj_one(wL, IdL_L, 'wL')
+    proj_IdR_R = _proj_one(wR, IdR_R, 'wR')
+    proj_other_L = _proj_other(wL, IdL_L, IdR_L, 'wL')
+    proj_other_R = _proj_other(wR, IdL_R, IdR_R, 'wR')
+
+    D = apply_mask(apply_mask(W, proj_IdL_L, 'wL'), proj_IdR_R, 'wR')
+    C = apply_mask(apply_mask(W, proj_IdL_L, 'wL'), proj_other_R, 'wR') if proj_other_R is not None else None
+    B = apply_mask(apply_mask(W, proj_other_L, 'wL'), proj_IdR_R, 'wR') if proj_other_L is not None else None
+    A = (
+        apply_mask(apply_mask(W, proj_other_L, 'wL'), proj_other_R, 'wR')
+        if (proj_other_L is not None and proj_other_R is not None)
+        else None
+    )
+    return A, B, C, D
