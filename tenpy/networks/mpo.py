@@ -3141,6 +3141,27 @@ class MPOEnvironment(BaseEnvironment):
 
     """
 
+    LP_contraction = ct.PlanarDiagram(
+        tensors='LP[vR*, wR, vR], Bk[vL, p, vR], W[wL, p, wR, p*], Bb[vR*, p*, vL*]',
+        definition=(
+            'LP:vR* @ Bb:vL*, LP:wR @ W:wL, LP:vR @ Bk:vL, '
+            'Bk:p @ W:p*, Bk:vR -> vR, '
+            'W:p @ Bb:p*, W:wR -> wR, '
+            'Bb:vR* -> vR*'
+        ),
+        dims=dict(chi=['vR', 'vR*', 'vL', 'vL*'], w=['wL', 'wR'], d=['p', 'p*']),
+    )
+    RP_contraction = ct.PlanarDiagram(
+        tensors='RP[wL, vL*, vL], Bk[vL, p, vR], W[wL, p, wR, p*], Bb[vR*, p*, vL*]',
+        definition=(
+            'RP:wL @ W:wR, RP:vL* @ Bb:vR*, RP:vL @ Bk:vR, '
+            'Bk:vL -> vL, Bk:p @ W:p*, '
+            'W:wL -> wL, W:p @ Bb:p*, '
+            'Bb:vL* -> vL*'
+        ),
+        dims=dict(chi=['vR', 'vR*', 'vL', 'vL*'], w=['wL', 'wR'], d=['p', 'p*']),
+    )
+
     def __init__(self, bra: MPS, H: MPO, ket: MPS, cache=None, **init_env_data):
         self.H = H
         super().__init__(bra, ket, cache, **init_env_data)
@@ -3322,7 +3343,7 @@ class MPOEnvironment(BaseEnvironment):
 
         Returns
         -------
-        init_LP : :class:`~tenpy.linalg.np_conserved.Array`
+        init_LP : :class:`~cyten.Tensor`
             Environment left of site `i` with labels ``'vR*', 'wR', 'vR'``.
 
         """
@@ -3356,8 +3377,8 @@ class MPOEnvironment(BaseEnvironment):
 
         Returns
         -------
-        init_RP : :class:`~tenpy.linalg.np_conserved.Array`
-            Environment right of site `i` with labels ``'vL*', 'wL', 'vL'``.
+        init_RP : :class:`~cyten.Tensor`
+            Environment right of site `i` with labels ``'wL', 'vL*', 'vL'``.
 
         """
         i0 = i + start_env_sites
@@ -3459,25 +3480,15 @@ class MPOEnvironment(BaseEnvironment):
 
     def _contract_LP(self, i: int, LP: ct.Tensor) -> ct.Tensor:
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
-        # same as MPSEnvironment._contract_LP, but also contract with `H.get_W(i)`
-        raise NotImplementedError('MPO: diagrams')
-        LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
-        LP = npc.tensordot(self.H.get_W(i), LP, axes=(['p*', 'wL'], ['p', 'wR']))
-        axes = (self.bra._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
-        # for a usual MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
-        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
-        return LP  # labels 'vR*', 'wR', 'vR'
+        return self.LP_contraction.evaluate(
+            dict(LP=LP, Bk=self.ket.get_B(i, form='A'), W=self.H.get_W(i), Bb=self.bra.get_B(i, form='A').hc)
+        )
 
     def _contract_RP(self, i: int, RP: ct.Tensor) -> ct.Tensor:
         """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
-        # same as MPSEnvironment._contract_RP, but also contract with `H.get_W(i)`
-        raise NotImplementedError('MPO: diagrams')
-        RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
-        RP = npc.tensordot(RP, self.H.get_W(i), axes=(['p', 'wL'], ['p*', 'wR']))
-        axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
-        # for a usual MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
-        RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
-        return RP  # labels 'vL', 'wL', 'vL*'
+        return self.RP_contraction.evaluate(
+            dict(RP=RP, Bk=self.ket.get_B(i, form='B'), W=self.H.get_W(i), Bb=self.bra.get_B(i, form='B').hc)
+        )
 
     def _contract_LHeff(self, i: int, label_p: str = 'p0') -> ct.Tensor:
         LP = self.get_LP(i)
@@ -4213,7 +4224,7 @@ class MPOTransferMatrix(ct.sparse.LinearOperator):
         )
         self._explicit_plus_hc = H.explicit_plus_hc
 
-    def matvec(self, vec, project=True):
+    def matvec(self, vec: ct.Tensor, project: bool = True) -> ct.Tensor:
         """One matvec-operation.
 
         Parameters
@@ -4225,19 +4236,15 @@ class MPOTransferMatrix(ct.sparse.LinearOperator):
 
         """
         if not self.transpose:  # right to left
+            assert vec.labels_are('vL', 'wL', 'vL*', planar=True)
             vec.itranspose(['vL', 'wL', 'vL*'])  # shouldn't do anything
             for Bc, W, B in zip(self._M_conj, self._W, self._M):
-                # vec: vL wL vL*
-                vec = npc.tensordot(B, vec, axes=['vR', 'vL'])  # vL p wL vL*
-                vec = npc.tensordot(vec, W, axes=[['p', 'wL'], ['p*', 'wR']])  # vL vL* p wL
-                vec = npc.tensordot(vec, Bc, axes=[['vL*', 'p'], ['vR*', 'p*']])  # vL wL vL*
+                vec = MPOEnvironment.RP_contraction.evaluate(dict(RP=vec, Bk=B, W=W, Bb=Bc))
             vec = vec.shift_charges_horizontal(dx_0=self.unit_cell_width)
         else:
-            vec.itranspose(['vR*', 'wR', 'vR'])  # shouldn't do anything
+            assert vec.labels_are('vR*', 'wR', 'vR', planar=True)
             for Ac, W, A in zip(self._M_conj, self._W, self._M):
-                vec = npc.tensordot(vec, A, axes=['vR', 'vL'])  # vR* wR p vR
-                vec = npc.tensordot(W, vec, axes=[['wL', 'p*'], ['wR', 'p']])  # wR p vR* vR
-                vec = npc.tensordot(Ac, vec, axes=[['p*', 'vL*'], ['p', 'vR*']])  # vR* wR vR
+                vec = MPOEnvironment.LP_contraction.evaluate(dict(LP=vec, Bk=A, W=W, Bb=Ac))
             vec = vec.shift_charges_horizontal(dx_0=-self.unit_cell_width)
         if project:
             self._project(vec)
