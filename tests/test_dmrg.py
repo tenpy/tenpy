@@ -2,6 +2,7 @@
 
 # Copyright (C) TeNPy Developers, Apache license
 import warnings
+from functools import reduce
 
 import cyten as ct
 import numpy as np
@@ -179,6 +180,94 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
         assert abs((Edmrg - Eexact) / Eexact) < 1.0e-10
         assert abs((Edmrg - Edmrg2) / Edmrg2) < max(1.0e-10, np.max(psi.norm_test()))
         assert abs((Edmrg - Edmrg3) / Edmrg3) < max(1.0e-10, np.max(psi.norm_test()))
+
+
+def _dense_heisenberg(L):
+    """Nearest-neighbour Heisenberg chain as a dense matrix, in the (down, up) Kronecker basis."""
+    Sz = np.diag([-0.5, 0.5])
+    Sp = np.array([[0.0, 0.0], [1.0, 0.0]])  # |up><down|
+    Sm = Sp.T
+    eye = np.eye(2)
+    H = np.zeros((2**L, 2**L))
+    for i in range(L - 1):
+        for left, right in [(Sz, Sz), (0.5 * Sp, Sm), (0.5 * Sm, Sp)]:
+            ops = [eye] * L
+            ops[i], ops[i + 1] = left, right
+            H = H + reduce(np.kron, ops)
+    return H
+
+
+_HEISENBERG_BACKENDS = {'SU2': 'FusionTreeBackend', 'Sz': 'AbelianBackend', None: 'NoSymmetryBackend'}
+
+
+@pytest.fixture(
+    params=[pytest.param('SU2', id='SU2'), pytest.param('Sz', id='Sz'), pytest.param(None, id='no_symmetry')]
+)
+def heisenberg_symmetry(request):
+    """The `conserve` argument for the Heisenberg chain; checks the expected backend is used."""
+    conserve = request.param
+    site = sites.SpinSite(0.5, conserve=conserve)
+    assert type(site.backend).__name__ == _HEISENBERG_BACKENDS[conserve], f'wrong backend for conserve={conserve!r}'
+    return conserve
+
+
+@pytest.mark.filterwarnings('ignore:bitcount function is deprecated:DeprecationWarning')
+@pytest.mark.parametrize(
+    'combine, n',
+    [
+        # combine n
+        (True, 2),  # simplest case
+        (True, 1),
+        (False, 2),
+    ],
+)
+@pytest.mark.slow
+def test_dmrg_heisenberg_vs_exact(heisenberg_symmetry, combine, n, L=8):
+    M = SpinChain(dict(L=L, bc_MPS='finite', conserve=heisenberg_symmetry))
+    site = M.lat.unit_cell[0]
+    assert type(site.backend).__name__ == _HEISENBERG_BACKENDS[heisenberg_symmetry]
+    psi = mps.MPS.from_desired_bond_dimension(
+        M.lat.mps_sites(),
+        30,
+        bc='finite',
+        total_charge=site.leg.symmetry.trivial_sector,
+        unit_cell_width=M.lat.mps_unit_cell_width,
+    )
+    dmrg_pars = {
+        'combine': combine,
+        'chi_list': {0: 10, 5: 30},
+        'max_E_err': 1.0e-12,
+        'max_S_err': 1.0e-8,
+        'N_sweeps_check': 1,
+        'trunc_params': {
+            'svd_min': 1.0e-10,
+        },
+        'max_N_for_ED': 20,  # small enough that we test both diag_method=lanczos and ED_block!
+        'max_sweeps': 40,
+        'active_sites': n,
+    }
+    res = dmrg.run(psi, M, dmrg_pars)
+
+    H_ref = _dense_heisenberg(L)
+    block = np.transpose(np.reshape(H_ref, [2] * (2 * L)), [*range(L), *reversed(range(L, 2 * L))])
+    H = ct.SymmetricTensor.from_dense_block(
+        block,
+        codomain=[site.leg] * L,
+        domain=[site.leg] * L,
+        labels=[[f'p{i}' for i in range(L)], [f'p{i}*' for i in range(L)]],
+    )
+    ED = ExactDiag.from_hamiltonian(H, M.lat.mps_sites())
+    ED.full_diagonalization()
+    E_ED, psi_ED = ED.groundstate()
+    np.testing.assert_allclose(E_ED, np.linalg.eigvalsh(H_ref)[0], atol=1e-10)
+
+    print(f'E_DMRG={res["E"]:.14f} vs E_exact={E_ED:.14f}')
+    assert abs(res['E'] - E_ED) < 1.0e-10, f'energy stage: E_DMRG={res["E"]} vs E_ED={E_ED}'
+    ov = np.vdot(psi_ED.to_numpy().reshape(-1), ED.mps_to_full(psi).to_numpy().reshape(-1))
+    print('compare with ED: overlap = ', abs(ov) ** 2)
+    assert abs(abs(ov) - 1.0) < 1.0e-8, f'overlap stage: |overlap|={abs(ov)}'  # unique groundstate: finite size gap!
+    var = M.H_MPO.variance(psi)
+    assert var < 1.0e-8, f'variance stage: variance={var}'
 
 
 @pytest.mark.skip(reason='Not ported yet')
