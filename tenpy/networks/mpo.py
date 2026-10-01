@@ -3144,7 +3144,7 @@ class MPOEnvironment(BaseEnvironment):
     def __init__(self, bra: MPS, H: MPO, ket: MPS, cache=None, **init_env_data):
         self.H = H
         super().__init__(bra, ket, cache, **init_env_data)
-        self.dtype = np.result_type(bra.dtype, ket.dtype, H.dtype)
+        self.dtype = ct.Dtype.common(bra.dtype, ket.dtype, H.dtype)
 
     def init_first_LP_last_RP(
         self,
@@ -3555,7 +3555,7 @@ class MPOEnvironmentBuilder:
         self.H = H
         self.ket = psi
         self.L = psi.L
-        self.dtype = np.result_type(self.ket.dtype, self.H.dtype)
+        self.dtype = ct.Dtype.common(self.ket.dtype, self.H.dtype)
         self._p_label = self.ket._p_label
         self.test_sanity()
         # MPS tensors as needed by transfer matrices during init_LP_RP
