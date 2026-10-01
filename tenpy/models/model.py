@@ -1905,9 +1905,8 @@ class CouplingModel(Model):
                 unit_cell_width=self.lat.mps_unit_cell_width,
             )
             combined = graph.build_coupling()
-            L = len(combined.factorization)
-            IdL = [0] + [None] * L
-            IdR = [None] * L + [0]
+            IdL = graph.IdL
+            IdR = graph.IdR
             max_range = max(pos[-1] - pos[0] for pos in positions)
             return mpo.MPO(
                 sites,

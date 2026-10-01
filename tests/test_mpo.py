@@ -695,3 +695,29 @@ def test_to_single_coupling_bad_input():
     with pytest.raises(ValueError):
         # site 1 is never touched
         to_single_coupling([c_field, c_field], [[0], [2]], [1.0, 1.0], [0, 0])
+
+
+@pytest.mark.parametrize('conserve', [None, 'best'])
+@pytest.mark.parametrize('approximation', ['I', 'II'])
+def test_make_U_cyten(conserve, approximation):
+    """make_U_I / make_U_II on Coupling-built finite MPOs (DirectSumSpace virtual legs)."""
+    from cyten.tensors import SymmetricTensor
+
+    from tenpy.models.spins import SpinChain
+
+    M = SpinChain(dict(L=4, Jx=1.0, Jy=1.0, Jz=1.0, hz=0.2, bc_MPS='finite', conserve=conserve))
+    H = M.H_MPO
+    assert isinstance(H.get_W(0), SymmetricTensor)
+    # Interior bonds must expose both IdL and IdR summand indices.
+    assert H.IdL[0] == 0 and H.IdR[-1] == 0
+    for b in range(1, H.L):
+        assert H.IdL[b] is not None
+        assert H.IdR[b] is not None
+
+    U = H.make_U(dt=-0.01j, approximation=approximation)
+    assert U.L == H.L
+    assert all(i is not None for i in U.IdL)
+    for i in range(U.L):
+        assert isinstance(U.get_W(i), SymmetricTensor)
+    for i in range(U.L - 1):
+        assert U.get_W(i).get_leg_co_domain('wR') == U.get_W(i + 1).get_leg_co_domain('wL')
