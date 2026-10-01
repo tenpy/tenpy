@@ -5723,7 +5723,7 @@ class MPS(BaseMPSExpectationValue):
 
         """
         perm = list(perm)  # gets modified, so we should copy
-        assert len(perm) = self.L
+        assert len(perm) == self.L
         # In order to keep sites close together, we always scan from the left,
         # keeping everything up to `i` in strictly ascending order.
         # => more or less an 'insertion' sort algorithm.
