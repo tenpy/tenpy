@@ -2876,6 +2876,7 @@ class MPOGraph(MPSGeometry):
 
         L = self.L
         ordered_states = []
+        state_labels = []
         IdL = [None] * (L + 1)
         IdR = [None] * (L + 1)
         for bond in range(L + 1):
@@ -2885,6 +2886,7 @@ class MPOGraph(MPSGeometry):
                 keys = ['IdR']
             else:
                 keys = sorted(self._coupling_states[bond].keys(), key=repr)
+            state_labels.append([k if isinstance(k, str) else None for k in keys])
             ordered = {key: idx for idx, key in enumerate(keys)}
             ordered_states.append(ordered)
             IdL[bond] = ordered.get('IdL', None)
@@ -2901,7 +2903,10 @@ class MPOGraph(MPSGeometry):
                     if b is None:
                         continue
                     grid[a][b] = tensor
-            factorization.append(ct.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*']))
+            W = ct.tensor_from_grid(
+                grid, labels=['wL', 'p', 'wR', 'p*'], row_labels=state_labels[i], col_labels=state_labels[i + 1]
+            )
+            factorization.append(W)
 
         # Summand indices into the DirectSumSpace virtual legs of ``factorization``.
         self.IdL = IdL
@@ -3328,7 +3333,7 @@ class MPOEnvironment(BaseEnvironment):
         assert isinstance(mpo_wL, ct.DirectSumSpace)
         init_LP = ct.add_trivial_leg(init_LP, 1, label='wR', is_dual=not mpo_wL.is_dual)
         mask = mpo_wL.projection_onto_summand(
-            0 if all(l is None for l in mpo_wL.summand_labels) else 'IdL',  # TODO rm workaround
+            'IdL',
             backend=init_LP.backend,
             labels=['wL', 'wR'],
             device=init_LP.device,
@@ -3362,10 +3367,7 @@ class MPOEnvironment(BaseEnvironment):
         assert isinstance(mpo_wR, ct.DirectSumSpace)
         init_RP = ct.add_trivial_leg(init_RP, 0, label='wL', is_dual=not mpo_wR.is_dual)
         mask = mpo_wR.projection_onto_summand(
-            -1 if all(l is None for l in mpo_wR.summand_labels) else 'IdR',  # TODO rm workaround
-            backend=init_RP.backend,
-            labels=['wR', 'wL'],
-            device=init_RP.device,
+            'IdR', backend=init_RP.backend, labels=['wR', 'wL'], device=init_RP.device
         )
         init_RP = ct.tdot(init_RP, mask, 'wL', 'wR')
         for j in range(i0, i, -1):
