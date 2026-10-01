@@ -3321,15 +3321,20 @@ class MPOEnvironment(BaseEnvironment):
             Environment left of site `i` with labels ``'vR*', 'wR', 'vR'``.
 
         """
-        raise NotImplementedError
-
         i0 = i - start_env_sites
-        IdL = self.H.get_IdL(i0)
-        if IdL is None:
-            raise RuntimeError(f'Need to set IdL at i0={i0} for the MPO self.H')
         init_LP = super().init_LP(i0, 0)
-        leg_mpo = self.H.get_W(i0).get_leg('wL').conj()
-        init_LP = init_LP.add_leg(leg_mpo, IdL, axis=1, label='wR')
+        assert init_LP.labels == ['vR*', 'vR']
+        mpo_wL = self.H.get_W(i0).get_leg('wL')
+        assert isinstance(mpo_wL, ct.DirectSumSpace)
+        init_LP = ct.add_trivial_leg(init_LP, 1, label='wR', is_dual=not mpo_wL.is_dual)
+        mask = mpo_wL.projection_onto_summand(
+            0 if all(l is None for l in mpo_wL.summand_labels) else 'IdL',  # TODO rm workaround
+            backend=init_LP.backend,
+            labels=['wL', 'wR'],
+            device=init_LP.device,
+        )
+        init_LP = ct.tdot(init_LP, mask, 'wR', 'wL')
+        # TODO do we care about the leg arrangement or not?
         for j in range(i0, i):
             init_LP = self._contract_LP(j, init_LP)
         return init_LP
@@ -3350,14 +3355,19 @@ class MPOEnvironment(BaseEnvironment):
             Environment right of site `i` with labels ``'vL*', 'wL', 'vL'``.
 
         """
-        raise NotImplementedError
         i0 = i + start_env_sites
-        IdR = self.H.get_IdR(i0)
-        if IdR is None:
-            raise RuntimeError(f'Need to set IdR at i0={i0} for the MPO self.H')
         init_RP = super().init_RP(i0, 0)
-        leg_mpo = self.H.get_W(i0).get_leg('wR').conj()
-        init_RP = init_RP.add_leg(leg_mpo, IdR, axis=1, label='wL')
+        assert init_RP.labels == ['vL*', 'vL']
+        mpo_wR = self.H.get_W(i0).get_leg('wR')
+        assert isinstance(mpo_wR, ct.DirectSumSpace)
+        init_RP = ct.add_trivial_leg(init_RP, 0, label='wL', is_dual=not mpo_wR.is_dual)
+        mask = mpo_wR.projection_onto_summand(
+            -1 if all(l is None for l in mpo_wR.summand_labels) else 'IdR',  # TODO rm workaround
+            backend=init_RP.backend,
+            labels=['wR', 'wL'],
+            device=init_RP.device,
+        )
+        init_RP = ct.tdot(init_RP, mask, 'wL', 'wR')
         for j in range(i0, i, -1):
             init_RP = self._contract_RP(j, init_RP)
         return init_RP
