@@ -5701,8 +5701,15 @@ class MPS(BaseMPSExpectationValue):
         Parameters
         ----------
         perm : ndarray[ndim=1, int]
-            The applied permutation, such that ``psi.permute_sites(perm)[i] = psi[perm[i]]``
-            (where ``[i]`` indicates the `i`-th site).
+            Destination position of each original site: the site initially at
+            position i is moved to position perm[i]. Must be a permutation of
+            range(self.L).
+
+            For example, perm=[1, 2, 0] changes the site order from [A, B, C]
+            to [C, A, B].
+
+            To obtain a desired final ordering `order` of the original site
+            indices, pass np.argsort(order).
         swap_op : ``None`` | ``'auto', 'autoInv'`` | :class:`~tenpy.linalg.np_conserved.Array`
             The operator used to swap the physical legs of a two-site wave function `theta`,
             see :meth:`swap_sites`.
@@ -5716,6 +5723,7 @@ class MPS(BaseMPSExpectationValue):
 
         """
         perm = list(perm)  # gets modified, so we should copy
+        assert len(perm) = self.L
         # In order to keep sites close together, we always scan from the left,
         # keeping everything up to `i` in strictly ascending order.
         # => more or less an 'insertion' sort algorithm.
