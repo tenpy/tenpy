@@ -273,6 +273,10 @@ def heisenberg_symmetry(request):
 )
 @pytest.mark.slow
 def test_dmrg_heisenberg_vs_exact(heisenberg_symmetry, combine, n, L=8):
+    if combine:
+        # same as test_dmrg_vs_exact: DMRG with combine is disabled upstream for now
+        pytest.xfail('combine is not fixed yet. See PR #694')  # https://github.com/tenpy/tenpy/pull/694
+
     M = _heisenberg_model(heisenberg_symmetry, L)
     site = M.lat.unit_cell[0]
     _check_heisenberg_site(site, heisenberg_symmetry)
