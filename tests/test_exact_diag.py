@@ -3,6 +3,7 @@
 # Copyright (C) TeNPy Developers, Apache license
 import copy
 from functools import reduce
+from types import SimpleNamespace
 
 import cyten as ct
 import numpy as np
@@ -13,6 +14,8 @@ from cyten.symmetries.spaces import AbelianLegPipe
 from cyten.tensors import SymmetricTensor, compose, dagger, norm
 
 from tenpy.algorithms import exact_diag
+from tenpy.models.spins import SpinChain
+from tenpy.models.tf_ising import TFIChain
 
 _LEGACY = 'legacy np_conserved test, not migrated to cyten yet'
 
@@ -442,3 +445,108 @@ def test_get_numpy_Hamiltonian(undo_sort_charge, conserve, use_ED, J=1, g=4.3291
     else:
         H_res = exact_diag.get_numpy_Hamiltonian(model, undo_sort_charge=undo_sort_charge)
     assert np.allclose(H_res, H_expect)
+
+
+def _dense_tfi(L, J, g):
+    """Transverse field Ising chain ``-J sum sx sx - g sum sz`` as a dense matrix, in the (down, up) basis."""
+    sx = np.array([[0.0, 1.0], [1.0, 0.0]])
+    sz = np.diag([-1.0, 1.0])
+    eye = np.eye(2)
+    H = np.zeros((2**L, 2**L))
+    for i in range(L):
+        ops = [eye] * L
+        ops[i] = sz
+        H = H - g * reduce(np.kron, ops)
+        if i < L - 1:
+            ops = [eye] * L
+            ops[i], ops[i + 1] = sx, sx
+            H = H - J * reduce(np.kron, ops)
+    return H
+
+
+def _dense_to_tensor(site, H_ref, L):
+    block = np.transpose(np.reshape(H_ref, [2] * (2 * L)), [*range(L), *reversed(range(L, 2 * L))])
+    return SymmetricTensor.from_dense_block(
+        block,
+        codomain=[site.leg] * L,
+        domain=[site.leg] * L,
+        labels=[[f'p{i}' for i in range(L)], [f'p{i}*' for i in range(L)]],
+    )
+
+
+def _check_built_models(M, H_ref, H_expect):
+    """Both builders reproduce `H_expect` and agree with `H_ref` after full diagonalization."""
+    full = {}
+    for method in ['build_full_H_from_mpo', 'build_full_H_from_bonds']:
+        ED = exact_diag.ExactDiag.from_model(M)
+        getattr(ED, method)()
+        full[method] = ED.full_H
+        assert ED.full_H.codomain == H_expect.codomain
+        assert ED.full_H.domain == H_expect.domain
+        assert ED.full_H.labels == H_expect.labels
+        assert ct.almost_equal(ED.full_H, H_expect)
+        ED.full_diagonalization()
+        np.testing.assert_allclose(np.sort(ED.E), np.sort(np.linalg.eigvalsh(H_ref)), atol=1e-10)
+        np.testing.assert_allclose(np.min(ED.E), np.linalg.eigvalsh(H_ref)[0], atol=1e-10)
+        E0, _ = ED.groundstate()
+        np.testing.assert_allclose(E0, np.linalg.eigvalsh(H_ref)[0], atol=1e-10)
+    assert ct.almost_equal(full['build_full_H_from_mpo'], full['build_full_H_from_bonds'])
+
+
+@pytest.mark.parametrize('conserve', [None, 'parity', 'Sz', 'SU2'])
+@pytest.mark.parametrize('L', [3, 4])
+def test_build_full_H_heisenberg(conserve, L):
+    M = SpinChain(dict(L=L, bc_MPS='finite', conserve=conserve))
+    H_expect, H_ref = _heisenberg_tensor(M.lat.mps_sites()[0], L)
+    _check_built_models(M, H_ref, H_expect)
+
+
+@pytest.mark.parametrize('conserve', [None, 'parity'])
+@pytest.mark.parametrize('L', [3, 4])
+def test_build_full_H_tfi(conserve, L):
+    M = TFIChain(dict(L=L, J=1.0, g=1.2, bc_MPS='finite', conserve=conserve))
+    site = M.lat.mps_sites()[0]
+    assert site.state_labels['down'] == 0 and site.state_labels['up'] == 1
+    H_ref = _dense_tfi(L, 1.0, 1.2)
+    _check_built_models(M, H_ref, _dense_to_tensor(site, H_ref, L))
+
+
+@pytest.mark.parametrize(
+    'conserve, dense',
+    [(None, False), ('parity', False), ('Sz', False), ('SU2', True)],
+)
+def test_assembly_route(conserve, dense):
+    M = SpinChain(dict(L=3, bc_MPS='finite', conserve=conserve))
+    ED = exact_diag.ExactDiag.from_model(M)
+    assert ED._use_dense_assembly() == dense
+    assert ED.symmetry.is_abelian == (not dense)
+
+
+@pytest.mark.parametrize('conserve', [None, 'Sz', 'SU2'])
+def test_build_full_H_explicit_plus_hc(conserve, L=3):
+    M = SpinChain(dict(L=L, bc_MPS='finite', conserve=conserve))
+    H_expect, H_ref = _heisenberg_tensor(M.lat.mps_sites()[0], L)
+    M.H_MPO.explicit_plus_hc = True  # the Heisenberg MPO is hermitian, so H + h.c. = 2 H
+    ED = exact_diag.ExactDiag.from_model(M)
+    ED.build_full_H_from_mpo()
+    assert ct.almost_equal(ED.full_H, 2 * H_expect)
+
+
+def test_dense_H_from_mpo_matches_reference():
+    M = SpinChain(dict(L=4, bc_MPS='finite', conserve=None))
+    H = exact_diag.ExactDiag._dense_H_from_mpo(M.H_MPO)
+    np.testing.assert_allclose(H, _dense_heisenberg(4), atol=1e-12)
+
+
+def test_build_full_H_errors():
+    L = 3
+    site = SpinSite(0.5, conserve='Sz')
+    H, _ = _heisenberg_tensor(site, L)
+    ED = exact_diag.ExactDiag.from_hamiltonian(H, [site] * L)
+    with pytest.raises(ValueError, match='from_model'):
+        ED.build_full_H_from_mpo()
+    with pytest.raises(ValueError, match='from_model'):
+        ED.build_full_H_from_bonds()
+    infinite_model = SimpleNamespace(lat=SimpleNamespace(bc_MPS='infinite'))  # infinite models cannot be built yet
+    with pytest.raises(ValueError, match='finite'):
+        exact_diag.ExactDiag.from_model(infinite_model)

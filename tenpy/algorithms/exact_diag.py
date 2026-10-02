@@ -204,66 +204,67 @@ class ExactDiag:
         return cls.from_model(M, *args, **kwargs)
 
     def build_full_H_from_mpo(self):
-        """Calculate self.full_H from the MPO (``H_MPO``) of the model."""
-        raise NotImplementedError(
-            'requires the cyten MPO/models layer, which is not ported yet - use `ExactDiag.from_hamiltonian`.'
-        )
+        """Calculate self.full_H from the MPO (``H_MPO``) of the model.
+
+        Needs an instance created with :meth:`from_model`. The result is a tensor with
+        ``codomain == domain == [site.leg for site in sites]`` and labels ``p0, ..., p{L-1}``
+        (codomain) and ``p{L-1}*, ..., p0*`` (domain).
+        """
+        model = self._require_model()
         if self._exceeds_max_size():
             return
-        mpo = self.model.H_MPO
-        full_H = mpo.get_W(0).take_slice(mpo.get_IdL(0), 'wL')
-        full_H.ireplace_labels(['p', 'p*'], [self._labels_p[0], self._labels_pconj[0]])
-        for i in range(1, mpo.L):
-            W = mpo.get_W(i, copy=True)
-            W.ireplace_labels(['p', 'p*'], [self._labels_p[i], self._labels_pconj[i]])
-            if i == mpo.L - 1:
-                W = W.take_slice(mpo.get_IdR(mpo.L - 1), 'wR')
-            full_H = npc.tensordot(full_H, W, axes=['wR', 'wL'])
-        full_H = full_H.combine_legs(
-            [self._labels_p, self._labels_pconj], new_axes=[0, 1], pipes=[self._pipe, self._pipe_conj]
-        )
-        if mpo.explicit_plus_hc:
-            full_H = full_H + full_H.conj().itranspose(full_H.get_leg_labels())
+        mpo = model.H_MPO
+        if mpo.bc != 'finite':
+            raise ValueError(f'ExactDiag needs a finite MPO, got bc={mpo.bc!r}.')
+        if mpo.L != len(self._sites):
+            raise ValueError(f'MPO has {mpo.L} sites, but ExactDiag was set up for {len(self._sites)}.')
+        if self._use_dense_assembly():
+            H = self._dense_H_from_mpo(mpo)
+            if mpo.explicit_plus_hc:
+                H = H + H.conj().T
+            full_H = self._full_H_from_dense(H)
+        else:
+            full_H = ct.Coupling(list(mpo.sites), factorization=list(mpo._W)).to_tensor()
+            if mpo.explicit_plus_hc:
+                full_H = full_H + ct.dagger(full_H)
         self._set_full_H(full_H)
 
     def build_full_H_from_bonds(self):
-        """Calculate self.full_H from bond terms (``H_bond``) of the model."""
-        raise NotImplementedError(
-            'requires the cyten MPO/models layer, which is not ported yet - use `ExactDiag.from_hamiltonian`.'
-        )
+        """Calculate self.full_H from bond terms (``H_bond``) of the model.
+
+        Needs an instance created with :meth:`from_model` of a model with ``H_bond``, e.g. a
+        :class:`~tenpy.models.model.NearestNeighborModel`. The resulting `full_H` is as in
+        :meth:`build_full_H_from_mpo`.
+        """
+        model = self._require_model()
+        H_bond = getattr(model, 'H_bond', None)
+        if H_bond is None:
+            raise ValueError('The model has no `H_bond`; use `build_full_H_from_mpo` or a NearestNeighborModel.')
         if self._exceeds_max_size():
             return
-        sites = self.model.lat.mps_sites()
-        H_bond = self.model.H_bond
-        L = len(sites)
-        Ids = [
-            s.Id.replace_labels(['p', 'p*'], [self._labels_p[i], self._labels_pconj[i]]) for i, s in enumerate(sites)
-        ]
-        Ids_L = [Ids[0]]  # Ids_L[j] has identity up to (including) site j
-        Ids_R = [Ids[-1]]  # Ids_R[j] is identity starting from (including) site L-1-j
-        for j in range(1, L - 2):
-            Ids_L.append(npc.outer(Ids_L[-1], Ids[j]))
-            Ids_R.append(npc.outer(Ids[L - j - 1], Ids_R[-1]))
-        full_H = None
-        for i in range(1, L):
-            # H_bond[i] lives on sites (i-1, i)
-            lL, lLc = self._labels_p[i - 1], self._labels_pconj[i - 1]
-            lR, lRc = self._labels_p[i], self._labels_pconj[i]
-            Hb = H_bond[i]
-            if Hb is None:
-                continue
-            Hb = Hb.replace_labels(['p0', 'p0*', 'p1', 'p1*'], [lL, lLc, lR, lRc])
-            if i > 1:
-                Hb = npc.outer(Ids_L[i - 2], Hb)  # need i-2 == j
-            if i < L - 1:
-                Hb = npc.outer(Hb, Ids_R[L - 2 - i])  # need i+1 == L-1-j   =>   j = L-2-i
-            Hb = Hb.combine_legs(
-                [self._labels_p, self._labels_pconj], new_axes=[0, 1], pipes=[self._pipe, self._pipe_conj]
-            )
+        L = len(self._sites)
+        if self._use_dense_assembly():
+            dims = [int(s.dim) for s in self._sites]
+            H = np.zeros((int(np.prod(dims)),) * 2, dtype=complex)
+            for i in range(1, L):
+                if H_bond[i] is None:
+                    continue
+                # H_bond[i] has labels p0, p1, p1*, p0* and lives on sites (i-1, i)
+                Hb = H_bond[i].to_numpy(understood_braiding=True)
+                Hb = Hb.transpose(0, 1, 3, 2).reshape(dims[i - 1] * dims[i], dims[i - 1] * dims[i])
+                left = np.eye(int(np.prod(dims[: i - 1])))
+                right = np.eye(int(np.prod(dims[i + 1 :])))
+                H += np.kron(np.kron(left, Hb), right)
+            full_H = self._full_H_from_dense(H)
+        else:
+            full_H = None
+            for i in range(1, L):
+                if H_bond[i] is None:
+                    continue
+                Hb = self._embed_bond(H_bond[i], i)
+                full_H = Hb if full_H is None else full_H + Hb
             if full_H is None:
-                full_H = Hb
-            else:
-                full_H += Hb
+                raise ValueError('The model has no bond terms.')
         self._set_full_H(full_H)
 
     def full_diagonalization(self, new_labels='eig', sort='<'):
@@ -275,10 +276,7 @@ class ExactDiag:
         if self.full_H is None:
             raise ValueError('You need to call one of `build_full_H_*` first!')
         if self.full_H.domain != self.full_H.codomain:
-            raise NotImplementedError(
-                'cyten eigh requires full_H.domain == full_H.codomain; the `build_full_H_*` methods '
-                'are not migrated to cyten yet - use `ExactDiag.from_hamiltonian`.'
-            )
+            raise NotImplementedError('full_diagonalization requires full_H.domain == full_H.codomain.')
         W, V = cyten_eigh(self.full_H, new_labels, new_leg_dual=False, sort=sort)
         self.E = W.diagonal_as_numpy()
         self.V = V
@@ -406,6 +404,60 @@ class ExactDiag:
         )
         kwargs.setdefault('which', 'SA')
         return op.eigenvectors(k, *args, **kwargs)
+
+    def _require_model(self):
+        if self.model is None:
+            raise ValueError('This ExactDiag has no model; create it with `ExactDiag.from_model`.')
+        return self.model
+
+    def _use_dense_assembly(self):
+        """Whether `full_H` is assembled as a dense matrix (non-abelian symmetry) or with cyten tensors.
+
+        Contracting many tensors with a non-abelian symmetry needs F- and R-symbols of high weight,
+        which are not available (and slow), so the dense basis is used instead.
+        """
+        return not self.symmetry.is_abelian
+
+    @staticmethod
+    def _dense_H_from_mpo(mpo):
+        """Contract the finite `mpo` to a dense matrix in the Kronecker basis (site 0 most significant)."""
+        T = None
+        for i in range(mpo.L):
+            W = mpo.get_W(i).to_numpy(understood_braiding=True)  # axes wL, p, wR, p*
+            if T is None:
+                T = W
+                continue
+            a, P, b, Q = T.shape
+            _, p, c, q = W.shape
+            T = np.tensordot(T, W, axes=[2, 0])  # a, P, Q, p, c, q
+            T = T.transpose(0, 1, 3, 4, 2, 5).reshape(a, P * p, c, Q * q)
+        if T.shape[0] != 1 or T.shape[2] != 1:
+            raise ValueError('The outer virtual legs of a finite MPO must be trivial.')
+        return T[0, :, 0, :]
+
+    def _full_H_from_dense(self, H):
+        """Convert a dense matrix in the Kronecker basis (site 0 most significant) to the `full_H` tensor."""
+        L = len(self._sites)
+        dims = [int(s.dim) for s in self._sites]
+        block = np.reshape(H, dims + dims).transpose([*range(L), *reversed(range(L, 2 * L))])
+        legs = [s.leg for s in self._sites]
+        return ct.SymmetricTensor.from_dense_block(
+            block,
+            codomain=legs,
+            domain=legs,
+            labels=[self._labels_p, self._labels_pconj],
+            understood_braiding=True,
+        )
+
+    def _embed_bond(self, Hb, i):
+        """Extend ``H_bond[i]`` (acting on sites ``i-1, i``) by identities to all sites."""
+        L = len(self._sites)
+        T = Hb.relabel({'p0': f'p{i - 1}', 'p1': f'p{i}', 'p0*': f'p{i - 1}*', 'p1*': f'p{i}*'})
+        for j in range(L):
+            if j not in (i - 1, i):
+                Id = self._sites[j].get_op('Id').as_SymmetricTensor()
+                T = ct.outer(T, Id, relabel2={'p': f'p{j}', 'p*': f'p{j}*'})
+        return ct.permute_legs(T, codomain=self._labels_p, domain=self._labels_pconj)
 
     def _set_full_H(self, full_H):
         if self.full_H is not None:
