@@ -185,20 +185,21 @@ class MPO(MPSGeometry):
             Entries in :attr:`_W` are considered zero if their norm is smaller than `norm_tol`.
 
         """
-        raise NotImplementedError('TODO: MPO._graph')
         if self._graph is not None:
             return
         # build graph, no checks for loops etc.
         self._graph = [{} for _ in range(len(self.sites))]
         for i in range(self.L):
             W = self.get_W(i)
-            W.itranspose(['wL', 'wR', 'p', 'p*'])
-            chiL, chiR, _, _ = W.shape
-            for jL in range(chiL):
-                for jR in range(chiR):
-                    op = W[jL, jR]
-                    if npc.norm(op) > norm_tol:
-                        self._graph[i][(jL, jR)] = op
+            wL = W.get_leg('wL')
+            wR = W.get_leg('wR')
+            assert isinstance(wL, ct.DirectSumSpace)
+            assert isinstance(wR, ct.DirectSumSpace)
+            for jL in range(len(wL.summand_labels)):
+                for jR in range(len(wR.summand_labels)):
+                    op = ct.tensor_grid_cell(W, jL, jR, 'wL', 'wR')
+                    if ct.norm(op) > norm_tol:
+                        self._graph[i][(jL, jR)] = op  # FIXME def changed, now 4-leg!
 
     def _make_graph_from_couplings(self, couplings_with_start, norm_tol=1e-12):
         """Construct a MPO graph from cyten Couplings using hash-based indexing.
@@ -292,7 +293,6 @@ class MPO(MPSGeometry):
               should check the status via :attr:`_outer_permutation`.
 
         """
-        raise NotImplementedError('TODO: MPO._graph')
         # check whether ordering the graph makes sense
         if self._outer_permutation is not None and not self._outer_permutation:
             warnings.warn(
@@ -318,7 +318,9 @@ class MPO(MPSGeometry):
                 self._outer_permutation = False
                 return
         # attempting to order the graph makes sense
-        try:
+
+        # try:
+        if True:  # FIXME reactivate try except block
             cycle_params = self._graph_connections()
             j_IdL, j_IdR, j_other_cycles, j_upper, j_lower = self._sort_connections(cycle_params)
             outer_connections, _, cycles = cycle_params
@@ -364,10 +366,12 @@ class MPO(MPSGeometry):
             # ordering was successful
             self._cycles = {cycle[0]: cycle for cycle in cycles}
             self._outer_permutation = perm
-        except ValueError as e:
-            # graph cannot be ordered
-            warnings.warn('Ordering the MPO failed: ' + str(e))
-            self._outer_permutation = False
+
+        # FIXME reactivate:
+        # except ValueError as e:
+        #     # graph cannot be ordered
+        #     warnings.warn('Ordering the MPO failed: ' + str(e))
+        #     self._outer_permutation = False
 
     def _graph_connections(self):
         """Helper function for :meth:`_order_graph`.
@@ -386,7 +390,6 @@ class MPO(MPSGeometry):
             The corresponding cycles as in :attr:`_cycles`.
 
         """
-        raise NotImplementedError('TODO: MPO._graph')
         j_cycles = []
         cycles = []
         outer_connections = []
@@ -444,10 +447,10 @@ class MPO(MPSGeometry):
             lower indices
 
         """
-        raise NotImplementedError('TODO: MPO._graph')
         outer_connections, j_cycles, _ = graph_connections
         # check IdL, IdR valid
-        j_IdL, j_IdR = self.IdL[0], self.IdR[-1]
+        j_IdL = self._W[0].get_leg('wL').summand_labels.index('IdL')  # TODO workaround!
+        j_IdR = self._W[-1].get_leg('wR').summand_labels.index('IdR')  # TODO workaround!
         if (j_IdL is not None) and (j_IdL < 0):
             j_IdL = self.chi[0] + j_IdL
         if (j_IdR is not None) and (j_IdR < 0):
@@ -3571,7 +3574,7 @@ class MPOEnvironmentBuilder:
     """
 
     def __init__(self, H, psi):
-        raise NotImplementedError('TODO: MPOEnvironmentBuilder')
+        # raise NotImplementedError('TODO: MPOEnvironmentBuilder')  # FIXME
         self.H = H
         self.ket = psi
         self.L = psi.L
@@ -3588,7 +3591,8 @@ class MPOEnvironmentBuilder:
         # check that the physical legs are contractable
         assert self.L == self.ket.L == self.H.L
         for H_s, k_s in zip(self.H.sites, self.ket.sites):
-            k_s.leg.test_equal(H_s.leg)
+            if H_s.leg != k_s.leg:
+                raise ValueError('Sites have mismatching legs!')
 
     def _contract_cL(self, cL, i, op):
         """Partial contraction cL=(A-op-A*)="""
@@ -3614,10 +3618,14 @@ class MPOEnvironmentBuilder:
             - Can be generalized to allow arbitrary operators. Requires adjusting self._c0_rho
         """
         ones = []
+        return ones  # FIXME workaround! (dont have one-norm ...?)
         for j_outer, loop in self.H._cycles.items():
             norm = 1.0
             for j in range(self.H.L):
                 op = self.H._graph[j][(loop[j], loop[j + 1])]  # (i,j)
+                factor = ct.norm(
+                    op,
+                )
                 factor = npc.norm(op, ord=1) / op.shape[0]
                 if norm * factor < tol:
                     norm = 0.0
@@ -3792,13 +3800,13 @@ class MPOEnvironmentBuilder:
             Energy per site, only returned if `calc_E` is True.
 
         """
-        if not self.H.chinfo.trivial_shift:
+        if not self.H.symmetry.trivial_shift:
             raise NotImplementedError(
                 'Iterative LP/RP initialization is not yet supported for shift-symmetry with infinite systems.'
             )
         if _mpo_check_for_iter_LP_RP_infinite(self.H) is False:
             raise ValueError('Iterative environment initialization failed: Hamiltonian cannot be ordered.')
-        assert which == 'LP' or 'RP' or 'both', f'Invalid environment type "{which}"'
+        assert which in ['LP', 'RP', 'both'], f'Invalid environment type "{which}"'
         ones = self._determine_cycles()
         n_terms = len(ones)
         # gmres defaults, set N_min=0 for states close to product states
@@ -3810,16 +3818,16 @@ class MPOEnvironmentBuilder:
         legs_labels = {
             'init_LP': (
                 [
-                    self.H.get_W(0).get_leg('wL').conj(),
-                    self.ket.get_B(0).get_leg('vL').conj(),
+                    self.H.get_W(0).get_leg('wL').dual,
+                    self.ket.get_B(0).get_leg('vL').dual,
                     self.ket.get_B(0).get_leg('vL'),
                 ],
                 ['wR', 'vR', 'vR*'],
             ),
             'init_RP': (
                 [
-                    self.H.get_W(self.L - 1).get_leg('wR').conj(),
-                    self.ket.get_B(self.L - 1).get_leg('vR').conj(),
+                    self.H.get_W(self.L - 1).get_leg('wR').dual,
+                    self.ket.get_B(self.L - 1).get_leg('vR').dual,
                     self.ket.get_B(self.L - 1).get_leg('vR'),
                 ],
                 ['wL', 'vL', 'vL*'],
@@ -3834,7 +3842,7 @@ class MPOEnvironmentBuilder:
             # Ms, Ns as needed for TransferMatrix
             form = 'A' if name == 'init_LP' else 'B'
             self._Ms = [self.ket.get_B(i, form=form) for i in range(self.L)]
-            self._Ns = [self.ket.get_B(i, form=form).conj() for i in range(self.L)]
+            self._Ns = [self.ket.get_B(i, form=form).hc for i in range(self.L)]
             envs[name] = [
                 npc.Array(legs_labels[name][0], dtype=self.dtype, labels=legs_labels[name][1]) for _ in range(n_terms)
             ]
