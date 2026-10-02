@@ -1188,6 +1188,13 @@ def full_diag_effH(
 
     """
     fullH: ct.SymmetricTensor = effH.to_tensor()
+    if isinstance(effH, TwoSiteH) and effH.combine:
+        fullH = ct.planar_permute_legs(fullH, codomain=['(vL.p0)', '(p1.vR)'], domain=['(vL*.p0*)', '(p1*.vR*)'])
+    else:
+        # TODO only implementing workaround for the one case above for now.
+        #      ideally, we fix to_tensor() to already do this
+        #      see https://github.com/tenpy/tenpy/issues/693
+        raise NotImplementedError
     assert fullH.codomain_labels == effH.acts_on
     E, V = ct.eigh(fullH, new_labels='eig*', new_leg_dual=False)
     # V: ct.SymmetricTensor

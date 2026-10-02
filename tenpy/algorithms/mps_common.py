@@ -1006,7 +1006,7 @@ class EffectiveH(PlanarLinearOperator):
         """Contract `self` to a matrix."""
         tensor = self.to_tensor()
         n = len(tensor.labels) // 2
-        return ct.combine_legs(tensor, tensor.labels[:n], tensor.labels[n:])
+        return ct.combine_legs(tensor, tensor.labels[:n], tensor.labels[n:])  # FIXME this is suspicous
 
     def update_LP(self, env, i, U=None):
         """Equivalent to ``env.get_LP(i, store=True)``; optimized for `combine`.
@@ -1086,7 +1086,7 @@ class OneSiteH(EffectiveH):
         See above.
     LHeff, RHeff : :class:`~tenpy.linalg.np_conserved.Array`
         Only set if :attr:`combine`, and only one of them depending on :attr:`move_right`.
-        If `move_right` was True, `LHeff` is set with labels ``'(vR*.p0)', 'wR', '(vR.p0*)'``
+        If `move_right` was True, `LHeff` is set with labels ``'(vR*.p0)', 'wR', '(p0*.vR)'``
         for bra, MPO, ket; otherwise `RHeff` is set with labels ``'(p0*.vL)', 'wL', '(p0, vL*)'``
     LP, W0, RP : :class:`~tenpy.linalg.np_conserved.Array`
         Tensors making up the network of `self`.
@@ -1240,7 +1240,7 @@ class OneSiteH(EffectiveH):
     def update_LP(self, env, i, U=None):
         if self.combine and self.move_right:
             assert i == self.i0 + 1  # TODO: hit this in single-site?!?
-            LP = npc.tensordot(self.LHeff, U, axes=['(vR.p0*)', '(vL.p)'])
+            LP = npc.tensordot(self.LHeff, U, axes=['(p0*.vR)', '(vL.p)'])
             LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p*)', '(vR*.p0)'])
             env.set_LP(i, LP, age=env.get_LP_age(i - 1) + 1)
         else:
@@ -1301,10 +1301,10 @@ class TwoSiteH(EffectiveH):
         Overwritten by normal attribute, if `combine`.
     LHeff : :class:`~tenpy.linalg.np_conserved.Array`
         Left part of the effective Hamiltonian.
-        Labels ``'(vR*.p0)', 'wR', '(vR.p0*)'`` for bra, MPO, ket.
+        Labels ``'(vR*.p0)', 'wR', '(p0*.vR)'`` for bra, MPO, ket.
     RHeff : :class:`~tenpy.linalg.np_conserved.Array`
         Right part of the effective Hamiltonian.
-        Labels ``'(p1*.vL)', 'wL', '(p1.vL*)'`` for ket, MPO, bra.
+        Labels ``'(p1*.vL)', 'wL', '(vL.p1*)'`` for ket, MPO, bra.
     LP, W0, W1, RP : :class:`~tenpy.linalg.np_conserved.Array`
         Tensors making up the network of `self`.
 
@@ -1329,6 +1329,20 @@ class TwoSiteH(EffectiveH):
         extra_dims=dict(chi=['vL', 'vR'], d=['p0', 'p1']),
     )
 
+    op_diagram_combine = ct.PlanarDiagram(
+        tensors='LHeff[(p0*.vR), (vR*.p0), wR], RHeff[(p1*.vL), wL, (vL.p1*)]',
+        definition=(
+            'LHeff:(p0*.vR) -> (vL*.p0*), LHeff:(vR*.p0) -> (vL.p0), LHeff:wR @ RHeff:wL, '
+            'RHeff:(p1*.vL) -> (p1*.vR*), RHeff:(vL.p1*) -> (p1.vR)'
+        ),
+        dims=dict(chi_p=['(p0*.vR)', '(vR*.p0)', '(p1*.vL)', '(vL.p1*)'], w=['wL', 'wR']),
+    )
+    matvec_diagram_combine = op_diagram_combine.add_tensor(
+        tensor='theta[(vL.p0), (p1.vR)]',
+        extra_definition='theta:(vL.p0) @ LHeff:(p0*.vR), theta:(p1.vR) @ RHeff:(p1*.vL)',
+        extra_dims=dict(chi_p=['(vL.p0)', '(p1.vR)']),
+    )
+
     def __init__(self, env, i0, combine=False, move_right=True):
         self.i0 = i0
         self.LP = env.get_LP(i0)
@@ -1342,15 +1356,17 @@ class TwoSiteH(EffectiveH):
         self.N = (
             self.LP.get_leg('vR').dim * self.W0.get_leg('p').dim * self.W1.get_leg('p').dim * self.RP.get_leg('vL').dim
         )
-        PlanarLinearOperator.__init__(
-            self,
-            op_diagram=self.op_diagram,
-            matvec_diagram=self.matvec_diagram,
-            op_tensors=dict(Lp=self.LP, W0=self.W0, W1=self.W1, Rp=self.RP),
-            vec_name='theta',
-        )
         if combine:
             self.combine_Heff(env)
+        PlanarLinearOperator.__init__(
+            self,
+            op_diagram=self.op_diagram_combine if combine else self.op_diagram,
+            matvec_diagram=self.matvec_diagram_combine if combine else self.matvec_diagram,
+            op_tensors=dict(LHeff=self.LHeff, RHeff=self.RHeff)
+            if combine
+            else dict(Lp=self.LP, W0=self.W0, W1=self.W1, Rp=self.RP),
+            vec_name='theta',
+        )
 
     def matvec(self, theta):
         """Apply the effective Hamiltonian to `theta`.
@@ -1366,12 +1382,13 @@ class TwoSiteH(EffectiveH):
             Product of `theta` and the effective Hamiltonian.
 
         """
+        return super().matvec(theta)  # FIXME cleanup. We do *not* want to split legs before contracting!
         labels = theta.labels
         if self.combine:
             theta = ct.split_legs(theta)
         theta = PlanarLinearOperator.matvec(self, theta)
         if self.combine:
-            theta = ct.combine_legs(theta, ['vL', 'p0'], ['p1', 'vR'], pipes=[self.pipeL, self.pipeR])
+            theta = ct.combine_legs(theta, ['vL', 'p0'], ['p1', 'vR'])
         theta = ct.permute_legs(theta, codomain=labels, domain=[])  # if necessary, transpose
         # This is where we would truncate. Separate mode from combine?
         return theta
@@ -1394,10 +1411,8 @@ class TwoSiteH(EffectiveH):
         """
         if left:
             self.LHeff = env._contract_LHeff(self.i0, 'p0')
-            self.pipeL = self.LHeff.get_leg('(vR*.p0)')
         if right:
             self.RHeff = env._contract_RHeff(self.i0 + 1, 'p1')
-            self.pipeR = self.RHeff.get_leg('(p1.vL*)')
         self.acts_on = ['(vL.p0)', '(p1.vR)']  # overwrites class attribute!
 
     def combine_theta(self, theta):
@@ -1415,8 +1430,8 @@ class TwoSiteH(EffectiveH):
 
         """
         if self.combine:
-            theta = ct.combine_legs(theta, ['vL', 'p0'], ['p1', 'vR'], pipes=[self.pipeL, self.pipeR])
-        return ct.permute_legs(theta, codomain=self.acts_on, domain=[])
+            theta = ct.combine_legs(theta, ['vL', 'p0'], ['p1', 'vR'])
+        return ct.permute_legs(theta, codomain=self.acts_on, domain=[])  # FIXME why permute??
 
     def adjoint(self):
         """Return the hermitian conjugate of `self`."""
@@ -1438,7 +1453,7 @@ class TwoSiteH(EffectiveH):
     def update_LP(self, env, i, U=None):
         if self.combine:
             assert i == self.i0 + 1
-            LP = npc.tensordot(self.LHeff, U, axes=['(vR.p0*)', '(vL.p)'])
+            LP = npc.tensordot(self.LHeff, U, axes=['(p0*.vR)', '(vL.p)'])
             LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p*)', '(vR*.p0)'])
             env.set_LP(i, LP, age=env.get_LP_age(i - 1) + 1)
         else:
@@ -1448,7 +1463,7 @@ class TwoSiteH(EffectiveH):
         if self.combine:
             assert i == self.i0
             RP = npc.tensordot(VH, self.RHeff, axes=['(p.vR)', '(p1*.vL)'])
-            RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p*.vR*)'])
+            RP = npc.tensordot(RP, VH.conj(), axes=['(vL.p1*)', '(p*.vR*)'])
             env.set_RP(i, RP, age=env.get_RP_age(i + 1) + 1)
         else:
             env.get_RP(i, store=True)
@@ -1484,7 +1499,7 @@ class ZeroSiteH(EffectiveH):
         Overwritten by normal attribute, if `combine`.
     LHeff, RHeff : :class:`~tenpy.linalg.np_conserved.Array`
         Only set if :attr:`combine`, and only one of them depending on :attr:`move_right`.
-        If `move_right` was True, `LHeff` is set with labels ``'(vR*.p0)', 'wR', '(vR.p0*)'``
+        If `move_right` was True, `LHeff` is set with labels ``'(vR*.p0)', 'wR', '(p0*.vR)'``
         for bra, MPO, ket; otherwise `RHeff` is set with labels ``'(p0*.vL)', 'wL', '(p0, vL*)'``
     LP, W0, RP : :class:`~tenpy.linalg.np_conserved.Array`
         Tensors making up the network of `self`.
@@ -1948,7 +1963,7 @@ def _get_RHeff(env, i, eff_H):
     # return RHeff with 'p1' labels on site `i`
     if i == eff_H.i0 + eff_H.length - 1 and hasattr(eff_H, 'RHeff'):
         if eff_H.length == 1:
-            return eff_H.RHeff.replace_labels(['(p0.vL*)', '(p0*.vL)'], ['(p1.vL*)', '(p1*.vL)'])
+            return eff_H.RHeff.replace_labels(['(p0.vL*)', '(p0*.vL)'], ['(vL.p1*)', '(p1*.vL)'])
         return eff_H.RHeff
     # else:
     return env._contract_RHeff(i)
@@ -2053,7 +2068,7 @@ class DensityMatrixMixer(Mixer):
 
         if mix_left:
             LHeff = _get_LHeff(env=engine.env, i=i0, eff_H=engine.eff_H)
-            rho_L = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
+            rho_L = npc.tensordot(LHeff, theta, axes=['(p0*.vR)', '(vL.p0)'])
             rho_L.ireplace_label('(vR*.p0)', '(vL.p0)')
             rho_c = rho_L.conj()
             rho_L.iscale_axis(mix_L, 'wR')
@@ -2068,7 +2083,7 @@ class DensityMatrixMixer(Mixer):
         if mix_right:
             RHeff = _get_RHeff(env=engine.env, i=i0 + 1, eff_H=engine.eff_H)
             rho_R = npc.tensordot(theta, RHeff, axes=['(p1.vR)', '(p1*.vL)'])
-            rho_R.ireplace_label('(p1.vL*)', '(p1.vR)')
+            rho_R.ireplace_label('(vL.p1*)', '(p1.vR)')
             rho_c = rho_R.conj()
             rho_R.iscale_axis(mix_R, 'wL')
             rho_R = npc.tensordot(rho_c, rho_R, axes=[['wL*', '(vL*.p0*)'], ['wL', '(vL.p0)']])
@@ -2193,9 +2208,9 @@ class SubspaceExpansion(Mixer):
 
         if move_right:
             LHeff = _get_LHeff(env=engine.env, i=i0, eff_H=engine.eff_H)
-            LHeff = LHeff.transpose(['(vR*.p0)', 'wR', '(vR.p0*)'])
+            LHeff = LHeff.transpose(['(vR*.p0)', 'wR', '(p0*.vR)'])
             if not explicit_plus_hc and IdL is not None:
-                theta_expand = npc.tensordot(LHeff.iscale_axis(mix_L, 'wR'), theta, ['(vR.p0*)', '(vL.p0)'])
+                theta_expand = npc.tensordot(LHeff.iscale_axis(mix_L, 'wR'), theta, ['(p0*.vR)', '(vL.p0)'])
                 theta_expand.ireplace_label('(vR*.p0)', '(vL.p0)')
             else:
                 # need to stack different parts of the wR leg
@@ -2208,11 +2223,11 @@ class SubspaceExpansion(Mixer):
                     proj[IdR] = False
                 LHeff.iproject(proj, 'wR')
                 LHeff = LHeff * np.sqrt(self.amplitude)
-                stack.append(npc.tensordot(LHeff, theta, ['(vR.p0*)', '(vL.p0)']))
+                stack.append(npc.tensordot(LHeff, theta, ['(p0*.vR)', '(vL.p0)']))
                 if explicit_plus_hc:
                     # apply (LHeff^dagger theta) = conj(dot(LHeff.T, theta.conj()))
                     th = npc.tensordot(LHeff, theta.conj(), ['(vR*.p0)', '(vL*.p0*)'])
-                    stack.append(th.itranspose(['(vR.p0*)', 'wR', 'vR*']).iconj())
+                    stack.append(th.itranspose(['(p0*.vR)', 'wR', 'vR*']).iconj())
                 theta_expand = npc.concatenate(stack, axis='wR')
                 IdL = 0  # of the new, concatenated leg.
             theta_expand = theta_expand.combine_legs(['wR', 'vR'], qconj=-1)
@@ -2222,10 +2237,10 @@ class SubspaceExpansion(Mixer):
         else:  # move left
             RHeff = _get_RHeff(env=engine.env, i=i0, eff_H=engine.eff_H)
             # RHeff is on site i0, but has p1 label
-            RHeff = RHeff.transpose(['(p1*.vL)', 'wL', '(p1.vL*)'])
+            RHeff = RHeff.transpose(['(p1*.vL)', 'wL', '(vL.p1*)'])
             if not explicit_plus_hc and IdR is not None:
                 theta_expand = npc.tensordot(theta, RHeff.iscale_axis(mix_R, 'wL'), ['(p0.vR)', '(p1*.vL)'])
-                theta_expand.ireplace_label('(p1.vL*)', '(p0.vR)')
+                theta_expand.ireplace_label('(vL.p1*)', '(p0.vR)')
             else:
                 # need to stack different parts of the wR leg
                 wL = RHeff.get_leg('wL')
@@ -2239,7 +2254,7 @@ class SubspaceExpansion(Mixer):
                 stack.append(npc.tensordot(theta, RHeff, ['(p0.vR)', '(p1*.vL)']))
                 if explicit_plus_hc:
                     # apply (RHeff^dagger theta) = conj(dot(RHeff.T, theta.conj()))
-                    th = npc.tensordot(theta.conj(), RHeff, ['(p0*.vR*)', '(p1.vL*)'])
+                    th = npc.tensordot(theta.conj(), RHeff, ['(p0*.vR*)', '(vL.p1*)'])
                     stack.append(th.itranspose(['vL*', 'wL', '(p1*.vL*)']).iconj())
                 theta_expand = npc.concatenate(stack, axis='wR')
                 IdR = 0  # of the new, concatenated leg.
