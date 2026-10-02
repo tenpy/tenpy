@@ -43,7 +43,7 @@ import numpy as np
 from ..networks.mps import MPS_TOTAL_CHARGE_LABEL
 from ..tools import TruncationError, asConfig, memory_usage
 from . import mps_common
-from .mps_common import IterativeSweeps, OneSiteH, TwoSiteH
+from .mps_common import EffectiveH, IterativeSweeps, OneSiteH, TwoSiteH
 
 logger = logging.getLogger(__name__)
 
