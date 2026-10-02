@@ -753,11 +753,11 @@ class DMRGEngine(IterativeSweeps):
         if diag_method == 'lanczos':
             eng = ct.tensors.LanczosGroundState(self.eff_H, theta_guess, self.lanczos_params)
             E, theta, N = eng.run()
-        if diag_method == 'arpack':
+        elif diag_method == 'arpack':
             E, theta = ct.tensors.lanczos_arpack(self.eff_H, theta_guess, self.lanczos_params)
-        if diag_method == 'ED_block':
+        elif diag_method == 'ED_block':
             E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
-        if diag_method == 'ED_all':
+        elif diag_method == 'ED_all':
             E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=False)
         else:
             raise ValueError('Unknown diagonalization method: ' + repr(self.diag_method))
