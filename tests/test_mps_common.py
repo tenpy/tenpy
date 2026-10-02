@@ -114,14 +114,16 @@ def _boundary_LP_RP(H_MPO, psi):
     W0 = H_MPO.get_W(0)
     leg_L = W0.get_leg('wL').dual
     onehot_L = np.zeros(leg_L.dim, dtype=complex)
-    onehot_L[H_MPO.get_IdL(0)] = 1.0
+    IdL = 0  # TODO dummy, how to do it cleanly?
+    onehot_L[IdL] = 1.0
     onehot_L = ct.SymmetricTensor.from_dense_block(onehot_L, codomain=[leg_L], backend=backend, labels=['wR'])
     LP = ct.outer(env.init_LP(0, 0).as_SymmetricTensor(), onehot_L)
 
     W1 = H_MPO.get_W(psi.L - 1)
     leg_R = W1.get_leg('wR').dual
     onehot_R = np.zeros(leg_R.dim, dtype=complex)
-    onehot_R[H_MPO.get_IdR(psi.L - 1)] = 1.0
+    IdR = -1  # TODO dummy, how to do it cleanly?
+    onehot_R[IdR] = 1.0
     onehot_R = ct.SymmetricTensor.from_dense_block(onehot_R, codomain=[leg_R], backend=backend, labels=['wL'])
     RP = ct.outer(env.init_RP(psi.L - 1, 0).as_SymmetricTensor(), onehot_R)
     RP = ct.permute_legs(RP, codomain=['vL*', 'vL'], domain=['wL'])

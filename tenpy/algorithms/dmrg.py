@@ -43,7 +43,7 @@ import numpy as np
 from ..networks.mps import MPS_TOTAL_CHARGE_LABEL
 from ..tools import TruncationError, asConfig, memory_usage
 from . import mps_common
-from .mps_common import IterativeSweeps, OneSiteH, TwoSiteH
+from .mps_common import EffectiveH, IterativeSweeps, OneSiteH, TwoSiteH
 
 logger = logging.getLogger(__name__)
 
@@ -729,7 +729,17 @@ class DMRGEngine(IterativeSweeps):
 
         """
         N = -1  # (unknown)
-        assert theta_guess.labels_are('vL', *(f'p{i}' for i in range(self.n_optimize)), 'vR')
+
+        # verify labels on theta
+        if not self.combine:
+            expect_labels = ['vL', *(f'p{i}' for i in range(self.n_optimize)), 'vR']
+        elif self.n_optimize == 2:
+            expect_labels = ['(vL.p0)', '(p1.vR)']
+        elif self.move_right:
+            expect_labels = ['(vL.p0)', 'vR']
+        else:
+            expect_labels = ['vL', '(p0.vR)']
+        assert theta_guess.labels_are(*expect_labels, planar=True)
 
         diag_method = self.diag_method
 
@@ -1148,7 +1158,9 @@ def chi_list(chi_max, dchi=20, nsweeps=20):
     return chi_list
 
 
-def full_diag_effH(effH, theta_guess, keep_sector=True, charge_label=MPS_TOTAL_CHARGE_LABEL):
+def full_diag_effH(
+    effH: EffectiveH, theta_guess: ct.Tensor, keep_sector: bool = True, charge_label: str = MPS_TOTAL_CHARGE_LABEL
+) -> tuple[float, ct.Tensor]:
     """Perform an exact diagonalization of `effH`.
 
     This function offers an alternative to :func:`~tenpy.linalg.lanczos.lanczos`.
@@ -1176,6 +1188,7 @@ def full_diag_effH(effH, theta_guess, keep_sector=True, charge_label=MPS_TOTAL_C
 
     """
     fullH: ct.SymmetricTensor = effH.to_tensor()
+    assert fullH.codomain_labels == effH.acts_on
     E, V = ct.eigh(fullH, new_labels='eig*', new_leg_dual=False)
     # V: ct.SymmetricTensor
 
