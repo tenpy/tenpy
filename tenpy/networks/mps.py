@@ -5577,7 +5577,17 @@ class MPS(BaseMPSExpectationValue):
                 res = TM.matvec(TM.initial_guess(1.0))  # apply transfer matrix to identity
                 return npc.trace(res, 0, 1) * self.norm * other.norm
             else:
-                env = MPSEnvironment(self, other)
+                bra = self
+                if other is not self:
+                    # gauge as in MPSEnvironment, such that we can check for different total charges
+                    other.gauge_total_charge()
+                    bra = self._gauged()
+                    if _different_total_charges(bra, other):
+                        zero = self.backend.block_backend.block_from_numpy(
+                            np.asarray(0.0), dtype=ct.Dtype.common(self.dtype, other.dtype), device=self.device
+                        )
+                        return ct.block_backends.Scalar(zero)
+                env = MPSEnvironment(bra, other)
                 return env.full_contraction(0)
         else:  # infinite
             if not understood_infinite:
@@ -7504,7 +7514,14 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         if ket is None:
             ket = bra
         if ket is not bra:
-            bra = ket._gauge_compatible_vL_vR(bra)  # ensure matching charges
+            # ensure that the charge legs of bra and ket are on the same (last) site
+            ket.gauge_total_charge()
+            bra = bra._gauged()
+            if _different_total_charges(bra, ket):
+                raise ValueError('bra and ket have different total charges; all contractions vanish.')
+            # TODO: for total charge legs with dim > 1, bra and ket may only share some sectors (check with
+            #       _have_common_total_charge); restrict the charge leg of (the copy of) bra to these sectors?
+            #       Requires masks on LegPipes in cyten, since merged charge legs with dim > 1 are pipes.
         self.bra = bra
         self.ket = ket
         self.dtype = ct.Dtype.common(bra.dtype, ket.dtype)
@@ -8609,7 +8626,7 @@ class InitialStateBuilder:
         if check_charge is None:
             return
         check_charge = tuple(check_charge)
-        has_charge = tuple(psi.get_total_charge(psi.bc == 'finite'))
+        has_charge = tuple(psi.get_total_charge())
         assert check_charge == has_charge
 
     def from_file(self):
