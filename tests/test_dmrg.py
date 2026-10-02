@@ -149,6 +149,7 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, L=6):
     ],
 )
 @pytest.mark.slow
+@pytest.mark.filterwarnings('ignore:Re-using environment with `chi_list` set! Do you want this:UserWarning')
 def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
     if combine:
         pytest.xfail('combine is not fixed yet. See PR #694')  # https://github.com/tenpy/tenpy/pull/694
@@ -191,7 +192,7 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
         # if mixer is not None:
         #     dmrg_pars['mixer_params']['amplitude'] = 1.e-12  # don't actually contribute...
         dmrg_pars['start_env'] = 1
-    res = dmrg.run(psi, M, dmrg_pars)
+    res = dmrg.run(psi, M, dmrg_pars, resume_data={'init_env_data': dict(start_env_sites=0)})
     if bc_MPS == 'finite':
         ED = ExactDiag.from_model(M)
         ED.build_full_H_from_mpo()
