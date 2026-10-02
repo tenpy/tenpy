@@ -36,7 +36,8 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v6
       with:
-        submodules: true  # not recursive: for now private submodules within cyten
+        # recursive: also pull cyten's hdf5_io and SUN_symbols submodules
+        submodules: recursive
 
     - name: Set up micromamba
       uses: mamba-org/setup-micromamba@v3
