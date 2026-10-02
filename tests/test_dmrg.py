@@ -125,12 +125,14 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, L=6):
         assert E0 == pytest.approx(np.linalg.eigvalsh(matrix)[0])
 
 
-@pytest.mark.skip(reason='Not ported yet')
+# @pytest.mark.skip(reason='Not ported yet')
 @pytest.mark.parametrize(
     'bc_MPS, combine, mixer, n',
     [
         # bc     combine  mixer n
         ('finite', False, False, 2),  # simplest case
+        ('infinite', False, False, 2),  # simplest case
+        # FIXME also do conserve!
         ('finite', True, False, 2),  # simplest case
         ('finite', True, True, 1),
         # 1-site DMRG without mixer is expected to fail!
@@ -194,6 +196,7 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
     res = dmrg.run(psi, M, dmrg_pars)
     if bc_MPS == 'finite':
         ED = ExactDiag.from_model(M)
+        pytest.xfail('ED for comparison not implemented yet')  # FIXME Ludwig
         ED.build_full_H_from_mpo()
         ED.full_diagonalization()
         E_ED, psi_ED = ED.groundstate()
