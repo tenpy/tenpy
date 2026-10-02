@@ -266,6 +266,10 @@ mps_contraction_diagram_operations: dict[str, ct.PlanarDiagram] = {
         definition='RP:vL @ ket:vR, ket:p @ bra:p*, RP:vL* @ bra:vR*, ket:vL -> vL, bra:vL* -> vL*',
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
     ),
+    # with an additional leg `c` on the outer side of LP / RP, which is not contracted
+    'LP2c @ TM': ct.PlanarDiagram(
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], c=['c']),
+    ),
     'bra-W-ket2 @ RP2': ct.PlanarDiagram(
         tensors='RP[vL*, vL], W[p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
         definition=('RP:vL @ ket:vR, ket:p @ W:p*, RP:vL* @ bra:vR*, bra:p* @ W:p, ket:vL -> vL, bra:vL* -> vL*'),
