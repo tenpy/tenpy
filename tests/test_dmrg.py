@@ -3,7 +3,6 @@
 # Copyright (C) TeNPy Developers, Apache license
 import warnings
 from functools import reduce
-from pathlib import Path
 
 import cyten as ct
 import numpy as np
@@ -199,24 +198,13 @@ def _dense_heisenberg(L):
 
 
 _HEISENBERG_BACKENDS = {'SU2': 'FusionTreeBackend', 'Sz': 'AbelianBackend', None: 'NoSymmetryBackend'}
-_SUN_DATA_PATH = Path(__file__).resolve().parents[1] / 'cyten_repo' / 'external' / 'SUN_symbols'
-
-
-@pytest.fixture(scope='module', autouse=True)
-def _sun_data_path():
-    """Point cyten to the bundled SU(N) data, independent of env vars / user config (if the data exists).
-
-    The data is the ``cyten_repo/external/SUN_symbols`` submodule (``git submodule update --init --recursive``).
-    """
-    if not any(_SUN_DATA_PATH.glob('*.hdf5')):
-        yield
-        return
-    with ct.temporary_options(su_n_data_path=str(_SUN_DATA_PATH)):
-        yield
 
 
 def _heisenberg_model(kind, L):
-    """Heisenberg chain; for ``kind='SU2'`` cyten's default routing gives the Clebsch-Gordan-data based SU(N=2)."""
+    """Heisenberg chain; for ``kind='SU2'`` cyten's default routing gives the Clebsch-Gordan-data based SU(N=2).
+
+    The SU(N) data path is configured for all tests in ``tests/conftest.py``.
+    """
     return SpinChain(dict(L=L, bc_MPS='finite', conserve=kind))
 
 
