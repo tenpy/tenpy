@@ -1158,7 +1158,9 @@ def chi_list(chi_max, dchi=20, nsweeps=20):
     return chi_list
 
 
-def full_diag_effH(effH, theta_guess, keep_sector=True, charge_label=MPS_TOTAL_CHARGE_LABEL):
+def full_diag_effH(
+    effH: EffectiveH, theta_guess: ct.Tensor, keep_sector: bool = True, charge_label: str = MPS_TOTAL_CHARGE_LABEL
+) -> tuple[float, ct.Tensor]:
     """Perform an exact diagonalization of `effH`.
 
     This function offers an alternative to :func:`~tenpy.linalg.lanczos.lanczos`.
@@ -1186,6 +1188,7 @@ def full_diag_effH(effH, theta_guess, keep_sector=True, charge_label=MPS_TOTAL_C
 
     """
     fullH: ct.SymmetricTensor = effH.to_tensor()
+    assert fullH.codomain_labels == effH.acts_on
     E, V = ct.eigh(fullH, new_labels='eig*', new_leg_dual=False)
     # V: ct.SymmetricTensor
 
