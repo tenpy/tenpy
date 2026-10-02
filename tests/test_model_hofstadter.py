@@ -108,7 +108,7 @@ def test_ED_spectrum_HofstadterFermions(bc_x, bc_y, gauge):
         return
 
     model = HofstadterFermions(model_params)
-    engine = ExactDiag(model)
+    engine = ExactDiag.from_model(model)
     engine.build_full_H_from_mpo()
     engine.full_diagonalization()
     low_energy_spectrum = np.sort(engine.E)[:10]
@@ -184,7 +184,7 @@ def test_ED_spectrum_HofstadterBosons(bc_x, bc_y, gauge):
         return
 
     model = HofstadterBosons(model_params)
-    engine = ExactDiag(model)
+    engine = ExactDiag.from_model(model)
     engine.build_full_H_from_mpo()
     engine.full_diagonalization()
     low_energy_spectrum = np.sort(engine.E)[:10]

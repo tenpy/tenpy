@@ -16,7 +16,7 @@ from tenpy.models.lattice import Chain
 from tenpy.models.model import CouplingModel, MPOModel
 from tenpy.models.spins import DipolarSpinChain, SpinChain
 from tenpy.models.tf_ising import TFIChain
-from tenpy.networks import mps
+from tenpy.networks import MPO, mps
 
 
 def e0_transverse_ising(g=0.5):
@@ -38,6 +38,29 @@ class _DummyEffH:
 
     def to_tensor(self):
         return self.tensor
+
+
+class WorkaroundNNModel:
+    def __init__(self, site: ct.Site, nn_interaction: ct.Coupling, onsite: ct.Coupling, bc_MPS: str, lat):
+        self.site = site
+        self.nn_interaction = nn_interaction
+        self.onsite = onsite
+        self.bc_MPS = bc_MPS
+        self.lat = lat
+
+        A, B = nn_interaction.factorization
+        (C,) = onsite.factorization
+        Id = site.identity_tensor(w=C.get_leg('wL'))
+        grid = [[Id, A, C], [None, None, B], [None, None, Id]]
+        W = ct.tensor_from_grid(
+            grid, labels=['wL', 'p', 'wR', 'p*'], row_labels=['IdL', None, 'IdR'], col_labels=['IdL', None, 'IdR']
+        )
+
+        if bc_MPS == 'infinite':
+            L = lat.Ls[0]
+            self.H_MPO = MPO([site] * L, [W] * L, bc='infinite', max_range=2, mps_unit_cell_width=1)
+        else:
+            raise NotImplementedError
 
 
 @pytest.mark.filterwarnings('ignore:bitcount function is deprecated:DeprecationWarning')
@@ -108,6 +131,7 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, L=6):
     'bc_MPS, combine, mixer, n',
     [
         # bc     combine  mixer n
+        ('finite', False, False, 2),  # simplest case
         ('finite', True, False, 2),  # simplest case
         ('finite', True, True, 1),
         # 1-site DMRG without mixer is expected to fail!
@@ -126,10 +150,23 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, L=6):
     ],
 )
 @pytest.mark.slow
+@pytest.mark.filterwarnings('ignore:Re-using environment with `chi_list` set! Do you want this:UserWarning')
 def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
+    if combine:
+        pytest.xfail('combine is not fixed yet. See PR #694')  # https://github.com/tenpy/tenpy/pull/694
+
     L = 2 if bc_MPS == 'infinite' else 8
-    model_params = dict(L=L, J=1.0, g=g, bc_MPS=bc_MPS, conserve=None)
-    M = TFIChain(model_params)
+
+    if bc_MPS == 'finite':
+        model_params = dict(L=L, J=1.0, g=g, bc_MPS=bc_MPS, conserve=None)
+        M = TFIChain(model_params)
+    if bc_MPS == 'infinite':
+        site = ct.models.sites.SpinSite()
+        lat = Chain(L, site, bc_MPS='infinite', bc='periodic')
+        SigmaX_SigmaX = ct.models.couplings.spin_spin_coupling([site, site], Jx=4)
+        g_SigmaZ = ct.models.couplings.spin_field_coupling([site], hz=2 * g)
+        M = WorkaroundNNModel(site, SigmaX_SigmaX, g_SigmaZ, bc_MPS=bc_MPS, lat=lat)
+
     state = [0] * L  # Ferromagnetic Ising
     psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
     dmrg_pars = {
@@ -156,9 +193,9 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
         # if mixer is not None:
         #     dmrg_pars['mixer_params']['amplitude'] = 1.e-12  # don't actually contribute...
         dmrg_pars['start_env'] = 1
-    res = dmrg.run(psi, M, dmrg_pars)
+    res = dmrg.run(psi, M, dmrg_pars, resume_data={'init_env_data': dict(start_env_sites=0)})
     if bc_MPS == 'finite':
-        ED = ExactDiag(M)
+        ED = ExactDiag.from_model(M)
         ED.build_full_H_from_mpo()
         ED.full_diagonalization()
         E_ED, psi_ED = ED.groundstate()
@@ -336,7 +373,7 @@ def test_dmrg_diag_method(engine, diag_method, tol=1.0e-6):
         'diag_method': diag_method,
         'mixer': True,
     }
-    ED = ExactDiag(M)
+    ED = ExactDiag.from_model(M)
     ED.build_full_H_from_mpo()
     ED.full_diagonalization()
     if diag_method == 'ED_all':
@@ -367,7 +404,7 @@ def test_dmrg_excited(eps=1.0e-12):
     model_params = dict(L=L, J=1.0, g=g, bc_MPS=bc, conserve='parity', sort_charge=True)
     M = TFIChain(model_params)
     # compare to exact solution
-    ED = ExactDiag(M)
+    ED = ExactDiag.from_model(M)
     ED.build_full_H_from_mpo()
     ED.full_diagonalization()
     # Note: energies sorted by charge sector (first 0), then ascending -> perfect for comparison

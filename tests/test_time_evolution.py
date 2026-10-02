@@ -71,7 +71,7 @@ def test_ExpMPOEvolution(bc_MPS, approximation, compression, use_eig_based_svd, 
     eng = mpo_evolution.ExpMPOEvolution(psi, M, options)
 
     if bc_MPS == 'finite':
-        ED = exact_diag.ExactDiag(M)
+        ED = exact_diag.ExactDiag.from_model(M)
         ED.build_full_H_from_mpo()
         ED.full_diagonalization()
         psiED = ED.mps_to_full(psi)
@@ -121,7 +121,7 @@ def test_ExpMPOEvolution_dipolar(bc_MPS, approximation, compression, dt=0.01, nu
 
     if bc_MPS == 'finite':
         # compare evolved state to ED
-        ED = exact_diag.ExactDiag(model)
+        ED = exact_diag.ExactDiag.from_model(model)
         ED.build_full_H_from_mpo()
         ED.full_diagonalization()
         psi_ED = ED.mps_to_full(psi)

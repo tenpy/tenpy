@@ -42,7 +42,7 @@ def test_DipolarSpinChain():
         expect_dipole = i * expect_2Sz
         expect_charges = np.array([expect_2Sz, expect_dipole]).T
         assert np.all(s.leg.charges == expect_charges)
-    ED = ExactDiag(model)
+    ED = ExactDiag.from_model(model)
     ED.build_full_H_from_mpo()
     full_H_qtotal = ED.full_H.qtotal
     assert np.allclose(full_H_qtotal, [0, 0])

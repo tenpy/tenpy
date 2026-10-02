@@ -85,7 +85,7 @@ def test_tebd(bc_MPS, which_engine, compute_err, use_eig_based_svd, g=0.5):
     print('norm_test', psi.norm_test())
     if bc_MPS == 'finite':
         psi.canonical_form()
-        ED = ExactDiag(M)
+        ED = ExactDiag.from_model(M)
         ED.build_full_H_from_mpo()
         ED.full_diagonalization()
         E_ED, psi_ED = ED.groundstate()

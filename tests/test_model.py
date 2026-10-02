@@ -481,12 +481,12 @@ def test_CouplingMPOModel_group():
         print('model = ', m)
         assert m.H_MPO.max_range == 1
         # test grouping sites
-        ED = ExactDiag(m)
+        ED = ExactDiag.from_model(m)
         #  ED.build_full_H_from_mpo()
         ED.build_full_H_from_bonds()
         m.group_sites(n=2)
         assert m.H_MPO.max_range == 1
-        ED_gr = ExactDiag(m)
+        ED_gr = ExactDiag.from_model(m)
         ED_gr.build_full_H_from_mpo()
         H = ED.full_H.split_legs().to_ndarray()
         Hgr = ED_gr.full_H.split_legs()
@@ -513,7 +513,7 @@ def test_model_H_conversion(L=6):
     # conversion from MPO to bond in MPOModel
     H_bond = m.calc_H_bond_from_MPO()
     # compare: did we get the correct result?
-    ED = ExactDiag(m)
+    ED = ExactDiag.from_model(m)
     ED.build_full_H_from_bonds()
     H0 = ED.full_H  # this should be correct
     ED.full_H = None
@@ -537,7 +537,7 @@ def test_model_H_conversion_dipolar(L=6):
     # build full hamiltonian from MPO, assume that to be correct
     m = DipolarSpinChain(model_params)
     m.group_sites(3)
-    ED = ExactDiag(m)
+    ED = ExactDiag.from_model(m)
     ED.build_full_H_from_mpo()
     H0 = ED.full_H
     H0.test_sanity()
@@ -545,7 +545,7 @@ def test_model_H_conversion_dipolar(L=6):
 
     # convert H_MPO -> H_bond (calc_H_bond_from_MPO called by from_MPOModel)
     m_nn = model.NearestNeighborModel.from_MPOModel(m)
-    ED = ExactDiag(m_nn)
+    ED = ExactDiag.from_model(m_nn)
     ED.build_full_H_from_bonds()
     H1 = ED.full_H
     H1.test_sanity()

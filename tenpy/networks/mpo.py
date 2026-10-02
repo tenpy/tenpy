@@ -3473,7 +3473,7 @@ class MPOEnvironment(BaseEnvironment):
         """
         # same as MPSEnvironment.full_contraction, but also contract 'wL' with 'wR'
         LP, RP = self._full_contraction_LP_RP(i0)
-        res = ct.inner(LP, RP, do_dagger=False).to_numpy()
+        res = ct.planar_contraction(LP, RP, ['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']).to_numpy()
         if self.H.explicit_plus_hc:
             res = res + np.conj(res)
         return res
@@ -3571,6 +3571,10 @@ class MPOEnvironmentBuilder:
     """
 
     def __init__(self, H, psi):
+        warnings.warn(
+            'MPOEnvironmentBuilder is not yet supported. To run iDMRG for now, you can e.g. set '
+            'resume_data={"init_env_data": dict(start_env_sites=0)} in the DMRG engine kwargs'
+        )
         raise NotImplementedError('TODO: MPOEnvironmentBuilder')
         self.H = H
         self.ket = psi

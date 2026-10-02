@@ -753,11 +753,11 @@ class DMRGEngine(IterativeSweeps):
         if diag_method == 'lanczos':
             eng = ct.tensors.LanczosGroundState(self.eff_H, theta_guess, self.lanczos_params)
             E, theta, N = eng.run()
-        if diag_method == 'arpack':
+        elif diag_method == 'arpack':
             E, theta = ct.tensors.lanczos_arpack(self.eff_H, theta_guess, self.lanczos_params)
-        if diag_method == 'ED_block':
+        elif diag_method == 'ED_block':
             E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
-        if diag_method == 'ED_all':
+        elif diag_method == 'ED_all':
             E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=False)
         else:
             raise ValueError('Unknown diagonalization method: ' + repr(self.diag_method))
@@ -1188,7 +1188,14 @@ def full_diag_effH(
 
     """
     fullH: ct.SymmetricTensor = effH.to_tensor()
-    assert fullH.codomain_labels == effH.acts_on
+    if isinstance(effH, TwoSiteH) and not effH.combine:
+        assert fullH.labels_are('vL', 'p0', 'p1', 'vR', 'vR*', 'p1*', 'p0*', 'vL*', planar=True)
+    else:
+        raise NotImplementedError  # TODO implement similar label check!
+
+    # TODO workaround. See https://github.com/tenpy/tenpy/issues/693
+    fullH = ct.planar_permute_legs(fullH, codomain=effH.acts_on)
+
     E, V = ct.eigh(fullH, new_labels='eig*', new_leg_dual=False)
     # V: ct.SymmetricTensor
 
