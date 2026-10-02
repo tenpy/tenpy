@@ -3752,6 +3752,13 @@ class MPS(BaseMPSExpectationValue):
         just initialize the corresponding local states and generate a corresponding `index_map`
         of the geometry of pairs, see the example below.
 
+        If the entries of an `index_map` are not sorted, the sites of the corresponding local MPS
+        are first permuted with :meth:`permute_sites`.
+        If the local MPS are interleaved (or wrap around the unit cell of an infinite MPS), the
+        physical legs of some local MPS cross the virtual bonds of others. This requires a
+        symmetry with symmetric braids (e.g. bosons or fermions, but not anyons).
+        Symmetries with a non-trivial shift under translations are not supported.
+
         Parameters
         ----------
         mps_covering : list of :class:`MPS`
@@ -3767,7 +3774,9 @@ class MPS(BaseMPSExpectationValue):
         Returns
         -------
         psi : :class:`MPS`
-            An MPS constructed as explained above.
+            An MPS constructed as explained above. It is *not* gauged, see :attr:`is_gauged`:
+            the total charge of each local MPS is kept on the site of its last tensor.
+            Call :meth:`gauge_total_charge` if required.
 
         Example
         -------
@@ -3790,21 +3799,21 @@ class MPS(BaseMPSExpectationValue):
             |    0  1  2  3  4  5  6
 
         As another example, let's generalize :meth:`from_singlets` to "spin-full" fermions
-        represented by the (spin-less!) :class:`~tenpy.networks.site.FermionSite` with an extra
+        represented by the (spin-less!) :class:`~cyten.sites.SpinlessFermionSite` with an extra
         index for the spin, here `u=0,1` on a 2D square lattice.
 
         .. testsetup :: product_mps_covering
 
+            import cyten as ct
             from tenpy.networks.mps import MPS
-            from tenpy.networks.site import FermionSite
             from tenpy.models.lattice import Square, MultiSpeciesLattice
 
         .. doctest :: product_mps_covering
 
-            >>> ferm = FermionSite(conserve='N')
+            >>> ferm = ct.sites.SpinlessFermionSite(conserve='N')
             >>> lat = MultiSpeciesLattice(Square(4, 2, None), [ferm] * 2, ['up', 'down'])
-            >>> ferm_up_down = MPS.from_product_state([ferm] * 4, ['full', 'empty', 'empty', 'full'], unit_cell_width=4)
-            >>> ferm_down_up = MPS.from_product_state([ferm] * 4, ['empty', 'full', 'full', 'empty'], unit_cell_width=4)
+            >>> ferm_up_down = MPS.from_product_state([ferm] * 4, ['1', '0', '0', '1'], unit_cell_width=4)
+            >>> ferm_down_up = MPS.from_product_state([ferm] * 4, ['0', '1', '1', '0'], unit_cell_width=4)
             >>> ferm_singlet = ferm_up_down.add(ferm_down_up, 0.5**0.5, -(0.5**0.5))
             >>> index_map = [
             ...     [(x, y, 0), (x, y, 1), (x + 1, y, 0), (x + 1, y, 1)] for (x, y) in [(0, 0), (0, 1), (2, 0), (2, 1)]
@@ -3824,67 +3833,72 @@ class MPS(BaseMPSExpectationValue):
         sites = [None] * L
         for local_psi, ind_map in zip(mps_covering, index_map):
             assert local_psi.bc == 'finite'
+            assert local_psi.L == len(ind_map)
             for site, i in zip(local_psi.sites, ind_map):
                 if sites[i % L] is not None:
                     raise ValueError(f'duplicate index {i:d} for {L:d}-site index_map\n{index_map!r}')
                 sites[i % L] = site
-        chinfo = sites[0].leg.chinfo
+        symmetry = sites[0].symmetry
         for site in sites:
-            assert site.leg.chinfo == chinfo, 'incompatible types of charges'
+            assert site.symmetry == symmetry, 'incompatible symmetries'
+        if not symmetry.trivial_shift:
+            raise ValueError('MPS.from_product_mps_covering does not support symmetries with non-trivial shift.')
         # first extract tensors from local mps
         # i = index in new psi to be constructed, j = index in local_psi
         B_parts = [[] for _ in range(L)]
         SR_parts = [[] for _ in range(L)]
-        for local_psi, ind_map in zip(mps_covering, index_map):
+        charge_label = '!' + MPS_TOTAL_CHARGE_LABEL
+        for k, (local_psi, ind_map) in enumerate(zip(mps_covering, index_map)):
             local_psi = local_psi.copy()
             argsort = np.argsort(ind_map)
             if not np.all(argsort == np.arange(len(argsort))):
                 local_psi.permute_sites(argsort)
                 ind_map = [ind_map[i] for i in argsort]
             local_psi.convert_form('B')
-            triv_leg = npc.LegCharge(chinfo, [0, 1], [chinfo.make_valid()])  # trivial leg
-            local_psi.gauge_total_charge(vL_leg=triv_leg, vR_leg=triv_leg.conj())
+            local_psi.gauge_total_charge()  # only charge leg on the last tensor, trivial outer bonds
             for j, i in enumerate(ind_map):
                 B = local_psi.get_B(j, 'B')
+                if B.has_label(charge_label):
+                    # unique label for each local MPS; still recognized by `_charge_leg_labels`
+                    B.relabel({charge_label: f'{charge_label}_{k:d}'})
                 B_parts[i % L].append(B)
-                SR = local_psi.get_SR(j)
-                SR_parts[i % L].append(SR)
                 if j + 1 < len(ind_map):
+                    SR = local_psi.get_SR(j).as_SymmetricTensor()
+                    SR_parts[i % L].append(SR)
                     next_i = ind_map[j + 1]
-                    vR_leg = B.get_leg('vR')
-                    Triv = npc.diag(1.0, vR_leg.conj(), labels=['vL', 'vR'])
+                    Triv = ct.DiagonalTensor.from_eye(
+                        leg=B.get_leg('vR').dual,
+                        backend=B.backend,
+                        labels=['vL', 'vR'],
+                        dtype=B.dtype,
+                        device=B.device,
+                    ).as_SymmetricTensor()
                     for i2 in range(i + 1, next_i):
                         B_parts[i2 % L].append(Triv)
                         SR_parts[i2 % L].append(SR)
         # combine B_parts and SR_parts to big tensors Bs and SVs
-        Bs = []
+        Bs = [_combine_virtual_legs(B_p) for B_p in B_parts]
         SVs = [None]
-        for B_p, S_p in zip(B_parts, SR_parts):
-            B = B_p[0]
-            SR = S_p[0]
-            for B2, SR2 in zip(B_p[1:], S_p[1:]):
-                B2 = B2.replace_labels(['vL', 'vR'], ['vL2', 'vR2'])
-                B = npc.outer(B, B2).combine_legs([['vL', 'vL2'], ['vR', 'vR2']], qconj=[+1, -1])
-                B.ireplace_labels(['(vL.vL2)', '(vR.vR2)'], ['vL', 'vR'])
-                pipeR = B.get_leg('vR')
-                d, d2 = (len(SR), len(SR2))
-                inds = np.indices([d, d2]).transpose([1, 2, 0]).reshape([d * d2, 2])
-                SR = SR[inds[:, 0]] * SR2[inds[:, 1]]  # = np.outer(SR, SR2).flatten()
-                perm = [pipeR.map_incoming_flat(ind) for ind in inds]
-                SR = SR[inverse_permutation(perm)]
-                B.legs[B.get_leg_index('vR')] = pipeR.to_LegCharge()
-                B.legs[B.get_leg_index('vL')] = B.get_leg('vL').to_LegCharge()
-            Bs.append(B)
+        for B, SR_p in zip(Bs, SR_parts):
+            if len(SR_p) == 0:  # no local MPS crosses this bond
+                SR = ct.DiagonalTensor.from_eye(
+                    leg=ct.ElementarySpace.from_trivial_sector(symmetry=symmetry),
+                    backend=B.backend,
+                    labels=['vL', 'vR'],
+                    dtype=B.dtype.to_real,
+                    device=B.device,
+                )
+            else:
+                SR = ct.DiagonalTensor.from_tensor(_combine_virtual_legs(SR_p))
             SVs.append(SR)
         SVs[0] = SVs[-1]
-        if bc == 'finite':
-            SVs = SVs[:-1]
         return cls(
             sites,
             Bs,
             SVs,
             bc=bc,
             form='B',
+            norm=float(np.prod([local_psi.norm for local_psi in mps_covering])),
             unit_cell_width=unit_cell_width,
             understood_shift_symmetry=understood_shift_symmetry,
         )
@@ -8915,6 +8929,35 @@ def _charge_leg_labels(B: ct.Tensor) -> list[str]:
     if not isinstance(B, ct.HiddenLegTensor):
         return []
     return [B.labels[i] for i in B.hidden_leg_idcs() if MPS_TOTAL_CHARGE_LABEL in B.labels[i]]
+
+
+def _combine_virtual_legs(parts: list[ct.SymmetricTensor]) -> ct.SymmetricTensor:
+    """Combine tensors on parallel virtual bonds into a single tensor with legs ``vL, (p), vR``.
+
+    Each of the `parts` has legs ``vL, vR`` and at most one of them additionally a physical leg.
+    The outer product of the `parts` is taken and the virtual legs are combined to
+    ``vL = (vL0.vL1...)`` and ``vR = (vR0.vR1...)``, which are then flattened to
+    :class:`~cyten.ElementarySpace`s. If the `parts` on the left and right of a bond contain the
+    same bonds in the same order (up to additional trivial legs), the resulting legs are
+    contractible. Used by :meth:`MPS.from_product_mps_covering`.
+    """
+    n = len(parts)
+    if n == 1:
+        return parts[0]
+    p_parts = [k for k, T in enumerate(parts) if T.num_legs - len(_charge_leg_labels(T)) > 2]
+    if any(k != n - 1 for k in p_parts) and not parts[0].symmetry.has_symmetric_braid:
+        # the physical leg would need to be braided past the virtual legs of the following parts
+        raise NotImplementedError('Crossing bonds require a symmetry with symmetric braids.')
+    T = parts[0].copy(deep=False)
+    T.relabel({'vL': 'vL0', 'vR': 'vR0'})
+    for k in range(1, n):
+        T = ct.outer(T, parts[k], relabel2={'vL': f'vL{k:d}', 'vR': f'vR{k:d}'})
+    vLs = [f'vL{k:d}' for k in range(n)]
+    vRs = [f'vR{k:d}' for k in reversed(range(n))]  # reversed, such that vR pipe is dual to vL pipe
+    T = ct.combine_legs(T, vLs, vRs, pipe_dualities=[False, True])
+    combine_labels = ct.tensors._tensors._combine_leg_labels
+    T.relabel({combine_labels(vLs): 'vL', combine_labels(vRs): 'vR'})
+    return ct.flatten_pipe_leg(ct.flatten_pipe_leg(T, 'vL'), 'vR')
 
 
 def _flatten_domain_pipe(B: ct.SymmetricTensor, domain_pos: int) -> ct.SymmetricTensor:
