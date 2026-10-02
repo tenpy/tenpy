@@ -729,7 +729,17 @@ class DMRGEngine(IterativeSweeps):
 
         """
         N = -1  # (unknown)
-        assert theta_guess.labels_are('vL', *(f'p{i}' for i in range(self.n_optimize)), 'vR')
+
+        # verify labels on theta
+        if not self.combine:
+            expect_labels = ['vL', *(f'p{i}' for i in range(self.n_optimize)), 'vR']
+        elif self.n_optimize == 2:
+            expect_labels = ['(vL.p0)', '(p1.vR)']
+        elif self.move_right:
+            expect_labels = ['(vL.p0)', 'vR']
+        else:
+            expect_labels = ['vL', '(p0.vR)']
+        assert theta_guess.labels_are(*expect_labels, planar=True)
 
         diag_method = self.diag_method
 
