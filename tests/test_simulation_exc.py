@@ -33,7 +33,7 @@ def test_OrthogonalExcitations(tmp_path, switch, group, eps=1.0e-10, N_exc=3):
     M = TFIChain(model_params)
 
     # get exact diagonalization reference excitations
-    ED = ExactDiag(M)
+    ED = ExactDiag.from_model(M)
     ED.build_full_H_from_mpo()
     ED.full_diagonalization()
     # Note: energies sorted by chargesector and then within charge sector -> perfect for comparison

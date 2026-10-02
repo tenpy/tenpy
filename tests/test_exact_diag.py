@@ -316,7 +316,7 @@ def test_ED():
     # just quickly check that it runs without errors for a small system
     xxz_pars = dict(L=4, Jxx=1.0, Jz=1.0, hz=0.1, bc_MPS='finite', sort_charge=True)
     M = XXZChain(xxz_pars)
-    ED = exact_diag.ExactDiag(M)
+    ED = exact_diag.ExactDiag.from_model(M)
     ED.build_full_H_from_mpo()
     H, ED.full_H = ED.full_H, None
     ED.build_full_H_from_bonds()
@@ -328,7 +328,7 @@ def test_ED():
     assert np.all(psi.qtotal == [0])
     E_sec2, psi_sec2 = ED.groundstate([2])
     assert np.all(psi_sec2.qtotal == [2])
-    ED2 = exact_diag.ExactDiag(M, psi.qtotal)
+    ED2 = exact_diag.ExactDiag.from_model(M, psi.qtotal)
     ED2.build_full_H_from_mpo()
     ED2.full_diagonalization()
     E2, psi2 = ED2.groundstate()

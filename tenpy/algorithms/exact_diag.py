@@ -90,7 +90,7 @@ class ExactDiag:
 
     """
 
-    def __init__(self, sites, charge_sector=None, max_size=2e6):
+    def __init__(self, sites: list[ct.Site], charge_sector=None, max_size=2e6):
         self.model = None
         self.full_H = None
         self.E = None
@@ -515,7 +515,7 @@ def get_scipy_sparse_Hamiltonian(model, undo_sort_charge: bool = True):
 
 
 def _get_numpy_Hamiltonian_ExactDiag_full_H(model, from_mpo: bool, undo_sort_charge: bool):
-    ed = ExactDiag(model)
+    ed = ExactDiag.from_model(model)
     if from_mpo and hasattr(model, 'H_MPO'):
         ed.build_full_H_from_mpo()
     else:

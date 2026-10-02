@@ -476,7 +476,7 @@ def test_MPO_var(L=8, tol=1.0e-13):
     psi = random_MPS(L, 2, 10)
     exp_val = M.H_MPO.expectation_value(psi)
 
-    ED = ExactDiag(M)
+    ED = ExactDiag.from_model(M)
     ED.build_full_H_from_mpo()
     psi_full = ED.mps_to_full(psi)
     exp_val_full = npc.inner(psi_full, npc.tensordot(ED.full_H, psi_full, axes=1), axes='range', do_conj=True)

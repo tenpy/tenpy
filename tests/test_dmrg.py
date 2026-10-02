@@ -161,7 +161,7 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
         dmrg_pars['start_env'] = 1
     res = dmrg.run(psi, M, dmrg_pars)
     if bc_MPS == 'finite':
-        ED = ExactDiag(M)
+        ED = ExactDiag.from_model(M)
         ED.build_full_H_from_mpo()
         ED.full_diagonalization()
         E_ED, psi_ED = ED.groundstate()
@@ -236,7 +236,7 @@ def test_dmrg_diag_method(engine, diag_method, tol=1.0e-6):
         'diag_method': diag_method,
         'mixer': True,
     }
-    ED = ExactDiag(M)
+    ED = ExactDiag.from_model(M)
     ED.build_full_H_from_mpo()
     ED.full_diagonalization()
     if diag_method == 'ED_all':
@@ -267,7 +267,7 @@ def test_dmrg_excited(eps=1.0e-12):
     model_params = dict(L=L, J=1.0, g=g, bc_MPS=bc, conserve='parity', sort_charge=True)
     M = TFIChain(model_params)
     # compare to exact solution
-    ED = ExactDiag(M)
+    ED = ExactDiag.from_model(M)
     ED.build_full_H_from_mpo()
     ED.full_diagonalization()
     # Note: energies sorted by charge sector (first 0), then ascending -> perfect for comparison
