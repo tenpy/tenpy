@@ -56,9 +56,24 @@ class WorkaroundNNModel:
             grid, labels=['wL', 'p', 'wR', 'p*'], row_labels=['IdL', None, 'IdR'], col_labels=['IdL', None, 'IdR']
         )
 
+        Id_C = ct.planar_contraction(
+            Id, C, 'wR', 'wL', relabel1={'p': 'p0', 'p*': 'p0*'}, relabel2={'p': 'p1', 'p*': 'p1*'}
+        )
+        Id_C = ct.squeeze_legs(Id_C, ['wL', 'wR'])
+        Id_C = ct.planar_permute_legs(Id_C, codomain=['p0', 'p1'])
+
+        C_Id = ct.planar_contraction(
+            C, Id, 'wR', 'wL', relabel1={'p': 'p0', 'p*': 'p0*'}, relabel2={'p': 'p1', 'p*': 'p1*'}
+        )
+        C_Id = ct.squeeze_legs(C_Id, ['wL', 'wR'])
+        C_Id = ct.planar_permute_legs(C_Id, codomain=['p0', 'p1'])
+
         if bc_MPS == 'infinite':
             L = lat.Ls[0]
             self.H_MPO = MPO([site] * L, [W] * L, bc='infinite', max_range=2, mps_unit_cell_width=1)
+            H_bond = nn_interaction.to_tensor() + 0.5 * Id_C + 0.5 * C_Id
+            H_bond = ct.Coupling.from_tensor(H_bond, [site, site], name='H_bond')
+            self.H_bond = [H_bond] * L
         else:
             raise NotImplementedError
 
@@ -126,12 +141,12 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, L=6):
         assert E0 == pytest.approx(np.linalg.eigvalsh(matrix)[0])
 
 
-@pytest.mark.skip(reason='Not ported yet')
 @pytest.mark.parametrize(
     'bc_MPS, combine, mixer, n',
     [
         # bc     combine  mixer n
         ('finite', False, False, 2),  # simplest case
+        ('infinite', False, False, 2),  # simplest case
         ('finite', True, False, 2),  # simplest case
         ('finite', True, True, 1),
         # 1-site DMRG without mixer is expected to fail!
@@ -153,7 +168,11 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, L=6):
 @pytest.mark.filterwarnings('ignore:Re-using environment with `chi_list` set! Do you want this:UserWarning')
 def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
     if combine:
-        pytest.xfail('combine is not fixed yet. See PR #694')  # https://github.com/tenpy/tenpy/pull/694
+        pytest.skip('combine is not fixed yet. See PR #694')  # https://github.com/tenpy/tenpy/pull/694
+    if mixer is not False:
+        pytest.skip('Mixer not implemented yet')  # https://github.com/tenpy/tenpy/issues/659
+    if n != 2:
+        pytest.skip('Single-site not implemented yet')  # https://github.com/tenpy/tenpy/issues/698
 
     L = 2 if bc_MPS == 'infinite' else 8
 
@@ -196,6 +215,11 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
     res = dmrg.run(psi, M, dmrg_pars, resume_data={'init_env_data': dict(start_env_sites=0)})
     if bc_MPS == 'finite':
         ED = ExactDiag.from_model(M)
+
+        with pytest.raises(NotImplementedError):
+            ED.build_full_H_from_mpo()
+        pytest.xfail('ED for comparison not implemented yet')
+
         ED.build_full_H_from_mpo()
         ED.full_diagonalization()
         E_ED, psi_ED = ED.groundstate()
@@ -212,10 +236,21 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
         print(f'E_DMRG={Edmrg:.12f} vs E_exact={Eexact:.12f}')
         print(f'relative energy error: {abs((Edmrg - Eexact) / Eexact):.2e}')
         print('norm err:', psi.norm_test())
-        Edmrg2 = np.mean(psi.expectation_value(M.H_bond))
-        Edmrg3 = M.H_MPO.expectation_value(psi)
+
+        # Compare the DMRG-reported energy
         assert abs((Edmrg - Eexact) / Eexact) < 1.0e-10
+
+        # Compare the energy via H_bond
+        bond_energies = [psi.expectation_value(H, i) for i, H in enumerate(M.H_bond)]
+        Edmrg2 = np.mean(bond_energies)
         assert abs((Edmrg - Edmrg2) / Edmrg2) < max(1.0e-10, np.max(psi.norm_test()))
+
+        # Compare the energy via H_MPO
+        with pytest.raises(NotImplementedError):
+            _ = M.H_MPO.expectation_value(psi)
+        pytest.xfail('iMPO expval not ready!')
+
+        Edmrg3 = M.H_MPO.expectation_value(psi)
         assert abs((Edmrg - Edmrg3) / Edmrg3) < max(1.0e-10, np.max(psi.norm_test()))
 
 
