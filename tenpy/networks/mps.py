@@ -4269,7 +4269,7 @@ class MPS(BaseMPSExpectationValue):
             new_fR = None if k + 1 < n else formR  # right form as stored, except for last B
             B = self.get_B(i + k, (1.0 - old_fR, new_fR), False, cutoff, str(k))
             _, old_fR = self.form[self._to_valid_site_index(i + k)]
-            theta = ct.tensors.partial_compose(B, theta, 'vL')
+            theta = ct.tensors.partial_compose(B, _hidden_legs_to_codomain(theta), 'vL')
         return theta
 
     def convert_form(self, new_form='B'):
@@ -5779,7 +5779,6 @@ class MPS(BaseMPSExpectationValue):
             with legs ``'vL', 'vR'``.
 
         """
-        # TODO the decompositions do not return HiddenLegTensors -> fix in cyten
         assert self.finite
         L = self.L
         assert L > 1  # otherwise implement yourself...
@@ -5825,7 +5824,10 @@ class MPS(BaseMPSExpectationValue):
 
         if self.bc == 'segment':
             # also need to calculate new singular values on the very right
-            U, S, VR_segment, _, _ = ct.truncated_svd(M, new_labels=['vR', 'vL'], charge_leg_top=False, svd_min=cutoff)
+            # keep the total charge legs on the MPS (in U), not in the segment boundary VR_segment
+            U, S, VR_segment, _, _ = ct.truncated_svd(
+                _hidden_legs_to_codomain(M), new_labels=['vR', 'vL'], svd_min=cutoff
+            )
             if not renormalize:
                 self.norm = self.norm * ct.norm(S)
             S /= ct.norm(S)
@@ -5834,9 +5836,8 @@ class MPS(BaseMPSExpectationValue):
         else:
             VR_segment = None
         # sweep from right to left, calculating all the singular values
-        U, S, V, _, _ = ct.truncated_svd(
-            ct.planar_permute_legs(M, codomain=['vL']), new_labels=['vR', 'vL'], svd_min=cutoff
-        )
+        # the total charge legs end up in V, i.e. stay on the last site
+        U, S, V, _, _ = ct.truncated_svd(_split_off_vL(M), new_labels=['vR', 'vL'], svd_min=cutoff)
         V = ct.planar_permute_legs(V, codomain=['vL', 'p'])
         if not renormalize and self.bc == 'finite':
             self.norm = self.norm * ct.norm(S)
@@ -8977,6 +8978,20 @@ def _flatten_domain_pipe(B: ct.SymmetricTensor, domain_pos: int) -> ct.Symmetric
     return ct.HiddenLegTensor(T, [labels[i] for i in hidden_idcs])
 
 
+def _hidden_legs_to_codomain(T: ct.Tensor) -> ct.Tensor:
+    """Bend the hidden legs in the domain of `T` to the front of its codomain, such that the domain is ``[vR]``.
+
+    `T` has public legs ``vL, ..., vR`` with ``vR`` and possibly hidden (total charge) legs in the domain,
+    e.g. a :class:`~cyten.HiddenLegTensor` as obtained from :meth:`MPS.get_B`. Then ``vR`` can be contracted
+    with :func:`~cyten.tensors.partial_compose`. Only the hidden legs are bent; if the domain is already
+    ``[vR]``, `T` is returned unchanged.
+    """
+    if T.num_domain_legs == 1:
+        return T
+    k = T.labels.index('vR')
+    return ct.planar_permute_legs(T, codomain=T.labels[k + 1 :] + T.labels[:k], domain=['vR'])
+
+
 def _merge_charge_legs(B: ct.HiddenLegTensor, labels: list[str], new_label: str) -> ct.HiddenLegTensor:
     """Combine the hidden legs `labels` of `B` into a single hidden leg `new_label`.
 
@@ -9034,6 +9049,16 @@ def _real_if_close_nested(value, factor: float = 1.0):
     if isinstance(value, list):
         return [_real_if_close_nested(val, factor) for val in value]
     return value.real_if_close() * factor
+
+
+def _split_off_vL(T: ct.Tensor) -> ct.Tensor:
+    """Arrange `T` as ``[vL] <- [...]`` for a decomposition, with all hidden legs explicitly in the domain.
+
+    The cyclic order of the legs is kept, i.e., only the legs switching between codomain and domain are bent.
+    """
+    labels = T.labels
+    k = labels.index('vL')
+    return ct.planar_permute_legs(T, codomain=['vL'], domain=(labels[k + 1 :] + labels[:k])[::-1])
 
 
 def _truncate_virtual_space(
