@@ -8222,10 +8222,7 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         return np.real_if_close(np.asarray(value)) * (self.bra.norm * self.ket.norm)
 
 
-# TODO_MPS stopped here
-
-
-class TransferMatrix(ct.tensors.sparse.LinearOperator):  # TODO: adapt for LinearOperator
+class TransferMatrix(ct.tensors.sparse.LinearOperator):
     r"""Transfer matrix of two MPS (bra & ket).
 
     For an iMPS in the thermodynamic limit, we often need to find the 'dominant `RP`' (and `LP`).
@@ -8241,9 +8238,15 @@ class TransferMatrix(ct.tensors.sparse.LinearOperator):  # TODO: adapt for Linea
         |    ---N[j]*--N[j+1]* ... --N[j+L]*--
 
     Here the `N` denotes the matrices of the bra and `M` the ones of the ket, respectively.
-    To view it as a `matrix`, we combine the left and right indices to pipes::
+    The transfer matrix acts on the "vectors" `RP` with legs ``vL* <- vL`` (``transpose=False``)
+    or `LP` with legs ``vR* <- vR`` (``transpose=True``), as obtained from
+    :meth:`MPS.get_RP` and :meth:`MPS.get_LP`.
+    For a non-trivial :attr:`charge_sector`, the vectors have an additional leg ``'c'`` carrying
+    the charge, which is placed on the outer side, i.e., the legs are ``[vL*, c, vL]`` for `RP`
+    and ``[vR*, vR, c]`` for `LP` (in the cyclic order of :attr:`~cyten.Tensor.legs`).
 
-        |  (vL.vL*) ->-TM->- (vR.vR*)   acting on  (vL.vL*) ->-RP
+    The eigenvectors are found with the :class:`~cyten.tensors.krylov_based.Arnoldi` method
+    acting directly on the tensors, such that it works for all symmetries and backends.
 
     Note that we keep all M and N as copies.
 
@@ -8262,15 +8265,14 @@ class TransferMatrix(ct.tensors.sparse.LinearOperator):  # TODO: adapt for Linea
         We start the `M` of the ket at site `shift_ket` (i.e. the `i` in the above network).
     transpose : bool
         Whether `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
-    charge_sector : None | :class:``~cyten.Sector`` | ``0``
+    charge_sector : None | :class:`~cyten.Sector` | ``0`` | ``'trivial'``
         Selects the charge sector of the vector onto which the linear operator acts.
-        ``None`` stands for *all* sectors, ``0`` stands for the trivial charge sector.
-        Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in charge sector 0.
+        ``None`` stands for *all* sectors, ``0`` or ``'trivial'`` for the trivial sector.
+        Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in the trivial sector.
         Note that you can update the `charge_sector` after initialization
         via the :attr:`charge_sector` property.
     form : ``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)
         In which canonical form we take the `M` and `N` matrices.
-
 
     Attributes
     ----------
@@ -8283,21 +8285,20 @@ class TransferMatrix(ct.tensors.sparse.LinearOperator):  # TODO: adapt for Linea
         We start the `M` of the ket at site `shift_ket`.
     transpose : bool
         Whether `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
-    qtotal : charges
-        Total charge of the transfer matrix (which is gauged away in matvec).
-    form : tuple(float, float) | None
-        In which canonical form (all of) the `M` and `N` matrices are.
-    flat_linop : :class:`~tenpy.linalg.sparse.FlatLinearOperator`
-        Class lifting :meth:`matvec` to ndarrays in order to use :func:`~tenpy.tools.math.speigs`.
-    pipe : :class:`~tenpy.linalg.charges.LegPipe`
-        Pipe corresponding to ``'(vL.vL*)'`` for ``transpose=False``
-        or to ``'(vR.vR*)'`` for ``transpose=True``.
-    label_split :
-        ``['vL', 'vL*']`` if ``transpose=False`` or ``['vR', 'vR*']`` if ``transpose=True``.
-    _bra_N : list of npc.Array
-        Complex conjugated matrices of the bra, transposed for fast `matvec`.
-    _ket_M : list of npc.Array
-        The matrices of the ket, transposed for fast `matvec`.
+    unit_cell_width : int
+        See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+    backend : :class:`~cyten.TensorBackend`
+        The backend of the bra and ket tensors.
+    device : str
+        The device of the bra and ket tensors.
+    charge_leg : :class:`~cyten.ElementarySpace` | None
+        The space of the leg ``'c'`` of the vectors for the :attr:`charge_sector`,
+        as it appears in the codomain of `RP` and in the domain of `LP`.
+        ``None`` for the trivial sector, where the vectors have no leg ``'c'``.
+    _bra_N : list of :class:`~cyten.SymmetricTensor`
+        Complex conjugated matrices of the bra (with labels ``vR*, p*, vL*``), left to right.
+    _ket_M : list of :class:`~cyten.SymmetricTensor`
+        The matrices of the ket, left to right.
 
     """
 
@@ -8308,32 +8309,36 @@ class TransferMatrix(ct.tensors.sparse.LinearOperator):  # TODO: adapt for Linea
         shift_bra: int = 0,
         shift_ket: int = 0,
         transpose: bool = False,
-        charge_sector: None | ct.Sector | 0 = 0,
+        charge_sector: None | ct.Sector | Literal[0, 'trivial'] = 0,
         form='B',
     ):
         L = lcm(bra.L, ket.L)
         unit_cell_width = ket.unit_cell_width * (L // ket.L)
         if ket.symmetry != bra.symmetry:
             raise ValueError('incompatible symmetries')
+        if bra is not ket:
+            # ensure that the charge legs of bra and ket are on the same (last) site, see MPSEnvironment
+            bra = bra._gauged()
+            ket = ket._gauged()
+            if _different_total_charges(bra, ket):
+                raise ValueError(
+                    'bra and ket have different total charges, such that the TransferMatrix is nil-potent '
+                    '(or its eigenvectors break the symmetry, e.g. for Z_N charges). '
+                    'For Z_N charges, you can enlarge the unit cell of the MPS to avoid that.'
+                )
         self.shift_bra = shift_bra
         self.shift_ket = shift_ket
-        assert ket._p_label == bra._p_label
         form = ket._to_valid_form(form)
         ket_M = [ket.get_B(i, form=form) for i in range(shift_ket, shift_ket + L)]
         bra_N = [bra.get_B(i, form=form) for i in range(shift_bra, shift_bra + L)]
-
-        self._init_from_Ns_Ms(
-            bra_N, ket_M, transpose, charge_sector, ket._p_label, not ket.finite, unit_cell_width=unit_cell_width
-        )
+        self._init_from_Ns_Ms(bra_N, ket_M, transpose, charge_sector, unit_cell_width=unit_cell_width)
 
     def _init_from_Ns_Ms(
         self,
-        bra_N: list[ct.Tensor],
-        ket_M: list[ct.Tensor],
+        bra_N: list[ct.SymmetricTensor],
+        ket_M: list[ct.SymmetricTensor],
         transpose: bool,
-        charge_sector: None | ct.Sector | 0,
-        p_label: list[str],
-        infinite: bool = True,
+        charge_sector: None | ct.Sector | Literal[0, 'trivial'],
         conjugate_Ns: bool = True,
         unit_cell_width: int = None,
     ):
@@ -8356,58 +8361,30 @@ class TransferMatrix(ct.tensors.sparse.LinearOperator):  # TODO: adapt for Linea
         assert isinstance(unit_cell_width, int) and 0 < unit_cell_width <= L and L % unit_cell_width == 0
         self.unit_cell_width = unit_cell_width
         assert len(ket_M) == L
+        self.backend = ct.backends.get_same_backend(*[T for T in self._ket_M + self._bra_N])
+        self.device = ct.tensors.get_same_device(*[T for T in self._ket_M + self._bra_N])
         self.transpose = transpose
-        self._p_label = p = p_label  # for usual MPS just ['p']
-        self._pstar_label = pstar = [lbl + '*' for lbl in self._p_label]
+        self._ket_M = ket_M
+        self._bra_N = [B.hc for B in bra_N] if conjugate_Ns else bra_N
         if not transpose:  # right to left
-            label = '(vL.vL*)'  # what we act on
-            label_split = ['vL', 'vL*']
-            M = self._ket_M = [B.itranspose(['vL'] + p + ['vR']) for B in reversed(ket_M)]
-            if conjugate_Ns:
-                N = self._bra_N = [B.conj().itranspose(pstar + ['vR*', 'vL*']) for B in reversed(bra_N)]
-            else:
-                N = self._bra_N = [B.itranspose(pstar + ['vR*', 'vL*']) for B in reversed(bra_N)]
-            pipe = npc.LegPipe([M[0].get_leg('vR'), N[0].get_leg('vR*')], qconj=-1).conj()
+            legs = [self._bra_N[-1].get_leg('vR*').dual, ket_M[-1].get_leg('vR').dual]
+            labels = ['vL*', 'vL']
         else:  # left to right
-            label = '(vR*.vR)'  # mathematically more natural
-            label_split = ['vR*', 'vR']
-            M = self._ket_M = [B.itranspose(['vL'] + p + ['vR']) for B in ket_M]
-            if conjugate_Ns:
-                N = self._bra_N = [B.conj().itranspose(['vR*', 'vL*'] + pstar) for B in bra_N]
-            else:
-                N = self._bra_N = [B.itranspose(['vR*', 'vL*'] + pstar) for B in bra_N]
-            pipe = npc.LegPipe([N[0].get_leg('vL*'), M[0].get_leg('vL')], qconj=+1).conj()
-        dtype = np.promote_types(M[0].dtype, N[0].dtype)
-        self.pipe = pipe
-        self.label_split = label_split
-        self.flat_linop = npc.FlatLinearOperator(self.matvec, pipe, dtype, charge_sector, label)
-        chinfo = M[0].chinfo
-        self.qtotal = chinfo.make_valid(np.sum([B.qtotal for B in M + N], axis=0))
-        if infinite and np.any(self.qtotal != 0):
-            # for non-zero U(1) qtotal, we can immediately say that `self` is nilpotent.
-            # In contrast, nonzero Z_N qtotal does not imply that, since the transfer-matrix
-            # doesn't have to be hermitian: it could be circulant, with arbitrary eigenvalues!
-            # The eigenvectors will *not* conserve the charge in this case!
-            enlarge_factors = []
-            for i in np.nonzero(self.qtotal)[0]:
-                if chinfo.mod[i] == 1:  # U(1) qtotal
-                    raise ValueError('TransferMatrix is nil-potent due to charges')
-                enlarge_factors.append(chinfo.mod[i])  # get N of Z_N charge
-            raise ValueError(
-                'TransferMatrix has non-zero qtotal for Z_N charges. '
-                'It can have valid eigenvectors, but they will break the Z_N charge. '
-                'To avoid that, you can enlarge the unit cell of the MPS '
-                'by a factor of ' + str(enlarge_factors)
-            )
+            legs = [self._bra_N[0].get_leg('vL*').dual, ket_M[0].get_leg('vL').dual]
+            labels = ['vR*', 'vR']
+        self._trivial_legs = legs
+        self._trivial_labels = labels
+        dtype = ct.Dtype.common(*[T.dtype for T in self._ket_M + self._bra_N])
+        super().__init__(legs, dtype, labels)
+        self.charge_sector = charge_sector
 
     @classmethod
     def from_Ns_Ms(
         cls,
-        bra_N: list[ct.Tensor],
-        ket_M: list[ct.Tensor],
+        bra_N: list[ct.SymmetricTensor],
+        ket_M: list[ct.SymmetricTensor],
         transpose: bool = False,
-        charge_sector: None | ct.Sector | 0 = 0,
-        p_label: list[str] = ['p'],
+        charge_sector: None | ct.Sector | Literal[0, 'trivial'] = 0,
         conjugate_Ns: bool = True,
         unit_cell_width: int = None,
     ):
@@ -8415,17 +8392,15 @@ class TransferMatrix(ct.tensors.sparse.LinearOperator):  # TODO: adapt for Linea
 
         Parameters
         ----------
-        bra_N, ket_M : list of :class:`~cyten.tensors.Tensor`
+        bra_N, ket_M : list of :class:`~cyten.SymmetricTensor`
             Plain tensors of the bra and ket, in a list going left to right,
             the bra not conjugated.
         transpose : bool
             Whether `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
-        charge_sector : None | :class:``~cyten.Sector`` | ``0``
+        charge_sector : None | :class:`~cyten.Sector` | ``0`` | ``'trivial'``
             Selects the charge sector of the vector onto which the Linear operator acts.
-            ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
-            Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in charge sector 0.
-        p_label : list of str
-            Physical label(s) of the tensors.
+            ``None`` stands for *all* sectors, ``0`` or ``'trivial'`` for the trivial sector.
+            Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in the trivial sector.
         conjugate_Ns : bool
             If False, assumes that bra_N is already complex conjugated.
         unit_cell_width : int
@@ -8435,85 +8410,226 @@ class TransferMatrix(ct.tensors.sparse.LinearOperator):  # TODO: adapt for Linea
         self = cls.__new__(cls)
         self.shift_bra = self.shift_ket = 0
         self._init_from_Ns_Ms(
-            bra_N, ket_M, transpose, charge_sector, p_label, conjugate_Ns=conjugate_Ns, unit_cell_width=unit_cell_width
+            bra_N, ket_M, transpose, charge_sector, conjugate_Ns=conjugate_Ns, unit_cell_width=unit_cell_width
         )
         return self
 
     @property
-    def charge_sector(self):
-        return self.flat_linop.charge_sector
+    def charge_sector(self) -> None | ct.Sector:
+        """The charge sector of the vectors, ``None`` for all sectors. See :attr:`charge_leg`."""
+        return self._charge_sector
 
     @charge_sector.setter
-    def charge_sector(self, value):
-        self.flat_linop.charge_sector = value
-
-    def matvec(self, vec):
-        """Given `vec` as an npc.Array, apply the transfer matrix.
-
-        Parameters
-        ----------
-        vec : :class:`~tenpy.linalg.np_conserved.Array`
-            Vector to act on with the transfermatrix.
-            If not `transposed`, `vec` is the right part `RP` of an environment,
-            with legs ``'(vL.vL*)'`` in a pipe or splitted.
-            If `transposed`, the left part `LP` of an environment with legs ``'(vR*.vR)'``.
-
-        Returns
-        -------
-        mat_vec : :class:`~tenpy.linalg.np_conserved.Array`
-            The transfer matrix acted on `vec`, in the same form as given.
-
-        """
-        pipe = None
-        if self.label_split[0] not in vec._labels:
-            vec = vec.split_legs(0)
-            pipe = self.pipe
-        orig_labels = vec.get_leg_labels()
-        # vec.itranspose(self.label_split)  # ['vL', 'vL*'] or ['vR*', 'vR']
-        # the actual work
-        if not self.transpose:  # right to left
-            contract = [self._p_label + ['vL*'], self._pstar_label + ['vR*']]
-            for N, M in zip(self._bra_N, self._ket_M):
-                vec = npc.tensordot(M, vec, axes=['vR', 'vL'])
-                vec = npc.tensordot(vec, N, axes=contract)  # [['p', 'vL*'], ['p*', 'vR*']]
-            vec = vec.shift_charges_horizontal(dx_0=self.unit_cell_width)
-        else:  # left to right
-            contract = [['vL*'] + self._pstar_label, ['vR*'] + self._p_label]
-            for N, M in zip(self._bra_N, self._ket_M):
-                vec = npc.tensordot(vec, M, axes=['vR', 'vL'])
-                vec = npc.tensordot(N, vec, axes=contract)  # [['vL*', 'p*'], ['vR*', 'p']])
-            vec = vec.shift_charges_horizontal(dx_0=-self.unit_cell_width)
-        if pipe is None:
-            vec.itranspose(orig_labels)  # make sure we have the same labels/order as before
+    def charge_sector(self, value: None | ct.Sector | Literal[0, 'trivial']):
+        symmetry = self._ket_M[0].symmetry
+        if value == 'trivial' or value == 0:
+            value = symmetry.trivial_sector
+            self.charge_leg = None
+        elif value is None:
+            # all sectors, each with multiplicity 1: the operator is the direct sum over the sectors
+            sectors = ct.TensorProduct(self._trivial_legs, symmetry).sector_decomposition
+            self.charge_leg = ct.ElementarySpace.from_defining_sectors(symmetry, sectors)
+        elif isinstance(value, ct.Sector):
+            if not symmetry.is_valid_sector(value):
+                raise ValueError(f'invalid charge_sector {value!r}')
+            self.charge_leg = ct.ElementarySpace.from_defining_sectors(symmetry, [value])
         else:
-            vec = vec.combine_legs(self.label_split, pipes=pipe)
-        return vec
+            raise ValueError(f'invalid charge_sector {value!r}')
+        self._charge_sector = value
+        if self.charge_leg is None:
+            self.vector_legs = self._trivial_legs
+            self.vector_labels = self._trivial_labels
+        elif not self.transpose:  # RP: [vL*, c, vL] with c in the codomain
+            self.vector_legs = [self._trivial_legs[0], self.charge_leg.dual, self._trivial_legs[1]]
+            self.vector_labels = ['vL*', 'c', 'vL']
+        else:  # LP: [vR*, vR, c] with c in the domain
+            self.vector_legs = [*self._trivial_legs, self.charge_leg.dual]
+            self.vector_labels = ['vR*', 'vR', 'c']
 
-    def initial_guess(self, diag=1.0):
-        """Return a diagonal matrix as initial guess for the eigenvector.
+    def matvec(self, vec: ct.SymmetricTensor) -> ct.SymmetricTensor:
+        """Apply the transfer matrix to `vec`.
 
         Parameters
         ----------
-        diag : float | 1D ndarray
-            Should be ``1.`` for the identity or some singular values squared.
+        vec : :class:`~cyten.SymmetricTensor`
+            Vector to act on with the transfer matrix.
+            If not `transposed`, `vec` is the right part `RP` of an environment,
+            with legs ``vL*, vL`` (and ``c`` for a non-trivial :attr:`charge_sector`).
+            If `transposed`, the left part `LP` of an environment with legs ``vR*, vR`` (and ``c``).
 
         Returns
         -------
-        mat : :class:`~tenpy.linalg.np_conserved.Array`
-            A 2D array with `diag` on the diagonal such that :meth:`matvec` can act on it.
+        mat_vec : :class:`~cyten.SymmetricTensor`
+            The transfer matrix acted on `vec`, with the same legs in codomain and domain as `vec`.
 
         """
-        return npc.diag(diag, self.pipe.legs[0], labels=self.label_split)
+        codomain, domain = vec.codomain_labels, vec.domain_labels
+        charged = vec.has_label('c')
+        if not self.transpose:  # right to left
+            diagram = mps_contraction_diagram_operations['TM @ RP2c' if charged else 'TM @ RP2']
+            for N, M in zip(reversed(self._bra_N), reversed(self._ket_M)):
+                vec = diagram.evaluate(dict(RP=vec, ket=M, bra=N))
+        else:  # left to right
+            diagram = mps_contraction_diagram_operations['LP2c @ TM' if charged else 'LP2 @ TM']
+            for N, M in zip(self._bra_N, self._ket_M):
+                vec = diagram.evaluate(dict(LP=vec, ket=M, bra=N))
+        # TODO: shift the charges by one unit cell (with unit_cell_width) for shift-symmetries
+        return ct.planar_permute_legs(vec, codomain=codomain, domain=domain)
 
-    def eigenvectors(self, *args, **kwargs):
-        """Find (dominant) eigenvector(s) of self using :mod:`scipy.sparse`.
+    def initial_guess(self, diag: float | ct.DiagonalTensor = 1.0) -> ct.SymmetricTensor:
+        """Return an initial guess for the eigenvector.
 
-        For arguments see :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors`.
+        Parameters
+        ----------
+        diag : float | :class:`~cyten.DiagonalTensor`
+            For the trivial :attr:`charge_sector`, the guess is the identity times `diag`, or
+            `diag` itself if it is a :class:`~cyten.DiagonalTensor`, e.g., some singular values squared.
+            Requires that the virtual legs of bra and ket are the same; otherwise (and for a
+            non-trivial :attr:`charge_sector`) we return a random tensor.
 
-        If no :attr:`charge_sector` was selected, we look in *all* charge sectors.
-        The returned eigenvectors have combined legs ``'(vL.vL*)'`` or ``(vR*.vR)``.
+        Returns
+        -------
+        guess : :class:`~cyten.SymmetricTensor`
+            A tensor with the legs such that :meth:`matvec` can act on it.
+
         """
-        return self.flat_linop.eigenvectors(*args, **kwargs)
+        leg_bra, leg_ket = self._trivial_legs
+        if self.charge_leg is None and leg_bra == leg_ket.dual:
+            if isinstance(diag, ct.DiagonalTensor):
+                guess = diag.copy().as_dtype(ct.Dtype.common(diag.dtype, self.dtype))
+                guess.set_labels(self._trivial_labels)
+            else:
+                guess = ct.DiagonalTensor.from_eye(
+                    leg_bra, backend=self.backend, labels=self._trivial_labels, dtype=self.dtype, device=self.device
+                )
+                guess = guess * diag
+            return guess.as_SymmetricTensor()
+        # TODO: adjust this guess later on
+        if self.charge_leg is None:
+            codomain, domain = [leg_bra], [leg_ket.dual]
+        elif not self.transpose:  # RP: [vL*, c, vL]
+            codomain, domain = [leg_bra, self.charge_leg.dual], [leg_ket.dual]
+        else:  # LP: [vR*, vR, c]
+            codomain, domain = [leg_bra], [self.charge_leg, leg_ket.dual]
+        return ct.SymmetricTensor.from_random_normal(
+            codomain, domain, backend=self.backend, labels=self.vector_labels, dtype=self.dtype, device=self.device
+        )
+
+    def eigenvectors(
+        self,
+        num_ev: int = 1,
+        which: str = 'LM',
+        v0: ct.SymmetricTensor | None = None,
+        tol: float = 1.0e-13,
+        N_max: int = 40,
+        max_restarts: int = 50,
+    ) -> tuple[np.ndarray, list[ct.SymmetricTensor]]:
+        """Find (dominant) eigenvector(s) of self with the :class:`~cyten.tensors.krylov_based.Arnoldi` method.
+
+        We restart the Arnoldi iteration from the sum of the current eigenvector estimates, until all of them
+        are converged.
+        If :attr:`charge_sector` is ``None``, we look in *all* charge sectors, one after the other: a Krylov
+        method can not resolve exact degeneracies (e.g. between the sectors ``q`` and ``-q`` for ``bra == ket``)
+        from a single starting vector. Use :meth:`eigenvector_charge` to find the charge sector of an eigenvector.
+
+        Parameters
+        ----------
+        num_ev : int
+            Number of eigenvalues/vectors to look for. Reduced (with a warning) if it is larger than the
+            dimension of the space the transfer matrix acts on.
+        which : ``'LM' | 'LR' | 'SR'``
+            Which eigenvalues to look for, see :class:`~cyten.tensors.krylov_based.Arnoldi`.
+        v0 : :class:`~cyten.SymmetricTensor` | None
+            Initial guess, with legs as for :meth:`matvec`. Defaults to :meth:`initial_guess`.
+            Ignored for ``charge_sector=None``.
+        tol : float
+            Tolerance for the residuals ``norm(self.matvec(v) - eta * v)`` of the normalized eigenvectors
+            `v`, relative to the largest magnitude of the eigenvalues `eta`.
+        N_max : int
+            Maximum dimension of the Krylov space in each Arnoldi run.
+        max_restarts : int
+            Maximum number of restarts. We warn if the eigenvectors are not converged after that.
+
+        Returns
+        -------
+        eta : 1D ndarray
+            The eigenvalues, sorted according to `which`.
+        w : list of :class:`~cyten.SymmetricTensor`
+            The corresponding (normalized) eigenvectors, with legs as for :meth:`matvec`.
+
+        """
+        if self.charge_sector is None:
+            eta, w = [], []
+            try:
+                for sector in self.charge_leg.defining_sectors:
+                    self.charge_sector = sector
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings('ignore', 'TransferMatrix.eigenvectors: reduce num_ev')
+                        eta_s, w_s = self.eigenvectors(num_ev, which, None, tol, N_max, max_restarts)
+                    eta.extend(eta_s)
+                    w.extend(w_s)
+            finally:
+                self.charge_sector = None
+            perm = argsort(np.array(eta), which)[:num_ev]
+            return np.real_if_close(np.array(eta)[perm]), [w[i] for i in perm]
+        if v0 is None:
+            v0 = self.initial_guess()
+        dim = v0.num_parameters
+        if num_ev > dim:
+            warnings.warn(f'TransferMatrix.eigenvectors: reduce num_ev={num_ev} to the dimension {dim}', stacklevel=2)
+            num_ev = dim
+        if num_ev > 1:
+            # make sure v0 is not an (exact) eigenvector, which would stop Arnoldi after a single step
+            noise = ct.SymmetricTensor.from_random_normal(
+                v0.codomain, v0.domain, backend=v0.backend, labels=v0.labels, dtype=v0.dtype, device=v0.device
+            )
+            v0 = v0 / ct.norm(v0) + 1.0e-3 * noise / ct.norm(noise)
+        if dim == 1:
+            # the only vector is an eigenvector (and Arnoldi needs at least 2 steps)
+            v = v0 / ct.norm(v0)
+            eta = np.real_if_close(ct.inner(v, self.matvec(v)).to_numpy())
+            return eta, [v]
+        N = int(min(N_max, dim))
+        options = dict(num_ev=num_ev, which=which, N_min=min(N, num_ev + 2), N_max=N, N_cache=N, E_tol=0.1 * tol)
+        for _ in range(max_restarts + 1):
+            eta, w, _ = ct.tensors.Arnoldi(self, v0, options).run()
+            # Arnoldi might stop early (if v0 is in an invariant subspace) with less than `num_ev` vectors
+            eta = np.asarray(eta)[: len(w)]
+            norms = [ct.norm(v).to_numpy() for v in w]
+            keep = [k for k, n in enumerate(norms) if n > 0.0]
+            eta = eta[keep]
+            w = [w[k] / norms[k] for k in keep]
+            scale = max(np.max(np.abs(eta)), np.finfo(float).tiny)
+            residuals = [ct.norm(self.matvec(v) - complex(e) * v).to_numpy() for e, v in zip(eta, w)]
+            if len(w) == num_ev and max(residuals) <= tol * scale:
+                break
+            # restart from the sum of the eigenvector estimates, with some noise to leave invariant subspaces
+            noise = ct.SymmetricTensor.from_random_normal(
+                v0.codomain, v0.domain, backend=v0.backend, labels=v0.labels, dtype=v0.dtype, device=v0.device
+            )
+            v0 = 1.0e-3 * noise / ct.norm(noise)
+            for v in w:
+                v0 = v0 + v
+            options['N_min'] = N  # build the full Krylov space after the first restart
+        else:
+            warnings.warn(
+                f'TransferMatrix.eigenvectors did not converge to tol={tol:.1e}: found {len(w):d} of {num_ev:d} '
+                f'eigenvectors with residuals {max(residuals, default=np.inf) / scale:.1e} after {max_restarts:d} '
+                'restarts',
+                stacklevel=2,
+            )
+        eta = np.real_if_close(eta)
+        return eta, w
+
+    def eigenvector_charge(self, vec: ct.SymmetricTensor) -> ct.Sector:
+        """The charge sector of an eigenvector `vec`."""
+        if not vec.has_label('c'):
+            return self._ket_M[0].symmetry.trivial_sector
+        charge_leg = vec.get_leg('c').dual
+        sectors = charge_leg.defining_sectors
+        if len(sectors) == 1:
+            return sectors[0]
+        raise ValueError(f'charge_leg {charge_leg!r} has more than one sector: {sectors!r}')
 
 
 class InitialStateBuilder:
