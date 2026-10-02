@@ -15,7 +15,7 @@ from tenpy.models.lattice import Chain
 from tenpy.models.model import CouplingModel, MPOModel
 from tenpy.models.spins import DipolarSpinChain, SpinChain
 from tenpy.models.tf_ising import TFIChain
-from tenpy.networks import mps
+from tenpy.networks import MPO, mps
 
 
 def e0_transverse_ising(g=0.5):
@@ -37,6 +37,29 @@ class _DummyEffH:
 
     def to_tensor(self):
         return self.tensor
+
+
+class WorkaroundNNModel:
+    def __init__(self, site: ct.Site, nn_interaction: ct.Coupling, onsite: ct.Coupling, bc_MPS: str, lat):
+        self.site = site
+        self.nn_interaction = nn_interaction
+        self.onsite = onsite
+        self.bc_MPS = bc_MPS
+        self.lat = lat
+
+        A, B = nn_interaction.factorization
+        (C,) = onsite.factorization
+        Id = site.identity_tensor(w=C.get_leg('wL'))
+        grid = [[Id, A, C], [None, None, B], [None, None, Id]]
+        W = ct.tensor_from_grid(
+            grid, labels=['wL', 'p', 'wR', 'p*'], row_labels=['IdL', None, 'IdR'], col_labels=['IdL', None, 'IdR']
+        )
+
+        if bc_MPS == 'infinite':
+            L = lat.Ls[0]
+            self.H_MPO = MPO([site] * L, [W] * L, bc='infinite', max_range=2, mps_unit_cell_width=1)
+        else:
+            raise NotImplementedError
 
 
 @pytest.mark.filterwarnings('ignore:bitcount function is deprecated:DeprecationWarning')
@@ -131,8 +154,17 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
         pytest.xfail('combine is not fixed yet. See PR #694')  # https://github.com/tenpy/tenpy/pull/694
 
     L = 2 if bc_MPS == 'infinite' else 8
-    model_params = dict(L=L, J=1.0, g=g, bc_MPS=bc_MPS, conserve=None)
-    M = TFIChain(model_params)
+
+    if bc_MPS == 'finite':
+        model_params = dict(L=L, J=1.0, g=g, bc_MPS=bc_MPS, conserve=None)
+        M = TFIChain(model_params)
+    if bc_MPS == 'infinite':
+        site = ct.models.sites.SpinSite()
+        lat = Chain(L, site, bc_MPS='infinite', bc='periodic')
+        SigmaX_SigmaX = ct.models.couplings.spin_spin_coupling([site, site], Jx=4)
+        g_SigmaZ = ct.models.couplings.spin_field_coupling([site], hz=2 * g)
+        M = WorkaroundNNModel(site, SigmaX_SigmaX, g_SigmaZ, bc_MPS=bc_MPS, lat=lat)
+
     state = [0] * L  # Ferromagnetic Ising
     psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
     dmrg_pars = {
