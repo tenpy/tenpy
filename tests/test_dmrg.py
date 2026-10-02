@@ -2,14 +2,12 @@
 
 # Copyright (C) TeNPy Developers, Apache license
 import warnings
-from functools import cache, reduce
+from functools import reduce
 from pathlib import Path
 
 import cyten as ct
 import numpy as np
 import pytest
-from cyten import symmetries as syms
-from cyten.models import degrees_of_freedom as dof
 from cyten.models import sites
 from scipy import integrate
 
@@ -200,42 +198,37 @@ def _dense_heisenberg(L):
     return H
 
 
-_HEISENBERG_BACKENDS = {'SU2_CG': 'FusionTreeBackend', 'Sz': 'AbelianBackend', None: 'NoSymmetryBackend'}
+_HEISENBERG_BACKENDS = {'SU2': 'FusionTreeBackend', 'Sz': 'AbelianBackend', None: 'NoSymmetryBackend'}
 _SUN_DATA_PATH = Path(__file__).resolve().parents[1] / 'cyten_repo' / 'external' / 'SUN_symbols'
 
 
-@cache
-def _su2_cg_site():
-    """Spin-1/2 site with the Clebsch-Gordan-data based SU(N=2) symmetry (not the sympy based SU2 class)."""
-    symmetry = ct.Symmetry([syms.SUN(2, 6, cg_hweight=20, path=str(_SUN_DATA_PATH))])
-    leg = ct.ElementarySpace(symmetry, [[1, 0]], [1])
-    spin_vector = np.asarray(sites.SpinSite(0.5, conserve='SU2').spin_vector)  # dense (down, up) spin operators
-    return dof.SpinDOF(leg, spin_vector, state_labels={'down': 0, 'up': 1})
+@pytest.fixture(scope='module', autouse=True)
+def _sun_data_path():
+    """Point cyten to the bundled SU(N) data, independent of env vars / user config (if the data exists).
 
-
-class _SU2CGSpinChain(SpinChain):
-    """`SpinChain` on the CG-data SU(2) site; `SpinChain.init_sites` hardcodes `SpinSite`."""
-
-    def init_sites(self, model_params):
-        return _su2_cg_site()
+    The data is the ``cyten_repo/external/SUN_symbols`` submodule (``git submodule update --init --recursive``).
+    """
+    if not any(_SUN_DATA_PATH.glob('*.hdf5')):
+        yield
+        return
+    with ct.temporary_options(su_n_data_path=str(_SUN_DATA_PATH)):
+        yield
 
 
 def _heisenberg_model(kind, L):
-    params = dict(L=L, bc_MPS='finite')
-    if kind == 'SU2_CG':
-        return _SU2CGSpinChain(params)
-    return SpinChain(dict(params, conserve=kind))
+    """Heisenberg chain; for ``kind='SU2'`` cyten's default routing gives the Clebsch-Gordan-data based SU(N=2)."""
+    return SpinChain(dict(L=L, bc_MPS='finite', conserve=kind))
 
 
 def _check_heisenberg_site(site, kind):
-    """Check the expected backend and (for SU2_CG) the CG-data symmetry class are used."""
+    """Check the expected backend and (for SU2) that cyten's default routing uses the CG-data symmetry class."""
     assert type(site.backend).__name__ == _HEISENBERG_BACKENDS[kind], f'wrong backend for conserve={kind!r}'
-    if kind == 'SU2_CG':
+    if kind == 'SU2':
         assert type(site.leg.symmetry.factors[0]).__name__ == 'SUN'
 
 
 @pytest.fixture(
-    params=[pytest.param('SU2_CG', id='SU2_CG'), pytest.param('Sz', id='Sz'), pytest.param(None, id='no_symmetry')]
+    params=[pytest.param('SU2', id='SU2'), pytest.param('Sz', id='Sz'), pytest.param(None, id='no_symmetry')]
 )
 def heisenberg_symmetry(request):
     """The kind of symmetry conserved by the Heisenberg chain; checks the expected backend is used."""
@@ -267,6 +260,8 @@ def test_dmrg_heisenberg_vs_exact(heisenberg_symmetry, combine, n, L=8):
     )
     dmrg_pars = {
         'combine': combine,
+        # the mixer is not ported yet; must be explicit, since single-site DMRG enables it by default
+        'mixer': False,
         'chi_list': {0: 10, 5: 30},
         'max_E_err': 1.0e-12,
         'max_S_err': 1.0e-8,
