@@ -2566,15 +2566,18 @@ class MPS(BaseMPSExpectationValue):
 
         Specifically, it saves
         :attr:`sites`,
-        :attr:`chinfo`,
-        :attr:`unit_cell_width` (under these names),
+        :attr:`unit_cell_width`,
+        :attr:`segment_boundaries` (under these names),
         :attr:`_B` as ``"tensors"``,
         :attr:`_S` as ``"singular_values"``,
         :attr:`bc` as ``"boundary_condition"``,
-        :attr:`form` converted to a single array of shape (L, 2) as ``"canonical_form"``.
+        :attr:`form` converted to a single array of shape (L, 2) as ``"canonical_form"``,
+        where a non-canonical form ``None`` is represented as ``(nan, nan)``.
         Moreover, it saves :attr:`norm`, :attr:`L`, :attr:`grouped` and
         :attr:`_transfermatrix_keep` (as "transfermatrix_keep") as HDF5 attributes, as well as
         the maximum of :attr:`chi` under the name "max_bond_dimension".
+        The :attr:`symmetry`, :attr:`dtype`, :attr:`backend` and :attr:`device` are not saved
+        separately, but recovered from the sites and tensors when loading.
 
         Parameters
         ----------
@@ -2586,13 +2589,12 @@ class MPS(BaseMPSExpectationValue):
             The `name` of `h5gr` with a ``'/'`` in the end.
 
         """
-        # TODO
+        form = np.array([(np.nan, np.nan) if f is None else f for f in self.form], dtype=float)
         hdf5_saver.save(self.sites, subpath + 'sites')
         hdf5_saver.save(self._B, subpath + 'tensors')
         hdf5_saver.save(self._S, subpath + 'singular_values')
         hdf5_saver.save(self.bc, subpath + 'boundary_condition')
-        hdf5_saver.save(np.array(self.form), subpath + 'canonical_form')
-        hdf5_saver.save(self.chinfo, subpath + 'chinfo')
+        hdf5_saver.save(form, subpath + 'canonical_form')
         hdf5_saver.save(self.unit_cell_width, subpath + 'unit_cell_width')
         hdf5_saver.save(self.segment_boundaries, subpath + 'segment_boundaries')
         h5gr.attrs['norm'] = self.norm
@@ -2622,23 +2624,25 @@ class MPS(BaseMPSExpectationValue):
             Newly generated class instance containing the required data.
 
         """
-        # TODO
+        # TODO option to load from tenpy v1?
         obj = cls.__new__(cls)  # create class instance, no __init__() call
         hdf5_loader.memorize_load(h5gr, obj)
 
         obj.sites = hdf5_loader.load(subpath + 'sites')
+        obj.symmetry = obj.sites[0].symmetry
         obj._B = hdf5_loader.load(subpath + 'tensors')
         obj._S = hdf5_loader.load(subpath + 'singular_values')
         obj.bc = hdf5_loader.load(subpath + 'boundary_condition')
         form = hdf5_loader.load(subpath + 'canonical_form')
-        obj.form = [tuple(f) for f in form]
+        obj.form = [None if np.any(np.isnan(f)) else (float(f[0]), float(f[1])) for f in form]
         obj.norm = hdf5_loader.get_attr(h5gr, 'norm')
 
         obj.grouped = hdf5_loader.get_attr(h5gr, 'grouped')
         obj._transfermatrix_keep = hdf5_loader.get_attr(h5gr, 'transfermatrix_keep')
-        obj.chinfo = hdf5_loader.load(subpath + 'chinfo')
-        obj.unit_cell_width = hdf5_loader.load(subpath + 'unit_cell_width')
-        obj.dtype = np.result_type(*[B.dtype for B in obj._B])
+        obj.unit_cell_width = int(hdf5_loader.load(subpath + 'unit_cell_width'))
+        obj.dtype = ct.Dtype.common(*[B.dtype for B in obj._B])
+        obj.backend = ct.backends.get_same_backend(*obj._B, *obj.sites)
+        obj.device = ct.tensors.get_same_device(*obj._B)
         if 'segment_boundaries' in h5gr:
             obj.segment_boundaries = hdf5_loader.load(subpath + 'segment_boundaries')
         else:
