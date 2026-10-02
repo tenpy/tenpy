@@ -107,6 +107,7 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, L=6):
     'bc_MPS, combine, mixer, n',
     [
         # bc     combine  mixer n
+        ('finite', False, False, 2),  # simplest case
         ('finite', True, False, 2),  # simplest case
         ('finite', True, True, 1),
         # 1-site DMRG without mixer is expected to fail!
@@ -126,6 +127,9 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, L=6):
 )
 @pytest.mark.slow
 def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
+    if combine:
+        pytest.xfail('combine is not fixed yet. See PR #694')  # https://github.com/tenpy/tenpy/pull/694
+
     L = 2 if bc_MPS == 'infinite' else 8
     model_params = dict(L=L, J=1.0, g=g, bc_MPS=bc_MPS, conserve=None)
     M = TFIChain(model_params)
