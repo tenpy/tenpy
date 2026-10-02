@@ -2,11 +2,14 @@
 
 # Copyright (C) TeNPy Developers, Apache license
 import warnings
-from functools import reduce
+from functools import cache, reduce
+from pathlib import Path
 
 import cyten as ct
 import numpy as np
 import pytest
+from cyten import symmetries as syms
+from cyten.models import degrees_of_freedom as dof
 from cyten.models import sites
 from scipy import integrate
 
@@ -197,18 +200,47 @@ def _dense_heisenberg(L):
     return H
 
 
-_HEISENBERG_BACKENDS = {'SU2': 'FusionTreeBackend', 'Sz': 'AbelianBackend', None: 'NoSymmetryBackend'}
+_HEISENBERG_BACKENDS = {'SU2_CG': 'FusionTreeBackend', 'Sz': 'AbelianBackend', None: 'NoSymmetryBackend'}
+_SUN_DATA_PATH = Path(__file__).resolve().parents[1] / 'cyten_repo' / 'external' / 'SUN_symbols'
+
+
+@cache
+def _su2_cg_site():
+    """Spin-1/2 site with the Clebsch-Gordan-data based SU(N=2) symmetry (not the sympy based SU2 class)."""
+    symmetry = ct.Symmetry([syms.SUN(2, 6, cg_hweight=20, path=str(_SUN_DATA_PATH))])
+    leg = ct.ElementarySpace(symmetry, [[1, 0]], [1])
+    spin_vector = np.asarray(sites.SpinSite(0.5, conserve='SU2').spin_vector)  # dense (down, up) spin operators
+    return dof.SpinDOF(leg, spin_vector, state_labels={'down': 0, 'up': 1})
+
+
+class _SU2CGSpinChain(SpinChain):
+    """`SpinChain` on the CG-data SU(2) site; `SpinChain.init_sites` hardcodes `SpinSite`."""
+
+    def init_sites(self, model_params):
+        return _su2_cg_site()
+
+
+def _heisenberg_model(kind, L):
+    params = dict(L=L, bc_MPS='finite')
+    if kind == 'SU2_CG':
+        return _SU2CGSpinChain(params)
+    return SpinChain(dict(params, conserve=kind))
+
+
+def _check_heisenberg_site(site, kind):
+    """Check the expected backend and (for SU2_CG) the CG-data symmetry class are used."""
+    assert type(site.backend).__name__ == _HEISENBERG_BACKENDS[kind], f'wrong backend for conserve={kind!r}'
+    if kind == 'SU2_CG':
+        assert type(site.leg.symmetry.factors[0]).__name__ == 'SUN'
 
 
 @pytest.fixture(
-    params=[pytest.param('SU2', id='SU2'), pytest.param('Sz', id='Sz'), pytest.param(None, id='no_symmetry')]
+    params=[pytest.param('SU2_CG', id='SU2_CG'), pytest.param('Sz', id='Sz'), pytest.param(None, id='no_symmetry')]
 )
 def heisenberg_symmetry(request):
-    """The `conserve` argument for the Heisenberg chain; checks the expected backend is used."""
-    conserve = request.param
-    site = sites.SpinSite(0.5, conserve=conserve)
-    assert type(site.backend).__name__ == _HEISENBERG_BACKENDS[conserve], f'wrong backend for conserve={conserve!r}'
-    return conserve
+    """The kind of symmetry conserved by the Heisenberg chain; checks the expected backend is used."""
+    _check_heisenberg_site(_heisenberg_model(request.param, 4).lat.unit_cell[0], request.param)
+    return request.param
 
 
 @pytest.mark.filterwarnings('ignore:bitcount function is deprecated:DeprecationWarning')
@@ -223,9 +255,9 @@ def heisenberg_symmetry(request):
 )
 @pytest.mark.slow
 def test_dmrg_heisenberg_vs_exact(heisenberg_symmetry, combine, n, L=8):
-    M = SpinChain(dict(L=L, bc_MPS='finite', conserve=heisenberg_symmetry))
+    M = _heisenberg_model(heisenberg_symmetry, L)
     site = M.lat.unit_cell[0]
-    assert type(site.backend).__name__ == _HEISENBERG_BACKENDS[heisenberg_symmetry]
+    _check_heisenberg_site(site, heisenberg_symmetry)
     psi = mps.MPS.from_desired_bond_dimension(
         M.lat.mps_sites(),
         30,
