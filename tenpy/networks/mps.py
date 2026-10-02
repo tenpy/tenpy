@@ -1861,7 +1861,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         elif isinstance(sites2, int):
             sites2 = range(0, sites2)
 
-        site_list = np.asarray([sites1, sites2])
+        site_list = [np.asarray(sites1), np.asarray(sites2)]
         offset_list = [offsets1, offsets2]
         widths = [width1, width2]
         offset_err = 'specified offsets are not sorted'
@@ -2483,12 +2483,8 @@ class MPS(BaseMPSExpectationValue):
                 assert len(f) == 2
         for i, B in enumerate(self._B):
             assert isinstance(B, ct.SymmetricTensor)
-            if not B.labels_are(*self._B_labels):
-                if not (
-                    isinstance(B, ct.HiddenLegTensor)
-                    and set(self._B_labels) == set([B.labels[i] for i in B.public_leg_idcs()])
-                ):
-                    raise ValueError(f'B has wrong labels {B.labels!r}, expected {self._B_labels!r}')
+            if not _public_labels_are(B, self._B_labels, planar=True):
+                raise ValueError(f'B has wrong labels {B.labels!r}, expected {self._B_labels!r}')
             i2 = (i + 1) if self.finite else (i + 1) % self.L
             if isinstance(self._S[i2], ct.DiagonalTensor):
                 if (
@@ -4137,7 +4133,7 @@ class MPS(BaseMPSExpectationValue):
             ``None`` stands for non-canonical form.
 
         """
-        assert B.labels_are('vL', 'p', 'vR', planar=True)
+        assert _public_labels_are(B, ['vL', 'p', 'vR'], planar=True)
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         B = self.shift_Tensor_unit_cells(B, -num_unit_cells)
         self.form[i_in_unit_cell] = self._to_valid_form(form)
@@ -9014,6 +9010,23 @@ def _project_onto_single_summand(B: ct.SymmetricTensor, leg: str) -> ct.Symmetri
         return B
     assert len(space.spaces) == 1, 'expected a single summand'
     return ct.apply_mask(B, space.projection_onto_summand(0, backend=B.backend, device=B.device), leg)
+
+
+def _public_labels_are(B: ct.Tensor, labels: list[str], planar: bool = False) -> bool:
+    """Like ``B.labels_are(*labels, planar=planar)``, but ignoring the hidden legs of a :class:`~cyten.HiddenLegTensor`.
+
+    For ``planar=True``, the public legs need to have the `labels` up to a cyclic permutation.
+    """
+    # TODO should this be a method of the tensors instead?
+    if not isinstance(B, ct.HiddenLegTensor):
+        return B.labels_are(*labels, planar=planar)
+    public = [B.labels[i] for i in B.public_leg_idcs()]
+    if len(public) != len(labels) or set(public) != set(labels):
+        return False
+    if not planar:
+        return True
+    k = public.index(labels[0])
+    return public[k:] + public[:k] == list(labels)
 
 
 def _real_if_close_nested(value, factor: float = 1.0):
