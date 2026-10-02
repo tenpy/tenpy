@@ -215,20 +215,18 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
     res = dmrg.run(psi, M, dmrg_pars, resume_data={'init_env_data': dict(start_env_sites=0)})
     if bc_MPS == 'finite':
         ED = ExactDiag.from_model(M)
-
-        with pytest.raises(NotImplementedError):
-            ED.build_full_H_from_mpo()
-        pytest.xfail('ED for comparison not implemented yet')
-
         ED.build_full_H_from_mpo()
         ED.full_diagonalization()
         E_ED, psi_ED = ED.groundstate()
-        ov = npc.inner(psi_ED, ED.mps_to_full(psi), 'range', do_conj=True)
+        ov = np.vdot(psi_ED.to_numpy().reshape(-1), ED.mps_to_full(psi).to_numpy().reshape(-1))
         print('E_DMRG={Edmrg:.14f} vs E_exact={Eex:.14f}'.format(Edmrg=res['E'], Eex=E_ED))
         print('compare with ED: overlap = ', abs(ov) ** 2)
         assert abs(abs(ov) - 1.0) < 1.0e-8  # unique groundstate: finite size gap!
-        var = M.H_MPO.variance(psi)
-        assert var < 1.0e-8
+
+        with pytest.raises(NotImplementedError):
+            var = M.H_MPO.variance(psi)
+            assert var < 1.0e-8
+
     else:
         # compare exact solution for transverse field Ising model
         Edmrg = res['E']
