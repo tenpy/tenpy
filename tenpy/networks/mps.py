@@ -173,7 +173,6 @@ from ..tools import (
     asConfig,
     get_recursive,
     hdf5_io,
-    inverse_permutation,
     lcm,
     svd_theta,
     to_array,
@@ -4367,7 +4366,9 @@ class MPS(BaseMPSExpectationValue):
         self._B = [self.get_B(i, form=None) for i in inds]
         self._S = [self.get_SL(i) for i in inds]
 
-    def overlap_translate_finite(self, psi: MPS, shift: int = 1) -> float | complex:
+    def overlap_translate_finite(
+        self, psi: MPS, shift: int = 1, overbraid: bool | None = None
+    ) -> ct.BlockBackend.Scalar:
         r"""Contract ``<self|T^N|psi>`` for translation `T` with finite, periodic boundaries.
 
         Looks like this for ``shift=1``, with the open virtual legs contracted in the end::
@@ -4390,10 +4391,16 @@ class MPS(BaseMPSExpectationValue):
         shift : int
             Translation by how many sites. Note that for large shift, the contraction is
             :math:`O(\chi^4)` compared to DMRG etc scaling as :math:`O(\chi^3)`.
+        overbraid : bool | None
+            The contraction is non-planar: the virtual legs closing the periodic boundaries are
+            braided through the physical legs. Whether they braid over (``True``) or under
+            (``False``) the physical legs of the first `shift` sites; the braids across the
+            remaining sites have the opposite chirality.
+            ``None`` is only allowed for symmetric braids, where the chirality does not matter.
 
         Returns
         -------
-        self_Tn_psi : float or complex
+        self_Tn_psi : :class:`~cyten.BlockBackend.Scalar`
             Contraction of ``<self|T^N|psi>``.
 
         See Also
@@ -4403,30 +4410,66 @@ class MPS(BaseMPSExpectationValue):
         roll_mps_unit_cell : Effectively applies ``T^shift`` on infinite MPS.
 
         """
-        # TODO not sure how to generalize
+        # this is a non-planar contraction: we need to braid the left leg connecting Th[0] and Th*[0] through
+        # shift physical legs, the leg connecting B[L - shift] and B[L - shift -1] and the leg connecting
+        # B[L - 1] and B*[L - 1] are braided through L - shift physical legs
+        # The braids can however be expressed in terms of planar contractions by using site.identity_tensor
+        if overbraid is None:
+            if not self.symmetry.has_symmetric_braid:
+                raise ValueError('overbraid=None is only allowed for symmetric braids; specify True or False.')
+            overbraid = True
         assert self.bc == psi.bc == 'finite'
         L = self.L
         assert L == psi.L
         if shift < 0:
             shift = shift + self.L
         assert 0 < shift < self.L
+        if _different_total_charges(self, psi):
+            # the hidden total charge legs would not be contracted
+            zero = self.backend.block_backend.block_from_numpy(
+                np.asarray(0.0), dtype=ct.Dtype.common(self.dtype, psi.dtype), device=self.device
+            )
+            return ct.block_backends.Scalar(zero)
         forms = ['Th'] + ['B'] * (L - 1)
         inds = np.roll(np.arange(self.L), shift)  # consistent with `roll_mps_unit_cell`!
         B_bra = self.get_B(0, forms[0])
         B_ket = psi.get_B(inds[0], forms[inds[0]])
-        C = npc.tensordot(B_bra.conj(), B_ket, axes=[self._get_p_label('*'), self._get_p_label('')])
+        braid_leg = B_bra.get_leg('vL')
+        W = self.sites[0].identity_tensor(w=braid_leg, overbraid=overbraid)
+        C = ct.planar_contraction(B_bra.hc, W, ['vL*', 'p*'], ['wL', 'p'])
+        C = ct.planar_contraction(C, B_ket, self._get_p_label('*'), self._get_p_label(''))
         for i in range(1, L):
-            j = inds[i]
-            B_ket = psi.get_B(j, forms[j])
-            if i != shift:
-                C = npc.tensordot(C, B_ket, axes=['vR', 'vL'])
-            else:
+            if i == shift:
                 # here, B_ket is the Th[0] - handle the open left/rightmost, trivial virtual legs
-                C.ireplace_label('vR', 'openR')
-                C = npc.tensordot(C, B_ket, axes=['vL*', 'vL'])  # contract trivial left legs
+                # exchange the current wR (contract with Th0) with current vL and vR, which are
+                # now braided with the opposite overbraid across the remaining physical legs
+                # (pipe them to use the same contractions as before)
+                C = ct.planar_permute_legs(C, codomain=['vR*'], domain=['vL', 'vR', 'wR'])
+                C = ct.planar.planar_combine_legs(C, ['vR', 'vL'])
+                # wR is braided with the pipe; hidden legs (total charge) get levels automatically
+                levels = {'wR': 1, '(vR.vL)': 0} if overbraid else {'wR': 0, '(vR.vL)': 1}
+                C = ct.move_leg(C, 'wR', domain_pos=0, levels=levels)
+                C.relabel({'(vR.vL)': 'wR', 'wR': 'vR'})
+                braid_leg = C.get_leg('wR').dual
+                overbraid = not overbraid
+
+            j = inds[i]
             B_bra = self.get_B(i, forms[i])
-            C = npc.tensordot(C, B_bra.conj(), axes=[['vR*'] + self._get_p_label(''), ['vL*'] + self._get_p_label('*')])
-        return npc.trace(npc.trace(C, 'vR', 'vL'), 'openR', 'vR*')
+            B_ket = psi.get_B(j, forms[j])
+            W = self.sites[i].identity_tensor(w=braid_leg, overbraid=overbraid)
+            if i == L - 1:
+                W.relabel({'wR': '(vRp.vLp)'})
+                W = ct.split_legs(W, '(vRp.vLp)')
+                C = ct.planar_contraction(C, B_bra.hc, ['vR*'], ['vL*'])
+                C = ct.planar_contraction(C, W, ['wR', 'p*', 'vR*'], ['wL', 'p', 'vRp'])
+                C = ct.planar_contraction(
+                    C, B_ket, ['vR', 'vLp'] + self._get_p_label('*'), ['vL', 'vR'] + self._get_p_label('')
+                )
+            else:
+                C = ct.planar_contraction(C, B_bra.hc, ['vR*'], ['vL*'])
+                C = ct.planar_contraction(C, W, ['wR', 'p*'], ['wL', 'p'])
+                C = ct.planar_contraction(C, B_ket, ['vR'] + self._get_p_label('*'), ['vL'] + self._get_p_label(''))
+        return C.real_if_close()
 
     def enlarge_chi(self, extra_legs, random_fct=np.random.normal):
         """Artificially enlarge the bond dimension by the specified extra legs/charges. In place.
@@ -8973,6 +9016,24 @@ def _combine_virtual_legs(parts: list[ct.SymmetricTensor]) -> ct.SymmetricTensor
     combine_labels = ct.tensors._tensors._combine_leg_labels
     T.relabel({combine_labels(vLs): 'vL', combine_labels(vRs): 'vR'})
     return ct.flatten_pipe_leg(ct.flatten_pipe_leg(T, 'vL'), 'vR')
+
+
+def _different_total_charges(bra: MPS, ket: MPS) -> bool:
+    """Whether the gauged `bra` and `ket` have different total charges, see :meth:`MPS.get_total_charge`.
+
+    If so, `bra` and `ket` are in different charge sectors such that e.g. their overlap vanishes.
+    For different unit cells, the total charges (per unit cell) are not comparable and we return ``False``.
+
+    TODO: For total charge legs with dim > 1, this always returns ``False``, although `bra` and `ket` may
+    only share some (or none) of the sectors, see :func:`_have_common_total_charge`.
+    """
+    if bra.L != ket.L:
+        return False
+    for psi in [bra, ket]:
+        leg = psi.total_charge_leg
+        if leg is not None and leg.dim > 1:
+            return False
+    return bra.get_total_charge() != ket.get_total_charge()
 
 
 def _flatten_domain_pipe(B: ct.SymmetricTensor, domain_pos: int) -> ct.SymmetricTensor:
