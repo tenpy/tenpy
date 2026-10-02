@@ -4146,38 +4146,56 @@ class MPS(BaseMPSExpectationValue):
         theta: ct.Tensor,
         trunc_par: dict | None = None,
         update_norm: bool = False,
-        charge_leg_right: bool = True,
-    ) -> float | None:
+        charge_leg_right: bool | None = None,
+    ) -> TruncationError | None:
         """SVD a two-site wave function `theta` and save it in `self`.
+
+        The new tensors are stored in form ``'A'`` on site `i` and ``'B'`` on site `i + 1`, the singular
+        values on the bond in between.
 
         Parameters
         ----------
         i : int
             `theta` is the wave function on sites `i`, `i + 1`.
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            The two-site wave function with labels ``'vL', 'p0', 'p1', 'vR'``,
-            ready for svd.
+        theta : :class:`~cyten.Tensor`
+            The two-site wave function with labels ``'vL', 'p0', 'p1', 'vR'``, as obtained from
+            :meth:`get_theta`. It may be a :class:`~cyten.HiddenLegTensor` with hidden total charge
+            legs (see :meth:`gauge_total_charge`), which need to be (cyclically) between ``'vR'`` and
+            ``'vL'``. The arrangement of the legs between codomain and domain does not matter.
         trunc_par : None | dict
             Parameters for truncation, see :cfg:config:`truncation`.
             If ``None``, no truncation is done.
         update_norm : bool
             If ``True``, multiply the norm of `theta` into :attr:`norm`.
-        charge_leg_right : bool
-            For a theta that is a :class:`~cyten.ChargedTensor`, determines if the charge leg
-            should be part of the tensor at site `i + 1` (`True`) or at site `i` (`False`).
+        charge_leg_right : bool | None
+            Determines on which tensor the hidden total charge legs of `theta` (if any) end up:
+            on the tensor at site `i + 1` (``True``) or at site `i` (``False``).
+            ``None`` keeps a gauged MPS gauged (see :attr:`is_gauged`), i.e., the charge legs move
+            towards the last tensor of the (unit cell of the) MPS: they go to site `i + 1`, except for
+            the bond crossing the unit cell boundary of an infinite MPS, where they stay on site `i`.
+            The virtual leg on the bond between the sites depends on this choice, since its charges
+            are shifted by the total charge. For a total charge leg with ``dim == 1``, the singular
+            values do not.
+
+        Returns
+        -------
+        err : :class:`~tenpy.TruncationError` | None
+            The truncation error introduced, ``None`` if `trunc_par` is ``None``.
 
         """
+        if charge_leg_right is None:
+            charge_leg_right = self.finite or self._to_valid_site_index(i) != self.L - 1
         self.dtype = ct.Dtype.common(self.dtype, theta.dtype)
-        theta = ct.planar_permute_legs(theta, codomain=['vL', 'p0'])
+        theta = _permute_theta_for_svd(theta, charge_leg_right)
         if trunc_par is None:
-            U, S, Vh = ct.svd(theta, new_labels=['vR', 'vL'], charge_leg_top=charge_leg_right)
+            U, S, Vh = ct.svd(theta, new_labels=['vR', 'vL'])
             renorm = ct.norm(S)
             S /= renorm
             err = None
             if update_norm:
                 self.norm *= renorm
         else:
-            U, S, Vh, err, renormalize = svd_theta(theta, trunc_par)
+            U, S, Vh, err, renormalize = svd_theta(theta, trunc_par, new_labels=['vR', 'vL'])
             if update_norm:
                 self.norm *= renormalize
         Vh = ct.planar_permute_legs(Vh, codomain=['vL', 'p1'])
@@ -9012,6 +9030,28 @@ def _merge_charge_legs(B: ct.HiddenLegTensor, labels: list[str], new_label: str)
     if len(labels) > 1 and B.get_leg(new_label[1:]).dim == 1:
         B = _flatten_domain_pipe(B, 0)  # such that equal charges give equal legs
     return ct.HiddenLegTensor(B, [new_label[1:], *other_hidden])
+
+
+def _permute_theta_for_svd(theta: ct.Tensor, charge_leg_right: bool) -> ct.Tensor:
+    """Arrange a two-site `theta` as ``[vL, p0] <- [vR, p1]`` for an SVD, placing its hidden legs explicitly.
+
+    The SVD of a :class:`~cyten.HiddenLegTensor` keeps each hidden leg on the factor of its side,
+    i.e., hidden legs in the codomain end up on `U` and those in the domain on `Vh`.
+    The hidden total charge legs of `theta` need to be (cyclically) between ``'vR'`` and ``'vL'``, as for
+    :meth:`MPS.get_theta`. They are put into the domain for ``charge_leg_right=True`` and into the codomain
+    otherwise, which is possible without braiding them.
+    """
+    if not isinstance(theta, ct.HiddenLegTensor):
+        return ct.planar_permute_legs(theta, codomain=['vL', 'p0'])
+    labels = theta.labels
+    k = labels.index('vL')
+    labels = labels[k:] + labels[:k]
+    hidden = labels[4:]
+    if labels[:4] != ['vL', 'p0', 'p1', 'vR']:
+        raise ValueError(f'hidden legs of theta need to be between vR and vL, got labels {theta.labels!r}')
+    if charge_leg_right:
+        return ct.planar_permute_legs(theta, codomain=['vL', 'p0'], domain=hidden[::-1] + ['vR', 'p1'])
+    return ct.planar_permute_legs(theta, codomain=hidden + ['vL', 'p0'], domain=['vR', 'p1'])
 
 
 def _project_onto_single_summand(B: ct.SymmetricTensor, leg: str) -> ct.SymmetricTensor:
