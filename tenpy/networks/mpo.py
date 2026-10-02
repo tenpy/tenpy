@@ -3493,24 +3493,34 @@ class MPOEnvironment(BaseEnvironment):
     def _contract_LHeff(self, i: int, label_p: str = 'p0') -> ct.Tensor:
         """Helper for effective H with combine.
 
-        Contract LP with a W and combine to legs ``(vR.p0*), (vR*.p0), wR``.
+        Contract LP with a W and combine to legs ``(p0*.vR), (vR*.p0), wR``.
         """
         LP = self.get_LP(i)
         p, ps = label_p, label_p + '*'
         LHeff = ct.planar_contraction(LP, self.H.get_W(i), 'wR', 'wL', relabel2={'p': p, 'p*': ps})
         assert LHeff.labels_are('vR', 'vR*', p, 'wR', ps, planar=True)
-        return ct.combine_legs(LHeff, ['vR*', p], ['vR', ps])
+        # FIXME something about the leg-combine is off here
+        #       I am also confused about the resulting labels....
+        ct.planar_combine_legs(LHeff, ['vR*', p], [ps, 'vR'], pipe_dualities=[False, True])
+        res = ct.combine_legs(LHeff, ['vR*', p], [ps, 'vR'], pipe_dualities=[False, True])
+        assert res.labels_are(f'(vR*.{p})', 'wR', f'({ps}.vR)', planar=True)
+        assert res.get_leg(f'(vR*.{p})') == res.get_leg(f'({ps}.vR)').dual
+        return res
 
     def _contract_RHeff(self, i: int, label_p: str = 'p1') -> ct.Tensor:
         """Helper for effective H with combine.
 
-        Contract RP with a W and combine to legs ``(p1*.vL), wL, (p1.vL*)``.
+        Contract RP with a W and combine to legs ``(vL.p1*), wL, (p1.vL*)``.
         """
         RP = self.get_RP(i)
         p, ps = label_p, label_p + '*'
         RHeff = ct.planar_contraction(self.H.get_W(i), RP, 'wR', 'wL', relabel1={'p': p, 'p*': ps})
         assert RHeff.labels_are('vL', ps, 'wL', p, 'vL*', planar=True)
-        return ct.combine_legs(RHeff, [ps, 'vL'], [p, 'vL*'])
+        ct.planar_combine_legs(RHeff, [ps, 'vL'], ['vL*', p], pipe_dualities=[True, False])
+        res = ct.combine_legs(RHeff, [ps, 'vL'], ['vL*', p], pipe_dualities=[True, False])
+        assert res.labels_are(f'(vL.{ps})', 'wL', f'({p}.vL*)')
+        assert res.get_leg(f'(vL.{ps})') == res.get_leg(f'({p}.vL*)').dual
+        return res
 
 
 class MPOEnvironmentBuilder:
