@@ -6407,6 +6407,10 @@ class MPS(BaseMPSExpectationValue):
             B_self = psi_self.get_B(i)
             Bs.append(ct.tensor_from_grid([[B_self, None], [None, other.get_B(i)]], labels=B_self.labels))
         Bs.append(ct.tensor_from_grid([[last_B_self], [last_B_other]], labels=last_B_self.labels))
+        # The outer legs are DirectSumSpaces with a single summand; replace them by that summand,
+        # which is an isomorphism. (The inner bonds are replaced in canonical_form_finite.)
+        Bs[0] = _project_onto_single_summand(Bs[0], 'vL')
+        Bs[-1] = _project_onto_single_summand(Bs[-1], 'vR')
         Ss = [
             ct.DiagonalTensor.from_eye(
                 leg=B.get_leg('vL'),
@@ -8954,6 +8958,19 @@ def _merge_charge_legs(B: ct.HiddenLegTensor, labels: list[str], new_label: str)
     if len(labels) > 1 and B.get_leg(new_label[1:]).dim == 1:
         B = _flatten_domain_pipe(B, 0)  # such that equal charges give equal legs
     return ct.HiddenLegTensor(B, [new_label[1:], *other_hidden])
+
+
+def _project_onto_single_summand(B: ct.SymmetricTensor, leg: str) -> ct.SymmetricTensor:
+    """Replace a :class:`~cyten.DirectSumSpace` `leg` with a single summand by that summand.
+
+    The projection onto the only summand is an isomorphism, i.e. no information is lost.
+    Other legs are returned unchanged.
+    """
+    space = B.get_leg(leg)
+    if not isinstance(space, ct.DirectSumSpace):
+        return B
+    assert len(space.spaces) == 1, 'expected a single summand'
+    return ct.apply_mask(B, space.projection_onto_summand(0, backend=B.backend, device=B.device), leg)
 
 
 def _real_if_close_nested(value, factor: float = 1.0):
