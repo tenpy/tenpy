@@ -1235,52 +1235,42 @@ class MPO(MPSGeometry):
             For an infinite MPS: the density per site.
 
         """
-        raise NotImplementedError
         if psi.finite:
             raise ValueError('not infinite MPS')
         env = MPOEnvironment(psi, self, psi, start_env_sites=0)
         L = lcm(self.L, psi.L)
         LP0 = env.init_LP(0)
-        masks_L_no_IdL = []
-        masks_R_no_IdRL = []
-        for i, W in enumerate(self._W):
-            mask_L = np.ones(W.get_leg('wL').ind_len, np.bool_)
-            mask_L[self.get_IdL(i)] = False
-            masks_L_no_IdL.append(mask_L)
-            mask_R = np.ones(W.get_leg('wR').ind_len, np.bool_)
-            mask_R[self.get_IdL(i + 1)] = False
-            mask_R[self.get_IdR(i)] = False
-            masks_R_no_IdRL.append(mask_R)
-        # contract first site with theta
-        theta = psi.get_theta(0, 1)
-        LP = npc.tensordot(LP0, theta, axes=['vR', 'vL'])
-        LP = npc.tensordot(LP, self._W[0], axes=[['wR', 'p0'], ['wL', 'p*']])
-        LP = npc.tensordot(LP, theta.conj(), axes=[['vR*', 'p'], ['vL*', 'p0*']])
-
+        theta = psi.get_B(0, 'Th')
+        LP = env.LP_contraction.evaluate(dict(LP=LP0, Bk=theta, W=self.get_W(0), Bb=theta.hc))
         for i in range(1, max(max_range, 1) * L):
-            i0 = i % self.L
             W = self.get_W(i)
             if i >= L:
                 # have one full unit cell: don't use further terms starting with IdL
-                mask_L = masks_L_no_IdL[i0]
-                LP.iproject(mask_L, 'wR')
-                W = W.copy()
-                W.iproject(mask_L, 'wL')
-            B = psi.get_B(i, form='B')
-            LP = npc.tensordot(LP, B, axes=['vR', 'vL'])
-            LP = npc.tensordot(LP, W, axes=[['wR', 'p'], ['wL', 'p*']])
-            LP = npc.tensordot(LP, B.conj(), axes=[['vR*', 'p'], ['vL*', 'p*']])
+                keep = [i for i, l in enumerate(W.get_leg('wL').summand_labels) if l != 'IdL']
+                proj = W.get_leg('wL').projection_onto_summands(
+                    keep, backend=W.backend, labels=['wL', 'wR'], device=W.device
+                )
+                W = ct.planar_contraction(W, proj, 'wL', 'wR')
+                LP = ct.planar_contraction(LP, proj.hc, 'wR', 'wR*', relabel2={'wL*': 'wR'})
+            B = psi.get_B(i, 'B')
+            LP = env.LP_contraction.evaluate(dict(LP=LP, Bk=B, W=W, Bb=B.hc))
 
             if i >= L - 1:
                 RP = env.init_RP(i)
-                current_value = npc.inner(LP, RP, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
-                LP_converged = LP.copy()
-                LP_converged.iproject(masks_R_no_IdRL[i0], 'wR')
-                if npc.norm(LP_converged) < tol:
+                current_value = ct.planar_contraction(LP, RP, ['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL'])
+
+                # remove following identities
+                keep = [i for i, l in enumerate(LP.get_leg('wR').summand_labels) if l not in ['IdL', 'IdR']]
+                proj = LP.get_leg('wR').projection_onto_summands(
+                    keep, backend=LP.backend, labels=['wR', 'wL'], device=LP.device
+                )
+                LP_converged = ct.planar_contraction(LP, proj, 'wR', 'wL')
+                if ct.norm(LP_converged) < tol:
                     break  # no more terms left
         else:  # no break
             msg = f'Tolerance {tol:.2e} not reached within {max_range:d} sites'
             warnings.warn(msg, stacklevel=2)
+        current_value = current_value.to_numpy()
         if self.explicit_plus_hc:
             current_value = current_value + np.conj(current_value)
         return np.real_if_close(current_value / L)

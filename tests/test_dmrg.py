@@ -245,11 +245,6 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
         Edmrg2 = np.mean(bond_energies)
         assert abs((Edmrg - Edmrg2) / Edmrg2) < max(1.0e-10, np.max(psi.norm_test()))
 
-        # Compare the energy via H_MPO
-        with pytest.raises(NotImplementedError):
-            _ = M.H_MPO.expectation_value(psi)
-        pytest.xfail('iMPO expval not ready!')
-
         Edmrg3 = M.H_MPO.expectation_value(psi)
         assert abs((Edmrg - Edmrg3) / Edmrg3) < max(1.0e-10, np.max(psi.norm_test()))
 
