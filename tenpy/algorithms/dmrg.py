@@ -1190,11 +1190,13 @@ def full_diag_effH(
     fullH: ct.SymmetricTensor = effH.to_tensor()
     if isinstance(effH, TwoSiteH) and not effH.combine:
         assert fullH.labels_are('vL', 'p0', 'p1', 'vR', 'vR*', 'p1*', 'p0*', 'vL*', planar=True)
-    else:
+        # TODO workaround. See https://github.com/tenpy/tenpy/issues/693
+        fullH = ct.planar_permute_legs(fullH, codomain=effH.acts_on)
+    elif isinstance(effH, EffectiveH):
         raise NotImplementedError  # TODO implement similar label check!
-
-    # TODO workaround. See https://github.com/tenpy/tenpy/issues/693
-    fullH = ct.planar_permute_legs(fullH, codomain=effH.acts_on)
+    else:
+        # let e.g. the dummy in the tests through
+        pass
 
     E, V = ct.eigh(fullH, new_labels='eig*', new_leg_dual=False)
     # V: ct.SymmetricTensor

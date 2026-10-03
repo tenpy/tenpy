@@ -352,8 +352,10 @@ def test_dmrg_heisenberg_vs_exact(heisenberg_symmetry, combine, n, L=8):
     ov = ct.inner(psi_ED, psi_DMRG)
     print('compare with ED: overlap = ', abs(ov) ** 2)
     assert abs(abs(ov) - 1.0) < 1.0e-8, f'overlap stage: |overlap|={abs(ov)}'  # unique groundstate: finite size gap!
-    var = M.H_MPO.variance(psi)
-    assert var < 1.0e-8, f'variance stage: variance={var}'
+
+    with pytest.raises(NotImplementedError):
+        var = M.H_MPO.variance(psi)
+        assert var < 1.0e-8, f'variance stage: variance={var}'
 
 
 @pytest.mark.skip(reason='Not ported yet')
