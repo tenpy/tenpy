@@ -263,51 +263,48 @@ def _dense_heisenberg(L):
     return H
 
 
-_HEISENBERG_BACKENDS = {'SU2': 'FusionTreeBackend', 'Sz': 'AbelianBackend', None: 'NoSymmetryBackend'}
-
-
-def _heisenberg_model(kind, L):
-    """Heisenberg chain; for ``kind='SU2'`` cyten's default routing gives the Clebsch-Gordan-data based SU(N=2).
-
-    The SU(N) data path is configured for all tests in ``tests/conftest.py``.
-    """
-    return SpinChain(dict(L=L, bc_MPS='finite', conserve=kind))
-
-
-def _check_heisenberg_site(site, kind):
-    """Check the expected backend and (for SU2) that cyten's default routing uses the CG-data symmetry class."""
-    assert type(site.backend).__name__ == _HEISENBERG_BACKENDS[kind], f'wrong backend for conserve={kind!r}'
-    if kind == 'SU2':
-        assert type(site.leg.symmetry.factors[0]).__name__ == 'SUN'
-
-
-@pytest.fixture(
-    params=[pytest.param('SU2', id='SU2'), pytest.param('Sz', id='Sz'), pytest.param(None, id='no_symmetry')]
-)
-def heisenberg_symmetry(request):
-    """The kind of symmetry conserved by the Heisenberg chain; checks the expected backend is used."""
-    _check_heisenberg_site(_heisenberg_model(request.param, 4).lat.unit_cell[0], request.param)
-    return request.param
-
-
-@pytest.mark.parametrize(
-    'combine, n',
-    [
-        # combine n
-        (True, 2),  # simplest case
-        (True, 1),
-        (False, 2),
-    ],
-)
+@pytest.mark.parametrize('combine', [True, False])
+@pytest.mark.parametrize('n', [2, 1])
+@pytest.mark.parametrize('conserve', ['SU2', 'Sz', None])
+@pytest.mark.parametrize('tensor_backend', ['fusion_tree', 'abelian', 'no_symmetry'])
 @pytest.mark.slow
-def test_dmrg_heisenberg_vs_exact(heisenberg_symmetry, combine, n, L=8):
+def test_dmrg_heisenberg_vs_exact(combine, n, conserve, tensor_backend, L=8):
     if combine:
         # same as test_dmrg_vs_exact: DMRG with combine is disabled upstream for now
-        pytest.xfail('combine is not fixed yet. See PR #694')  # https://github.com/tenpy/tenpy/pull/694
+        pytest.skip('combine is not fixed yet. See PR #694')  # https://github.com/tenpy/tenpy/pull/694
+    if n != 2:
+        pytest.skip('Single-site not implemented yet')  # https://github.com/tenpy/tenpy/issues/698
+    if (conserve == 'SU2' and tensor_backend != 'fusion_tree') or (
+        conserve == 'Sz' and tensor_backend == 'no_symmetry'
+    ):
+        # TODO once we can properly initialize models with fixed backend, do the following:
 
-    M = _heisenberg_model(heisenberg_symmetry, L)
-    site = M.lat.unit_cell[0]
-    _check_heisenberg_site(site, heisenberg_symmetry)
+        # with pytest.raises(ct.SymmetryError):
+        #     ...  # initialize model code
+        # return
+
+        pytest.skip()
+
+    M = SpinChain(dict(L=L, bc_MPS='finite', conserve=conserve))
+    site: ct.Site = M.lat.unit_cell[0]
+
+    # verify we initialized with the right symmetry
+    if conserve == 'SU2':
+        assert repr(site.symmetry) == 'Symmetry([SUNSymmetry(N=2)])'
+    elif conserve == 'Sz':
+        assert site.symmetry.is_equivalent_to(ct.U1())
+    elif conserve is None:
+        assert site.symmetry.is_equivalent_to(ct.NoSymmetry())
+    else:
+        raise NotImplementedError
+
+    # verify we initialized with the right backend
+    if (conserve, tensor_backend) not in [('SU2', 'fusion_tree'), ('Sz', 'abelian'), (None, 'no_symmetry')]:
+        assert site.backend != ct.get_backend(tensor_backend)
+        pytest.skip('Can not control backend of model yet')
+
+    assert site.backend == ct.get_backend(tensor_backend)
+
     psi = mps.MPS.from_desired_bond_dimension(
         M.lat.mps_sites(),
         30,
