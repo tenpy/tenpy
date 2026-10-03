@@ -83,7 +83,6 @@ def _kron_charge_indices(site, L, sector):
 
 
 # the SU(2) Clebsch-Gordans go through sympy, which trips over a deprecation in mpmath
-@pytest.mark.filterwarnings('ignore:bitcount function is deprecated:DeprecationWarning')
 @pytest.mark.parametrize('conserve', ['Sz', 'parity', 'None', 'SU(2)'])
 @pytest.mark.parametrize('L', [3, 4])
 def test_exact_diag_full(conserve, L):
@@ -104,7 +103,6 @@ def test_exact_diag_full(conserve, L):
 
 
 # the SU(2) Clebsch-Gordans go through sympy, which trips over a deprecation in mpmath
-@pytest.mark.filterwarnings('ignore:bitcount function is deprecated:DeprecationWarning')
 @pytest.mark.parametrize('conserve', ['Sz', 'parity', 'None', 'SU(2)'])
 @pytest.mark.parametrize('L', [3, 4])
 def test_exact_diag_groundstate_per_sector(conserve, L):
@@ -138,7 +136,6 @@ def test_exact_diag_groundstate_per_sector(conserve, L):
 
 
 # the SU(2) Clebsch-Gordans go through sympy, which trips over a deprecation in mpmath
-@pytest.mark.filterwarnings('ignore:bitcount function is deprecated:DeprecationWarning')
 @pytest.mark.parametrize('conserve', ['Sz', 'parity', 'None', 'SU(2)'])
 @pytest.mark.parametrize('L', [3, 4])
 def test_exact_diag_charge_sector(conserve, L):
@@ -222,7 +219,6 @@ def test_exact_diag_mask(conserve, L):
 
 
 # the SU(2) Clebsch-Gordans go through sympy, which trips over a deprecation in mpmath
-@pytest.mark.filterwarnings('ignore:bitcount function is deprecated:DeprecationWarning')
 def test_exact_diag_mask_su2(L=3):
     # a per-basis-state charge doesn't exist for a non-abelian symmetry, so _mask stays None
     site = SpinSite(0.5, conserve='SU(2)')
@@ -266,7 +262,6 @@ def test_exact_diag_anyons(L=3):
 
 
 # the SU(2) Clebsch-Gordans go through sympy, which trips over a deprecation in mpmath
-@pytest.mark.filterwarnings('ignore:bitcount function is deprecated:DeprecationWarning')
 @pytest.mark.parametrize('conserve', ['Sz', 'parity', 'None'])
 @pytest.mark.parametrize('L', [3, 4])
 def test_exact_diag_sparse_diag(conserve, L):
@@ -291,7 +286,6 @@ def test_exact_diag_sparse_diag(conserve, L):
 
 
 # the SU(2) Clebsch-Gordans go through sympy, which trips over a deprecation in mpmath
-@pytest.mark.filterwarnings('ignore:bitcount function is deprecated:DeprecationWarning')
 def test_exact_diag_sparse_diag_su2(L=3):
     site = SpinSite(0.5, conserve='SU(2)')
     H, H_ref = _heisenberg_tensor(site, L)

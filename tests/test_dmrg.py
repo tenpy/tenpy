@@ -78,7 +78,6 @@ class WorkaroundNNModel:
             raise NotImplementedError
 
 
-@pytest.mark.filterwarnings('ignore:bitcount function is deprecated:DeprecationWarning')
 @pytest.mark.parametrize(
     'site_kind, conserve', [('spin', None), ('spin', 'parity'), ('spin', 'Sz'), ('spin', 'SU2'), ('golden', None)]
 )
@@ -291,7 +290,6 @@ def heisenberg_symmetry(request):
     return request.param
 
 
-@pytest.mark.filterwarnings('ignore:bitcount function is deprecated:DeprecationWarning')
 @pytest.mark.parametrize(
     'combine, n',
     [
