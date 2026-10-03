@@ -268,6 +268,13 @@ mps_contraction_diagram_operations: dict[str, ct.PlanarDiagram] = {
     ),
     # with an additional leg `c` on the outer side of LP / RP, which is not contracted
     'LP2c @ TM': ct.PlanarDiagram(
+        tensors='LP[vR*, vR, c], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='LP:vR @ ket:vL, ket:p @ bra:p*, LP:vR* @ bra:vL*, ket:vR -> vR, bra:vR* -> vR*, LP:c -> c',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], c=['c']),
+    ),
+    'TM @ RP2c': ct.PlanarDiagram(
+        tensors='RP[vL*, c, vL], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='RP:vL @ ket:vR, ket:p @ bra:p*, RP:vL* @ bra:vR*, ket:vL -> vL, bra:vL* -> vL*, RP:c -> c',
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], c=['c']),
     ),
     'bra-W-ket2 @ RP2': ct.PlanarDiagram(
@@ -4719,7 +4726,7 @@ class MPS(BaseMPSExpectationValue):
                 # split off the right-most physical leg and vR from theta
                 # theta: vL p0 ... pj vR
                 theta = theta.combine_legs(combine, qconj=[+1, -1])
-                U, S, V, err, _ = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
+                U, S, V, err, _ = svd_theta(theta, trunc_par, new_labels=['vR', 'vL'])
                 Ss_new.append(S)
                 trunc_err += err
                 theta = U.scale_axis(S, 'vR').split_legs(0)  # vL p0 ... pj-1 vR
@@ -5793,6 +5800,9 @@ class MPS(BaseMPSExpectationValue):
             if isinstance(S, ct.DiagonalTensor):
                 # transpose to get vR = vL* to the codomain
                 rho_L2 = S.T.relabel({'vR': 'vL*'}) ** 2
+                if self.symmetry.has_complex_topological_data:
+                    # real rho_L2 might not be allowed as SymmetricTensor
+                    rho_L2 = rho_L2.as_dtype(rho_L2.dtype.to_complex)
             else:
                 assert S.num_legs == 2
                 S = S.T
@@ -5804,6 +5814,8 @@ class MPS(BaseMPSExpectationValue):
             S = self.get_SR(i)
             if isinstance(S, ct.DiagonalTensor):
                 rho_R2 = (S**2).relabel({'vL': 'vR*'})
+                if self.symmetry.has_complex_topological_data:
+                    rho_R2 = rho_R2.as_dtype(rho_R2.dtype.to_complex)
             else:
                 assert S.num_legs == 2
                 rho_R2 = ct.compose(S.hc, S)
@@ -6985,7 +6997,7 @@ class MPS(BaseMPSExpectationValue):
         C = ct.planar_contraction(C, swap_op, ['p0', 'p1'], ['p0*', 'p1*'])
         C = ct.planar_permute_legs(C, codomain=['vL', 'p0'], domain=['vR', 'p1'])
         theta = ct.tensors.partial_compose(C, self.get_SL(i), 'vL')
-        U, S, V, err, renormalize = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
+        U, S, V, err, renormalize = svd_theta(theta, trunc_par, new_labels=['vR', 'vL'])
         B_L = ct.compose(C, V.hc, relabel1={'p0': 'p'}, relabel2={'vL*': 'vR'})
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         B_R = ct.planar_permute_legs(V, codomain=['vL', 'p1'])
@@ -7473,11 +7485,13 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         The MPS to project on. Should be given in usual 'ket' form;
         we call `hc` on the matrices directly.
         Stored in place, without making copies.
-        If necessary to match charges, we call :meth:`~tenpy.networks.mps.MPS.gauge_total_charge`.
+        If necessary to match charges, we use a shallow copy gauged with
+        :meth:`~tenpy.networks.mps.MPS.gauge_total_charge`.
     ket : :class:`~tenpy.networks.mpo.MPO` | None
         The MPS on which the local operator acts.
         Stored in place, without making copies.
-        If ``None``, use `bra`.
+        If ``None``, use `bra`. Otherwise, the charge legs are gauged in place with
+        :meth:`~tenpy.networks.mps.MPS.gauge_total_charge`, if necessary.
     cache : :class:`~tenpy.tools.cache.DictCache` | None
         Cache in which the tensors should be saved. If ``None``, a new `DictCache` is generated.
     **init_env_data :
@@ -8361,11 +8375,11 @@ class TransferMatrix(ct.tensors.sparse.LinearOperator):
         assert isinstance(unit_cell_width, int) and 0 < unit_cell_width <= L and L % unit_cell_width == 0
         self.unit_cell_width = unit_cell_width
         assert len(ket_M) == L
-        self.backend = ct.backends.get_same_backend(*[T for T in self._ket_M + self._bra_N])
-        self.device = ct.tensors.get_same_device(*[T for T in self._ket_M + self._bra_N])
         self.transpose = transpose
         self._ket_M = ket_M
         self._bra_N = [B.hc for B in bra_N] if conjugate_Ns else bra_N
+        self.backend = ct.backends.get_same_backend(*[T for T in self._ket_M + self._bra_N])
+        self.device = ct.tensors.get_same_device(*[T for T in self._ket_M + self._bra_N])
         if not transpose:  # right to left
             legs = [self._bra_N[-1].get_leg('vR*').dual, ket_M[-1].get_leg('vR').dual]
             labels = ['vL*', 'vL']
