@@ -218,7 +218,9 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
         ED.build_full_H_from_mpo()
         ED.full_diagonalization()
         E_ED, psi_ED = ED.groundstate()
-        ov = np.vdot(psi_ED.to_numpy().reshape(-1), ED.mps_to_full(psi).to_numpy().reshape(-1))
+        psi_ED = ct.squeeze_legs(psi_ED.as_SymmetricTensor(), 'slice')
+        psi_DMRG = ct.split_legs(ED.mps_to_full(psi))
+        ov = ct.inner(psi_ED, psi_DMRG)
         print('E_DMRG={Edmrg:.14f} vs E_exact={Eex:.14f}'.format(Edmrg=res['E'], Eex=E_ED))
         print('compare with ED: overlap = ', abs(ov) ** 2)
         assert abs(abs(ov) - 1.0) < 1.0e-8  # unique groundstate: finite size gap!
@@ -347,7 +349,9 @@ def test_dmrg_heisenberg_vs_exact(heisenberg_symmetry, combine, n, L=8):
 
     print(f'E_DMRG={res["E"]:.14f} vs E_exact={E_ED:.14f}')
     assert abs(res['E'] - E_ED) < 1.0e-10, f'energy stage: E_DMRG={res["E"]} vs E_ED={E_ED}'
-    ov = np.vdot(psi_ED.to_numpy().reshape(-1), ED.mps_to_full(psi).to_numpy().reshape(-1))
+    psi_ED = ct.squeeze_legs(psi_ED.as_SymmetricTensor(), 'slice')
+    psi_DMRG = ct.split_legs(ED.mps_to_full(psi))
+    ov = ct.inner(psi_ED, psi_DMRG)
     print('compare with ED: overlap = ', abs(ov) ** 2)
     assert abs(abs(ov) - 1.0) < 1.0e-8, f'overlap stage: |overlap|={abs(ov)}'  # unique groundstate: finite size gap!
     var = M.H_MPO.variance(psi)
