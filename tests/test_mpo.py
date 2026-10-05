@@ -3,6 +3,7 @@
 
 import numpy as np
 import pytest
+from numpy import testing as npt
 from random_test import random_MPS
 
 from tenpy.algorithms.exact_diag import ExactDiag
@@ -507,3 +508,90 @@ def test_MPO_from_Wflat(bc, conserve, sort_charge, L=6, d=2, chi=5):
     Wflat2 = [W.to_ndarray() for W in op._W]
     for W, W2 in zip(Wflat, Wflat2):
         assert np.allclose(W, W2)
+
+
+# For testing MPO.make_U, prepare a pure-numpy implementation to compare against
+
+
+def make_WI_np(dt, A, B, C, D):
+    assert all(T.ndim == 4 for T in [A, B, C, D])
+    Id = np.eye(2)[None, None, :, :]
+    W = np.zeros((1 + A.shape[0], 1 + A.shape[1], 2, 2), complex)
+    W[0:1, 0:1] = Id + dt * D
+    W[0:1, 1:] = C
+    W[1:, 0:1] = dt * B
+    W[1:, 1:] = A
+    return W
+
+
+def make_WII_np(dt, A, B, C, D):
+    assert all(T.ndim == 4 for T in [A, B, C, D])
+    return mpo.make_W_II(dt, A, B[:, 0], C[0, :], D[0, 0])
+
+
+def make_W_np(dt, H_W: np.ndarray, approximation: str, finite: bool) -> np.ndarray:
+    # ensure IdL / IdR as expected
+    eye = np.eye(2)
+
+    if finite:
+        assert H_W[0].shape[0] == 2
+        assert H_W[-1].shape[1] == 2
+
+    W_U = []
+    for W in H_W:  # W[wL, wR, p, p*]
+        # extract blocks such that
+        # W = [[1 C D]
+        #      [0 A B]
+        #      [0 0 1]]
+        assert np.allclose(W[0, 0], eye)
+        C = W[0, 1:-1][None, :, :, :]
+        D = W[0, -1][None, None, :, :]
+        assert np.allclose(W[1:-1, 0], 0)
+        A = W[1:-1, 1:-1]
+        B = W[1:-1, -1][:, None, :, :]
+        assert np.allclose(W[-1, :-1], 0)
+        assert np.allclose(W[-1, -1], eye)
+
+        if approximation == 'I':
+            W_U.append(make_WI_np(dt, A, B, C, D))
+        elif approximation == 'II':
+            W_U.append(make_WII_np(dt, A, B, C, D))
+        else:
+            raise NotImplementedError
+    return W_U
+
+
+@pytest.mark.parametrize('conserve', [None, 'best'])
+@pytest.mark.parametrize('approximation', ['I', 'II'])
+@pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
+def test_MPO_make_U(conserve, approximation, bc_MPS, L=6, dt=0.01):
+    M = SpinChain(dict(L=L, Jx=1.0, Jy=1.0, Jz=1.0, hz=0.2, bc_MPS=bc_MPS, conserve=conserve))
+    U_MPO = M.H_MPO.make_U(-1j * dt, approximation=approximation)
+    U_MPO.test_sanity()
+    assert U_MPO.L == L
+
+    # check standard MPO setup: [wL, wR, p, p*], IdL = 0, IdR = -1
+    assert all(W._labels == ['wL', 'wR', 'p', 'p*'] for W in M.H_MPO._W)
+    assert all(j == 0 for j in M.H_MPO.IdL)
+    assert all(j == dim - 1 for j, dim in zip(M.H_MPO.IdR, M.H_MPO.chi))
+
+    # compare against pure-numpy construction of the W tensors
+    W_U_expect_np = make_W_np(
+        -1j * dt, [W.to_ndarray() for W in M.H_MPO._W], approximation=approximation, finite=bc_MPS == 'finite'
+    )
+    for W, expect_np in zip(U_MPO._W, W_U_expect_np):
+        npt.assert_almost_equal(W.to_ndarray(), expect_np)
+
+    # check error bound
+    if bc_MPS == 'finite':
+        ED_H = ExactDiag.from_H_mpo(M.H_MPO)
+        ED_H.build_full_H_from_mpo()
+        ED_H.full_diagonalization()
+        U_exact = ED_H.exp_H(dt).to_ndarray()
+
+        ED_U = ExactDiag.from_H_mpo(U_MPO)
+        ED_U.build_full_H_from_mpo()
+        U_np = ED_U.full_H.to_ndarray()
+
+        err = np.linalg.norm(U_np - U_exact)
+        assert err < L * (dt**2)
