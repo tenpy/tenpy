@@ -1099,7 +1099,7 @@ def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied
     # DMRG norm tolerance: https://tenpy.readthedocs.io/en/latest/reference/tenpy.algorithms.dmrg.DMRGEngine.html#cfg-option-DMRGEngine.norm_tol
     if not 'norm_tol' in run_defaults:        parser.add_argument('-norm_tol', type=float, default=1e-5) # After the DMRG run, update the environment with at most `norm_tol_iter` sweeps until ``np.linalg.norm(psi.norm_err()) < norm_tol``.
     if not 'norm_tol_iter' in run_defaults:
-        parser.add_argument('-norm_tol_iter', type=float, default=5.0)
+        parser.add_argument('-norm_tol_iter', type=int, default=5)
 	#Perform at most `norm_tol_iter`*`update_env` sweeps to converge the norm error below `norm_tol`
     
     # parameters controlling sweeps to reconstruct the environment
@@ -1165,8 +1165,8 @@ def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied
     omp_set_nthreads(args.ncores)
     if not args.dir == None:
         os.chdir(args.dir)
-    import matplotlib
-    matplotlib.rcParams["savefig.directory"] = os.chdir(os.getcwd())
+    #import matplotlib
+    #matplotlib.rcParams["savefig.directory"] = os.chdir(os.getcwd())
 
     # Build the identifier based on model-defined and general parameters
     identifier = "chi_{}_seed_{}_".format(args.chi, args.seed)  # Only use seed if supplied?

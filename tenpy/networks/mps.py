@@ -6147,8 +6147,7 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
     initial_state = [0] * size
     all_sites = list(range(size))  # To avoid having two types on same site.
     for state, fill in zip(states, filling):
-        sites = random.sample(set(all_sites),
-                              int(fill * size))  # pick fill*size sites to put state
+        sites = random.sample(sorted(all_sites), int(round(fill * size)))  # pick fill*size sites to put state
         for site in sites:
             initial_state[site] = state
             all_sites.remove(site)
