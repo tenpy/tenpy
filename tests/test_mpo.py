@@ -12,7 +12,7 @@ from scipy import linalg as spla
 from tenpy.algorithms import ExactDiag
 from tenpy.models.spins import SpinChain
 from tenpy.networks import mpo
-from tenpy.networks.terms import to_single_coupling
+from tenpy.networks.terms import CouplingTerms, OnsiteTerms, to_single_coupling
 
 # spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 spin_half = SpinSite(S=0.5, conserve=None)
@@ -337,34 +337,39 @@ def test_MPO_hermitian():
     assert _is_hermitian_coupling(L, site, H)
 
 
-def test_MPO_addition():
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+@pytest.mark.parametrize('bc', ['infinite', 'finite'])
+@pytest.mark.parametrize('explicit_plus_hc', [True, False])
+def test_MPO_addition(bc, explicit_plus_hc):
     L = 4
-    for bc in ['infinite', 'finite']:
-        print('bc = ', bc, '-' * 40)
-        s = spin_half
-        ot1 = OnsiteTerms(L)
-        ct1 = CouplingTerms(L)
-        ct1.add_coupling_term(2.0, 2, 3, 'Sm', 'Sp')
-        ct1.add_coupling_term(2.0, 2, 3, 'Sp', 'Sm')
-        ct1.add_coupling_term(2.0, 1, 2, 'Sz', 'Sz')
-        ot1.add_onsite_term(3.0, 1, 'Sz')
-        H1 = mpo.MPOGraph.from_terms((ot1, ct1), [s] * L, bc, unit_cell_width=L).build_MPO()
-        ot2 = OnsiteTerms(4)
-        ct2 = CouplingTerms(4)
-        ct2.add_coupling_term(4.0, 0, 2, 'Sz', 'Sz')
-        ct2.add_coupling_term(4.0, 1, 2, 'Sz', 'Sz')
-        ot2.add_onsite_term(5.0, 1, 'Sz')
-        H2 = mpo.MPOGraph.from_terms((ot2, ct2), [s] * L, bc, unit_cell_width=L).build_MPO()
-        H12_sum = H1 + H2
-        ot12 = OnsiteTerms(4)
-        ot12 += ot1
-        ot12 += ot2
-        ct12 = CouplingTerms(4)
-        ct12 += ct1
-        ct12 += ct2
-        H12 = mpo.MPOGraph.from_terms((ot12, ct12), [s] * L, bc, unit_cell_width=L).build_MPO()
-        assert H12.is_equal(H12_sum)
+    print('bc = ', bc, '-' * 40)
+    s = spin_half
+    ot1 = OnsiteTerms(L)
+    ct1 = CouplingTerms(L)
+    ct1.add_coupling_term(2.0, 2, 3, 'Sm', 'Sp')
+    ct1.add_coupling_term(2.0, 2, 3, 'Sp', 'Sm')
+    ct1.add_coupling_term(2.0, 1, 2, 'Sz', 'Sz')
+    ot1.add_onsite_term(3.0, 1, 'Sz')
+
+    with pytest.raises(NotImplementedError, match='TODO: MPO._graph'):
+        _ = mpo.MPOGraph.from_terms((ot1, ct1), [s] * L, bc, unit_cell_width=L).build_MPO()
+    pytest.skip('MPOGraph.build_MPO not ported')
+
+    H1 = mpo.MPOGraph.from_terms((ot1, ct1), [s] * L, bc, unit_cell_width=L).build_MPO()
+    ot2 = OnsiteTerms(4)
+    ct2 = CouplingTerms(4)
+    ct2.add_coupling_term(4.0, 0, 2, 'Sz', 'Sz')
+    ct2.add_coupling_term(4.0, 1, 2, 'Sz', 'Sz')
+    ot2.add_onsite_term(5.0, 1, 'Sz')
+    H2 = mpo.MPOGraph.from_terms((ot2, ct2), [s] * L, bc, unit_cell_width=L).build_MPO()
+    H12_sum = H1 + H2
+    ot12 = OnsiteTerms(4)
+    ot12 += ot1
+    ot12 += ot2
+    ct12 = CouplingTerms(4)
+    ct12 += ct1
+    ct12 += ct2
+    H12 = mpo.MPOGraph.from_terms((ot12, ct12), [s] * L, bc, unit_cell_width=L).build_MPO()
+    assert H12.is_equal(H12_sum)
 
 
 @pytest.mark.parametrize('sites', [None, [0], [1], [0, 1, 2, 3], [2, 3], [3, 2]])

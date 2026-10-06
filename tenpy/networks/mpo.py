@@ -48,7 +48,6 @@ from scipy.special import comb as sp_comb
 
 from ..tools import (
     TruncationError,
-    add_with_None_0,
     asConfig,
     inverse_permutation,
     lcm,
@@ -1918,7 +1917,6 @@ class MPO(MPSGeometry):
             The sum `self + other`.
 
         """
-        raise NotImplementedError('TODO: MPO')
         if self.explicit_plus_hc != other.explicit_plus_hc:
             raise ValueError('Can not add MPOs with different explicit_plus_hc flags')
 
@@ -1927,55 +1925,26 @@ class MPO(MPSGeometry):
         assert self.unit_cell_width == other.unit_cell_width
         assert other.L == L
 
-        ps = [self._get_block_projections(i) for i in range(L + 1)]  # TODO no longer exists!
-        po = [other._get_block_projections(i) for i in range(L + 1)]  # TODO no longer exists!
-
-        def block(of, l, r):
-            block_, pl, pr = of
-            l = pl[l]
-            r = pr[r]
-            if l is None or r is None:
-                return None
-            # else
-            return block_[l, r]
-
-        # l/r = left/right,  s/o = self/other
         Ws = []
-        IdL = [None] * (L + 1)
-        IdL[0] = 0
-        IdR = [None] * (L + 1)
-        IdR[-1] = -1
         for i in range(L):
-            ws = self._W[i].itranspose(['wL', 'wR', 'p', 'p*'])
-            wo = other._W[i].itranspose(['wL', 'wR', 'p', 'p*'])
-            s = (ws, ps[i], ps[i + 1])
-            o = (wo, po[i], po[i + 1])
-            onsite = add_with_None_0(block(s, 0, 2), block(o, 0, 2))
+            left = self.finite and i == 0
+            right = self.finite and i == L - 1
+            A1, B1, C1, D1, Id = partition_W(self._W[i], left_boundary=left, right_boundary=right)
+            A2, B2, C2, D2, _ = partition_W(other._W[i], left_boundary=left, right_boundary=right)
+            IdL = ct.tensor_from_grid([[Id]], labels=['wL', 'p', 'wR', 'p*'], row_labels=['IdL'], col_labels=['IdL'])
+            IdR = ct.tensor_from_grid([[Id]], labels=['wL', 'p', 'wR', 'p*'], row_labels=['IdR'], col_labels=['IdR'])
+            grid = [
+                [Id, C1, C2, D1 + D2],
+                [None, A1, None, B1],
+                [None, None, A2, B2],
+                [None, None, None, Id],
+            ]
+            Ws.append(ct.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*']))
 
-            w_grid = [
-                [block(s, 0, 0), block(s, 0, 1), block(o, 0, 1), onsite        ],
-                [None,           block(s, 1, 1), None,           block(s, 1, 2)],
-                [None,           None,           block(o, 1, 1), block(o, 1, 2)],
-                [None,           None,           None,           block(s, 2, 2)]
-            ]  # fmt: skip
-            w_grid = np.array(w_grid, dtype=object)
-            if w_grid[0, 0] is None:
-                w_grid[0, 0] = block(o, 0, 0)
-            if w_grid[0, 0] is not None:
-                IdL[i + 1] = 0
-            if w_grid[-1, -1] is None:
-                w_grid[-1, -1] = block(o, 2, 2)
-            if w_grid[-1, -1] is not None:
-                IdR[i] = -1
-            # now drop rows and columns which are completely zero
-            w_is_None = np.array([[(w is None) for w in w_row] for w_row in w_grid], dtype=bool)
-            w_grid = w_grid[np.logical_not(np.all(w_is_None, 1)), :]
-            w_grid = w_grid[:, np.logical_not(np.all(w_is_None, 0))]
-            Ws.append(npc.grid_concat(w_grid, [0, 1]))
-        if self.max_range is not None and other.max_range is not None:
-            max_range = max(self.max_range, other.max_range)
-        else:
+        if self.max_range is None or other.max_range is None:
             max_range = None
+        else:
+            max_range = max(self.max_range, other.max_range)
         return MPO(
             self.sites,
             Ws,
