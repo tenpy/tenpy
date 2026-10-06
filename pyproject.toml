@@ -110,7 +110,6 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
 exclude = ["doc/sphinx_ext/*", "doc/toycodes", "doc/notebooks"]
 builtins = ["npc"]  # TODO ignore npc not present until we ported everyting to the new C++ cyten backend
 

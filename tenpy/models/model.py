@@ -689,7 +689,7 @@ class MPOModel(Model):
 
     def __init__(self, lattice, H_MPO):
         Model.__init__(self, lattice)
-        self.H_MPO = H_MPO
+        self.H_MPO: mpo.MPO = H_MPO
         MPOModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
 

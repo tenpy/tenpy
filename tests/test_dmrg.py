@@ -71,7 +71,7 @@ class WorkaroundNNModel:
 
         if bc_MPS == 'infinite':
             L = lat.Ls[0]
-            self.H_MPO = MPO([site] * L, [W] * L, bc='infinite', max_range=2, mps_unit_cell_width=1)
+            self.H_MPO: MPO = MPO([site] * L, [W] * L, bc='infinite', max_range=2, mps_unit_cell_width=1)
             H_bond = nn_interaction.to_tensor() + 0.5 * Id_C + 0.5 * C_Id
             H_bond = ct.Coupling.from_tensor(H_bond, [site, site], name='H_bond')
             self.H_bond = [H_bond] * L
