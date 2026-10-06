@@ -43,8 +43,7 @@ from typing import Any, Literal
 
 import cyten as ct
 import numpy as np
-from cyten import Coupling, DirectSumSpace, ElementarySpace, Mask, SymmetricTensor
-from scipy.linalg import expm as sp_expm
+from cyten import Coupling, ElementarySpace, SymmetricTensor
 from scipy.special import comb as sp_comb
 
 from ..tools import (
@@ -66,7 +65,6 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     'MPO',
-    'make_W_II',
     'MPOGraph',
     'MPOEnvironment',
     'MPOEnvironmentBuilder',
@@ -933,75 +931,26 @@ class MPO(MPSGeometry):
                 'the `explicit_plus_hc=True` flag!\n'
                 'See also https://github.com/tenpy/tenpy/issues/265'
             )
-        out_dtype = ct.Dtype.from_numpy_dtype(np.result_type(dt, self.dtype))
-        U = [self.get_W(i).as_dtype(out_dtype) for i in range(self.L)]
+        U_list = []
 
-        IdLR = []
-        for i in range(self.L):
-            U1 = U[i]
-            U2 = U[(i + 1) % self.L]
-            IdL = self.IdL[i + 1]
-            IdR = self.IdR[i + 1]
-
-            if IdL is None or IdR is None:
-                # Finite projected boundary bond: already a single identity wire.
-                if IdL is not None:
-                    IdLR.append(IdL)
-                elif IdR is not None:
-                    IdLR.append(IdR)
-                else:
-                    IdLR.append(0)
-                continue
-
-            wR = U1.get_leg('wR')
-            if not isinstance(wR, DirectSumSpace):
-                raise TypeError(
-                    'make_U_I requires DirectSumSpace virtual legs (from tensor_from_grid); '
-                    f'got {type(wR).__name__} on bond {i + 1}'
-                )
-            n = len(wR.spaces)
-            IdL_n = IdL if IdL >= 0 else IdL + n
-            IdR_n = IdR if IdR >= 0 else IdR + n
-
-            # U1[:, IdL] += dt * U1[:, IdR] via Mask extract / embed
-            col_IdR = ct.apply_mask(U1, wR.projection_onto_summand(IdR_n), 'wR')
-            col_on_IdL = ct.enlarge_leg(col_IdR, wR.inclusion_of_summand(IdL_n), 'wR')
-            U1 = ct.linear_combination(1.0, U1, dt, col_on_IdL)
-
-            keep_idx = [k for k in range(n) if k != IdR_n]
-            proj_keep = wR.projection_onto_summands(keep_idx)
-            U1 = ct.apply_mask(U1, proj_keep, 'wR')
-
-            # Same bond on the next site's wL (or wrap for infinite).
-            if not (self.finite and i + 1 == self.L):
-                wL2 = U2.get_leg('wL')
-                if not isinstance(wL2, DirectSumSpace):
-                    raise TypeError(f'make_U_I: expected DirectSumSpace on wL of site {(i + 1) % self.L}')
-                U2 = ct.apply_mask(U2, wL2.projection_onto_summands(keep_idx), 'wL')
-                U[(i + 1) % self.L] = U2
-
-            U[i] = U1
-            if IdL_n > IdR_n:
-                IdLR.append(IdL_n - 1)
+        for i, W in enumerate(self._W):
+            left = self.finite and i == 0
+            right = self.finite and i == self.L - 1
+            A, B, C, D, Id = partition_W(W, left_boundary=left, right_boundary=right)
+            if left and right:
+                raise RuntimeError
+            elif left:
+                grid = [[Id + dt * D, C]]
+            elif right:
+                grid = [[Id + dt * D], [dt * B]]
             else:
-                IdLR.append(IdL_n)
+                grid = [[Id + dt * D, C], [dt * B, A]]
+            U = ct.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*'])
+            assert 'Id' in U.get_leg('wL').summand_labels
+            assert 'Id' in U.get_leg('wR').summand_labels
+            U_list.append(U)
 
-        IdL0 = self.IdL[0]
-        IdR0 = self.IdR[0]
-        if IdL0 is not None and IdR0 is not None:
-            if IdL0 > IdR0:
-                IdLR_0 = IdL0 - 1
-            else:
-                IdLR_0 = IdL0
-        elif IdL0 is not None:
-            IdLR_0 = IdL0
-        elif IdR0 is not None:
-            IdLR_0 = IdR0
-        else:
-            IdLR_0 = 0
-        IdLR = [IdLR_0] + IdLR
-
-        return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf, mps_unit_cell_width=self.unit_cell_width)
+        return MPO(self.sites, U_list, self.bc, np.inf, mps_unit_cell_width=self.unit_cell_width)
 
     def make_U_II(self, dt):
         r"""Creates the :math:`U_{II}` propagator.
@@ -1023,83 +972,30 @@ class MPO(MPSGeometry):
                 'the `explicit_plus_hc=True` flag!\n'
                 'See also https://github.com/tenpy/tenpy/issues/265'
             )
-        out_dtype = ct.Dtype.from_numpy_dtype(np.result_type(dt, self.dtype))
-        IdL = self.IdL
-        IdR = self.IdR
+        backend = self._W[0].backend  # TODO should probably be an MPO attr in the long term
+        device = self._W[0].device
 
-        parts = []
-        for i in range(self.L):
-            W = self.get_W(i).as_dtype(out_dtype)
-            A, B, C, D = _partition_W_cyten(W, IdL[i], IdR[i], IdL[i + 1], IdR[i + 1])
-            D_np = D.to_numpy(leg_order=['wL', 'wR', 'p', 'p*'], understood_braiding=True)[0, 0]
-            if C is not None:
-                C_np = C.to_numpy(leg_order=['wL', 'wR', 'p', 'p*'], understood_braiding=True)[0]
-            else:
-                C_np = np.zeros((0, D_np.shape[0], D_np.shape[1]), dtype=D_np.dtype)
-            if B is not None:
-                B_np = B.to_numpy(leg_order=['wL', 'wR', 'p', 'p*'], understood_braiding=True)[:, 0]
-            else:
-                B_np = np.zeros((0, D_np.shape[0], D_np.shape[1]), dtype=D_np.dtype)
-            if A is not None:
-                A_np = A.to_numpy(leg_order=['wL', 'wR', 'p', 'p*'], understood_braiding=True)
-            else:
-                A_np = np.zeros((B_np.shape[0], C_np.shape[0], D_np.shape[0], D_np.shape[1]), dtype=D_np.dtype)
-            W_II_np = make_W_II(dt, A_np, B_np, C_np, D_np)
-            # make_W_II uses (wL, wR, p, p*); from_dense_block uses label order (wL, p, wR, p*).
-            W_II_np = np.transpose(W_II_np, (0, 2, 1, 3))
-            parts.append((W, A, B, C, D, W_II_np))
+        # create leg, operators on auxiliary hard-core boson spaces
+        boson_leg = ct.ElementarySpace.from_trivial_sector(2, symmetry=self.symmetry)
+        Id_b = ct.SymmetricTensor.from_eye([boson_leg], backend, labels=['b', 'b*'], device=device)
+        b = ct.SymmetricTensor.from_dense_block(
+            [[0, 0], [1, 0]], [boson_leg], [boson_leg], backend, labels=['b', 'b*'], device=device
+        )
 
-        # Shared virtual bond spaces Id ⊕ other (co-domain view, is_dual=False), one per bond.
-        sym = parts[0][0].symmetry
-        Id_sp = ElementarySpace.from_trivial_sector(1, symmetry=sym, is_dual=False)
-        null = ElementarySpace.from_null_space(sym, is_dual=False)
-        others = [null] * (self.L + 1)
-        for i, (W, A, B, C, D, _) in enumerate(parts):
-            # left bond i
-            if A is not None:
-                oL = A.get_leg('wL')
-            elif B is not None:
-                oL = B.get_leg('wL')
-            else:
-                oL = null
-            if oL.is_dual:
-                oL = oL.with_opposite_duality()
-            if oL.dim > 0:
-                others[i] = oL
-            # right bond i+1
-            if A is not None:
-                oR = A.get_leg('wR')
-            elif C is not None:
-                oR = C.get_leg('wR')
-            else:
-                oR = null
-            if oR.is_dual:
-                oR = oR.with_opposite_duality()
-            if oR.dim > 0:
-                others[i + 1] = oR
+        U_list = []
+        for i, W in enumerate(self._W):
+            left = self.finite and i == 0
+            right = self.finite and i == self.L - 1
+            A, B, C, D, Id = partition_W(W, left_boundary=left, right_boundary=right)
+            # TODO we will want a N-arg outer I assume
+            # TODO  v1 implementation deals with single entries of [wL, wR] i.e. with remaining dims
+            #       [b, b*, p, p*] and exponentiates those. what does that mean here?
+            #       is it enough to demand that all cells are single sectors?
+            #       what happens to the wL/wR legs under exponentiation? ...?
 
-        bonds = []
-        for o in others:
-            bonds.append(Id_sp if o.dim == 0 else Id_sp.direct_sum(o))
-
-        U = []
-        for i, (W, A, B, C, D, W_II_np) in enumerate(parts):
-            p_space = W.get_leg_co_domain('p')
-            pstar_space = W.get_leg_co_domain('p*')
-            new_L = bonds[i]
-            new_R = bonds[i + 1]
-            W_II = SymmetricTensor.from_dense_block(
-                W_II_np,
-                [new_L, p_space],
-                [pstar_space, new_R],
-                backend=W.backend,
-                labels=['wL', 'p', 'wR', 'p*'],
-                dtype=out_dtype,
-                understood_braiding=True,
-            )
-            U.append(W_II)
-        Id = [0] * (self.L + 1)
-        return MPO(self.sites, U, self.bc, Id, Id, max_range=self.max_range, mps_unit_cell_width=self.unit_cell_width)
+        print((Id_b, b, A))  # just for linter...
+        raise NotImplementedError('U_II is not ported yet. Use U_I in the meantime')
+        return MPO(self.sites, U_list, self.bc, max_range=self.max_range, mps_unit_cell_width=self.unit_cell_width)
 
     def expectation_value(
         self, psi: MPS, tol: float = 1.0e-10, max_range: int = 100, init_env_data={}
@@ -1819,8 +1715,8 @@ class MPO(MPSGeometry):
             assert np.all(W.qtotal == trivial)
             DL, DR, d, d = W.shape
 
-            # parititioning will change, see currently _partition_W_cyten
-            A_npc, B_npc, C_npc, D_npc = _partition_W(W, IdL[k], IdR[k], IdL[k + 1], IdR[k + 1])
+            # TODO Note: parition_W has changed!
+            A_npc, B_npc, C_npc, D_npc = partition_W(W, IdL[k], IdR[k], IdL[k + 1], IdR[k + 1])
             Id_npc = npc.eye_like(D_npc, labels=['p', 'p*'])
             dW = np.empty((DL, DR), dtype=object)
 
@@ -2089,85 +1985,6 @@ class MPO(MPSGeometry):
             self.explicit_plus_hc,
             mps_unit_cell_width=self.unit_cell_width,
         )  # no graph
-
-
-def make_W_II(t, A, B, C, D):
-    r"""W_II approx to exp(t H) from MPO parts (A, B, C, D).
-
-    Get the W_II approximation of :cite:`zaletel2015`.
-
-    In the paper, we have two formal parameter "phi_{r/c}" which satisfies
-    :math:`\phi_r^2 = phi_c^2 = 0`.  To implement this, we temporarily extend the virtual Hilbert
-    space with two hard-core bosons "br, bl". The components of Eqn (11) can be computed for each
-    index of the virtual row/column independently
-    The matrix exponential is done in the hard-core extended Hilbert space
-
-    Parameters
-    ----------
-    t : float
-        The time step per application of the propagator.
-        Should be imaginary for real time evolution!
-    A, B, C, D :  :class:`numpy.ndarray`
-        Blocks of the MPO tensor to be exponentiated, as defined in :cite:`zaletel2015`.
-        Legs ``'wL', 'wR', 'p', 'p*'``; legs projected to a single IdL/IdR can be dropped.
-
-    """
-    raise NotImplementedError
-    tC = np.sqrt(np.abs(t))  # spread time step across B, C
-    tB = t / tC
-    d = D.shape[0]
-
-    # The virtual size of W is  (1+Nr, 1+Nc)
-    Nr = A.shape[0]
-    Nc = A.shape[1]
-    W = np.zeros((1 + Nr, 1 + Nc, d, d), dtype=np.result_type(D, t))
-
-    Id_ = np.array([[1, 0], [0, 1]])  # 2x2 operators in a hard-core boson space
-    b = np.array([[0, 0], [1, 0]])
-
-    Id = np.kron(Id_, Id_)  # 4x4 operators in the 2x hard core boson space
-    Br = np.kron(b, Id_)
-    Bc = np.kron(Id_, b)
-    Brc = np.kron(b, b)
-    for r in range(Nr):  # double loop over row / column of A
-        for c in range(Nc):
-            # Select relevant part of virtual space and extend by hardcore bosons
-            h = (
-                np.kron(Brc, A[r, c, :, :])
-                + np.kron(Br, tB * B[r, :, :])
-                + np.kron(Bc, tC * C[c, :, :])
-                + t * np.kron(Id, D)
-            )
-            w = sp_expm(h)  # Exponentiate in the extended Hilbert space
-            w = w.reshape((2, 2, d, 2, 2, d))
-            w = w[:, :, :, 0, 0, :]
-            W[1 + r, 1 + c, :, :] = w[1, 1]  # extracts relevant parts according to Eqn 11
-            if c == 0:
-                W[1 + r, 0] = w[1, 0]
-            if r == 0:
-                W[0, 1 + c] = w[0, 1]
-                if c == 0:
-                    W[0, 0] = w[0, 0]
-        if Nc == 0:  # technically only need one boson
-            h = np.kron(Br, tB * B[r, :, :]) + t * np.kron(Id, D)
-            w = sp_expm(h)
-            w = w.reshape((2, 2, d, 2, 2, d))
-            w = w[:, :, :, 0, 0, :]
-            W[1 + r, 0] = w[1, 0]
-            if r == 0:
-                W[0, 0] = w[0, 0]
-    if Nr == 0:
-        for c in range(Nc):
-            h = np.kron(Bc, tC * C[c, :, :]) + t * np.kron(Id, D)
-            w = sp_expm(h)
-            w = w.reshape((2, 2, d, 2, 2, d))
-            w = w[:, :, :, 0, 0, :]
-            W[0, 1 + c] = w[0, 1]
-            if c == 0:
-                W[0, 0] = w[0, 0]
-        if Nc == 0:
-            W = sp_expm(t * D).reshape([1, 1, d, d])
-    return W
 
 
 def _ensure_identity_op(site):
@@ -4561,61 +4378,80 @@ def _mpo_check_for_iter_LP_RP_infinite(mpo):
     return mpo._outer_permutation
 
 
-def _other_summand_indices(space, IdL, IdR):
-    """Indices of summands that are neither IdL nor IdR on a DirectSumSpace."""
-    if not isinstance(space, DirectSumSpace):
-        return []
-    n = len(space.spaces)
-    skip = set()
-    if IdL is not None:
-        skip.add(IdL if IdL >= 0 else IdL + n)
-    if IdR is not None:
-        skip.add(IdR if IdR >= 0 else IdR + n)
-    return [k for k in range(n) if k not in skip]
+def partition_W(
+    W: ct.Tensor,
+    IdL='IdL',
+    IdR='IdR',
+    Id_summand_label='Id',
+    left_boundary: bool = False,
+    right_boundary: bool = False,
+) -> tuple[ct.Tensor | None, ct.Tensor | None, ct.Tensor | None, ct.Tensor, ct.Tensor]:
+    """Assume an MPO tensor of the usual upper-block-triangular form and extract its blocks.
 
+    We assume that as a matrix of the summand_labels ``['IdL', *others, 'IdR']``, the
+    tensor `W` has the following grid structure on legs ``wL, wR``::
 
-def _partition_W_cyten(W, IdL_L, IdR_L, IdL_R, IdR_R):
-    """Split a cyten MPO tensor into A/B/C/D using DirectSumSpace projections.
+        |        [[1  C  D]
+        |   W  =  [0  A  B]
+        |         [0  0  1]]
+
+    Or at a finite boundary::
+
+        |                                                    [[D]]
+        |   W_left =  [[1  C  D]        ;        W_right  =  [[B]]
+        |                                                    [[1]]
+
+    We verify that structure and extract the grid cells ``A, B, C, D``.
 
     Returns
     -------
-    A, B, C, D
-        ``SymmetricTensor`` blocks. ``A``/``B``/``C`` may be ``None`` when the
-        corresponding ``other`` space is empty. ``D`` always has 1D trivial
-        virtual legs (IdL × IdR).
+    A, B, C, D: :class:`cyten.Tensor` | None
+        The subgrids of W. If at a boundary, non-existing entires are set to ``None``.
+    Id: :class:`cyten.Tensor`
+        The identity cell, also as a 4-leg Tensor, as a 1x1 grid with `Id_summand_label`
 
     """
-    backend = W.backend
-    wL = W.get_leg('wL')
-    wR = W.get_leg('wR')
-
-    def _proj_one(leg, idx, which):
-        if not isinstance(leg, DirectSumSpace):
-            # Projected finite boundary: already a single identity wire.
-            return Mask.from_eye(leg, is_projection=True, backend=backend)
-        if idx is None:
-            if len(leg.spaces) != 1:
-                raise ValueError(f'{which}: expected single summand when index is None')
-            return leg.projection_onto_summand(0, backend=backend)
-        return leg.projection_onto_summand(idx, backend=backend)
-
-    def _proj_other(leg, IdL, IdR, which):
-        other = _other_summand_indices(leg, IdL, IdR)
-        if not other:
-            return None
-        return leg.projection_onto_summands(other, backend=backend)
-
-    proj_IdL_L = _proj_one(wL, IdL_L, 'wL')
-    proj_IdR_R = _proj_one(wR, IdR_R, 'wR')
-    proj_other_L = _proj_other(wL, IdL_L, IdR_L, 'wL')
-    proj_other_R = _proj_other(wR, IdL_R, IdR_R, 'wR')
-
-    D = ct.apply_mask(ct.apply_mask(W, proj_IdL_L, 'wL'), proj_IdR_R, 'wR')
-    C = ct.apply_mask(ct.apply_mask(W, proj_IdL_L, 'wL'), proj_other_R, 'wR') if proj_other_R is not None else None
-    B = ct.apply_mask(ct.apply_mask(W, proj_other_L, 'wL'), proj_IdR_R, 'wR') if proj_other_L is not None else None
-    A = (
-        ct.apply_mask(ct.apply_mask(W, proj_other_L, 'wL'), proj_other_R, 'wR')
-        if (proj_other_L is not None and proj_other_R is not None)
-        else None
+    Id = ct.SymmetricTensor.from_eye([W.get_leg('p')], W.backend, labels=['p', 'p*'])
+    Id = ct.add_trivial_leg(Id, codomain_pos=0, label='wL', is_dual=W.get_leg('wL').is_dual)
+    Id = ct.add_trivial_leg(Id, domain_pos=-1, label='wR', is_dual=not W.get_leg('wR').is_dual)
+    Id_subgrid = ct.tensor_from_grid(
+        [[Id]], labels=['wL', 'p', 'wR', 'p*'], row_labels=[Id_summand_label], col_labels=[Id_summand_label]
     )
-    return A, B, C, D
+    others_wL = [i for i, l in enumerate(W.get_leg('wL').summand_labels) if l not in [IdL, IdR]]
+    others_wR = [i for i, l in enumerate(W.get_leg('wR').summand_labels) if l not in [IdL, IdR]]
+
+    if left_boundary and right_boundary:
+        raise ValueError('Can not be left and right boundary at the same time')
+
+    if left_boundary:
+        assert W.get_leg('wL').summand_labels == [IdL]
+        assert all(l in W.get_leg('wR').summand_labels for l in (IdL, IdR))
+        assert ct.almost_equal(ct.tensor_grid_cell(W, IdL, IdL, 'wL', 'wR'), Id)
+        C = ct.tensor_subgrid(W, [IdL], others_wR, 'wL', 'wR')
+        D = ct.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
+        return None, None, C, D, Id_subgrid
+
+    if right_boundary:
+        assert all(l in W.get_leg('wL').summand_labels for l in (IdL, IdR))
+        assert W.get_leg('wR').summand_labels == [IdR]
+        D = ct.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
+        B = ct.tensor_subgrid(W, others_wL, [IdR], 'wL', 'wR')
+        assert ct.almost_equal(ct.tensor_grid_cell(W, IdR, IdR, 'wL', 'wR'), Id)
+        return None, B, None, D, Id_subgrid
+
+    # remaining case: bulk tensor
+    assert all(l in W.get_leg(leg).summand_labels for l in (IdL, IdR) for leg in ('wL', 'wR'))
+    # first row
+    assert ct.almost_equal(ct.tensor_grid_cell(W, IdL, IdL, 'wL', 'wR'), Id)
+    C = ct.tensor_subgrid(W, [IdL], others_wR, 'wL', 'wR')
+    D = ct.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
+    # middle rows
+    assert ct.norm(ct.tensor_subgrid(W, others_wL, [IdL], 'wL', 'wR')).to_numpy() == 0
+    A = ct.tensor_subgrid(W, others_wL, others_wR, 'wL', 'wR')
+    B = ct.tensor_subgrid(W, others_wL, [IdR], 'wL', 'wR')
+    # bottom row
+    assert ct.norm(ct.tensor_grid_cell(W, IdR, IdL, 'wL', 'wR')).to_numpy() == 0
+    assert ct.norm(ct.tensor_subgrid(W, [IdR], others_wR, 'wL', 'wR')).to_numpy() == 0
+    assert ct.almost_equal(ct.tensor_grid_cell(W, IdR, IdR, 'wL', 'wR'), Id)
+
+    return A, B, C, D, Id_subgrid
