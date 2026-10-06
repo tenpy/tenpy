@@ -327,7 +327,16 @@ def test_dmrg_heisenberg_vs_exact(combine, n, conserve, tensor_backend, L=8):
         'max_sweeps': 40,
         'active_sites': n,
     }
-    res = dmrg.run(psi, M, dmrg_pars)
+
+    if conserve == 'SU2':
+        try:
+            res = dmrg.run(psi, M, dmrg_pars)
+        except ValueError as exc:
+            if 'Input irreps have higher weight than highest weight irrep in HDF5-file' not in str(exc):
+                raise
+            pytest.skip('SU2 symmetry data not available')
+    else:
+        res = dmrg.run(psi, M, dmrg_pars)
 
     H_ref = _dense_heisenberg(L)
     block = np.transpose(np.reshape(H_ref, [2] * (2 * L)), [*range(L), *reversed(range(L, 2 * L))])
