@@ -121,7 +121,7 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
                 In this case one can pass it via the argument `mem_saving_factor` to the model.
 
         """
-        chinfo = self.lat.unit_cell[0].leg.chinfo
+        chinfo = self.lat.unit_cell[0].leg.chinfo  # TODO use self.lattice.symmetry
         savings = 1.0
         for mod in chinfo.mod:
             if mod == 1:

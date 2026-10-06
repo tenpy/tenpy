@@ -709,7 +709,7 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
     """
     # cac := conserve_ancilla_charge
     model = model.copy()
-    chinfo = model.lat.unit_cell[0].leg.chinfo
+    chinfo = model.lat.unit_cell[0].leg.chinfo  # TODO use model.lattice.symmetry
     chinfo_cac = npc.ChargeInfo(list(chinfo.mod) * 2, chinfo.names + [n + ' ancilla' for n in chinfo.names])
 
     converted_sites_cache = {}

@@ -303,7 +303,7 @@ class Model(Hdf5Exportable):
                 In the best case, the user can adjust this model parameter to enhance the estimate.
 
         """
-        chinfo = self.lat.unit_cell[0].leg.chinfo
+        chinfo = self.lat.unit_cell[0].leg.chinfo  # TODO use self.lattice.symmetry
         savings = 1
         for mod in chinfo.mod:
             if mod == 1:
