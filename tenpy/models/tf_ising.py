@@ -14,7 +14,7 @@ from cyten.models.sites import SpinSite
 
 from ..tools import to_array
 from .lattice import Chain
-from .model import CouplingMPOModel, NearestNeighborModel
+from .new_model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = ['TFIModel', 'TFIChain']
 

@@ -44,9 +44,9 @@ from . import (
     # haldane,
     # hofstadter,
     # hubbard,
-    lattice,
+    lattice
     # mixed_xk,
-    model,
+    new_model,
     # molecular,
     # spins,
     # spins_nnn,
@@ -67,7 +67,7 @@ from . import (
 from .lattice import *
 
 # from .mixed_xk import *
-from .model import *
+from .new_model import *
 
 # from .molecular import *
 # from .pxp import *
@@ -80,5 +80,5 @@ from .model import *
 
 __all__ = [
     *lattice.__all__,
-    *model.__all__,
+    *new_model.__all__,
 ]

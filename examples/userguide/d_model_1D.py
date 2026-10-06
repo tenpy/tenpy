@@ -3,7 +3,7 @@
 from tenpy.networks.site import SpinSite
 
 from tenpy.models.lattice import Chain
-from tenpy.models.model import CouplingModel, MPOModel, NearestNeighborModel
+from tenpy.models.new_model import CouplingModel, MPOModel, NearestNeighborModel
 
 
 class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):

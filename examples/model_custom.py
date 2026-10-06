@@ -12,7 +12,7 @@ from tenpy.networks.site import SpinSite
 
 # from tenpy.linalg import np_conserved as npc
 from tenpy.models.lattice import Chain
-from tenpy.models.model import CouplingMPOModel, NearestNeighborModel
+from tenpy.models.new_model import CouplingMPOModel, NearestNeighborModel
 from tenpy.networks.mps import TransferMatrix
 
 

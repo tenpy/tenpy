@@ -14,7 +14,7 @@ from test_dmrg import e0_transverse_ising
 
 import tenpy.algorithms.tebd as tebd
 from tenpy.algorithms.exact_diag import ExactDiag
-from tenpy.models.model import NearestNeighborModel
+from tenpy.models.new_model import NearestNeighborModel
 from tenpy.models.spins import DipolarSpinChain, SpinChain
 from tenpy.networks.mps import MPS
 

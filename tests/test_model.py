@@ -16,7 +16,7 @@ from cyten.tensors import almost_equal, dagger
 # import tenpy.linalg.np_conserved as npc
 # import tenpy.networks.site
 # from tenpy.algorithms.exact_diag import ExactDiag, get_numpy_Hamiltonian
-from tenpy.models import lattice, model
+from tenpy.models import lattice, new_model
 
 # spin_half_site = tenpy.networks.site.SpinHalfSite('Sz', sort_charge=False)
 
@@ -41,17 +41,17 @@ def _mpo_is_hermitian(H_MPO, eps=1.0e-10):
 
 def check_model_sanity(M, hermitian=True):
     """call M.test_sanity() for all different subclasses of M."""
-    if isinstance(M, model.CouplingModel):
-        model.CouplingModel.test_sanity(M)
-    if isinstance(M, model.NearestNeighborModel):
-        model.NearestNeighborModel.test_sanity(M)
+    if isinstance(M, new_model.CouplingModel):
+        new_model.CouplingModel.test_sanity(M)
+    if isinstance(M, new_model.NearestNeighborModel):
+        new_model.NearestNeighborModel.test_sanity(M)
         if hermitian:
             for i, H in enumerate(M.H_bond):
                 if H is not None and not almost_equal(H, dagger(H)):
                     print(H)
                     raise ValueError(f'H on bond {i:d} not hermitian')
-    if isinstance(M, model.MPOModel):
-        model.MPOModel.test_sanity(M)
+    if isinstance(M, new_model.MPOModel):
+        new_model.MPOModel.test_sanity(M)
         if hermitian:
             assert _mpo_is_hermitian(M.H_MPO)
 
@@ -90,7 +90,7 @@ def test_CouplingModel():
     pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
     for bc in ['open', 'periodic']:
         spin_half_lat = lattice.Chain(5, spin_half_site, bc=bc, bc_MPS='finite')
-        M = model.CouplingModel(spin_half_lat)
+        M = new_model.CouplingModel(spin_half_lat)
         M.add_twosite_coupling(1.2, 0, 'Sz', 0, 'Sz', 1)
         M.test_sanity()
         M.calc_H_MPO()
@@ -106,7 +106,7 @@ def test_ext_flux():
     pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
     Lx, Ly = 3, 4
     lat = lattice.Square(Lx, Ly, fermion_site, bc=['periodic', 'periodic'], bc_MPS='infinite')
-    M = model.CouplingModel(lat)
+    M = new_model.CouplingModel(lat)
     strength = 1.23
     strength_array = np.ones((Lx, Ly)) * strength
     for phi in [0, 2 * np.pi]:  # flux shouldn't do anything
@@ -143,7 +143,7 @@ def test_CouplingModel_shift(Lx=3, Ly=3, shift=1):
     pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
     bc = ['periodic', shift]
     spin_half_square = lattice.Square(Lx, Ly, spin_half_site, bc=bc, bc_MPS='infinite')
-    M = model.CouplingModel(spin_half_square)
+    M = new_model.CouplingModel(spin_half_square)
     M.add_twosite_coupling(1.2, 0, 'Sz', 0, 'Sz', [1, 0])
     M.add_multi_coupling(0.8, [('Sz', [0, 0], 0), ('Sz', [0, 1], 0), ('Sz', [1, 0], 0)])
     M.test_sanity()
@@ -159,7 +159,7 @@ def test_CouplingModel_fermions():
     pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
     for bc, bc_MPS in zip(['open', 'periodic'], ['finite', 'infinite']):
         fermion_lat = lattice.Chain(5, fermion_site, bc=bc, bc_MPS=bc_MPS)
-        M = model.CouplingModel(fermion_lat)
+        M = new_model.CouplingModel(fermion_lat)
         M.add_twosite_coupling(1.2, 0, 'Cd', 0, 'C', 1, 'JW')
         M.add_twosite_coupling(1.2, 0, 'Cd', 0, 'C', -1, 'JW')
         M.test_sanity()
@@ -170,7 +170,7 @@ def test_CouplingModel_fermions():
 def test_CouplingModel_explicit():
     pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
     fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
-    M = model.CouplingModel(fermion_lat_cyl)
+    M = new_model.CouplingModel(fermion_lat_cyl)
     M.add_onsite(0.125, 0, 'N')
     M.add_twosite_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), None)  # auto-determine JW-string!
     M.add_twosite_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), None)
@@ -256,7 +256,7 @@ def test_CouplingModel_explicit():
 def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
     pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
     fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
-    M = model.CouplingModel(fermion_lat_cyl)
+    M = new_model.CouplingModel(fermion_lat_cyl)
     # create a weird fermionic model with 3-body interactions
     M.add_onsite(0.125, 0, 'N')
     M.add_twosite_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), plus_hc=use_plus_hc)
@@ -347,8 +347,8 @@ def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc,
         anti_commute_sign = +1
 
     lat = lattice.Chain(L=L, site=s, bc=['open' if bc == 'finite' else 'periodic'], bc_MPS=bc)
-    m_exp = model.CouplingModel(lat)
-    m_manual = model.CouplingModel(lat)
+    m_exp = new_model.CouplingModel(lat)
+    m_manual = new_model.CouplingModel(lat)
 
     print('standard case: no subsites')
     a = 3.0 + 0.42j
@@ -366,8 +366,8 @@ def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc,
     assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
 
     print('non-uniform decay')
-    m_exp = model.CouplingModel(lat)
-    m_manual = model.CouplingModel(lat)
+    m_exp = new_model.CouplingModel(lat)
+    m_manual = new_model.CouplingModel(lat)
     a = 3.0 + 0.42j
     l = np.random.uniform(0.01, 0.2, size=L)
     m_exp.add_exponentially_decaying_coupling(a, l, op_i, op_j, plus_hc=(add_hc == 'flag'))
@@ -391,8 +391,8 @@ def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc,
     assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
 
     print('with subsites')
-    m_exp = model.CouplingModel(lat)
-    m_manual = model.CouplingModel(lat)
+    m_exp = new_model.CouplingModel(lat)
+    m_manual = new_model.CouplingModel(lat)
     a = 3.0 + 0.42j
     l = np.random.uniform(0.01, 0.2, size=L)
     subsites = [1, 3, 5]
@@ -420,8 +420,8 @@ def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc,
     assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
 
     print('with subsites and subsites_start')
-    m_exp = model.CouplingModel(lat)
-    m_manual = model.CouplingModel(lat)
+    m_exp = new_model.CouplingModel(lat)
+    m_manual = new_model.CouplingModel(lat)
     a = 3.0 + 0.42j
     l = np.random.uniform(0.01, 0.2, size=L)
     subsites_start = [0, 2]
@@ -457,7 +457,7 @@ def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc,
     assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
 
 
-class MyMod(model.CouplingMPOModel, model.NearestNeighborModel):
+class MyMod(new_model.CouplingMPOModel, new_model.NearestNeighborModel):
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
         return tenpy.networks.site.SpinHalfSite(conserve, True)
@@ -544,7 +544,7 @@ def test_model_H_conversion_dipolar(L=6):
     assert np.all(H0.qtotal == 0)
 
     # convert H_MPO -> H_bond (calc_H_bond_from_MPO called by from_MPOModel)
-    m_nn = model.NearestNeighborModel.from_MPOModel(m)
+    m_nn = new_model.NearestNeighborModel.from_MPOModel(m)
     ED = ExactDiag.from_model(m_nn)
     ED.build_full_H_from_bonds()
     H1 = ED.full_H
@@ -564,9 +564,9 @@ def test_model_H_conversion_dipolar(L=6):
 
 
 def compare_models_plus_hc(
-    m_manual: model.CouplingModel,
-    m_plus_hc: model.CouplingModel,
-    m_explicit: model.CouplingModel,
+    m_manual: new_model.CouplingModel,
+    m_plus_hc: new_model.CouplingModel,
+    m_explicit: new_model.CouplingModel,
     expect_non_hermitian_mpo: bool = False,  # if MPO without hc is non-hermitian
 ):
     # helper for test_model_plus_hc; check if the models are equivalent
@@ -644,9 +644,9 @@ def test_model_plus_hc(which_site, which_ops, op_string, L=6):
     else:
         raise ValueError
 
-    m_manual = model.CouplingModel(lat)
-    m_plus_hc = model.CouplingModel(lat)
-    m_explicit = model.CouplingModel(lat, explicit_plus_hc=True)
+    m_manual = new_model.CouplingModel(lat)
+    m_plus_hc = new_model.CouplingModel(lat)
+    m_explicit = new_model.CouplingModel(lat, explicit_plus_hc=True)
 
     print('onsite')
     hx = np.random.random(L)
@@ -753,7 +753,7 @@ def test_model_plus_hc(which_site, which_ops, op_string, L=6):
         compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
 
-class DisorderedLatticeModel(model.CouplingMPOModel):
+class DisorderedLatticeModel(new_model.CouplingMPOModel):
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
         return tenpy.networks.site.SpinHalfSite(conserve, sort_charge=True)
@@ -821,7 +821,7 @@ def test_fixes_511(L=6, t=1.234, tp=2.54):
     pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
     # https://github.com/tenpy/tenpy/issues/511
 
-    class TTprimeSpinfulChain(model.CouplingMPOModel):
+    class TTprimeSpinfulChain(new_model.CouplingMPOModel):
         """Spin-1/2 fermions on a 1D chain with NN hopping t and NNN hopping t'."""
 
         def init_sites(self, p):
@@ -892,7 +892,7 @@ def test_CouplingModel_add_coupling_cyten():
     J = 1.5
     site = SpinSite(S=0.5, conserve=None)
     lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    M = model.CouplingModel(lat)
+    M = new_model.CouplingModel(lat)
 
     coupling = heisenberg_coupling([site, site], J=J)
     for i in range(L - 1):  # sum over all nearest-neighbor bonds
@@ -949,7 +949,7 @@ def test_CouplingModel_add_coupling_cyten_tfim():
     g = 0.9
     site = SpinSite(S=0.5, conserve=None)
     lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    M = model.CouplingModel(lat)
+    M = new_model.CouplingModel(lat)
 
     coupling_xx = spin_spin_coupling([site, site], Jx=1.0)
     for i in range(L - 1):
@@ -980,14 +980,14 @@ def test_CouplingModel_add_coupling_reversed_dx():
     labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
 
     # forward: indices ascend -> no permutation needed
-    M_fwd = model.CouplingModel(lat)
+    M_fwd = new_model.CouplingModel(lat)
     coupling_fwd = heisenberg_coupling([site, site], J=J)
     for i in range(L - 1):
         M_fwd.add_coupling(coupling_fwd, [i, i + 1])
     H_fwd = M_fwd.calc_H_coupling().to_tensor().to_numpy(labels).reshape(2**L, 2**L)
 
     # reversed: indices descend -> triggers permute()
-    M_rev = model.CouplingModel(lat)
+    M_rev = new_model.CouplingModel(lat)
     coupling = heisenberg_coupling([site, site], J=J)
     for i in range(1, L):
         M_rev.add_coupling(coupling, [i, i - 1])
@@ -1019,7 +1019,7 @@ def test_CouplingModel_add_coupling_reversed_dx_split():
 
     # coupling = Sm_(index0) Sp_(index1); place with indices reversed, prefactor absorbed at index1
     coupling = hopping_coupling(Sm, Sp)
-    M = model.CouplingModel(lat)
+    M = new_model.CouplingModel(lat)
     for i in range(1, L):
         M.add_coupling(coupling, [i, i - 1], strength=2.0, split=1)
 
@@ -1058,20 +1058,20 @@ def test_add_coupling_three_entry_points_agree():
     dim = site.dim
 
     # 1) direct add_coupling with an explicit Coupling
-    M1 = model.CouplingModel(lat)
+    M1 = new_model.CouplingModel(lat)
     coupling = heisenberg_coupling([site, site], J=J)
     for i in range(L - 1):
         M1.add_coupling(coupling, [i, i + 1])
     H1 = M1.calc_H_coupling().to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
 
     # 2) add_twosite_coupling (old two-site signature), one call per Pauli component
-    M2 = model.CouplingModel(lat)
+    M2 = new_model.CouplingModel(lat)
     for op in ('Sx', 'Sy', 'Sz'):
         M2.add_twosite_coupling(J, 0, op, 0, op, 1)
     H2 = M2.calc_H_coupling().to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
 
     # 3) add_multi_coupling (old multi-site signature)
-    M3 = model.CouplingModel(lat)
+    M3 = new_model.CouplingModel(lat)
     for op in ('Sx', 'Sy', 'Sz'):
         M3.add_multi_coupling(J, [(op, [0], 0), (op, [1], 0)])
     H3 = M3.calc_H_coupling().to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
@@ -1114,12 +1114,12 @@ def test_add_twosite_coupling_plus_hc():
 
     # add_twosite_coupling already sums over all lattice bonds internally (via
     # lat.possible_couplings) -- call it exactly once, not once per bond.
-    M_plus_hc = model.CouplingModel(lat)
+    M_plus_hc = new_model.CouplingModel(lat)
     M_plus_hc.add_twosite_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
     H_plus_hc = M_plus_hc.calc_H_coupling().to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
 
     # equivalent: add the h.c. term explicitly, by hand
-    M_explicit = model.CouplingModel(lat)
+    M_explicit = new_model.CouplingModel(lat)
     M_explicit.add_twosite_coupling(t, 0, 'Sp', 0, 'Sm', 1)
     M_explicit.add_twosite_coupling(np.conj(t), 0, 'Sm', 0, 'Sp', 1)
     H_explicit = M_explicit.calc_H_coupling().to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
@@ -1134,7 +1134,7 @@ def test_add_coupling_error_paths():
     L = 4
     site = SpinSite(S=0.5, conserve=None)
     lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    M = model.CouplingModel(lat)
+    M = new_model.CouplingModel(lat)
     coupling = heisenberg_coupling([site, site], J=1.0)
 
     # explicit op_string (Jordan-Wigner) is not yet supported
@@ -1156,7 +1156,7 @@ def test_add_coupling_error_paths():
         M.add_twosite_coupling(1.0, 0, 'Sz', 0, 'Sx', 0)
 
     # calc_H_coupling: not every MPS site in [0, L) is covered
-    M_partial = model.CouplingModel(lat)
+    M_partial = new_model.CouplingModel(lat)
     M_partial.add_coupling(coupling, [1, 2])  # leaves sites 0, 3 uncovered
     with pytest.raises(ValueError):
         M_partial.calc_H_coupling()
@@ -1166,7 +1166,7 @@ def test_add_coupling_error_paths():
 
     fsite = SpinlessFermionSite(num_species=1, conserve='N')
     flat = lattice.Chain(L, fsite, bc='open', bc_MPS='finite')
-    Mf = model.CouplingModel(flat)
+    Mf = new_model.CouplingModel(flat)
     with pytest.raises(NotImplementedError):
         Mf.add_twosite_coupling(1.0, 0, 'N0', 0, 'N0', 1)
     with pytest.raises(NotImplementedError):

@@ -18,7 +18,7 @@ An example for such a case is given in the file ``examples/c_tebd.py``.
 
 from ..networks.site import GroupedSite, SpinSite
 from .lattice import Chain
-from .model import CouplingMPOModel, NearestNeighborModel
+from .new_model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = ['SpinChainNNN', 'SpinChainNNN2']
 

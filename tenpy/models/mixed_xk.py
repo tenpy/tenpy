@@ -73,7 +73,7 @@ from ..networks.site import FermionSite
 from ..networks.terms import TermList
 from ..tools import inverse_permutation, to_array, to_iterable
 from .lattice import Lattice
-from .model import CouplingMPOModel
+from .new_model import CouplingMPOModel
 
 __all__ = ['MixedXKLattice', 'MixedXKModel', 'SpinlessMixedXKSquare', 'HubbardMixedXKSquare']
 

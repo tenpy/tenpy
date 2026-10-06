@@ -15,7 +15,7 @@ from tenpy.networks.site import SpinHalfSite
 
 from tenpy.algorithms import dmrg
 from tenpy.models.lattice import Chain
-from tenpy.models.model import MPOModel
+from tenpy.models.new_model import MPOModel
 from tenpy.networks.mpo import MPO
 from tenpy.networks.mps import MPS
 from tenpy.tools.params import asConfig

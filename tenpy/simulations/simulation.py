@@ -24,7 +24,7 @@ import numpy as np
 
 from .. import version
 from ..algorithms.algorithm import Algorithm
-from ..models.model import Model, NearestNeighborModel
+from ..models.new_model import Model, NearestNeighborModel
 from ..networks.mps import InitialStateBuilder
 from ..tools import (
     CacheFile,

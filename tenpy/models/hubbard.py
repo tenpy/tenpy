@@ -6,7 +6,7 @@ import numpy as np
 from ..networks.site import BosonSite, FermionSite, SpinHalfFermionSite, spin_half_species
 from ..tools import asConfig
 from .lattice import Chain
-from .model import CouplingMPOModel, NearestNeighborModel
+from .new_model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = [
     'BoseHubbardModel',

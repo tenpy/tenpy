@@ -10,7 +10,7 @@ from cyten.models.sites import SpinSite
 
 from ..tools import asConfig, to_array
 from .lattice import Chain
-from .model import CouplingModel, CouplingMPOModel, MPOModel, NearestNeighborModel
+from .new_model import CouplingModel, CouplingMPOModel, MPOModel, NearestNeighborModel
 
 __all__ = ['XXZChain', 'XXZChain2']
 

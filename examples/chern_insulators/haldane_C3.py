@@ -10,7 +10,7 @@ from tenpy.networks.site import FermionSite, GroupedSite
 
 from tenpy.algorithms import dmrg
 from tenpy.models import lattice
-from tenpy.models.model import CouplingMPOModel
+from tenpy.models.new_model import CouplingMPOModel
 from tenpy.networks import site
 from tenpy.networks.mps import MPS
 

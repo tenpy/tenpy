@@ -13,7 +13,7 @@ from ..networks.mps import MPS
 from ..networks.site import SpinSite, kron
 from ..tools import asConfig
 from .lattice import Chain
-from .model import MPOModel, NearestNeighborModel
+from .new_model import MPOModel, NearestNeighborModel
 
 __all__ = ['AKLTChain']
 
