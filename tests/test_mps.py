@@ -82,12 +82,11 @@ def test_mps():
 
 
 def test_mps_add():
-    pytest.skip(_LEGACY)
-    s = site.SpinHalfSite(conserve='Sz', sort_charge=True)
+    s = spin_half
     u, d = 'up', 'down'
     psi1 = mps.MPS.from_product_state([s] * 4, [u, u, d, u], bc='finite', unit_cell_width=4)
     psi2 = mps.MPS.from_product_state([s] * 4, [u, d, u, u], bc='finite', unit_cell_width=4)
-    npt.assert_equal(psi1.get_total_charge(True), [2])
+    npt.assert_equal(psi1.get_total_charge(), ct.Sector([2]))
     psi_sum = psi1.add(psi2, 0.5**0.5, -(0.5**0.5))
     npt.assert_almost_equal(psi_sum.norm, 1.0)
     npt.assert_almost_equal(psi_sum.overlap(psi1), 0.5**0.5)
@@ -97,17 +96,17 @@ def test_mps_add():
     npt.assert_almost_equal(psi_sum.overlap(psi), 1.0)
 
     psi2_prime = mps.MPS.from_product_state([s] * 4, [u, u, u, u], bc='finite', unit_cell_width=4)
-    npt.assert_equal(psi2_prime.get_total_charge(True), [4])
+    npt.assert_equal(psi2_prime.get_total_charge(), ct.Sector([4]))
+    pytest.skip(_LEGACY)
     psi2_prime.apply_local_op(1, 'Sm', False, False)
     # now psi2_prime is psi2 up to gauging of charges.
-    npt.assert_equal(psi2_prime.get_total_charge(True), [2])
+    npt.assert_equal(psi2_prime.get_total_charge(), ct.Sector([2]))
     # can MPS.add handle this?
     psi_sum_prime = psi1.add(psi2_prime, 0.5**0.5, -(0.5**0.5))
     npt.assert_almost_equal(psi_sum_prime.overlap(psi), 1.0)
 
 
 def test_mps_overlap_translate_finite():
-    pytest.skip(_LEGACY)
     s = spin_half
     u, d = 'up', 'down'
     psi1 = mps.MPS.from_product_state([s] * 4, [u, u, d, u], bc='finite', unit_cell_width=4)
@@ -141,8 +140,25 @@ def test_MPSEnvironment():
     env.expectation_value('Sz')
 
 
+def test_different_total_charges():
+    # bra and ket in different charge sectors -> vanishing overlap instead of an error during contraction
+    s = ct.sites.SpinSite(S=0.5, conserve='Sz')
+    psi_a = mps.MPS.from_product_state([s] * 4, ['up', 'up', 'up', 'down'], bc='finite', unit_cell_width=4)
+    psi_b = mps.MPS.from_product_state([s] * 4, ['up', 'down', 'up', 'up'], bc='finite', unit_cell_width=4)
+    psi_0 = mps.MPS.from_product_state([s] * 4, ['up', 'down', 'up', 'down'], bc='finite', unit_cell_width=4)
+    assert psi_0.total_charge_leg is None
+    assert psi_a.total_charge_leg == psi_b.total_charge_leg  # 2 * Sz = 2
+    assert tuple(psi_a.get_total_charge()) == tuple(psi_b.get_total_charge()) == (2,)
+    assert psi_0.get_total_charge() == s.symmetry.trivial_sector
+    assert not mps._different_total_charges(psi_a, psi_b)
+    assert mps._different_total_charges(psi_a, psi_0)
+    for bra, ket, expect in [(psi_a, psi_a, 1.0), (psi_a, psi_b, 0.0), (psi_a, psi_0, 0.0), (psi_0, psi_a, 0.0)]:
+        npt.assert_allclose(bra.overlap(ket).to_numpy(), expect)
+    with pytest.raises(ValueError, match='different total charges'):
+        mps.MPSEnvironment(psi_a, psi_0)
+
+
 def test_singlet_mps():
-    pytest.skip(_LEGACY)
     u, d = 'up', 'down'
     pairs = [(0, 3), (1, 6), (2, 5)]
     bond_singlets = np.array([1, 2, 3, 2, 2, 1, 0])
@@ -156,17 +172,29 @@ def test_singlet_mps():
     assert np.all(2**bond_singlets == np.array(psi.chi))
     ent = psi.entanglement_entropy() / np.log(2)
     npt.assert_array_almost_equal_nulp(ent, bond_singlets, 5)
-    psi.entanglement_spectrum(True)  # (just check that the function runs)
+    # TODO entanglement_spectrum is not ported yet
+    # psi.entanglement_spectrum(True)  # (just check that the function runs)
     npt.assert_almost_equal(psi.norm, 1.0)
     npt.assert_almost_equal(psi.overlap(psi), 1.0)
-    id_vals = psi.expectation_value('Id')
-    npt.assert_almost_equal(id_vals, [1.0] * L)
+    # TODO expectation_value('Id') fails: the 'Id' operator of the site has labels 'W:p', 'W:p*'
+    # id_vals = psi.expectation_value('Id')
+    # npt.assert_almost_equal(id_vals, [1.0] * L)
     Sz_vals = psi.expectation_value('Sigmaz')
     expected_Sz_vals = [(0.0 if i not in lonely else 1.0) for i in range(L)]
     print('Sz_vals = ', Sz_vals)
     print('expected_Sz_vals = ', expected_Sz_vals)
     npt.assert_almost_equal(Sz_vals, expected_Sz_vals)
 
+    product_state = [None] * L
+    for i, j in pairs:
+        product_state[i] = u
+        product_state[j] = d
+    for k in lonely:
+        product_state[k] = u
+    psi2 = mps.MPS.from_product_state([spin_half] * L, product_state, bc='finite', unit_cell_width=L)
+    npt.assert_almost_equal(psi.overlap(psi2), 0.5 ** (0.5 * len(pairs)))
+
+    pytest.skip('TODO: entanglement_entropy_segment(2) and mutinf_two_site are not ported yet')
     ent_segm = psi.entanglement_entropy_segment(list(range(4))) / np.log(2)
     npt.assert_array_almost_equal_nulp(ent_segm, [2, 3, 1, 3, 2], 5)
     ent_segm = psi.entanglement_entropy_segment([0, 1, 3, 4]) / np.log(2)
@@ -187,19 +215,10 @@ def test_singlet_mps():
         k = coord.index((i, j))
         mutinf[k] -= 2.0  # S(i)+S(j)-S(ij) = (1+1-0)*log(2)
     npt.assert_array_almost_equal(mutinf, 0.0, decimal=14)
-    product_state = [None] * L
-    for i, j in pairs:
-        product_state[i] = u
-        product_state[j] = d
-    for k in lonely:
-        product_state[k] = u
-    psi2 = mps.MPS.from_product_state([spin_half] * L, product_state, bc='finite', unit_cell_width=L)
-    npt.assert_almost_equal(psi.overlap(psi2), 0.5 ** (0.5 * len(pairs)))
 
 
 def test_from_mps_covering():
-    pytest.skip(_LEGACY)
-    spin = site.SpinSite(conserve=None)
+    spin = ct.sites.SpinSite(S=0.5, conserve=None)
     psi_uuu = mps.MPS.from_product_state([spin] * 3, ['up', 'up', 'up'], unit_cell_width=3)
     psi_ddd = mps.MPS.from_product_state([spin] * 3, ['down', 'down', 'down'], unit_cell_width=3)
     GHZ = psi_uuu.add(psi_ddd, 0.5**0.5, -(0.5**0.5))
@@ -232,10 +251,10 @@ def test_from_mps_covering():
     )
 
     # this code is also an example in MPS.from_product_mps_covering
-    ferm = site.FermionSite(conserve='N')
+    ferm = ct.sites.SpinlessFermionSite(conserve='N')
     lat = MultiSpeciesLattice(Square(4, 2, None), [ferm] * 2, ['up', 'down'])
-    ferm_up_down = mps.MPS.from_product_state([ferm] * 4, ['full', 'empty', 'empty', 'full'], unit_cell_width=4)
-    ferm_down_up = mps.MPS.from_product_state([ferm] * 4, ['empty', 'full', 'full', 'empty'], unit_cell_width=4)
+    ferm_up_down = mps.MPS.from_product_state([ferm] * 4, ['1', '0', '0', '1'], unit_cell_width=4)
+    ferm_down_up = mps.MPS.from_product_state([ferm] * 4, ['0', '1', '1', '0'], unit_cell_width=4)
     ferm_singlet = ferm_up_down.add(ferm_down_up, 0.5**0.5, -(0.5**0.5))
     index_map = [[(x, y, 0), (x, y, 1), (x + 1, y, 0), (x + 1, y, 1)] for (x, y) in [(0, 0), (0, 1), (2, 0), (2, 1)]]
     index_map = [[lat.lat2mps_idx(x_y_u) for x_y_u in pairs] for pairs in index_map]
@@ -290,6 +309,7 @@ def test_from_mps_covering():
             ]
         ),
     )
+    pytest.skip("TODO: the cyten SpinlessFermionSite has no charged operators, use couplings")
     corrs = psi.term_correlation_function_right([('Cd', 1), ('C', 0)], [('Cd', 0), ('C', 1)], 0, [2, 4, 6])
     npt.assert_almost_equal(corrs, [0.0, -0.5, 0.0])
 
@@ -518,14 +538,17 @@ def test_enlarge_mps_unit_cell():
 
 
 def test_roll_mps_unit_cell():
-    pytest.skip(_LEGACY)
-    s = site.SpinHalfSite(conserve='Sz', sort_charge=True)
+    s = ct.sites.SpinSite(S=0.5, conserve='Sz')
     psi = mps.MPS.from_product_state([s] * 4, ['down', 'up', 'up', 'up'], bc='infinite', unit_cell_width=4)
     psi1 = psi.copy()
     psi1.roll_mps_unit_cell(1)
     psi1.test_sanity()
+    psi1_ = psi1._gauged()
+    assert not psi1.is_gauged
+    assert psi1_.is_gauged
     npt.assert_equal(psi.expectation_value('Sigmaz'), [-1.0, 1.0, 1.0, 1.0])
     npt.assert_equal(psi1.expectation_value('Sigmaz'), [1.0, -1.0, 1.0, 1.0])
+    npt.assert_equal(psi1_.expectation_value('Sigmaz'), [1.0, -1.0, 1.0, 1.0])
     psi_m_1 = psi.copy()
     psi_m_1.roll_mps_unit_cell(-1)
     psi_m_1.test_sanity()
