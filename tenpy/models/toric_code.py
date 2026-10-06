@@ -9,7 +9,7 @@ import numpy as np
 
 from ..networks.site import SpinHalfSite
 from .lattice import Lattice, _parse_sites, get_order
-from .model import CouplingMPOModel
+from .new_model import CouplingMPOModel
 
 __all__ = ['DualSquare', 'ToricCode']
 

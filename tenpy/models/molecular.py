@@ -8,7 +8,7 @@ import numpy as np
 from ..networks.site import SpinHalfFermionSite
 from ..tools import Config
 from .lattice import Lattice
-from .model import CouplingMPOModel
+from .new_model import CouplingMPOModel
 
 __all__ = ['MolecularModel']
 

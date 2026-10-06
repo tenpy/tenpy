@@ -8,7 +8,7 @@ import numpy as np
 
 from ..networks.site import ClockSite
 from .lattice import Chain
-from .model import CouplingMPOModel, NearestNeighborModel
+from .new_model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = ['ClockModel', 'ClockChain']
 

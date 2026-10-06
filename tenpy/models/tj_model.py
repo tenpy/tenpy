@@ -3,7 +3,7 @@
 
 from ..networks.site import SpinHalfHoleSite
 from .lattice import Chain
-from .model import CouplingMPOModel, NearestNeighborModel
+from .new_model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = ['tJModel', 'tJChain']
 

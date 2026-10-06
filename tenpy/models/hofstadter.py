@@ -10,7 +10,7 @@ import numpy as np
 
 from ..networks.site import BosonSite, FermionSite
 from .lattice import Square
-from .model import CouplingMPOModel
+from .new_model import CouplingMPOModel
 
 __all__ = ['HofstadterBosons', 'HofstadterFermions', 'gauge_hopping', 'hopping_phases']
 

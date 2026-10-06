@@ -13,7 +13,7 @@ from scipy import integrate
 from tenpy.algorithms import dmrg, dmrg_parallel
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.models.lattice import Chain
-from tenpy.models.model import CouplingModel, MPOModel
+from tenpy.models.new_model import CouplingModel, MPOModel
 from tenpy.models.spins import DipolarSpinChain, SpinChain
 from tenpy.models.tf_ising import TFIChain
 from tenpy.networks import MPO, mps

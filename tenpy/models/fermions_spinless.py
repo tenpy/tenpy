@@ -6,7 +6,7 @@
 
 from ..networks.site import FermionSite
 from .lattice import Chain
-from .model import CouplingMPOModel, NearestNeighborModel
+from .new_model import CouplingMPOModel, NearestNeighborModel
 
 __all__ = ['FermionModel', 'FermionChain']
 

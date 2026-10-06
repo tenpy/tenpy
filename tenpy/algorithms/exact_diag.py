@@ -24,7 +24,7 @@ from cyten.symmetries.spaces import AbelianLegPipe, TensorProduct
 from cyten.tensors import HermitianNumpyArrayLinearOperator, slice_leg
 from cyten.tensors import eigh as cyten_eigh
 
-from ..models.model import CouplingModel
+from ..models.new_model import CouplingModel
 from ..networks.mps import MPS
 from ..tools import inverse_permutation
 
@@ -197,7 +197,7 @@ class ExactDiag:
 
         """
         from ..models.lattice import TrivialLattice
-        from ..models.model import MPOModel
+        from ..models.new_model import MPOModel
 
         assert H_MPO.bc == 'finite'
         M = MPOModel(TrivialLattice(H_MPO.sites), H_MPO)

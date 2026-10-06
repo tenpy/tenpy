@@ -5,7 +5,7 @@ import numpy as np
 
 from ..networks.site import SpinHalfSite
 from .lattice import Chain
-from .model import CouplingMPOModel
+from .new_model import CouplingMPOModel
 
 __all__ = ['PXPChain']
 

@@ -844,6 +844,7 @@ class RandomUnitaryEvolution(TEBDEngine):
     """
 
     def __init__(self, psi, options, **kwargs):
+        raise NotImplementedError('Get rid of this class, it is now just TEBD with RandomUnitary model')
         TEBDEngine.__init__(self, psi, None, options, **kwargs)
 
     def run(self):

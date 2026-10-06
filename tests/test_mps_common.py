@@ -8,7 +8,7 @@ from cyten.models.couplings import spin_field_coupling, spin_spin_coupling
 from cyten.models.sites import SpinSite
 
 from tenpy.algorithms.mps_common import TwoSiteH, VariationalCompression
-from tenpy.models import lattice, model
+from tenpy.models import lattice, new_model
 from tenpy.networks.mps import MPS, MPSEnvironment
 from tenpy.tools import TruncationError
 
@@ -167,7 +167,7 @@ def test_two_site_h_matvec():
     J, g = 1.5, 0.9
     site = SpinSite(S=0.5, conserve=None)
     lat = lattice.Chain(2, site, bc='open', bc_MPS='finite')
-    M = model.CouplingModel(lat)
+    M = new_model.CouplingModel(lat)
     M.add_coupling(spin_spin_coupling([site, site], Jx=1.0), [0, 1], strength=-J)
     for i in range(2):
         M.add_coupling(spin_field_coupling([site], hz=1.0), [i], strength=-g)

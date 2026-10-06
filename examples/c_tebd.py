@@ -132,7 +132,7 @@ def example_TEBD_tf_ising_lightcone(L, g, tmax, dt):
 
 
 def example_TEBD_gs_tf_ising_next_nearest_neighbor(L, g, Jp):
-    from tenpy.models.model import NearestNeighborModel
+    from tenpy.models.new_model import NearestNeighborModel
     from tenpy.models.spins_nnn import SpinChainNNN2
 
     print('finite TEBD, imaginary time evolution, transverse field Ising next-nearest neighbor')
