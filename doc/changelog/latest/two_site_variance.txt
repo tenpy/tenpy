@@ -1,0 +1,6 @@
+- Add :meth:`~tenpy.networks.mpo.MPO.two_site_variance` implementing the two-site variance
+  error measure of :arxiv:`1711.01104`, and the corresponding measurement function
+  :func:`~tenpy.simulations.measurement.m_two_site_variance`.
+
+- Add :func:`tenpy.algorithms.dmrg.extrapolate_in_variance` to optimize a state for a series of
+  bond dimensions and extrapolate the energy to vanishing two-site variance.
