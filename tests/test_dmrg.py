@@ -4,12 +4,12 @@
 import warnings
 from functools import reduce
 
-import cyten as ct
 import numpy as np
 import pytest
 from cyten.models import sites
 from scipy import integrate
 
+import cyten as ct
 from tenpy.algorithms import dmrg, dmrg_parallel
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.models.lattice import Chain
@@ -17,6 +17,7 @@ from tenpy.models.model import CouplingModel, MPOModel
 from tenpy.models.spins import DipolarSpinChain, SpinChain
 from tenpy.models.tf_ising import TFIChain
 from tenpy.networks import MPO, mps
+from tenpy.tools import asConfig
 
 
 def e0_transverse_ising(g=0.5):
@@ -329,11 +330,13 @@ def test_dmrg_heisenberg_vs_exact(combine, n, conserve, tensor_backend, L=8):
     }
 
     if conserve == 'SU2':
+        dmrg_pars = asConfig(dmrg_pars, 'DMRG')
         try:
             res = dmrg.run(psi, M, dmrg_pars)
         except ValueError as exc:
             if 'Input irreps have higher weight than highest weight irrep in HDF5-file' not in str(exc):
                 raise
+            dmrg_pars.unused.clear()  # supress "unused" warnings on teardown
             pytest.skip('SU2 symmetry data not available')
     else:
         res = dmrg.run(psi, M, dmrg_pars)
