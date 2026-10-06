@@ -937,6 +937,7 @@ class MPO(MPSGeometry):
             left = self.finite and i == 0
             right = self.finite and i == self.L - 1
             A, B, C, D, Id = partition_W(W, left_boundary=left, right_boundary=right)
+            Id = ct.tensor_from_grid([[Id]], labels=['wL', 'p', 'wR', 'p*'], row_labels=['Id'], col_labels=['Id'])
             if left and right:
                 raise RuntimeError
             elif left:
@@ -4408,15 +4409,12 @@ def partition_W(
     A, B, C, D: :class:`cyten.Tensor` | None
         The subgrids of W. If at a boundary, non-existing entires are set to ``None``.
     Id: :class:`cyten.Tensor`
-        The identity cell, also as a 4-leg Tensor, as a 1x1 grid with `Id_summand_label`
+        The identity cell, as a 4-leg Tensor
 
     """
     Id = ct.SymmetricTensor.from_eye([W.get_leg('p')], W.backend, labels=['p', 'p*'])
     Id = ct.add_trivial_leg(Id, codomain_pos=0, label='wL', is_dual=W.get_leg('wL').is_dual)
     Id = ct.add_trivial_leg(Id, domain_pos=-1, label='wR', is_dual=not W.get_leg('wR').is_dual)
-    Id_subgrid = ct.tensor_from_grid(
-        [[Id]], labels=['wL', 'p', 'wR', 'p*'], row_labels=[Id_summand_label], col_labels=[Id_summand_label]
-    )
     others_wL = [i for i, l in enumerate(W.get_leg('wL').summand_labels) if l not in [IdL, IdR]]
     others_wR = [i for i, l in enumerate(W.get_leg('wR').summand_labels) if l not in [IdL, IdR]]
 
@@ -4429,7 +4427,7 @@ def partition_W(
         assert ct.almost_equal(ct.tensor_grid_cell(W, IdL, IdL, 'wL', 'wR'), Id)
         C = ct.tensor_subgrid(W, [IdL], others_wR, 'wL', 'wR')
         D = ct.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
-        return None, None, C, D, Id_subgrid
+        return None, None, C, D, Id
 
     if right_boundary:
         assert all(l in W.get_leg('wL').summand_labels for l in (IdL, IdR))
@@ -4437,7 +4435,7 @@ def partition_W(
         D = ct.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
         B = ct.tensor_subgrid(W, others_wL, [IdR], 'wL', 'wR')
         assert ct.almost_equal(ct.tensor_grid_cell(W, IdR, IdR, 'wL', 'wR'), Id)
-        return None, B, None, D, Id_subgrid
+        return None, B, None, D, Id
 
     # remaining case: bulk tensor
     assert all(l in W.get_leg(leg).summand_labels for l in (IdL, IdR) for leg in ('wL', 'wR'))
@@ -4454,4 +4452,4 @@ def partition_W(
     assert ct.norm(ct.tensor_subgrid(W, [IdR], others_wR, 'wL', 'wR')).to_numpy() == 0
     assert ct.almost_equal(ct.tensor_grid_cell(W, IdR, IdR, 'wL', 'wR'), Id)
 
-    return A, B, C, D, Id_subgrid
+    return A, B, C, D, Id
