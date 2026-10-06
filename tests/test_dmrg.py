@@ -4,12 +4,12 @@
 import warnings
 from functools import reduce
 
+import cyten as ct
 import numpy as np
 import pytest
 from cyten.models import sites
 from scipy import integrate
 
-import cyten as ct
 from tenpy.algorithms import dmrg, dmrg_parallel
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.models.lattice import Chain
