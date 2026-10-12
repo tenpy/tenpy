@@ -51,7 +51,6 @@ from ..networks.terms import (
     MultiCouplingTerms,
     OnsiteTerms,
     order_combine_term,
-    to_single_coupling,
 )
 from ..tools import Hdf5Exportable, add_with_None_0, asConfig, to_array
 from .lattice import HelicalLattice, IrregularLattice, Lattice, MultiSpeciesLattice, get_lattice

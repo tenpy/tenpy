@@ -26,7 +26,9 @@ def plot_model(model_params, phi_ext=0.1):
     ax = plt.gca()
     M.lat.plot_sites(ax)
     M.coupling_terms['t1 Bd_i B_j'].plot_coupling_terms(ax, M.lat)
-    M.coupling_terms['t2 Bd_i B_j'].plot_coupling_terms(ax, M.lat, text='{op_j!s} {strength_angle:.2f}', text_pos=0.9)
+    M.coupling_terms['t2 Bd_i B_j'].plot_coupling_terms(
+        ax, M.lat, text='{coupling_name!s} {strength_angle:.2f}', text_pos=0.9
+    )
     print(M.coupling_terms['t1 Bd_i B_j'].to_TermList())
     ax.set_aspect(1.0)
     plt.show()
