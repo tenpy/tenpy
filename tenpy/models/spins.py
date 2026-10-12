@@ -122,7 +122,7 @@ class SpinModel(CouplingMPOModel):
         # strength=None, then look up each coefficient at those lattice positions.
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             site1, site2 = self.lat.unit_cell[u1], self.lat.unit_cell[u2]
-            mps_i, mps_j, lat_indices, coupling_shape = self.lat.possible_couplings(u1, u2, dx, None)
+            mps_i, mps_j, lat_indices, coupling_shape = self.lat.possible_couplings(u1, u2, dx)
             Jx_arr = to_array(Jx, coupling_shape)
             Jy_arr = to_array(Jy, coupling_shape)
             Jz_arr = to_array(Jz, coupling_shape)
