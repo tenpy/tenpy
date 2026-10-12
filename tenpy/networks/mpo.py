@@ -28,8 +28,10 @@ We use the following label convention for the `W` (where arrows indicate `qconj`
 
 
 If an MPO describes a sum of local terms (e.g. most Hamiltonians),
-some bond indices correspond to 'only identities to the left/right'.
-We store these indices in `IdL` and `IdR` (if there are such indices).
+some virtual bond states correspond to 'only identities to the left/right'.
+These are marked by the summand labels ``'IdL'`` and ``'IdR'`` on the (direct sum) virtual legs
+``wL``/``wR`` of the :attr:`_W` tensors, i.e. they are the labelled rows/columns of the grid of
+operators that makes up each `W` (if there are such states); see :func:`partition_W`.
 
 Similar as for the MPS, a bond index ``i`` is *left* of site `i`,
 i.e. between sites ``i-1`` and ``i``.
@@ -112,6 +114,12 @@ class MPO(MPSGeometry):
         computed and added at runtime, i.e., `self` is not (necessarily) hermitian.
     _W : list of :class:`~lasyten.Tensor`
         The matrices of the MPO. Labels are ``wL, p, wR, p*`` (up to cyclic permutation).
+        For an MPO that is a sum of local terms, the virtual legs are direct sums whose summands are
+        labelled; the ``'IdL'`` / ``'IdR'`` summands replace the former integer indices ``MPO.IdL`` /
+        ``MPO.IdR`` (which now raise a ``ValueError``). The usual upper block triangular structure
+        can be extracted with :func:`partition_W`, and
+        :meth:`MPOEnvironment.init_LP` / :meth:`MPOEnvironment.init_RP` project onto these summands
+        to build the trivial boundary environments.
     _valid_bc : tuple of str
         Class attribute. Valid boundary conditions; the same as for an MPS.
     _graph : None | list of {dict of {(int,int): :class:`~tenpy.linalg.np_conserved.Array`}}
@@ -122,7 +130,8 @@ class MPO(MPSGeometry):
         Relevant only for iMPOs and segment MPOs with contractible outer virtual legs:
         `self._W[0].get_leg("wL")`, `self._W[-1].get_leg("wR")`
         Ordering of the outer virtual legs such that `self` is upper triangular w.r.t. the whole unit cell.
-        Follows the constraint `_outer_permutation[0] = self.IdL[0]`, `_outer_permutation[-1] = self.IdR[-1]`
+        Follows the constraint that the first entry is the ``'IdL'`` and the last entry the ``'IdR'``
+        summand of the outer virtual legs.
         Defaults to `None` if the ordering has not yet been checked of False if ordering the MPO is not possible
         **Note:** This ordering is valid only with respect to the **whole unit cell**, not for
         internal `'wL'/'wR'` legs.
