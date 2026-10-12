@@ -43,7 +43,7 @@ from typing import Any, Literal
 
 import cyten as ct
 import numpy as np
-from cyten import Coupling, ElementarySpace, SymmetricTensor
+from cyten import Coupling, ElementarySpace
 from scipy.special import comb as sp_comb
 
 from ..tools import (
@@ -1957,19 +1957,6 @@ class MPO(MPSGeometry):
         )  # no graph
 
 
-def _ensure_identity_op(site):
-    """Make sure `site` has an 'Id' onsite operator.
-
-    Unlike the old `tenpy.networks.site.Site`, :class:`cyten.models.degrees_of_freedom.Site`
-    does not come with a predefined identity operator, but :class:`MPOGraph` relies on 'Id'
-    being valid on every site
-    """
-    if site.valid_opname('Id'):
-        return
-    op = SymmetricTensor.from_eye([site.leg], backend=site.backend, labels=['p', 'p*'], device=site.default_device)
-    site.add_onsite_operator('Id', op)
-
-
 class MPOGraph(MPSGeometry):
     """Representation of an MPO by a graph, based on a 'finite state machine'.
 
@@ -2567,8 +2554,6 @@ class MPOGraph(MPSGeometry):
             'IdL'/'IdR' to exist on all bonds.
 
         """
-        for site in self.sites:
-            _ensure_identity_op(site)
         if self.bc == 'infinite' or insert_all_id:
             max_IdL = self.L  # add identities for all sites
             min_IdR = 0
