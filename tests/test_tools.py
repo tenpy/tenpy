@@ -346,6 +346,28 @@ def test_failing_consistency_check():
     # but the program should continue
 
 
+def test_svd_theta_truncation_error():
+    import lasyten as lasy
+    from lasyten.models.sites import SpinSite
+
+    rng = np.random.default_rng(3)
+    leg = SpinSite(S=1.5, conserve=None).leg
+    backend = lasy.get_backend('no_symmetry', 'numpy')
+    block = 3.0 * rng.normal(size=(4, 4, 4, 4))  # deliberately not normalized
+    theta = lasy.SymmetricTensor.from_dense_block(
+        block, codomain=[leg] * 2, domain=[leg] * 2, backend=backend, labels=['a', 'b', 'c', 'd']
+    )
+    chi = 5
+    trunc_params = {'chi_max': chi, 'svd_min': 0, 'trunc_cut': 0}
+    U, S, Vh, err, renormalize = tools.svd_theta(theta, trunc_params, new_labels=['vR', 'vL'])
+
+    sing_vals = np.linalg.svd(block.reshape(16, 16), compute_uv=False)
+    # eps is the *squared* relative Frobenius error, i.e. the discarded weight
+    eps_expected = np.sum(sing_vals[chi:] ** 2) / np.sum(sing_vals**2)
+    npt.assert_allclose(err.eps, eps_expected, rtol=1e-10)
+    npt.assert_allclose(renormalize, np.linalg.norm(sing_vals[:chi]), rtol=1e-10)
+
+
 if __name__ == '__main__':
     import tempfile
     from pathlib import Path
