@@ -337,6 +337,46 @@ def test_MPO_hermitian():
     assert _is_hermitian_coupling(L, site, H)
 
 
+def _mpo_to_dense(M, L):
+    labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
+    dim = M.sites[0].dim
+    return Coupling(list(M.sites), factorization=list(M._W)).to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
+
+
+def test_MPO_dagger():
+    """MPO.dagger agrees with the dense hermitian conjugate and keeps the IdL / IdR structure."""
+    L = 4
+    site = SpinSite(S=0.5, conserve=None)
+    Sm = site.get_op('Sm').to_numpy()
+    Sp = site.get_op('Sp').to_numpy()
+    Sz = site.get_op('Sz').to_numpy()
+    filler = spin_field_coupling([site], hz=0.0)
+    # non-hermitian: complex prefactors / one-sided hopping
+    c_zz = _hopping_coupling(site, 1j * Sz, Sz)
+    c_mp = _hopping_coupling(site, Sm, Sp)
+    H = _build_hermitian_test_coupling(L, filler, [(c_mp, (0, 3)), (c_zz, (1, 2))])
+    M = mpo.MPO(list(H.sites), H.factorization, 'finite', mps_unit_cell_width=L)
+    M_dag = M.dagger()
+    M_dag.test_sanity()
+    H_dense = _mpo_to_dense(M, L)
+    H_dag_dense = _mpo_to_dense(M_dag, L)
+    assert not np.allclose(H_dense, H_dense.conj().T)
+    npt.assert_allclose(H_dag_dense, H_dense.conj().T, atol=1e-14)
+    # the summand labels of the virtual legs are unchanged
+    for W, W_dag in zip(M._W, M_dag._W):
+        assert W_dag.labels == ['wL', 'p', 'wR', 'p*']
+        assert W.get_leg('wL').summand_labels == W_dag.get_leg('wL').summand_labels
+        assert W.get_leg('wR').summand_labels == W_dag.get_leg('wR').summand_labels
+    # dagger is an involution
+    npt.assert_allclose(_mpo_to_dense(M_dag.dagger(), L), H_dense, atol=1e-14)
+
+    # symmetric, hermitian model
+    M = SpinChain(dict(L=L, Jx=1.0, Jy=0.5, Jz=1.0, hz=0.2, bc_MPS='finite', conserve='best')).H_MPO
+    M_dag = M.dagger()
+    M_dag.test_sanity()
+    npt.assert_allclose(_mpo_to_dense(M_dag, L), _mpo_to_dense(M, L), atol=1e-14)
+
+
 @pytest.mark.parametrize('bc', ['infinite', 'finite'])
 @pytest.mark.parametrize('explicit_plus_hc', [True, False])
 def test_MPO_addition(bc, explicit_plus_hc):

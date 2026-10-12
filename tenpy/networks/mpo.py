@@ -1374,25 +1374,21 @@ class MPO(MPSGeometry):
         return TermList(all_terms, all_prefs)
 
     def dagger(self):
-        """Return hermitian conjugate copy of self."""
+        """Return hermitian conjugate copy of self.
+
+        The hermitian conjugate is taken on each ``W`` separately, i.e. the virtual structure
+        (including the ``'IdL'`` / ``'IdR'`` summand labels) is unchanged and only the physical legs
+        are transposed and the entries are complex conjugated. Note that the virtual legs are
+        dualized (they carry the conjugate charges).
+        """
         if self.explicit_plus_hc:
             return self.copy()
-        if self.bc != 'finite':
-            raise NotImplementedError("MPO.dagger() for bc != 'finite' is not yet supported")
-        # for finite bc, the `_W` tensors have the same structure as a cyten Coupling's
-        # `factorization` (trivial boundary legs), so we can round-trip through `Coupling` to
-        # get the hermitian conjugate at the tensor level.
-        coupling = Coupling(sites=list(self.sites), factorization=list(self._W))
-        hc_coupling = Coupling.from_tensor(ct.dagger(coupling.to_tensor()), sites=list(self.sites))
-        return MPO(
-            self.sites,
-            hc_coupling.factorization,
-            self.bc,
-            self.IdL,
-            self.IdR,
-            self.max_range,
-            mps_unit_cell_width=self.unit_cell_width,
-        )
+        Ws = []
+        for W in self._W:
+            # ct.dagger gives labels [p, wR*, p*, wL*]; cyclic permutation back to the standard leg order.
+            W = ct.permute_legs(ct.dagger(W), codomain=['wL*', 'p'], domain=['p*', 'wR*'])
+            Ws.append(W.relabel({'wL*': 'wL', 'wR*': 'wR'}))
+        return MPO(self.sites, Ws, self.bc, self.max_range, mps_unit_cell_width=self.unit_cell_width)
 
     def is_hermitian(self, eps: float = 1.0e-10, max_range: int | None = None):
         """Check if `self` is a hermitian MPO.
