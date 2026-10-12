@@ -225,9 +225,8 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
         print('compare with ED: overlap = ', abs(ov) ** 2)
         assert abs(abs(ov) - 1.0) < 1.0e-8  # unique groundstate: finite size gap!
 
-        with pytest.raises(NotImplementedError):
-            var = M.H_MPO.variance(psi)
-            assert var < 1.0e-8
+        var = M.H_MPO.variance(psi)
+        assert var < 1.0e-8
 
     else:
         # compare exact solution for transverse field Ising model
@@ -362,9 +361,8 @@ def test_dmrg_heisenberg_vs_exact(combine, n, conserve, tensor_backend, L=8):
     print('compare with ED: overlap = ', abs(ov) ** 2)
     assert abs(abs(ov) - 1.0) < 1.0e-8, f'overlap stage: |overlap|={abs(ov)}'  # unique groundstate: finite size gap!
 
-    with pytest.raises(NotImplementedError):
-        var = M.H_MPO.variance(psi)
-        assert var < 1.0e-8, f'variance stage: variance={var}'
+    var = M.H_MPO.variance(psi)
+    assert var < 1.0e-8, f'variance stage: variance={var}'
 
 
 @pytest.mark.skip(reason='Not ported yet')
