@@ -7,7 +7,7 @@ An MPS looks roughly like this::
     |     ┗━━━┯━━━┛    ┗━━━┯━━━┛    ┗━━━┯━━━┛
     |         │            │            │
 
-We use the following label convention for the `B` (where arrows indicate `qconj`)::
+We use the following label convention for the `B` (schematic; lines/arrows only show contractions, not leg duality)::
 
     |        ┏━━━━━━━┓
     |   vL ──┨   B   ┠── vR
@@ -8060,7 +8060,7 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
     This class stores the partial contractions `LP` and `RP` coming from the left and right up to
     each bond, allowing efficient calculations of expectation values, correlation functions etc.
 
-    We use the following label convention (where arrows indicate `qconj`)::
+    We use the following label convention (schematic; lines/arrows only show contractions, not leg duality)::
 
         |    .-->- vR           vL ->-.
         |    |                        |

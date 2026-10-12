@@ -16,7 +16,7 @@ Valid boundary conditions of an MPO are the same as for an MPS
 canonical form. However, unlike for an MPS, this doesn't simplify calculations.
 Thus, an MPO has no `form`.)
 
-We use the following label convention for the `W` (where arrows indicate `qconj`)::
+We use the following label convention for the `W` (schematic; lines/arrows only show contractions, not leg duality)::
 
     |            p*
     |            ^
