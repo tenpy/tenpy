@@ -11,7 +11,7 @@ from scipy import linalg as spla
 
 from tenpy.algorithms import ExactDiag
 from tenpy.models.spins import SpinChain
-from tenpy.networks import mpo
+from tenpy.networks import mpo, mps
 from tenpy.networks.terms import CouplingTerms, OnsiteTerms, to_single_coupling
 
 # spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
@@ -337,39 +337,43 @@ def test_MPO_hermitian():
     assert _is_hermitian_coupling(L, site, H)
 
 
-@pytest.mark.parametrize('bc', ['infinite', 'finite'])
-@pytest.mark.parametrize('explicit_plus_hc', [True, False])
-def test_MPO_addition(bc, explicit_plus_hc):
-    L = 4
-    print('bc = ', bc, '-' * 40)
-    s = spin_half
-    ot1 = OnsiteTerms(L)
-    ct1 = CouplingTerms(L)
-    ct1.add_coupling_term(2.0, 2, 3, 'Sm', 'Sp')
-    ct1.add_coupling_term(2.0, 2, 3, 'Sp', 'Sm')
-    ct1.add_coupling_term(2.0, 1, 2, 'Sz', 'Sz')
-    ot1.add_onsite_term(3.0, 1, 'Sz')
+@pytest.mark.parametrize('L', [2, 4])
+def test_MPO_addition(L):
+    """Adding two MPOs gives the sum of the dense operators and keeps the IdL / IdR labels."""
+    M1 = SpinChain(dict(L=L, Jx=1.0, Jy=1.0, Jz=1.1, hz=0.2, bc_MPS='finite', conserve=None))
+    M2 = SpinChain(dict(L=L, Jx=0.3, Jy=0.0, Jz=-0.7, hz=0.5, bc_MPS='finite', conserve=None))
+    H1, H2 = M1.H_MPO, M2.H_MPO
+    H12 = H1 + H2
+    H12.test_sanity()
+    assert H12.L == L
+    assert H12.bc == 'finite'
 
-    with pytest.raises(NotImplementedError, match='TODO: MPO._graph'):
-        _ = mpo.MPOGraph.from_terms((ot1, ct1), [s] * L, bc, unit_cell_width=L).build_MPO()
-    pytest.skip('MPOGraph.build_MPO not ported')
+    # IdL / IdR are available as grid labels on the bonds
+    for i, W in enumerate(H12._W):
+        if i > 0:
+            assert 'IdL' in W.get_leg('wL').summand_labels
+            assert 'IdR' in W.get_leg('wL').summand_labels
+        if i < L - 1:
+            assert 'IdL' in W.get_leg('wR').summand_labels
+            assert 'IdR' in W.get_leg('wR').summand_labels
+    assert H12._W[0].get_leg('wL').summand_labels == ['IdL']
+    assert H12._W[-1].get_leg('wR').summand_labels == ['IdR']
 
-    H1 = mpo.MPOGraph.from_terms((ot1, ct1), [s] * L, bc, unit_cell_width=L).build_MPO()
-    ot2 = OnsiteTerms(4)
-    ct2 = CouplingTerms(4)
-    ct2.add_coupling_term(4.0, 0, 2, 'Sz', 'Sz')
-    ct2.add_coupling_term(4.0, 1, 2, 'Sz', 'Sz')
-    ot2.add_onsite_term(5.0, 1, 'Sz')
-    H2 = mpo.MPOGraph.from_terms((ot2, ct2), [s] * L, bc, unit_cell_width=L).build_MPO()
-    H12_sum = H1 + H2
-    ot12 = OnsiteTerms(4)
-    ot12 += ot1
-    ot12 += ot2
-    ct12 = CouplingTerms(4)
-    ct12 += ct1
-    ct12 += ct2
-    H12 = mpo.MPOGraph.from_terms((ot12, ct12), [s] * L, bc, unit_cell_width=L).build_MPO()
-    assert H12.is_equal(H12_sum)
+    def dense(H):
+        ED = ExactDiag.from_H_mpo(H)
+        ED.build_full_H_from_mpo()
+        return ED.full_H.to_numpy()
+
+    npt.assert_allclose(dense(H12), dense(H1) + dense(H2), atol=1e-12)
+    npt.assert_allclose(dense(H12), dense(H2 + H1), atol=1e-12)
+    # environments (which use IdL / IdR) work and give the sum of the energies
+    sites = M1.lat.mps_sites()
+    psi = mps.MPS.from_product_state(sites, ['up', 'down'] * (L // 2), bc='finite', unit_cell_width=L)
+    E = [mpo.MPOEnvironment(psi, H, psi).full_contraction(0) for H in (H1, H2, H12)]
+    npt.assert_allclose(E[2], E[0] + E[1], atol=1e-12)
+
+    # the sum can be added again, i.e. it is again in standard form
+    npt.assert_allclose(dense(H12 + H1), 2 * dense(H1) + dense(H2), atol=1e-12)
 
 
 @pytest.mark.parametrize('sites', [None, [0], [1], [0, 1, 2, 3], [2, 3], [3, 2]])

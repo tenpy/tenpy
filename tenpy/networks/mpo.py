@@ -1902,7 +1902,9 @@ class MPO(MPSGeometry):
     def __add__(self, other):
         """Return an MPO representing `self + other`.
 
-        Requires both `self` and `other` to be in standard sum form with `IdL` and `IdR` being set.
+        Requires both `self` and `other` to be in standard sum form with `IdL` and `IdR` being set
+        as labels of the virtual legs. The result keeps these labels. Currently only supports
+        ``L > 1`` for finite boundary conditions (same restriction as :meth:`make_U_I`).
 
         This is a naive, block-wise addition without any compression!
 
@@ -1931,15 +1933,24 @@ class MPO(MPSGeometry):
             right = self.finite and i == L - 1
             A1, B1, C1, D1, Id = partition_W(self._W[i], left_boundary=left, right_boundary=right)
             A2, B2, C2, D2, _ = partition_W(other._W[i], left_boundary=left, right_boundary=right)
-            IdL = ct.tensor_from_grid([[Id]], labels=['wL', 'p', 'wR', 'p*'], row_labels=['IdL'], col_labels=['IdL'])
-            IdR = ct.tensor_from_grid([[Id]], labels=['wL', 'p', 'wR', 'p*'], row_labels=['IdR'], col_labels=['IdR'])
-            grid = [
-                [Id, C1, C2, D1 + D2],
-                [None, A1, None, B1],
-                [None, None, A2, B2],
-                [None, None, None, Id],
-            ]
-            Ws.append(ct.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*']))
+            # identity cells carrying the IdL / IdR labels; the labels of the other cells are propagated
+            labels = ['wL', 'p', 'wR', 'p*']
+            IdL = ct.tensor_from_grid([[Id]], labels=labels, row_labels=['IdL'], col_labels=['IdL'])
+            IdR = ct.tensor_from_grid([[Id]], labels=labels, row_labels=['IdR'], col_labels=['IdR'])
+            D = D1 + D2
+            # grid structure with rows / columns [IdL, others of self, others of other, IdR]
+            if left:
+                grid = [[IdL, C1, C2, D]]
+            elif right:
+                grid = [[D], [B1], [B2], [IdR]]
+            else:
+                grid = [
+                    [IdL, C1, C2, D],
+                    [None, A1, None, B1],
+                    [None, None, A2, B2],
+                    [None, None, None, IdR],
+                ]
+            Ws.append(ct.tensor_from_grid(grid, labels=labels))
 
         if self.max_range is None or other.max_range is None:
             max_range = None
@@ -1949,12 +1960,10 @@ class MPO(MPSGeometry):
             self.sites,
             Ws,
             self.bc,
-            IdL,
-            IdR,
             max_range,
             self.explicit_plus_hc,
             mps_unit_cell_width=self.unit_cell_width,
-        )  # no graph
+        )
 
 
 def _ensure_identity_op(site):
