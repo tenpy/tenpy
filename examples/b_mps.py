@@ -15,15 +15,11 @@ but makes use of other predefined classes except npc.
 # Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
-import tenpy.linalg.np_conserved as npc
 
-# some more imports
-from tenpy.networks.site import SpinHalfSite
-
-from tenpy.linalg import svd_theta
 from tenpy.models.lattice import Chain
 from tenpy.networks.mpo import MPO, MPOEnvironment
 from tenpy.networks.mps import MPS
+from tenpy.tools import svd_theta
 
 # model parameters
 Jxx, Jz = 1.0, 1.0
