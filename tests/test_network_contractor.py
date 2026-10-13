@@ -9,7 +9,6 @@ import numpy as np
 from random_test import random_Array
 
 from tenpy.algorithms.network_contractor import contract, ncon
-from tenpy.linalg import np_conserved as npc
 
 # Construct toy tensors
 # =====================

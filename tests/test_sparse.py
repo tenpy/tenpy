@@ -9,8 +9,6 @@ import tenpy.linalg.np_conserved as npc
 import tenpy.linalg.random_matrix as rmat
 from random_test import gen_random_legcharge
 
-from tenpy.linalg import sparse
-
 ch = npc.ChargeInfo([2])
 
 
