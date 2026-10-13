@@ -9,7 +9,9 @@ prefactor when specifying e.g. a Hamiltonian.
 
 import itertools
 import warnings
+from abc import ABCMeta, abstractmethod
 from collections.abc import Sequence
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Protocol
 
 import cyten as ct
@@ -23,6 +25,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     'TermList',
+    'Terms',
     'OnsiteTerms',
     'CouplingTerms',
     'MultiCouplingTerms',
@@ -49,6 +52,67 @@ class DefinesCouplings(Protocol):
     def get_coupling(self, name: str, *sites: ct.Site) -> ct.Coupling: ...
 
     def test_coupling_name(self, name: str, *sites: ct.Site): ...  # raise ValueError
+
+
+class Terms(Hdf5Exportable, metaclass=ABCMeta):
+    """Base class for representations of terms that can be added to an MPO.
+
+    TODO elaborate on classes and their differences.
+    """
+
+    @abstractmethod
+    def max_range(self) -> int:
+        """Maximum range of the terms in the MPS geometry.
+
+        This is e.g. ``0`` for purely onsite or ``1`` for nearest-neighbor
+        """
+        ...
+
+    @abstractmethod
+    def add_to_graph(self, graph: MPOGraph):
+        """Add the represented terms to an MPOGraph.
+
+        Parameters
+        ----------
+        graph : :class:`~tenpy.networks.mpo.MPOGraph`
+            The graph into which the terms from :attr:`onsite_terms` should be added.
+
+        """
+
+    @abstractmethod
+    def test_terms(self, sites: list[ct.Site], model: DefinesCouplings):
+        """Check that the terms are valid for a given model on given sites.
+
+        Raises
+        ------
+        ValueError
+            If something is inconsistent
+
+        """
+        ...
+
+    @abstractmethod
+    def to_TermList(self) -> TermList:
+        """TODO: review termlist first"""
+        ...
+
+    @abstractmethod
+    def remove_zeros(self, tol_zero: float = 1e-15, inplace: bool = True) -> Terms:
+        """Remove terms with (almost) zero prefactor.
+
+        Parameters
+        ----------
+        tol_zero : float
+            Tolerance for considering prefactors zero
+        inplace : bool
+            Modify inplace (default) or work on a copy.
+
+        Returns
+        -------
+        The modified instance.
+
+        """
+        ...
 
 
 class TermList(Hdf5Exportable):
@@ -333,7 +397,7 @@ def order_combine_term(term, sites):
     return term, overall_sign
 
 
-class OnsiteTerms(Hdf5Exportable):
+class OnsiteTerms(Terms):
     """Operator names, site indices and strengths representing onsite terms.
 
     Represents a sum of onsite terms where the operators are only given by their name
@@ -361,10 +425,6 @@ class OnsiteTerms(Hdf5Exportable):
         self.onsite_terms: list[dict[str, float | complex]] = [dict() for _ in range(L)]
 
     def max_range(self):
-        """Maximum range of the terms.
-
-        In this case ``0``.
-        """
         return 0
 
     def add_onsite_term(self, strength: float | complex, i: int, op: str):
@@ -385,14 +445,6 @@ class OnsiteTerms(Hdf5Exportable):
         term[op] = term.get(op, 0) + strength
 
     def add_to_graph(self, graph: MPOGraph):
-        """Add the represented terms to an MPOGraph.
-
-        Parameters
-        ----------
-        graph : :class:`~tenpy.networks.mpo.MPOGraph`
-            The graph into which the terms from :attr:`onsite_terms` should be added.
-
-        """
         raise NotImplementedError  # TODO review MPOGraph first
         assert self.L == graph.L
         for i, terms in enumerate(self.onsite_terms):
@@ -428,21 +480,14 @@ class OnsiteTerms(Hdf5Exportable):
             res.append(H)
         return res
 
-    def remove_zeros(self, tol_zero: float = 1.0e-15):
-        """Remove entries close to 0 from :attr:`onsite_terms`.
-
-        Parameters
-        ----------
-        tol_zero : float
-            Entries in :attr:`onsite_terms` with `strength` < `tol_zero` are considered to be
-            zero and removed.
-
-        """
+    def remove_zeros(self, tol_zero: float = 1.0e-15, inplace: bool = True) -> OnsiteTerms:
+        if not inplace:
+            return deepcopy(self).remove_zeros(tol_zero)
         for term in self.onsite_terms:
             for op in list(term.keys()):
                 if abs(term[op]) < tol_zero:
                     del term[op]
-        return
+        return self
 
     def add_to_nn_bond_tensors(
         self,
@@ -529,7 +574,7 @@ class OnsiteTerms(Hdf5Exportable):
                 self_t[key] = self_t.get(key, 0.0) + value
         return self
 
-    def _test_terms(self, sites: list[ct.Site]):
+    def test_terms(self, sites: list[ct.Site], model: DefinesCouplings):
         """Check that all given operators exist in the `sites`."""
         for site, terms in zip(sites, self.onsite_terms):
             for opname in terms:
@@ -537,7 +582,7 @@ class OnsiteTerms(Hdf5Exportable):
                     raise ValueError(f'Operator {opname!r} not in site')
 
 
-class CouplingTerms(Hdf5Exportable):
+class CouplingTerms(Terms):
     """Operator names, site indices and strengths representing two-site coupling terms.
 
     Parameters
@@ -565,14 +610,6 @@ class CouplingTerms(Hdf5Exportable):
         self.coupling_terms: dict[int, dict[str, dict[int, float | complex]]] = dict()
 
     def max_range(self) -> int:
-        """Determine the maximal range in :attr:`coupling_terms`.
-
-        Returns
-        -------
-        max_range : int
-            The maximum of ``j - i`` for the `i`, `j` occurring in a term of :attr:`coupling_terms`.
-
-        """
         max_range = 0
         for i, d1 in self.coupling_terms.items():
             for d2 in d1.values():
@@ -696,14 +733,6 @@ class CouplingTerms(Hdf5Exportable):
         # done
 
     def add_to_graph(self, graph: MPOGraph):
-        """Add terms from :attr:`coupling_terms` to an MPOGraph.
-
-        Parameters
-        ----------
-        graph : :class:`~tenpy.networks.mpo.MPOGraph`
-            The graph into which the terms from :attr:`coupling_terms` should be added.
-
-        """
         raise NotImplementedError  # TODO adapt MPOGraph first
         assert self.L == graph.L
         # structure of coupling terms:
@@ -759,16 +788,9 @@ class CouplingTerms(Hdf5Exportable):
             H_bond[j] = add_with_None_0(H_bond[j], strength * h.to_tensor())
         assert all(h.labels_are('p0', 'p1', 'p1*', 'p0*', planar=True))
 
-    def remove_zeros(self, tol_zero=1.0e-15):
-        """Remove entries close to 0 from :attr:`coupling_terms`.
-
-        Parameters
-        ----------
-        tol_zero : float
-            Entries in :attr:`coupling_terms` with `strength` < `tol_zero` are considered to be
-            zero and removed.
-
-        """
+    def remove_zeros(self, tol_zero: float = 1e-15, inplace: bool = True) -> CouplingTerms:
+        if not inplace:
+            return deepcopy(self).remove_zeros(tol_zero)
         # note: converting the dict.items() to list before iterating is needed,
         #       since we possibly pop entries off
         for i, terms_i in list(self.coupling_terms.items()):
@@ -780,7 +802,7 @@ class CouplingTerms(Hdf5Exportable):
                     terms_i.pop(n)
             if len(terms_i) == 0:
                 self.coupling_terms.pop(i)
-        return
+        return self
 
     def to_TermList(self):
         """Convert :attr:`onsite_terms` into a :class:`TermList`.
@@ -820,8 +842,7 @@ class CouplingTerms(Hdf5Exportable):
                     self_i_n[j] = self_i_n.get(j, 0.0) + other_strength
         return self
 
-    def _test_terms(self, sites: list[ct.Site], model: DefinesCouplings):
-        """Check the format of self.coupling_terms."""
+    def test_terms(self, sites: list[ct.Site], model: DefinesCouplings):
         L = self.L
         for i, name, j, strength in self:
             assert 0 <= i < L
@@ -831,7 +852,7 @@ class CouplingTerms(Hdf5Exportable):
         return
 
 
-class MultiCouplingTerms(Hdf5Exportable):
+class MultiCouplingTerms(Terms):
     """Coupling names, site indices and strengths representing general `M`-site coupling terms.
 
     Generalizes :class:`CouplingTerms` from `2`-site to `M`-site couplings.
@@ -897,7 +918,9 @@ class MultiCouplingTerms(Hdf5Exportable):
     def add_to_graph(self, graph: MPOGraph):
         raise NotImplementedError  # TODO adapt MPOGraph first / maybe do this via termlist only?
 
-    def remove_zeros(self, tol_zero=1e-15):
+    def remove_zeros(self, tol_zero: float = 1e-15, inplace: bool = True) -> MultiCouplingTerms:
+        if not inplace:
+            return deepcopy(self).remove_zeros(tol_zero)
         for i, terms_i in list(self.coupling_terms.items()):
             for n, terms_i_n in list(terms_i.items()):
                 _remove_zeros_recursive(terms_i_n, tol_zero)
@@ -905,7 +928,7 @@ class MultiCouplingTerms(Hdf5Exportable):
                     terms_i.pop(n)
             if len(terms_i) == 0:
                 self.coupling_terms.pop(i)
-        return
+        return self
 
     def to_TermList(self):
         raise NotImplementedError('Adapt TermList fist!')
@@ -928,7 +951,7 @@ class MultiCouplingTerms(Hdf5Exportable):
                 for ijkl, strength in _iter_dicts_recursive(self_i_n):
                     yield ijkl, n, strength
 
-    def _test_terms(self, sites: list[ct.Site], model: DefinesCouplings):
+    def test_terms(self, sites: list[ct.Site], model: DefinesCouplings):
         L = self.L
         for ijkl, name, strength in self:
             assert 0 <= ijkl[0] < L
@@ -975,7 +998,7 @@ def _iter_dicts_recursive(keys: list[int], dict_or_val: dict[int, complex] | com
         yield keys, val
 
 
-class ExponentiallyDecayingTerms(Hdf5Exportable):
+class ExponentiallyDecayingTerms(Terms):
     r"""Represent a sum of exponentially decaying (long-range) couplings.
 
     MPOs can represent translation invariant, exponentially decaying long-range terms of the
@@ -1108,19 +1131,11 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
 
         self.centered_terms.append((strength, lambda_, op_i, op_j, i, subsites, op_string))
 
-    def add_to_graph(self, graph, key='exp-decay'):
-        """Add terms from :attr:`onsite_terms` to an MPOGraph.
+    def add_to_graph(self, graph):
+        # TODO this was a param before, but signatures got unified.
+        #      is it ever used? maybe it can be a (class) attr?
+        key = 'exp-decay'
 
-        Parameters
-        ----------
-        graph : :class:`~tenpy.networks.mpo.MPOGraph`
-            The graph into which the terms from :attr:`exp_decaying_terms` should be added.
-        key : str
-            Key to distinguish from other `states` in the :class:`~tenpy.networks.mpo.MPOGraph`.
-            We find integers `key_nr` and use ``(key_nr, key)`` as `state` for the different
-            entries in :attr:`exp_decaying_terms`.
-
-        """
         assert self.L == graph.L
         # get set of states with `key` to find unique `key_nr` for each of the terms
         all_states = set()
@@ -1316,13 +1331,9 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
         return self
 
     def max_range(self):
-        """Maximum range of the couplings.
-
-        In this case ``np.inf``.
-        """
         return np.inf
 
-    def _test_terms(self, sites):
+    def test_terms(self, sites: list[ct.Site], model: DefinesCouplings):
         """Check the format of self.exp_decaying_terms."""
         for term in self.exp_decaying_terms:
             strength, lambda_, op_i, op_j, subsites, subsites_start, op_string = term
