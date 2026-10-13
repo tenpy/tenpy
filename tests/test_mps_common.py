@@ -89,14 +89,15 @@ def test_variational_compression_overlap():
     block, psi_large, psi_small, p_labels, d, _ = _compress_random_mps(L, chi_small, seed=1)
 
     got = MPSEnvironment(psi_small, psi_large).full_contraction(0).as_complex128()
-    # full_contraction includes bra.norm * ket.norm. The compression stores the discarded weight in
-    # `psi_small.norm` (= sqrt(1 - eps) < 1), while `get_theta` is normalized. Divide it out to
-    # compare with the normalized dense state below.
+    # full_contraction includes the factor bra.norm * ket.norm. `psi_large.norm` is 1, but the
+    # compression leaves `psi_small.norm = sqrt(1 - eps) < 1`, the norm of the kept (truncated)
+    # part of the state, where eps is the discarded weight. `get_theta` is normalized to 1, so
+    # divide `psi_small.norm` out to compare with the normalized dense state below.
     got = got / psi_small.norm
 
     theta = psi_small.get_theta(0, n=L)
     got_dense = theta.to_numpy(['vL'] + p_labels + ['vR']).reshape((d,) * L)
-    # `get_theta` and `block` both have unit norm, so this is the overlap of the normalized states
+    # `get_theta` and `block` both have unit norm (as dense arrays), so this is the overlap of the normalized states
     expected = np.vdot(got_dense.ravel(), block.ravel())
     npt.assert_allclose(got, expected, atol=1e-10)
 
