@@ -53,7 +53,9 @@ and bottom::
     |         |   |   |   |   |   |
     |         :   :   :   :   :   :
 
-We  use the following label convention::
+Diagrams are schematic: lines indicate the labels of the legs and which legs are contracted;
+arrow heads do not indicate the duality of the legs.
+We use the following label convention::
 
     |         q
     |         ^

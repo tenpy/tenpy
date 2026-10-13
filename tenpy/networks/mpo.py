@@ -1,6 +1,9 @@
 """Matrix product operator (MPO).
 
-An MPO is the generalization of an :class:`~tenpy.networks.mps.MPS` to operators. Graphically::
+An MPO is the generalization of an :class:`~tenpy.networks.mps.MPS` to operators.
+Diagrams are schematic: lines indicate the labels of the legs and which legs are contracted;
+arrow heads do not indicate the duality of the legs.
+Graphically::
 
     |      ^        ^        ^
     |      |        |        |
@@ -16,7 +19,7 @@ Valid boundary conditions of an MPO are the same as for an MPS
 canonical form. However, unlike for an MPS, this doesn't simplify calculations.
 Thus, an MPO has no `form`.)
 
-We use the following label convention for the `W` (schematic; lines/arrows only show contractions, not leg duality)::
+We use the following label convention for the `W`::
 
     |            p*
     |            ^
@@ -2874,6 +2877,9 @@ class MPOGraph(MPSGeometry):
 class MPOEnvironment(BaseEnvironment):
     """Stores partial contractions of :math:`<bra|H|ket>` for an MPO `H`.
 
+    Diagrams are schematic: lines indicate the labels of the legs and which legs are contracted;
+    arrow heads do not indicate the duality of the legs.
+
     The network for a contraction :math:`<bra|H|ket>` of an MPO `H` between two MPS looks like::
 
         |     .------>-M[0]-->-M[1]-->-M[2]-->- ...  ->--.
@@ -3176,7 +3182,9 @@ class MPOEnvironment(BaseEnvironment):
         """Calculate LP at given site from nearest available one (including `i`).
 
         The returned ``LP_i`` corresponds to the following contraction,
-        where the M's and the N's are in the 'A' form::
+        where the M's and the N's are in the 'A' form.
+        Diagrams are schematic: lines indicate the labels of the legs and which legs are contracted;
+        arrow heads do not indicate the duality of the legs.
 
             |     .-------M[0]--- ... --M[i-1]--->-   'vR'
             |     |       |             |
@@ -3207,7 +3215,9 @@ class MPOEnvironment(BaseEnvironment):
         """Calculate RP at given site from nearest available one (including `i`).
 
         The returned ``RP_i`` corresponds to the following contraction,
-        where the M's and the N's are in the 'B' form::
+        where the M's and the N's are in the 'B' form.
+        Diagrams are schematic: lines indicate the labels of the legs and which legs are contracted;
+        arrow heads do not indicate the duality of the legs.
 
             |     'vL'  ->---M[i+1]-- ... --M[L-1]----.
             |                |              |         |
@@ -3292,6 +3302,9 @@ class MPOEnvironment(BaseEnvironment):
 
 class MPOEnvironmentBuilder:
     r"""Construct boundary environments for periodic MPOEnvironments.
+
+    Diagrams are schematic: lines indicate the labels of the legs and which legs are contracted;
+    arrow heads do not indicate the duality of the legs.
 
     This class implement the construction scheme from :cite:`phien2012` to construct
     `LP[0]` and `RP[self.L-1]` for a periodic :class:`MPOEnvironment`::
