@@ -601,12 +601,15 @@ class Sweep(Algorithm):
             i_L = self.i0
             i_R = self.i0 + 1
         else:  # n == 1 and left moving
-            # `move_right is None` (only used for the last update of a TDVP sweep, with
-            # `update_LP_RP == [False, False]`) also ends up here, giving `i_L = i0 - 1`, which is
-            # -1 for i0 = 0. That is fine in practice: TDVP overrides `update_env` as a no-op for
-            # that update, and `free_no_longer_needed_envs` only computes the indices, but does not
-            # delete anything for `move_right is None`. The base-class `update_env` would, however,
-            # not be valid for a "non-moving" single-site update (it would call `del_RP(-1)`).
+            # `move_right is None` (only the last entry of the TDVP schedules, with
+            # `update_LP_RP == [False, False]`) also ends up here, giving i_L = -1 for i0 = 0.
+            # This index is never used: `SingleSiteTDVPEngine.update_local` skips the base
+            # `update_env` for i0 == 0 (`left_moving_update`), and `free_no_longer_needed_envs`
+            # deletes nothing for `None`. Otherwise `del_RP(-1)` would not raise, but wrap around
+            # (with a FutureWarning) and delete the right-most RP. `TwoSiteTDVPEngine` has n == 2,
+            # so it never gets here; it calls the base `update_env` even for the `None` update, which
+            # only deletes LP[1], RP[0] (both outdated after the update, not recomputed).
+            # NOTE: this path is untested (tests/test_tdvp.py is skipped).
             i_L = self.i0 - 1
             i_R = self.i0
         return i_L, i_R
