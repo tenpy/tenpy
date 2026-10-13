@@ -10,7 +10,7 @@ from numpy import testing as npt
 from scipy import linalg as spla
 
 from tenpy.algorithms import ExactDiag
-from tenpy.models.spins import SpinChain
+from tenpy.models.spins import DipolarSpinChain, SpinChain
 from tenpy.networks import mpo, mps
 from tenpy.networks.terms import CouplingTerms, OnsiteTerms, to_single_coupling
 
@@ -337,7 +337,7 @@ def test_MPO_hermitian():
     assert _is_hermitian_coupling(L, site, H)
 
 
-@pytest.mark.parametrize('L', [2, 4])
+@pytest.mark.parametrize('L', [2, 3, 4, 5])
 def test_MPO_addition(L):
     """Adding two MPOs gives the sum of the dense operators and keeps the IdL / IdR labels."""
     M1 = SpinChain(dict(L=L, Jx=1.0, Jy=1.0, Jz=1.1, hz=0.2, bc_MPS='finite', conserve=None))
@@ -368,12 +368,76 @@ def test_MPO_addition(L):
     npt.assert_allclose(dense(H12), dense(H2 + H1), atol=1e-12)
     # environments (which use IdL / IdR) work and give the sum of the energies
     sites = M1.lat.mps_sites()
-    psi = mps.MPS.from_product_state(sites, ['up', 'down'] * (L // 2), bc='finite', unit_cell_width=L)
+    psi = mps.MPS.from_product_state(sites, (['up', 'down'] * L)[:L], bc='finite', unit_cell_width=L)
     E = [mpo.MPOEnvironment(psi, H, psi).full_contraction(0) for H in (H1, H2, H12)]
     npt.assert_allclose(E[2], E[0] + E[1], atol=1e-12)
 
     # the sum can be added again, i.e. it is again in standard form
     npt.assert_allclose(dense(H12 + H1), 2 * dense(H1) + dense(H2), atol=1e-12)
+
+
+def _dense_H(H):
+    ED = ExactDiag.from_H_mpo(H)
+    ED.build_full_H_from_mpo()
+    return ED.full_H.to_numpy()
+
+
+@pytest.mark.parametrize('backend', ['fusion_tree', 'abelian', 'no_symmetry'])
+@pytest.mark.parametrize('conserve', [None, 'Sz', 'best'])
+def test_MPO_addition_symmetric(conserve, backend, L=4):
+    """Adding MPOs with symmetries (Sz conserved since Jx = Jy) gives the sum of the dense operators."""
+    M1 = SpinChain(dict(L=L, Jx=1.0, Jy=1.0, Jz=1.1, hz=0.2, bc_MPS='finite', conserve=conserve))
+    if M1.H_MPO._W[0].backend != ct.get_backend(backend):
+        pytest.skip('Can not control model backend yet')
+    M2 = SpinChain(dict(L=L, Jx=0.4, Jy=0.4, Jz=-0.7, hz=0.5, bc_MPS='finite', conserve=conserve))
+    H1, H2 = M1.H_MPO, M2.H_MPO
+    H12 = H1 + H2
+    H12.test_sanity()
+    npt.assert_allclose(_dense_H(H12), _dense_H(H1) + _dense_H(H2), atol=1e-12)
+
+
+def test_MPO_addition_long_range(L=5):
+    """Adding MPOs with three- and four-site (i.e. longer range) terms."""
+
+    class FieldDipolarSpinChain(DipolarSpinChain):
+        # a field is needed to have the IdR entries on the first bond, see the docstring of MPO.__add__
+        def init_terms(self, model_params):
+            super().init_terms(model_params)
+            site = self.lat.unit_cell[0]
+            for i in range(self.lat.N_sites):
+                self.add_coupling(spin_field_coupling([site], hz=0.1 * (i + 1)), [i])
+
+    pars = dict(L=L, bc_MPS='finite', conserve=None)
+    H1 = FieldDipolarSpinChain(dict(J3=1.0, J4=0.3, **pars)).H_MPO
+    H2 = FieldDipolarSpinChain(dict(J3=-0.4, J4=0.8, **pars)).H_MPO
+    H12 = H1 + H2
+    H12.test_sanity()
+    npt.assert_allclose(_dense_H(H12), _dense_H(H1) + _dense_H(H2), atol=1e-12)
+    # also mixed with a nearest-neighbor chain
+    H3 = SpinChain(dict(Jx=1.0, Jy=0.5, Jz=0.2, hz=0.3, S=1, **pars)).H_MPO
+    npt.assert_allclose(_dense_H(H1 + H3), _dense_H(H1) + _dense_H(H3), atol=1e-12)
+
+
+def test_MPO_addition_errors():
+    pars = dict(Jx=1.0, Jy=1.0, Jz=1.0, bc_MPS='finite', conserve=None)
+    H4 = SpinChain(dict(L=4, hz=0.2, **pars)).H_MPO
+    H3 = SpinChain(dict(L=3, hz=0.2, **pars)).H_MPO
+    with pytest.raises(ValueError, match='different length'):
+        _ = H4 + H3
+    H4_inf = H4.copy()
+    H4_inf.bc = 'infinite'
+    with pytest.raises(ValueError, match='different bc'):
+        _ = H4 + H4_inf
+    H4_hc = H4.copy()
+    H4_hc.explicit_plus_hc = True
+    with pytest.raises(ValueError, match='explicit_plus_hc'):
+        _ = H4 + H4_hc
+    # without field, the first tensor has no 'IdR' column
+    H4_nofield = SpinChain(dict(L=4, hz=0.0, **pars)).H_MPO
+    with pytest.raises(NotImplementedError, match='IdR.*676'):
+        _ = H4 + H4_nofield
+    with pytest.raises(NotImplementedError, match='IdR.*676'):
+        _ = H4_nofield + H4
 
 
 @pytest.mark.parametrize('sites', [None, [0], [1], [0, 1, 2, 3], [2, 3], [3, 2]])

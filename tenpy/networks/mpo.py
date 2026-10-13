@@ -1902,30 +1902,81 @@ class MPO(MPSGeometry):
     def __add__(self, other):
         """Return an MPO representing `self + other`.
 
-        Requires both `self` and `other` to be in standard sum form with `IdL` and `IdR` being set
-        as labels of the virtual legs. The result keeps these labels. Currently only supports
-        ``L > 1`` for finite boundary conditions (same restriction as :meth:`make_U_I`).
+        This is a naive, block-wise addition without any compression! The virtual bond dimension
+        of the result is the sum of those of `self` and `other`, minus the shared ``IdL`` / ``IdR``
+        entries.
 
-        This is a naive, block-wise addition without any compression!
+        Both `self` and `other` need to be in the standard upper-block-triangular sum form, as
+        generated e.g. by :class:`MPOGraph` / the models, where *every* virtual bond carries both
+        ``'IdL'`` and ``'IdR'`` summand labels (at the boundaries of a finite MPO only the
+        respective existing one, i.e. ``IdL`` on the right of the first and ``IdR`` on the left of
+        the last tensor). The result is again in this form and keeps these labels, such that it
+        can be added again, used in :class:`MPOEnvironment`, etc.
+
+        Limitations (see also https://github.com/tenpy/tenpy/issues/676):
+
+        - The general case, where ``IdL`` / ``IdR`` are not (both) known on every bond, is not
+          implemented. In particular this excludes MPOs with vanishing ``IdR`` or ``IdL`` columns,
+          e.g. the Hamiltonian of a finite spin chain with only nearest-neighbor terms and no field
+          (such that the first tensor has no ``IdR`` column), and MPOs with only on-site terms
+          (without any off-identity block on the bonds). Raises a :class:`NotImplementedError`.
+        - Finite MPOs need ``L > 1`` (same restriction as :meth:`make_U_I`).
+        - ``'segment'`` boundary conditions are not supported.
+        - For ``'infinite'`` bc, only the bulk tensors are handled; this is not covered by the
+          model-based tests yet.
 
         Parameters
         ----------
         other : :class:`MPO`
-            MPO to be added to `self`.
+            MPO to be added to `self`. Needs the same boundary conditions, length and
+            ``unit_cell_width``, as well as the same ``explicit_plus_hc`` flag as `self`.
 
         Returns
         -------
         sum_mpo : :class:`MPO`
             The sum `self + other`.
 
+        Raises
+        ------
+        ValueError
+            If the MPOs have different ``explicit_plus_hc``, ``bc``, ``L`` or ``unit_cell_width``,
+            or if `self` is a finite MPO with ``L == 1``.
+        NotImplementedError
+            For ``'segment'`` bc or if the ``'IdL'`` / ``'IdR'`` labels are missing on a bond.
+
         """
+        if not isinstance(other, MPO):
+            return NotImplemented
         if self.explicit_plus_hc != other.explicit_plus_hc:
             raise ValueError('Can not add MPOs with different explicit_plus_hc flags')
-
+        if self.bc != other.bc:
+            raise ValueError(f'Can not add MPOs with different bc: {self.bc!r} and {other.bc!r}')
+        if self.bc == 'segment':
+            raise NotImplementedError("Adding MPOs with 'segment' bc is not supported.")
+        if other.L != self.L:
+            raise ValueError(f'Can not add MPOs with different length L: {self.L} and {other.L}')
+        if self.unit_cell_width != other.unit_cell_width:
+            raise ValueError(
+                f'Can not add MPOs with different unit_cell_width: {self.unit_cell_width} and {other.unit_cell_width}'
+            )
         L = self.L
-        assert self.bc == other.bc
-        assert self.unit_cell_width == other.unit_cell_width
-        assert other.L == L
+        if self.finite and L < 2:
+            raise ValueError('Adding finite MPOs is only implemented for L > 1.')
+        for name, mpo in [('self', self), ('other', other)]:
+            for i, W in enumerate(mpo._W):
+                for leg, boundary in [('wL', self.finite and i == 0), ('wR', self.finite and i == L - 1)]:
+                    if boundary:
+                        continue
+                    labels = W.get_leg(leg).summand_labels
+                    has_ids = 'IdL' in labels and 'IdR' in labels
+                    has_others = any(label not in ['IdL', 'IdR'] for label in labels)
+                    if not (has_ids and has_others):
+                        raise NotImplementedError(
+                            f'Can not add MPOs: the {leg} leg of W[{i}] of `{name}` has summand labels {labels}, but '
+                            "adding requires both 'IdL' and 'IdR' as well as at least one further summand on every "
+                            'virtual bond. The general case without these is not implemented yet, '
+                            'see https://github.com/tenpy/tenpy/issues/676.'
+                        )
 
         Ws = []
         for i in range(L):
