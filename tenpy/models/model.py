@@ -1137,7 +1137,7 @@ class CouplingModel(Model):
         if category is None:
             category = f'{op1}_i {op2}_j'
         coupling = self._coupling_from_opnames([site1, site2], [op1, op2], name=category)
-        mps_i, mps_j, strength_vals = self.lat.possible_couplings(u1, u2, dx, strength)
+        mps_i, mps_j, strength_vals = self.lat.possible_couplings_strengths(u1, u2, dx, strength)
         for i, j, current_strength in zip(mps_i, mps_j, strength_vals):
             self.add_coupling(coupling, [int(i), int(j)], strength=current_strength, category=category)
         if plus_hc:
@@ -1402,7 +1402,7 @@ class CouplingModel(Model):
             raise ValueError("Coupling shouldn't be purely onsite!")
 
         # prepare: figure out the necessary mps indices
-        mps_ijkl, strength_vals = self.lat.possible_multi_couplings(ops, strength)
+        mps_ijkl, strength_vals = self.lat.possible_multi_couplings_strengths(all_dxs, all_us, strength)
         if category is None:
             category = ' '.join(['{op}_{i}'.format(op=op, i=chr(ord('i') + m)) for m, op in enumerate(all_ops)])
         coupling = self._coupling_from_opnames(sites_per_op, all_ops, name=category)

@@ -1319,16 +1319,15 @@ class Lattice:
             shift_strength[a] = min_dx  # note: can be positive!
         return tuple(shape), np.array(shift_strength)
 
-    def possible_multi_couplings(
-        self, pos: list[tuple[LatticeVector, int]]
-    ) -> tuple[IntArray2D, IntArray2D, tuple[int, ...]]:
+    def possible_multi_couplings(self, dx: IntArray2D, u: IntArray1D) -> tuple[IntArray2D, IntArray2D, tuple[int, ...]]:
         """Generalization of :meth:`possible_couplings` to couplings with more than 2 sites.
 
         Parameters
         ----------
-        pos : list of ``(dx, u)``
-            See :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling`.
-            TODO copy explicitly?
+        dx: ``(M, dim)`` array-like
+            For each site the ``M``-site coupling acts on, a lattice translation vector.
+        u: ``(M,)`` array-like
+            For each site the ``M``-site coupling acts on, a unit-cell index.
 
         Returns
         -------
@@ -1346,16 +1345,17 @@ class Lattice:
 
         """
         D = self.dim
-        Nops = len(pos)
+        M = len(dx)
+        assert len(u) == M
         Ls = np.array(self.Ls)
         # make 3D arrays ["iteration over lattice", "operator", "spatial direction"]
         # recall numpy broadcasting: 1D equivalent to [np.newaxis, np.newaxis, :]
-        dx = np.array([op_dx for op_dx, op_u in pos], dtype=np.int_).reshape([1, Nops, D])
-        u = np.array([op_u for op_dx, op_u in pos], dtype=np.int_).reshape([1, Nops, 1])
+        dx = np.asarray(dx, int).reshape([1, M, D])
+        u = np.asarray(dx, int).reshape([1, M, 1])
         coupling_shape, shift_lat_indices = self.multi_coupling_shape(dx[0, :, :])
         if any([s == 0 for s in coupling_shape]):
-            return np.zeros([0, len(pos)], int), np.zeros([0, self.dim], int), coupling_shape
-        lat_indices = np.indices(coupling_shape).reshape([1, self.dim, -1]).transpose([2, 0, 1])
+            return np.zeros([0, M], int), np.zeros([0, D], int), coupling_shape
+        lat_indices = np.indices(coupling_shape).reshape([1, D, -1]).transpose([2, 0, 1])
         lat_ijkl_shifted = lat_indices + (dx - shift_lat_indices)
         lat_ijkl = np.mod(lat_ijkl_shifted, Ls)
         if self.bc_shift is not None:
@@ -1377,15 +1377,16 @@ class Lattice:
         return mps_ijkl, lat_indices, coupling_shape
 
     def possible_multi_couplings_strengths(
-        self, pos: list[tuple[LatticeVector, int]], strength: ArrayLike
+        self, dx: IntArray2D, u: IntArray1D, strength: ArrayLike
     ) -> tuple[IntArray2D, FloatComplexArray1D]:
         """Generalization of :meth:`possible_couplings_strengths` to multi couplings.
 
         Parameters
         ----------
-        pos : list of ``(dx, u)``
-            See :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling`.
-            TODO copy explicitly?
+        dx: ``(M, dim)`` array-like
+            For each site the ``M``-site coupling acts on, a lattice translation vector.
+        u: ``(M,)`` array-like
+            For each site the ``M``-site coupling acts on, a unit-cell index.
         strength : array-like
             Strength input, like for :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling`.
 
@@ -1403,7 +1404,7 @@ class Lattice:
             Couplings where ``strength_vals == 0.`` are filtered out.
 
         """
-        mps_ijkl, lat_indices, coupling_shape = self.possible_multi_couplings(pos)
+        mps_ijkl, lat_indices, coupling_shape = self.possible_multi_couplings(dx, u)
         if len(mps_ijkl) == 0:
             return mps_ijkl, np.zeros([0], np.array(strength).dtype)
         strength = to_array(strength, coupling_shape)  # tile to correct shape
@@ -2504,13 +2505,13 @@ class HelicalLattice(Lattice):
         keep = np.min([mps_i, mps_j], axis=0) < self.N_sites
         return mps_i[keep], mps_j[keep], strength_vals[keep]
 
-    def possible_multi_couplings(self, pos):
-        mps_ijkl, lat_inds, coupl_shape = self.regular_lattice.possible_multi_couplings(pos)
+    def possible_multi_couplings(self, dx, u):
+        mps_ijkl, lat_inds, coupl_shape = self.regular_lattice.possible_multi_couplings(dx, u)
         keep = np.min(mps_ijkl, axis=1) < self.N_sites
         return mps_ijkl[keep, :], lat_inds[keep, :], coupl_shape
 
-    def possible_multi_couplings_strengths(self, pos, strength):
-        mps_ijkl, strength_vals = self.regular_lattice.possible_multi_couplings(pos, strength)
+    def possible_multi_couplings_strengths(self, dx, u, strength):
+        mps_ijkl, strength_vals = self.regular_lattice.possible_multi_couplings(dx, u, strength)
         # we can actually check that everything is translation invariant!
         self._check_transl_invar_strength(mps_ijkl, strength_vals)
         keep = np.min(mps_ijkl, axis=1) < self.N_sites
