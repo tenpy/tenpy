@@ -7,7 +7,9 @@ An MPS looks roughly like this::
     |     ┗━━━┯━━━┛    ┗━━━┯━━━┛    ┗━━━┯━━━┛
     |         │            │            │
 
-We use the following label convention for the `B` (where arrows indicate `qconj`)::
+Diagrams are schematic: lines indicate the labels of the legs and which legs are contracted;
+arrow heads do not indicate the duality of the legs.
+We use the following label convention for the `B`::
 
     |        ┏━━━━━━━┓
     |   vL ──┨   B   ┠── vR
@@ -7636,7 +7638,9 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         """Calculate LP at given site from nearest available one.
 
         The returned ``LP_i`` corresponds to the following contraction,
-        where the M's and the N's are in the 'A' form::
+        where the M's and the N's are in the 'A' form.
+        Diagrams are schematic: lines indicate the labels of the legs and which legs are contracted;
+        arrow heads do not indicate the duality of the legs.
 
             |     .-------M[0]--- ... --M[i-1]--->-   'vR'
             |     |       |             |
@@ -7683,7 +7687,9 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         """Calculate RP at given site from nearest available one.
 
         The returned ``RP_i`` corresponds to the following contraction,
-        where the M's and the N's are in the 'B' form::
+        where the M's and the N's are in the 'B' form.
+        Diagrams are schematic: lines indicate the labels of the legs and which legs are contracted;
+        arrow heads do not indicate the duality of the legs.
 
             |     'vL'  ->---M[i+1]-- ... --M[L-1]----.
             |                |              |         |
@@ -8046,6 +8052,9 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
 class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
     """Class storing partial contractions between two different MPS and providing expectation values.
 
+    Diagrams are schematic: lines indicate the labels of the legs and which legs are contracted;
+    arrow heads do not indicate the duality of the legs.
+
     The network for a contraction :math:`<bra|Op|ket>` of a local operator `Op`, say exemplary
     at sites `i, i+1` looks like::
 
@@ -8060,7 +8069,7 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
     This class stores the partial contractions `LP` and `RP` coming from the left and right up to
     each bond, allowing efficient calculations of expectation values, correlation functions etc.
 
-    We use the following label convention (where arrows indicate `qconj`)::
+    We use the following label convention::
 
         |    .-->- vR           vL ->-.
         |    |                        |
@@ -8137,6 +8146,8 @@ class TransferMatrix(ct.tensors.sparse.LinearOperator):  # TODO: adapt for Linea
         |    ---N[j]*--N[j+1]* ... --N[j+L]*--
 
     Here the `N` denotes the matrices of the bra and `M` the ones of the ket, respectively.
+    Diagrams are schematic: lines indicate the labels of the legs and which legs are contracted;
+    arrow heads do not indicate the duality of the legs.
     To view it as a `matrix`, we combine the left and right indices to pipes::
 
         |  (vL.vL*) ->-TM->- (vR.vR*)   acting on  (vL.vL*) ->-RP
