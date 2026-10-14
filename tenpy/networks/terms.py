@@ -880,6 +880,9 @@ class MultiCouplingTerms(Terms):
         self.coupling_terms: dict[int, dict[str, dict[int, Any]]] = dict()
         self._max_range = 0
 
+    def max_range(self):
+        return self._max_range
+
     def add_multi_coupling_term(self, strength, ijkl, coupling_name: str):
         """Add a multi-site coupling term on given MPS sites.
 
