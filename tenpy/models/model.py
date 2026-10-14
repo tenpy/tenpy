@@ -20,8 +20,8 @@ from numpy.typing import ArrayLike
 
 from ..networks import MPO, MPOGraph
 from ..networks.mpo import partition_W
-from ..networks.terms import CouplingTerms, MultiCouplingTerms, OnsiteTerms, Terms
-from ..tools import asConfig, to_array
+from ..networks.terms import CouplingTerms, ExponentiallyDecayingTerms, MultiCouplingTerms, OnsiteTerms, Terms
+from ..tools import to_array
 from .lattice import Lattice
 
 __all__ = [
@@ -35,7 +35,22 @@ __all__ = [
 ]
 
 
-Model = NearestNeighborModel = object()  # TODO placeholders to make imports ok for now
+# TODO placeholders
+class Model:
+    pass
+
+
+class NearestNeighborModel(Model):
+    pass
+
+
+class MPOModel(Model):
+    pass
+
+
+class CouplingMPOModel(MPOModel):
+    def __init__(self, params):
+        self.params = params
 
 
 class EvolutionModel(metaclass=ABCMeta):
@@ -58,12 +73,14 @@ class EvolutionModel(metaclass=ABCMeta):
 
     """
 
-    def __init__(self, lattice: Lattice, model_params):
+    def __init__(self, lattice: Lattice):
         self.lattice = lattice
         self.symmetry = lattice.symmetry
         self.backend = lattice.backend
         self.bc_MPS = lattice.bc_MPS
-        self.model_params = asConfig(model_params, type(self).__name__)
+
+    def test_sanity(self):
+        self.lattice.test_sanity()
 
     @property
     def finite(self):
@@ -109,6 +126,9 @@ class RandomUnitaryEvolution(EvolutionModel):
     def __init__(self, lattice, model_params):
         raise NotImplementedError
 
+    def test_sanity(self):
+        return super().test_sanity()
+
 
 class HamiltonianModel(EvolutionModel, metaclass=ABCMeta):
     """Base class for models that define a Hamiltonian.
@@ -116,8 +136,8 @@ class HamiltonianModel(EvolutionModel, metaclass=ABCMeta):
     The Hamiltonian is defined in subclasses via :meth:`get_H_bond` and/or :meth:`get_H_MPO`.
     """
 
-    def __init__(self, lattice: Lattice, model_params):
-        EvolutionModel.__init__(self, lattice=lattice, model_params=model_params)
+    def __init__(self, lattice: Lattice):
+        EvolutionModel.__init__(self, lattice=lattice)
 
     @abstractmethod
     def get_H_bond(self) -> list[ct.Tensor | None]:
@@ -145,6 +165,10 @@ class HamiltonianModel(EvolutionModel, metaclass=ABCMeta):
         #      -> make sure to use invalidate_caches!
         raise NotImplementedError
 
+    def get_U_MPO(self, t, dt):
+        # FIXME read approximation from params?
+        return self.get_H_MPO().make_U(dt, approximation='II')
+
 
 class HamiltonianMPOModel(HamiltonianModel):
     """A model where the Hamiltonian is defined directly in terms of an MPO.
@@ -159,6 +183,10 @@ class HamiltonianMPOModel(HamiltonianModel):
         self._H_MPO = H_MPO
         self._H_bond = None
         HamiltonianModel.__init__(self, lattice=lattice)
+
+    def test_sanity(self):
+        self._H_MPO.test_sanity()
+        return super().test_sanity()
 
     def invalidate_caches(self):
         self._H_bond = None
@@ -176,24 +204,273 @@ class HamiltonianMPOModel(HamiltonianModel):
         raise NotImplementedError('Can not exponentiate generic MPOs.')
 
 
+class CouplingDefinition(metaclass=ABCMeta):
+    """FIXME"""
+
+    def __init__(
+        self,
+        backend: ct.TensorBackend,
+        symmetry: ct.Symmetry,
+        coupling_names: Sequence[str] = [],
+        num_sites: dict[str, int] = {},
+        hc_map: dict[str, str] = {},
+    ):
+        self.backend = backend
+        self.symmetry = symmetry
+        self.coupling_names = coupling_names = set(coupling_names)
+        self.num_sites = num_sites.copy()
+        self.hc_map = hc_map.copy()
+
+    def test_sanity(self):
+        assert set(self.num_sites.keys()) == set(self.hc_map.keys()) == self.coupling_names
+        assert set(self.hc_map.values()).issubset(self.coupling_names)
+        for op, hc in self.hc_map.items():
+            assert self.hc_map[hc] == op
+        # FIXME in tests: systematically check that the hc is correct
+
+    @abstractmethod
+    def decompose(self, name: str, sites: Sequence[ct.Site]) -> list[tuple[complex, list[ct.SymmetricTensor]]]:
+        """FIXME"""
+        ...
+
+    @abstractmethod
+    def permute(self, name: str, perm: Sequence[int]) -> dict[str, float | complex]: ...
+
+    @abstractmethod
+    def get_coupling(self, name: str, sites: Sequence[ct.Site]) -> ct.Coupling: ...
+
+    def test_valid(self, name: str, sites: Sequence[ct.Site]):
+        """FIXME"""
+        if name not in self.coupling_names:
+            raise ValueError(f'Unknonwn coupling name: {name}')
+
+
+class OnsiteCouplingDefinition(CouplingDefinition):
+    """FIXME"""
+
+    def __init__(self, sites: Sequence[ct.Site], backend: ct.TensorBackend, symmetry: ct.Symmetry):
+        self.sites = sites  # FIXME deal with duplicates?
+        hc_map = {}
+        for s in sites:
+            for name in s.onsite_operators:
+                # FIXME should add hc opname mechanism to cyten.Site!
+                hc = name
+                assert hc_map.get(name, hc) == hc
+                hc_map[name] = hc
+        num_sites = {k: 1 for k in hc_map}
+        super().__init__(backend, symmetry, coupling_names=hc_map.keys(), num_sites=num_sites, hc_map=hc_map)
+
+    def decompose(self, name, sites):
+        return [(1.0, self.get_coupling(name, sites).factorization)]
+
+    def permute(self, name, perm):
+        return {name: 1.0}
+
+    def get_coupling(self, name, sites):
+        assert len(sites) == 1
+        h = sites[0].get_op(name)
+        return ct.Coupling.from_tensor(h, sites, name=name)
+
+    def test_valid(self, name, sites):
+        assert len(sites) == 1
+        assert name in sites[0].onsite_operators
+        return super().test_valid(name, sites)
+
+
+# FIXME move
+# FIXME what is a good place to document the meaning? docstring? or dynamically via method?
+class SpinCouplingDefinition(CouplingDefinition):
+    """FIXME"""
+
+    def __init__(self, backend: ct.TensorBackend, symmetry: ct.Symmetry):
+        tmp = {
+            'Sx.Sx': (2, 'Sx.Sx'),
+            'Sy.Sy': (2, 'Sy.Sy'),
+            'Sz.Sz': (2, 'Sz.Sz'),
+            'S.S': (2, 'S.S'),
+            'Sp.Sm': (2, 'Sm.Sp'),
+            'Sm.Sp': (2, 'Sp.Sm'),
+            'chiral3spin': (3, 'chiral3spin'),
+        }
+        num_sites = {k: num for k, (num, hc) in tmp.items()}
+        hc_map = {k: hc for k, (num, hc) in tmp.items()}
+        super().__init__(backend, symmetry, coupling_names=tmp.keys(), num_sites=num_sites, hc_map=hc_map)
+
+    def get_spin_conserve(self, sites: list[ct.Site]) -> Literal['SU(2)', 'Sz', 'parity', None]:
+        if not isinstance(sites[0], ct.models.SpinSite):
+            raise NotImplementedError
+        res = sites[0].conserve
+        if any(s.conserve != res for s in sites[1:]):
+            raise ct.SymmetryError('Inconsistent conserve for sites!')
+        return res
+
+    def decompose(self, name, sites):
+        conserve = self.get_spin_conserve(sites)
+        if name in ['Sx.Sx', 'Sy.Sy', 'Sz.Sz', 'Sp.Sm', 'Sm.Sp']:
+            if conserve == 'SU(2)':
+                raise ct.SymmetryError(f'Coupling not SU(2) symmetric: {name}')
+            return {name: +1}
+        if name == 'S.S':
+            if conserve == 'SU(2)':
+                return {name: +1}
+            return {'Sx.Sx': 1, 'Sy.Sy': 1, 'Sz.Sz': 1}
+        if name == 'chiral3spin':
+            raise NotImplementedError
+        raise ValueError(f'Unknown name: {name}')
+
+    def get_coupling(self, name, sites):
+        if name == 'Sx.Sx':
+            return ct.models.spin_spin_coupling(sites, Jx=1, backend=self.backend)
+        if name == 'Sy.Sy':
+            return ct.models.spin_spin_coupling(sites, Jy=1, backend=self.backend)
+        if name == 'Sz.Sz':
+            return ct.models.spin_spin_coupling(sites, Jz=1, backend=self.backend)
+        if name == 'S.S':
+            return ct.models.spin_spin_coupling(sites, Jx=1, Jy=1, Jz=1, backend=self.backend)
+        if name == 'Sp.Sm':
+            raise NotImplementedError
+        if name == 'Sm.Sp':
+            raise NotImplementedError
+        if name == 'chiral3spin':
+            raise NotImplementedError
+        raise ValueError(f'Unknown name: {name}')
+
+    def permute(self, name, perm):
+        if name in ['Sx.Sx', 'Sy.Sy', 'Sz.Sz', 'S.S']:
+            return {name: 1}
+        perm = np.asarray(perm, int)
+        if np.all(perm == np.arange(len(perm))):
+            return {name: 1}
+        if name == 'Sm.Sp':
+            return {'Sp.Sm': 1}  # trivial permutation already excluded -> must be swap
+        if name == 'Sp.Sm':
+            return {'Sm.Sp': 1}  # trivial permutation already excluded -> must be swap
+        if name == 'chiral3spin':
+            if np.all(perm == np.array([1, 2, 0])) or np.all(perm == np.array([2, 0, 1])):
+                return {name: +1}
+            else:
+                return {name: -1}
+        raise ValueError(f'Unknown name: {name}')
+
+    def test_valid(self, name, sites):
+        super().test_valid(name, sites)
+        _ = self.get_spin_conserve(sites)  # <- does all checks on sites (are spin, are consistent)
+
+
 class CouplingModel(HamiltonianModel):
     """A model, which defines a Hamiltonian in terms of couplings.
 
     TODO elaborate
     - statefulness, point to methods
+
+    Parameters
+    ----------
+    lattice
+        TODO
+    coupling_definitions
+        TODO
+        Note that :class:`OnsiteCouplingDefinition` is automatically added.
+    explicit_plus_hc
+        TODO
+
+    Attributes
+    ----------
+    explicit_plus_hc : bool
+        If `True`, `self` represents the terms explicitly stored in e.g. :attr:`onsite_terms`
+        and :attr:`coupling_terms` and so on, *plus* their hermitian conjugate added.
+        The flag will be carried on to the MPO, which will have a reduced bond dimension if
+        ``self.add_*(..., plus_hc=True)`` was used.
+        Note that :meth:`add_onsite_operator`, :meth:`add_two_site_coupling`, :meth:`add_multi_site_coupling`
+        and :meth:`add_exponentially_decaying_coupling` respect this flag, ensuring that the
+        *represented* Hamiltonian is independent of the `explicit_plus_hc` flag.
+
     """
 
-    def __init__(self, lattice: Lattice):
-        self._H_MPO = None
+    def __init__(
+        self,
+        lattice: Lattice,
+        coupling_definitions: Sequence[CouplingDefinition | type[CouplingDefinition]],
+        explicit_plus_hc: bool = False,
+    ):
+        self._H_MPO: MPO | None = None
         self._L_mps = L = len(lattice.mps_sites())
         self.onsite_terms = OnsiteTerms(L)
         self.coupling_terms = CouplingTerms(L)
         self.multi_coupling_terms = MultiCouplingTerms(L)
-        self.exp_decaying_terms = None  # TODO port class in terms.py first
+        self.exp_decaying_terms = ExponentiallyDecayingTerms(L)
+        self.explicit_plus_hc = explicit_plus_hc
+        onsite_definitions = OnsiteCouplingDefinition(
+            sites=lattice.unit_cell, backend=lattice.backend, symmetry=lattice.symmetry
+        )
+        self.coupling_definitions = [
+            d if isinstance(d, CouplingDefinition) else d(backend=lattice.backend, symmetry=lattice.symmetry)
+            for d in [onsite_definitions, *coupling_definitions]
+        ]
         HamiltonianModel.__init__(self, lattice=lattice)
+
+    def test_sanity(self):
+        if self._H_MPO is not None:
+            self._H_MPO.test_sanity()
+        sites = self.lattice.mps_sites()
+        self.onsite_terms.test_terms(sites, self)
+        self.coupling_terms.test_terms(sites, self)
+        self.multi_coupling_terms.test_terms(sites, self)
+        self.exp_decaying_terms.test_terms(sites, self)
+
+        # check coupling_definitions
+        seen_names = []
+        for d in self.coupling_definitions:
+            d.test_sanity()
+            assert all(n not in seen_names for n in d.coupling_names)
+            seen_names.extend(d.coupling_names)
+
+        return super().test_sanity()
+
+    def coupling_num_sites(self, coupling_name: str) -> int:
+        for d in self.coupling_definitions:
+            if coupling_name not in d.coupling_names:
+                continue
+            return d.num_sites[coupling_name]
+        raise ValueError(f'Unknown coupling name {coupling_name}')
+
+    def decompose_coupling(
+        self, coupling_name: str, sites: Sequence[ct.Site]
+    ) -> list[tuple[complex, list[ct.SymmetricTensor]]]:
+        for d in self.coupling_definitions:
+            if coupling_name not in d.coupling_names:
+                continue
+            return d.decompose(coupling_name, sites)
+        raise ValueError(f'Unknown coupling name {coupling_name}')
+
+    def permute_coupling(self, coupling_name: str, perm: Sequence[int]) -> dict[str, float | complex]:
+        for d in self.coupling_definitions:
+            if coupling_name not in d.coupling_names:
+                continue
+            return d.permute(coupling_name, perm)
+        raise ValueError(f'Unknown coupling name {coupling_name}')
+
+    def _get_switch_LR(self, name: str, idcs: Sequence[int]) -> int:
+        assert self.coupling_n_sites(name) == len(idcs)
+        return len(idcs) - len(idcs) // 2
+
+    def get_coupling(self, coupling_name: str, sites: Sequence[ct.Site]) -> ct.Coupling:
+        for d in self.coupling_definitions:
+            if coupling_name not in d.coupling_names:
+                continue
+            return d.get_coupling(coupling_name, sites)
+        raise ValueError(f'Unknown coupling name {coupling_name}')
+
+    def test_coupling(self, coupling_name: str, sites: Sequence[ct.Site]):
+        """FIXME"""
+        for d in self.coupling_definitions:
+            if coupling_name not in d.coupling_names:
+                continue
+            return d.test_valid(coupling_name, sites)
+        raise ValueError(f'Unknown coupling name {coupling_name}')
 
     def invalidate_caches(self):
         self._H_MPO = None
+        self._H_bond = None
         super().invalidate_caches()
 
     def get_nonzero_terms(self, tol_zero=1e-15) -> list[Terms]:
@@ -201,7 +478,7 @@ class CouplingModel(HamiltonianModel):
             self.onsite_terms.remove_zeros(tol_zero),
             self.coupling_terms.remove_zeros(tol_zero),
             self.multi_coupling_terms.remove_zeros(tol_zero),
-            self.exp_decaying_terms.remove_zeros(tol_zero),
+            # self.exp_decaying_terms.remove_zeros(tol_zero),  # FIXME reactivate
         ]
 
     def get_H_MPO(self, tol_zero=1e-15):
@@ -218,6 +495,11 @@ class CouplingModel(HamiltonianModel):
             # TODO optionally optimize basis here?
             self._H_MPO = graph.build_MPO(max_range=max_range, explicit_plus_hc=self.explicit_plus_hc)
         return self._H_MPO
+
+    def get_H_bond(self):
+        if self._H_bond is None:
+            self._H_bond = calc_H_bond_from_MPO(self._H_MPO)
+        return self._H_bond
 
     def add_onsite_operator(
         self,
@@ -260,6 +542,8 @@ class CouplingModel(HamiltonianModel):
             * A single ``int`` specifies a single site.
             * ``'sum_over'`` adds an onsite term to all of them. Note that `strength` applies to
               all of them the same. For different strengths per `u`, call this method multiple times.
+        plus_hc : bool
+            If `True`, the hermitian conjugate of the terms is added automatically.
 
         See Also
         --------
@@ -272,8 +556,15 @@ class CouplingModel(HamiltonianModel):
             return
         u = ct.tools.to_valid_idx(u, len(self.lattice.unit_cell))
 
+        if self.explicit_plus_hc:
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength = strength / 2  # avoid double-counting this term: add the h.c. explicitly later on
+
         if x == 'sum_over':
-            strength = to_array(strength, self.lat.Ls)
+            strength = to_array(strength, self.lattice.Ls)
+            # FIXME generally purge ``.lat
             for i, i_lat in zip(*self.lattice.mps_lat_idx_fix_u(u)):
                 self.onsite_terms.add_onsite_term(strength[*i_lat], i, op)
         else:
@@ -282,6 +573,10 @@ class CouplingModel(HamiltonianModel):
             x = np.asarray(x, int).reshape(-1)
             i = self.lattice.lat2mps_idx([*x, u])
             self.onsite_terms.add_onsite_term(strength, i, op)
+
+        if plus_hc:
+            hc_op = self.lattice.unit_cell[u].get_hc_op_name(op)
+            self.add_onsite_operator(np.conj(strength), hc_op, x=x, u=u, plus_hc=False)
 
     def add_two_site_coupling(
         self,
@@ -333,6 +628,8 @@ class CouplingModel(HamiltonianModel):
               term for all possible combinations ``u1, u2``.
               Note that `strength` applies to all equally. Use multiple calls for `u`-dependent strength.
             * A single ``int`` specifies a single site.
+        plus_hc : bool
+            If `True`, the hermitian conjugate of the terms is added automatically.
 
         See Also
         --------
@@ -355,10 +652,16 @@ class CouplingModel(HamiltonianModel):
         u1 = ct.tools.to_valid_idx(u1, len(self.lattice.unit_cell))
         u2 = ct.tools.to_valid_idx(u2, len(self.lattice.unit_cell))
 
+        if self.explicit_plus_hc:
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength = strength / 2  # avoid double-counting this term: add the h.c. explicitly later on
+
         dx = np.array(dx, int).reshape([self.lattice.dim])
         if x1 == 'sum_over':
             for i, j, pref in zip(*self.lattice.possible_couplings_strengths(u1, u2, dx, strength)):
-                self._add_two_site_coupling_mps(pref, i, j, coupling_name)
+                self._add_two_site_coupling_mps(pref, i, j, coupling_name, plus_hc=plus_hc)
         else:
             if not self.finite:
                 raise ValueError('Can not add single coupling to infinite system.')
@@ -366,9 +669,15 @@ class CouplingModel(HamiltonianModel):
             x2 = x1 + dx
             i = self.lattice.lat2mps_idx([*x1, u1])
             j = self.lattice.lat2mps_idx([*x2, u2])
-            self._add_two_site_coupling_mps(strength, i, j, coupling_name)
+            self._add_two_site_coupling_mps(strength, i, j, coupling_name, plus_hc=plus_hc)
 
-    def _add_two_site_coupling_mps(self, pref: float | complex, i: int, j: int, coupling_name: str):
+    def _add_two_site_coupling_mps(
+        self, pref: float | complex, i: int, j: int, coupling_name: str, plus_hc: bool = False
+    ):
+        if plus_hc:
+            hc_name = self.get_hc_coupling_name(coupling_name)
+            self._add_two_site_coupling_mps(np.conj(pref), i, j, hc_name, plus_hc=False)
+
         if i == j:
             raise ValueError('Two-site coupling must be on different sites!')
         if i < j:
@@ -422,6 +731,8 @@ class CouplingModel(HamiltonianModel):
             * ``'sum_over_independent'`` specifies to add the term for all possible combinations ``u1, u2, ..., uM``.
                 Note that `strength` applies to all equally. Use multiple calls for `u`-dependent strength.
             * A 1D array-like specifies a single unit-cell index for each site acted on.
+        plus_hc : bool
+            If `True`, the hermitian conjugate of the terms is added automatically.
 
         See Also
         --------
@@ -440,19 +751,31 @@ class CouplingModel(HamiltonianModel):
         u = np.array(u, int).reshape([N])
         dx = np.array(dx, int).reshape([N, self.lattice.dim])
 
+        if self.explicit_plus_hc:
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength = strength / 2  # avoid double-counting this term: add the h.c. explicitly later on
+
         if x == 'sum_over':
             mps_idcs, strength_vals = self.lattice.possible_multi_couplings_strengths(dx, u, strength)
             for ijkl, pref in zip(mps_idcs, strength_vals):
-                self._add_multi_coupling_mps(pref, ijkl, coupling_name)
+                self._add_multi_coupling_mps(pref, ijkl, coupling_name, plus_hc=plus_hc)
         else:
             if not self.finite:
                 raise ValueError('Can not add single coupling to infinite system.')
             x = np.asarray(x, int).reshape([1, self.lattice.dim]) + dx
             lat_idcs = np.concatenate(x, u[:, None], axis=1)
             mps_idcs = self.lattice.lat2mps_idx(lat_idcs)
-            self._add_multi_coupling_mps(strength, mps_idcs, coupling_name)
+            self._add_multi_coupling_mps(strength, mps_idcs, coupling_name, plus_hc=plus_hc)
 
-    def _add_multi_coupling_mps(self, pref: float | complex, ijkl: Sequence[int], coupling_name: str):
+    def _add_multi_coupling_mps(
+        self, pref: float | complex, ijkl: Sequence[int], coupling_name: str, plus_hc: bool = False
+    ):
+        if plus_hc:
+            hc_name = self.get_hc_coupling_name(coupling_name)
+            self._add_multi_coupling_mps(np.conj(pref), ijkl, hc_name, plus_hc=False)
+
         if ct.tools.duplicate_entries(ijkl):
             raise ValueError('Can not act on the same site twice!')
         perm = np.argsort(ijkl)

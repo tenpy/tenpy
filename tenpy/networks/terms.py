@@ -20,6 +20,7 @@ import numpy as np
 from ..tools import Hdf5Exportable, add_with_None_0
 
 if TYPE_CHECKING:
+    from ..models import CouplingModel
     from .mpo import MPOGraph
 
 
@@ -34,24 +35,27 @@ __all__ = [
 ]
 
 
+# FIXME rm
 class DefinesCouplings(Protocol):
     """Placeholder, just for typehints, until we implement which class handles coupling names"""
 
     ...
 
-    def get_n_sites(self, name: str) -> int: ...
+    def coupling_n_sites(self, name: str) -> int: ...
 
     def decompose_coupling(self, name: str, *sites: ct.Site) -> list[tuple[complex, list[ct.SymmetricTensor]]]: ...
 
     def permute_coupling(self, name: str, perm: Sequence[int]) -> dict[str, float | complex]: ...
 
-    def get_switch_LR(self, name: str, *locs: int) -> int:
-        assert self.get_n_sites(name) == len(locs)
+    def _get_switch_LR(self, name: str, *locs: int) -> int:
+        assert self.coupling_n_sites(name) == len(locs)
         return len(locs) // 2
 
     def get_coupling(self, name: str, *sites: ct.Site) -> ct.Coupling: ...
 
-    def test_coupling_name(self, name: str, *sites: ct.Site): ...  # raise ValueError
+    def has_coupling(self, name: str, *sites: ct.Site): ...  # raise ValueError
+
+    def get_hc_coupling_name(self, name: str) -> str: ...
 
 
 class Terms(Hdf5Exportable, metaclass=ABCMeta):
@@ -80,7 +84,7 @@ class Terms(Hdf5Exportable, metaclass=ABCMeta):
         """
 
     @abstractmethod
-    def test_terms(self, sites: list[ct.Site], model: DefinesCouplings):
+    def test_terms(self, sites: list[ct.Site], model: CouplingModel):
         """Check that the terms are valid for a given model on given sites.
 
         Raises
@@ -574,7 +578,7 @@ class OnsiteTerms(Terms):
                 self_t[key] = self_t.get(key, 0.0) + value
         return self
 
-    def test_terms(self, sites: list[ct.Site], model: DefinesCouplings):
+    def test_terms(self, sites: list[ct.Site], model: CouplingModel):
         """Check that all given operators exist in the `sites`."""
         for site, terms in zip(sites, self.onsite_terms):
             for opname in terms:
@@ -756,7 +760,7 @@ class CouplingTerms(Terms):
                 for j, strength in terms_i_n.items():
                     yield i, n, j, strength
 
-    def to_nn_bond_tensors(self, sites: list[ct.Site], model: DefinesCouplings) -> list[ct.SymmetricTensor]:
+    def to_nn_bond_tensors(self, sites: list[ct.Site], model: CouplingModel) -> list[ct.SymmetricTensor]:
         """Convert the :attr:`coupling_terms` into tensors on nearest neighbor bonds.
 
         Parameters
@@ -842,13 +846,13 @@ class CouplingTerms(Terms):
                     self_i_n[j] = self_i_n.get(j, 0.0) + other_strength
         return self
 
-    def test_terms(self, sites: list[ct.Site], model: DefinesCouplings):
+    def test_terms(self, sites: list[ct.Site], model: CouplingModel):
         L = self.L
-        for i, name, j, strength in self:
+        for i, name, j, _ in self:
             assert 0 <= i < L
             if not i < j:
                 raise ValueError('wrong order of indices in coupling terms')
-            model.test_coupling_name(name, sites[i], sites[j % L])
+            model.test_coupling(name, [sites[i], sites[j % L]])
         return
 
 
@@ -954,12 +958,12 @@ class MultiCouplingTerms(Terms):
                 for ijkl, strength in _iter_dicts_recursive(self_i_n):
                     yield ijkl, n, strength
 
-    def test_terms(self, sites: list[ct.Site], model: DefinesCouplings):
+    def test_terms(self, sites: list[ct.Site], model: CouplingModel):
         L = self.L
         for ijkl, name, strength in self:
             assert 0 <= ijkl[0] < L
             assert all(i < j for i, j in zip(ijkl, ijkl[1:]))
-            model.test_coupling_name(name, *(sites[i % L] for i in ijkl))
+            model.test_coupling(name, [sites[i % L] for i in ijkl])
         return
 
 
@@ -1052,7 +1056,6 @@ class ExponentiallyDecayingTerms(Terms):
     """
 
     def __init__(self, L):
-        raise NotImplementedError  # TODO not ported yet
         assert L > 0
         self.L = L
         self.exp_decaying_terms = []
@@ -1091,6 +1094,7 @@ class ExponentiallyDecayingTerms(Terms):
             The operator to be inserted between `A` and `B`; for Fermions this should be ``"JW"``.
 
         """
+        raise NotImplementedError('Not ported yet')
         assert np.isscalar(lambda_) or len(lambda_) == self.L
         if subsites is None:
             subsites = np.arange(self.L)
@@ -1118,6 +1122,7 @@ class ExponentiallyDecayingTerms(Terms):
         See :meth:`~tenpy.models.model.CouplingModel.add_centered_exponentially_decaying_term` for
         details.
         """
+        raise NotImplementedError('Not ported yet')
         assert -self.L <= i < self.L
         if i < 0:
             i = i + self.L
@@ -1336,7 +1341,7 @@ class ExponentiallyDecayingTerms(Terms):
     def max_range(self):
         return np.inf
 
-    def test_terms(self, sites: list[ct.Site], model: DefinesCouplings):
+    def test_terms(self, sites: list[ct.Site], model: CouplingModel):
         """Check the format of self.exp_decaying_terms."""
         for term in self.exp_decaying_terms:
             strength, lambda_, op_i, op_j, subsites, subsites_start, op_string = term
@@ -1359,3 +1364,8 @@ class ExponentiallyDecayingTerms(Terms):
                 if not sites[j].valid_opname(op_string):
                     raise ValueError(f'Operator {op_string=} not in site {j}')
         # done
+
+    def remove_zeros(self, tol_zero=1e-15, inplace=True):
+        if len(self.exp_decaying_terms) + len(self.centered_terms) > 0:
+            raise NotImplementedError
+        return self

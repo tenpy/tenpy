@@ -3,6 +3,7 @@
 # Copyright (C) TeNPy Developers, Apache license
 import itertools
 
+import cyten as ct
 import numpy as np
 import numpy.testing as npt
 import pytest
@@ -86,20 +87,43 @@ def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True
         check_model_sanity(M, hermitian)
 
 
-def test_CouplingModel():
-    pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
-    for bc in ['open', 'periodic']:
-        spin_half_lat = lattice.Chain(5, spin_half_site, bc=bc, bc_MPS='finite')
-        M = model.CouplingModel(spin_half_lat)
-        M.add_twosite_coupling(1.2, 0, 'Sz', 0, 'Sz', 1)
-        M.test_sanity()
-        M.calc_H_MPO()
-        if bc == 'periodic':
-            with pytest.raises(ValueError, match='initialize H_bond for a NearestNeighborModel'):
-                M.calc_H_bond()  # should raise a ValueError
-                # periodic bc but finite bc_MPS leads to a long-range coupling
-        else:
-            M.calc_H_bond()
+@pytest.mark.parametrize('bc', ['open', 'periodic'])
+@pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
+@pytest.mark.parametrize('tensor_backend', ['fusion_tree', 'abelian', 'no_symmetry'])
+@pytest.mark.parametrize('conserve', ['SU(2)', 'Sz', None])
+def test_CouplingModel_basic(bc, bc_MPS, tensor_backend, conserve):
+    backend = ct.get_backend(tensor_backend)
+    site = SpinSite(conserve=conserve, backend=backend)
+    spin_half_lat = lattice.Chain(5, site, bc=bc, bc_MPS=bc_MPS)
+    M = model.CouplingModel(spin_half_lat, [model.SpinCouplingDefinition])
+
+    # 1) Only NN terms
+    M.add_two_site_coupling(1.2, 'S.S', dx=1)
+    if conserve == 'SU(2)':
+        with pytest.raises(ct.SymmetryError):
+            M.add_two_site_coupling(0.7, 'Sx.Sx', dx=1)
+        with pytest.raises(ct.SymmetryError):
+            M.add_onsite_operator(0.3, 'Sz')
+    else:
+        M.add_two_site_coupling(0.7, 'Sx.Sx', dx=1)
+        M.add_onsite_operator(0.3, 'Sz')
+    if conserve is None:
+        M.add_onsite_operator(0.8, 'Sx')
+    else:
+        with pytest.raises(ct.SymmetryError):
+            M.add_onsite_operator(0.8, 'Sx')
+
+    M.test_sanity()
+
+    H_MPO = M.get_H_MPO()
+    H_MPO.test_sanity()
+
+    if bc == 'periodic' and bc_MPS == 'finite':
+        with pytest.raises(ValueError, match='initialize H_bond for a NearestNeighborModel'):
+            # periodic bc but finite bc_MPS leads to a long-range coupling
+            M.get_H_bond()
+    else:
+        M.get_H_bond()
 
 
 def test_ext_flux():
