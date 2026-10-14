@@ -111,8 +111,8 @@ class MPO(MPSGeometry):
     _W : list of :class:`~lasyten.Tensor`
         The matrices of the MPO. Labels are ``wL, p, wR, p*`` (up to cyclic permutation).
         For an MPO that is a sum of local terms, the virtual legs are direct sums whose summands are
-        labelled; the ``'IdL'`` / ``'IdR'`` summands replace the former integer indices ``MPO.IdL`` /
-        ``MPO.IdR`` (which now raise a ``ValueError``). The usual upper block triangular structure
+        labelled; the ``'IdL'`` / ``'IdR'`` summands mark the states with only identities to the
+        left / right. The usual upper block triangular structure
         can be extracted with :func:`partition_W`, and
         :meth:`MPOEnvironment.init_LP` / :meth:`MPOEnvironment.init_RP` project onto these summands
         to build the trivial boundary environments.
