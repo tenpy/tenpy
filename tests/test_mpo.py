@@ -4,8 +4,9 @@
 import lasyten as lasy
 import numpy as np
 import pytest
-from lasyten.models.couplings import Coupling, heisenberg_coupling, spin_field_coupling
-from lasyten.models.sites import SpinSite
+from lasyten import ElementarySpace
+from lasyten.models.couplings import Coupling, heisenberg_coupling, hopping, spin_field_coupling
+from lasyten.models.sites import FibonacciAnyonSite, SpinlessFermionSite, SpinSite
 from numpy import testing as npt
 from scipy import linalg as spla
 
@@ -375,6 +376,60 @@ def test_MPO_dagger():
     M_dag = M.dagger()
     M_dag.test_sanity()
     npt.assert_allclose(_mpo_to_dense(M_dag, L), _mpo_to_dense(M, L), atol=1e-14)
+
+
+def _mpo_to_tensor(M):
+    """Contract all ``W`` into one lasyten tensor, without a dense basis (works for anyons)."""
+    return Coupling(list(M.sites), factorization=list(M._W)).to_tensor()
+
+
+def _check_dagger_tensor(M):
+    """`M.dagger()` agrees with ``lasy.dagger`` of the contracted MPO and is an involution."""
+    M_dag = M.dagger()
+    M_dag.test_sanity()
+    T, T_dag = _mpo_to_tensor(M), _mpo_to_tensor(M_dag)
+    assert T_dag.labels == lasy.dagger(T).labels
+    assert lasy.almost_equal(T_dag, lasy.dagger(T))
+    assert not lasy.almost_equal(T, lasy.dagger(T))  # the test case is not hermitian
+    for W, W_dag in zip(M._W, M_dag._W):
+        assert W_dag.labels == ['wL', 'p', 'wR', 'p*']
+        for leg in ['wL', 'wR']:
+            if hasattr(W.get_leg(leg), 'summand_labels'):  # e.g. not for random W tensors
+                assert W.get_leg(leg).summand_labels == W_dag.get_leg(leg).summand_labels
+    assert lasy.almost_equal(_mpo_to_tensor(M_dag.dagger()), T)
+
+
+@pytest.mark.parametrize('conserve', ['N', 'parity'])
+@pytest.mark.parametrize('pairs', [[(0, 1), (1, 2), (2, 3)], [(0, 3), (1, 2)]], ids=['nearest', 'long_range'])
+def test_MPO_dagger_fermions(conserve, pairs, L=4):
+    """MPO.dagger needs planar leg permutations (no braids), e.g. for the Jordan-Wigner strings."""
+    site = SpinlessFermionSite(conserve=conserve)
+    # `hopping` is hermitian, so a complex prefactor makes the MPO non-hermitian
+    couplings = [hopping([site, site]) for _ in pairs]
+    H = to_single_coupling(couplings, [list(pair) for pair in pairs], [1j] * len(pairs), [0] * len(pairs))
+    M = mpo.MPO(list(H.sites), H.factorization, 'finite', mps_unit_cell_width=L)
+    _check_dagger_tensor(M)
+
+
+def test_MPO_dagger_anyons(L=3):
+    """MPO.dagger for Fibonacci anyons, with random complex W tensors on non-trivial virtual spaces."""
+    site = FibonacciAnyonSite()
+    sym = site.symmetry
+    vac, tau = sym.trivial_sector, site.leg.sector_decomposition[1]
+    trivial = ElementarySpace.from_trivial_sector(1, symmetry=sym)
+    virtual = ElementarySpace.from_defining_sectors(sym, [vac, tau], [1, 1])
+    spaces = [trivial] + [virtual] * (L - 1) + [trivial]
+    Ws = [
+        lasy.SymmetricTensor.from_random_normal(
+            [spaces[i], site.leg],
+            [site.leg, spaces[i + 1]],
+            labels=[['wL', 'p'], ['p*', 'wR']],
+            dtype=lasy.Dtype.complex128,
+        )
+        for i in range(L)
+    ]
+    M = mpo.MPO([site] * L, Ws, 'finite', mps_unit_cell_width=L)
+    _check_dagger_tensor(M)
 
 
 @pytest.mark.parametrize('bc', ['infinite', 'finite'])

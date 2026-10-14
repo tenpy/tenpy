@@ -1385,8 +1385,9 @@ class MPO(MPSGeometry):
             return self.copy()
         Ws = []
         for W in self._W:
-            # lasy.dagger gives labels [p, wR*, p*, wL*]; cyclic permutation back to the standard leg order.
-            W = lasy.permute_legs(lasy.dagger(W), codomain=['wL*', 'p'], domain=['p*', 'wR*'])
+            # lasy.dagger gives labels [p, wR*, p*, wL*]; a cyclic (i.e. planar, braid-free) permutation
+            # brings them back to the standard leg order, which also works for fermions and anyons.
+            W = lasy.planar_permute_legs(lasy.dagger(W), codomain=['wL*', 'p'], domain=['p*', 'wR*'])
             Ws.append(W.relabel({'wL*': 'wL', 'wR*': 'wR'}))
         return MPO(self.sites, Ws, self.bc, self.max_range, mps_unit_cell_width=self.unit_cell_width)
 
