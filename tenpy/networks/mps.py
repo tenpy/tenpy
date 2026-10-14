@@ -6872,9 +6872,7 @@ class MPS(BaseMPSExpectationValue):
         C = ct.planar_contraction(C, swap_op, ['p0', 'p1'], ['p0*', 'p1*'])
         C = ct.planar_permute_legs(C, codomain=['vL', 'p0'], domain=['vR', 'p1'])
         theta = ct.tensors.partial_compose(C, self.get_SL(i), 'vL')
-        U, S, V, err, renormalize = ct.truncated_svd(theta, **trunc_par, new_labels=['vR', 'vL'])
-        # like TruncationError.from_S, but using the err (float) from truncated_svd
-        err = TruncationError(err, 1.0 - 2.0 * err)
+        U, S, V, err, renormalize = svd_theta(theta, trunc_par, new_labels=['vR', 'vL'])
         B_L = ct.compose(C, V.hc, relabel1={'p0': 'p'}, relabel2={'vL*': 'vR'})
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         B_R = ct.planar_permute_legs(V, codomain=['vL', 'p1'])
