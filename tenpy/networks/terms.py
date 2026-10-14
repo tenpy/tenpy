@@ -39,19 +39,23 @@ class DefinesCouplings(Protocol):
 
     ...
 
-    def get_n_sites(self, name: str) -> int: ...
+    def coupling_n_sites(self, name: str) -> int: ...
 
     def decompose_coupling(self, name: str, *sites: ct.Site) -> list[tuple[complex, list[ct.SymmetricTensor]]]: ...
 
     def permute_coupling(self, name: str, perm: Sequence[int]) -> dict[str, float | complex]: ...
 
-    def get_switch_LR(self, name: str, *locs: int) -> int:
-        assert self.get_n_sites(name) == len(locs)
+    def _get_switch_LR(self, name: str, *locs: int) -> int:
+        assert self.coupling_n_sites(name) == len(locs)
         return len(locs) // 2
 
     def get_coupling(self, name: str, *sites: ct.Site) -> ct.Coupling: ...
 
-    def test_coupling_name(self, name: str, *sites: ct.Site): ...  # raise ValueError
+    def has_coupling(self, name: str, *sites: ct.Site): ...  # raise ValueError
+
+    def get_hc_coupling_name(self, name: str) -> str:
+        ...
+        
 
 
 class Terms(Hdf5Exportable, metaclass=ABCMeta):
