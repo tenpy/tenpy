@@ -9,6 +9,7 @@ from cyten.models.sites import SpinSite
 
 from tenpy.algorithms.mps_common import TwoSiteH, VariationalCompression
 from tenpy.models import lattice, model
+from tenpy.networks.mpo import MPOEnvironment
 from tenpy.networks.mps import MPS, MPSEnvironment
 from tenpy.tools import TruncationError
 
@@ -100,32 +101,17 @@ def test_variational_compression_overlap():
 
 
 def _boundary_LP_RP(H_MPO, psi):
-    """Hand-build the LP/RP environment tensors for a 2-site system, sidestepping the still
-    np_conserved-only ``MPOEnvironment.init_LP``/``init_RP`` (``tenpy/networks/mpo.py``).
+    """Build the LP/RP environment tensors for a 2-site system.
 
     For an ``L=2`` system, the environment `TwoSiteH` needs at ``i0=0`` (``LP`` left of site 0,
-    ``RP`` right of site 1) is just the two trivial chain boundaries, decorated with a "one-hot"
-    MPO bond leg at the ``IdL``/``IdR`` index -- exactly what ``init_LP``/``init_RP`` are supposed
-    to build, just done here directly with cyten calls since that code path isn't ported yet.
+    ``RP`` right of site 1) is just the trivial chain boundary decorated with the MPO bond leg
+    projected onto the ``'IdL'``/``'IdR'`` summand, which is exactly what
+    :meth:`MPOEnvironment.init_LP`/:meth:`MPOEnvironment.init_RP` build.
     """
-    backend = ct.get_backend('no_symmetry', 'numpy')
-    env = MPSEnvironment(psi, psi)
-
-    W0 = H_MPO.get_W(0)
-    leg_L = W0.get_leg('wL').dual
-    onehot_L = np.zeros(leg_L.dim, dtype=complex)
-    IdL = 0  # TODO dummy, how to do it cleanly?
-    onehot_L[IdL] = 1.0
-    onehot_L = ct.SymmetricTensor.from_dense_block(onehot_L, codomain=[leg_L], backend=backend, labels=['wR'])
-    LP = ct.outer(env.init_LP(0, 0).as_SymmetricTensor(), onehot_L)
-
-    W1 = H_MPO.get_W(psi.L - 1)
-    leg_R = W1.get_leg('wR').dual
-    onehot_R = np.zeros(leg_R.dim, dtype=complex)
-    IdR = -1  # TODO dummy, how to do it cleanly?
-    onehot_R[IdR] = 1.0
-    onehot_R = ct.SymmetricTensor.from_dense_block(onehot_R, codomain=[leg_R], backend=backend, labels=['wL'])
-    RP = ct.outer(env.init_RP(psi.L - 1, 0).as_SymmetricTensor(), onehot_R)
+    env = MPOEnvironment(psi, H_MPO, psi)
+    LP = env.init_LP(0, 0)
+    RP = env.init_RP(psi.L - 1, 0)
+    LP = ct.permute_legs(LP, codomain=['vR*', 'wR'], domain=['vR'])
     RP = ct.permute_legs(RP, codomain=['vL*', 'vL'], domain=['wL'])
     return LP, RP
 
