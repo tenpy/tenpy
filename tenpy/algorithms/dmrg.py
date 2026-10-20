@@ -660,7 +660,9 @@ class DMRGEngine(IterativeSweeps):
                 env._update_gauge_RP(j, V, update_bra, update_ket)
             # No need to clear the environments on the other bonds!
 
-    def mixed_svd(self, theta: lasy.Tensor) -> tuple[lasy.Tensor, lasy.Tensor, lasy.Tensor, TruncationError, lasy.DiagonalTensor]:
+    def mixed_svd(
+        self, theta: lasy.Tensor
+    ) -> tuple[lasy.Tensor, lasy.Tensor, lasy.Tensor, TruncationError, lasy.DiagonalTensor]:
         """Perform truncated or mixed SVD of the local update `theta` and update the MPS accordingly.
 
         For details, see the concrete implementations :meth:`TwoSiteDMRGEngine.mixed_svd`

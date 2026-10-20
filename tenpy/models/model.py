@@ -957,8 +957,8 @@ class CouplingModel(Model):
             ot.add_onsite_term(strength, i, op)
         elif len(term) == 2:
             ct = self.coupling_terms.setdefault(category, CouplingTerms(N))
-            args = lasy.coupling_term_handle_JW(strength, term, sites)
-            lasy.add_coupling_term(*args)
+            args = ct.coupling_term_handle_JW(strength, term, sites)
+            ct.add_coupling_term(*args)
         elif len(term) > 2:
             ct = self.coupling_terms.setdefault(category, MultiCouplingTerms(N))
             if not isinstance(ct, MultiCouplingTerms):
@@ -966,8 +966,8 @@ class CouplingModel(Model):
                 self.coupling_terms[category] = new_ct = MultiCouplingTerms(self.lat.N_sites)
                 new_ct += ct
                 ct = new_ct
-            args = lasy.multi_coupling_term_handle_JW(strength, term, sites)
-            lasy.add_multi_coupling_term(*args)
+            args = ct.multi_coupling_term_handle_JW(strength, term, sites)
+            ct.add_multi_coupling_term(*args)
         else:
             raise ValueError('empty term!')
         if plus_hc:
@@ -1127,10 +1127,11 @@ class CouplingModel(Model):
         for site, op in [(site1, op1), (site2, op2)]:
             if isinstance(site, FermionicDOF):
                 raise NotImplementedError(
-                    f"add_twosite_coupling doesn't support fermionic sites yet. "
-                    f'Identity insertion betweennon-adjacent MPS sites requires operators with built-in '
-                    f"Jordan-Wigner strings (like 'lasyten.models.couplings.hopping'). Named operator doesn't have this."
-                    f"Fix: Build the Coupling manually and use 'add_coupling(coupling, indices)' instead."
+                    "add_twosite_coupling doesn't support fermionic sites yet. "
+                    'Identity insertion betweennon-adjacent MPS sites requires operators with built-in '
+                    "Jordan-Wigner strings (like 'lasyten.models.couplings.hopping')."
+                    "Named operator doesn't have this."
+                    "Fix: Build the Coupling manually and use 'add_coupling(coupling, indices)' instead."
                 )
         if np.all(dx == 0) and u1 == u2:
             raise ValueError("Coupling shouldn't be onsite!")
@@ -1307,7 +1308,7 @@ class CouplingModel(Model):
         if category is None:
             category = f'{op_i}_i {op_j}_j'
         ct = self.coupling_terms.setdefault(category, CouplingTerms(self.lat.N_sites))
-        lasy.add_coupling_term(strength, i, j, op_i, op_j, op_string)
+        ct.add_coupling_term(strength, i, j, op_i, op_j, op_string)
         if plus_hc:
             site_i = self.lat.unit_cell[self.lat.order[i, -1]]
             site_j = self.lat.unit_cell[self.lat.order[j % self.lat.N_sites, -1]]
@@ -1315,7 +1316,7 @@ class CouplingModel(Model):
             # op_string should be defined on all sites in the unit cell...
             hc_op_string = site_i.get_hc_op_name(op_string)
             hc_op_j = site_j.get_hc_op_name(op_j)
-            lasy.add_coupling_term(np.conj(strength), i, j, hc_op_i, hc_op_j, hc_op_string)
+            ct.add_coupling_term(np.conj(strength), i, j, hc_op_i, hc_op_j, hc_op_string)
 
     def all_coupling_terms(self):
         """Sum of all :attr:`coupling_terms`."""
@@ -1471,13 +1472,13 @@ class CouplingModel(Model):
             self.coupling_terms[category] = new_ct = MultiCouplingTerms(self.lat.N_sites)
             new_ct += ct
             ct = new_ct
-        lasy.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_string, switchLR)
+        ct.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_string, switchLR)
         if plus_hc:
             sites_ijkl = [self.lat.unit_cell[self.lat.order[i % self.lat.N_sites, -1]] for i in ijkl]
             hc_ops = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, ops_ijkl)]
             # NB: op_string should be defined on all sites in the unit cell...
             hc_op_string = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, op_string)]
-            lasy.add_multi_coupling_term(np.conj(strength), ijkl, hc_ops, hc_op_string, switchLR)
+            ct.add_multi_coupling_term(np.conj(strength), ijkl, hc_ops, hc_op_string, switchLR)
 
     def add_exponentially_decaying_coupling(
         self, strength, lambda_, op_i, op_j, subsites=None, subsites_start=None, op_string=None, plus_hc=False
@@ -1834,9 +1835,9 @@ class CouplingModel(Model):
         finite = self.lat.bc_MPS == 'finite'
 
         ct = self.all_coupling_terms()
-        lasy.remove_zeros(tol_zero)
+        ct.remove_zeros(tol_zero)
         try:
-            H_bond = lasy.to_nn_bond_Arrays(sites)
+            H_bond = ct.to_nn_bond_Arrays(sites)
         except ValueError as e:
             if e.args[0] == 'not nearest neighbor':
                 raise ValueError(
@@ -1919,14 +1920,14 @@ class CouplingModel(Model):
         ot = self.all_onsite_terms()
         ot.remove_zeros(tol_zero)
         ct = self.all_coupling_terms()
-        lasy.remove_zeros(tol_zero)
+        ct.remove_zeros(tol_zero)
         edt = self.exp_decaying_terms
 
         H_MPO_graph = mpo.MPOGraph.from_terms(
             (ot, ct, edt), self.lat.mps_sites(), self.lat.bc_MPS, unit_cell_width=self.lat.mps_unit_cell_width
         )
         H_MPO = H_MPO_graph.build_MPO()
-        H_MPO.max_range = lasy.max_range()
+        H_MPO.max_range = ct.max_range()
         H_MPO.explicit_plus_hc = self.explicit_plus_hc
         return H_MPO
 

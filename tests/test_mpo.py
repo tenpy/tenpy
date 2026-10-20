@@ -379,9 +379,9 @@ def test_MPO_plus_identity(sites, alpha=0.7, beta=0.42):
 
     ot = OnsiteTerms(4)
     ct = CouplingTerms(4)
-    lasy.add_coupling_term(2.0, 2, 3, 'Sm', 'Sp')
-    lasy.add_coupling_term(2.0, 2, 3, 'Sp', 'Sm')
-    lasy.add_coupling_term(2.0, 1, 2, 'Sz', 'Sz')
+    ct.add_coupling_term(2.0, 2, 3, 'Sm', 'Sp')
+    ct.add_coupling_term(2.0, 2, 3, 'Sp', 'Sm')
+    ct.add_coupling_term(2.0, 1, 2, 'Sz', 'Sz')
     ot.add_onsite_term(3.0, 1, 'Sz')
     H1 = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'finite', unit_cell_width=4).build_MPO()
 
@@ -411,10 +411,10 @@ def test_MPO_expectation_value(tol=1.0e-15):
     ot = OnsiteTerms(L_mpo)  # H.L != psi.L, consider L = lcm(4, 6) = 12
     ot.add_onsite_term(0.1, 0, 'Sz')  # -> 0.5 * 2 (sites 0, 4, not 8)
     ot.add_onsite_term(0.2, 3, 'Sz')  # -> 0.  (not sites 4, 7, 11)
-    ct = CouplingTerms(L_mpo)  # note: lasy.L != psi1.L
-    lasy.add_coupling_term(1.0, 2, 3, 'Sz', 'Sz')  # -> 0. (not 2-3, 6-7, 10-11)
-    lasy.add_coupling_term(1.5, 1, 3, 'Sz', 'Sz')  # -> 1.5*(-0.25) (1-3, not 5-7, not 9-11)
-    lasy.add_coupling_term(2.5, 0, 6, 'Sz', 'Sz')  # -> 2.5*0.25*3 (0-6, 4-10, not 8-14)
+    ct = CouplingTerms(L_mpo)  # note: ct.L != psi1.L
+    ct.add_coupling_term(1.0, 2, 3, 'Sz', 'Sz')  # -> 0. (not 2-3, 6-7, 10-11)
+    ct.add_coupling_term(1.5, 1, 3, 'Sz', 'Sz')  # -> 1.5*(-0.25) (1-3, not 5-7, not 9-11)
+    ct.add_coupling_term(2.5, 0, 6, 'Sz', 'Sz')  # -> 2.5*0.25*3 (0-6, 4-10, not 8-14)
     H = mpo.MPOGraph.from_terms((ot, ct), [s] * L_mpo, 'infinite', unit_cell_width=L_mpo).build_MPO()
     desired_ev = (0.1 * 0.5 * 2 + 0.2 * 0.0 + 1.0 * 0.0 + 1.5 * -0.25 + 2.5 * 0.25 * 2) / 12
     ev_power = H.expectation_value_power(psi1, tol=tol)

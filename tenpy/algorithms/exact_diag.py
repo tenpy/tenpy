@@ -596,9 +596,9 @@ def _get_Hamiltonian_from_couplings(model, sparse: bool, undo_sort_charge: bool)
     ot = model.all_onsite_terms()
     ot.remove_zeros()
     ct = model.all_coupling_terms()
-    lasy.remove_zeros()
+    ct.remove_zeros()
     edt = model.exp_decaying_terms
-    term_list = ot.to_TermList() + lasy.to_TermList() + edt.to_TermList()
+    term_list = ot.to_TermList() + ct.to_TermList() + edt.to_TermList()
 
     sites = model.lat.mps_sites()
     dims = [s.leg.ind_len for s in sites]

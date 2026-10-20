@@ -322,7 +322,9 @@ class MPSGeometry:
 
     _valid_bc = ('finite', 'segment', 'infinite')  # valid boundary conditions. Dont overwrite this!
 
-    def __init__(self, sites: list[lasy.Site], bc: Literal['finite', 'segment', 'infinite'], unit_cell_width: int = None):
+    def __init__(
+        self, sites: list[lasy.Site], bc: Literal['finite', 'segment', 'infinite'], unit_cell_width: int = None
+    ):
         self.sites = list(sites)
         self.symmetry = self.sites[0].symmetry
         self.bc = bc
@@ -1606,7 +1608,13 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         return RP
 
     def _contract_tensors_LP(
-        self, LP: lasy.Tensor, bra: MPS, ket: MPS, ops: list[lasy.Tensor], sites: list[int], form_on_first_site: str = 'Th'
+        self,
+        LP: lasy.Tensor,
+        bra: MPS,
+        ket: MPS,
+        ops: list[lasy.Tensor],
+        sites: list[int],
+        form_on_first_site: str = 'Th',
     ) -> lasy.Tensor:
         """Contract the left part of an expectation value with respect to multiple :class:`~lasyten.Tensor`.
 
@@ -1670,7 +1678,13 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         return new_LP
 
     def _contract_tensors_RP(
-        self, RP: lasy.Tensor, bra: MPS, ket: MPS, ops: list[lasy.Tensor], sites: list[int], form_on_first_site: str = 'Th'
+        self,
+        RP: lasy.Tensor,
+        bra: MPS,
+        ket: MPS,
+        ops: list[lasy.Tensor],
+        sites: list[int],
+        form_on_first_site: str = 'Th',
     ) -> lasy.Tensor:
         """Contract the right part of an expectation value with respect to multiple :class:`~lasyten.Tensor`.
 
@@ -2284,7 +2298,8 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
     ) -> np.ndarray | list[lasy.BlockBackend.Scalar]:
         """Post processing of result values of :meth:`expectation_value`.
 
-        May return :class:`~lasyten.BlockBackend.Scalar` or convert to numpy array and cast to real values if applicable.
+        May return :class:`~lasyten.BlockBackend.Scalar` or convert to numpy array and
+        cast to real values if applicable.
         Optionally (depending on concrete subclass), considers state norms or not.
         E.g., in :class:`MPS` we ignore the norm but consider the norms in :class:`MPSEnvironment`.
         """
@@ -3496,7 +3511,8 @@ class MPS(BaseMPSExpectationValue):
             Bs.append(B)
         if SVs is None:
             new_SVs = [
-                lasy.DiagonalTensor.from_eye(leg, backend, ['vL', 'vR'], dtype.to_real, device) for leg in virtual_spaces
+                lasy.DiagonalTensor.from_eye(leg, backend, ['vL', 'vR'], dtype.to_real, device)
+                for leg in virtual_spaces
             ]
             new_SVs = [S / np.sqrt(S.get_leg('vL').dim) for S in new_SVs]
         else:
@@ -5338,7 +5354,9 @@ class MPS(BaseMPSExpectationValue):
         return np.sum(ps[:, np.newaxis] * (np.asarray(charges) - charges_mean[np.newaxis, :]) ** 2, axis=0)
 
     @staticmethod
-    def get_charge_tree_for_given_charge_sector(sites: list[lasy.Site], charge_sector: lasy.Sector) -> list[lasy.SectorArray]:
+    def get_charge_tree_for_given_charge_sector(
+        sites: list[lasy.Site], charge_sector: lasy.Sector
+    ) -> list[lasy.SectorArray]:
         r"""Construct the charge-tree for a given charge sector.
 
         This is a tree of possible charges for each site s.t. the MPS lies in the given ``charge_sector``.
@@ -5552,7 +5570,7 @@ class MPS(BaseMPSExpectationValue):
         bc = 'finite' if self.finite else 'infinite'
         mpo_graph = mpo.MPOGraph.from_terms((ot, ct), self.sites, bc, unit_cell_width=self.unit_cell_width)
         mpo_ = mpo_graph.build_MPO()
-        terms_sum = mpo_.expectation_value(self, max_range=lasy.max_range())
+        terms_sum = mpo_.expectation_value(self, max_range=ct.max_range())
         if not self.finite:
             terms_sum = terms_sum * self.L
         return terms_sum, mpo_
@@ -5792,7 +5810,9 @@ class MPS(BaseMPSExpectationValue):
 
         if self.bc == 'segment':
             # also need to calculate new singular values on the very right
-            U, S, VR_segment, _, _ = lasy.truncated_svd(M, new_labels=['vR', 'vL'], charge_leg_top=False, svd_min=cutoff)
+            U, S, VR_segment, _, _ = lasy.truncated_svd(
+                M, new_labels=['vR', 'vL'], charge_leg_top=False, svd_min=cutoff
+            )
             if not renormalize:
                 self.norm = self.norm * lasy.norm(S)
             S /= lasy.norm(S)
@@ -6292,7 +6312,9 @@ class MPS(BaseMPSExpectationValue):
                 return xis[0]
             return xis
 
-    def correlation_length_charge_sectors(self, drop_symmetric: bool = True, include_0: bool = True) -> lasy.SectorArray:
+    def correlation_length_charge_sectors(
+        self, drop_symmetric: bool = True, include_0: bool = True
+    ) -> lasy.SectorArray:
         """Return possible `charge_sector` argument for :meth:`correlation_length`.
 
         The :meth:`correlation_length` is calculated from eigenvalues of the transfer matrix.
@@ -6382,7 +6404,9 @@ class MPS(BaseMPSExpectationValue):
         Bs = [lasy.tensor_from_grid([[alpha * theta_self, beta * theta_other]], labels=theta_self.labels)]
         for i in range(1, L - 1):
             # TODO we should make sure that the hidden legs are by convention not in the positions along which we stack
-            Bs.append(lasy.tensor_from_grid([[self.get_B(i), None], [None, other.get_B(i)]], labels=self.get_B(i).labels))
+            Bs.append(
+                lasy.tensor_from_grid([[self.get_B(i), None], [None, other.get_B(i)]], labels=self.get_B(i).labels)
+            )
         Bs.append(lasy.tensor_from_grid([[last_B_self], [last_B_other]], labels=last_B_self.labels))
         Ss = [
             lasy.DiagonalTensor.from_eye(
@@ -7160,7 +7184,9 @@ class MPS(BaseMPSExpectationValue):
             return form
         return self._valid_forms[form]
 
-    def _scale_axis_B(self, B: lasy.Tensor, S: lasy.Tensor, form_diff: float, axis_B: str, cutoff: float) -> lasy.Tensor:
+    def _scale_axis_B(
+        self, B: lasy.Tensor, S: lasy.Tensor, form_diff: float, axis_B: str, cutoff: float
+    ) -> lasy.Tensor:
         """Scale an axis of B with S to bring it in desired form.
 
         If S is just a diagonal tensor (as usual, e.g. during TEBD), this function just performs
@@ -7583,7 +7609,9 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         leg_bra = self.bra.get_B(i - start_env_sites, None).get_leg('vL')
         if not leg_ket == leg_bra:
             raise ValueError(f'Incompatible legs {leg_ket} and {leg_bra} cannot be contracted')
-        init_LP = lasy.Identity(leg_ket, backend=self.backend, dtype=self.dtype, device=self.device, labels=['vR*', 'vR'])
+        init_LP = lasy.Identity(
+            leg_ket, backend=self.backend, dtype=self.dtype, device=self.device, labels=['vR*', 'vR']
+        )
         init_LP = init_LP.as_SymmetricTensor()  # TODO remove
         for j in range(i - start_env_sites, i):
             init_LP = self._contract_LP(j, init_LP)
@@ -7626,7 +7654,9 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         leg_bra = self.bra.get_B(i + start_env_sites, None).get_leg('vR')
         if not leg_ket == leg_bra:
             raise ValueError(f'Incompatible legs {leg_ket} and {leg_bra} cannot be contracted')
-        init_RP = lasy.Identity(leg_ket, backend=self.backend, dtype=self.dtype, device=self.device, labels=['vL*', 'vL'])
+        init_RP = lasy.Identity(
+            leg_ket, backend=self.backend, dtype=self.dtype, device=self.device, labels=['vL*', 'vL']
+        )
         init_RP = init_RP.as_SymmetricTensor()  # TODO remove
         for j in range(i + start_env_sites, i, -1):
             init_RP = self._contract_RP(j, init_RP)

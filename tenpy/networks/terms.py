@@ -177,11 +177,11 @@ class TermList(Hdf5Exportable):
                 op, i = term[0]
                 ot.add_onsite_term(strength, i, op)
             elif len(term) == 2:
-                args = lasy.coupling_term_handle_JW(strength, term, sites)
-                lasy.add_coupling_term(*args)
+                args = ct.coupling_term_handle_JW(strength, term, sites)
+                ct.add_coupling_term(*args)
             elif len(term) > 2:
-                args = lasy.multi_coupling_term_handle_JW(strength, term, sites)
-                lasy.add_multi_coupling_term(*args)
+                args = ct.multi_coupling_term_handle_JW(strength, term, sites)
+                ct.add_multi_coupling_term(*args)
             else:
                 raise ValueError('term without entry!?')
         return ot, ct

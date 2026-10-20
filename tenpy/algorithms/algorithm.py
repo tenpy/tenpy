@@ -336,7 +336,9 @@ class Algorithm:
         logger.info('Total RAM estimate: %8d MB', RAM_MB)
         return RAM_MB
 
-    def svd_theta(self, theta: lasy.Tensor) -> tuple[lasy.Tensor, lasy.DiagonalTensor, lasy.Tensor, TruncationError, float]:
+    def svd_theta(
+        self, theta: lasy.Tensor
+    ) -> tuple[lasy.Tensor, lasy.DiagonalTensor, lasy.Tensor, TruncationError, float]:
         """Perform a truncated SVD on the given tensor `theta`.
 
         This is essentially a thin wrapper around :func:`tenpy.svd_theta`, using
