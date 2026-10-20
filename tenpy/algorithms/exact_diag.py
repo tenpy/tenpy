@@ -17,12 +17,12 @@ This might be used to obtain the spectrum, the ground state or highly excited st
 
 import warnings
 
-import cyten as ct
+import lasyten as lasy
 import numpy as np
-from cyten.symmetries import SymmetryError
-from cyten.symmetries.spaces import AbelianLegPipe, TensorProduct
-from cyten.tensors import HermitianNumpyArrayLinearOperator, slice_leg
-from cyten.tensors import eigh as cyten_eigh
+from lasyten.symmetries import SymmetryError
+from lasyten.symmetries.spaces import AbelianLegPipe, TensorProduct
+from lasyten.tensors import HermitianNumpyArrayLinearOperator, slice_leg
+from lasyten.tensors import eigh as lasyten_eigh
 
 from ..models.model import CouplingModel
 from ..networks.mps import MPS
@@ -43,9 +43,9 @@ class ExactDiag:
     charge_sector : ``None`` | charges
         If not ``None``, restrict :meth:`groundstate`/:meth:`sparse_diag` to the given charge
         sector. Note that (unlike the old `np_conserved` version) this does *not* reduce the size
-        of `full_H` itself -- :func:`~cyten.tensors.eigh` is already block-diagonal in the coupled
+        of `full_H` itself -- :func:`~lasyten.tensors.eigh` is already block-diagonal in the coupled
         sector, so there is nothing to gain from projecting beforehand; :meth:`sparse_diag`, via
-        :class:`~cyten.tensors.HermitianNumpyArrayLinearOperator`, is what actually restricts the
+        :class:`~lasyten.tensors.HermitianNumpyArrayLinearOperator`, is what actually restricts the
         work to one sector.
     max_size : int
         The `build_H_*` functions will do nothing (but emit a warning) if the total size of the
@@ -56,31 +56,31 @@ class ExactDiag:
     model : :class:`~tenpy.models.MPOmodel` | :class:`~tenpy.models.CouplingModel` | ``None``
         The model which is to be diagonalized, if constructed via :meth:`from_model`.
         ``None`` otherwise.
-    symmetry : :class:`~cyten.symmetries.Symmetry`
+    symmetry : :class:`~lasyten.symmetries.Symmetry`
         The symmetry of the sites (which is the same for all sites).
     charge_sector : ``None`` | charges
         If not ``None``, we restrict to the given charge sector, see above.
     max_size : int
         The ``build_H_*`` functions will do nothing (but emit a warning) if the total size of the
         Hamiltonian would be larger than this.
-    full_H : :class:`~cyten.tensors.SymmetricTensor` | ``None``
+    full_H : :class:`~lasyten.tensors.SymmetricTensor` | ``None``
         The full Hamiltonian to be diagonalized, physical legs ``p0, ..., p{L-1}`` in the
         codomain and their duals in the domain. ``None`` if the ``build_H_*`` functions haven't
         been called yet, or if `max_size` would have been exceeded.
     E : ndarray | ``None``
         1D array of eigenvalues, index-aligned with the ``'eig'`` leg of `V`.
-    V : :class:`~cyten.tensors.SymmetricTensor` | ``None``
-        Eigenvectors, as returned by :func:`~cyten.tensors.eigh`. Physical legs as in `full_H`,
+    V : :class:`~lasyten.tensors.SymmetricTensor` | ``None``
+        Eigenvectors, as returned by :func:`~lasyten.tensors.eigh`. Physical legs as in `full_H`,
         plus a new leg ``'eig'`` corresponding to the eigenvalues.
-    _sites : list of :class:`~cyten.models.sites.Site`
+    _sites : list of :class:`~lasyten.models.sites.Site`
         The sites in the given order.
     _labels_p : list or str
         The labels use for the physical legs; just ``['p0', 'p1', ...., 'p{L-1}']``.
     _labels_pconj : list or str
         Just each of `_labels_p` with an ``*``.
-    _pipe : :class:`~cyten.symmetries.spaces.TensorProduct`
+    _pipe : :class:`~lasyten.symmetries.spaces.TensorProduct`
         The (uncombined) tensor product of the physical legs.
-    _pipe_conj : :class:`~cyten.symmetries.spaces.TensorProduct`
+    _pipe_conj : :class:`~lasyten.symmetries.spaces.TensorProduct`
         Just ``_pipe.dual``.
     _mask : 1D bool ndarray | ``None``
         Only set for an abelian `symmetry` with a fixed `charge_sector`: bool mask, which of the
@@ -90,7 +90,7 @@ class ExactDiag:
 
     """
 
-    def __init__(self, sites: list[ct.Site], charge_sector=None, max_size=2e6):
+    def __init__(self, sites: list[lasy.Site], charge_sector=None, max_size=2e6):
         self.model = None
         self.full_H = None
         self.E = None
@@ -135,16 +135,16 @@ class ExactDiag:
 
     @classmethod
     def from_hamiltonian(cls, H, sites, charge_sector=None, max_size=2e6):
-        """Initialize directly from a cyten Hamiltonian tensor and its sites.
+        """Initialize directly from a lasyten Hamiltonian tensor and its sites.
 
-        Entry point while ``tenpy.models`` is not ported to cyten yet.
+        Entry point while ``tenpy.models`` is not ported to lasyten yet.
 
         Parameters
         ----------
-        H : :class:`~cyten.tensors.SymmetricTensor`
+        H : :class:`~lasyten.tensors.SymmetricTensor`
             The Hamiltonian, e.g. from ``Coupling.to_tensor()``, with the physical legs
             ``p0, ..., p{L-1}`` in the codomain and their duals in the domain.
-        sites : list of :class:`~cyten.models.sites.Site`
+        sites : list of :class:`~lasyten.models.sites.Site`
             The sites, in MPS order.
         charge_sector, max_size :
             As for :meth:`__init__`.
@@ -224,9 +224,9 @@ class ExactDiag:
                 H = H + H.conj().T
             full_H = self._full_H_from_dense(H)
         else:
-            full_H = ct.Coupling(list(mpo.sites), factorization=list(mpo._W)).to_tensor()
+            full_H = lasy.Coupling(list(mpo.sites), factorization=list(mpo._W)).to_tensor()
             if mpo.explicit_plus_hc:
-                full_H = full_H + ct.dagger(full_H)
+                full_H = full_H + lasy.dagger(full_H)
         self._set_full_H(full_H)
 
     def build_full_H_from_bonds(self):
@@ -270,14 +270,14 @@ class ExactDiag:
     def full_diagonalization(self, new_labels='eig', sort='<'):
         """Full diagonalization to obtain all eigenvalues and eigenvectors.
 
-        Sets :attr:`V` and :attr:`E`. Keyword arguments are given to :func:`~cyten.tensors.eigh`
+        Sets :attr:`V` and :attr:`E`. Keyword arguments are given to :func:`~lasyten.tensors.eigh`
         (in addition to ``new_labels='eig', new_leg_dual=False``, which cannot be overridden).
         """
         if self.full_H is None:
             raise ValueError('You need to call one of `build_full_H_*` first!')
         if self.full_H.domain != self.full_H.codomain:
             raise NotImplementedError('full_diagonalization requires full_H.domain == full_H.codomain.')
-        W, V = cyten_eigh(self.full_H, new_labels, new_leg_dual=False, sort=sort)
+        W, V = lasyten_eigh(self.full_H, new_labels, new_leg_dual=False, sort=sort)
         self.E = W.diagonal_as_numpy()
         self.V = V
 
@@ -295,7 +295,7 @@ class ExactDiag:
         -------
         E0 : float
             Ground state energy (possibly in the given sector).
-        psi0 : :class:`~cyten.tensors.HiddenLegTensor`
+        psi0 : :class:`~lasyten.tensors.HiddenLegTensor`
             Ground state (possibly in the given sector), with a hidden ``'!slice'`` leg carrying
             its definite charge. Physical legs ``p0, ..., p{L-1}``.
 
@@ -322,10 +322,10 @@ class ExactDiag:
         """Return ``U(dt) := exp(-i H dt)``."""
         if self.E is None or self.V is None:
             raise ValueError('You need to call `full_diagonalization` first!')
-        D = ct.DiagonalTensor.from_diag_block(
+        D = lasy.DiagonalTensor.from_diag_block(
             np.exp(-1.0j * dt * self.E), leg=self.V.get_leg('eig'), labels=['eig', 'eig*']
         )
-        return ct.tdot(ct.scale_axis(self.V, D, 'eig'), self.V.hc, 'eig', 'eig*')
+        return lasy.tdot(lasy.scale_axis(self.V, D, 'eig'), self.V.hc, 'eig', 'eig*')
 
     def mps_to_full(self, mps):
         """Contract an MPS along the virtual bonds and combine its legs.
@@ -337,22 +337,22 @@ class ExactDiag:
 
         Returns
         -------
-        psi : :class:`~cyten.tensors.SymmetricTensor`
+        psi : :class:`~lasyten.tensors.SymmetricTensor`
             The MPS contracted along the virtual bonds.
 
         """
         if mps.bc != 'finite':
             raise ValueError('Full diagonalization works only on finite systems')
         psi = mps.get_theta(0, mps.L)  # does exactly what we need
-        psi = ct.squeeze_legs(psi, ['vL', 'vR'])
-        return ct.combine_legs(psi, list(range(mps.L)))
+        psi = lasy.squeeze_legs(psi, ['vL', 'vR'])
+        return lasy.combine_legs(psi, list(range(mps.L)))
 
     def full_to_mps(self, psi, canonical_form='B'):
         """Convert a full state (with a single leg) to an MPS.
 
         Parameters
         ----------
-        psi : :class:`~cyten.tensors.SymmetricTensor`
+        psi : :class:`~lasyten.tensors.SymmetricTensor`
             The state (with a single leg) which should be splitted into an MPS.
         canonical_form : str
             The form in which the MPS will be afterwards.
@@ -363,21 +363,21 @@ class ExactDiag:
             An normalized MPS representation in canonical form.
 
         """
-        if isinstance(psi, ct.HiddenLegTensor):
+        if isinstance(psi, lasy.HiddenLegTensor):
             # e.g. from groundstate(): strip the hidden '!slice' leg, requires charge-neutrality.
-            psi = ct.squeeze_legs(psi, ['!slice'])
+            psi = lasy.squeeze_legs(psi, ['!slice'])
         if not psi.has_pipes:  # plain state with legs p0..p{L-1}: combine into one pipe first
-            psi = ct.combine_legs(psi, list(range(len(self._sites))))
-        psi = ct.split_legs(psi, 0)  # split the combined leg into the physical legs of the sites
+            psi = lasy.combine_legs(psi, list(range(len(self._sites))))
+        psi = lasy.split_legs(psi, 0)  # split the combined leg into the physical legs of the sites
         unit_cell_width = len(self._sites) if self.model is None else self.model.lat.mps_unit_cell_width
         return MPS.from_full(self._sites, psi, form=canonical_form, unit_cell_width=unit_cell_width)
 
     def sparse_diag(self, k, *args, **kwargs):
-        """The `k` lowest eigenvalues and eigenvectors, via :mod:`cyten.tensors.sparse`.
+        """The `k` lowest eigenvalues and eigenvectors, via :mod:`lasyten.tensors.sparse`.
 
-        Wraps :class:`~cyten.tensors.HermitianNumpyArrayLinearOperator`, which restricts to
+        Wraps :class:`~lasyten.tensors.HermitianNumpyArrayLinearOperator`, which restricts to
         :attr:`charge_sector` (all sectors if it is ``None``) and calls
-        :func:`scipy.sparse.linalg.eigsh` under the hood. Note that cyten does not yet support
+        :func:`scipy.sparse.linalg.eigsh` under the hood. Note that lasyten does not yet support
         restricting to a single, higher-dimensional sector (e.g. non-trivial SU(2) sectors) this
         way; ``charge_sector=None`` and one-dimensional sectors work.
 
@@ -387,13 +387,13 @@ class ExactDiag:
             The number of eigenvalues/eigenvectors to compute.
         *args, **kwargs :
             Further arguments given to
-            :meth:`~cyten.tensors.HermitianNumpyArrayLinearOperator.eigenvectors`.
+            :meth:`~lasyten.tensors.HermitianNumpyArrayLinearOperator.eigenvectors`.
 
         Returns
         -------
         E : 1D ndarray
             The `k` energies, ascending.
-        psi : list of :class:`~cyten.tensors.ChargedTensor`
+        psi : list of :class:`~lasyten.tensors.ChargedTensor`
             The corresponding eigenstates, physical legs ``p0, ..., p{L-1}``.
 
         """
@@ -411,7 +411,7 @@ class ExactDiag:
         return self.model
 
     def _use_dense_assembly(self):
-        """Whether `full_H` is assembled as a dense matrix (non-abelian symmetry) or with cyten tensors.
+        """Whether `full_H` is assembled as a dense matrix (non-abelian symmetry) or with lasyten tensors.
 
         Contracting many tensors with a non-abelian symmetry needs F- and R-symbols of high weight,
         which are not available (and slow), so the dense basis is used instead.
@@ -441,7 +441,7 @@ class ExactDiag:
         dims = [int(s.dim) for s in self._sites]
         block = np.reshape(H, dims + dims).transpose([*range(L), *reversed(range(L, 2 * L))])
         legs = [s.leg for s in self._sites]
-        return ct.SymmetricTensor.from_dense_block(
+        return lasy.SymmetricTensor.from_dense_block(
             block,
             codomain=legs,
             domain=legs,
@@ -456,13 +456,13 @@ class ExactDiag:
         for j in range(L):
             if j not in (i - 1, i):
                 Id = self._sites[j].get_op('Id').as_SymmetricTensor()
-                T = ct.outer(T, Id, relabel2={'p': f'p{j}', 'p*': f'p{j}*'})
-        return ct.permute_legs(T, codomain=self._labels_p, domain=self._labels_pconj)
+                T = lasy.outer(T, Id, relabel2={'p': f'p{j}', 'p*': f'p{j}*'})
+        return lasy.permute_legs(T, codomain=self._labels_p, domain=self._labels_pconj)
 
     def _set_full_H(self, full_H):
         if self.full_H is not None:
             warnings.warn('full_H calculated multiple times!?', stacklevel=2)
-        # The np_conserved version projected onto `charge_sector` here. cyten cannot: Mask and
+        # The np_conserved version projected onto `charge_sector` here. lasyten cannot: Mask and
         # DiagonalTensor reject LegPipes, so `full_H` would first have to be flattened onto a single
         # abstract leg -- and then the eigenvectors could no longer be split back into the sites.
         # `charge_sector` therefore restricts `groundstate` instead; `eigh` is block-wise anyway.
@@ -502,7 +502,7 @@ def get_full_wavefunction(psi: MPS, undo_sort_charge: bool = True):
         raise NotImplementedError
     p = psi._p_label[0]
     theta = psi.get_theta(0, psi.L)
-    theta = ct.permute_legs(theta, ['vL'] + [f'{p}{n}' for n in range(psi.L)] + ['vR'])
+    theta = lasy.permute_legs(theta, ['vL'] + [f'{p}{n}' for n in range(psi.L)] + ['vR'])
     assert theta.labels == ['vL'] + [f'{p}{n}' for n in range(psi.L)] + ['vR']
     theta = theta.to_numpy()
     theta = np.squeeze(theta, (0, -1))  # squeeze vL, vR
@@ -588,7 +588,7 @@ def _get_numpy_Hamiltonian_ExactDiag_full_H(model, from_mpo: bool, undo_sort_cha
 def _get_Hamiltonian_from_couplings(model, sparse: bool, undo_sort_charge: bool):
     """Helper to get either dense numpy or sparse scipy matrix of the Hamiltonian."""
     raise NotImplementedError(
-        'requires the cyten MPO/models layer, which is not ported yet - use `ExactDiag.from_hamiltonian`.'
+        'requires the lasyten MPO/models layer, which is not ported yet - use `ExactDiag.from_hamiltonian`.'
     )
     if not isinstance(model, CouplingModel):
         raise ValueError('Must be a coupling model.')
@@ -596,9 +596,9 @@ def _get_Hamiltonian_from_couplings(model, sparse: bool, undo_sort_charge: bool)
     ot = model.all_onsite_terms()
     ot.remove_zeros()
     ct = model.all_coupling_terms()
-    ct.remove_zeros()
+    lasy.remove_zeros()
     edt = model.exp_decaying_terms
-    term_list = ot.to_TermList() + ct.to_TermList() + edt.to_TermList()
+    term_list = ot.to_TermList() + lasy.to_TermList() + edt.to_TermList()
 
     sites = model.lat.mps_sites()
     dims = [s.leg.ind_len for s in sites]

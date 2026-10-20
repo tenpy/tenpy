@@ -5,9 +5,9 @@ Uniform lattice of spin-S sites, coupled by nearest-neighbor interactions.
 # Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
-from cyten.models.couplings import Coupling
-from cyten.models.sites import SpinSite
-from cyten.tensors import dagger
+from lasyten.models.couplings import Coupling
+from lasyten.models.sites import SpinSite
+from lasyten.tensors import dagger
 
 from ..tools import to_array
 from .lattice import Chain
@@ -71,7 +71,7 @@ class SpinModel(CouplingMPOModel):
         S : {0.5, 1, 1.5, 2, ...}
             The 2S+1 local states range from m = -S, -S+1, ... +S.
         conserve : 'best' | 'Sz' | 'parity' | None
-            What should be conserved. See :class:`~cyten.models.sites.SpinSite`.
+            What should be conserved. See :class:`~lasyten.models.sites.SpinSite`.
             For ``'best'``, we check the parameters what can be preserved.
         Jx, Jy, Jz, hx, hy, hz, muJ, D, E  : float | array
             Coupling as defined for the Hamiltonian above.
@@ -158,9 +158,9 @@ class DipolarSpinChain(CouplingMPOModel):
             - \mathtt{J4} \sum_{i} (S^+_i S^-_{i + 1} S^-_{i + 2} S^+_{i + 2} + \mathrm{h.c.})
 
     .. note ::
-        Dipole ("dipole"-)conservation is not (yet) supported by the cyten-based symmetry
+        Dipole ("dipole"-)conservation is not (yet) supported by the lasyten-based symmetry
         framework, so ``conserve='dipole'`` is currently unavailable. This class otherwise
-        works with the symmetries that :class:`~cyten.models.sites.SpinSite` does support.
+        works with the symmetries that :class:`~lasyten.models.sites.SpinSite` does support.
 
     Parameters
     ----------
@@ -176,7 +176,7 @@ class DipolarSpinChain(CouplingMPOModel):
             The 2S+1 local states range from m = -S, -S+1, ... +S.
             Defaults to ``S=1``.
         conserve : 'best' | 'Sz' | 'parity' | None
-            What should be conserved. See :class:`~cyten.models.sites.SpinSite`.
+            What should be conserved. See :class:`~lasyten.models.sites.SpinSite`.
             For ``'best'``, we preserve ``'Sz'``.
         J3, J4 : float | array
             Coupling as defined for the Hamiltonian above.

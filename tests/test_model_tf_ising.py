@@ -11,10 +11,10 @@ def test_TFIChain_general():
 
 @pytest.mark.slow
 def test_TFIModel2D_general():
-    # bc_MPS='infinite' is not yet supported by the cyten-native add_coupling path
+    # bc_MPS='infinite' is not yet supported by the lasyten-native add_coupling path
     # (CouplingModel.calc_H_MPO() currently requires bc_MPS='finite' when using add_coupling).
     # Lx=1 (rather than 2) since the hermiticity check in check_general_model contracts the
-    # whole MPO into a dense operator (MPO.is_hermitian()/overlap() aren't yet ported to cyten
+    # whole MPO into a dense operator (MPO.is_hermitian()/overlap() aren't yet ported to lasyten
     # tensors), which is only tractable for small system sizes.
     check_general_model(
         TFIModel,

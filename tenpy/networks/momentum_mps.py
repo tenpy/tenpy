@@ -25,7 +25,7 @@ always orthogonal to the initial uniform MPS. `X` parametrizes the excited state
 import logging
 import warnings
 
-import cyten as ct
+import lasyten as lasy
 import numpy as np
 
 from ..tools import BetaWarning
@@ -180,7 +180,7 @@ class MomentumMPS:
 
         """
         i = self._to_valid_index(i)
-        self.dtype = ct.Dtype.common(self.dtype, X.dtype)
+        self.dtype = lasy.Dtype.common(self.dtype, X.dtype)
         self._X[i] = X
 
     def _to_valid_index(self, i):

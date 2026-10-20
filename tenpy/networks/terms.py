@@ -177,11 +177,11 @@ class TermList(Hdf5Exportable):
                 op, i = term[0]
                 ot.add_onsite_term(strength, i, op)
             elif len(term) == 2:
-                args = ct.coupling_term_handle_JW(strength, term, sites)
-                ct.add_coupling_term(*args)
+                args = lasy.coupling_term_handle_JW(strength, term, sites)
+                lasy.add_coupling_term(*args)
             elif len(term) > 2:
-                args = ct.multi_coupling_term_handle_JW(strength, term, sites)
-                ct.add_multi_coupling_term(*args)
+                args = lasy.multi_coupling_term_handle_JW(strength, term, sites)
+                lasy.add_multi_coupling_term(*args)
             else:
                 raise ValueError('term without entry!?')
         return ot, ct
@@ -1736,7 +1736,7 @@ def to_single_coupling(couplings, sites, prefactors, split, bc='finite', name=No
 
     Parameters
     ----------
-    couplings : list of cyten.models.couplings.Coupling
+    couplings : list of lasyten.models.couplings.Coupling
         The individual couplings to be summed together.
     sites : list of list of int
         For each coupling, a strictly ascending list of MPS site indices where it acts.
@@ -1758,7 +1758,7 @@ def to_single_coupling(couplings, sites, prefactors, split, bc='finite', name=No
 
     Returns
     -------
-    coupling : cyten.models.couplings.Coupling
+    coupling : lasyten.models.couplings.Coupling
         The single, unified coupling representing the sum of all inputs.
 
     """

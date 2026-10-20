@@ -4,7 +4,7 @@
 [submodule "doc/toycodes"]
 	path = doc/toycodes
 	url = https://github.com/tenpy/tenpy_toycodes
-[submodule "cyten"]
-	path = cyten_repo
-	url = https://github.com/tenpy/cyten
+[submodule "lasyten"]
+	path = lasyten_repo
+	url = https://github.com/tenpy/lasyten
 	branch = main

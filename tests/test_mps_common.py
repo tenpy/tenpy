@@ -1,11 +1,11 @@
 """A collection of tests for (classes in) :mod:`tenpy.algorithms.mps_common`."""
 
 # Copyright (C) TeNPy Developers, Apache license
-import cyten as ct
+import lasyten as lasy
 import numpy as np
 import numpy.testing as npt
-from cyten.models.couplings import spin_field_coupling, spin_spin_coupling
-from cyten.models.sites import SpinSite
+from lasyten.models.couplings import spin_field_coupling, spin_spin_coupling
+from lasyten.models.sites import SpinSite
 
 from tenpy.algorithms.mps_common import TwoSiteH, VariationalCompression
 from tenpy.models import lattice, model
@@ -24,13 +24,13 @@ def _compress_random_mps(L, chi_small, seed):
     site = SpinSite(S=0.5, conserve=None)
     sites = [site] * L
     d = site.dim
-    backend = ct.get_backend('no_symmetry', 'numpy')
+    backend = lasy.get_backend('no_symmetry', 'numpy')
 
     block = rng.normal(size=(d,) * L) + 1.0j * rng.normal(size=(d,) * L)
     block /= np.linalg.norm(block)
 
     p_labels = [f'p{i}' for i in range(L)]
-    psi_tensor = ct.SymmetricTensor.from_dense_block(block, codomain=[site.leg] * L, backend=backend, labels=p_labels)
+    psi_tensor = lasy.SymmetricTensor.from_dense_block(block, codomain=[site.leg] * L, backend=backend, labels=p_labels)
     psi_large = MPS.from_full(sites, psi_tensor, form=None, unit_cell_width=L)
 
     options = {
@@ -106,9 +106,9 @@ def _boundary_LP_RP(H_MPO, psi):
     For an ``L=2`` system, the environment `TwoSiteH` needs at ``i0=0`` (``LP`` left of site 0,
     ``RP`` right of site 1) is just the two trivial chain boundaries, decorated with a "one-hot"
     MPO bond leg at the ``IdL``/``IdR`` index -- exactly what ``init_LP``/``init_RP`` are supposed
-    to build, just done here directly with cyten calls since that code path isn't ported yet.
+    to build, just done here directly with lasyten calls since that code path isn't ported yet.
     """
-    backend = ct.get_backend('no_symmetry', 'numpy')
+    backend = lasy.get_backend('no_symmetry', 'numpy')
     env = MPSEnvironment(psi, psi)
 
     W0 = H_MPO.get_W(0)
@@ -116,17 +116,17 @@ def _boundary_LP_RP(H_MPO, psi):
     onehot_L = np.zeros(leg_L.dim, dtype=complex)
     IdL = 0  # TODO dummy, how to do it cleanly?
     onehot_L[IdL] = 1.0
-    onehot_L = ct.SymmetricTensor.from_dense_block(onehot_L, codomain=[leg_L], backend=backend, labels=['wR'])
-    LP = ct.outer(env.init_LP(0, 0).as_SymmetricTensor(), onehot_L)
+    onehot_L = lasy.SymmetricTensor.from_dense_block(onehot_L, codomain=[leg_L], backend=backend, labels=['wR'])
+    LP = lasy.outer(env.init_LP(0, 0).as_SymmetricTensor(), onehot_L)
 
     W1 = H_MPO.get_W(psi.L - 1)
     leg_R = W1.get_leg('wR').dual
     onehot_R = np.zeros(leg_R.dim, dtype=complex)
     IdR = -1  # TODO dummy, how to do it cleanly?
     onehot_R[IdR] = 1.0
-    onehot_R = ct.SymmetricTensor.from_dense_block(onehot_R, codomain=[leg_R], backend=backend, labels=['wL'])
-    RP = ct.outer(env.init_RP(psi.L - 1, 0).as_SymmetricTensor(), onehot_R)
-    RP = ct.permute_legs(RP, codomain=['vL*', 'vL'], domain=['wL'])
+    onehot_R = lasy.SymmetricTensor.from_dense_block(onehot_R, codomain=[leg_R], backend=backend, labels=['wL'])
+    RP = lasy.outer(env.init_RP(psi.L - 1, 0).as_SymmetricTensor(), onehot_R)
+    RP = lasy.permute_legs(RP, codomain=['vL*', 'vL'], domain=['wL'])
     return LP, RP
 
 
@@ -177,8 +177,8 @@ def test_two_site_h_matvec():
     d = site.dim
     block = rng.normal(size=(d, d)) + 1.0j * rng.normal(size=(d, d))
     block /= np.linalg.norm(block)
-    backend = ct.get_backend('no_symmetry', 'numpy')
-    psi_tensor = ct.SymmetricTensor.from_dense_block(
+    backend = lasy.get_backend('no_symmetry', 'numpy')
+    psi_tensor = lasy.SymmetricTensor.from_dense_block(
         block, codomain=[site.leg] * 2, backend=backend, labels=['p0', 'p1']
     )
     psi = MPS.from_full([site, site], psi_tensor, form=None, unit_cell_width=2)

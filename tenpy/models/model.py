@@ -36,9 +36,9 @@ import warnings
 from functools import wraps
 
 import numpy as np
-from cyten.models.couplings import Coupling
-from cyten.models.degrees_of_freedom import FermionicDOF, Site
-from cyten.tensors import dagger
+from lasyten.models.couplings import Coupling
+from lasyten.models.degrees_of_freedom import FermionicDOF, Site
+from lasyten.tensors import dagger
 
 # #from ..linalg import np_conserved as npc
 # from ..linalg.charges import LegCharge
@@ -900,7 +900,7 @@ class CouplingModel(Model):
         self.explicit_plus_hc = explicit_plus_hc
         # list of (coupling, positions, strength, split), filled by add_coupling,
         # calc_H_coupling. See tenpy.networks.terms.to_single_coupling
-        self._cyten_couplings = []
+        self._lasyten_couplings = []
         CouplingModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
 
@@ -910,7 +910,7 @@ class CouplingModel(Model):
         for ot in self.onsite_terms.values():
             ot._test_terms(sites)
         for ct in self.coupling_terms.values():
-            ct._test_terms(sites)
+            lasy._test_terms(sites)
 
     def add_local_term(self, strength, term, category=None, plus_hc=False):
         """Add a single term to `self`.
@@ -957,8 +957,8 @@ class CouplingModel(Model):
             ot.add_onsite_term(strength, i, op)
         elif len(term) == 2:
             ct = self.coupling_terms.setdefault(category, CouplingTerms(N))
-            args = ct.coupling_term_handle_JW(strength, term, sites)
-            ct.add_coupling_term(*args)
+            args = lasy.coupling_term_handle_JW(strength, term, sites)
+            lasy.add_coupling_term(*args)
         elif len(term) > 2:
             ct = self.coupling_terms.setdefault(category, MultiCouplingTerms(N))
             if not isinstance(ct, MultiCouplingTerms):
@@ -966,8 +966,8 @@ class CouplingModel(Model):
                 self.coupling_terms[category] = new_ct = MultiCouplingTerms(self.lat.N_sites)
                 new_ct += ct
                 ct = new_ct
-            args = ct.multi_coupling_term_handle_JW(strength, term, sites)
-            ct.add_multi_coupling_term(*args)
+            args = lasy.multi_coupling_term_handle_JW(strength, term, sites)
+            lasy.add_multi_coupling_term(*args)
         else:
             raise ValueError('empty term!')
         if plus_hc:
@@ -1077,7 +1077,7 @@ class CouplingModel(Model):
 
         Note: This is just a backwards-compatible wrapper matching the old add_coupling syntaxfrom
         earlier TeNPy versions.
-        It creates a Cyten Coupling object and passes it to the new add_coupling method for each
+        It creates a LASyTen Coupling object and passes it to the new add_coupling method for each
         position on the lattice.
 
         Parameters
@@ -1091,17 +1091,17 @@ class CouplingModel(Model):
             Picks the site ``lat.unit_cell[u1]`` for OP1.
         op1 : str
             Valid operator name of an onsite operator in ``lat.unit_cell[u1]`` for OP1,
-            see :meth:`~cyten.models.degrees_of_freedom.Site.get_op`.
+            see :meth:`~lasyten.models.degrees_of_freedom.Site.get_op`.
         u2 : int
             Picks the site ``lat.unit_cell[u2]`` for OP2.
         op2 : str
             Valid operator name of an onsite operator in ``lat.unit_cell[u2]`` for OP2,
-            see :meth:`~cyten.models.degrees_of_freedom.Site.get_op`.
+            see :meth:`~lasyten.models.degrees_of_freedom.Site.get_op`.
         dx : iterable of int
             Translation vector (of the unit cell) between OP1 and OP2.
             For a 1D lattice, a single int is also fine.
         op_string : str | None
-            Not yet supported in cyten, must be ``None``.
+            Not yet supported in lasyten, must be ``None``.
         category : str
             Descriptive name, defaults to a string of the form ``"{op1}_i {op2}_j"``.
         plus_hc : bool
@@ -1109,7 +1109,7 @@ class CouplingModel(Model):
 
         See Also
         --------
-        add_coupling : The cyten method which is called.
+        add_coupling : The lasyten method which is called.
         add_onsite : Add terms acting on one site only.
         add_multi_coupling : Add terms acting on more than two sites.
 
@@ -1129,7 +1129,7 @@ class CouplingModel(Model):
                 raise NotImplementedError(
                     f"add_twosite_coupling doesn't support fermionic sites yet. "
                     f'Identity insertion betweennon-adjacent MPS sites requires operators with built-in '
-                    f"Jordan-Wigner strings (like 'cyten.models.couplings.hopping'). Named operator doesn't have this."
+                    f"Jordan-Wigner strings (like 'lasyten.models.couplings.hopping'). Named operator doesn't have this."
                     f"Fix: Build the Coupling manually and use 'add_coupling(coupling, indices)' instead."
                 )
         if np.all(dx == 0) and u1 == u2:
@@ -1161,7 +1161,7 @@ class CouplingModel(Model):
 
         Parameters
         ----------
-        coupling : cyten.models.couplings.Coupling
+        coupling : lasyten.models.couplings.Coupling
             The coupling object to add. Its internal operators are fixed, so its sites
             must match the physical MPS sites at the given indices.
         indices : list of int
@@ -1201,25 +1201,25 @@ class CouplingModel(Model):
             permutation = list(np.argsort(positions))
             placed_coupling = coupling.permute(permutation, coupling._levels)
             placed_split = None if split is None else permutation.index(split)
-        self._cyten_couplings.append((placed_coupling, sorted_positions, strength, placed_split))
+        self._lasyten_couplings.append((placed_coupling, sorted_positions, strength, placed_split))
 
     @staticmethod
     def _coupling_from_opnames(sites, opnames, name=None):
-        """Build a cyten Coupling representing the product of named onsite operators.
+        """Build a lasyten Coupling representing the product of named onsite operators.
 
         Parameters
         ----------
-        sites : list of cyten.models.degrees_of_freedom.Site
+        sites : list of lasyten.models.degrees_of_freedom.Site
             The sites the coupling acts on, one per entry of `opnames`.
         opnames : list of str
             Name of the onsite operator to use on each site, see
-            :meth:`~cyten.models.degrees_of_freedom.Site.get_op`.
+            :meth:`~lasyten.models.degrees_of_freedom.Site.get_op`.
         name : str, optional
             Name for the returned Coupling.
 
         Returns
         -------
-        coupling : cyten.models.couplings.Coupling
+        coupling : lasyten.models.couplings.Coupling
             Coupling representing the outer product of the given operators, each acting on its
             own site (in the given order).
 
@@ -1238,7 +1238,7 @@ class CouplingModel(Model):
 
     @staticmethod
     def _coupling_hermitian_conjugate(coupling, name=None):
-        """Hermitian conjugate of a cyten Coupling, as a new Coupling on the same sites.
+        """Hermitian conjugate of a lasyten Coupling, as a new Coupling on the same sites.
 
         Works at the tensor level (contract, conjugate-transpose, re-factorize), so it applies to
         *any* Coupling, not just ones built via :meth:`_coupling_from_opnames`.
@@ -1246,9 +1246,9 @@ class CouplingModel(Model):
         return Coupling.from_tensor(dagger(coupling.to_tensor()), coupling.sites, name=name)
 
     def calc_H_coupling(self, name=None):
-        """Calculate the cyten Coupling representation of the Hamiltonian.
+        """Calculate the lasyten Coupling representation of the Hamiltonian.
 
-        Uses the couplings added via :meth:`add_coupling` (the cyten-native path).
+        Uses the couplings added via :meth:`add_coupling` (the lasyten-native path).
 
         Parameters
         ----------
@@ -1257,14 +1257,14 @@ class CouplingModel(Model):
 
         Returns
         -------
-        H : cyten.models.couplings.Coupling
+        H : lasyten.models.couplings.Coupling
             Coupling representing the sum of all terms added via :meth:`add_coupling`.
 
         """
-        if not self._cyten_couplings:
+        if not self._lasyten_couplings:
             raise ValueError('No couplings added via add_coupling; nothing to build.')
         couplings, sites_arg, prefactors, split = [], [], [], []
-        for coupling, positions, strength, split_idx in self._cyten_couplings:
+        for coupling, positions, strength, split_idx in self._lasyten_couplings:
             couplings.append(coupling)
             sites_arg.append(positions)
             prefactors.append(strength)
@@ -1307,7 +1307,7 @@ class CouplingModel(Model):
         if category is None:
             category = f'{op_i}_i {op_j}_j'
         ct = self.coupling_terms.setdefault(category, CouplingTerms(self.lat.N_sites))
-        ct.add_coupling_term(strength, i, j, op_i, op_j, op_string)
+        lasy.add_coupling_term(strength, i, j, op_i, op_j, op_string)
         if plus_hc:
             site_i = self.lat.unit_cell[self.lat.order[i, -1]]
             site_j = self.lat.unit_cell[self.lat.order[j % self.lat.N_sites, -1]]
@@ -1315,7 +1315,7 @@ class CouplingModel(Model):
             # op_string should be defined on all sites in the unit cell...
             hc_op_string = site_i.get_hc_op_name(op_string)
             hc_op_j = site_j.get_hc_op_name(op_j)
-            ct.add_coupling_term(np.conj(strength), i, j, hc_op_i, hc_op_j, hc_op_string)
+            lasy.add_coupling_term(np.conj(strength), i, j, hc_op_i, hc_op_j, hc_op_string)
 
     def all_coupling_terms(self):
         """Sum of all :attr:`coupling_terms`."""
@@ -1343,8 +1343,8 @@ class CouplingModel(Model):
         fitting into the lattice if you imagine open boundary conditions.
 
         This is a  wrapper kept under its old TeNPy signature.
-        It builds one :class:`~cyten.models.couplings.Coupling` from
-        `ops` and delegates to the cyten-native :meth:`add_coupling`, once per lattice placement.
+        It builds one :class:`~lasyten.models.couplings.Coupling` from
+        `ops` and delegates to the lasyten-native :meth:`add_coupling`, once per lattice placement.
 
         Parameters
         ----------
@@ -1353,15 +1353,15 @@ class CouplingModel(Model):
         ops : list of ``(opname, dx, u)``
             Each tuple determines one operator of the coupling, see the description above.
             `opname` (str) is the name of the operator (see
-            :meth:`~cyten.models.degrees_of_freedom.Site.get_op`),
+            :meth:`~lasyten.models.degrees_of_freedom.Site.get_op`),
             `dx` (list of length `lat.dim`) is a translation vector, and
             `u` (int) is the index of `lat.unit_cell` on which the operator acts.
         op_string : str | None
-            Not yet supported in cyten, must be ``None``.
+            Not yet supported in lasyten, must be ``None``.
         switchLR : int | ``"middle_i" | "middle_op"``
             Accepted for signature compatibility but has no effect: it only ever changed *where*
             in the old string-based graph `strength` was folded in, which cannot affect the
-            represented Hamiltonian (the analogous cyten-native knob is `split` on
+            represented Hamiltonian (the analogous lasyten-native knob is `split` on
             :meth:`add_coupling`, similarly inconsequential -- see its docstring).
         category : str
             Descriptive name; defaults to a string of the form ``"{op0}_i {other_ops[0]}_j {other_ops[1]}_k ..."``.
@@ -1372,7 +1372,7 @@ class CouplingModel(Model):
 
         See Also
         --------
-        add_coupling : The cyten-native core this delegates to.
+        add_coupling : The lasyten-native core this delegates to.
         add_onsite : Add terms acting on one site only.
         add_twosite_coupling : Add terms acting on exactly two sites.
 
@@ -1471,13 +1471,13 @@ class CouplingModel(Model):
             self.coupling_terms[category] = new_ct = MultiCouplingTerms(self.lat.N_sites)
             new_ct += ct
             ct = new_ct
-        ct.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_string, switchLR)
+        lasy.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_string, switchLR)
         if plus_hc:
             sites_ijkl = [self.lat.unit_cell[self.lat.order[i % self.lat.N_sites, -1]] for i in ijkl]
             hc_ops = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, ops_ijkl)]
             # NB: op_string should be defined on all sites in the unit cell...
             hc_op_string = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, op_string)]
-            ct.add_multi_coupling_term(np.conj(strength), ijkl, hc_ops, hc_op_string, switchLR)
+            lasy.add_multi_coupling_term(np.conj(strength), ijkl, hc_ops, hc_op_string, switchLR)
 
     def add_exponentially_decaying_coupling(
         self, strength, lambda_, op_i, op_j, subsites=None, subsites_start=None, op_string=None, plus_hc=False
@@ -1776,9 +1776,9 @@ class CouplingModel(Model):
         if not self.exp_decaying_terms.is_empty:
             raise ValueError("Can't `calc_H_bond` with non-empty `exp_decaying_terms`.")
 
-        if self._cyten_couplings:
-            # cyten-native path: couplings were added via add_coupling (possibly through the
-            # add_twosite_coupling/add_multi_coupling wrappers), and stored as placed cyten
+        if self._lasyten_couplings:
+            # lasyten-native path: couplings were added via add_coupling (possibly through the
+            # add_twosite_coupling/add_multi_coupling wrappers), and stored as placed lasyten
             # Couplings rather than in `coupling_terms`/`onsite_terms`. Since H_bond only needs
             # nearest-neighbor terms, sum each placed Coupling's dense tensor directly onto the
             # bond it acts on; onsite (single-site) terms get distributed onto a neighboring
@@ -1788,7 +1788,7 @@ class CouplingModel(Model):
             L = self.lat.N_sites
             sites = self.lat.mps_sites()
             H_bond = [None] * L
-            for coupling, positions, strength, split in self._cyten_couplings:
+            for coupling, positions, strength, split in self._lasyten_couplings:
                 if len(positions) == 2 and positions[1] - positions[0] == 1:
                     i, j = positions  # coupling.to_tensor() already has p0 <-> i, p1 <-> j
                     term = strength * coupling.to_tensor()
@@ -1834,9 +1834,9 @@ class CouplingModel(Model):
         finite = self.lat.bc_MPS == 'finite'
 
         ct = self.all_coupling_terms()
-        ct.remove_zeros(tol_zero)
+        lasy.remove_zeros(tol_zero)
         try:
-            H_bond = ct.to_nn_bond_Arrays(sites)
+            H_bond = lasy.to_nn_bond_Arrays(sites)
         except ValueError as e:
             if e.args[0] == 'not nearest neighbor':
                 raise ValueError(
@@ -1880,17 +1880,17 @@ class CouplingModel(Model):
             MPO representation of the Hamiltonian.
 
         """
-        if self._cyten_couplings:
-            # cyten-native path: couplings were added via add_coupling (possibly through the
+        if self._lasyten_couplings:
+            # lasyten-native path: couplings were added via add_coupling (possibly through the
             # add_twosite_coupling/add_multi_coupling wrappers), and are stored as placed
-            # cyten Couplings rather than in `onsite_terms`/`coupling_terms`. Combine them into
+            # lasyten Couplings rather than in `onsite_terms`/`coupling_terms`. Combine them into
             # a single Coupling via the (finite-only) coupling-graph machinery and wrap it as
             # an MPO directly.
             if self.lat.bc_MPS != 'finite':
                 raise NotImplementedError("add_coupling-based CouplingModel currently only supports bc_MPS='finite'")
             sites = self.lat.mps_sites()
             couplings, positions, strengths, splits = [], [], [], []
-            for coupling, pos, strength, split in self._cyten_couplings:
+            for coupling, pos, strength, split in self._lasyten_couplings:
                 couplings.append(coupling)
                 positions.append(pos)
                 strengths.append(strength)
@@ -1919,14 +1919,14 @@ class CouplingModel(Model):
         ot = self.all_onsite_terms()
         ot.remove_zeros(tol_zero)
         ct = self.all_coupling_terms()
-        ct.remove_zeros(tol_zero)
+        lasy.remove_zeros(tol_zero)
         edt = self.exp_decaying_terms
 
         H_MPO_graph = mpo.MPOGraph.from_terms(
             (ot, ct, edt), self.lat.mps_sites(), self.lat.bc_MPS, unit_cell_width=self.lat.mps_unit_cell_width
         )
         H_MPO = H_MPO_graph.build_MPO()
-        H_MPO.max_range = ct.max_range()
+        H_MPO.max_range = lasy.max_range()
         H_MPO.explicit_plus_hc = self.explicit_plus_hc
         return H_MPO
 

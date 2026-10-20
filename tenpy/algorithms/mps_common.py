@@ -28,10 +28,10 @@ import warnings
 
 # from ..linalg import np_conserved as npc
 # from ..linalg.sparse import NpcLinearOperator, OrthogonalNpcLinearOperator, SumNpcLinearOperator
-import cyten as ct
-import cyten.tensors.sparse as ct_sparse
+import lasyten as lasy
+import lasyten.tensors.sparse as lasy_sparse
 import numpy as np
-from cyten.tensors.planar import PlanarLinearOperator
+from lasyten.tensors.planar import PlanarLinearOperator
 
 from ..networks.mpo import MPOEnvironment
 from ..networks.mps import MPSEnvironment
@@ -163,7 +163,7 @@ class Sweep(Algorithm):
     def S_inv_cutoff(self):
         # high cutoff for regular inverse of S, higher cutoff if we need to (pseudo-) invert
         # a matrix (S is not a plain DiagonalTensor while the mixer is on)
-        return 1.0e-8 if any(S is not None and not isinstance(S, ct.DiagonalTensor) for S in self.psi._S) else 1.0e-15
+        return 1.0e-8 if any(S is not None and not isinstance(S, lasy.DiagonalTensor) for S in self.psi._S) else 1.0e-15
 
     def get_resume_data(self, sequential_simulations=False):
         data = super().get_resume_data(sequential_simulations)
@@ -519,7 +519,7 @@ class Sweep(Algorithm):
         self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right)
         # note: this order of wrapping is most effective.
         if hasattr(self.env, 'H') and self.env.H.explicit_plus_hc:
-            self.eff_H = ct_sparse.SumLinearOperator(self.eff_H, self.eff_H.adjoint())
+            self.eff_H = lasy_sparse.SumLinearOperator(self.eff_H, self.eff_H.adjoint())
         if len(self.ortho_to_envs) > 0:
             self._wrap_ortho_eff_H()
 
@@ -532,14 +532,14 @@ class Sweep(Algorithm):
             theta = o_env.ket.get_theta(i0, n=self.eff_H.length)
             LP = o_env.get_LP(i0, store=True)
             RP = o_env.get_RP(i0 + self.eff_H.length - 1, store=True)
-            theta = ct.tdot(LP, theta, ['vR'], ['vL'])
-            theta = ct.tdot(theta, RP, ['vR'], ['vL'])
+            theta = lasy.tdot(LP, theta, ['vR'], ['vL'])
+            theta = lasy.tdot(theta, RP, ['vR'], ['vL'])
             theta = theta.relabel({'vR*': 'vL', 'vL*': 'vR'})
             if self.eff_H.combine:
                 theta = self.eff_H.combine_theta(theta)
-            theta = ct.permute_legs(theta, codomain=self.eff_H.acts_on, domain=[])
+            theta = lasy.permute_legs(theta, codomain=self.eff_H.acts_on, domain=[])
             ortho_vecs.append(theta)
-        self.eff_H = ct_sparse.ProjectedLinearOperator(self.eff_H, ortho_vecs)
+        self.eff_H = lasy_sparse.ProjectedLinearOperator(self.eff_H, ortho_vecs)
 
     def update_local(self, theta, **kwargs):
         """Perform algorithm-specific local update.
@@ -713,15 +713,15 @@ class Sweep(Algorithm):
         # RP environments transform like B tensors on the vL(*) leg(s)
 
         if self.psi.finite:
-            assert isinstance(self.psi.get_SL(0), ct.DiagonalTensor)
-            assert isinstance(self.psi.get_SR(self.psi.L - 1), ct.DiagonalTensor)
+            assert isinstance(self.psi.get_SL(0), lasy.DiagonalTensor)
+            assert isinstance(self.psi.get_SR(self.psi.L - 1), lasy.DiagonalTensor)
             first = 1
         else:
             first = 0
 
         for i in range(first, self.psi.L):  # converting S to the left of site i
             S = self.psi.get_SL(i)
-            if isinstance(S, ct.DiagonalTensor):
+            if isinstance(S, lasy.DiagonalTensor):
                 # nothing to do
                 continue
             U, S, V = npc.svd(S, full_matrices=False, inner_labels=['vR', 'vL'])
@@ -1006,7 +1006,7 @@ class EffectiveH(PlanarLinearOperator):
         """Contract `self` to a matrix."""
         tensor = self.to_tensor()
         n = len(tensor.labels) // 2
-        return ct.combine_legs(tensor, tensor.labels[:n], tensor.labels[n:])
+        return lasy.combine_legs(tensor, tensor.labels[:n], tensor.labels[n:])
 
     def update_LP(self, env, i, U=None):
         """Equivalent to ``env.get_LP(i, store=True)``; optimized for `combine`.
@@ -1096,7 +1096,7 @@ class OneSiteH(EffectiveH):
     length = 1
     acts_on = ['vL', 'p0', 'vR']
 
-    op_diagram = ct.PlanarDiagram(
+    op_diagram = lasy.PlanarDiagram(
         tensors='Lp[vR*, wR, vR], W0[wL, p, wR, p*], Rp[vL*, vL, wL]',
         definition=(
             'Lp:vR* -> vL, Lp:wR @ W0:wL, Lp:vR -> vL*, '
@@ -1116,7 +1116,7 @@ class OneSiteH(EffectiveH):
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0)
         self.W0 = env.H.get_W(i0)
-        self.dtype = ct.Dtype.from_numpy_dtype(env.H.dtype)
+        self.dtype = lasy.Dtype.from_numpy_dtype(env.H.dtype)
         self.combine = combine
         self.move_right = move_right
         self.N = self.LP.get_leg('vR').dim * self.W0.get_leg('p').dim * self.RP.get_leg('vL').dim
@@ -1136,8 +1136,8 @@ class OneSiteH(EffectiveH):
         if combine:
             raise NotImplementedError("Shouldn't need this for vumps")
         self.i0 = i0
-        self.LP = ct.permute_legs(LP, codomain=['vR*', 'wR', 'vR'], domain=[])
-        self.RP = ct.permute_legs(RP, codomain=['vL*', 'vL', 'wL'], domain=[])
+        self.LP = lasy.permute_legs(LP, codomain=['vR*', 'wR', 'vR'], domain=[])
+        self.RP = lasy.permute_legs(RP, codomain=['vL*', 'vL', 'wL'], domain=[])
         self.W0 = W0
         self.dtype = LP.dtype
         self.combine = combine
@@ -1169,14 +1169,14 @@ class OneSiteH(EffectiveH):
         """
         labels = theta.labels
         if self.combine:
-            theta = ct.split_legs(theta)
+            theta = lasy.split_legs(theta)
         theta = PlanarLinearOperator.matvec(self, theta)
         if self.combine:
             if self.move_right:
-                theta = ct.combine_legs(theta, ['vL', 'p0'], pipes=[self.pipeL])
+                theta = lasy.combine_legs(theta, ['vL', 'p0'], pipes=[self.pipeL])
             else:
-                theta = ct.combine_legs(theta, ['p0', 'vR'], pipes=[self.pipeR])
-        theta = ct.permute_legs(theta, codomain=labels, domain=[])  # if necessary, transpose
+                theta = lasy.combine_legs(theta, ['p0', 'vR'], pipes=[self.pipeR])
+        theta = lasy.permute_legs(theta, codomain=labels, domain=[])  # if necessary, transpose
         return theta
 
     def combine_Heff(self, env):
@@ -1216,10 +1216,10 @@ class OneSiteH(EffectiveH):
         """
         if self.combine:
             if self.move_right:
-                theta = ct.combine_legs(theta, ['vL', 'p0'], pipes=[self.pipeL])
+                theta = lasy.combine_legs(theta, ['vL', 'p0'], pipes=[self.pipeL])
             else:
-                theta = ct.combine_legs(theta, ['p0', 'vR'], pipes=[self.pipeR])
-        return ct.permute_legs(theta, codomain=self.acts_on, domain=[])
+                theta = lasy.combine_legs(theta, ['p0', 'vR'], pipes=[self.pipeR])
+        return lasy.permute_legs(theta, codomain=self.acts_on, domain=[])
 
     def adjoint(self):
         """Return the hermitian conjugate of `self`."""
@@ -1313,7 +1313,7 @@ class TwoSiteH(EffectiveH):
     length = 2
     acts_on = ['vL', 'p0', 'p1', 'vR']
 
-    op_diagram = ct.PlanarDiagram(
+    op_diagram = lasy.PlanarDiagram(
         tensors='Lp[vR*, wR, vR], W0[wL, p, wR, p*], W1[wL, p, wR, p*], Rp[vL*, vL, wL]',
         definition=(
             'Lp:vR* -> vL, Lp:wR @ W0:wL, Lp:vR -> vL*, '
@@ -1368,11 +1368,11 @@ class TwoSiteH(EffectiveH):
         """
         labels = theta.labels
         if self.combine:
-            theta = ct.split_legs(theta)
+            theta = lasy.split_legs(theta)
         theta = PlanarLinearOperator.matvec(self, theta)
         if self.combine:
-            theta = ct.combine_legs(theta, ['vL', 'p0'], ['p1', 'vR'], pipes=[self.pipeL, self.pipeR])
-        theta = ct.permute_legs(theta, codomain=labels, domain=[])  # if necessary, transpose
+            theta = lasy.combine_legs(theta, ['vL', 'p0'], ['p1', 'vR'], pipes=[self.pipeL, self.pipeR])
+        theta = lasy.permute_legs(theta, codomain=labels, domain=[])  # if necessary, transpose
         # This is where we would truncate. Separate mode from combine?
         return theta
 
@@ -1415,8 +1415,8 @@ class TwoSiteH(EffectiveH):
 
         """
         if self.combine:
-            theta = ct.combine_legs(theta, ['vL', 'p0'], ['p1', 'vR'], pipes=[self.pipeL, self.pipeR])
-        return ct.permute_legs(theta, codomain=self.acts_on, domain=[])
+            theta = lasy.combine_legs(theta, ['vL', 'p0'], ['p1', 'vR'], pipes=[self.pipeL, self.pipeR])
+        return lasy.permute_legs(theta, codomain=self.acts_on, domain=[])
 
     def adjoint(self):
         """Return the hermitian conjugate of `self`."""
@@ -1494,7 +1494,7 @@ class ZeroSiteH(EffectiveH):
     length = 0
     acts_on = ['vL', 'vR']
 
-    op_diagram = ct.PlanarDiagram(
+    op_diagram = lasy.PlanarDiagram(
         tensors='Lp[vR*, wR, vR], Rp[vL*, vL, wL]',
         definition='Lp:vR* -> vL, Lp:wR @ Rp:wL, Lp:vR -> vL*, Rp:vL* -> vR, Rp:vL -> vR*',
         dims=dict(chi=['vR', 'vR*', 'vL', 'vL*'], w=['wL', 'wR']),
@@ -1509,7 +1509,7 @@ class ZeroSiteH(EffectiveH):
         self.i0 = i0
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0 - 1)
-        self.dtype = ct.Dtype.from_numpy_dtype(env.H.dtype)
+        self.dtype = lasy.Dtype.from_numpy_dtype(env.H.dtype)
         self.N = self.LP.get_leg('vR').dim * self.RP.get_leg('vL').dim
         PlanarLinearOperator.__init__(
             self,
@@ -1523,8 +1523,8 @@ class ZeroSiteH(EffectiveH):
     def from_LP_RP(cls, LP, RP, i0=0):
         self = cls.__new__(cls)
         self.i0 = i0
-        self.LP = ct.permute_legs(LP, codomain=['vR*', 'wR', 'vR'], domain=[])
-        self.RP = ct.permute_legs(RP, codomain=['vL*', 'vL', 'wL'], domain=[])
+        self.LP = lasy.permute_legs(LP, codomain=['vR*', 'wR', 'vR'], domain=[])
+        self.RP = lasy.permute_legs(RP, codomain=['vL*', 'vL', 'wL'], domain=[])
         self.dtype = LP.dtype
         self.N = LP.get_leg('vR').dim * RP.get_leg('vL').dim
         PlanarLinearOperator.__init__(
@@ -1552,7 +1552,7 @@ class ZeroSiteH(EffectiveH):
         """
         labels = theta.labels
         theta = PlanarLinearOperator.matvec(self, theta)
-        theta = ct.permute_legs(theta, codomain=labels, domain=[])  # if necessary, transpose
+        theta = lasy.permute_legs(theta, codomain=labels, domain=[])  # if necessary, transpose
         return theta
 
     def adjoint(self):
@@ -1574,7 +1574,7 @@ class DummyTwoSiteH(EffectiveH):
     # a single trivial "Id" tensor to which theta:vL is contracted; the other legs of theta are
     # left open. PlanarDiagram requires the new tensor of add_tensor to connect to the existing
     # diagram, so a fully disconnected (i.e. truly empty) op_diagram is not possible.
-    op_diagram = ct.PlanarDiagram(tensors='Id[a]', definition='Id:a -> a', dims=dict(x=['a']))
+    op_diagram = lasy.PlanarDiagram(tensors='Id[a]', definition='Id:a -> a', dims=dict(x=['a']))
     matvec_diagram = op_diagram.add_tensor(
         tensor='theta[vL, p0, p1, vR]',
         extra_definition='theta:vL @ Id:a, theta:p0 -> p0, theta:p1 -> p1, theta:vR -> vR',
@@ -1582,10 +1582,10 @@ class DummyTwoSiteH(EffectiveH):
     )
 
     def __init__(self, *args, **kwargs):
-        backend = ct.get_backend('no_symmetry', 'numpy')
-        sym = ct.NoSymmetry().as_Symmetry()
-        leg = ct.ElementarySpace.from_trivial_sector(1, symmetry=sym)
-        Id = ct.SymmetricTensor.from_eye([leg], backend=backend, labels=['a'])
+        backend = lasy.get_backend('no_symmetry', 'numpy')
+        sym = lasy.NoSymmetry().as_Symmetry()
+        leg = lasy.ElementarySpace.from_trivial_sector(1, symmetry=sym)
+        Id = lasy.SymmetricTensor.from_eye([leg], backend=backend, labels=['a'])
         PlanarLinearOperator.__init__(
             self,
             op_diagram=self.op_diagram,
@@ -2396,11 +2396,11 @@ class VariationalCompression(IterativeSweeps):
         th = self.env.ket.get_theta(i0, n=2)  # ket is old psi
         LP = self.env.get_LP(i0)
         RP = self.env.get_RP(i0 + 1)
-        th = ct.tdot(LP, th, ['vR'], ['vL'])
-        th = ct.tdot(th, RP, ['vR'], ['vL'])
+        th = lasy.tdot(LP, th, ['vR'], ['vL'])
+        th = lasy.tdot(th, RP, ['vR'], ['vL'])
         th = th.relabel({'vR*': 'vL', 'vL*': 'vR'})
-        th = ct.permute_legs(th, codomain=['vL', 'p0'], domain=['p1', 'vR'])
-        th = ct.combine_legs(th, ['vL', 'p0'], ['p1', 'vR'])
+        th = lasy.permute_legs(th, codomain=['vL', 'p0'], domain=['p1', 'vR'])
+        th = lasy.combine_legs(th, ['vL', 'p0'], ['p1', 'vR'])
         return self.update_new_psi(th)
 
     def update_new_psi(self, theta):
@@ -2408,17 +2408,17 @@ class VariationalCompression(IterativeSweeps):
         i0 = self.i0
         new_psi = self.psi
         U, S, VH, err, renormalize = self.svd_theta(theta)
-        U = ct.split_legs(U)
-        VH = ct.split_legs(VH)
+        U = lasy.split_legs(U)
+        VH = lasy.split_legs(VH)
         self.renormalize.append(renormalize)
         # first compare to old best guess to check convergence of the sweeps
         if self._tol_theta_diff is not None and self.update_LP_RP[0] is False:
             theta_old = new_psi.get_theta(i0)
-            theta_new_trunc = ct.tdot(ct.scale_axis(U, S, 'vR'), VH, ['vR'], ['vL'])
-            theta_new_trunc = ct.permute_legs(
+            theta_new_trunc = lasy.tdot(lasy.scale_axis(U, S, 'vR'), VH, ['vR'], ['vL'])
+            theta_new_trunc = lasy.permute_legs(
                 theta_new_trunc, codomain=theta_old.codomain_labels, domain=theta_old.domain_labels
             )
-            ov = ct.inner(theta_new_trunc, theta_old)
+            ov = lasy.inner(theta_new_trunc, theta_old)
             theta_diff = 1.0 - abs(ov)
             self._theta_diff.append(theta_diff)
         # now set the new tensors to the MPS
