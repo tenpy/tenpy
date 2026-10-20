@@ -53,7 +53,9 @@ and bottom::
     |         |   |   |   |   |   |
     |         :   :   :   :   :   :
 
-We  use the following label convention::
+Diagrams are schematic: lines indicate the labels of the legs and which legs are contracted;
+arrow heads do not indicate the duality of the legs.
+We use the following label convention::
 
     |         q
     |         ^
@@ -112,7 +114,7 @@ see :cite:`hauschild2018`.
     to use a `singlet` as a maximally entangled state.
     Here, we use instead the identity :math:`\delta_{p,q}`, since it is easier to
     generalize for `p` running over more than two indices, and allows a simple use of charge
-    conservation with the above `qconj` convention.
+    conservation.
     Moreover, we don't split the physical and auxiliary space into separate sites, which makes
     TEBD as costly as :math:`O(d^6 \chi^3)`.
 """
