@@ -78,7 +78,7 @@ import numpy as np
 
 try:
     from packaging.version import parse as parse_version
-except (ImportError, AttributeError):
+except ImportError, AttributeError:
     try:
         from setuptools._vendor.packaging.version import parse as parse_version
     except ImportError:
@@ -809,7 +809,7 @@ class Hdf5Saver:
         qualname = obj.__qualname__
         try:
             obj2 = find_global(module, qualname)
-        except (ImportError, KeyError, AttributeError):
+        except ImportError, KeyError, AttributeError:
             raise Hdf5ExportError(f"Can't export `{obj!r}`: it's not found as {qualname} in module {module}") from None
         else:
             if obj2 is not obj:
@@ -1151,7 +1151,7 @@ class Hdf5Loader:
         class_name = self.get_attr(h5gr, ATTR_CLASS)
         try:
             cls = find_global(module_name, class_name)
-        except (ImportError, AttributeError):
+        except ImportError, AttributeError:
             msg = f"Can't import class {class_name!s} from {module_name!s}"
             if self.ignore_unknown:
                 warnings.warn(msg, UserWarning)
@@ -1174,7 +1174,7 @@ class Hdf5Loader:
         class_name = self.get_attr(h5gr, ATTR_CLASS)
         try:
             obj = find_global(module_name, class_name)
-        except (ImportError, AttributeError):
+        except ImportError, AttributeError:
             msg = f"Can't import global {class_name!s} from {module_name!s}"
             if self.ignore_unknown:
                 warnings.warn(msg, UserWarning)

@@ -22,9 +22,9 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
-          # recursive: also pull cyten's hdf5_io and SUN_symbols submodules
+          # recursive: also pull lasyten's hdf5_io and SUN_symbols submodules
           submodules: recursive
 
       - name: Set up micromamba
@@ -40,14 +40,14 @@ jobs:
         # build deps (pybind11, scikit-build-core, cmake, pytorch, ...) come from environment.yml
         run: |
           pip install --no-build-isolation -e ".[test]"
-        working-directory: ./cyten_repo/external/hdf5_io
+        working-directory: ./lasyten_repo/external/hdf5_io
 
-      - name: Build and install cyten
+      - name: Build and install lasyten
         # build deps (pybind11, scikit-build-core, cmake, pytorch, ...) come from environment.yml
         # --no-build-isolation avoids pip pulling a CUDA torch wheel that needs the CUDA toolkit
         run: |
           pip install --no-build-isolation -e ".[test]"
-        working-directory: ./cyten_repo
+        working-directory: ./lasyten_repo
 
       - name: Build and install tenpy
         run: |
@@ -58,7 +58,7 @@ jobs:
         # Note: This runs in the repo root directory, which contains the uncompiled tenpy package.
         #       To use the version we just installed, it is important to run `coverage`
         #       instead of `python -m coverage`.
-        # Note: only cover tenpy tests, not cyten!
+        # Note: only cover tenpy tests, not lasyten!
         run: |
           coverage run -m pytest tests
           coverage report -m --skip-covered --sort=miss

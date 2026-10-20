@@ -9,8 +9,8 @@ We choose the field along z to allow to conserve the parity, if desired.
 # Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
-from cyten.models.couplings import spin_field_coupling, spin_spin_coupling
-from cyten.models.sites import SpinSite
+from lasyten.models.couplings import spin_field_coupling, spin_spin_coupling
+from lasyten.models.sites import SpinSite
 
 from ..tools import to_array
 from .lattice import Chain
@@ -44,7 +44,7 @@ class TFIModel(CouplingMPOModel):
         :include: CouplingMPOModel
 
         conserve : None | 'parity'
-            What should be conserved. See :class:`~cyten.models.sites.SpinSite`.
+            What should be conserved. See :class:`~lasyten.models.sites.SpinSite`.
         J, g : float | array
             Coupling as defined for the Hamiltonian above.
             Defaults to ``J=g=1``
@@ -73,7 +73,7 @@ class TFIModel(CouplingMPOModel):
             site1, site2 = self.lat.unit_cell[u1], self.lat.unit_cell[u2]
             # sigma^x_i sigma^x_j = 4 * S^x_i S^x_j
             coupling = spin_spin_coupling([site1, site2], Jx=4.0)
-            mps_i, mps_j, strength_vals = self.lat.possible_couplings(u1, u2, dx, J)
+            mps_i, mps_j, strength_vals = self.lat.possible_couplings_strengths(u1, u2, dx, J)
             for i, j, strength in zip(mps_i, mps_j, strength_vals):
                 self.add_coupling(coupling, [int(i), int(j)], strength=-strength)
         # done

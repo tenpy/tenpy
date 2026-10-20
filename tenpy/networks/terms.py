@@ -1736,7 +1736,7 @@ def to_single_coupling(couplings, sites, prefactors, split, bc='finite', name=No
 
     Parameters
     ----------
-    couplings : list of cyten.models.couplings.Coupling
+    couplings : list of lasyten.models.couplings.Coupling
         The individual couplings to be summed together.
     sites : list of list of int
         For each coupling, a strictly ascending list of MPS site indices where it acts.
@@ -1758,7 +1758,7 @@ def to_single_coupling(couplings, sites, prefactors, split, bc='finite', name=No
 
     Returns
     -------
-    coupling : cyten.models.couplings.Coupling
+    coupling : lasyten.models.couplings.Coupling
         The single, unified coupling representing the sum of all inputs.
 
     """

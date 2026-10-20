@@ -34,9 +34,9 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
-        # recursive: also pull cyten's hdf5_io and SUN_symbols submodules
+        # recursive: also pull lasyten's hdf5_io and SUN_symbols submodules
         submodules: recursive
 
     - name: Set up micromamba
@@ -52,14 +52,14 @@ jobs:
       # build deps (pybind11, scikit-build-core, cmake, pytorch, ...) come from environment.yml
       run: |
         pip install --no-build-isolation -e ".[test]"
-      working-directory: ./cyten_repo/external/hdf5_io
+      working-directory: ./lasyten_repo/external/hdf5_io
 
-    - name: Build and install cyten
+    - name: Build and install lasyten
       # build deps (pybind11, scikit-build-core, cmake, pytorch, ...) come from environment.yml
       # --no-build-isolation avoids pip pulling a CUDA torch wheel that needs the CUDA toolkit
       run: |
         pip install --no-build-isolation -e ".[test]"
-      working-directory: ./cyten_repo
+      working-directory: ./lasyten_repo
 
     - name: Build and install tenpy
       run: |

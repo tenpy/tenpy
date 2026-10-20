@@ -57,7 +57,7 @@ from . import (
 )
 
 # The model modules above are still
-# np_conserved-based and do not yet work in cyten.
+# np_conserved-based and do not yet work in lasyten.
 # from .aklt import *
 # from .clock import *
 # from .fermions_spinless import *

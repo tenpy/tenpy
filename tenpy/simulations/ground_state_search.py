@@ -4,7 +4,7 @@
 from pathlib import Path
 
 import numpy as np
-from cyten.tensors import krylov_based
+from lasyten.tensors import krylov_based
 
 from ..algorithms.mps_common import ZeroSiteH
 

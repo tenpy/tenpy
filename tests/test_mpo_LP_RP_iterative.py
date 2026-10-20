@@ -7,7 +7,6 @@ import pytest
 pytest.skip(allow_module_level=True)
 
 import pytest
-from tenpy.linalg import np_conserved as npc
 
 # networks
 from tenpy.networks.site import SpinHalfSite

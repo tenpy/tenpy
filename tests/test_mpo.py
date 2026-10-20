@@ -1,29 +1,25 @@
 """A collection of tests for (classes in) :module:`tenpy.networks.mpo`."""
 # Copyright (C) TeNPy Developers, Apache license
 
+import lasyten as lasy
 import numpy as np
 import pytest
-from cyten.models.couplings import Coupling, heisenberg_coupling, spin_field_coupling
+from lasyten.models.couplings import Coupling, heisenberg_coupling, spin_field_coupling
+from lasyten.models.sites import SpinSite
+from numpy import testing as npt
+from scipy import linalg as spla
 
-# from tenpy.networks import site
-# from tenpy.networks.terms import CouplingTerms, MultiCouplingTerms, OnsiteTerms, TermList
-from cyten.models.sites import SpinSite
-
-# pytest.skip(allow_module_level=True)
-# from random_test import random_MPS
-# from tenpy.algorithms.exact_diag import ExactDiag
-# from tenpy.linalg import np_conserved as npc
-# from tenpy.models.spins import SpinChain
-# from tenpy.models.xxz_chain import XXZChain
+from tenpy.algorithms import ExactDiag
+from tenpy.models.spins import SpinChain
 from tenpy.networks import mpo
-from tenpy.networks.terms import to_single_coupling
+from tenpy.networks.terms import CouplingTerms, OnsiteTerms, to_single_coupling
 
 # spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 spin_half = SpinSite(S=0.5, conserve=None)
 
 
 def test_MPO():
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     s = spin_half
     for bc in mpo.MPO._valid_bc:
         for L in [4, 2, 1]:
@@ -96,7 +92,7 @@ def test_MPOGraph():
 
 
 def test_MPOGraph_term_conversion():
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     L = 4
 
     g1 = mpo.MPOGraph([spin_half] * L, 'infinite', unit_cell_width=L)
@@ -176,7 +172,7 @@ def test_MPOGraph_coupling_hash_tuples():
 
 
 def test_MPO_conversion():
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     L = 8
     sites = []
     for i in range(L):
@@ -259,7 +255,7 @@ def test_MPO_conversion():
 
 
 def test_MPOEnvironment():
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     xxz_pars = dict(L=4, Jxx=1.0, Jz=1.1, hz=0.1, bc_MPS='finite', sort_charge=True)
     L = xxz_pars['L']
     M = XXZChain(xxz_pars)
@@ -317,7 +313,7 @@ def test_MPO_hermitian():
     Adapted from the old np_conserved-based version (which built ``Sm_2 Sp_3`` /
     ``Sp_2 Sm_3`` via ``CouplingTerms`` + ``MPOGraph.from_terms(...).build_MPO()`` on an
     infinite chain, including a term wrapping into a further unit cell, ``(3, 18)``) to the
-    cyten :func:`~tenpy.networks.terms.to_single_coupling`.
+    lasyten :func:`~tenpy.networks.terms.to_single_coupling`.
     """
     L = 4
     site = SpinSite(S=0.5, conserve=None)
@@ -341,39 +337,44 @@ def test_MPO_hermitian():
     assert _is_hermitian_coupling(L, site, H)
 
 
-def test_MPO_addition():
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+@pytest.mark.parametrize('bc', ['infinite', 'finite'])
+@pytest.mark.parametrize('explicit_plus_hc', [True, False])
+def test_MPO_addition(bc, explicit_plus_hc):
     L = 4
-    for bc in ['infinite', 'finite']:
-        print('bc = ', bc, '-' * 40)
-        s = spin_half
-        ot1 = OnsiteTerms(L)
-        ct1 = CouplingTerms(L)
-        ct1.add_coupling_term(2.0, 2, 3, 'Sm', 'Sp')
-        ct1.add_coupling_term(2.0, 2, 3, 'Sp', 'Sm')
-        ct1.add_coupling_term(2.0, 1, 2, 'Sz', 'Sz')
-        ot1.add_onsite_term(3.0, 1, 'Sz')
-        H1 = mpo.MPOGraph.from_terms((ot1, ct1), [s] * L, bc, unit_cell_width=L).build_MPO()
-        ot2 = OnsiteTerms(4)
-        ct2 = CouplingTerms(4)
-        ct2.add_coupling_term(4.0, 0, 2, 'Sz', 'Sz')
-        ct2.add_coupling_term(4.0, 1, 2, 'Sz', 'Sz')
-        ot2.add_onsite_term(5.0, 1, 'Sz')
-        H2 = mpo.MPOGraph.from_terms((ot2, ct2), [s] * L, bc, unit_cell_width=L).build_MPO()
-        H12_sum = H1 + H2
-        ot12 = OnsiteTerms(4)
-        ot12 += ot1
-        ot12 += ot2
-        ct12 = CouplingTerms(4)
-        ct12 += ct1
-        ct12 += ct2
-        H12 = mpo.MPOGraph.from_terms((ot12, ct12), [s] * L, bc, unit_cell_width=L).build_MPO()
-        assert H12.is_equal(H12_sum)
+    print('bc = ', bc, '-' * 40)
+    s = spin_half
+    ot1 = OnsiteTerms(L)
+    ct1 = CouplingTerms(L)
+    ct1.add_coupling_term(2.0, 2, 3, 'Sm', 'Sp')
+    ct1.add_coupling_term(2.0, 2, 3, 'Sp', 'Sm')
+    ct1.add_coupling_term(2.0, 1, 2, 'Sz', 'Sz')
+    ot1.add_onsite_term(3.0, 1, 'Sz')
+
+    with pytest.raises(NotImplementedError, match='TODO: MPO._graph'):
+        _ = mpo.MPOGraph.from_terms((ot1, ct1), [s] * L, bc, unit_cell_width=L).build_MPO()
+    pytest.skip('MPOGraph.build_MPO not ported')
+
+    H1 = mpo.MPOGraph.from_terms((ot1, ct1), [s] * L, bc, unit_cell_width=L).build_MPO()
+    ot2 = OnsiteTerms(4)
+    ct2 = CouplingTerms(4)
+    ct2.add_coupling_term(4.0, 0, 2, 'Sz', 'Sz')
+    ct2.add_coupling_term(4.0, 1, 2, 'Sz', 'Sz')
+    ot2.add_onsite_term(5.0, 1, 'Sz')
+    H2 = mpo.MPOGraph.from_terms((ot2, ct2), [s] * L, bc, unit_cell_width=L).build_MPO()
+    H12_sum = H1 + H2
+    ot12 = OnsiteTerms(4)
+    ot12 += ot1
+    ot12 += ot2
+    ct12 = CouplingTerms(4)
+    ct12 += ct1
+    ct12 += ct2
+    H12 = mpo.MPOGraph.from_terms((ot12, ct12), [s] * L, bc, unit_cell_width=L).build_MPO()
+    assert H12.is_equal(H12_sum)
 
 
 @pytest.mark.parametrize('sites', [None, [0], [1], [0, 1, 2, 3], [2, 3], [3, 2]])
 def test_MPO_plus_identity(sites, alpha=0.7, beta=0.42):
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     s = spin_half
 
     ot = OnsiteTerms(4)
@@ -402,7 +403,7 @@ def test_MPO_plus_identity(sites, alpha=0.7, beta=0.42):
 
 
 def test_MPO_expectation_value(tol=1.0e-15):
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     L_mpo = 4
     s = spin_half
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='infinite', unit_cell_width=6)
@@ -470,7 +471,7 @@ def test_MPO_expectation_value(tol=1.0e-15):
 
 
 def test_MPO_var(L=8, tol=1.0e-13):
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     xxz_pars = dict(L=L, Jx=1.0, Jy=1.0, Jz=1.1, hz=0.1, bc_MPS='finite', conserve=None)
     M = SpinChain(xxz_pars)
     psi = random_MPS(L, 2, 10)
@@ -498,7 +499,7 @@ def test_MPO_var(L=8, tol=1.0e-13):
 
 @pytest.mark.parametrize('method', ['SVD', 'variational', 'zip_up'])
 def test_apply_mpo(method):
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     bc_MPS = 'finite'
     # NOTE: overlap doesn't work for calculating the energy (density) in infinite systems!
     # energy is extensive, overlap exponential....
@@ -522,7 +523,7 @@ def test_apply_mpo(method):
 
 
 def test_MPOTransferMatrix(eps=1.0e-13):
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     s = spin_half
     # exponential decay in Sz term to make it harder
     gamma = 0.5
@@ -585,7 +586,7 @@ def test_MPOTransferMatrix(eps=1.0e-13):
 
 
 def test_MPO_from_wavepacket(L=10):
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     (
         k0,
         x0,
@@ -696,28 +697,223 @@ def test_to_single_coupling_bad_input():
         to_single_coupling([c_field, c_field], [[0], [2]], [1.0, 1.0], [0, 0])
 
 
-@pytest.mark.skip
+def make_WI_np(dt, A, B, C, D):
+    assert all(T.ndim == 4 for T in [A, B, C, D])
+    Id = np.eye(2)[None, None, :, :]
+    W = np.zeros((1 + A.shape[0], 1 + A.shape[1], 2, 2), complex)
+    W[0:1, 0:1] = Id + dt * D
+    W[0:1, 1:] = C
+    W[1:, 0:1] = dt * B
+    W[1:, 1:] = A
+    return W
+
+
+def make_WII_np(dt, A, B, C, D):
+    assert all(T.ndim == 4 for T in [A, B, C, D])
+    B = B[:, 0]
+    C = C[0, :]
+    D = D[0, 0]
+
+    # Implementation from v1:
+
+    tC = np.sqrt(np.abs(dt))  # spread time step across B, C
+    tB = dt / tC
+    d = D.shape[0]
+
+    # The virtual size of W is  (1+Nr, 1+Nc)
+    Nr = A.shape[0]
+    Nc = A.shape[1]
+    W = np.zeros((1 + Nr, 1 + Nc, d, d), dtype=np.result_type(D, dt))
+
+    Id_ = np.array([[1, 0], [0, 1]])  # 2x2 operators in a hard-core boson space
+    b = np.array([[0, 0], [1, 0]])
+
+    Id = np.kron(Id_, Id_)  # 4x4 operators in the 2x hard core boson space
+    Br = np.kron(b, Id_)
+    Bc = np.kron(Id_, b)
+    Brc = np.kron(b, b)
+    for r in range(Nr):  # double loop over row / column of A
+        for c in range(Nc):
+            # Select relevant part of virtual space and extend by hardcore bosons
+            h = (
+                np.kron(Brc, A[r, c, :, :])
+                + np.kron(Br, tB * B[r, :, :])
+                + np.kron(Bc, tC * C[c, :, :])
+                + dt * np.kron(Id, D)
+            )
+            w = spla.expm(h)  # Exponentiate in the extended Hilbert space
+            w = w.reshape((2, 2, d, 2, 2, d))
+            w = w[:, :, :, 0, 0, :]
+            W[1 + r, 1 + c, :, :] = w[1, 1]  # extracts relevant parts according to Eqn 11
+            if c == 0:
+                W[1 + r, 0] = w[1, 0]
+            if r == 0:
+                W[0, 1 + c] = w[0, 1]
+                if c == 0:
+                    W[0, 0] = w[0, 0]
+        if Nc == 0:  # technically only need one boson
+            h = np.kron(Br, tB * B[r, :, :]) + t * np.kron(Id, D)
+            w = spla.expm(h)
+            w = w.reshape((2, 2, d, 2, 2, d))
+            w = w[:, :, :, 0, 0, :]
+            W[1 + r, 0] = w[1, 0]
+            if r == 0:
+                W[0, 0] = w[0, 0]
+    if Nr == 0:
+        for c in range(Nc):
+            h = np.kron(Bc, tC * C[c, :, :]) + t * np.kron(Id, D)
+            w = spla.expm(h)
+            w = w.reshape((2, 2, d, 2, 2, d))
+            w = w[:, :, :, 0, 0, :]
+            W[0, 1 + c] = w[0, 1]
+            if c == 0:
+                W[0, 0] = w[0, 0]
+        if Nc == 0:
+            W = spla.expm(dt * D).reshape([1, 1, d, d])
+    return W
+
+
+def make_W_np_v1(dt, H_W: list[np.ndarray], approximation: str, finite: bool) -> list[np.ndarray]:
+    """make WI or WII from W of H_MPO, like in v1"""
+
+    # ensure IdL / IdR as expected
+    eye = np.eye(2)
+
+    if finite:
+        assert H_W[0].shape[0] == 1
+        assert H_W[-1].shape[1] == 1
+
+    W_U = []
+    for i, W in enumerate(H_W):  # W[wL, wR, p, p*]
+        if finite and i == 0:
+            # W = [[1 C D]]
+            assert np.allclose(W[0, 0], eye)
+            C = W[0, 1:-1][None, :, :, :]
+            D = W[0, -1][None, None, :, :]
+            A = np.zeros((0, C.shape[1], 2, 2))
+            B = np.zeros((0, D.shape[1], 2, 2))
+        elif finite and i == len(H_W) - 1:
+            # W =[[D] [B] [1]]
+            D = W[0, -1][None, None, :, :]
+            B = W[1:-1, -1][:, None, :, :]
+            assert np.allclose(W[-1, -1], eye)
+            A = np.zeros((B.shape[0], 0, 2, 2))
+            C = np.zeros((D.shape[0], 0, 2, 2))
+        else:
+            # extract blocks such that
+            # W = [[1 C D]
+            #      [0 A B]
+            #      [0 0 1]]
+            assert np.allclose(W[0, 0], eye)
+            C = W[0, 1:-1][None, :, :, :]
+            D = W[0, -1][None, None, :, :]
+            assert np.allclose(W[1:-1, 0], 0)
+            A = W[1:-1, 1:-1]
+            B = W[1:-1, -1][:, None, :, :]
+            assert np.allclose(W[-1, :-1], 0)
+            assert np.allclose(W[-1, -1], eye)
+
+        if approximation == 'I':
+            W_U.append(make_WI_np(dt, A, B, C, D))
+        elif approximation == 'II':
+            W_U.append(make_WII_np(dt, A, B, C, D))
+        else:
+            raise NotImplementedError
+    return W_U
+
+
+def _roll_IdR_position(W, wL=True, wR=True):
+    """Map between conventions [IdL, IdR, *other] -> [IdL, *others, IdR] for order of W-blocks"""
+    dL, dR, _, _ = W.shape
+    # [IdL, IdR, *other] -> [IdL, *others, IdR]
+    if wL and wR:
+        res = W[*np.ix_([0, *range(2, dL), 1], [0, *range(2, dR), 1]), :, :]
+    elif wL:
+        res = W[[0, *range(2, dL), 1], :, :, :]
+    elif wR:
+        res = W[:, [0, *range(2, dR), 1], :, :]
+    else:
+        res = W
+    assert res.shape == W.shape
+    return res
+
+
+def make_W_np(dt, H: mpo.MPO, approximation: str, finite: bool) -> np.ndarray:
+    """Make pure-numpy WI / WII tensors from the Hamiltonian MPO"""
+    # transpose to v1 leg order
+    assert all(W.labels == ['wL', 'p', 'wR', 'p*'] for W in H._W)
+    H_W = [W.to_numpy().transpose([0, 2, 1, 3]) for W in H._W]  # transpose to tenpy v1 leg order
+
+    # ensure row/column ordering within MPO tensors
+    has_v1_state_ordering = all(
+        W.get_leg('wL').summand_labels == (['IdL'] if i == 0 and finite else ['IdL', None, 'IdR'])
+        and W.get_leg('wR').summand_labels == (['IdR'] if i == H.L - 1 and finite else ['IdL', None, 'IdR'])
+        for i, W in enumerate(H._W)
+    )
+    has_lexsorted_state_ordering = all(
+        W.get_leg('wL').summand_labels == (['IdL'] if i == 0 and finite else ['IdL', 'IdR', None])
+        and W.get_leg('wR').summand_labels == (['IdR'] if i == H.L - 1 and finite else ['IdL', 'IdR', None])
+        for i, W in enumerate(H._W)
+    )
+    if has_v1_state_ordering:
+        pass
+    elif has_lexsorted_state_ordering:
+        H_W = [_roll_IdR_position(W, wL=not finite or i > 0, wR=not finite or i < H.L - 1) for i, W in enumerate(H_W)]
+    else:
+        raise NotImplementedError
+
+    op_norms = [np.linalg.norm(W, axis=(2, 3)) for W in H_W]  # for debugging
+    U_W = make_W_np_v1(dt, H_W, approximation=approximation, finite=finite)
+
+    # transpose back to v2 leg order
+    U_W = [W.transpose([0, 2, 1, 3]) for W in U_W]
+
+    return U_W
+
+
 @pytest.mark.parametrize('conserve', [None, 'best'])
+@pytest.mark.parametrize('backend', ['fusion_tree', 'abelian', 'no_symmetry'])
 @pytest.mark.parametrize('approximation', ['I', 'II'])
-def test_make_U_cyten(conserve, approximation):
-    """make_U_I / make_U_II on Coupling-built finite MPOs (DirectSumSpace virtual legs)."""
-    from cyten.tensors import SymmetricTensor
+@pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
+def test_MPO_make_U(conserve, backend, approximation, bc_MPS, L=6, dt=0.01):
+    """Compare MPO.make_U vs a pure-numpy implementation
 
-    from tenpy.models.spins import SpinChain
+    This pure-numpy implementation is also run in the v1 tests, and thus trusted
+    """
+    if bc_MPS == 'infinite':
+        with pytest.raises(NotImplementedError):
+            _ = SpinChain(dict(L=L, Jx=1.0, Jy=1.0, Jz=1.0, hz=0.2, bc_MPS=bc_MPS, conserve=conserve))
+        pytest.skip('Models can not create infinite MPOs yet')
 
-    M = SpinChain(dict(L=4, Jx=1.0, Jy=1.0, Jz=1.0, hz=0.2, bc_MPS='finite', conserve=conserve))
-    H = M.H_MPO
-    assert isinstance(H.get_W(0), SymmetricTensor)
-    # Interior bonds must expose both IdL and IdR summand indices.
-    assert H.IdL[0] == 0 and H.IdR[-1] == 0
-    for b in range(1, H.L):
-        assert H.IdL[b] is not None
-        assert H.IdR[b] is not None
+    M = SpinChain(dict(L=L, Jx=1.0, Jy=1.0, Jz=1.0, hz=0.2, bc_MPS=bc_MPS, conserve=conserve))
+    if M.H_MPO._W[0].backend != lasy.get_backend(backend):
+        pytest.skip('Can not control model backend yet')
 
-    U = H.make_U(dt=-0.01j, approximation=approximation)
-    assert U.L == H.L
-    assert all(i is not None for i in U.IdL)
-    for i in range(U.L):
-        assert isinstance(U.get_W(i), SymmetricTensor)
-    for i in range(U.L - 1):
-        assert U.get_W(i).get_leg_co_domain('wR') == U.get_W(i + 1).get_leg_co_domain('wL')
+    if approximation == 'II':
+        with pytest.raises(NotImplementedError):
+            _ = M.H_MPO.make_U(-1j * dt, approximation=approximation)
+        pytest.skip('WII not ported yet')
+
+    U_MPO: mpo.MPO = M.H_MPO.make_U(-1j * dt, approximation=approximation)
+    U_MPO.test_sanity()
+    assert U_MPO.L == L
+
+    # compare against pure-numpy construction of the W tensors
+    W_U_expect_np = make_W_np(-1j * dt, M.H_MPO, approximation=approximation, finite=bc_MPS == 'finite')
+    for W, expect_np in zip(U_MPO._W, W_U_expect_np):
+        W_np = W.to_numpy()
+        npt.assert_almost_equal(W_np, expect_np)
+
+    # check error bound
+    if bc_MPS == 'finite':
+        ED_H = ExactDiag.from_H_mpo(M.H_MPO)
+        ED_H.build_full_H_from_mpo()
+        ED_H.full_diagonalization()
+        U_exact = ED_H.exp_H(dt).to_numpy()
+
+        ED_U = ExactDiag.from_H_mpo(U_MPO)
+        ED_U.build_full_H_from_mpo()
+        U_np = ED_U.full_H.to_numpy()
+
+        err = np.linalg.norm(U_np - U_exact)
+        assert err < L * (dt**2)

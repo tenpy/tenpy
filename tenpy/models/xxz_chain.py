@@ -5,8 +5,8 @@ this module is more to serve as a pedagogical example for a model.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from cyten.models.couplings import spin_field_coupling, spin_spin_coupling
-from cyten.models.sites import SpinSite
+from lasyten.models.couplings import spin_field_coupling, spin_spin_coupling
+from lasyten.models.sites import SpinSite
 
 from ..tools import asConfig, to_array
 from .lattice import Chain
@@ -41,13 +41,13 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         L : int
             Length of the chain.
         conserve : 'parity' | None
-            What should be conserved. See :class:`~cyten.models.sites.SpinSite`.
+            What should be conserved. See :class:`~lasyten.models.sites.SpinSite`.
         Jxx, Jz, hz : float | array
             Coupling as defined for the Hamiltonian above.
             Defaults to ``Jxx=Jz=1`` without field ``hz=0``.
         bc_MPS : {'finite'}
             MPS boundary conditions. Only ``'finite'`` is currently supported by the
-            cyten-native ``add_coupling`` path.
+            lasyten-native ``add_coupling`` path.
 
     """
 
@@ -77,10 +77,10 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         # Jxx/2 (Sp_i Sm_j + Sm_i Sp_j) = Jxx (Sx_i Sx_j + Sy_i Sy_j)
         coupling_xy = spin_spin_coupling([site, site], Jx=1.0, Jy=1.0)
         coupling_z = spin_spin_coupling([site, site], Jz=1.0)
-        mps_i, mps_j, Jxx_vals = self.lat.possible_couplings(0, 0, [1], Jxx)
+        mps_i, mps_j, Jxx_vals = self.lat.possible_couplings_strengths(0, 0, [1], Jxx)
         for i, j, strength in zip(mps_i, mps_j, Jxx_vals):
             self.add_coupling(coupling_xy, [int(i), int(j)], strength=strength)
-        mps_i, mps_j, Jz_vals = self.lat.possible_couplings(0, 0, [1], Jz)
+        mps_i, mps_j, Jz_vals = self.lat.possible_couplings_strengths(0, 0, [1], Jz)
         for i, j, strength in zip(mps_i, mps_j, Jz_vals):
             self.add_coupling(coupling_z, [int(i), int(j)], strength=strength)
         # 7) initialize H_MPO
@@ -126,9 +126,9 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
             site1, site2 = self.lat.unit_cell[u1], self.lat.unit_cell[u2]
             coupling_xy = spin_spin_coupling([site1, site2], Jx=1.0, Jy=1.0)
             coupling_z = spin_spin_coupling([site1, site2], Jz=1.0)
-            mps_i, mps_j, Jxx_vals = self.lat.possible_couplings(u1, u2, dx, Jxx)
+            mps_i, mps_j, Jxx_vals = self.lat.possible_couplings_strengths(u1, u2, dx, Jxx)
             for i, j, strength in zip(mps_i, mps_j, Jxx_vals):
                 self.add_coupling(coupling_xy, [int(i), int(j)], strength=strength)
-            mps_i, mps_j, Jz_vals = self.lat.possible_couplings(u1, u2, dx, Jz)
+            mps_i, mps_j, Jz_vals = self.lat.possible_couplings_strengths(u1, u2, dx, Jz)
             for i, j, strength in zip(mps_i, mps_j, Jz_vals):
                 self.add_coupling(coupling_z, [int(i), int(j)], strength=strength)

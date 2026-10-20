@@ -37,7 +37,7 @@ import logging
 import time
 import warnings
 
-import cyten as ct
+import lasyten as lasy
 import numpy as np
 
 from ..networks.mps import MPS_TOTAL_CHARGE_LABEL
@@ -523,12 +523,12 @@ class DMRGEngine(IterativeSweeps):
         self._meas_E_trunc = meas_E_trunc
         return super().sweep(optimize)
 
-    def update_local(self, theta: ct.Tensor, optimize=True):
+    def update_local(self, theta: lasy.Tensor, optimize=True):
         """Perform site-update on the site given by the current value of :attr:`i0`.
 
         Parameters
         ----------
-        theta : :class:`cyten.Tensor`
+        theta : :class:`lasyten.Tensor`
             Initial guess for the ground state of the effective Hamiltonian.
             Leg configuration depends on two-site or one-site update, and on :attr:`combine`.
             Two-site: if :attr:`combine` then ``(vL.p0), (p1.vR)`` else ``vL, p0, p1, vR``.
@@ -552,7 +552,7 @@ class DMRGEngine(IterativeSweeps):
             age : int
                 Current size of the DMRG simulation: number of physical sites involved
                 into the contraction.
-            U, VH: :class:`cyten.Tensor`
+            U, VH: :class:`lasyten.Tensor`
                 `U` and `VH` returned by :meth:`mixed_svd`.
             ov_change: float
                 Change in the wave function ``1. - abs(<theta_guess|theta>)``
@@ -567,7 +567,7 @@ class DMRGEngine(IterativeSweeps):
         else:
             E0, N, ov_change = None, 0, 0.0
         U, S, VH, err, S_approx = self.mixed_svd(theta)
-        self._entropy_approx[(i0 + n_opt - 1) % self.psi.L] = ct.entropy(S_approx**2)
+        self._entropy_approx[(i0 + n_opt - 1) % self.psi.L] = lasy.entropy(S_approx**2)
         update_data = {'E0': E0, 'err': err, 'N': N, 'age': age, 'U': U, 'VH': VH, 'ov_change': ov_change}
         return update_data
 
@@ -619,16 +619,16 @@ class DMRGEngine(IterativeSweeps):
             j = 0
             A = psi.get_B(j, form='A')
             th = psi.get_B(j, form='Th')
-            th = ct.permute_legs(th, codomain=['vL'])
-            U, S, V = ct.svd(th, new_labels=['vL', 'vR'])
-            S = S / ct.norm(S)
+            th = lasy.permute_legs(th, codomain=['vL'])
+            U, S, V = lasy.svd(th, new_labels=['vL', 'vR'])
+            S = S / lasy.norm(S)
             psi.set_SL(j, S)
-            A_new = ct.planar_contraction(U.hc, A, ['vL*'], ['vL'], relabel1={'vR*': 'vL'})
+            A_new = lasy.planar_contraction(U.hc, A, ['vL*'], ['vL'], relabel1={'vR*': 'vL'})
             psi.set_B(j, A_new, form='A')
 
             old_UL, old_VR = psi.segment_boundaries
             if old_UL is not None:
-                new_UL = ct.planar_contraction(old_UL, U, ['vR'], ['vL'])
+                new_UL = lasy.planar_contraction(old_UL, U, ['vR'], ['vL'])
                 psi.segment_boundaries = (new_UL, old_VR)
 
             for env in self._all_envs:
@@ -642,16 +642,16 @@ class DMRGEngine(IterativeSweeps):
             j = psi.L - 1
             B = psi.get_B(j, form='B')
             th = psi.get_B(j, form='Th')
-            th = ct.permute_legs(th, domain=['vR'])
-            U, S, V = ct.svd(th, new_labels=['vL', 'vR'])
-            S = S / ct.norm(S)
+            th = lasy.permute_legs(th, domain=['vR'])
+            U, S, V = lasy.svd(th, new_labels=['vL', 'vR'])
+            S = S / lasy.norm(S)
             psi.set_SR(j, S)
-            B_new = ct.planar_contraction(B, V.hc, ['vR'], ['vR*'], relabel2={'vL*': 'vR'})
+            B_new = lasy.planar_contraction(B, V.hc, ['vR'], ['vR*'], relabel2={'vL*': 'vR'})
             psi.set_B(j, B_new, form='B')
 
             old_UL, old_VR = psi.segment_boundaries
             if old_VR is not None:
-                new_VR = ct.planar_contraction(V, old_VR, ['vR'], ['vL'])
+                new_VR = lasy.planar_contraction(V, old_VR, ['vR'], ['vL'])
                 psi.segment_boundaries = (old_UL, new_VR)
 
             for env in self._all_envs:
@@ -660,7 +660,9 @@ class DMRGEngine(IterativeSweeps):
                 env._update_gauge_RP(j, V, update_bra, update_ket)
             # No need to clear the environments on the other bonds!
 
-    def mixed_svd(self, theta: ct.Tensor) -> tuple[ct.Tensor, ct.Tensor, ct.Tensor, TruncationError, ct.DiagonalTensor]:
+    def mixed_svd(
+        self, theta: lasy.Tensor
+    ) -> tuple[lasy.Tensor, lasy.Tensor, lasy.Tensor, TruncationError, lasy.DiagonalTensor]:
         """Perform truncated or mixed SVD of the local update `theta` and update the MPS accordingly.
 
         For details, see the concrete implementations :meth:`TwoSiteDMRGEngine.mixed_svd`
@@ -668,7 +670,7 @@ class DMRGEngine(IterativeSweeps):
         """
         raise NotImplementedError('To be implemented in subclasses')
 
-    def diag(self, theta_guess: ct.Tensor):
+    def diag(self, theta_guess: lasy.Tensor):
         """Diagonalize the effective Hamiltonian represented by self.
 
         .. cfg:configoptions :: DMRGEngine
@@ -713,14 +715,14 @@ class DMRGEngine(IterativeSweeps):
 
         Parameters
         ----------
-        theta_guess : :class:`cyten.Tensor`
+        theta_guess : :class:`lasyten.Tensor`
             Initial guess for the ground state of the effective Hamiltonian.
 
         Returns
         -------
         E0 : float
             Energy of the found ground state.
-        theta : :class:`cyten.Tensor`
+        theta : :class:`lasyten.Tensor`
             Ground state of the effective Hamiltonian.
         N : int
             Number of Lanczos iterations used. ``-1`` if unknown.
@@ -751,17 +753,17 @@ class DMRGEngine(IterativeSweeps):
             else:
                 diag_method = 'lanczos'
         if diag_method == 'lanczos':
-            eng = ct.tensors.LanczosGroundState(self.eff_H, theta_guess, self.lanczos_params)
+            eng = lasy.tensors.LanczosGroundState(self.eff_H, theta_guess, self.lanczos_params)
             E, theta, N = eng.run()
         elif diag_method == 'arpack':
-            E, theta = ct.tensors.lanczos_arpack(self.eff_H, theta_guess, self.lanczos_params)
+            E, theta = lasy.tensors.lanczos_arpack(self.eff_H, theta_guess, self.lanczos_params)
         elif diag_method == 'ED_block':
             E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
         elif diag_method == 'ED_all':
             E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=False)
         else:
             raise ValueError('Unknown diagonalization method: ' + repr(self.diag_method))
-        ov_change = 1.0 - abs(ct.inner(theta_guess, theta))
+        ov_change = 1.0 - abs(lasy.inner(theta_guess, theta))
         return E, theta, N, ov_change
 
     def plot_update_stats(self, axes, xaxis='time', yaxis='E', y_exact=None, **kwargs):
@@ -896,19 +898,19 @@ class TwoSiteDMRGEngine(DMRGEngine):
 
         Parameters
         ----------
-        theta : :class:`cyten.Tensor`
+        theta : :class:`lasyten.Tensor`
             The optimized new wave function.
             Legs ``(vL.p0), (p1.vR)`` if :attr:`combine` else ``vL, p0, p1, vR``.
 
         Returns
         -------
-        U : :class:`cyten.Tensor`
+        U : :class:`lasyten.Tensor`
             Left isometric factor of `theta`. Legs ``(vL.p), vR`` if :attr:`combine` else ``vL, p, vR``.
             The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
-        S : :class:`cyten.Tensor` (two legs)
+        S : :class:`lasyten.Tensor` (two legs)
             Singular values (or general, non-diagonal bond matrix, if mixer is on). Legs ``vL, vR``.
             The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
-        VH : :class:`cyten.Tensor`
+        VH : :class:`lasyten.Tensor`
             Right isometric factor of `theta`. Legs ``vL, (p.vR)`` if :attr:`combine` else ``vL, p, vR``.
             The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
         err : :class:`~tenpy.TruncationError`
@@ -927,15 +929,15 @@ class TwoSiteDMRGEngine(DMRGEngine):
 
         if mixer is None:
             if self.combine:
-                theta = ct.planar_permute_legs(theta, codomain=['(vL.p0)'], domain=['(p1.vR)'])
+                theta = lasy.planar_permute_legs(theta, codomain=['(vL.p0)'], domain=['(p1.vR)'])
             else:
-                theta = ct.planar_permute_legs(theta, codomain=['vL', 'p0'], domain=['vR', 'p1'])
+                theta = lasy.planar_permute_legs(theta, codomain=['vL', 'p0'], domain=['vR', 'p1'])
             U, S, VH, err, _ = self.svd_theta(theta)
             if self.combine:
                 U.relabel({'(vL.p0)': '(vL.p)'})
                 VH.relabel({'(p1.vR)': '(p.vR)'})
-                A = ct.split_legs(U, ['(vL.p)'])
-                B = ct.split_legs(VH, ['(p.vR)'])
+                A = lasy.split_legs(U, ['(vL.p)'])
+                B = lasy.split_legs(VH, ['(p.vR)'])
             else:
                 U.relabel({'p0': 'p'})
                 VH.relabel({'p1': 'p'})
@@ -1012,7 +1014,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
         Parameters
         ----------
-        theta : :class:`cyten.Tensor`
+        theta : :class:`lasyten.Tensor`
             The optimized wave function.
             Labels ``(vL.p0), vR`` is :attr:`combine` and :attr:`move_right`,
             *or* ``vL, (p0.vR)`` if :attr:`combine` and not :attr:`move_right`,
@@ -1020,18 +1022,18 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
         Returns
         -------
-        U : :class:`cyten.Tensor`
+        U : :class:`lasyten.Tensor`
             New left-canonical tensor. Legs ``(vL.p), vR`` if :attr:`combine` else ``vL, p, vR``.
             The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
-        S : :class:`cyten.Tensor`
+        S : :class:`lasyten.Tensor`
             Singular values or general bond matrix, if mixer is on. Labels ``'vL', 'vR'``.
             The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
-        VH : :class:`cyten.Tensor`
+        VH : :class:`lasyten.Tensor`
             New right-canonical tensor. Legs ``vL, (p.vR)`` if :attr:`combine` else ``vL, p, vR``.
             The :attr:`psi` has been updated with this tensor already, it is returned for convenience.
         err : :class:`~tenpy.runcationError`
             The truncation error introduced.
-        S_approx : :class:`cyten.DiagonalTensor`
+        S_approx : :class:`lasyten.DiagonalTensor`
             An approximation of the singular values of the truncated `theta`.
             If exact singular values are available, e.g. if the mixer is off,
             both `S` and `S_approx` are exact singular values.
@@ -1059,19 +1061,19 @@ class SingleSiteDMRGEngine(DMRGEngine):
             S_a = S
             if move_right:
                 # theta @ B = U @ S @ VH @ B = U @ S @ (VH B)
-                B = ct.planar_contraction(VH, self.psi.get_B(i_R, form='B'), ['vR'], ['vL'])
+                B = lasy.planar_contraction(VH, self.psi.get_B(i_R, form='B'), ['vR'], ['vL'])
                 if self.combine:
                     U.relabel({'(vL.p0)': '(vL.p)'})
-                    A = ct.split_legs(U, '(vL.p)')
+                    A = lasy.split_legs(U, '(vL.p)')
                 else:
                     U.relabel({'p0': 'p'})
                     A = U
             else:
                 # A @ theta = A @ U @ S @ VH = (A @ U) @ S @ VH
-                A = ct.planar_contraction(self.psi.get_B(i_L, form='A'), U, ['vR'], ['vL'])
+                A = lasy.planar_contraction(self.psi.get_B(i_L, form='A'), U, ['vR'], ['vL'])
                 if self.combine:
                     VH.relabel({'(p0.vR)': '(p.vR)'})
-                    B = ct.split_legs(VH, '(p.vR)')
+                    B = lasy.split_legs(VH, '(p.vR)')
                 else:
                     VH.relabel({'p0': 'p'})
                     B = VH
@@ -1081,11 +1083,11 @@ class SingleSiteDMRGEngine(DMRGEngine):
             S_a = S
             # absorb VH/U into S
             if move_right:
-                S = ct.tdot(S, VH, 'vR', 'vL')
+                S = lasy.tdot(S, VH, 'vR', 'vL')
                 VH = next_B
                 U.ireplace_label('(vL.p0)', '(vL.p)')
             else:
-                S = ct.tensordot(U, S, 'vR', 'vL')
+                S = lasy.tensordot(U, S, 'vR', 'vL')
                 U = next_A
                 VH.ireplace_label('(p0.vR)', '(p.vR)')
         else:
@@ -1093,12 +1095,12 @@ class SingleSiteDMRGEngine(DMRGEngine):
             # just use two-site theta
             if self.move_right:
                 next_B.ireplace_label('(p.vR)', '(p1.vR)')
-                theta = ct.tdot(theta, next_B, 'vR', 'vL')
+                theta = lasy.tdot(theta, next_B, 'vR', 'vL')
                 i0 = self.i0
             else:
                 next_A.ireplace_label('(vL.p)', '(vL.p0)')
                 theta.ireplace_label('(p0.vR)', '(p1.vR)')
-                theta = ct.tensordot(next_A, theta, 'vR', 'vL')
+                theta = lasy.tensordot(next_A, theta, 'vR', 'vL')
                 i0 = self.i0 - 1
             qtotal_LR = [self.psi.get_B(i0, form=None).qtotal, self.psi.get_B(i0 + 1, form=None).qtotal]
             U, S, VH, err, S_a = mixer.mixed_svd_2site(
@@ -1159,8 +1161,8 @@ def chi_list(chi_max, dchi=20, nsweeps=20):
 
 
 def full_diag_effH(
-    effH: EffectiveH, theta_guess: ct.Tensor, keep_sector: bool = True, charge_label: str = MPS_TOTAL_CHARGE_LABEL
-) -> tuple[float, ct.Tensor]:
+    effH: EffectiveH, theta_guess: lasy.Tensor, keep_sector: bool = True, charge_label: str = MPS_TOTAL_CHARGE_LABEL
+) -> tuple[float, lasy.Tensor]:
     """Perform an exact diagonalization of `effH`.
 
     This function offers an alternative to :func:`~tenpy.linalg.lanczos.lanczos`.
@@ -1169,7 +1171,7 @@ def full_diag_effH(
     ----------
     effH : :class:`~tenpy.algorithms.mps_common.EffectiveH`
         The effective Hamiltonian.
-    theta_guess : :class:`cyten.Tensor`
+    theta_guess : :class:`lasyten.Tensor`
         Current guess to select the charge sector. Labels as specified by ``effH.acts_on``.
     keep_sector : bool, optional
         Whether to keep the charge sector specified by ``theta_guess``. Default is True.
@@ -1183,26 +1185,26 @@ def full_diag_effH(
     -------
     E0 : float
         The energy of `theta`.
-    theta : :class:`cyten.Tensor`
+    theta : :class:`lasyten.Tensor`
         The ground state (possibly restricted to the sector specified by `theta_guess`).
 
     """
-    fullH: ct.SymmetricTensor = effH.to_tensor()
+    fullH: lasy.SymmetricTensor = effH.to_tensor()
     if isinstance(effH, TwoSiteH) and not effH.combine:
         assert fullH.labels_are('vL', 'p0', 'p1', 'vR', 'vR*', 'p1*', 'p0*', 'vL*', planar=True)
         # TODO workaround. See https://github.com/tenpy/tenpy/issues/693
-        fullH = ct.planar_permute_legs(fullH, codomain=effH.acts_on)
+        fullH = lasy.planar_permute_legs(fullH, codomain=effH.acts_on)
     elif isinstance(effH, EffectiveH):
         raise NotImplementedError  # TODO implement similar label check!
     else:
         # let e.g. the dummy in the tests through
         pass
 
-    E, V = ct.eigh(fullH, new_labels='eig*', new_leg_dual=False)
-    # V: ct.SymmetricTensor
+    E, V = lasy.eigh(fullH, new_labels='eig*', new_leg_dual=False)
+    # V: lasy.SymmetricTensor
 
     if keep_sector:
-        if isinstance(theta_guess, ct.HiddenLegTensor):
+        if isinstance(theta_guess, lasy.HiddenLegTensor):
             sector = theta_guess.as_SymmetricTensor().get_leg(charge_label).sector_decomposition[0]
         else:
             sector = fullH.symmetry.trivial_sector
@@ -1218,11 +1220,11 @@ def full_diag_effH(
         sector = None
 
     gs_projector, E0 = E.sector_argmin(sector)
-    theta: ct.Tensor = ct.compose(V, gs_projector.hc)
+    theta: lasy.Tensor = lasy.compose(V, gs_projector.hc)
 
     if gs_projector.small_leg.sector_decomposition[0] == fullH.symmetry.trivial_sector:
-        theta = ct.squeeze_legs(theta, 'eig*')
+        theta = lasy.squeeze_legs(theta, 'eig*')
     else:
-        theta = ct.HiddenLegTensor.from_tensor(theta.relabel({'eig*': charge_label}), [charge_label])
+        theta = lasy.HiddenLegTensor.from_tensor(theta.relabel({'eig*': charge_label}), [charge_label])
 
     return E0, theta

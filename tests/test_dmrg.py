@@ -4,10 +4,10 @@
 import warnings
 from functools import reduce
 
-import cyten as ct
+import lasyten as lasy
 import numpy as np
 import pytest
-from cyten.models import sites
+from lasyten.models import sites
 from scipy import integrate
 
 from tenpy.algorithms import dmrg, dmrg_parallel
@@ -17,6 +17,7 @@ from tenpy.models.model import CouplingModel, MPOModel
 from tenpy.models.spins import DipolarSpinChain, SpinChain
 from tenpy.models.tf_ising import TFIChain
 from tenpy.networks import MPO, mps
+from tenpy.tools import asConfig
 
 
 def e0_transverse_ising(g=0.5):
@@ -41,7 +42,7 @@ class _DummyEffH:
 
 
 class WorkaroundNNModel:
-    def __init__(self, site: ct.Site, nn_interaction: ct.Coupling, onsite: ct.Coupling, bc_MPS: str, lat):
+    def __init__(self, site: lasy.Site, nn_interaction: lasy.Coupling, onsite: lasy.Coupling, bc_MPS: str, lat):
         self.site = site
         self.nn_interaction = nn_interaction
         self.onsite = onsite
@@ -52,27 +53,27 @@ class WorkaroundNNModel:
         (C,) = onsite.factorization
         Id = site.identity_tensor(w=C.get_leg('wL'))
         grid = [[Id, A, C], [None, None, B], [None, None, Id]]
-        W = ct.tensor_from_grid(
+        W = lasy.tensor_from_grid(
             grid, labels=['wL', 'p', 'wR', 'p*'], row_labels=['IdL', None, 'IdR'], col_labels=['IdL', None, 'IdR']
         )
 
-        Id_C = ct.planar_contraction(
+        Id_C = lasy.planar_contraction(
             Id, C, 'wR', 'wL', relabel1={'p': 'p0', 'p*': 'p0*'}, relabel2={'p': 'p1', 'p*': 'p1*'}
         )
-        Id_C = ct.squeeze_legs(Id_C, ['wL', 'wR'])
-        Id_C = ct.planar_permute_legs(Id_C, codomain=['p0', 'p1'])
+        Id_C = lasy.squeeze_legs(Id_C, ['wL', 'wR'])
+        Id_C = lasy.planar_permute_legs(Id_C, codomain=['p0', 'p1'])
 
-        C_Id = ct.planar_contraction(
+        C_Id = lasy.planar_contraction(
             C, Id, 'wR', 'wL', relabel1={'p': 'p0', 'p*': 'p0*'}, relabel2={'p': 'p1', 'p*': 'p1*'}
         )
-        C_Id = ct.squeeze_legs(C_Id, ['wL', 'wR'])
-        C_Id = ct.planar_permute_legs(C_Id, codomain=['p0', 'p1'])
+        C_Id = lasy.squeeze_legs(C_Id, ['wL', 'wR'])
+        C_Id = lasy.planar_permute_legs(C_Id, codomain=['p0', 'p1'])
 
         if bc_MPS == 'infinite':
             L = lat.Ls[0]
-            self.H_MPO = MPO([site] * L, [W] * L, bc='infinite', max_range=2, mps_unit_cell_width=1)
+            self.H_MPO: MPO = MPO([site] * L, [W] * L, bc='infinite', max_range=2, mps_unit_cell_width=1)
             H_bond = nn_interaction.to_tensor() + 0.5 * Id_C + 0.5 * C_Id
-            H_bond = ct.Coupling.from_tensor(H_bond, [site, site], name='H_bond')
+            H_bond = lasy.Coupling.from_tensor(H_bond, [site, site], name='H_bond')
             self.H_bond = [H_bond] * L
         else:
             raise NotImplementedError
@@ -89,10 +90,10 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, L=6):
         site = sites.GoldenSite()
     legs = [site.leg] * L
     labels = [*(f'p{i}' for i in range(L)), *(f'p{i}*' for i in range(L - 1, -1, -1))]
-    full_H = ct.SymmetricTensor.from_random_normal(legs, legs, labels=labels)
+    full_H = lasy.SymmetricTensor.from_random_normal(legs, legs, labels=labels)
     full_H += full_H.hc
 
-    E, V = ct.eigh(full_H, new_labels='eig', new_leg_dual=False)
+    E, V = lasy.eigh(full_H, new_labels='eig', new_leg_dual=False)
     target_sector = None
     if keep_sector == 'random_nontrivial':
         sectors = [
@@ -107,7 +108,7 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, L=6):
         # verify the construction worked:
         assert theta_guess.as_SymmetricTensor().get_leg('slice').sector_decomposition[0] == target_sector
     else:
-        theta_guess = ct.SymmetricTensor.from_random_normal(legs, labels=[f'p{i}' for i in range(L)])
+        theta_guess = lasy.SymmetricTensor.from_random_normal(legs, labels=[f'p{i}' for i in range(L)])
 
     E0, theta = dmrg.full_diag_effH(
         _DummyEffH(full_H), theta_guess, keep_sector=keep_sector is not False, charge_label='slice'
@@ -116,7 +117,7 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, L=6):
     # expected labels
     if keep_sector:
         assert theta.labels == theta_guess.labels
-    elif isinstance(theta, ct.HiddenLegTensor):
+    elif isinstance(theta, lasy.HiddenLegTensor):
         # TODO this is a bit confusing...
         assert theta.labels == [*theta_guess.labels, '!slice']
     else:
@@ -131,7 +132,7 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, L=6):
     assert E0 == pytest.approx(expected_E0)
 
     if full_H.symmetry.can_be_dropped and keep_sector is False:
-        # TODO does/should cyten expose a convenience method to do this special kind of reshape?
+        # TODO does/should lasyten expose a convenience method to do this special kind of reshape?
         matrix = (
             full_H.to_numpy(understood_braiding=True)
             .transpose(*range(L), *reversed(range(L, 2 * L)))
@@ -179,10 +180,10 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
         model_params = dict(L=L, J=1.0, g=g, bc_MPS=bc_MPS, conserve=None)
         M = TFIChain(model_params)
     if bc_MPS == 'infinite':
-        site = ct.models.sites.SpinSite()
+        site = lasy.models.sites.SpinSite()
         lat = Chain(L, site, bc_MPS='infinite', bc='periodic')
-        SigmaX_SigmaX = ct.models.couplings.spin_spin_coupling([site, site], Jx=4)
-        g_SigmaZ = ct.models.couplings.spin_field_coupling([site], hz=2 * g)
+        SigmaX_SigmaX = lasy.models.couplings.spin_spin_coupling([site, site], Jx=4)
+        g_SigmaZ = lasy.models.couplings.spin_field_coupling([site], hz=2 * g)
         M = WorkaroundNNModel(site, SigmaX_SigmaX, g_SigmaZ, bc_MPS=bc_MPS, lat=lat)
 
     state = [0] * L  # Ferromagnetic Ising
@@ -217,9 +218,9 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
         ED.build_full_H_from_mpo()
         ED.full_diagonalization()
         E_ED, psi_ED = ED.groundstate()
-        psi_ED = ct.squeeze_legs(psi_ED.as_SymmetricTensor(), 'slice')
-        psi_DMRG = ct.split_legs(ED.mps_to_full(psi))
-        ov = ct.inner(psi_ED, psi_DMRG)
+        psi_ED = lasy.squeeze_legs(psi_ED.as_SymmetricTensor(), 'slice')
+        psi_DMRG = lasy.split_legs(ED.mps_to_full(psi))
+        ov = lasy.inner(psi_ED, psi_DMRG)
         print('E_DMRG={Edmrg:.14f} vs E_exact={Eex:.14f}'.format(Edmrg=res['E'], Eex=E_ED))
         print('compare with ED: overlap = ', abs(ov) ** 2)
         assert abs(abs(ov) - 1.0) < 1.0e-8  # unique groundstate: finite size gap!
@@ -279,31 +280,31 @@ def test_dmrg_heisenberg_vs_exact(combine, n, conserve, tensor_backend, L=8):
     ):
         # TODO once we can properly initialize models with fixed backend, do the following:
 
-        # with pytest.raises(ct.SymmetryError):
+        # with pytest.raises(lasy.SymmetryError):
         #     ...  # initialize model code
         # return
 
         pytest.skip()
 
     M = SpinChain(dict(L=L, bc_MPS='finite', conserve=conserve))
-    site: ct.Site = M.lat.unit_cell[0]
+    site: lasy.Site = M.lat.unit_cell[0]
 
     # verify we initialized with the right symmetry
     if conserve == 'SU2':
         assert repr(site.symmetry) == 'Symmetry([SUNSymmetry(N=2)])'
     elif conserve == 'Sz':
-        assert site.symmetry.is_equivalent_to(ct.U1())
+        assert site.symmetry.is_equivalent_to(lasy.U1())
     elif conserve is None:
-        assert site.symmetry.is_equivalent_to(ct.NoSymmetry())
+        assert site.symmetry.is_equivalent_to(lasy.NoSymmetry())
     else:
         raise NotImplementedError
 
     # verify we initialized with the right backend
     if (conserve, tensor_backend) not in [('SU2', 'fusion_tree'), ('Sz', 'abelian'), (None, 'no_symmetry')]:
-        assert site.backend != ct.get_backend(tensor_backend)
+        assert site.backend != lasy.get_backend(tensor_backend)
         pytest.skip('Can not control backend of model yet')
 
-    assert site.backend == ct.get_backend(tensor_backend)
+    assert site.backend == lasy.get_backend(tensor_backend)
 
     psi = mps.MPS.from_desired_bond_dimension(
         M.lat.mps_sites(),
@@ -327,11 +328,22 @@ def test_dmrg_heisenberg_vs_exact(combine, n, conserve, tensor_backend, L=8):
         'max_sweeps': 40,
         'active_sites': n,
     }
-    res = dmrg.run(psi, M, dmrg_pars)
+
+    if conserve == 'SU2':
+        dmrg_pars = asConfig(dmrg_pars, 'DMRG')
+        try:
+            res = dmrg.run(psi, M, dmrg_pars)
+        except ValueError as exc:
+            if 'Input irreps have higher weight than highest weight irrep in HDF5-file' not in str(exc):
+                raise
+            dmrg_pars.unused.clear()  # supress "unused" warnings on teardown
+            pytest.skip('SU2 symmetry data not available')
+    else:
+        res = dmrg.run(psi, M, dmrg_pars)
 
     H_ref = _dense_heisenberg(L)
     block = np.transpose(np.reshape(H_ref, [2] * (2 * L)), [*range(L), *reversed(range(L, 2 * L))])
-    H = ct.SymmetricTensor.from_dense_block(
+    H = lasy.SymmetricTensor.from_dense_block(
         block,
         codomain=[site.leg] * L,
         domain=[site.leg] * L,
@@ -344,9 +356,9 @@ def test_dmrg_heisenberg_vs_exact(combine, n, conserve, tensor_backend, L=8):
 
     print(f'E_DMRG={res["E"]:.14f} vs E_exact={E_ED:.14f}')
     assert abs(res['E'] - E_ED) < 1.0e-10, f'energy stage: E_DMRG={res["E"]} vs E_ED={E_ED}'
-    psi_ED = ct.squeeze_legs(psi_ED.as_SymmetricTensor(), 'slice')
-    psi_DMRG = ct.split_legs(ED.mps_to_full(psi))
-    ov = ct.inner(psi_ED, psi_DMRG)
+    psi_ED = lasy.squeeze_legs(psi_ED.as_SymmetricTensor(), 'slice')
+    psi_DMRG = lasy.split_legs(ED.mps_to_full(psi))
+    ov = lasy.inner(psi_ED, psi_DMRG)
     print('compare with ED: overlap = ', abs(ov) ** 2)
     assert abs(abs(ov) - 1.0) < 1.0e-8, f'overlap stage: |overlap|={abs(ov)}'  # unique groundstate: finite size gap!
 

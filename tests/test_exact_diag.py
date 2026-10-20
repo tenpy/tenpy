@@ -5,19 +5,19 @@ import copy
 from functools import reduce
 from types import SimpleNamespace
 
-import cyten as ct
+import lasyten as lasy
 import numpy as np
 import pytest
-from cyten.models.sites import FibonacciAnyonSite, SpinSite
-from cyten.symmetries import SymmetryError
-from cyten.symmetries.spaces import AbelianLegPipe
-from cyten.tensors import SymmetricTensor, compose, dagger, norm
+from lasyten.models.sites import FibonacciAnyonSite, SpinSite
+from lasyten.symmetries import SymmetryError
+from lasyten.symmetries.spaces import AbelianLegPipe
+from lasyten.tensors import SymmetricTensor, compose, dagger, norm
 
 from tenpy.algorithms import exact_diag
 from tenpy.models.spins import SpinChain
 from tenpy.models.tf_ising import TFIChain
 
-_LEGACY = 'legacy np_conserved test, not migrated to cyten yet'
+_LEGACY = 'legacy np_conserved test, not migrated to lasyten yet'
 
 
 def _dense_heisenberg(L):
@@ -36,7 +36,7 @@ def _dense_heisenberg(L):
 
 
 def _heisenberg_tensor(site, L):
-    """The Heisenberg chain as a cyten tensor, together with its dense reference."""
+    """The Heisenberg chain as a lasyten tensor, together with its dense reference."""
     assert site.state_labels['down'] == 0 and site.state_labels['up'] == 1  # basis of _dense_heisenberg
     H_ref = _dense_heisenberg(L)
     # the dense block wants the leg order [p0, ..., p{L-1}, p{L-1}*, ..., p0*]
@@ -61,7 +61,7 @@ def _assert_eigenvector(H, E, psi_inv):
 def _assert_eigenvector_dense(H_ref, E, psi):
     """Check ``H_ref @ vec = E * vec`` for the dense vector represented by `psi`.
 
-    Unlike :func:`_assert_eigenvector`, this works for a :class:`~cyten.tensors.ChargedTensor`
+    Unlike :func:`_assert_eigenvector`, this works for a :class:`~lasyten.tensors.ChargedTensor`
     with a `charged_state` set (as returned by :meth:`ExactDiag.sparse_diag`), where
     ``psi.invariant_part`` alone is *not* the eigenvector.
     """
@@ -125,7 +125,7 @@ def test_exact_diag_groundstate_per_sector(conserve, L):
         np.testing.assert_allclose(E0, np.min(ED.E[mask]), atol=1e-10)
 
         if site.leg.symmetry.is_abelian:
-            # fully independent of cyten's eigh: a hand-picked dense sub-block of H_ref
+            # fully independent of lasyten's eigh: a hand-picked dense sub-block of H_ref
             idx = _kron_charge_indices(site, L, sector)
             expected_E0 = np.min(np.linalg.eigvalsh(H_ref[np.ix_(idx, idx)]))
             np.testing.assert_allclose(E0, expected_E0, atol=1e-10)
@@ -173,7 +173,7 @@ def test_exact_diag_mps_roundtrip(conserve, L):
 
     # a charge-neutral random state in the p0..p{L-1} basis (nonzero only if a neutral sector exists)
     psi_full = SymmetricTensor.from_random_uniform(
-        [site.leg] * L, [], labels=[[f'p{i}' for i in range(L)], []], dtype=ct.Dtype.float64
+        [site.leg] * L, [], labels=[[f'p{i}' for i in range(L)], []], dtype=lasy.Dtype.float64
     )
     psi_full = psi_full / norm(psi_full)
     mps = ED.full_to_mps(psi_full)
@@ -198,7 +198,7 @@ def test_exact_diag_exp_H(conserve, L):
     ED.full_diagonalization()
     dt = 0.1
     U = ED.exp_H(dt)
-    # match cyten's block convention: domain axes reversed (as in _heisenberg_tensor)
+    # match lasyten's block convention: domain axes reversed (as in _heisenberg_tensor)
     expect_block = np.transpose(
         np.reshape(expm(-1.0j * dt * H_ref), [2] * (2 * L)), [*range(L), *reversed(range(L, 2 * L))]
     )
@@ -247,7 +247,7 @@ def test_exact_diag_errors(L=3):
 
 
 def test_exact_diag_anyons(L=3):
-    # ExactDiag needs a dense basis (argmin, ChargedTensor, ...), which cyten does not define for
+    # ExactDiag needs a dense basis (argmin, ChargedTensor, ...), which lasyten does not define for
     # anyons -- so it refuses the symmetry outright, right at construction.
     site = FibonacciAnyonSite()
     leg = site.leg
@@ -296,7 +296,7 @@ def test_exact_diag_sparse_diag_su2(L=3):
     np.testing.assert_allclose(E[0], np.min(np.linalg.eigvalsh(H_ref)), atol=1e-8)
     _assert_eigenvector_dense(H_ref, E[0], psi[0])
 
-    # cyten does not yet support restricting to a single, higher-dimensional (non-abelian) sector
+    # lasyten does not yet support restricting to a single, higher-dimensional (non-abelian) sector
     sector = ED.possible_charge_sectors()[0]
     ED_sec = exact_diag.ExactDiag.from_hamiltonian(H, sites, charge_sector=sector)
     with pytest.raises(NotImplementedError):
@@ -478,13 +478,13 @@ def _check_built_models(M, H_ref, H_expect):
         assert ED.full_H.codomain == H_expect.codomain
         assert ED.full_H.domain == H_expect.domain
         assert ED.full_H.labels == H_expect.labels
-        assert ct.almost_equal(ED.full_H, H_expect)
+        assert lasy.almost_equal(ED.full_H, H_expect)
         ED.full_diagonalization()
         np.testing.assert_allclose(np.sort(ED.E), np.sort(np.linalg.eigvalsh(H_ref)), atol=1e-10)
         np.testing.assert_allclose(np.min(ED.E), np.linalg.eigvalsh(H_ref)[0], atol=1e-10)
         E0, _ = ED.groundstate()
         np.testing.assert_allclose(E0, np.linalg.eigvalsh(H_ref)[0], atol=1e-10)
-    assert ct.almost_equal(full['build_full_H_from_mpo'], full['build_full_H_from_bonds'])
+    assert lasy.almost_equal(full['build_full_H_from_mpo'], full['build_full_H_from_bonds'])
 
 
 @pytest.mark.parametrize('conserve', [None, 'parity', 'Sz', 'SU2'])
@@ -523,7 +523,7 @@ def test_build_full_H_explicit_plus_hc(conserve, L=3):
     M.H_MPO.explicit_plus_hc = True  # the Heisenberg MPO is hermitian, so H + h.c. = 2 H
     ED = exact_diag.ExactDiag.from_model(M)
     ED.build_full_H_from_mpo()
-    assert ct.almost_equal(ED.full_H, 2 * H_expect)
+    assert lasy.almost_equal(ED.full_H, 2 * H_expect)
 
 
 def test_dense_H_from_mpo_matches_reference():

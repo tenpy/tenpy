@@ -111,8 +111,7 @@ def test_IrregularLattice():
         npt.assert_equal(i, np.array(expect['i']))
         npt.assert_equal(j, np.array(expect['j']))
 
-        ops = [(None, dx, u1), (None, [0, 0], u0)]
-        m_ji, m_lat_indices, m_coupling_shape = ir.possible_multi_couplings(ops)
+        m_ji, m_lat_indices, m_coupling_shape = ir.possible_multi_couplings(dx=[dx, [0, 0]], u=[u1, u0])
         sort = np.lexsort(m_lat_indices.T)
         npt.assert_equal(m_ji[sort, 1], np.array(expect['i']))
         npt.assert_equal(m_ji[sort, 0], np.array(expect['j']))
@@ -133,24 +132,24 @@ def test_HelicalLattice():
             assert (i1[a], j1[a]) == tuple(ij2[b])
             assert s1[a] == s2[b]
 
-    i, j, s = hel.possible_couplings(0, 1, [0, 0], strength)
-    ijm, sm = hel.possible_multi_couplings([('X', [0, 0], 0), ('X', [0, 0], 1)], strength)
+    i, j, s = hel.possible_couplings_strengths(0, 1, [0, 0], strength)
+    ijm, sm = hel.possible_multi_couplings_strengths(dx=[[0, 0], [0, 0]], u=[0, 1], strength=strength)
     assert np.all(i == [0, 2]) and np.all(j == [1, 3])
     assert np.all(s == [1.5, 2.5])
     assert_same(i, j, s, ijm, sm)
 
-    i, j, s = hel.possible_couplings(0, 0, [1, 0], strength)
-    ijm, sm = hel.possible_multi_couplings([('X', [0, 0], 0), ('X', [1, 0], 0)], strength)
+    i, j, s = hel.possible_couplings_strengths(0, 0, [1, 0], strength)
+    ijm, sm = hel.possible_multi_couplings_strengths(dx=[[0, 0], [1, 0]], u=[0, 0], strength=strength)
     assert np.all(i == [0, 2]) and np.all(j == [6, 8])
     assert np.all(s == [1.5, 2.5])
     assert_same(i, j, s, ijm, sm)
 
-    i, j, s = hel.possible_couplings(0, 0, [-1, 1], strength)
+    i, j, s = hel.possible_couplings_strengths(0, 0, [-1, 1], strength)
     assert np.all(i == [4, 6]) and np.all(j == [0, 2])
     assert np.all(s == [2.5, 1.5])  # swapped!
-    ijm, sm = hel.possible_multi_couplings([('X', [0, 0], 0), ('X', [-1, 1], 0)], strength)
+    ijm, sm = hel.possible_multi_couplings_strengths(dx=[[0, 0], [-1, 1]], u=[0, 0], strength=strength)
     assert_same(i, j, s, ijm, sm)
-    ijm, sm = hel.possible_multi_couplings([('X', [1, 0], 0), ('X', [0, 1], 0)], strength)
+    ijm, sm = hel.possible_multi_couplings_strengths(dx=[[1, 0], [0, 1]], u=[0, 0], strength=strength)
     assert_same(i, j, s, ijm, sm)
 
     # test that MPS.from_lat_product_state checks translation invariance
@@ -286,8 +285,7 @@ def test_possible_couplings():
         for dx in [(0, 0), (0, 1), (2, 1), (-1, -1)]:
             print('dx =', dx)
             mps0, mps1, lat_indices, coupling_shape = lat.possible_couplings(u0, u1, dx)
-            ops = [(None, [0, 0], u0), (None, dx, u1)]
-            m_ijkl, m_lat_indices, m_coupling_shape = lat.possible_multi_couplings(ops)
+            m_ijkl, m_lat_indices, m_coupling_shape = lat.possible_multi_couplings(dx=[[0, 0], dx], u=[u0, u1])
             assert coupling_shape == m_coupling_shape
             if len(lat_indices) == 0:
                 continue
