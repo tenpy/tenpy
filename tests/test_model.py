@@ -6,12 +6,12 @@ import itertools
 import numpy as np
 import numpy.testing as npt
 import pytest
-from cyten.models.couplings import Coupling, heisenberg_coupling, spin_field_coupling, spin_spin_coupling
+from lasyten.models.couplings import Coupling, heisenberg_coupling, spin_field_coupling, spin_spin_coupling
 
 # from tenpy.models.spins import DipolarSpinChain
 # from tenpy.models.xxz_chain import XXZChain
-from cyten.models.sites import SpinSite
-from cyten.tensors import almost_equal, dagger
+from lasyten.models.sites import SpinSite
+from lasyten.tensors import almost_equal, dagger
 
 # import tenpy.linalg.np_conserved as npc
 # import tenpy.networks.site
@@ -29,7 +29,7 @@ def _mpo_is_hermitian(H_MPO, eps=1.0e-10):
     """Check hermiticity of a finite `H_MPO` at the dense-tensor level.
 
     ``MPO.is_hermitian()``/``MPO.overlap()`` still rely on np_conserved-only methods that
-    haven't been ported to cyten tensors; for the (currently finite-only) models under test we
+    haven't been ported to lasyten tensors; for the (currently finite-only) models under test we
     can instead just contract the whole MPO into a single Coupling and compare to its dagger.
     """
     if H_MPO.bc != 'finite':
@@ -87,7 +87,7 @@ def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True
 
 
 def test_CouplingModel():
-    pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
+    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     for bc in ['open', 'periodic']:
         spin_half_lat = lattice.Chain(5, spin_half_site, bc=bc, bc_MPS='finite')
         M = model.CouplingModel(spin_half_lat)
@@ -103,7 +103,7 @@ def test_CouplingModel():
 
 
 def test_ext_flux():
-    pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
+    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     Lx, Ly = 3, 4
     lat = lattice.Square(Lx, Ly, fermion_site, bc=['periodic', 'periodic'], bc_MPS='infinite')
     M = model.CouplingModel(lat)
@@ -140,7 +140,7 @@ def test_ext_flux():
 
 
 def test_CouplingModel_shift(Lx=3, Ly=3, shift=1):
-    pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
+    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     bc = ['periodic', shift]
     spin_half_square = lattice.Square(Lx, Ly, spin_half_site, bc=bc, bc_MPS='infinite')
     M = model.CouplingModel(spin_half_square)
@@ -156,7 +156,7 @@ def test_CouplingModel_shift(Lx=3, Ly=3, shift=1):
 
 
 def test_CouplingModel_fermions():
-    pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
+    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     for bc, bc_MPS in zip(['open', 'periodic'], ['finite', 'infinite']):
         fermion_lat = lattice.Chain(5, fermion_site, bc=bc, bc_MPS=bc_MPS)
         M = model.CouplingModel(fermion_lat)
@@ -168,7 +168,7 @@ def test_CouplingModel_fermions():
 
 
 def test_CouplingModel_explicit():
-    pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
+    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
     M = model.CouplingModel(fermion_lat_cyl)
     M.add_onsite(0.125, 0, 'N')
@@ -254,7 +254,7 @@ def test_CouplingModel_explicit():
 
 @pytest.mark.parametrize('use_plus_hc, JW', [(False, 'JW'), (False, None), (True, None)])
 def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
-    pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
+    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
     M = model.CouplingModel(fermion_lat_cyl)
     # create a weird fermionic model with 3-body interactions
@@ -333,7 +333,7 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
 @pytest.mark.parametrize('add_hc', [False, 'manually', 'flag'], ids=['no_hc', 'manual_hc', 'plus_hc'])
 @pytest.mark.parametrize('bc', ['finite', 'infinite'])
 def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc, L=6):
-    pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
+    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     """test add_exponentially_decaying coupling by comparing with manual couplings"""
     if use_fermions:
         s = tenpy.networks.site.FermionSite(None)
@@ -473,7 +473,7 @@ class MyMod(model.CouplingMPOModel, model.NearestNeighborModel):
 
 
 def test_CouplingMPOModel_group():
-    pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
+    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     m1 = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
     model_params = {'L': 6, 'hz': np.random.random([6]), 'bc_MPS': 'finite', 'sort_charge': True}
     m2 = XXZChain(model_params)
@@ -502,7 +502,7 @@ def test_CouplingMPOModel_group():
 
 
 def test_model_H_conversion(L=6):
-    pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
+    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     bc = 'finite'
     model_params = {'L': L, 'hz': np.random.random([L]), 'bc_MPS': bc, 'sort_charge': True}
     m = XXZChain(model_params)
@@ -531,7 +531,7 @@ def test_model_H_conversion(L=6):
 
 
 def test_model_H_conversion_dipolar(L=6):
-    pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
+    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     model_params = dict(L=L, S=1, J3=1.0, J4=0.5, bc_MPS='finite', sort_charge=True)
 
     # build full hamiltonian from MPO, assume that to be correct
@@ -601,7 +601,7 @@ def compare_models_plus_hc(
     ],
 )
 def test_model_plus_hc(which_site, which_ops, op_string, L=6):
-    pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
+    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     """Same as `test_model_plus_hc`, but uses fermions and default JW behavior"""
     if which_site == 'spin':
         lat = lattice.Chain(L=L, site=tenpy.networks.site.SpinHalfSite(None))
@@ -777,7 +777,7 @@ class DisorderedLatticeModel(model.CouplingMPOModel):
 
 @pytest.mark.parametrize('bc', ['open', 'periodic'])
 def test_disordered_lattice_model(bc, J=2.0):
-    pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
+    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     model_params = {
         'lattice': 'Kagome',
         'Lx': 2,
@@ -818,7 +818,7 @@ def test_disordered_lattice_model(bc, J=2.0):
 
 
 def test_fixes_511(L=6, t=1.234, tp=2.54):
-    pytest.skip('not yet adapted to cyten; uses the old np_conserved-based Site/add_coupling API')
+    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     # https://github.com/tenpy/tenpy/issues/511
 
     class TTprimeSpinfulChain(model.CouplingMPOModel):
@@ -886,8 +886,8 @@ def _dense_Heisenberg(site, L, J):
     return H
 
 
-def test_CouplingModel_add_coupling_cyten():
-    """CouplingModel.add_coupling (cyten Coupling version) should reproduce a Heisenberg chain."""
+def test_CouplingModel_add_coupling_lasyten():
+    """CouplingModel.add_coupling (lasyten Coupling version) should reproduce a Heisenberg chain."""
     L = 4
     J = 1.5
     site = SpinSite(S=0.5, conserve=None)
@@ -913,7 +913,7 @@ def _dense_TFIM(L, J, g):
 
         H = -J \sum_i Sx_i Sx_{i+1} - g \sum_i Sz_i
 
-    Uses the same spin-1/2 basis convention as ``cyten.models.sites.SpinSite(S=0.5, conserve=None)``:
+    Uses the same spin-1/2 basis convention as ``lasyten.models.sites.SpinSite(S=0.5, conserve=None)``:
     state 0 = down (Sz=-1/2), state 1 = up (Sz=+1/2).
     """
     Sx = np.array([[0, 0.5], [0.5, 0]])
@@ -940,8 +940,8 @@ def _dense_TFIM(L, J, g):
     return H
 
 
-def test_CouplingModel_add_coupling_cyten_tfim():
-    """CouplingModel.add_coupling (cyten Coupling version) should reproduce the transverse field
+def test_CouplingModel_add_coupling_lasyten_tfim():
+    """CouplingModel.add_coupling (lasyten Coupling version) should reproduce the transverse field
     Ising model, checked against a fully hard-coded (pure numpy) reference Hamiltonian.
     """
     L = 5
@@ -1162,7 +1162,7 @@ def test_add_coupling_error_paths():
         M_partial.calc_H_coupling()
 
     # fermionic sites: named-operator path refuses (gap-bridging would need JW dressing)
-    from cyten.models.sites import SpinlessFermionSite
+    from lasyten.models.sites import SpinlessFermionSite
 
     fsite = SpinlessFermionSite(num_species=1, conserve='N')
     flat = lattice.Chain(L, fsite, bc='open', bc_MPS='finite')

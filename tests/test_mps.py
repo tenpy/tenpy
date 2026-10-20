@@ -2,7 +2,7 @@
 
 # Copyright (C) TeNPy Developers, Apache license
 
-import cyten as ct
+import lasyten as lasy
 import numpy as np
 import numpy.testing as npt
 import pytest
@@ -18,14 +18,14 @@ from tenpy.tools import misc
 
 _LEGACY = 'legacy test, not updated yet'
 
-spin_half = ct.sites.SpinSite(S=0.5, conserve='Sz')
+spin_half = lasy.sites.SpinSite(S=0.5, conserve='Sz')
 
 
 def test_mps():
-    site_triv = ct.sites.SpinSite(S=0.5, conserve='None')
+    site_triv = lasy.sites.SpinSite(S=0.5, conserve='None')
     psi = mps.MPS.from_product_state([site_triv] * 4, [0, 1, 0, 1], bc='finite', unit_cell_width=4)
     psi.test_sanity()
-    SzSz = ct.couplings.spin_spin_coupling([spin_half] * 2, Jz=1)
+    SzSz = lasy.couplings.spin_spin_coupling([spin_half] * 2, Jz=1)
     for L in [8, 4, 2, 1]:
         print(L)
         state = (spin_half.state_indices(['up', 'down']) * L)[:L]
@@ -508,7 +508,7 @@ def test_apply_local_op_JW_string(eps=1e-13):
 
 
 def test_enlarge_mps_unit_cell():
-    s = ct.sites.SpinSite(S=0.5, conserve='Sz')
+    s = lasy.sites.SpinSite(S=0.5, conserve='Sz')
     psi = mps.MPS.from_product_state([s] * 3, ['up', 'down', 'up'], bc='infinite', unit_cell_width=3)
     psi.enlarge_mps_unit_cell(3)
     psi.test_sanity()
@@ -974,7 +974,7 @@ def test_InitialStateBuilder():
             'check_filling': 0.5,
             'full_empty': ['up', 'down'],
         },
-        model_dtype=ct.Dtype.float64,
+        model_dtype=lasy.Dtype.float64,
     ).run()
     assert psi4.dtype == np.float64
     assert abs(psi4.overlap(psi1) - 1) > 0.1  # randomizing should lead to small overlap!
@@ -989,9 +989,9 @@ def test_InitialStateBuilder():
             'check_filling': 0.5,
             'full_empty': ['up', 'down'],
         },
-        model_dtype=ct.Dtype.complex128,
+        model_dtype=lasy.Dtype.complex128,
     ).run()
-    assert psi5.dtype == ct.Dtype.complex128
+    assert psi5.dtype == lasy.Dtype.complex128
     assert 1.0e-8 < abs(psi5.overlap(psi1) - 1) < 0.1  # but here we randomize only a bit
 
 

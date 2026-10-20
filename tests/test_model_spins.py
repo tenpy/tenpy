@@ -24,7 +24,7 @@ def test_SpinChain():
     )
 
 
-@pytest.mark.skip('dipole conservation is not (yet) supported by the cyten symmetry framework')
+@pytest.mark.skip('dipole conservation is not (yet) supported by the lasyten symmetry framework')
 def test_DipolarSpinChain():
     # imports kept local (rather than module-level as in the original) since
     # tenpy.algorithms.exact_diag still transitively imports the gutted np_conserved module;

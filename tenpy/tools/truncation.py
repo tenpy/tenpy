@@ -45,7 +45,7 @@ is the discarded part (orthogonal to the kept part) and the
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-import cyten as ct
+import lasyten as lasy
 import numpy as np
 
 from .hdf5_io import Hdf5Exportable
@@ -167,13 +167,13 @@ class TruncationError(Hdf5Exportable):
 
 
 def svd_theta(
-    theta: ct.Tensor,
+    theta: lasy.Tensor,
     trunc_params,
     new_labels=['vR', 'vL'],
-) -> tuple[ct.Tensor, ct.DiagonalTensor, ct.Tensor, TruncationError, float]:
+) -> tuple[lasy.Tensor, lasy.DiagonalTensor, lasy.Tensor, TruncationError, float]:
     """Perform a truncated SVD on the given tensor `theta`.
 
-    This is essentially a wrapper around :func:`cyten.truncated_svd` that unpacks the
+    This is essentially a wrapper around :func:`lasyten.truncated_svd` that unpacks the
     :attr:`trunc_params`, deals with normalization and converts the error to tenpy
     format.
 
@@ -202,23 +202,23 @@ def svd_theta(
 
     Parameters
     ----------
-    theta : :class:`cyten.Tensor`
+    theta : :class:`lasyten.Tensor`
         The tensor to be decomposed.
-        Like for :func:`cyten.truncated_svd`, the legs should already be arranged between
+        Like for :func:`lasyten.truncated_svd`, the legs should already be arranged between
         codomain and domain, to determine how the SVD should split them.
     trunc_params :
         trunc_params : dict
             Truncation parameters as described in :cfg:config:`truncation`.
     new_labels :
-        Labels for the new legs. See :func:`cyten.svd`
+        Labels for the new legs. See :func:`lasyten.svd`
 
     Returns
     -------
-    U : :class:`cyten.Tensor`
+    U : :class:`lasyten.Tensor`
         Left-canonical part of `theta`.
-    S : :class:`cyten.DiagonalTensor`
+    S : :class:`lasyten.DiagonalTensor`
         Kept Singular values, normalized to ``norm(S) == 1``.
-    Vh : :class:`cyten.Tensor`
+    Vh : :class:`lasyten.Tensor`
         Right-canonical part of `theta`.
     err : :class:`~tenpy.TruncationError`
         The truncation error introduced.
@@ -233,7 +233,7 @@ def svd_theta(
     degeneracy_tol = trunc_params.get('degeneracy_tol', None, 'real')
     svd_min = trunc_params.get('svd_min', 1.0e-14, 'real')
     trunc_cut = trunc_params.get('trunc_cut', 1.0e-14, 'real')
-    U, S, Vh, rel_err, renormalize = ct.truncated_svd(
+    U, S, Vh, rel_err, renormalize = lasy.truncated_svd(
         theta,
         new_labels=new_labels,
         new_leg_dual=False,

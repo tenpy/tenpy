@@ -18,7 +18,7 @@ For example an MPS represents the contraction along the 'virtual' legs/bonds of 
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from cyten.models import sites as site
+from lasyten.models import sites as site
 
 from . import momentum_mps, mpo, mps, purification_mps, terms, uniform_mps
 from .momentum_mps import *

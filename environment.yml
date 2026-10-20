@@ -15,7 +15,7 @@ dependencies:
   - doxygen  # required: generates pybind/docstrings/ DOC() headers at build time
   - pytorch
   - pytest>=6.0
-  - sympy # TODO this is leftover of cyten/symmetries/_su2data.py
+  - sympy # TODO this is leftover of lasyten/symmetries/_su2data.py
 
   # developer tools
   - ipython
