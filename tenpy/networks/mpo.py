@@ -2297,11 +2297,8 @@ class MPOGraph(MPSGeometry):
             Local index into :attr:`~lasyten.models.couplings.Coupling.factorization` whose tensor
             gets scaled by `strength`. ``None`` defaults to the last tensor.
 
-        See Also
-        --------
-        tenpy.networks.terms.to_single_coupling : builds a single Coupling out of several of these.
-
         """
+        raise NotImplementedError()  # TODO rework!
         if not isinstance(coupling, Coupling):
             raise TypeError(f'Expected Coupling, got {type(coupling)}')
 

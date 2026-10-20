@@ -1,25 +1,21 @@
 """A collection of tests for :module:`tenpy.networks.terms`."""
 
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
-
-pytest.skip(allow_module_level=True)
-
 import copy
 
+import cyten as ct
 import numpy as np
 import pytest
 
-from tenpy.models.spins_nnn import SpinChainNNN2
-from tenpy.networks import mpo, site
+# from tenpy.models.spins_nnn import SpinChainNNN2
+from tenpy.networks import mpo
 from tenpy.networks.terms import *
 
-spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=True)
-fermion = site.FermionSite(conserve='N')
-dummy = site.Site(spin_half.leg)
+spin_half = ct.models.SpinSite(0.5, conserve='Sz')
 
 
 def test_TermList():
+    pytest.skip('TermList not adapted yet')
     terms = [
         [('N', 3), ('N', 2), ('N', 3)],
         [('C', 0), ('N', 2), ('N', 4), ('Cd', 3), ('C', 2)],
@@ -77,18 +73,16 @@ def test_onsite_terms():
                                {"X_3": strength1[3]+ strength2[3], "Y_3": strength2[3]},
                                {"Y_4": strength2[4]},
                                {"Y_5": strength2[5]}]  # fmt: skip
-    # convert to term_list
-    tl = o1.to_TermList()
-    assert tl.terms == [[('X_0', 0)], [('Y_1', 1)], [('X_3', 3)], [('Y_3', 3)], [('Y_4', 4)], [('Y_5', 5)]]
-    o3, c3 = tl.to_OnsiteTerms_CouplingTerms([dummy] * L)
-    assert o3.onsite_terms == o1.onsite_terms
+    # TODO: skipped to/from TermList
 
 
-def test_coupling_terms():
+def test_coupling_terms(backend=None):
+    pytest.skip('Test needs to change')
+    spin_half = ct.models.SpinSite(0.5, conserve='Sz', backend=backend)
     L = 4
     sites = []
     for i in range(L):
-        s = site.Site(spin_half.leg)
+        s = ct.Site(spin_half.leg)
         s.add_op(f'X_{i:d}', 2.0 * np.eye(2))
         s.add_op(f'Y_{i:d}', 3.0 * np.eye(2))
         s.add_op('S1', 4.0 * np.eye(2))
@@ -247,71 +241,11 @@ def test_coupling_terms():
 
 
 def test_coupling_terms_handle_JW():
-    strength = 0.25
-    sites = []
-    L = 4
-    for i in range(L):
-        s = site.Site(spin_half.leg)
-        s.add_op(f'X_{i:d}', 2.0 * np.eye(2))
-        s.add_op(f'Y_{i:d}', 3.0 * np.eye(2), need_JW=True)
-        sites.append(s)
-    mc = MultiCouplingTerms(L)
-    # two-site terms
-    term = [('X_1', 1), ('X_0', 4)]
-    args = mc.coupling_term_handle_JW(strength, term, sites)
-    # args = i, j, op_i, op_j, op_str
-    assert args == (strength, 1, 4, 'X_1', 'X_0', 'Id')
-    term = [('Y_1', 1), ('Y_0', 4)]
-    args = mc.coupling_term_handle_JW(strength, term, sites)
-    assert args == (strength, 1, 4, 'Y_1 JW', 'Y_0', 'JW')
-
-    # switch order
-    term = [('Y_0', 4), ('Y_1', 1)]
-    term, sign = order_combine_term(term, sites)
-    assert term == [('Y_1', 1), ('Y_0', 4)]
-    args = mc.coupling_term_handle_JW(strength * sign, term, sites)
-    assert args == (-strength, 1, 4, 'Y_1 JW', 'Y_0', 'JW')
-
-    # multi coupling
-    term = [('X_0', 0), ('X_1', 1), ('X_3', 3)]
-    args = mc.multi_coupling_term_handle_JW(strength, term, sites)
-    assert args == (strength, [0, 1, 3], ['X_0', 'X_1', 'X_3'], ['Id', 'Id'])
-    term = [('X_0', 0), ('Y_1', 1), ('Y_3', 3)]
-    args = mc.multi_coupling_term_handle_JW(strength, term, sites)
-    assert args == (strength, [0, 1, 3], ['X_0', 'Y_1 JW', 'Y_3'], ['Id', 'JW'])
-
-    term = [('Y_0', 0), ('X_1', 1), ('Y_3', 3), ('X_0', 4), ('Y_2', 6), ('Y_3', 7)]
-    args = mc.multi_coupling_term_handle_JW(strength, term, [dummy] * 4)
-    assert args == (strength, [0, 1, 3, 4, 6, 7], [op[0] for op in term], ['Id'] * (len(term) - 1))
-    args = mc.multi_coupling_term_handle_JW(strength, term, sites)
-    print(args)
-    assert args == (
-        strength,
-        [0, 1, 3, 4, 6, 7],
-        ['Y_0 JW', 'X_1 JW', 'Y_3', 'X_0', 'Y_2 JW', 'Y_3'],
-        ['JW', 'JW', 'Id', 'Id', 'JW'],
-    )
-
-    term = [
-        ('Y_3', 7),
-        ('X_1', 1),
-        ('Y_0', 0),
-        ('X_0', 4),
-        ('Y_2', 6),
-        ('Y_3', 3),
-    ]
-    term, sign = order_combine_term(term, sites)
-    args = mc.multi_coupling_term_handle_JW(strength * sign, term, sites)
-    print(args)
-    assert args == (
-        strength,
-        [0, 1, 3, 4, 6, 7],
-        ['Y_0 JW', 'X_1 JW', 'Y_3', 'X_0', 'Y_2 JW', 'Y_3'],
-        ['JW', 'JW', 'Id', 'Id', 'JW'],
-    )
+    pytest.skip('coupling_term_handle_JW no longer exists. Instead do some fermion consistency checks')
 
 
 def test_exp_decaying_terms():
+    pytest.skip('exp decaying terms not adapted, and neither this test')
     ## subsites == subsites_start
     # check finite version
     L = 8
@@ -480,6 +414,7 @@ def test_exp_decaying_terms():
 
 @pytest.mark.parametrize('bc', ['finite', 'infinite'])
 def test_exp_non_uniform_decaying_terms(bc):
+    pytest.skip('exp decaying terms not adapted, and neither this test')
     L = 8
     subsite_step = 2
     subsites = np.arange(0, L, subsite_step)
@@ -551,6 +486,7 @@ def test_exp_non_uniform_decaying_terms(bc):
 
 @pytest.mark.parametrize('bc', ['finite', 'infinite'])
 def test_exp_non_uniform_decaying_terms_subsites_start(bc):
+    pytest.skip('exp decaying terms not adapted, and neither this test')
     L = 8
     subsite_step = 2
     subsites = np.arange(0, L, subsite_step)
@@ -625,6 +561,7 @@ def test_exp_non_uniform_decaying_terms_subsites_start(bc):
 @pytest.mark.parametrize('subsites', [None, np.array([0, 3, 4, 6, 7])])
 @pytest.mark.parametrize('uniform', [True, False])
 def test_exponentially_decaying_centered_terms(i, subsites, uniform):
+    pytest.skip('exp decaying terms not adapted, and neither this test')
     L = 8
     spin = site.Site(spin_half.leg)
     spin.add_op('X', 2.0 * np.eye(2))
@@ -679,6 +616,7 @@ def test_exponentially_decaying_centered_terms(i, subsites, uniform):
 
 @pytest.mark.parametrize('bc', ['finite', 'infinite'])
 def test_mpo_to_term_list(bc):
+    pytest.skip('MPO.to_TermList not adapted yet.')
     # Addresses PR 477 / 479
     L = 6
     model = SpinChainNNN2(dict(bc_MPS=bc, Jx=0, Jy=0, Jz=1, Jxp=0, Jyp=0, Jzp=1, L=6, S=0.5))

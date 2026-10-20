@@ -12,7 +12,7 @@ from scipy import linalg as spla
 from tenpy.algorithms import ExactDiag
 from tenpy.models.spins import SpinChain
 from tenpy.networks import mpo
-from tenpy.networks.terms import CouplingTerms, OnsiteTerms, to_single_coupling
+from tenpy.networks.terms import CouplingTerms, OnsiteTerms
 
 # spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 spin_half = SpinSite(S=0.5, conserve=None)
@@ -278,63 +278,6 @@ def _hopping_coupling(site, op_i, op_j):
     h = np.tensordot(op_i, op_j, axes=0)  # [p0, p0*, p1, p1*]
     h = np.transpose(h, [0, 2, 3, 1])  # -> [p0, p1, p1*, p0*]
     return Coupling.from_dense_block(h, [site, site], understood_braiding=True)
-
-
-def _build_hermitian_test_coupling(L, filler, pairs):
-    """Combine hopping terms on `pairs` (list of (coupling, (i, j))) into one Coupling.
-    Fill all other sites with some single-site Coupling, e.g. a zero operator."""
-    couplings, sites_arg, prefactors, split = [], [], [], []
-    changed = set()
-    for coupling, (i, j) in pairs:
-        couplings.append(coupling)
-        sites_arg.append([i, j])
-        prefactors.append(1.0)
-        split.append(0)
-        changed.update((i, j))
-    for k in range(L):
-        if k not in changed:
-            couplings.append(filler)
-            sites_arg.append([k])
-            prefactors.append(1.0)
-            split.append(0)
-    return to_single_coupling(couplings, sites_arg, prefactors, split)
-
-
-def _is_hermitian_coupling(L, site, coupling):
-    labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
-    dim = site.dim**L
-    H = coupling.to_tensor().to_numpy(labels).reshape(dim, dim)
-    return np.allclose(H, H.conj().T)
-
-
-def test_MPO_hermitian():
-    """Check that a hopping term alone is non-Hermitian, and adding its h.c. makes it Hermitian.
-
-    Adapted from the old np_conserved-based version (which built ``Sm_2 Sp_3`` /
-    ``Sp_2 Sm_3`` via ``CouplingTerms`` + ``MPOGraph.from_terms(...).build_MPO()`` on an
-    infinite chain, including a term wrapping into a further unit cell, ``(3, 18)``) to the
-    lasyten :func:`~tenpy.networks.terms.to_single_coupling`.
-    """
-    L = 4
-    site = SpinSite(S=0.5, conserve=None)
-    Sm = site.get_op('Sm').to_numpy()
-    Sp = site.get_op('Sp').to_numpy()
-
-    c_mp = _hopping_coupling(site, Sm, Sp)  # Sm_i Sp_j
-    c_pm = _hopping_coupling(site, Sp, Sm)  # Sp_i Sm_j
-    filler = spin_field_coupling([site], hz=0.0)  # zero operator, just marks a site as covered
-
-    H = _build_hermitian_test_coupling(L, filler, [(c_mp, (2, 3))])
-    assert not _is_hermitian_coupling(L, site, H)
-    H = _build_hermitian_test_coupling(L, filler, [(c_mp, (2, 3)), (c_pm, (2, 3))])
-    assert _is_hermitian_coupling(L, site, H)
-
-    # long-range coupling spanning (almost) the whole chain, in place of the old test's
-    # unit-cell term (3, 18)
-    H = _build_hermitian_test_coupling(L, filler, [(c_mp, (0, 3))])
-    assert not _is_hermitian_coupling(L, site, H)
-    H = _build_hermitian_test_coupling(L, filler, [(c_mp, (0, 3)), (c_pm, (0, 3))])
-    assert _is_hermitian_coupling(L, site, H)
 
 
 @pytest.mark.parametrize('bc', ['infinite', 'finite'])
@@ -634,67 +577,6 @@ def _coupling_to_dense(coupling, L):
     labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
     dim = coupling.sites[0].dim
     return coupling.to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
-
-
-def test_to_single_coupling_heisenberg_and_field():
-    """to_single_coupling should reproduce a hand-built sum of Heisenberg + field terms."""
-
-    L = 4
-    site = SpinSite(S=0.5, conserve=None)
-    c_nn = heisenberg_coupling([site, site], J=1.0)
-    c_field = spin_field_coupling([site], hz=1.0)
-
-    couplings = [c_nn, c_nn, c_nn, c_field, c_field, c_field, c_field]
-    sites_arg = [[0, 1], [1, 2], [2, 3], [0], [1], [2], [3]]
-    prefactors = [0.5, 1.5, 2.0, 0.1, 0.2, 0.3, 0.4]
-    split = [0, 0, 0, 0, 0, 0, 0]
-
-    result = to_single_coupling(couplings, sites_arg, prefactors, split, name='test H')
-    assert len(result.sites) == L
-    H = _coupling_to_dense(result, L)
-
-    terms = []
-    for J, (i, j) in zip([0.5, 1.5, 2.0], [(0, 1), (1, 2), (2, 3)]):
-        for op in ('Sx', 'Sy', 'Sz'):
-            terms.append((J, {i: op, j: op}))
-    for h, i in zip([0.1, 0.2, 0.3, 0.4], range(L)):
-        terms.append((h, {i: 'Sz'}))
-    H_expected = _dense_Hamiltonian(site, L, terms)
-
-    np.testing.assert_allclose(H, H_expected, atol=1e-10)
-    np.testing.assert_allclose(H, H.conj().T, atol=1e-10)
-
-
-def test_to_single_coupling_gap_and_split():
-    L = 3
-    site = SpinSite(S=0.5, conserve=None)
-    c_nn = heisenberg_coupling([site, site], J=1.0)
-    c_field = spin_field_coupling([site], hz=1.0)
-
-    couplings = [c_nn, c_field]
-    sites_arg = [[0, 2], [1]]  # c_nn has an identity inserted at site 1
-    prefactors = [0.7, 0.3]
-
-    H_expected = _dense_Hamiltonian(
-        site, L, [(0.7, {0: 'Sx', 2: 'Sx'}), (0.7, {0: 'Sy', 2: 'Sy'}), (0.7, {0: 'Sz', 2: 'Sz'}), (0.3, {1: 'Sz'})]
-    )
-
-    for split in ([1, 0], [0, 0]):  # scale the tensor at site 0 or at site 2
-        result = to_single_coupling(couplings, sites_arg, prefactors, split, name='gap')
-        H = _coupling_to_dense(result, L)
-        np.testing.assert_allclose(H, H_expected, atol=1e-10)
-
-
-def test_to_single_coupling_bad_input():
-    """Mismatched-length arguments and gaps between sites should raise ValueError."""
-    site = SpinSite(S=0.5, conserve=None)
-    c_field = spin_field_coupling([site], hz=1.0)
-
-    with pytest.raises(ValueError):
-        to_single_coupling([c_field], [[0]], [1.0, 2.0], [0])  # mismatched lengths
-    with pytest.raises(ValueError):
-        # site 1 is never touched
-        to_single_coupling([c_field, c_field], [[0], [2]], [1.0, 1.0], [0, 0])
 
 
 def make_WI_np(dt, A, B, C, D):
