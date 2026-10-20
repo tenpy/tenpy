@@ -22,7 +22,7 @@ import copy
 import itertools
 import logging
 
-import cyten as ct
+import lasyten as lasy
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from scipy.spatial import ConvexHull, Voronoi
@@ -90,7 +90,7 @@ class Lattice:
     ----------
     Ls : list of int
         the length in each direction
-    unit_cell : list of :class:`cyten.Site`
+    unit_cell : list of :class:`lasyten.Site`
         The sites making up a unit cell of the lattice.
     order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups, ...)``
         A string or tuple specifying the order, given to :meth:`ordering`.
@@ -138,13 +138,13 @@ class Lattice:
         sites. It always provides the horizontal distance traversed by an MPS unit cell,
         e.g. for the purpose of :ref:`shift_symmetry` or
         :meth:`~tenpy.networks.mps.MPS.correlation_length2`.
-    unit_cell : list of :class:`cyten.Site`
+    unit_cell : list of :class:`lasyten.Site`
         the sites making up a unit cell of the lattice.
-    symmetry : :class:`cyten.Symmetry`
+    symmetry : :class:`lasyten.Symmetry`
         The symmetry of the sites in the :attr:`unit_cell`.
         This is a symmetry on the local (and virtual) Hilbert spaces.
         It (usually) does *not* describe a spatial symmetry of the lattice.
-    backend : :class:`cyten.TensorBackend`
+    backend : :class:`lasyten.TensorBackend`
         The backend of the sites in the :attr:`unit_cell`.
     bc : bool ndarray
         Boundary conditions of the couplings in each direction of the lattice,
@@ -194,7 +194,7 @@ class Lattice:
     def __init__(
         self,
         Ls,
-        unit_cell: list[ct.Site],
+        unit_cell: list[lasy.Site],
         order='default',
         bc='open',
         bc_MPS='finite',

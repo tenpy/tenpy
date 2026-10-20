@@ -111,7 +111,7 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 120
 exclude = ["doc/sphinx_ext/*", "doc/toycodes", "doc/notebooks"]
-builtins = ["npc"]  # TODO ignore npc not present until we ported everyting to the new C++ cyten backend
+builtins = ["npc"]  # TODO ignore npc not present until we ported everyting to the new C++ lasyten backend
 
 [tool.ruff.lint]
 # Note: we use flake8 to lint docstrings, see .flake8

@@ -21,7 +21,7 @@
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-# cyten migration: the commented-out submodules still import ``np_conserved`` and are a to-do list.
+# lasyten migration: the commented-out submodules still import ``np_conserved`` and are a to-do list.
 from . import (
     algorithm,
     # disentangler,

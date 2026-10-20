@@ -14,7 +14,7 @@ from abc import ABCMeta, abstractmethod
 from collections.abc import Sequence
 from typing import Literal
 
-import cyten as ct
+import lasyten as lasy
 import numpy as np
 from numpy.typing import ArrayLike
 
@@ -94,7 +94,7 @@ class EvolutionModel(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_U_bond(self, t: float, dt: float, Nsteps: int = 1) -> list[tuple[int, ct.Tensor]]:
+    def get_U_bond(self, t: float, dt: float, Nsteps: int = 1) -> list[tuple[int, lasy.Tensor]]:
         """A time step as NN circuit, possibly up to approximations from discretization.
 
         TODO where to pass trotter options?
@@ -140,7 +140,7 @@ class HamiltonianModel(EvolutionModel, metaclass=ABCMeta):
         EvolutionModel.__init__(self, lattice=lattice)
 
     @abstractmethod
-    def get_H_bond(self) -> list[ct.Tensor | None]:
+    def get_H_bond(self) -> list[lasy.Tensor | None]:
         """The Hamiltonian as a sum of bond-terms.
 
         Returns
@@ -159,7 +159,7 @@ class HamiltonianModel(EvolutionModel, metaclass=ABCMeta):
         """The Hamiltonian as an MPO"""
         ...
 
-    def get_U_bond(self, t: float, dt: float, Nsteps: int = 1) -> list[tuple[int, ct.Tensor]]:
+    def get_U_bond(self, t: float, dt: float, Nsteps: int = 1) -> list[tuple[int, lasy.Tensor]]:
         # TODO move code from TEBDEngine here
         #      probably want caching, but per instance and per discretization params!
         #      -> make sure to use invalidate_caches!
@@ -209,8 +209,8 @@ class CouplingDefinition(metaclass=ABCMeta):
 
     def __init__(
         self,
-        backend: ct.TensorBackend,
-        symmetry: ct.Symmetry,
+        backend: lasy.TensorBackend,
+        symmetry: lasy.Symmetry,
         coupling_names: Sequence[str] = [],
         num_sites: dict[str, int] = {},
         hc_map: dict[str, str] = {},
@@ -229,7 +229,7 @@ class CouplingDefinition(metaclass=ABCMeta):
         # FIXME in tests: systematically check that the hc is correct
 
     @abstractmethod
-    def decompose(self, name: str, sites: Sequence[ct.Site]) -> list[tuple[complex, list[ct.SymmetricTensor]]]:
+    def decompose(self, name: str, sites: Sequence[lasy.Site]) -> list[tuple[complex, list[lasy.SymmetricTensor]]]:
         """FIXME"""
         ...
 
@@ -237,9 +237,9 @@ class CouplingDefinition(metaclass=ABCMeta):
     def permute(self, name: str, perm: Sequence[int]) -> dict[str, float | complex]: ...
 
     @abstractmethod
-    def get_coupling(self, name: str, sites: Sequence[ct.Site]) -> ct.Coupling: ...
+    def get_coupling(self, name: str, sites: Sequence[lasy.Site]) -> lasy.Coupling: ...
 
-    def test_valid(self, name: str, sites: Sequence[ct.Site]):
+    def test_valid(self, name: str, sites: Sequence[lasy.Site]):
         """FIXME"""
         if name not in self.coupling_names:
             raise ValueError(f'Unknonwn coupling name: {name}')
@@ -248,7 +248,7 @@ class CouplingDefinition(metaclass=ABCMeta):
 class OnsiteCouplingDefinition(CouplingDefinition):
     """FIXME"""
 
-    def __init__(self, sites: Sequence[ct.Site], backend: ct.TensorBackend, symmetry: ct.Symmetry):
+    def __init__(self, sites: Sequence[lasy.Site], backend: lasy.TensorBackend, symmetry: lasy.Symmetry):
         self.sites = sites  # FIXME deal with duplicates?
         hc_map = {}
         for s in sites:
@@ -269,7 +269,7 @@ class OnsiteCouplingDefinition(CouplingDefinition):
     def get_coupling(self, name, sites):
         assert len(sites) == 1
         h = sites[0].get_op(name)
-        return ct.Coupling.from_tensor(h, sites, name=name)
+        return lasy.Coupling.from_tensor(h, sites, name=name)
 
     def test_valid(self, name, sites):
         assert len(sites) == 1
@@ -282,7 +282,7 @@ class OnsiteCouplingDefinition(CouplingDefinition):
 class SpinCouplingDefinition(CouplingDefinition):
     """FIXME"""
 
-    def __init__(self, backend: ct.TensorBackend, symmetry: ct.Symmetry):
+    def __init__(self, backend: lasy.TensorBackend, symmetry: lasy.Symmetry):
         tmp = {
             'Sx.Sx': (2, 'Sx.Sx'),
             'Sy.Sy': (2, 'Sy.Sy'),
@@ -296,19 +296,19 @@ class SpinCouplingDefinition(CouplingDefinition):
         hc_map = {k: hc for k, (num, hc) in tmp.items()}
         super().__init__(backend, symmetry, coupling_names=tmp.keys(), num_sites=num_sites, hc_map=hc_map)
 
-    def get_spin_conserve(self, sites: list[ct.Site]) -> Literal['SU(2)', 'Sz', 'parity', None]:
-        if not isinstance(sites[0], ct.models.SpinSite):
+    def get_spin_conserve(self, sites: list[lasy.Site]) -> Literal['SU(2)', 'Sz', 'parity', None]:
+        if not isinstance(sites[0], lasy.models.SpinSite):
             raise NotImplementedError
         res = sites[0].conserve
         if any(s.conserve != res for s in sites[1:]):
-            raise ct.SymmetryError('Inconsistent conserve for sites!')
+            raise lasy.SymmetryError('Inconsistent conserve for sites!')
         return res
 
     def decompose(self, name, sites):
         conserve = self.get_spin_conserve(sites)
         if name in ['Sx.Sx', 'Sy.Sy', 'Sz.Sz', 'Sp.Sm', 'Sm.Sp']:
             if conserve == 'SU(2)':
-                raise ct.SymmetryError(f'Coupling not SU(2) symmetric: {name}')
+                raise lasy.SymmetryError(f'Coupling not SU(2) symmetric: {name}')
             return {name: +1}
         if name == 'S.S':
             if conserve == 'SU(2)':
@@ -320,13 +320,13 @@ class SpinCouplingDefinition(CouplingDefinition):
 
     def get_coupling(self, name, sites):
         if name == 'Sx.Sx':
-            return ct.models.spin_spin_coupling(sites, Jx=1, backend=self.backend)
+            return lasy.models.spin_spin_coupling(sites, Jx=1, backend=self.backend)
         if name == 'Sy.Sy':
-            return ct.models.spin_spin_coupling(sites, Jy=1, backend=self.backend)
+            return lasy.models.spin_spin_coupling(sites, Jy=1, backend=self.backend)
         if name == 'Sz.Sz':
-            return ct.models.spin_spin_coupling(sites, Jz=1, backend=self.backend)
+            return lasy.models.spin_spin_coupling(sites, Jz=1, backend=self.backend)
         if name == 'S.S':
-            return ct.models.spin_spin_coupling(sites, Jx=1, Jy=1, Jz=1, backend=self.backend)
+            return lasy.models.spin_spin_coupling(sites, Jx=1, Jy=1, Jz=1, backend=self.backend)
         if name == 'Sp.Sm':
             raise NotImplementedError
         if name == 'Sm.Sp':
@@ -434,8 +434,8 @@ class CouplingModel(HamiltonianModel):
         raise ValueError(f'Unknown coupling name {coupling_name}')
 
     def decompose_coupling(
-        self, coupling_name: str, sites: Sequence[ct.Site]
-    ) -> list[tuple[complex, list[ct.SymmetricTensor]]]:
+        self, coupling_name: str, sites: Sequence[lasy.Site]
+    ) -> list[tuple[complex, list[lasy.SymmetricTensor]]]:
         for d in self.coupling_definitions:
             if coupling_name not in d.coupling_names:
                 continue
@@ -453,14 +453,14 @@ class CouplingModel(HamiltonianModel):
         assert self.coupling_n_sites(name) == len(idcs)
         return len(idcs) - len(idcs) // 2
 
-    def get_coupling(self, coupling_name: str, sites: Sequence[ct.Site]) -> ct.Coupling:
+    def get_coupling(self, coupling_name: str, sites: Sequence[lasy.Site]) -> lasy.Coupling:
         for d in self.coupling_definitions:
             if coupling_name not in d.coupling_names:
                 continue
             return d.get_coupling(coupling_name, sites)
         raise ValueError(f'Unknown coupling name {coupling_name}')
 
-    def test_coupling(self, coupling_name: str, sites: Sequence[ct.Site]):
+    def test_coupling(self, coupling_name: str, sites: Sequence[lasy.Site]):
         """FIXME"""
         for d in self.coupling_definitions:
             if coupling_name not in d.coupling_names:
@@ -554,7 +554,7 @@ class CouplingModel(HamiltonianModel):
             for u in range(len(self.lattice.unit_cell)):
                 self.add_onsite_operator(strength, op, x=x, u=u, plus_hc=plus_hc)
             return
-        u = ct.tools.to_valid_idx(u, len(self.lattice.unit_cell))
+        u = lasy.tools.to_valid_idx(u, len(self.lattice.unit_cell))
 
         if self.explicit_plus_hc:
             if plus_hc:
@@ -649,8 +649,8 @@ class CouplingModel(HamiltonianModel):
             raise ValueError(
                 'Invalid u1 or u2. If string, must both be the same choice of sum_over_independent or sum_over_matching'
             )
-        u1 = ct.tools.to_valid_idx(u1, len(self.lattice.unit_cell))
-        u2 = ct.tools.to_valid_idx(u2, len(self.lattice.unit_cell))
+        u1 = lasy.tools.to_valid_idx(u1, len(self.lattice.unit_cell))
+        u2 = lasy.tools.to_valid_idx(u2, len(self.lattice.unit_cell))
 
         if self.explicit_plus_hc:
             if plus_hc:
@@ -776,7 +776,7 @@ class CouplingModel(HamiltonianModel):
             hc_name = self.get_hc_coupling_name(coupling_name)
             self._add_multi_coupling_mps(np.conj(pref), ijkl, hc_name, plus_hc=False)
 
-        if ct.tools.duplicate_entries(ijkl):
+        if lasy.tools.duplicate_entries(ijkl):
             raise ValueError('Can not act on the same site twice!')
         perm = np.argsort(ijkl)
         if np.all(perm == np.arange(len(ijkl))):
@@ -792,7 +792,7 @@ class CouplingModel(HamiltonianModel):
         raise NotImplementedError  # TODO skipped for now
 
 
-def calc_H_bond_from_MPO(H_MPO: MPO, tol_zero: float = 1e-15) -> list[ct.Tensor]:
+def calc_H_bond_from_MPO(H_MPO: MPO, tol_zero: float = 1e-15) -> list[lasy.Tensor]:
     """Calculate the bond Hamiltonian from the MPO Hamiltonian.
 
     Parameters
@@ -827,9 +827,9 @@ def calc_H_bond_from_MPO(H_MPO: MPO, tol_zero: float = 1e-15) -> list[ct.Tensor]
         left = H_MPO.finite and j == 0
         right = H_MPO.finite and j == H_MPO.L - 1
         A, B, C, D, Id = partition_W(W, left_boundary=left, right_boundary=right)
-        if A is not None and ct.norm(A) > tol_zero:
+        if A is not None and lasy.norm(A) > tol_zero:
             raise ValueError('Not a Nearest-Neighbour MPO!')
-        H_onsite.append(ct.squeeze_legs(D, ['wL', 'wR']))
+        H_onsite.append(lasy.squeeze_legs(D, ['wL', 'wR']))
         B_list.append(B)
         C_list.append(C)
         Id_list.append(Id)
@@ -841,9 +841,9 @@ def calc_H_bond_from_MPO(H_MPO: MPO, tol_zero: float = 1e-15) -> list[ct.Tensor]
             continue
         i = (j - 1) % H_bond.L
         # two-body coupling is C_i @ B_j
-        h = ct.planar_contraction(
-            ct.squeeze_legs(C_list[i], 'wL'),
-            ct.squeeze_legs(B_list[j], 'wR'),
+        h = lasy.planar_contraction(
+            lasy.squeeze_legs(C_list[i], 'wL'),
+            lasy.squeeze_legs(B_list[j], 'wR'),
             'wR',
             'wL',
             relabel1={'p': 'p0', 'p*': 'p0*'},
@@ -853,10 +853,10 @@ def calc_H_bond_from_MPO(H_MPO: MPO, tol_zero: float = 1e-15) -> list[ct.Tensor]
         # add the onsite terms
         strength_i = 1 if H_MPO.finite and i == 0 else 0.5
         strength_j = 1 if H_MPO.finite and j == H_MPO.L - 1 else 0.5
-        h += strength_i * ct.outer(
+        h += strength_i * lasy.outer(
             H_onsite[i], Id_list[j], relabel1={'p': 'p0', 'p*': 'p0*'}, relabel2={'p': 'p1', 'p*': 'p1*'}
         )
-        h += strength_j * ct.outer(
+        h += strength_j * lasy.outer(
             Id_list[i], H_onsite[j], relabel1={'p': 'p0', 'p*': 'p0*'}, relabel2={'p': 'p1', 'p*': 'p1*'}
         )
         H_bond.append(h)

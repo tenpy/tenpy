@@ -1,11 +1,11 @@
 """A collection of tests for (classes in) :module:`tenpy.networks.mpo`."""
 # Copyright (C) TeNPy Developers, Apache license
 
-import cyten as ct
+import lasyten as lasy
 import numpy as np
 import pytest
-from cyten.models.couplings import Coupling, heisenberg_coupling, spin_field_coupling
-from cyten.models.sites import SpinSite
+from lasyten.models.couplings import Coupling, heisenberg_coupling, spin_field_coupling
+from lasyten.models.sites import SpinSite
 from numpy import testing as npt
 from scipy import linalg as spla
 
@@ -19,7 +19,7 @@ spin_half = SpinSite(S=0.5, conserve=None)
 
 
 def test_MPO():
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     s = spin_half
     for bc in mpo.MPO._valid_bc:
         for L in [4, 2, 1]:
@@ -92,7 +92,7 @@ def test_MPOGraph():
 
 
 def test_MPOGraph_term_conversion():
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     L = 4
 
     g1 = mpo.MPOGraph([spin_half] * L, 'infinite', unit_cell_width=L)
@@ -172,7 +172,7 @@ def test_MPOGraph_coupling_hash_tuples():
 
 
 def test_MPO_conversion():
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     L = 8
     sites = []
     for i in range(L):
@@ -255,7 +255,7 @@ def test_MPO_conversion():
 
 
 def test_MPOEnvironment():
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     xxz_pars = dict(L=4, Jxx=1.0, Jz=1.1, hz=0.1, bc_MPS='finite', sort_charge=True)
     L = xxz_pars['L']
     M = XXZChain(xxz_pars)
@@ -317,7 +317,7 @@ def test_MPO_addition(bc, explicit_plus_hc):
 
 @pytest.mark.parametrize('sites', [None, [0], [1], [0, 1, 2, 3], [2, 3], [3, 2]])
 def test_MPO_plus_identity(sites, alpha=0.7, beta=0.42):
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     s = spin_half
 
     ot = OnsiteTerms(4)
@@ -346,7 +346,7 @@ def test_MPO_plus_identity(sites, alpha=0.7, beta=0.42):
 
 
 def test_MPO_expectation_value(tol=1.0e-15):
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     L_mpo = 4
     s = spin_half
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='infinite', unit_cell_width=6)
@@ -414,7 +414,7 @@ def test_MPO_expectation_value(tol=1.0e-15):
 
 
 def test_MPO_var(L=8, tol=1.0e-13):
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     xxz_pars = dict(L=L, Jx=1.0, Jy=1.0, Jz=1.1, hz=0.1, bc_MPS='finite', conserve=None)
     M = SpinChain(xxz_pars)
     psi = random_MPS(L, 2, 10)
@@ -442,7 +442,7 @@ def test_MPO_var(L=8, tol=1.0e-13):
 
 @pytest.mark.parametrize('method', ['SVD', 'variational', 'zip_up'])
 def test_apply_mpo(method):
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     bc_MPS = 'finite'
     # NOTE: overlap doesn't work for calculating the energy (density) in infinite systems!
     # energy is extensive, overlap exponential....
@@ -466,7 +466,7 @@ def test_apply_mpo(method):
 
 
 def test_MPOTransferMatrix(eps=1.0e-13):
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     s = spin_half
     # exponential decay in Sz term to make it harder
     gamma = 0.5
@@ -529,7 +529,7 @@ def test_MPOTransferMatrix(eps=1.0e-13):
 
 
 def test_MPO_from_wavepacket(L=10):
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to cyten coupling framework')
+    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     (
         k0,
         x0,
@@ -768,7 +768,7 @@ def test_MPO_make_U(conserve, backend, approximation, bc_MPS, L=6, dt=0.01):
         pytest.skip('Models can not create infinite MPOs yet')
 
     M = SpinChain(dict(L=L, Jx=1.0, Jy=1.0, Jz=1.0, hz=0.2, bc_MPS=bc_MPS, conserve=conserve))
-    if M.H_MPO._W[0].backend != ct.get_backend(backend):
+    if M.H_MPO._W[0].backend != lasy.get_backend(backend):
         pytest.skip('Can not control model backend yet')
 
     if approximation == 'II':

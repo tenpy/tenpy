@@ -4,7 +4,7 @@
 import numpy as np
 import numpy.testing as npt
 import pytest
-from cyten.tensors import almost_equal
+from lasyten.tensors import almost_equal
 from test_model import check_general_model
 
 from tenpy.models.xxz_chain import XXZChain, XXZChain2
@@ -13,7 +13,7 @@ from tenpy.models.xxz_chain import XXZChain, XXZChain2
 def _bond_eigenvalues(Hb):
     """Eigenvalues of a two-site bond operator with labels p0, p0*, p1, p1*.
 
-    TODO: replace with tenpy's exact_diag methods once they are ported to cyten.
+    TODO: replace with tenpy's exact_diag methods once they are ported to lasyten.
     """
     mat = Hb.to_numpy(['p0', 'p1', 'p0*', 'p1*']).reshape(4, 4)
     return np.linalg.eigvalsh(mat)

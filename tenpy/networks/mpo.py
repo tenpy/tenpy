@@ -41,9 +41,9 @@ import logging
 import warnings
 from typing import Any, Literal
 
-import cyten as ct
+import lasyten as lasy
 import numpy as np
-from cyten import Coupling, ElementarySpace, SymmetricTensor
+from lasyten import Coupling, ElementarySpace, SymmetricTensor
 from scipy.special import comb as sp_comb
 
 from ..tools import (
@@ -77,9 +77,9 @@ class MPO(MPSGeometry):
 
     Parameters
     ----------
-    sites : list of :class:`cyten.Site`
+    sites : list of :class:`lasyten.Site`
         Defines the local Hilbert space for each site.
-    Ws : list of :class:`~cyten.Tensor`
+    Ws : list of :class:`~lasyten.Tensor`
         The 'matrices' of the MPO. Labels are ``wL, p, wR, p*`` (up to cyclic permutation).
     bc : {'finite' | 'segment' | 'infinite'}
         Boundary conditions as described in :mod:`~tenpy.networks.mps`.
@@ -94,7 +94,7 @@ class MPO(MPSGeometry):
 
     Attributes
     ----------
-    dtype : :class:`cyten.Dtype`
+    dtype : :class:`lasyten.Dtype`
         The data type of the :attr:`_W`.
     bc : {'finite' | 'segment' | 'infinite'}
         Boundary conditions as described in :mod:`~tenpy.networks.mps`.
@@ -106,7 +106,7 @@ class MPO(MPSGeometry):
     explicit_plus_hc : bool
         If True, this flag indicates that the hermitian conjugate of the MPO should be
         computed and added at runtime, i.e., `self` is not (necessarily) hermitian.
-    _W : list of :class:`~cyten.Tensor`
+    _W : list of :class:`~lasyten.Tensor`
         The matrices of the MPO. Labels are ``wL, p, wR, p*`` (up to cyclic permutation).
     _valid_bc : tuple of str
         Class attribute. Valid boundary conditions; the same as for an MPS.
@@ -132,15 +132,15 @@ class MPO(MPSGeometry):
 
     def __init__(
         self,
-        sites: list[ct.Site],
-        Ws: list[ct.Tensor],
+        sites: list[lasy.Site],
+        Ws: list[lasy.Tensor],
         bc: Literal['finite', 'segment', 'infinite'] = 'finite',
         max_range: int | float | None = None,  # float only if float('inf')
         explicit_plus_hc: bool = False,
         mps_unit_cell_width: int | None = None,
     ):
         super().__init__(sites, bc, unit_cell_width=mps_unit_cell_width)
-        self.dtype = dtype = ct.Dtype.common(*[W.dtype for W in Ws])
+        self.dtype = dtype = lasy.Dtype.common(*[W.dtype for W in Ws])
         self._W = [W.as_dtype(dtype) for W in Ws]
         self.grouped = 1
         self.max_range = max_range
@@ -198,7 +198,7 @@ class MPO(MPSGeometry):
                         self._graph[i][(jL, jR)] = op
 
     def _make_graph_from_couplings(self, couplings_with_start, norm_tol=1e-12):
-        """Construct a MPO graph from cyten Couplings using hash-based indexing.
+        """Construct a MPO graph from lasyten Couplings using hash-based indexing.
 
         Each coupling hash uniquely identifies a class of interaction. Global virtual bond
         indices (jL, jR) are allocated once per unique coupling hash and reused for every
@@ -254,7 +254,7 @@ class MPO(MPSGeometry):
 
                 # Rearrange to (wL, wR, p, p*)
                 # Transpose so  op[jL,jR,:,:] is in (p, p*) order.
-                tensor_rearranged = ct.permute_legs(tensor, codomain=['wL', 'wR'], domain=['p', 'p*'])
+                tensor_rearranged = lasy.permute_legs(tensor, codomain=['wL', 'wR'], domain=['p', 'p*'])
                 arr = tensor_rearranged.to_numpy(understood_braiding=True)
 
                 arr = arr.transpose(0, 1, 3, 2)  # → (chiL, chiR, d, d) axes (wL, wR, p, p*)
@@ -546,7 +546,7 @@ class MPO(MPSGeometry):
         obj.sites = hdf5_loader.load(subpath + 'sites')
         obj.chinfo = hdf5_loader.load(subpath + 'chinfo')
         obj._W = hdf5_loader.load(subpath + 'tensors')
-        obj.dtype = ct.Dtype.common(*[W.dtype for W in obj._W])
+        obj.dtype = lasy.Dtype.common(*[W.dtype for W in obj._W])
         obj.grouped = hdf5_loader.get_attr(h5gr, 'grouped')
         obj.bc = hdf5_loader.load(subpath + 'boundary_condition')
         obj.max_range = hdf5_loader.load(subpath + 'max_range')
@@ -764,7 +764,7 @@ class MPO(MPSGeometry):
         """Dimensions of the virtual bonds."""
         return [W.get_leg('wL').dim for W in self._W] + [self._W[-1].get_leg('wR').dim]
 
-    def get_W(self, i: int, copy=False) -> ct.Tensor:
+    def get_W(self, i: int, copy=False) -> lasy.Tensor:
         """Return `W` at site `i`."""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         W = self._W[i_in_unit_cell]
@@ -772,7 +772,7 @@ class MPO(MPSGeometry):
             W = W.copy()
         return self.shift_Tensor_unit_cells(W, num_unit_cells=num_unit_cells, inplace=copy)
 
-    def set_W(self, i: int, W: ct.Tensor):
+    def set_W(self, i: int, W: lasy.Tensor):
         """Set `W` at site `i`. Note that ``W`` may be modified in-place."""
         assert W.labels_are('wL', 'p', 'wR', 'p*', planar=True)
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
@@ -936,7 +936,7 @@ class MPO(MPSGeometry):
             left = self.finite and i == 0
             right = self.finite and i == self.L - 1
             A, B, C, D, Id = partition_W(W, left_boundary=left, right_boundary=right)
-            Id = ct.tensor_from_grid([[Id]], labels=['wL', 'p', 'wR', 'p*'], row_labels=['Id'], col_labels=['Id'])
+            Id = lasy.tensor_from_grid([[Id]], labels=['wL', 'p', 'wR', 'p*'], row_labels=['Id'], col_labels=['Id'])
             if left and right:
                 raise RuntimeError
             elif left:
@@ -945,7 +945,7 @@ class MPO(MPSGeometry):
                 grid = [[Id + dt * D], [dt * B]]
             else:
                 grid = [[Id + dt * D, C], [dt * B, A]]
-            U = ct.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*'])
+            U = lasy.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*'])
             assert 'Id' in U.get_leg('wL').summand_labels
             assert 'Id' in U.get_leg('wR').summand_labels
             U_list.append(U)
@@ -976,9 +976,9 @@ class MPO(MPSGeometry):
         device = self._W[0].device
 
         # create leg, operators on auxiliary hard-core boson spaces
-        boson_leg = ct.ElementarySpace.from_trivial_sector(2, symmetry=self.symmetry)
-        Id_b = ct.SymmetricTensor.from_eye([boson_leg], backend, labels=['b', 'b*'], device=device)
-        b = ct.SymmetricTensor.from_dense_block(
+        boson_leg = lasy.ElementarySpace.from_trivial_sector(2, symmetry=self.symmetry)
+        Id_b = lasy.SymmetricTensor.from_eye([boson_leg], backend, labels=['b', 'b*'], device=device)
+        b = lasy.SymmetricTensor.from_dense_block(
             [[0, 0], [1, 0]], [boson_leg], [boson_leg], backend, labels=['b', 'b*'], device=device
         )
 
@@ -1146,22 +1146,22 @@ class MPO(MPSGeometry):
                 proj = W.get_leg('wL').projection_onto_summands(
                     keep, backend=W.backend, labels=['wL', 'wR'], device=W.device
                 )
-                W = ct.planar_contraction(W, proj, 'wL', 'wR')
-                LP = ct.planar_contraction(LP, proj.hc, 'wR', 'wR*', relabel2={'wL*': 'wR'})
+                W = lasy.planar_contraction(W, proj, 'wL', 'wR')
+                LP = lasy.planar_contraction(LP, proj.hc, 'wR', 'wR*', relabel2={'wL*': 'wR'})
             B = psi.get_B(i, 'B')
             LP = env.LP_contraction.evaluate(dict(LP=LP, Bk=B, W=W, Bb=B.hc))
 
             if i >= L - 1:
                 RP = env.init_RP(i)
-                current_value = ct.planar_contraction(LP, RP, ['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL'])
+                current_value = lasy.planar_contraction(LP, RP, ['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL'])
 
                 # remove following identities
                 keep = [i for i, l in enumerate(LP.get_leg('wR').summand_labels) if l not in ['IdL', 'IdR']]
                 proj = LP.get_leg('wR').projection_onto_summands(
                     keep, backend=LP.backend, labels=['wR', 'wL'], device=LP.device
                 )
-                LP_converged = ct.planar_contraction(LP, proj, 'wR', 'wL')
-                if ct.norm(LP_converged) < tol:
+                LP_converged = lasy.planar_contraction(LP, proj, 'wR', 'wL')
+                if lasy.norm(LP_converged) < tol:
                     break  # no more terms left
         else:  # no break
             msg = f'Tolerance {tol:.2e} not reached within {max_range:d} sites'
@@ -1379,11 +1379,11 @@ class MPO(MPSGeometry):
             return self.copy()
         if self.bc != 'finite':
             raise NotImplementedError("MPO.dagger() for bc != 'finite' is not yet supported")
-        # for finite bc, the `_W` tensors have the same structure as a cyten Coupling's
+        # for finite bc, the `_W` tensors have the same structure as a lasyten Coupling's
         # `factorization` (trivial boundary legs), so we can round-trip through `Coupling` to
         # get the hermitian conjugate at the tensor level.
         coupling = Coupling(sites=list(self.sites), factorization=list(self._W))
-        hc_coupling = Coupling.from_tensor(ct.dagger(coupling.to_tensor()), sites=list(self.sites))
+        hc_coupling = Coupling.from_tensor(lasy.dagger(coupling.to_tensor()), sites=list(self.sites))
         return MPO(
             self.sites,
             hc_coupling.factorization,
@@ -1843,24 +1843,24 @@ class MPO(MPSGeometry):
         If ``hconj_self``, we use the hc of self instead, i.e. compute
         ``<hc(self)|other> = Tr[self @ other]``.
         """
-        wA = ct.grid_project(self.get_W(0), ['wL'], ['IdL'], squeeze=True)
-        wB = ct.grid_project(other.get_W(0), ['wL'], ['IdL'], squeeze=True)
+        wA = lasy.grid_project(self.get_W(0), ['wL'], ['IdL'], squeeze=True)
+        wB = lasy.grid_project(other.get_W(0), ['wL'], ['IdL'], squeeze=True)
 
         if hconj_self:
-            res = ct.planar_contraction(
+            res = lasy.planar_contraction(
                 wA, wB, ['p', 'p*'], ['p*', 'p'], relabel1={'wR': 'wRa'}, relabel2={'wR': 'wRb'}
             )
             for i in range(1, num_sites):
-                res = ct.planar_contraction(res, self.get_W(i), 'wRa', 'wL', relabel2={'wR': 'wRa'})
-                res = ct.planar_contraction(
+                res = lasy.planar_contraction(res, self.get_W(i), 'wRa', 'wL', relabel2={'wR': 'wRa'})
+                res = lasy.planar_contraction(
                     res, other.get_W(i), ['wR', 'p*', 'p'], ['wL', 'p', 'p*'], relabel2={'wR': 'wRb'}
                 )
         else:
-            res = ct.planar_contraction(
+            res = lasy.planar_contraction(
                 wA.hc, wB, ['p', 'p*'], ['p*', 'p'], relabel1={'wR*': 'wRa'}, relabel2={'wR': 'wRb'}
             )
-        res = ct.grid_project(res, ['wRa', 'wRb'], ['IdR', 'IdR'])
-        return ct.item(res)
+        res = lasy.grid_project(res, ['wRa', 'wRb'], ['IdR', 'IdR'])
+        return lasy.item(res)
 
     def distance(self, other: MPO, understood_infinite: bool = False, num_sites: int = None) -> float:
         """The Frobenius distance induced by the inner product :meth:`overlap`."""
@@ -1931,15 +1931,15 @@ class MPO(MPSGeometry):
             right = self.finite and i == L - 1
             A1, B1, C1, D1, Id = partition_W(self._W[i], left_boundary=left, right_boundary=right)
             A2, B2, C2, D2, _ = partition_W(other._W[i], left_boundary=left, right_boundary=right)
-            IdL = ct.tensor_from_grid([[Id]], labels=['wL', 'p', 'wR', 'p*'], row_labels=['IdL'], col_labels=['IdL'])
-            IdR = ct.tensor_from_grid([[Id]], labels=['wL', 'p', 'wR', 'p*'], row_labels=['IdR'], col_labels=['IdR'])
+            IdL = lasy.tensor_from_grid([[Id]], labels=['wL', 'p', 'wR', 'p*'], row_labels=['IdL'], col_labels=['IdL'])
+            IdR = lasy.tensor_from_grid([[Id]], labels=['wL', 'p', 'wR', 'p*'], row_labels=['IdR'], col_labels=['IdR'])
             grid = [
                 [Id, C1, C2, D1 + D2],
                 [None, A1, None, B1],
                 [None, None, A2, B2],
                 [None, None, None, Id],
             ]
-            Ws.append(ct.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*']))
+            Ws.append(lasy.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*']))
 
         if self.max_range is None or other.max_range is None:
             max_range = None
@@ -1960,7 +1960,7 @@ class MPO(MPSGeometry):
 def _ensure_identity_op(site):
     """Make sure `site` has an 'Id' onsite operator.
 
-    Unlike the old `tenpy.networks.site.Site`, :class:`cyten.models.degrees_of_freedom.Site`
+    Unlike the old `tenpy.networks.site.Site`, :class:`lasyten.models.degrees_of_freedom.Site`
     does not come with a predefined identity operator, but :class:`MPOGraph` relies on 'Id'
     being valid on every site
     """
@@ -2026,7 +2026,7 @@ class MPOGraph(MPSGeometry):
         self.states = [set() for _ in range(self.L + 1)]
         self.graph = [{} for _ in range(self.L)]
         self._ordered_states = None
-        # cyten-native graph for cyten Couplings: entries are actual SymmetricTensor blocks
+        # lasyten-native graph for lasyten Couplings: entries are actual SymmetricTensor blocks
         # (not opname strings), see :meth:`add_coupling_as_term`/:meth:`build_coupling`.
         # ``_coupling_graph[i] == {keyL: {keyR: SymmetricTensor}}``
         self._coupling_graph = [dict() for _ in range(self.L)]
@@ -2121,17 +2121,17 @@ class MPOGraph(MPSGeometry):
         insert_all_id=True,
         unit_cell_width=None,
     ):
-        """Initialize an :class:`MPOGraph` from cyten Couplings using hashing.
+        """Initialize an :class:`MPOGraph` from lasyten Couplings using hashing.
 
         This method creates an MPOGraph where the graph keys are tuples containing
         the coupling hashes. The coupling hash uniquely identifies the coupling's data.
         Use :meth:`build_coupling` (not :meth:`build_MPO`, which only ever produces an old
         ``np_conserved``-based :class:`MPO`) to convert the resulting graph back into a single
-        cyten Coupling.
+        lasyten Coupling.
 
         Parameters
         ----------
-        couplings : list of cyten.models.couplings.Coupling
+        couplings : list of lasyten.models.couplings.Coupling
             List of Couplings to build the graph from.
         sites : list of :class:`~tenpy.models.lattice.Site`
             Local sites of the Hilbert space.
@@ -2139,7 +2139,7 @@ class MPOGraph(MPSGeometry):
             MPO boundary conditions.
         positions : None | list of (list of int)
             For each entry of `couplings`, the MPS site index of every entry of its
-            :attr:`~cyten.models.couplings.Coupling.factorization`; see
+            :attr:`~lasyten.models.couplings.Coupling.factorization`; see
             :meth:`add_coupling_as_term`. ``None`` defaults to every coupling starting at the
             left edge of the graph.
         strengths : None | list of float/complex
@@ -2270,31 +2270,31 @@ class MPOGraph(MPSGeometry):
             self._add_coupling_edge(i, key, key, site.identity_tensor(trivial))
 
     def add_coupling_as_term(self, coupling, positions=None, strength=1.0, split=None):
-        """Add a cyten Coupling to the graph as a single term.
+        """Add a lasyten Coupling to the graph as a single term.
 
         Unlike :meth:`add`, which stores ``(opname, strength)`` pairs referencing named onsite
-        operators, this inserts the entries of :attr:`~cyten.models.couplings.Coupling.factorization`
-        directly as :class:`~cyten.tensors.SymmetricTensor` blocks into :attr:`_coupling_graph`.
+        operators, this inserts the entries of :attr:`~lasyten.models.couplings.Coupling.factorization`
+        directly as :class:`~lasyten.tensors.SymmetricTensor` blocks into :attr:`_coupling_graph`.
         Since each factorization tensor already has correctly-sectored ``'wL'``/``'wR'`` legs
         (from however the `coupling` itself was constructed), no manual charge/leg-charge
         bookkeeping is needed here -- :meth:`build_coupling` later reassembles everything
-        via :func:`~cyten.tensors.tensor_from_grid`, which handles the sector bookkeeping.
+        via :func:`~lasyten.tensors.tensor_from_grid`, which handles the sector bookkeeping.
 
         Parameters
         ----------
-        coupling : cyten.models.couplings.Coupling
+        coupling : lasyten.models.couplings.Coupling
             The coupling to add to the graph.
         positions : None | list of int
-            The MPS site index for every entry of :attr:`~cyten.models.couplings.Coupling.factorization`,
+            The MPS site index for every entry of :attr:`~lasyten.models.couplings.Coupling.factorization`,
             strictly ascending. Gaps between consecutive positions are bridged with identity
-            tensors (:meth:`~cyten.models.couplings.Coupling.stretch_with_identities`), allowing
+            tensors (:meth:`~lasyten.models.couplings.Coupling.stretch_with_identities`), allowing
             the coupling to act on non-contiguous MPS sites. ``None`` defaults to
             ``range(len(coupling.factorization))``, i.e. the coupling starts at the left edge of
             the graph.
         strength : float
             Overall prefactor for the coupling. Multiplied into the tensor at `split` only.
         split : None | int
-            Local index into :attr:`~cyten.models.couplings.Coupling.factorization` whose tensor
+            Local index into :attr:`~lasyten.models.couplings.Coupling.factorization` whose tensor
             gets scaled by `strength`. ``None`` defaults to the last tensor.
 
         """
@@ -2362,7 +2362,7 @@ class MPOGraph(MPSGeometry):
 
         Parameters
         ----------
-        coupling : cyten.models.couplings.Coupling
+        coupling : lasyten.models.couplings.Coupling
             The coupling to add the string for.
         start_key : tuple
             The key at bond (i+1, i) to connect from.
@@ -2411,7 +2411,7 @@ class MPOGraph(MPSGeometry):
 
         Parameters
         ----------
-        coupling : cyten.models.couplings.Coupling
+        coupling : lasyten.models.couplings.Coupling
             The coupling to add the string for.
         start_key : tuple
             The key at bond (j-1, j) to connect from.
@@ -2451,17 +2451,17 @@ class MPOGraph(MPSGeometry):
         return keyR
 
     def add_missing_IdL_IdR_for_couplings(self):
-        """Add the ``'IdL'``/``'IdR'`` identity pass-through edges to the cyten-native graph.
+        """Add the ``'IdL'``/``'IdR'`` identity pass-through edges to the lasyten-native graph.
 
         This is the counterpart of :meth:`add_missing_IdL_IdR` for the tensor-valued
         :attr:`_coupling_graph` populated by :meth:`add_coupling_as_term`: it inserts an
-        ``'IdL'->'IdL'`` identity edge (:meth:`~cyten.models.degrees_of_freedom.Site.identity_tensor` with a
+        ``'IdL'->'IdL'`` identity edge (:meth:`~lasyten.models.degrees_of_freedom.Site.identity_tensor` with a
         trivial, dimension-1 bond space) on every site up to (not including) the rightmost bond
         where some coupling actually starts, and an ``'IdR'->'IdR'`` identity edge from the
         leftmost bond where some coupling actually ends through the right boundary. This mirrors
         :meth:`add_missing_IdL_IdR`'s ``insert_all_id=False`` behaviour: 'IdL'/'IdR' are only
         registered on bonds where they are actually reachable, since
-        :func:`~cyten.tensors.tensor_from_grid` (used by :meth:`build_coupling`) requires every
+        :func:`~lasyten.tensors.tensor_from_grid` (used by :meth:`build_coupling`) requires every
         declared state to have at least one nonzero edge.
         Should be called once, after all couplings have been added.
         """
@@ -2625,11 +2625,11 @@ class MPOGraph(MPSGeometry):
         """Build the  graph (see :meth:`add_coupling_as_term`) into a single Coupling.
 
         This method instead each site's tensor
-        directly from :attr:`_coupling_graph` via :func:`~cyten.tensors.tensor_from_grid`, which
+        directly from :attr:`_coupling_graph` via :func:`~lasyten.tensors.tensor_from_grid`, which
         stacks the  `SymmetricTensor` blocks along their virtual
-        bonds using :meth:`~cyten.symmetries.ElementarySpace.direct_sum`.
+        bonds using :meth:`~lasyten.symmetries.ElementarySpace.direct_sum`.
 
-        Only ``bc='finite'`` is supported, since :class:`~cyten.models.couplings.Coupling`
+        Only ``bc='finite'`` is supported, since :class:`~lasyten.models.couplings.Coupling`
         requires trivial (dimension-1) boundary legs; for the leftmost/rightmost bond, only the
         ``'IdL'``/``'IdR'`` state is kept (mirroring the boundary projection that
         :meth:`MPO.from_grids` performs for finite `bc`).
@@ -2641,7 +2641,7 @@ class MPOGraph(MPSGeometry):
 
         Returns
         -------
-        coupling : cyten.models.couplings.Coupling
+        coupling : lasyten.models.couplings.Coupling
             Single coupling representing the sum of all terms added to the graph.
 
         """
@@ -2677,7 +2677,7 @@ class MPOGraph(MPSGeometry):
                     if b is None:
                         continue
                     grid[a][b] = tensor
-            W = ct.tensor_from_grid(
+            W = lasy.tensor_from_grid(
                 grid, labels=['wL', 'p', 'wR', 'p*'], row_labels=state_labels[i], col_labels=state_labels[i + 1]
             )
             factorization.append(W)
@@ -2915,7 +2915,7 @@ class MPOEnvironment(BaseEnvironment):
 
     """
 
-    LP_contraction = ct.PlanarDiagram(
+    LP_contraction = lasy.PlanarDiagram(
         tensors='LP[vR*, wR, vR], Bk[vL, p, vR], W[wL, p, wR, p*], Bb[vR*, p*, vL*]',
         definition=(
             'LP:vR* @ Bb:vL*, LP:wR @ W:wL, LP:vR @ Bk:vL, '
@@ -2925,7 +2925,7 @@ class MPOEnvironment(BaseEnvironment):
         ),
         dims=dict(chi=['vR', 'vR*', 'vL', 'vL*'], w=['wL', 'wR'], d=['p', 'p*']),
     )
-    RP_contraction = ct.PlanarDiagram(
+    RP_contraction = lasy.PlanarDiagram(
         tensors='RP[wL, vL*, vL], Bk[vL, p, vR], W[wL, p, wR, p*], Bb[vR*, p*, vL*]',
         definition=(
             'RP:wL @ W:wR, RP:vL* @ Bb:vR*, RP:vL @ Bk:vR, '
@@ -2939,12 +2939,12 @@ class MPOEnvironment(BaseEnvironment):
     def __init__(self, bra: MPS, H: MPO, ket: MPS, cache=None, **init_env_data):
         self.H = H
         super().__init__(bra, ket, cache, **init_env_data)
-        self.dtype = ct.Dtype.common(bra.dtype, ket.dtype, H.dtype)
+        self.dtype = lasy.Dtype.common(bra.dtype, ket.dtype, H.dtype)
 
     def init_first_LP_last_RP(
         self,
-        init_LP: ct.Tensor | None = None,
-        init_RP: ct.Tensor | None = None,
+        init_LP: lasy.Tensor | None = None,
+        init_RP: lasy.Tensor | None = None,
         age_LP: int = 0,
         age_RP: int = 0,
         start_env_sites: int = None,
@@ -2984,7 +2984,7 @@ class MPOEnvironment(BaseEnvironment):
         force_init_method : {None, 'iter', 'TM'}
             Force method 'TM' or 'iter' as described above for **infinite** MPS.
         gmres_options : dict
-            Further optional parameters for :class:`cyten.tensors.krylov_based.GMRES`.
+            Further optional parameters for :class:`lasyten.tensors.krylov_based.GMRES`.
             Only relevant for **infinite** MPS if method 'iter' is used to get `init_LP`/`init_RP`.
 
         """
@@ -3073,7 +3073,7 @@ class MPOEnvironment(BaseEnvironment):
         assert any(key in self.cache for key in self._LP_keys)
         assert any(key in self.cache for key in self._RP_keys)
 
-    def init_LP(self, i: int, start_env_sites: int = 0) -> ct.Tensor:
+    def init_LP(self, i: int, start_env_sites: int = 0) -> lasy.Tensor:
         r"""Build an initial left part ``LP``.
 
         For `start_env_sites` > 0, assume that `bra` is the same as `ket`
@@ -3117,7 +3117,7 @@ class MPOEnvironment(BaseEnvironment):
 
         Returns
         -------
-        init_LP : :class:`~cyten.Tensor`
+        init_LP : :class:`~lasyten.Tensor`
             Environment left of site `i` with labels ``'vR*', 'wR', 'vR'``.
 
         """
@@ -3125,21 +3125,21 @@ class MPOEnvironment(BaseEnvironment):
         init_LP = super().init_LP(i0, 0)
         assert init_LP.labels == ['vR*', 'vR']
         mpo_wL = self.H.get_W(i0).get_leg('wL')
-        assert isinstance(mpo_wL, ct.DirectSumSpace)
-        init_LP = ct.add_trivial_leg(init_LP, 1, label='wR', is_dual=not mpo_wL.is_dual)
+        assert isinstance(mpo_wL, lasy.DirectSumSpace)
+        init_LP = lasy.add_trivial_leg(init_LP, 1, label='wR', is_dual=not mpo_wL.is_dual)
         mask = mpo_wL.projection_onto_summand(
             'IdL',
             backend=init_LP.backend,
             labels=['wL', 'wR'],
             device=init_LP.device,
         )
-        init_LP = ct.tdot(init_LP, mask, 'wR', 'wL')
+        init_LP = lasy.tdot(init_LP, mask, 'wR', 'wL')
         # TODO do we care about the leg arrangement or not?
         for j in range(i0, i):
             init_LP = self._contract_LP(j, init_LP)
         return init_LP
 
-    def init_RP(self, i, start_env_sites=0) -> ct.Tensor:
+    def init_RP(self, i, start_env_sites=0) -> lasy.Tensor:
         """Build initial right part ``RP`` for an MPS/MPOEnvironment.
 
         Parameters
@@ -3151,7 +3151,7 @@ class MPOEnvironment(BaseEnvironment):
 
         Returns
         -------
-        init_RP : :class:`~cyten.Tensor`
+        init_RP : :class:`~lasyten.Tensor`
             Environment right of site `i` with labels ``'wL', 'vL*', 'vL'``.
 
         """
@@ -3159,17 +3159,17 @@ class MPOEnvironment(BaseEnvironment):
         init_RP = super().init_RP(i0, 0)
         assert init_RP.labels == ['vL*', 'vL']
         mpo_wR = self.H.get_W(i0).get_leg('wR')
-        assert isinstance(mpo_wR, ct.DirectSumSpace)
-        init_RP = ct.add_trivial_leg(init_RP, 0, label='wL', is_dual=not mpo_wR.is_dual)
+        assert isinstance(mpo_wR, lasy.DirectSumSpace)
+        init_RP = lasy.add_trivial_leg(init_RP, 0, label='wL', is_dual=not mpo_wR.is_dual)
         mask = mpo_wR.projection_onto_summand(
             'IdR', backend=init_RP.backend, labels=['wR', 'wL'], device=init_RP.device
         )
-        init_RP = ct.tdot(init_RP, mask, 'wL', 'wR')
+        init_RP = lasy.tdot(init_RP, mask, 'wL', 'wR')
         for j in range(i0, i, -1):
             init_RP = self._contract_RP(j, init_RP)
         return init_RP
 
-    def get_LP(self, i: int, store: bool = True) -> ct.Tensor:
+    def get_LP(self, i: int, store: bool = True) -> lasy.Tensor:
         """Calculate LP at given site from nearest available one (including `i`).
 
         The returned ``LP_i`` corresponds to the following contraction,
@@ -3191,7 +3191,7 @@ class MPOEnvironment(BaseEnvironment):
 
         Returns
         -------
-        LP_i : :class:`~cyten.Tensor`
+        LP_i : :class:`~lasyten.Tensor`
             Contraction of everything left of site `i`,
             with labels ``'vR*', 'wR', 'vR'`` for `bra`, `H`, `ket`.
 
@@ -3200,7 +3200,7 @@ class MPOEnvironment(BaseEnvironment):
         # this just exists to update the docstring
         return super().get_LP(i, store)
 
-    def get_RP(self, i: int, store: bool = True) -> ct.Tensor:
+    def get_RP(self, i: int, store: bool = True) -> lasy.Tensor:
         """Calculate RP at given site from nearest available one (including `i`).
 
         The returned ``RP_i`` corresponds to the following contraction,
@@ -3221,7 +3221,7 @@ class MPOEnvironment(BaseEnvironment):
 
         Returns
         -------
-        RP_i : :class:`~cyten.Tensor`
+        RP_i : :class:`~lasyten.Tensor`
             Contraction of everything right of site `i`,
             with labels ``'vL*', 'wL', 'vL'`` for `bra`, `H`, `ket`.
 
@@ -3247,44 +3247,44 @@ class MPOEnvironment(BaseEnvironment):
         """
         # same as MPSEnvironment.full_contraction, but also contract 'wL' with 'wR'
         LP, RP = self._full_contraction_LP_RP(i0)
-        res = ct.planar_contraction(LP, RP, ['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']).to_numpy()
+        res = lasy.planar_contraction(LP, RP, ['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']).to_numpy()
         if self.H.explicit_plus_hc:
             res = res + np.conj(res)
         return res
 
-    def _contract_LP(self, i: int, LP: ct.Tensor) -> ct.Tensor:
+    def _contract_LP(self, i: int, LP: lasy.Tensor) -> lasy.Tensor:
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
         return self.LP_contraction.evaluate(
             dict(LP=LP, Bk=self.ket.get_B(i, form='A'), W=self.H.get_W(i), Bb=self.bra.get_B(i, form='A').hc)
         )
 
-    def _contract_RP(self, i: int, RP: ct.Tensor) -> ct.Tensor:
+    def _contract_RP(self, i: int, RP: lasy.Tensor) -> lasy.Tensor:
         """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
         return self.RP_contraction.evaluate(
             dict(RP=RP, Bk=self.ket.get_B(i, form='B'), W=self.H.get_W(i), Bb=self.bra.get_B(i, form='B').hc)
         )
 
-    def _contract_LHeff(self, i: int, label_p: str = 'p0') -> ct.Tensor:
+    def _contract_LHeff(self, i: int, label_p: str = 'p0') -> lasy.Tensor:
         """Helper for effective H with combine.
 
         Contract LP with a W and combine to legs ``(vR.p0*), (vR*.p0), wR``.
         """
         LP = self.get_LP(i)
         p, ps = label_p, label_p + '*'
-        LHeff = ct.planar_contraction(LP, self.H.get_W(i), 'wR', 'wL', relabel2={'p': p, 'p*': ps})
+        LHeff = lasy.planar_contraction(LP, self.H.get_W(i), 'wR', 'wL', relabel2={'p': p, 'p*': ps})
         assert LHeff.labels_are('vR', 'vR*', p, 'wR', ps, planar=True)
-        return ct.combine_legs(LHeff, ['vR*', p], ['vR', ps])
+        return lasy.combine_legs(LHeff, ['vR*', p], ['vR', ps])
 
-    def _contract_RHeff(self, i: int, label_p: str = 'p1') -> ct.Tensor:
+    def _contract_RHeff(self, i: int, label_p: str = 'p1') -> lasy.Tensor:
         """Helper for effective H with combine.
 
         Contract RP with a W and combine to legs ``(p1*.vL), wL, (p1.vL*)``.
         """
         RP = self.get_RP(i)
         p, ps = label_p, label_p + '*'
-        RHeff = ct.planar_contraction(self.H.get_W(i), RP, 'wR', 'wL', relabel1={'p': p, 'p*': ps})
+        RHeff = lasy.planar_contraction(self.H.get_W(i), RP, 'wR', 'wL', relabel1={'p': p, 'p*': ps})
         assert RHeff.labels_are('vL', ps, 'wL', p, 'vL*', planar=True)
-        return ct.combine_legs(RHeff, [ps, 'vL'], [p, 'vL*'])
+        return lasy.combine_legs(RHeff, [ps, 'vL'], [p, 'vL*'])
 
 
 class MPOEnvironmentBuilder:
@@ -3353,7 +3353,7 @@ class MPOEnvironmentBuilder:
         self.H = H
         self.ket = psi
         self.L = psi.L
-        self.dtype = ct.Dtype.common(self.ket.dtype, self.H.dtype)
+        self.dtype = lasy.Dtype.common(self.ket.dtype, self.H.dtype)
         self._p_label = self.ket._p_label
         self.test_sanity()
         # MPS tensors as needed by transfer matrices during init_LP_RP
@@ -3554,7 +3554,7 @@ class MPOEnvironmentBuilder:
             at most linearly with system size. For higher-order scaling,
             expectation values must be computed via explicit contractions.
         gmres_options : dict
-            Further optional parameters passed to :class:`cyten.tensors.krylov_based.GMRES`.
+            Further optional parameters passed to :class:`lasyten.tensors.krylov_based.GMRES`.
         tol_id : float
             Cycles with smaller norm are discarded.
 
@@ -3845,7 +3845,7 @@ class MPOEnvironmentBuilder:
         )
         # GMRES solver
         A = npc.ShiftNpcLinearOperator(TWjj, -1.0)
-        solver = ct.tensors.krylov_based.GMRES(A, b, b, options=options)  # makes internal copy
+        solver = lasy.tensors.krylov_based.GMRES(A, b, b, options=options)  # makes internal copy
         x_sol, res, _, _ = solver.run()
         if res > options['res']:
             msg = f'GMRES converged within tol={res} in environment initialization, requested was tol={options["res"]}.'
@@ -3857,7 +3857,7 @@ class MPOEnvironmentBuilder:
         return -x_sol  # cancel global minus sign
 
 
-class MPOTransferMatrix(ct.sparse.LinearOperator):
+class MPOTransferMatrix(lasy.sparse.LinearOperator):
     """Transfermatrix of a Hamiltonian-like MPO sandwiched between canonicalized MPS.
 
     Given an MPS in canonical form, this class helps to find the correct initial MPO environment
@@ -4011,7 +4011,7 @@ class MPOTransferMatrix(ct.sparse.LinearOperator):
         )
         self._explicit_plus_hc = H.explicit_plus_hc
 
-    def matvec(self, vec: ct.Tensor, project: bool = True) -> ct.Tensor:
+    def matvec(self, vec: lasy.Tensor, project: bool = True) -> lasy.Tensor:
         """One matvec-operation.
 
         Parameters
@@ -4048,7 +4048,7 @@ class MPOTransferMatrix(ct.sparse.LinearOperator):
             E = npc.inner(vec, self._proj_subtr, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
             vec -= self._E_shift * E
 
-    def dominant_eigenvector(self, **kwargs) -> tuple[float | complex, ct.Tensor]:
+    def dominant_eigenvector(self, **kwargs) -> tuple[float | complex, lasy.Tensor]:
         """Find dominant eigenvector of self using :mod:`scipy.sparse`.
 
         Parameters
@@ -4073,7 +4073,7 @@ class MPOTransferMatrix(ct.sparse.LinearOperator):
         norm = npc.inner(self._proj_norm, v0, axes='range', do_conj=False) / self._chi0
         return val, v0 / norm
 
-    def energy(self, dom_vec: ct.Tensor) -> float | complex:
+    def energy(self, dom_vec: lasy.Tensor) -> float | complex:
         """Given the dominant eigenvector, calculate the energy per MPS site.
 
         **Assumes** that `dominant_vec` is the result of :meth:`dominant_eigenvector`.
@@ -4346,13 +4346,13 @@ def _mpo_check_for_iter_LP_RP_infinite(mpo):
 
 
 def partition_W(
-    W: ct.Tensor,
+    W: lasy.Tensor,
     IdL='IdL',
     IdR='IdR',
     Id_summand_label='Id',
     left_boundary: bool = False,
     right_boundary: bool = False,
-) -> tuple[ct.Tensor | None, ct.Tensor | None, ct.Tensor | None, ct.Tensor, ct.Tensor]:
+) -> tuple[lasy.Tensor | None, lasy.Tensor | None, lasy.Tensor | None, lasy.Tensor, lasy.Tensor]:
     """Assume an MPO tensor of the usual upper-block-triangular form and extract its blocks.
 
     We assume that as a matrix of the summand_labels ``['IdL', *others, 'IdR']``, the
@@ -4372,15 +4372,15 @@ def partition_W(
 
     Returns
     -------
-    A, B, C, D: :class:`cyten.Tensor` | None
+    A, B, C, D: :class:`lasyten.Tensor` | None
         The subgrids of W. If at a boundary, non-existing entires are set to ``None``.
-    Id: :class:`cyten.Tensor`
+    Id: :class:`lasyten.Tensor`
         The identity cell, as a 4-leg Tensor
 
     """
-    Id = ct.SymmetricTensor.from_eye([W.get_leg('p')], W.backend, labels=['p', 'p*'])
-    Id = ct.add_trivial_leg(Id, codomain_pos=0, label='wL', is_dual=W.get_leg('wL').is_dual)
-    Id = ct.add_trivial_leg(Id, domain_pos=-1, label='wR', is_dual=not W.get_leg('wR').is_dual)
+    Id = lasy.SymmetricTensor.from_eye([W.get_leg('p')], W.backend, labels=['p', 'p*'])
+    Id = lasy.add_trivial_leg(Id, codomain_pos=0, label='wL', is_dual=W.get_leg('wL').is_dual)
+    Id = lasy.add_trivial_leg(Id, domain_pos=-1, label='wR', is_dual=not W.get_leg('wR').is_dual)
     others_wL = [i for i, l in enumerate(W.get_leg('wL').summand_labels) if l not in [IdL, IdR]]
     others_wR = [i for i, l in enumerate(W.get_leg('wR').summand_labels) if l not in [IdL, IdR]]
 
@@ -4390,32 +4390,32 @@ def partition_W(
     if left_boundary:
         assert W.get_leg('wL').summand_labels == [IdL]
         assert all(l in W.get_leg('wR').summand_labels for l in (IdL, IdR))
-        assert ct.almost_equal(ct.tensor_grid_cell(W, IdL, IdL, 'wL', 'wR'), Id)
-        C = ct.tensor_subgrid(W, [IdL], others_wR, 'wL', 'wR')
-        D = ct.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
+        assert lasy.almost_equal(lasy.tensor_grid_cell(W, IdL, IdL, 'wL', 'wR'), Id)
+        C = lasy.tensor_subgrid(W, [IdL], others_wR, 'wL', 'wR')
+        D = lasy.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
         return None, None, C, D, Id
 
     if right_boundary:
         assert all(l in W.get_leg('wL').summand_labels for l in (IdL, IdR))
         assert W.get_leg('wR').summand_labels == [IdR]
-        D = ct.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
-        B = ct.tensor_subgrid(W, others_wL, [IdR], 'wL', 'wR')
-        assert ct.almost_equal(ct.tensor_grid_cell(W, IdR, IdR, 'wL', 'wR'), Id)
+        D = lasy.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
+        B = lasy.tensor_subgrid(W, others_wL, [IdR], 'wL', 'wR')
+        assert lasy.almost_equal(lasy.tensor_grid_cell(W, IdR, IdR, 'wL', 'wR'), Id)
         return None, B, None, D, Id
 
     # remaining case: bulk tensor
     assert all(l in W.get_leg(leg).summand_labels for l in (IdL, IdR) for leg in ('wL', 'wR'))
     # first row
-    assert ct.almost_equal(ct.tensor_grid_cell(W, IdL, IdL, 'wL', 'wR'), Id)
-    C = ct.tensor_subgrid(W, [IdL], others_wR, 'wL', 'wR')
-    D = ct.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
+    assert lasy.almost_equal(lasy.tensor_grid_cell(W, IdL, IdL, 'wL', 'wR'), Id)
+    C = lasy.tensor_subgrid(W, [IdL], others_wR, 'wL', 'wR')
+    D = lasy.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
     # middle rows
-    assert ct.norm(ct.tensor_subgrid(W, others_wL, [IdL], 'wL', 'wR')).to_numpy() == 0
-    A = ct.tensor_subgrid(W, others_wL, others_wR, 'wL', 'wR')
-    B = ct.tensor_subgrid(W, others_wL, [IdR], 'wL', 'wR')
+    assert lasy.norm(lasy.tensor_subgrid(W, others_wL, [IdL], 'wL', 'wR')).to_numpy() == 0
+    A = lasy.tensor_subgrid(W, others_wL, others_wR, 'wL', 'wR')
+    B = lasy.tensor_subgrid(W, others_wL, [IdR], 'wL', 'wR')
     # bottom row
-    assert ct.norm(ct.tensor_grid_cell(W, IdR, IdL, 'wL', 'wR')).to_numpy() == 0
-    assert ct.norm(ct.tensor_subgrid(W, [IdR], others_wR, 'wL', 'wR')).to_numpy() == 0
-    assert ct.almost_equal(ct.tensor_grid_cell(W, IdR, IdR, 'wL', 'wR'), Id)
+    assert lasy.norm(lasy.tensor_grid_cell(W, IdR, IdL, 'wL', 'wR')).to_numpy() == 0
+    assert lasy.norm(lasy.tensor_subgrid(W, [IdR], others_wR, 'wL', 'wR')).to_numpy() == 0
+    assert lasy.almost_equal(lasy.tensor_grid_cell(W, IdR, IdR, 'wL', 'wR'), Id)
 
     return A, B, C, D, Id

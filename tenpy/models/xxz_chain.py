@@ -5,8 +5,8 @@ this module is more to serve as a pedagogical example for a model.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from cyten.models.couplings import spin_field_coupling, spin_spin_coupling
-from cyten.models.sites import SpinSite
+from lasyten.models.couplings import spin_field_coupling, spin_spin_coupling
+from lasyten.models.sites import SpinSite
 
 from ..tools import asConfig, to_array
 from .lattice import Chain
@@ -41,13 +41,13 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         L : int
             Length of the chain.
         conserve : 'parity' | None
-            What should be conserved. See :class:`~cyten.models.sites.SpinSite`.
+            What should be conserved. See :class:`~lasyten.models.sites.SpinSite`.
         Jxx, Jz, hz : float | array
             Coupling as defined for the Hamiltonian above.
             Defaults to ``Jxx=Jz=1`` without field ``hz=0``.
         bc_MPS : {'finite'}
             MPS boundary conditions. Only ``'finite'`` is currently supported by the
-            cyten-native ``add_coupling`` path.
+            lasyten-native ``add_coupling`` path.
 
     """
 
