@@ -1,23 +1,19 @@
 """A collection of tests to check the functionality of modules in `tenpy.simulations`"""
 
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
-
-pytest.skip(allow_module_level=True)
-
 import copy
 import os
 import sys
 
 import numpy as np
 import pytest
-from tenpy.algorithms.truncation import TruncationError
 
 import tenpy
 from tenpy.algorithms.algorithm import Algorithm
 from tenpy.simulations.ground_state_search import GroundStateSearch
 from tenpy.simulations.simulation import *
 from tenpy.simulations.time_evolution import RealTimeEvolution, SpectralSimulation, SpectralSimulationEvolveBraKet
+from tenpy.tools.truncation import TruncationError
 
 tenpy.tools.misc.skip_logging_setup = True  # skip logging setup
 
@@ -88,9 +84,8 @@ def bad_dummy_measurement(results, psi, model, simulation):
 simulation_params = {
     'model_class': 'XXZChain',
     'model_params': {
-        'bc_MPS': 'infinite',  # defaults to finite
+        'bc_MPS': 'finite',  # infinite CouplingModel not yet supported in lasyten
         'L': 4,
-        'sort_charge': True,
     },
     'algorithm_class': 'DummyAlgorithm',
     'algorithm_params': {
@@ -110,6 +105,7 @@ simulation_params = {
 expected_dummy_value = simulation_params['algorithm_params']['N_steps'] ** 2
 
 
+@pytest.mark.skip(reason='cannot pickle lasyten SpinSite yet')
 def test_Simulation(tmp_path):
     os.chdir(tmp_path)
     sim_params = copy.deepcopy(simulation_params)
@@ -119,7 +115,7 @@ def test_Simulation(tmp_path):
     with sim:
         results = sim.run()
         # should do exactly two measurements: one before and one after eng.run()
-    assert sim.model.lat.bc_MPS == 'infinite'  # check whether model parameters were used
+    assert sim.model.lat.bc_MPS == 'finite'  # check whether model parameters were used
     assert 'psi' in results  # should be by default
     meas = results['measurements']
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
@@ -164,7 +160,7 @@ def test_measure_at_algorithm_checkpoint():
     with sim:
         results = sim.run()
         # should do exactly two measurements: one before and one after eng.run()
-    assert sim.model.lat.bc_MPS == 'infinite'  # check whether model parameters were used
+    assert sim.model.lat.bc_MPS == 'finite'  # check whether model parameters were used
     assert 'psi' in results  # should be by default
     meas = results['measurements']
     # expect multiple measurements:
@@ -174,6 +170,7 @@ def test_measure_at_algorithm_checkpoint():
     assert np.all(meas['dummy_value'] == [-1] + [expected_dummy_value] * (1 + 4))
 
 
+@pytest.mark.skip(reason='Not ported yet for lasyten')
 def test_Simulation_resume(tmp_path):
     sim_params = copy.deepcopy(simulation_params)
     sim_params['directory'] = tmp_path
@@ -201,6 +198,7 @@ def test_Simulation_resume(tmp_path):
         assert np.all(r['measurements']['measurement_index'] == np.arange(2))
 
 
+@pytest.mark.skip(reason='cannot pickle lasyten SpinSite yet')
 def test_sequential_simulation(tmp_path):
     os.chdir(tmp_path)
     sim_params = copy.deepcopy(simulation_params)
@@ -226,7 +224,7 @@ def test_GroundStateSearch():
     sim_params = copy.deepcopy(groundstate_params)
     sim = GroundStateSearch(sim_params)
     results = sim.run()  # should do exactly two measurements: one before and one after eng.run()
-    assert sim.model.lat.bc_MPS == 'infinite'  # check whether model parameters were used
+    assert sim.model.lat.bc_MPS == 'finite'  # check whether model parameters were used
     assert 'psi' in results  # should be by default
     meas = results['measurements']
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
@@ -239,11 +237,12 @@ timeevol_params = copy.deepcopy(simulation_params)
 timeevol_params['final_time'] = 4.0
 
 
+@pytest.mark.skip(reason='Not ported yet for lasyten')
 def test_RealTimeEvolution():
     sim_params = copy.deepcopy(timeevol_params)
     sim = RealTimeEvolution(sim_params)
     results = sim.run()
-    assert sim.model.lat.bc_MPS == 'infinite'  # check whether model parameters were used
+    assert sim.model.lat.bc_MPS == 'finite'  # check whether model parameters were used
     assert 'psi' in results  # should be by default
     meas = results['measurements']
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
@@ -261,11 +260,12 @@ regrouping_params['group_to_NearestNeighborModel'] = True
 regrouping_params['group_sites'] = 2
 
 
+@pytest.mark.skip(reason='Not ported yet for lasyten')
 def test_regrouping_and_group_to_NearestNeighborModel():
     sim_params = copy.deepcopy(regrouping_params)
     sim = RealTimeEvolution(sim_params)
     results = sim.run()
-    assert sim.model.lat.bc_MPS == 'infinite'  # check whether model parameters were used
+    assert sim.model.lat.bc_MPS == 'finite'  # check whether model parameters were used
     assert 'psi' in results  # should be by default
     meas = results['measurements']
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
@@ -285,6 +285,7 @@ spectral_sim_params['operator_t'] = 'Sz'
 spectral_sim_params['model_params']['bc_MPS'] = 'finite'
 
 
+@pytest.mark.skip(reason='Not ported yet for lasyten')
 def test_SpectralSimulation():
     for SpectralSimulationClass in [SpectralSimulation, SpectralSimulationEvolveBraKet]:
         # building with initial state passed in sim params
@@ -395,6 +396,7 @@ sequential:
 """
 
 
+@pytest.mark.skip(reason='Not ported yet for lasyten')
 def test_yaml_load(tmp_path):
     yaml = pytest.importorskip('yaml')
 
