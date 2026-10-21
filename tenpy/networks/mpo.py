@@ -1378,11 +1378,18 @@ class MPO(MPSGeometry):
 
         The hermitian conjugate is taken on each ``W`` separately, i.e. the virtual structure
         (including the ``'IdL'`` / ``'IdR'`` summand labels) is unchanged and only the physical legs
-        are transposed and the entries are complex conjugated. Note that the virtual legs are
-        dualized (they carry the conjugate charges).
+        are transposed and the entries are complex conjugated. Left stays left: the result keeps the
+        labels ``'wL'`` and ``'wR'`` in place (there is no ``'wL' <-> 'wR*'`` swap).
+
+        The virtual legs of the result are *dualized* (``is_dual`` is flipped, they carry the
+        conjugate charges). Hence the result can in general not be combined with `self` on the
+        virtual level, e.g. ``H + H.dagger()`` fails with an incompatible-legs error, since
+        lasyten has no tensor-level leg flip. For ``explicit_plus_hc=True`` a copy is returned.
         """
         if self.explicit_plus_hc:
-            return self.copy()
+            new = self.copy()
+            new._W = list(self._W)  # `copy` is shallow; do not share the list with `self`
+            return new
         Ws = []
         for W in self._W:
             # lasy.dagger gives labels [p, wR*, p*, wL*]; a cyclic (i.e. planar, braid-free) permutation
