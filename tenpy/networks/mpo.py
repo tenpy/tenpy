@@ -1175,10 +1175,27 @@ class MPO(MPSGeometry):
         # TODO: Might be worth implementing?
         raise NotImplementedError('Could be implemented using MPOEnvironmentBuilder')
 
+    _variance_LP_contraction = lasy.PlanarDiagram(
+        tensors='LP[vR*, wR2, wR1, vR], Bk[vL, p, vR], W1[wL, p, wR, p*], W2[wL, p, wR, p*], Bb[vR*, p*, vL*]',
+        definition=(
+            'LP:vR* @ Bb:vL*, LP:wR2 @ W2:wL, LP:wR1 @ W1:wL, LP:vR @ Bk:vL, '
+            'Bk:p @ W1:p*, Bk:vR -> vR, '
+            'W1:p @ W2:p*, W1:wR -> wR1, '
+            'W2:p @ Bb:p*, W2:wR -> wR2, '
+            'Bb:vR* -> vR*'
+        ),
+        dims=dict(chi=['vR', 'vR*', 'vL', 'vL*'], w=['wL', 'wR', 'wR1', 'wR2'], d=['p', 'p*']),
+    )
+
     def variance(self, psi: MPS, exp_val: float | complex | None = None) -> float | complex:
         """Calculate ``<psi|self^2|psi> - <psi|self|psi>^2``.
 
-        Works only for finite systems. Ignores the :attr:`~tenpy.networks.mps.MPS.norm` of `psi`.
+        Works only for finite systems (``NotImplementedError`` otherwise). Ignores the
+        :attr:`~tenpy.networks.mps.MPS.norm` of `psi`. Not implemented for :attr:`explicit_plus_hc`.
+        ``<psi|self^2|psi>`` is obtained by contracting the network of `psi`, two copies of the
+        MPO (sharing the physical legs) and `psi.hc` from left to right with
+        :class:`lasyten.PlanarDiagram`, starting and ending in the ``'IdL'`` and ``'IdR'`` summands
+        of the MPO legs, respectively.
 
         .. todo ::
             This is a naive, expensive implementation contracting the full network.
@@ -1194,35 +1211,45 @@ class MPO(MPSGeometry):
             otherwise obtained from :meth:`expectation_value`.
             (Set this to 0 to obtain only the part ``<psi|self^2|psi>``.)
 
+        Returns
+        -------
+        variance : float | complex
+            The variance (extensive, not the density).
+
         """
-        raise NotImplementedError
-        if self.bc != 'finite':
-            raise ValueError('works only for finite systems')
+        if self.bc != 'finite' or psi.bc != 'finite':
+            raise NotImplementedError('MPO.variance works only for finite systems')
         if self.L != psi.L:
             raise ValueError('expect same L')
-        if psi._p_label != ['p']:
-            raise NotImplementedError('not adjusted for non-standard MPS.')
         if self.explicit_plus_hc:
             raise NotImplementedError('not implemented for explicit_plus_hc flag')
         assert self.L >= 1
         if exp_val is None:
             exp_val = self.expectation_value(psi)
 
-        th = psi.get_theta(0, n=1)
-        W = self.get_W(0).take_slice(self.get_IdL(0), 'wL')
-        contr = npc.tensordot(th, W.replace_label('wR', 'wR1'), axes=['p0', 'p*'])
-        contr = npc.tensordot(contr, W.replace_label('wR', 'wR2'), axes=['p', 'p*'])
-        contr = npc.tensordot(th.conj(), contr, axes=[['vL*', 'p0*'], ['vL', 'p']])
-        for i in range(1, self.L):
-            B = psi.get_B(i, form='B')
-            W = self.get_W(i)
-            contr = npc.tensordot(contr, B, axes=['vR', 'vL'])
-            contr = npc.tensordot(contr, W.replace_label('wR', 'wR1'), axes=[['wR1', 'p'], ['wL', 'p*']])
-            contr = npc.tensordot(contr, W.replace_label('wR', 'wR2'), axes=[['wR2', 'p'], ['wL', 'p*']])
-            contr = npc.tensordot(contr, B.conj(), axes=[['vR*', 'p'], ['vL*', 'p*']])
-        contr = contr.take_slice([self.get_IdR(self.L - 1)] * 2, ['wR1', 'wR2'])
-        contr = npc.trace(contr, 'vR', 'vR*')
-        return np.real_if_close(contr - exp_val**2)
+        env = MPOEnvironment(psi, self, psi)
+        # start with LP[vR*, wR1, vR] projected on IdL and add a second MPO leg, also projected on IdL
+        LP = env.init_LP(0).relabel({'wR': 'wR1'})
+        W = self.get_W(0)
+        wL = W.get_leg('wL')
+        LP = lasy.add_trivial_leg(LP, 1, label='wR2', is_dual=not wL.is_dual)
+        mask = wL.projection_onto_summand('IdL', backend=LP.backend, labels=['wL', 'wR'], device=LP.device)
+        LP = lasy.tdot(LP, mask, 'wR2', 'wL').relabel({'wR': 'wR2'})
+        LP = lasy.permute_legs(LP, codomain=['wR2', 'wR1', 'vR', 'vR*'])
+        for i in range(self.L):
+            B = psi.get_B(i, form='Th' if i == 0 else 'B')
+            LP = self._variance_LP_contraction.evaluate(dict(LP=LP, Bk=B, W1=self.get_W(i), W2=self.get_W(i), Bb=B.hc))
+        # project both MPO legs on IdR (leaving trivial legs) and contract the virtual legs
+        for label in ['wR1', 'wR2']:
+            mask = (
+                self.get_W(self.L - 1)
+                .get_leg('wR')
+                .projection_onto_summand('IdR', backend=LP.backend, labels=['new', 'wL'], device=LP.device)
+            )
+            LP = lasy.tdot(LP, mask, label, 'wL').relabel({'new': label})
+        LP = lasy.squeeze_legs(LP, ['wR1', 'wR2'])
+        H2 = lasy.trace(lasy.permute_legs(LP, codomain=['vR*'], domain=['vR']))
+        return np.real_if_close(H2 - exp_val**2)
 
     def prefactor(self, i: int, ops) -> float | complex:
         """Get prefactor for a given string of operators in self.

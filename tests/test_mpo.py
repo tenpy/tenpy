@@ -11,7 +11,7 @@ from scipy import linalg as spla
 
 from tenpy.algorithms import ExactDiag
 from tenpy.models.spins import SpinChain
-from tenpy.networks import mpo
+from tenpy.networks import mpo, mps
 from tenpy.networks.terms import CouplingTerms, OnsiteTerms, to_single_coupling
 
 # spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
@@ -470,29 +470,29 @@ def test_MPO_expectation_value(tol=1.0e-15):
     assert abs(ev - desired_ev) < tol
 
 
-def test_MPO_var(L=8, tol=1.0e-13):
-    pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
-    xxz_pars = dict(L=L, Jx=1.0, Jy=1.0, Jz=1.1, hz=0.1, bc_MPS='finite', conserve=None)
+@pytest.mark.parametrize('conserve', [None, 'best'])
+@pytest.mark.parametrize('backend', ['fusion_tree', 'abelian', 'no_symmetry'])
+def test_MPO_var(conserve, backend, L=6, tol=1.0e-12):
+    xxz_pars = dict(L=L, Jx=1.0, Jy=1.0, Jz=1.1, hz=0.1, bc_MPS='finite', conserve=conserve)
     M = SpinChain(xxz_pars)
-    psi = random_MPS(L, 2, 10)
-    exp_val = M.H_MPO.expectation_value(psi)
+    H = M.H_MPO
+    if H._W[0].backend != lasy.get_backend(backend):
+        pytest.skip('Can not control model backend yet')
+    psi = mps.MPS.from_desired_bond_dimension(M.lat.mps_sites(), 6, bc='finite', unit_cell_width=L)
+    exp_val = H.expectation_value(psi)
 
     ED = ExactDiag.from_model(M)
     ED.build_full_H_from_mpo()
-    psi_full = ED.mps_to_full(psi)
-    exp_val_full = npc.inner(psi_full, npc.tensordot(ED.full_H, psi_full, axes=1), axes='range', do_conj=True)
+    psi_full = lasy.split_legs(ED.mps_to_full(psi))
+    psi_labels = [f'p{i}' for i in range(L)]
+    H_psi = lasy.tdot(ED.full_H, psi_full, [f'p{i}*' for i in range(L)], psi_labels)
+    exp_val_full = lasy.inner(psi_full, H_psi)
     assert abs(exp_val - exp_val_full) / abs(exp_val_full) < tol
 
-    Hsquared = M.H_MPO.variance(psi, 0.0)
-
-    Hsquared_full = npc.inner(
-        psi_full,
-        npc.tensordot(ED.full_H, npc.tensordot(ED.full_H, psi_full, axes=1), axes=1),
-        axes='range',
-        do_conj=True,
-    )
+    Hsquared = H.variance(psi, 0.0)
+    Hsquared_full = lasy.inner(H_psi, H_psi)
     assert abs(Hsquared - Hsquared_full) / abs(Hsquared_full) < tol
-    var = M.H_MPO.variance(psi)
+    var = H.variance(psi)
     var_full = Hsquared_full - exp_val_full**2
     assert abs(var - var_full) / abs(var_full) < tol
 
