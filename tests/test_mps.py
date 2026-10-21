@@ -1018,3 +1018,32 @@ def test_fixes_181():
 
 if __name__ == '__main__':
     test_sample_measurements()
+
+
+@pytest.mark.parametrize('chi_max', [2, 3])
+def test_swap_sites_truncation_error(chi_max):
+    """`swap_sites` truncation error is the squared discarded weight and the state stays normalized."""
+    L, d = 4, 2
+    rng = np.random.default_rng(0)
+    s = lasy.sites.SpinSite(S=0.5, conserve=None)
+    backend = lasy.get_backend('no_symmetry', 'numpy')
+    block = rng.normal(size=(d,) * L) + 1.0j * rng.normal(size=(d,) * L)
+    block /= np.linalg.norm(block)
+    p_labels = [f'p{i}' for i in range(L)]
+    tensor = lasy.SymmetricTensor.from_dense_block(block, codomain=[s.leg] * L, backend=backend, labels=p_labels)
+    psi = mps.MPS.from_full([s] * L, tensor, unit_cell_width=L)
+
+    err = psi.swap_sites(1, trunc_par={'chi_max': chi_max})
+
+    # independent reference: SVD of the (exactly) swapped dense state at the swapped bond
+    swapped = block.transpose(0, 2, 1, 3)
+    S_ref = np.linalg.svd(swapped.reshape(d**2, d**2), compute_uv=False)
+    eps_ref = np.sum(S_ref[chi_max:] ** 2)
+    npt.assert_allclose(err.eps, eps_ref, atol=1e-12)
+    assert err.eps < np.sqrt(eps_ref)  # i.e. not the linear error
+
+    # the truncated state is renormalized
+    got = psi.get_theta(0, n=L).to_numpy(['vL'] + p_labels + ['vR']).reshape((d,) * L)
+    npt.assert_allclose(np.linalg.norm(got), 1.0, atol=1e-12)
+    # and is the best rank-chi_max approximation of the swapped state
+    npt.assert_allclose(abs(np.vdot(got.ravel(), swapped.ravel())) ** 2, 1.0 - eps_ref, atol=1e-12)
