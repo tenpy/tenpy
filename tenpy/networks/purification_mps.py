@@ -30,38 +30,42 @@ In other words, expectation values are sums over all possible states
 Saying that each ``:`` on top is to be connected with the corresponding ``:`` on the bottom,
 the trace is simply a contraction::
 
-    |         :   :   :   :   :   :
-    |         |   |   |   |   |   |
-    |         |-------------------|
-    |         |        O          |
-    |         |-------------------|
-    |         |   |   |   |   |   |
-    |         :   :   :   :   :   :
+    |      :        :        :        :        :        :
+    |      │        │        │        │        │        │
+    |   ┏━━┷━━━━━━━━┷━━━━━━━━┷━━━━━━━━┷━━━━━━━━┷━━━━━━━━┷━━━┓
+    |   ┃                         O                         ┃
+    |   ┗━━┯━━━━━━━━┯━━━━━━━━┯━━━━━━━━┯━━━━━━━━┯━━━━━━━━┯━━━┛
+    |      │        │        │        │        │        │
+    |      :        :        :        :        :        :
 
 Clearly, we get the same result, if we insert an identity operator, written as MPO, on the top
 and bottom::
 
-    |         :   :   :   :   :   :
-    |         |   |   |   |   |   |
-    |         B---B---B---B---B---B
-    |         |   |   |   |   |   |
-    |         |-------------------|
-    |         |        O          |
-    |         |-------------------|
-    |         |   |   |   |   |   |
-    |         B*--B*--B*--B*--B*--B*
-    |         |   |   |   |   |   |
-    |         :   :   :   :   :   :
+    |      :        :        :        :        :        :
+    |      │        │        │        │        │        │
+    |   ┏━━┷━━┓  ┏━━┷━━┓  ┏━━┷━━┓  ┏━━┷━━┓  ┏━━┷━━┓  ┏━━┷━━┓
+    |   ┃  B  ┠──┨  B  ┠──┨  B  ┠──┨  B  ┠──┨  B  ┠──┨  B  ┃
+    |   ┗━━┯━━┛  ┗━━┯━━┛  ┗━━┯━━┛  ┗━━┯━━┛  ┗━━┯━━┛  ┗━━┯━━┛
+    |      │        │        │        │        │        │
+    |   ┏━━┷━━━━━━━━┷━━━━━━━━┷━━━━━━━━┷━━━━━━━━┷━━━━━━━━┷━━━┓
+    |   ┃                         O                         ┃
+    |   ┗━━┯━━━━━━━━┯━━━━━━━━┯━━━━━━━━┯━━━━━━━━┯━━━━━━━━┯━━━┛
+    |      │        │        │        │        │        │
+    |   ┏━━┷━━┓  ┏━━┷━━┓  ┏━━┷━━┓  ┏━━┷━━┓  ┏━━┷━━┓  ┏━━┷━━┓
+    |   ┃ B*  ┠──┨ B*  ┠──┨ B*  ┠──┨ B*  ┠──┨ B*  ┠──┨ B*  ┃
+    |   ┗━━┯━━┛  ┗━━┯━━┛  ┗━━┯━━┛  ┗━━┯━━┛  ┗━━┯━━┛  ┗━━┯━━┛
+    |      │        │        │        │        │        │
+    |      :        :        :        :        :        :
 
-We  use the following label convention::
+We use the following label convention::
 
-    |         q
-    |         ^
-    |         |
-    |  vL ->- B ->- vR
-    |         |
-    |         ^
-    |         p
+    |           q
+    |           │
+    |       ┏━━━┷━━━┓
+    |   vL ─┨   B   ┠─ vR
+    |       ┗━━━┯━━━┛
+    |           │
+    |           p
 
 You can view the `MPO` as an MPS by combining the `p` and `q` leg and defining every physical
 operator to act trivial on the `q` leg. In expectation values, you would then sum over
@@ -112,7 +116,7 @@ see :cite:`hauschild2018`.
     to use a `singlet` as a maximally entangled state.
     Here, we use instead the identity :math:`\delta_{p,q}`, since it is easier to
     generalize for `p` running over more than two indices, and allows a simple use of charge
-    conservation with the above `qconj` convention.
+    conservation.
     Moreover, we don't split the physical and auxiliary space into separate sites, which makes
     TEBD as costly as :math:`O(d^6 \chi^3)`.
 """

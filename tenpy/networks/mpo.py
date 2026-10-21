@@ -2,11 +2,11 @@
 
 An MPO is the generalization of an :class:`~tenpy.networks.mps.MPS` to operators. Graphically::
 
-    |      ^        ^        ^
-    |      |        |        |
-    |  ->- W[0] ->- W[1] ->- W[2] ->- ...
-    |      |        |        |
-    |      ^        ^        ^
+    |         │            │            │
+    |     ┏━━━┷━━━┓    ┏━━━┷━━━┓    ┏━━━┷━━━┓
+    |   ──┨ W[0]  ┠────┨ W[1]  ┠────┨ W[2]  ┠── ...
+    |     ┗━━━┯━━━┛    ┗━━━┯━━━┛    ┗━━━┯━━━┛
+    |         │            │            │
 
 So each 'matrix' has two physical legs ``p, p*`` instead of just one,
 i.e. the entries of the 'matrices' are local operators.
@@ -16,15 +16,15 @@ Valid boundary conditions of an MPO are the same as for an MPS
 canonical form. However, unlike for an MPS, this doesn't simplify calculations.
 Thus, an MPO has no `form`.)
 
-We use the following label convention for the `W` (where arrows indicate `qconj`)::
+We use the following label convention for the `W`::
 
-    |            p*
-    |            ^
-    |            |
-    |     wL ->- W ->- wR
-    |            |
-    |            ^
-    |            p
+    |           p*
+    |           │
+    |       ┏━━━┷━━━┓
+    |   wL ─┨   W   ┠─ wR
+    |       ┗━━━┯━━━┛
+    |           │
+    |           p
 
 
 If an MPO describes a sum of local terms (e.g. most Hamiltonians),
@@ -2876,23 +2876,27 @@ class MPOEnvironment(BaseEnvironment):
 
     The network for a contraction :math:`<bra|H|ket>` of an MPO `H` between two MPS looks like::
 
-        |     .------>-M[0]-->-M[1]-->-M[2]-->- ...  ->--.
-        |     |        |       |       |                 |
-        |     |        ^       ^       ^                 |
-        |     |        |       |       |                 |
-        |     LP[0] ->-W[0]-->-W[1]-->-W[2]-->- ...  ->- RP[-1]
-        |     |        |       |       |                 |
-        |     |        ^       ^       ^                 |
-        |     |        |       |       |                 |
-        |     .------<-N[0]*-<-N[1]*-<-N[2]*-<- ...  -<--.
+        |   ┏━━━━━━━━┓    ┏━━━━━━━┓    ┏━━━━━━━┓    ┏━━━━━━━┓             ┏━━━━━━━━┓
+        |   ┃        ┠────┨ M[0]  ┠────┨ M[1]  ┠────┨ M[2]  ┠──── ... ────┨        ┃
+        |   ┃        ┃    ┗━━━┯━━━┛    ┗━━━┯━━━┛    ┗━━━┯━━━┛             ┃        ┃
+        |   ┃        ┃        │            │            │                 ┃        ┃
+        |   ┃        ┃    ┏━━━┷━━━┓    ┏━━━┷━━━┓    ┏━━━┷━━━┓             ┃        ┃
+        |   ┃ LP[0]  ┠────┨ W[0]  ┠────┨ W[1]  ┠────┨ W[2]  ┠──── ... ────┨ RP[-1] ┃
+        |   ┃        ┃    ┗━━━┯━━━┛    ┗━━━┯━━━┛    ┗━━━┯━━━┛             ┃        ┃
+        |   ┃        ┃        │            │            │                 ┃        ┃
+        |   ┃        ┃    ┏━━━┷━━━┓    ┏━━━┷━━━┓    ┏━━━┷━━━┓             ┃        ┃
+        |   ┃        ┠────┨ N[0]* ┠────┨ N[1]* ┠────┨ N[2]* ┠──── ... ────┨        ┃
+        |   ┗━━━━━━━━┛    ┗━━━━━━━┛    ┗━━━━━━━┛    ┗━━━━━━━┛             ┗━━━━━━━━┛
 
     We use the following label convention::
 
-        |    .-->- vR           vL ->-.
-        |    |                        |
-        |    LP->- wR           wL ->-RP
-        |    |                        |
-        |    .--<- vR*         vL* -<-.
+        |   ┏━━━━━━━━┓                  ┏━━━━━━━━┓
+        |   ┃        ┠──── vR    vL ────┨        ┃
+        |   ┃        ┃                  ┃        ┃
+        |   ┃  LP    ┠──── wR    wL ────┨   RP   ┃
+        |   ┃        ┃                  ┃        ┃
+        |   ┃        ┠──── vR*  vL* ────┨        ┃
+        |   ┗━━━━━━━━┛                  ┗━━━━━━━━┛
 
     See :class:`BaseEnvironment` for further details.
 
@@ -3178,11 +3182,17 @@ class MPOEnvironment(BaseEnvironment):
         The returned ``LP_i`` corresponds to the following contraction,
         where the M's and the N's are in the 'A' form::
 
-            |     .-------M[0]--- ... --M[i-1]--->-   'vR'
-            |     |       |             |
-            |     LP[0]---W[0]--- ... --W[i-1]--->-   'wR'
-            |     |       |             |
-            |     .-------N[0]*-- ... --N[i-1]*--<-   'vR*'
+            |   ┏━━━━━━━━┓    ┏━━━━━━━┓             ┏━━━━━━━━━┓
+            |   ┃        ┠────┨ M[0]  ┠──── ... ────┨ M[i-1]  ┠──── 'vR'
+            |   ┃        ┃    ┗━━━┯━━━┛             ┗━━━━┯━━━━┛
+            |   ┃        ┃        │                      │
+            |   ┃        ┃    ┏━━━┷━━━┓             ┏━━━━┷━━━━┓
+            |   ┃ LP[0]  ┠────┨ W[0]  ┠──── ... ────┨ W[i-1]  ┠──── 'wR'
+            |   ┃        ┃    ┗━━━┯━━━┛             ┗━━━━┯━━━━┛
+            |   ┃        ┃        │                      │
+            |   ┃        ┃    ┏━━━┷━━━┓             ┏━━━━┷━━━━┓
+            |   ┃        ┠────┨ N[0]* ┠──── ... ────┨ N[i-1]* ┠──── 'vR*'
+            |   ┗━━━━━━━━┛    ┗━━━━━━━┛             ┗━━━━━━━━━┛
 
 
         Parameters
@@ -3209,11 +3219,17 @@ class MPOEnvironment(BaseEnvironment):
         The returned ``RP_i`` corresponds to the following contraction,
         where the M's and the N's are in the 'B' form::
 
-            |     'vL'  ->---M[i+1]-- ... --M[L-1]----.
-            |                |              |         |
-            |     'wL'  ->---W[i+1]-- ... --W[L-1]----RP[-1]
-            |                |              |         |
-            |     'vL*' -<---N[i+1]*- ... --N[L-1]*---.
+            |             ┏━━━━━━━━━┓             ┏━━━━━━━━━┓    ┏━━━━━━━━┓
+            |    'vL' ────┨ M[i+1]  ┠──── ... ────┨ M[L-1]  ┠────┨        ┃
+            |             ┗━━━━┯━━━━┛             ┗━━━━┯━━━━┛    ┃        ┃
+            |                  │                       │         ┃        ┃
+            |             ┏━━━━┷━━━━┓             ┏━━━━┷━━━━┓    ┃        ┃
+            |    'wL' ────┨ W[i+1]  ┠──── ... ────┨ W[L-1]  ┠────┨ RP[-1] ┃
+            |             ┗━━━━┯━━━━┛             ┗━━━━┯━━━━┛    ┃        ┃
+            |                  │                       │         ┃        ┃
+            |             ┏━━━━┷━━━━┓             ┏━━━━┷━━━━┓    ┃        ┃
+            |   'vL*' ────┨ N[i+1]* ┠──── ... ────┨ N[L-1]* ┠────┨        ┃
+            |             ┗━━━━━━━━━┛             ┗━━━━━━━━━┛    ┗━━━━━━━━┛
 
         Parameters
         ----------
@@ -3296,11 +3312,13 @@ class MPOEnvironmentBuilder:
     This class implement the construction scheme from :cite:`phien2012` to construct
     `LP[0]` and `RP[self.L-1]` for a periodic :class:`MPOEnvironment`::
 
-        |             - - > - - - - - 'vR*'
-        |            |          |
-        |   LP[0] = E[0] ->- T_H**n - 'wR' (index `j`)
-        |            |          |
-        |             - - > - - - - - 'vR'
+        |           ┏━━━━━━━━┓    ┏━━━━━━━━━━┓
+        |           ┃        ┠────┨          ┠──── 'vR*'
+        |           ┃        ┃    ┃          ┃
+        |   LP[0] = ┃  E[0]  ┠────┨  T_H**n  ┠──── 'wR' (index `j`)
+        |           ┃        ┃    ┃          ┃
+        |           ┃        ┠────┨          ┠──── 'vR'
+        |           ┗━━━━━━━━┛    ┗━━━━━━━━━━┛
 
     where T_H has the structure of a corresponding :class:`MPOTransferMatrix`
     and the limit :math:`n → \infty` has to be taken.
