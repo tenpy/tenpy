@@ -53,10 +53,10 @@ from . import (
     # tf_ising,
     # tj_model,
     # toric_code,
-    # xxz_chain,
+    xxz_chain,
 )
 
-# The model modules above are still
+# Most model modules above are still
 # np_conserved-based and do not yet work in lasyten.
 # from .aklt import *
 # from .clock import *
@@ -76,9 +76,10 @@ from .model import *
 # from .tf_ising import *
 # from .tj_model import *
 # from .toric_code import *
-# from .xxz_chain import *
+from .xxz_chain import *
 
 __all__ = [
     *lattice.__all__,
     *model.__all__,
+    *xxz_chain.__all__,
 ]

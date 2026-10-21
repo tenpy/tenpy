@@ -438,10 +438,19 @@ class NearestNeighborModel(Model):
             for infinite bc ``E_bond[i]`` is the energy of bond ``i-1, i``.
 
         """
+        L = len(self.H_bond)
         if self.lat.bc_MPS == 'infinite':
-            return psi.expectation_value(self.H_bond, axes=(['p0', 'p1'], ['p0*', 'p1*']))
-        # else
-        return psi.expectation_value(self.H_bond[1:], axes=(['p0', 'p1'], ['p0*', 'p1*']))
+            bonds_and_starts = [(H, (i - 1) % L) for i, H in enumerate(self.H_bond)]
+        else:
+            # omit bond 0 between sites L-1 and 0
+            bonds_and_starts = [(H, i - 1) for i, H in enumerate(self.H_bond[1:], start=1)]
+        E_bond = []
+        for H, start in bonds_and_starts:
+            if H is None:
+                E_bond.append(0.0)
+            else:
+                E_bond.append(np.asarray(psi.expectation_value_tensor(H, sites=start)).reshape(-1)[0])
+        return np.asarray(E_bond)
 
     def extract_segment(self, *args, **kwargs):
         cp = super().extract_segment(*args, **kwargs)
