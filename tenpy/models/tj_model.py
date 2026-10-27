@@ -63,7 +63,7 @@ class tJModel(CouplingMPOModel):
         t = model_params.get('t', 1.0, 'real_or_array')
         J = model_params.get('J', 1.0, 'real_or_array')
 
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             self.add_coupling(-t, u1, 'Cdu', u2, 'Cu', dx, plus_hc=True)
             self.add_coupling(-t, u1, 'Cdd', u2, 'Cd', dx, plus_hc=True)
             self.add_coupling(J / 2.0, u1, 'Sp', u2, 'Sm', dx, plus_hc=True)

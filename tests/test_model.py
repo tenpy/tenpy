@@ -211,9 +211,9 @@ def test_CouplingModel_explicit():
     #  H_MPO_graph = tenpy.networks.mpo.MPOGraph.from_terms((M.all_onsite_terms(),
     #                                                        M.all_coupling_terms(),
     #                                                        M.exp_decaying_terms),
-    #                                                       M.lat.mps_sites(),
-    #                                                       M.lat.bc_MPS,
-    #                                                       unit_cell_width=M.lat.mps_unit_cell_width)
+    #                                                       M.lattice.mps_sites(),
+    #                                                       M.lattice.bc_MPS,
+    #                                                       unit_cell_width=M.lattice.mps_unit_cell_width)
     #  H_MPO_graph._set_ordered_states()
     #  from pprint import pprint
     #  pprint(H_MPO_graph._ordered_states)
@@ -304,9 +304,9 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
     H_MPO_graph = tenpy.networks.mpo.MPOGraph.from_terms((M.all_onsite_terms(),
                                                           M.all_coupling_terms(),
                                                           M.exp_decaying_terms),
-                                                         M.lat.mps_sites(),
-                                                         M.lat.bc_MPS,
-                                                         unit_cell_width=M.lat.mps_unit_cell_width)
+                                                         M.lattice.mps_sites(),
+                                                         M.lattice.bc_MPS,
+                                                         unit_cell_width=M.lattice.mps_unit_cell_width)
     H_MPO_graph._set_ordered_states()
     from pprint import pprint
     pprint(H_MPO_graph._ordered_states)
@@ -791,11 +791,11 @@ class DisorderedLatticeModel(model.CouplingMPOModel):
 
     def init_terms(self, model_params):
         J = model_params.get('J', 1.0)
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            dist = self.lat.distance(u1, u2, dx)
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
+            dist = self.lattice.distance(u1, u2, dx)
             self.add_twosite_coupling(J / dist, u1, 'Sz', u2, 'Sz', dx)
-        for u1, u2, dx in self.lat.pairs['next_nearest_neighbors']:
-            dist = self.lat.distance(u1, u2, dx)
+        for u1, u2, dx in self.lattice.pairs['next_nearest_neighbors']:
+            dist = self.lattice.distance(u1, u2, dx)
             self.add_twosite_coupling(J / dist, u1, 'Sx', u2, 'Sx', dx)
 
 
@@ -829,11 +829,11 @@ def test_disordered_lattice_model(bc, J=2.0):
         if need_pbc and bc == 'open':
             continue
         ij = np.array([i, j])
-        mps_i, mps_j = M.lat.lat2mps_idx(ij)
-        pos_i, pos_j = M.lat.position(ij)
+        mps_i, mps_j = M.lattice.lat2mps_idx(ij)
+        pos_i, pos_j = M.lattice.position(ij)
         dist = np.linalg.norm(pos_i - pos_j)
         if need_pbc:
-            dist = min(dist, np.linalg.norm(pos_i - pos_j + M.lat.basis[1] * M.lat.Ls[1]))
+            dist = min(dist, np.linalg.norm(pos_i - pos_j + M.lattice.basis[1] * M.lattice.Ls[1]))
         try:
             idx = terms.terms.index([(op, mps_i), (op, mps_j)])
         except ValueError:
@@ -866,12 +866,12 @@ def test_fixes_511(L=6, t=1.234, tp=2.54):
                 self.add_onsite(U, 0, 'NuNd')
 
             # NN hopping: -t * (c†_{iσ} c_{i+1,σ} + h.c.)
-            for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
                 self.add_twosite_coupling(-t, u1, 'Cdu', u2, 'Cu', dx, plus_hc=True)  # spin ↑
                 self.add_twosite_coupling(-t, u1, 'Cdd', u2, 'Cd', dx, plus_hc=True)  # spin ↓
 
             # NNN hopping: -t' * (c†_{iσ} c_{i+2,σ} + h.c.)
-            for u1, u2, dx in self.lat.pairs['next_nearest_neighbors']:
+            for u1, u2, dx in self.lattice.pairs['next_nearest_neighbors']:
                 self.add_twosite_coupling(-tp, u1, 'Cdu', u2, 'Cu', dx, plus_hc=True)
                 self.add_twosite_coupling(-tp, u1, 'Cdd', u2, 'Cd', dx, plus_hc=True)
 
@@ -1216,8 +1216,8 @@ def test_fixes_consistency_check_IrregularLattice():
 
     ad_hoc_fix = False
     if ad_hoc_fix:
-        model.lat.N_sites_per_ring = 1
+        model.lattice.N_sites_per_ring = 1
 
-    psi = tenpy.MPS.from_lat_product_state(model.lat, [[['up']]])
+    psi = tenpy.MPS.from_lat_product_state(model.lattice, [[['up']]])
     dmrg_params = dict(max_sweeps=2)
     _ = tenpy.algorithms.dmrg.run(psi, model, dmrg_params)

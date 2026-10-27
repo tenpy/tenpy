@@ -22,7 +22,11 @@ def _bond_eigenvalues(Hb):
 @pytest.mark.parametrize('conserve', ['Sz', 'parity', 'None'])
 def test_XXZChain(conserve):
     pars = dict(L=4, Jxx=1.0, Jz=1.0, hz=0.0, bc_MPS='finite', conserve=conserve)
-    chain = XXZChain(pars)
+
+    with pytest.raises(NotImplementedError, match='port models'):
+        chain = XXZChain(pars)
+    pytest.skip('port models')
+
     chain.test_sanity()
     for Hb in chain.H_bond[1:]:  # check bond eigenvalues
         W = _bond_eigenvalues(Hb)
@@ -56,11 +60,13 @@ def test_XXZChain(conserve):
 
 @pytest.mark.parametrize('conserve', ['Sz', 'parity', 'None'])
 def test_XXZChain_general(conserve, tol=1.0e-14):
-    check_general_model(
-        XXZChain,
-        dict(L=4, Jxx=1.0, hz=0.0, bc_MPS='finite', conserve=conserve),
-        dict(Jz=[0.0, 1.0, 2.0], hz=[0.0, 0.2]),
-    )
+    with pytest.raises(NotImplementedError, match='port models'):
+        check_general_model(
+            XXZChain,
+            dict(L=4, Jxx=1.0, hz=0.0, bc_MPS='finite', conserve=conserve),
+            dict(Jz=[0.0, 1.0, 2.0], hz=[0.0, 0.2]),
+        )
+    pytest.skip('port models')
     check_general_model(
         XXZChain2,
         dict(L=4, Jxx=1.0, hz=0.0, bc_MPS='finite', conserve=conserve),

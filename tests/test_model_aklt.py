@@ -15,7 +15,7 @@ def test_AKLT_finite():
     L = 4
     check_general_model(aklt.AKLTChain, {'L': L}, {})
     M = aklt.AKLTChain({'L': L, 'bc_MPS': 'finite', 'sort_charge': True})
-    psi = MPS.from_lat_product_state(M.lat, [['up'], ['down']])
+    psi = MPS.from_lat_product_state(M.lattice, [['up'], ['down']])
     eng = TwoSiteDMRGEngine(psi, M, {'trunc_params': {'svd_min': 1.0e-10, 'chi_max': 10}})
     E0, psi0 = eng.run()
     assert abs(E0 - (-2 / 3.0) * (L - 1)) < 1.0e-10
@@ -30,7 +30,7 @@ def test_AKLT_infinite():
     # switch to infinite
     L = 4
     M = aklt.AKLTChain({'L': L, 'bc_MPS': 'infinite', 'sort_charge': True})
-    psi = MPS.from_lat_product_state(M.lat, [['up'], ['down']])
+    psi = MPS.from_lat_product_state(M.lattice, [['up'], ['down']])
     eng = TwoSiteDMRGEngine(
         psi, M, {'trunc_params': {'svd_min': 1.0e-10, 'chi_max': 10}, 'N_sweeps_check': 1, 'mixer': False}
     )

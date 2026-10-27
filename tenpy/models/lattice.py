@@ -1073,8 +1073,8 @@ class Lattice:
             For example to add a Z-Z interaction of strength `J/r` with r the distance,
             you can do something like this in :meth:`~tenpy.models.CouplingModel.init_terms`:
 
-                for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-                    dist = self.lat.distance(u1, u2, dx)
+                for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
+                    dist = self.lattice.distance(u1, u2, dx)
                     self.add_coupling(J/dist, u1, 'Sz', u2, 'Sz', dx)
 
         """

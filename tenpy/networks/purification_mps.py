@@ -226,7 +226,7 @@ class PurificationMPS(MPS):
         ----------
         sites : list of :class:`~tenpy.networks.site.Site`
             The sites defining the local Hilbert space.
-            For usual :class:`tenpy.models.model.Model` given by `model.lat.mps_sites()`.
+            For usual :class:`tenpy.models.model.Model` given by `model.lattice.mps_sites()`.
         bc : {'finite', 'segment', 'infinite'}
             MPS boundary conditions as described in :class:`~tenpy.networks.mps.MPS`.
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
@@ -270,7 +270,7 @@ class PurificationMPS(MPS):
         ----------
         sites : list of :class:`~tenpy.networks.site.Site`
             The sites defining the local Hilbert space (on the physical legs).
-            For usual :class:`tenpy.models.model.Model` given by `model.lat.mps_sites()`.
+            For usual :class:`tenpy.models.model.Model` given by `model.lattice.mps_sites()`.
         charge_sector : tuple of int
             The desired charge sector to be taken for the canonical ensemble.
         dtype : type or string
@@ -709,7 +709,7 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
     """
     # cac := conserve_ancilla_charge
     model = model.copy()
-    chinfo = model.lat.unit_cell[0].leg.chinfo  # TODO use model.lattice.symmetry
+    chinfo = model.lattice.unit_cell[0].leg.chinfo  # TODO use model.lattice.symmetry
     chinfo_cac = npc.ChargeInfo(list(chinfo.mod) * 2, chinfo.names + [n + ' ancilla' for n in chinfo.names])
 
     converted_sites_cache = {}
@@ -727,8 +727,8 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
         converted_sites_cache[site] = s_new
         return s_new
 
-    model.lat = model.lat.copy()
-    model.lat.unit_cell = [_convert_site(s) for s in model.lat.unit_cell]
+    model.lattice = model.lattice.copy()
+    model.lattice.unit_cell = [_convert_site(s) for s in model.lattice.unit_cell]
 
     if hasattr(model, 'H_MPO'):
         model.H_MPO = H_MPO = model.H_MPO.copy()
@@ -752,7 +752,7 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
         H_MPO._W = new_W
 
     if hasattr(model, 'H_bond'):
-        sites = model.lat.mps_sites()  # already updated!
+        sites = model.lattice.mps_sites()  # already updated!
         model.H_bond = H_bond = model.H_bond[:]
         L = len(sites)
         assert len(sites) == len(H_bond)

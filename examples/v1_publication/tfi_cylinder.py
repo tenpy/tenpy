@@ -171,7 +171,7 @@ def single_run(g: float, Ly: int, conserve, chi_max: int, psi=None):
 
     # 3) Initialize an MPS (initial guess). Note that this selects the charge sector.
     if psi is None:
-        psi = tenpy.MPS.from_lat_product_state(model.lat, [[['up'], ['down']]])
+        psi = tenpy.MPS.from_lat_product_state(model.lattice, [[['up'], ['down']]])
 
     # 4) Initialize / Configure the DMRG engine
     # For a full list of options see
@@ -193,9 +193,9 @@ def single_run(g: float, Ly: int, conserve, chi_max: int, psi=None):
     # 6) Extract observables
     mag_z = np.average(psi.expectation_value('Sigmaz'))
     mag_x = np.average(psi.expectation_value('Sigmax'))
-    corr_xx = psi.correlation_function('Sigmax', 'Sigmax', [0], [10 * model.lat.N_sites]).item()
+    corr_xx = psi.correlation_function('Sigmax', 'Sigmax', [0], [10 * model.lattice.N_sites]).item()
     # See note in MPS.correlation_length for the units and why we need to divide
-    correlation_length = psi.correlation_length() / model.lat.N_sites_per_ring
+    correlation_length = psi.correlation_length() / model.lattice.N_sites_per_ring
     entropy = psi.entanglement_entropy()[0]
 
     return psi, energy, entropy, mag_z, mag_x, corr_xx, correlation_length

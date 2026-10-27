@@ -182,7 +182,7 @@ def setup(test_case: int):
         # model setup
         m_tfi = TFIChain({'conserve': 'parity', 'g': 1.5, 'J': 1.0, 'L': Lx, 'bc_MPS': 'infinite'})
         H_tfi = m_tfi.calc_H_MPO()
-        psi_tfi = MPS.from_lat_product_state(m_tfi.lat, p_state=[['up']] * Lx, bc='infinite')
+        psi_tfi = MPS.from_lat_product_state(m_tfi.lattice, p_state=[['up']] * Lx, bc='infinite')
         eng = dmrg_eng(psi_tfi, m_tfi, {'min_sweeps': 19, 'max_sweeps': 29, 'trunc_params': {'chi_max': 32}})
         E_tfi, psi_tfi = eng.run()
     if test_case == 1:
@@ -218,8 +218,8 @@ def setup(test_case: int):
                     op_string=['Id'] * 3,
                 )
         H_couple = m_couple.calc_H_MPO()
-        psi_couple = MPS.from_lat_product_state(m_couple.lat, [[['up']] * Ly] * Lx, bc='infinite')
-        m_couple_MPO = MPOModel(m_couple.lat, H_couple)
+        psi_couple = MPS.from_lat_product_state(m_couple.lattice, [[['up']] * Ly] * Lx, bc='infinite')
+        m_couple_MPO = MPOModel(m_couple.lattice, H_couple)
         eng = dmrg_eng(psi_couple, m_couple_MPO, {'min_sweeps': 19, 'max_sweeps': 29, 'trunc_params': {'chi_max': 8}})
         E_couple, psi_couple = eng.run()
     if test_case == 2:
@@ -242,14 +242,14 @@ def setup(test_case: int):
             for _ in range(Lx)
         ]
         H_tfi_square = MPO.from_grids(
-            m_tfi.lat.mps_sites(),
+            m_tfi.lattice.mps_sites(),
             grid_tfi,
             bc='infinite',
             IdL=0,
             IdR=4,
-            mps_unit_cell_width=m_tfi.lat.mps_unit_cell_width,
+            mps_unit_cell_width=m_tfi.lattice.mps_unit_cell_width,
         )
-        psi_up = MPS.from_lat_product_state(m_tfi.lat, [['up']] * Lx, bc='infinite')
+        psi_up = MPS.from_lat_product_state(m_tfi.lattice, [['up']] * Lx, bc='infinite')
 
     # return H, psi, E, name, N_cycles, cycle_indices, square_of_H, square_of_psi
     if test_case == 0:

@@ -9,7 +9,7 @@ from tenpy.networks.purification_mps import PurificationMPS
 def imag_tebd(L=30, beta_max=3.0, dt=0.05, order=2, bc='finite'):
     model_params = dict(L=L, J=1.0, g=1.2)
     M = TFIChain(model_params)
-    psi = PurificationMPS.from_infiniteT(M.lat.mps_sites(), bc=bc)
+    psi = PurificationMPS.from_infiniteT(M.lattice.mps_sites(), bc=bc)
     options = {'trunc_params': {'chi_max': 100, 'svd_min': 1.0e-8}, 'order': order, 'dt': dt, 'N_steps': 1}
     beta = 0.0
     eng = PurificationTEBD(psi, M, options)
@@ -26,7 +26,7 @@ def imag_tebd(L=30, beta_max=3.0, dt=0.05, order=2, bc='finite'):
 def imag_apply_mpo(L=30, beta_max=3.0, dt=0.05, order=2, bc='finite', approx='II'):
     model_params = dict(L=L, J=1.0, g=1.2)
     M = TFIChain(model_params)
-    psi = PurificationMPS.from_infiniteT(M.lat.mps_sites(), bc=bc)
+    psi = PurificationMPS.from_infiniteT(M.lattice.mps_sites(), bc=bc)
     options = {'trunc_params': {'chi_max': 100, 'svd_min': 1.0e-8}}
     beta = 0.0
     if order == 1:

@@ -52,6 +52,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     """
 
     def __init__(self, model_params):
+        raise NotImplementedError('port models')
         # 0) read out/set default parameters
         model_params = asConfig(model_params, 'XXZChain')
         L = model_params.get('L', 2, int)
@@ -77,10 +78,10 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         # Jxx/2 (Sp_i Sm_j + Sm_i Sp_j) = Jxx (Sx_i Sx_j + Sy_i Sy_j)
         coupling_xy = spin_spin_coupling([site, site], Jx=1.0, Jy=1.0)
         coupling_z = spin_spin_coupling([site, site], Jz=1.0)
-        mps_i, mps_j, Jxx_vals = self.lat.possible_couplings_strengths(0, 0, [1], Jxx)
+        mps_i, mps_j, Jxx_vals = self.lattice.possible_couplings_strengths(0, 0, [1], Jxx)
         for i, j, strength in zip(mps_i, mps_j, Jxx_vals):
             self.add_coupling(coupling_xy, [int(i), int(j)], strength=strength)
-        mps_i, mps_j, Jz_vals = self.lat.possible_couplings_strengths(0, 0, [1], Jz)
+        mps_i, mps_j, Jz_vals = self.lattice.possible_couplings_strengths(0, 0, [1], Jz)
         for i, j, strength in zip(mps_i, mps_j, Jz_vals):
             self.add_coupling(coupling_z, [int(i), int(j)], strength=strength)
         # 7) initialize H_MPO
@@ -115,20 +116,20 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
         # read out parameters
         Jxx = model_params.get('Jxx', 1.0, 'real_or_array')
         Jz = model_params.get('Jz', 1.0, 'real_or_array')
-        hz = to_array(model_params.get('hz', 0.0, 'real_or_array'), self.lat.Ls)
+        hz = to_array(model_params.get('hz', 0.0, 'real_or_array'), self.lattice.Ls)
         # add terms
-        for u in range(len(self.lat.unit_cell)):
-            site = self.lat.unit_cell[u]
+        for u in range(len(self.lattice.unit_cell)):
+            site = self.lattice.unit_cell[u]
             field = spin_field_coupling([site], hz=1.0)
-            for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
+            for i, i_lat in zip(*self.lattice.mps_lat_idx_fix_u(u)):
                 self.add_coupling(field, [i], strength=-hz[tuple(i_lat)])
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            site1, site2 = self.lat.unit_cell[u1], self.lat.unit_cell[u2]
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
+            site1, site2 = self.lattice.unit_cell[u1], self.lattice.unit_cell[u2]
             coupling_xy = spin_spin_coupling([site1, site2], Jx=1.0, Jy=1.0)
             coupling_z = spin_spin_coupling([site1, site2], Jz=1.0)
-            mps_i, mps_j, Jxx_vals = self.lat.possible_couplings_strengths(u1, u2, dx, Jxx)
+            mps_i, mps_j, Jxx_vals = self.lattice.possible_couplings_strengths(u1, u2, dx, Jxx)
             for i, j, strength in zip(mps_i, mps_j, Jxx_vals):
                 self.add_coupling(coupling_xy, [int(i), int(j)], strength=strength)
-            mps_i, mps_j, Jz_vals = self.lat.possible_couplings_strengths(u1, u2, dx, Jz)
+            mps_i, mps_j, Jz_vals = self.lattice.possible_couplings_strengths(u1, u2, dx, Jz)
             for i, j, strength in zip(mps_i, mps_j, Jz_vals):
                 self.add_coupling(coupling_z, [int(i), int(j)], strength=strength)

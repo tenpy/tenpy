@@ -259,8 +259,8 @@ def test_MPOEnvironment():
     xxz_pars = dict(L=4, Jxx=1.0, Jz=1.1, hz=0.1, bc_MPS='finite', sort_charge=True)
     L = xxz_pars['L']
     M = XXZChain(xxz_pars)
-    state = ([0, 1] * L)[:L]  # Neel
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc='finite', unit_cell_width=M.lat.mps_unit_cell_width)
+    state = ([[0], [1]] * L)[:L]  # Neel
+    psi = mps.MPS.from_lat_product_state(M.lattice, state)
     env = mpo.MPOEnvironment(psi, M.H_MPO, psi)
     env.get_LP(3, True)
     env.get_RP(0, True)
@@ -451,7 +451,9 @@ def test_apply_mpo(method):
     model_pars = dict(L=L, Jx=0.0, Jy=0.0, Jz=-4.0, hx=2.0 * g, bc_MPS=bc_MPS, conserve=None)
     M = SpinChain(model_pars)
     state = [[1 / np.sqrt(2), -1 / np.sqrt(2)]] * L  # pointing in (-x)-direction
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
+    psi = mps.MPS.from_product_state(
+        M.lattice.mps_sites(), state, bc=bc_MPS, unit_cell_width=M.lattice.mps_unit_cell_width
+    )
     H = M.H_MPO
     Eexp = H.expectation_value(psi)
     psi2 = psi.copy()

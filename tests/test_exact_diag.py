@@ -491,7 +491,7 @@ def _check_built_models(M, H_ref, H_expect):
 @pytest.mark.parametrize('L', [3, 4])
 def test_build_full_H_heisenberg(conserve, L):
     M = SpinChain(dict(L=L, bc_MPS='finite', conserve=conserve))
-    H_expect, H_ref = _heisenberg_tensor(M.lat.mps_sites()[0], L)
+    H_expect, H_ref = _heisenberg_tensor(M.lattice.mps_sites()[0], L)
     _check_built_models(M, H_ref, H_expect)
 
 
@@ -499,7 +499,7 @@ def test_build_full_H_heisenberg(conserve, L):
 @pytest.mark.parametrize('L', [3, 4])
 def test_build_full_H_tfi(conserve, L):
     M = TFIChain(dict(L=L, J=1.0, g=1.2, bc_MPS='finite', conserve=conserve))
-    site = M.lat.mps_sites()[0]
+    site = M.lattice.mps_sites()[0]
     assert site.state_labels['down'] == 0 and site.state_labels['up'] == 1
     H_ref = _dense_tfi(L, 1.0, 1.2)
     _check_built_models(M, H_ref, _dense_to_tensor(site, H_ref, L))
@@ -519,7 +519,7 @@ def test_assembly_route(conserve, dense):
 @pytest.mark.parametrize('conserve', [None, 'Sz', 'SU2'])
 def test_build_full_H_explicit_plus_hc(conserve, L=3):
     M = SpinChain(dict(L=L, bc_MPS='finite', conserve=conserve))
-    H_expect, H_ref = _heisenberg_tensor(M.lat.mps_sites()[0], L)
+    H_expect, H_ref = _heisenberg_tensor(M.lattice.mps_sites()[0], L)
     M.H_MPO.explicit_plus_hc = True  # the Heisenberg MPO is hermitian, so H + h.c. = 2 H
     ED = exact_diag.ExactDiag.from_model(M)
     ED.build_full_H_from_mpo()
@@ -541,6 +541,6 @@ def test_build_full_H_errors():
         ED.build_full_H_from_mpo()
     with pytest.raises(ValueError, match='from_model'):
         ED.build_full_H_from_bonds()
-    infinite_model = SimpleNamespace(lat=SimpleNamespace(bc_MPS='infinite'))  # infinite models cannot be built yet
+    infinite_model = SimpleNamespace(lattice=SimpleNamespace(bc_MPS='infinite'))  # infinite models cannot be built yet
     with pytest.raises(ValueError, match='finite'):
         exact_diag.ExactDiag.from_model(infinite_model)

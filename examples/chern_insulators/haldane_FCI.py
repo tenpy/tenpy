@@ -24,10 +24,10 @@ def plot_model(model_params, phi_ext=0.1):
 
     plt.figure()
     ax = plt.gca()
-    M.lat.plot_sites(ax)
-    M.coupling_terms['t1 Bd_i B_j'].plot_coupling_terms(ax, M.lat)
+    M.lattice.plot_sites(ax)
+    M.coupling_terms['t1 Bd_i B_j'].plot_coupling_terms(ax, M.lattice)
     M.coupling_terms['t2 Bd_i B_j'].plot_coupling_terms(
-        ax, M.lat, text='{coupling_name!s} {strength_angle:.2f}', text_pos=0.9
+        ax, M.lattice, text='{coupling_name!s} {strength_angle:.2f}', text_pos=0.9
     )
     print(M.coupling_terms['t1 Bd_i B_j'].to_TermList())
     ax.set_aspect(1.0)
@@ -72,7 +72,7 @@ def run(model_params, phi_ext=np.linspace(0, 2.0, 7)):
         if eng is None:  # first time in the loop
             M = BosonicHaldaneModel(model_params)
             psi = MPS.from_product_state(
-                M.lat.mps_sites(), prod_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+                M.lattice.mps_sites(), prod_state, bc=M.lattice.bc_MPS, unit_cell_width=M.lattice.mps_unit_cell_width
             )
             eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
         else:

@@ -76,10 +76,10 @@ class BoseHubbardModel(CouplingMPOModel):
         V = model_params.get('V', 0.0, 'real_or_array')
         mu = model_params.get('mu', 0, 'real_or_array')
         phi_ext = model_params.get('phi_ext', None, 'real')
-        for u in range(len(self.lat.unit_cell)):
+        for u in range(len(self.lattice.unit_cell)):
             self.add_onsite(-mu - U / 2.0, u, 'N')
             self.add_onsite(U / 2.0, u, 'NN')
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             if phi_ext is None:
                 hop = -t
             else:
@@ -121,7 +121,7 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
                 In this case one can pass it via the argument `mem_saving_factor` to the model.
 
         """
-        chinfo = self.lat.unit_cell[0].leg.chinfo  # TODO use self.lattice.symmetry
+        chinfo = self.lattice.unit_cell[0].leg.chinfo  # TODO use self.lattice.symmetry
         savings = 1.0
         for mod in chinfo.mod:
             if mod == 1:
@@ -191,10 +191,10 @@ class FermiHubbardModel(CouplingMPOModel):
         mu = model_params.get('mu', 0.0, 'real_or_array')
         phi_ext = model_params.get('phi_ext', None, 'real')
 
-        for u in range(len(self.lat.unit_cell)):
+        for u in range(len(self.lattice.unit_cell)):
             self.add_onsite(-mu, u, 'Ntot')
             self.add_onsite(U, u, 'NuNd')
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             if phi_ext is None:
                 hop = -t
             else:
@@ -256,19 +256,19 @@ class FermiHubbardModel2(CouplingMPOModel):
         mu = model_params.get('mu', 0.0, 'real_or_array')
         phi_ext = model_params.get('phi_ext', None, 'real')
 
-        for u in range(len(self.lat.unit_cell)):
+        for u in range(len(self.lattice.unit_cell)):
             self.add_onsite(-mu, u, 'N')
-        for u1, u2, dx in self.lat.pairs['onsite_up-down']:
+        for u1, u2, dx in self.lattice.pairs['onsite_up-down']:
             self.add_coupling(U, u1, 'N', u2, 'N', dx)
 
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors_diag']:
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors_diag']:
             if phi_ext is None:
                 hop = -t
             else:
                 hop = self.coupling_strength_add_ext_flux(-t, dx, [0, 2 * np.pi * phi_ext])
             self.add_coupling(hop, u1, 'Cd', u2, 'C', dx, plus_hc=True)
 
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors_all-all']:
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors_all-all']:
             self.add_coupling(V, u1, 'N', u2, 'N', dx)
 
 

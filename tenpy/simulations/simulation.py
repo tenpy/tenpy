@@ -524,7 +524,7 @@ class Simulation:
             builder_class = self.options.get('initial_state_builder_class', 'InitialStateBuilder')
             Builder = find_subclass(InitialStateBuilder, builder_class)
             params = self.options.subconfig('initial_state_params')
-            initial_state_builder = Builder(self.model.lat, params, self.model.dtype)
+            initial_state_builder = Builder(self.model.lattice, params, self.model.dtype)
             self.psi = initial_state_builder.run()
         else:
             self.logger.info('initial state as given')  # nothing to do

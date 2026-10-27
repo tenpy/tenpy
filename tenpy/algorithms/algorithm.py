@@ -95,7 +95,7 @@ class Algorithm:
         self.checkpoint = EventHandler('algorithm')
         self._resume_psi = None
         try:
-            N_sites_per_ring = model.lat.N_sites_per_ring
+            N_sites_per_ring = model.lattice.N_sites_per_ring
         except AttributeError:  # for e.g. VariationalApplyMPO, model is just the MPO and has no lat
             N_sites_per_ring = 1
         if N_sites_per_ring is not None:
@@ -250,19 +250,19 @@ class Algorithm:
         # get info from model & params
         L = self.psi.L
         chi_max = self.trunc_params['chi_max']
-        H_dim = [self.model.lat.mps_sites()[i].dim for i in range(self.psi.L)]
+        H_dim = [self.model.lattice.mps_sites()[i].dim for i in range(self.psi.L)]
 
         # determine all bond dimensions for arbitrary chains
         if self.psi.bc == 'finite':
             chis = np.zeros(L + 1, dtype=int)
             # first go from left to right
-            chis[0] = self.model.lat.mps_sites()[0].dim
+            chis[0] = self.model.lattice.mps_sites()[0].dim
             for i in range(1, L):
-                chis[i] = min(chis[i - 1] * self.model.lat.mps_sites()[i - 1].dim, chi_max)
+                chis[i] = min(chis[i - 1] * self.model.lattice.mps_sites()[i - 1].dim, chi_max)
             # now introduce cutoff from right
-            chis[L] = self.model.lat.mps_sites()[L - 1].dim
+            chis[L] = self.model.lattice.mps_sites()[L - 1].dim
             for i in range(L - 1, 0, -1):
-                chis[i] = min(chis[i], min(chis[i + 1] * self.model.lat.mps_sites()[i].dim, chi_max))
+                chis[i] = min(chis[i], min(chis[i + 1] * self.model.lattice.mps_sites()[i].dim, chi_max))
         else:
             chis = [chi_max] * (L + 1)
 
@@ -271,8 +271,8 @@ class Algorithm:
 
         # MPS ram:
         psi_entries = 0
-        for i in range(len(self.model.lat.mps_sites())):
-            site_i = self.model.lat.mps_sites()[i]
+        for i in range(len(self.model.lattice.mps_sites())):
+            site_i = self.model.lattice.mps_sites()[i]
             psi_entries += site_i.dim * chis[i] * chis[i + 1]
 
         total_entries += psi_entries

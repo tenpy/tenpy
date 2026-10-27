@@ -100,7 +100,7 @@ def test_purification_TEBD(L=3):
     M = XXZChain(xxz_pars)
     for disent in [None, 'backwards', 'min(None,last)-renyi', 'noise-norm', 'renyi-min(None,noise-renyi)']:
         psi = purification_mps.PurificationMPS.from_infiniteT(
-            M.lat.mps_sites(), bc='finite', unit_cell_width=M.lat.mps_unit_cell_width
+            M.lattice.mps_sites(), bc='finite', unit_cell_width=M.lattice.mps_unit_cell_width
         )
         TEBD_params = {
             'trunc_params': {'chi_max': 16, 'svd_min': 1.0e-8},
@@ -124,7 +124,7 @@ def test_purification_MPO(L=6):
     xxz_pars = dict(L=L, Jxx=1.0, Jz=2.0, hz=0.0, bc_MPS='finite', sort_charge=True)
     M = XXZChain(xxz_pars)
     psi = purification_mps.PurificationMPS.from_infiniteT(
-        M.lat.mps_sites(), bc='finite', unit_cell_width=M.lat.mps_unit_cell_width
+        M.lattice.mps_sites(), bc='finite', unit_cell_width=M.lattice.mps_unit_cell_width
     )
     options = {'trunc_params': {'chi_max': 50, 'svd_min': 1.0e-8}}
     U = M.H_MPO.make_U_II(dt=0.1)
@@ -137,7 +137,7 @@ def test_renyi_disentangler(L=4, eps=1.0e-15):
     xxz_pars = dict(L=L, Jxx=1.0, Jz=3.0, hz=0.0, bc_MPS='finite', sort_charge=True)
     M = XXZChain(xxz_pars)
     psi = purification_mps.PurificationMPS.from_infiniteT(
-        M.lat.mps_sites(), bc='finite', unit_cell_width=M.lat.mps_unit_cell_width
+        M.lattice.mps_sites(), bc='finite', unit_cell_width=M.lattice.mps_unit_cell_width
     )
     eng = PurificationTEBD(psi, M, {'disentangle': 'renyi'})
     theta = eng.psi.get_theta(1, 2)
@@ -246,7 +246,7 @@ def gen_disentangler_psi_singlet_test(site_P=spin_half, L=6, max_range=4):
 def test_purification_apply_local_op(n_sites, act_on_p, act_on_q):
     i = 2
     model = XXZChain(dict(L=8))
-    psi_inf = purification_mps.PurificationMPS.from_infiniteT(sites=model.lat.mps_sites(), unit_cell_width=8)
+    psi_inf = purification_mps.PurificationMPS.from_infiniteT(sites=model.lattice.mps_sites(), unit_cell_width=8)
     psi = psi_inf.copy()
 
     op_legs = []

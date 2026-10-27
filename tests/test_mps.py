@@ -129,7 +129,9 @@ def test_MPSEnvironment():
     L = xxz_pars['L']
     M = XXZChain(xxz_pars)
     state = ([0, 1] * L)[:L]  # Neel state
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc='finite', unit_cell_width=M.lat.mps_unit_cell_width)
+    psi = mps.MPS.from_product_state(
+        M.lattice.mps_sites(), state, bc='finite', unit_cell_width=M.lattice.mps_unit_cell_width
+    )
     env = mps.MPSEnvironment(psi, psi)
     env.get_LP(3, True)
     env.get_RP(0, True)

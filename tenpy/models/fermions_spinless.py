@@ -67,9 +67,9 @@ class FermionModel(CouplingMPOModel):
         V = model_params.get('V', 1.0, 'real_or_array')
         mu = model_params.get('mu', 0.0, 'real_or_array')
         phi_ext = model_params.get('phi_ext', None, 'real')
-        for u in range(len(self.lat.unit_cell)):
+        for u in range(len(self.lattice.unit_cell)):
             self.add_onsite(-mu, u, 'N')
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             if phi_ext is None:
                 hop = -J
             else:

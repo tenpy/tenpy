@@ -102,7 +102,7 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
             raise NameError(msg)
         if psi.bc != 'finite':
             raise NotImplementedError('Only finite TDVP is implemented')
-        assert psi.bc == model.lat.bc_MPS
+        assert psi.bc == model.lattice.bc_MPS
         options = asConfig(options, self.__class__.__name__)
         options.deprecated_alias(
             'lanczos_options', 'lanczos_params', 'See also https://github.com/tenpy/tenpy/issues/459'
