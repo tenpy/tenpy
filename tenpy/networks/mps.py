@@ -7,7 +7,7 @@ An MPS looks roughly like this::
     |     ┗━━━┯━━━┛    ┗━━━┯━━━┛    ┗━━━┯━━━┛
     |         │            │            │
 
-We use the following label convention for the `B` (where arrows indicate `qconj`)::
+We use the following label convention for the `B`::
 
     |        ┏━━━━━━━┓
     |   vL ──┨   B   ┠── vR
@@ -517,13 +517,17 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         Calculates n-site expectation values of operators sandwiched between bra and ket.
         For example the contraction for a two-site operator on site `i` would look like::
 
-            |          .--S--B[i]--B[i+1]--.
-            |          |     |     |       |
-            |          |     |-----|       |
-            |          LP[i] | op  |       RP[i+1]
-            |          |     |-----|       |
-            |          |     |     |       |
-            |          .--S--B*[i]-B*[i+1]-.
+            |   ┏━━━━━━━┓  ┏━━━┓  ┏━━━━━━━┓  ┏━━━━━━━━━┓  ┏━━━━━━━━━┓
+            |   ┃       ┠──┨ S ┠──┨ B[i]  ┠──┨ B[i+1]  ┠──┨         ┃
+            |   ┃       ┃  ┗━━━┛  ┗━━━┯━━━┛  ┗━━━━┯━━━━┛  ┃         ┃
+            |   ┃       ┃             │           │       ┃         ┃
+            |   ┃       ┃         ┏━━━┷━━━━━━━━━━━┷━━━━┓  ┃         ┃
+            |   ┃ LP[i] ┃         ┃         op         ┃  ┃ RP[i+1] ┃
+            |   ┃       ┃         ┗━━━┯━━━━━━━━━━━┯━━━━┛  ┃         ┃
+            |   ┃       ┃             │           │       ┃         ┃
+            |   ┃       ┃  ┏━━━┓  ┏━━━┷━━━┓  ┏━━━━┷━━━━┓  ┃         ┃
+            |   ┃       ┠──┨ S ┠──┨ B*[i] ┠──┨ B*[i+1] ┠──┨         ┃
+            |   ┗━━━━━━━┛  ┗━━━┛  ┗━━━━━━━┛  ┗━━━━━━━━━┛  ┗━━━━━━━━━┛
 
         Here, the `B` are taken from `ket`, the `B*` from `bra`.
         For MPS expectation values these are the same and LP / RP are trivial.
@@ -766,11 +770,17 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         ``op0_i0 op1_{i0+1} op2_{i0+2} ...``, looking like this (with `op` short for `operators`,
         for ``len(operators)=3``)::
 
-            |          .--S--B[i0]---B[i0+1]--B[i0+2]--B[i0+3]--.
-            |          |     |       |        |        |        |
-            |         LP[i0] op[0]   op[1]    op[2]    op[3]    RP[i0+3]
-            |          |     |       |        |        |        |
-            |          .--S--B*[i0]--B*[i0+1]-B*[i0+2]-B*[i0+3]-.
+            |   ┏━━━━━━━━┓  ┏━━━┓  ┏━━━━━━━━┓  ┏━━━━━━━━━━┓  ┏━━━━━━━━━━┓  ┏━━━━━━━━━━┓  ┏━━━━━━━━━━┓
+            |   ┃        ┠──┨ S ┠──┨ B[i0]  ┠──┨ B[i0+1]  ┠──┨ B[i0+2]  ┠──┨ B[i0+3]  ┠──┨          ┃
+            |   ┃        ┃  ┗━━━┛  ┗━━━━┯━━━┛  ┗━━━━━┯━━━━┛  ┗━━━━━┯━━━━┛  ┗━━━━━┯━━━━┛  ┃          ┃
+            |   ┃        ┃              │            │             │             │       ┃          ┃
+            |   ┃        ┃         ┏━━━━┷━━━┓  ┏━━━━━┷━━━━┓  ┏━━━━━┷━━━━┓  ┏━━━━━┷━━━━┓  ┃          ┃
+            |   ┃ LP[i0] ┃         ┃ op[0]  ┃  ┃  op[1]   ┃  ┃  op[2]   ┃  ┃  op[3]   ┃  ┃ RP[i0+3] ┃
+            |   ┃        ┃         ┗━━━━┯━━━┛  ┗━━━━━┯━━━━┛  ┗━━━━━┯━━━━┛  ┗━━━━━┯━━━━┛  ┃          ┃
+            |   ┃        ┃              │            │             │             │       ┃          ┃
+            |   ┃        ┃  ┏━━━┓  ┏━━━━┷━━━┓  ┏━━━━━┷━━━━┓  ┏━━━━━┷━━━━┓  ┏━━━━━┷━━━━┓  ┃          ┃
+            |   ┃        ┠──┨ S ┠──┨ B*[i0] ┠──┨ B*[i0+1] ┠──┨ B*[i0+2] ┠──┨ B*[i0+3] ┠──┨          ┃
+            |   ┗━━━━━━━━┛  ┗━━━┛  ┗━━━━━━━━┛  ┗━━━━━━━━━━┛  ┗━━━━━━━━━━┛  ┗━━━━━━━━━━┛  ┗━━━━━━━━━━┛
 
         Note: Use `expectation_value` for computing expectation values for a :class:`~lasyten.Coupling` or
         `expectation_value_tensor` for a multi-site :class:`~lasyten.Tensor`.
@@ -818,11 +828,17 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         For example the contraction of three one-site operators on sites ``i0``,
         ``i1 = i0 + 1``, ``i2 = i0 + 3`` would look like::
 
-            |          .--S--B[i0]---B[i0+1]--B[i0+2]--B[i0+3]--.
-            |          |     |       |        |        |        |
-            |         LP[i0] op1     op2      |        op3      RP[i0+3]
-            |          |     |       |        |        |        |
-            |          .--S--B*[i0]--B*[i0+1]-B*[i0+2]-B*[i0+3]-.
+            |   ┏━━━━━━━━┓  ┏━━━┓  ┏━━━━━━━━┓  ┏━━━━━━━━━━┓  ┏━━━━━━━━━━┓  ┏━━━━━━━━━━┓  ┏━━━━━━━━━━┓
+            |   ┃        ┠──┨ S ┠──┨ B[i0]  ┠──┨ B[i0+1]  ┠──┨ B[i0+2]  ┠──┨ B[i0+3]  ┠──┨          ┃
+            |   ┃        ┃  ┗━━━┛  ┗━━━━┯━━━┛  ┗━━━━━┯━━━━┛  ┗━━━━━┯━━━━┛  ┗━━━━━┯━━━━┛  ┃          ┃
+            |   ┃        ┃              │            │             │             │       ┃          ┃
+            |   ┃        ┃         ┏━━━━┷━━━┓  ┏━━━━━┷━━━━┓        │       ┏━━━━━┷━━━━┓  ┃          ┃
+            |   ┃ LP[i0] ┃         ┃  op1   ┃  ┃   op2    ┃        │       ┃   op3    ┃  ┃ RP[i0+3] ┃
+            |   ┃        ┃         ┗━━━━┯━━━┛  ┗━━━━━┯━━━━┛        │       ┗━━━━━┯━━━━┛  ┃          ┃
+            |   ┃        ┃              │            │             │             │       ┃          ┃
+            |   ┃        ┃  ┏━━━┓  ┏━━━━┷━━━┓  ┏━━━━━┷━━━━┓  ┏━━━━━┷━━━━┓  ┏━━━━━┷━━━━┓  ┃          ┃
+            |   ┃        ┠──┨ S ┠──┨ B*[i0] ┠──┨ B*[i0+1] ┠──┨ B*[i0+2] ┠──┨ B*[i0+3] ┠──┨          ┃
+            |   ┗━━━━━━━━┛  ┗━━━┛  ┗━━━━━━━━┛  ┗━━━━━━━━━━┛  ┗━━━━━━━━━━┛  ┗━━━━━━━━━━┛  ┗━━━━━━━━━━┛
 
         Parameters
         ----------
@@ -895,27 +911,53 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         For example the contraction for a two on-site operators on sites `i` and `j` would look
         like::
 
-            |          .--S--B[i]--B[i+1]--...--B[j]---.
-            |          |     |     |            |      |
-            |          |     |     |            op2    |
-            |          LP[i] |     |            |      RP[j]
-            |          |     op1   |            |      |
-            |          |     |     |            |      |
-            |          .--S--B*[i]-B*[i+1]-...--B*[j]--.
+            |   ┏━━━━━━━┓  ┏━━━┓  ┏━━━━━━━┓  ┏━━━━━━━━━┓     ┏━━━━━━━┓  ┏━━━━━━━┓
+            |   ┃       ┠──┨ S ┠──┨ B[i]  ┠──┨ B[i+1]  ┠─...─┨ B[j]  ┠──┨       ┃
+            |   ┃       ┃  ┗━━━┛  ┗━━━┯━━━┛  ┗━━━━┯━━━━┛     ┗━━━┯━━━┛  ┃       ┃
+            |   ┃       ┃             │           │              │      ┃       ┃
+            |   ┃       ┃             │           │          ┏━━━┷━━━┓  ┃       ┃
+            |   ┃       ┃             │           │          ┃  op2  ┃  ┃       ┃
+            |   ┃ LP[i] ┃         ┏━━━┷━━━┓       │          ┗━━━┯━━━┛  ┃ RP[j] ┃
+            |   ┃       ┃         ┃  op1  ┃       │              │      ┃       ┃
+            |   ┃       ┃         ┗━━━┯━━━┛       │              │      ┃       ┃
+            |   ┃       ┃             │           │              │      ┃       ┃
+            |   ┃       ┃  ┏━━━┓  ┏━━━┷━━━┓  ┏━━━━┷━━━━┓     ┏━━━┷━━━┓  ┃       ┃
+            |   ┃       ┠──┨ S ┠──┨ B*[i] ┠──┨ B*[i+1] ┠─...─┨ B*[j] ┠──┨       ┃
+            |   ┗━━━━━━━┛  ┗━━━┛  ┗━━━━━━━┛  ┗━━━━━━━━━┛     ┗━━━━━━━┛  ┗━━━━━━━┛
 
 
         Onsite terms are taken in the order ``<psi|op1_i op2_j|psi>``.
         If `opstr` is given, it calculates::
 
-            |           for i < j                               for i > j
+            |   for i < j
+            |   ┏━━━━━━━┓  ┏━━━┓  ┏━━━━━━━┓  ┏━━━━━━━━━┓     ┏━━━━━━━┓  ┏━━━━━━━┓
+            |   ┃       ┠──┨ S ┠──┨ B[i]  ┠──┨ B[i+1]  ┠─...─┨ B[j]  ┠──┨       ┃
+            |   ┃       ┃  ┗━━━┛  ┗━━━┯━━━┛  ┗━━━━┯━━━━┛     ┗━━━┯━━━┛  ┃       ┃
+            |   ┃       ┃             │           │              │      ┃       ┃
+            |   ┃       ┃             │      ┏━━━━┷━━━━┓     ┏━━━┷━━━┓  ┃       ┃
+            |   ┃       ┃             │      ┃  opstr  ┃     ┃  op2  ┃  ┃       ┃
+            |   ┃ LP[i] ┃         ┏━━━┷━━━┓  ┗━━━━┯━━━━┛     ┗━━━┯━━━┛  ┃ RP[j] ┃
+            |   ┃       ┃         ┃  op1  ┃       │              │      ┃       ┃
+            |   ┃       ┃         ┗━━━┯━━━┛       │              │      ┃       ┃
+            |   ┃       ┃             │           │              │      ┃       ┃
+            |   ┃       ┃  ┏━━━┓  ┏━━━┷━━━┓  ┏━━━━┷━━━━┓     ┏━━━┷━━━┓  ┃       ┃
+            |   ┃       ┠──┨ S ┠──┨ B*[i] ┠──┨ B*[i+1] ┠─...─┨ B*[j] ┠──┨       ┃
+            |   ┗━━━━━━━┛  ┗━━━┛  ┗━━━━━━━┛  ┗━━━━━━━━━┛     ┗━━━━━━━┛  ┗━━━━━━━┛
             |
-            |          .--S--B[i]---B[i+1]--...- B[j]---.     .--S--B[j]---B[j+1]--...- B[i]---.
-            |          |     |      |            |      |     |     |      |            |      |
-            |          |     |      opstr        op2    |     |     op2    |            |      |
-            |          LP[i] |      |            |      RP[j] LP[j] |      |            |      RP[i]
-            |          |     op1    |            |      |     |     |      opstr        op1    |
-            |          |     |      |            |      |     |     |      |            |      |
-            |          .--S--B*[i]--B*[i+1]-...- B*[j]--.     .--S--B*[j]--B*[j+1]-...- B*[i]--.
+            |   for i > j
+            |   ┏━━━━━━━┓  ┏━━━┓  ┏━━━━━━━┓  ┏━━━━━━━━━┓     ┏━━━━━━━┓  ┏━━━━━━━┓
+            |   ┃       ┠──┨ S ┠──┨ B[j]  ┠──┨ B[j+1]  ┠─...─┨ B[i]  ┠──┨       ┃
+            |   ┃       ┃  ┗━━━┛  ┗━━━┯━━━┛  ┗━━━━┯━━━━┛     ┗━━━┯━━━┛  ┃       ┃
+            |   ┃       ┃             │           │              │      ┃       ┃
+            |   ┃       ┃         ┏━━━┷━━━┓       │              │      ┃       ┃
+            |   ┃       ┃         ┃  op2  ┃       │              │      ┃       ┃
+            |   ┃ LP[j] ┃         ┗━━━┯━━━┛  ┏━━━━┷━━━━┓     ┏━━━┷━━━┓  ┃ RP[i] ┃
+            |   ┃       ┃             │      ┃  opstr  ┃     ┃  op1  ┃  ┃       ┃
+            |   ┃       ┃             │      ┗━━━━┯━━━━┛     ┗━━━┯━━━┛  ┃       ┃
+            |   ┃       ┃             │           │              │      ┃       ┃
+            |   ┃       ┃  ┏━━━┓  ┏━━━┷━━━┓  ┏━━━━┷━━━━┓     ┏━━━┷━━━┓  ┃       ┃
+            |   ┃       ┠──┨ S ┠──┨ B*[j] ┠──┨ B*[j+1] ┠─...─┨ B*[i] ┠──┨       ┃
+            |   ┗━━━━━━━┛  ┗━━━┛  ┗━━━━━━━┛  ┗━━━━━━━━━┛     ┗━━━━━━━┛  ┗━━━━━━━┛
 
 
         Strings (like ``'Id', 'Sz'``) in ``opstr`` are translated into single-site operators
@@ -925,13 +967,19 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         Couplings are in general multi-site operators, for which the following diagram is
         evaluated (for i < j)::
 
-            |          .--S--B[i1]-...--B[in]--...-B[k]-...--B[j1]--...-B[jm]---.
-            |          |     |          |          |         |          |       |
-            |          |     |          |          opstr     op2_j1-...-op2_jm  |
-            |          LP[i] |          |          |         |          |       RP[jm]
-            |          |     op1_i1-...-op1_in     |         |          |       |
-            |          |     |          |          |         |          |       |
-            |          .--S--B*[i1]-...-B*[in]-...-B*[k]-...-B*[j1]-...-B*[jm]--.
+            |   ┏━━━━━━━┓ ┏━━━┓ ┏━━━━━━━━┓     ┏━━━━━━━━┓     ┏━━━━━━━┓     ┏━━━━━━━━┓     ┏━━━━━━━━┓ ┏━━━━━━━━┓
+            |   ┃       ┠─┨ S ┠─┨ B[i1]  ┠─...─┨ B[in]  ┠─...─┨ B[k]  ┠─...─┨ B[j1]  ┠─...─┨ B[jm]  ┠─┨        ┃
+            |   ┃       ┃ ┗━━━┛ ┗━━━━┯━━━┛     ┗━━━━┯━━━┛     ┗━━━┯━━━┛     ┗━━━━┯━━━┛     ┗━━━━┯━━━┛ ┃        ┃
+            |   ┃       ┃            │              │             │              │              │     ┃        ┃
+            |   ┃       ┃            │              │         ┏━━━┷━━━┓     ┏━━━━┷━━━━━━━━━━━━━━┷━━━┓ ┃        ┃
+            |   ┃       ┃            │              │         ┃ opstr ┃     ┃   op2_j1-...-op2_jm   ┃ ┃        ┃
+            |   ┃ LP[i] ┃       ┏━━━━┷━━━━━━━━━━━━━━┷━━━┓     ┗━━━┯━━━┛     ┗━━━━┯━━━━━━━━━━━━━━┯━━━┛ ┃ RP[jm] ┃
+            |   ┃       ┃       ┃   op1_i1-...-op1_in   ┃         │              │              │     ┃        ┃
+            |   ┃       ┃       ┗━━━━┯━━━━━━━━━━━━━━┯━━━┛         │              │              │     ┃        ┃
+            |   ┃       ┃            │              │             │              │              │     ┃        ┃
+            |   ┃       ┃ ┏━━━┓ ┏━━━━┷━━━┓     ┏━━━━┷━━━┓     ┏━━━┷━━━┓     ┏━━━━┷━━━┓     ┏━━━━┷━━━┓ ┃        ┃
+            |   ┃       ┠─┨ S ┠─┨ B*[i1] ┠─...─┨ B*[in] ┠─...─┨ B*[k] ┠─...─┨ B*[j1] ┠─...─┨ B*[jm] ┠─┨        ┃
+            |   ┗━━━━━━━┛ ┗━━━┛ ┗━━━━━━━━┛     ┗━━━━━━━━┛     ┗━━━━━━━┛     ┗━━━━━━━━┛     ┗━━━━━━━━┛ ┗━━━━━━━━┛
 
         Here `op1` acts on sites `i1`, ..., `in` and `op2` acts on sites `j1`, ..., `jm`
         (in both cases not necessarily consecutive sites). If given, `opstr` is applied at every
@@ -2044,13 +2092,19 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         The order in which `coupling1` and `coupling2` are contracted is analogous to the tensor
         contraction in :func:`lasyten.compose`.
 
-        Graphically::
+        Graphically, where lines that cross are not connected (the line with a gap passes behind
+        the continuous line)::
 
-            |          |    |    |    |    |    |
-            |         ─W0───W1───W2───|────W3───|─
-            |          |    |    |    |    |    |    == _multiply_couplings(Vs, Ws, [2, 5, 6, 8], [0, 2, 3, 6])
-            |         ─|────V0───|────V1───V2───V3─
-            |          |    |    |    |    |    |
+            |         │         │         │         │         │         │
+            |       ┏━┷━━┓    ┏━┷━━┓    ┏━┷━━┓      │       ┏━┷━━┓      │
+            |   ────┨ W0 ┠────┨ W1 ┠────┨ W2 ┠───── │ ──────┨ W3 ┠───── │ ─────
+            |       ┗━┯━━┛    ┗━┯━━┛    ┗━┯━━┛      │       ┗━┯━━┛      │
+            |         │         │         │         │         │         │
+            |         │       ┏━┷━━┓      │       ┏━┷━━┓    ┏━┷━━┓    ┏━┷━━┓
+            |   ───── │ ──────┨ V0 ┠───── │ ──────┨ V1 ┠────┨ V2 ┠────┨ V3 ┠───
+            |         │       ┗━┯━━┛      │       ┗━┯━━┛    ┗━┯━━┛    ┗━┯━━┛
+            |         │         │         │         │         │         │
+            |   == _multiply_couplings(Vs, Ws, [2, 5, 6, 8], [0, 2, 3, 6])
 
         Here `Wi` are the individual tensors of `coupling2` and `Vi` those of `coupling1`.
         `sites1` and `sites2` are one of many possible realizations for this contraction.
@@ -3785,21 +3839,31 @@ class MPS(BaseMPSExpectationValue):
         -------
         Say you have three local MPS with ``mps_covering = [psi_A, psi_B, psi_C]``
         with `A`, `B` and `C` tensors on 3, 2, and 2 sites, respectively.
+        In the sketches below, lines that cross are not connected. The line with a gap passes
+        behind the continuous line.
         Using the ``index_map=[[0, 1, 3], [2, 5], [4, 6]]`` would combine them as::
 
-            |    A0-A1----A2 C0----C1
-            |    |  |     |  |     |
-            |    |  |  B0-|--|--B1 |
-            |    |  |  |  |  |  |  |
-            |    0  1  2  3  4  5  6
+            |    ┏━━━━┓  ┏━━━━┓          ┏━━━━┓  ┏━━━━┓          ┏━━━━┓
+            |    ┃ A0 ┠──┨ A1 ┠──────────┨ A2 ┃  ┃ C0 ┠──────────┨ C1 ┃
+            |    ┗━┯━━┛  ┗━┯━━┛          ┗━┯━━┛  ┗━┯━━┛          ┗━┯━━┛
+            |      │       │               │       │               │
+            |      │       │     ┏━━━━┓    │       │     ┏━━━━┓    │
+            |      │       │     ┃ B0 ┠─── │ ───── │ ────┨ B1 ┃    │
+            |      │       │     ┗━┯━━┛    │       │     ┗━┯━━┛    │
+            |      │       │       │       │       │       │       │
+            |      0       1       2       3       4       5       6
 
         Using the ``index_map=[[1, 2, 0], [3, 5], [6, 4]]`` would rather combine them as::
 
-            |    A2----.     C1----C0
-            |    |     |     |     |
-            |    |  A0-A1 B0-|--B1 |
-            |    |  |  |  |  |  |  |
-            |    0  1  2  3  4  5  6
+            |    ┏━━━━┓                          ┏━━━━┓          ┏━━━━┓
+            |    ┃ A2 ┠────────────┐             ┃ C1 ┠──────────┨ C0 ┃
+            |    ┗━┯━━┛            │             ┗━┯━━┛          ┗━┯━━┛
+            |      │               │               │               │
+            |      │     ┏━━━━┓  ┏━┷━━┓  ┏━━━━┓    │     ┏━━━━┓    │
+            |      │     ┃ A0 ┠──┨ A1 ┃  ┃ B0 ┠─── │ ────┨ B1 ┃    │
+            |      │     ┗━┯━━┛  ┗━┯━━┛  ┗━┯━━┛    │     ┗━┯━━┛    │
+            |      │       │       │       │       │       │       │
+            |      0       1       2       3       4       5       6
 
         As another example, let's generalize :meth:`from_singlets` to "spin-full" fermions
         represented by the (spin-less!) :class:`~tenpy.networks.site.FermionSite` with an extra
@@ -4355,9 +4419,13 @@ class MPS(BaseMPSExpectationValue):
 
         Looks like this for ``shift=1``, with the open virtual legs contracted in the end::
 
-           --B[L-1] Th[0] -- B[1] -- B[2] -- ..... B[L-2] --
-              |      |       |       |             |
-            Th*[0] --B*[1] --B*[2] --B*[3] --..... B*[L-1]
+             ┏━━━━━━━━┓  ┏━━━━━━━┓  ┏━━━━━━━┓  ┏━━━━━━━┓     ┏━━━━━━━━━┓
+           ──┨ B[L-1] ┃  ┃ Th[0] ┠──┨ B[1]  ┠──┨ B[2]  ┠─...─┨ B[L-2]  ┠──
+             ┗━━━━┯━━━┛  ┗━━━┯━━━┛  ┗━━━┯━━━┛  ┗━━━┯━━━┛     ┗━━━━┯━━━━┛
+                  │          │          │          │              │
+             ┏━━━━┷━━━┓  ┏━━━┷━━━┓  ┏━━━┷━━━┓  ┏━━━┷━━━┓     ┏━━━━┷━━━━┓
+             ┃ Th*[0] ┠──┨ B*[1] ┠──┨ B*[2] ┠──┨ B*[3] ┠─...─┨ B*[L-1] ┃
+             ┗━━━━━━━━┛  ┗━━━━━━━┛  ┗━━━━━━━┛  ┗━━━━━━━┛     ┗━━━━━━━━━┛
 
 
         An alternative to calling this method would be to call :meth:`permute_sites` followed by
@@ -5681,15 +5749,23 @@ class MPS(BaseMPSExpectationValue):
             The error ``norm_error[i, 0]`` is defined as the norm-difference between
             the following networks::
 
-                |   --theta[i]---.       --s[i]--.
-                |       |        |    vs         |
-                |   --theta*[i]--.       --s[i]--.
+                |     ┏━━━━━━━━━━━┓              ┏━━━━━━┓
+                |   ──┨ theta[i]  ┠──┐         ──┨ s[i] ┠──┐
+                |     ┗━━━━━┯━━━━━┛  │           ┗━━━━━━┛  │
+                |           │        │    vs               │
+                |     ┏━━━━━┷━━━━━┓  │           ┏━━━━━━┓  │
+                |   ──┨ theta*[i] ┠──┘         ──┨ s[i] ┠──┘
+                |     ┗━━━━━━━━━━━┛              ┗━━━━━━┛
 
             Similarly, ``norm_error[i, 1]`` is the norm-difference of::
 
-                |   .--theta[i]---         .--s[i+1]--
-                |   |    |          vs     |
-                |   .--theta*[i]--         .--s[i+1]--
+                |     ┏━━━━━━━━━━━┓             ┏━━━━━━━━┓
+                |   ┌─┨ theta[i]  ┠──         ┌─┨ s[i+1] ┠──
+                |   │ ┗━━━━━┯━━━━━┛           │ ┗━━━━━━━━┛
+                |   │       │            vs   │
+                |   │ ┏━━━━━┷━━━━━┓           │ ┏━━━━━━━━┓
+                |   └─┨ theta*[i] ┠──         └─┨ s[i+1] ┠──
+                |     ┗━━━━━━━━━━━┛             ┗━━━━━━━━┛
 
         """
         err = np.empty((self.L, 2), dtype=float)
@@ -7668,11 +7744,13 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         The returned ``LP_i`` corresponds to the following contraction,
         where the M's and the N's are in the 'A' form::
 
-            |     .-------M[0]--- ... --M[i-1]--->-   'vR'
-            |     |       |             |
-            |     LP[0]   |             |
-            |     |       |             |
-            |     .-------N[0]*-- ... --N[i-1]*--<-   'vR*'
+            |   ┏━━━━━━━┓  ┏━━━━━━━┓     ┏━━━━━━━━━┓
+            |   ┃       ┠──┨ M[0]  ┠─...─┨ M[i-1]  ┠── 'vR'
+            |   ┃       ┃  ┗━━━┯━━━┛     ┗━━━━┯━━━━┛
+            |   ┃ LP[0] ┃      │              │
+            |   ┃       ┃  ┏━━━┷━━━┓     ┏━━━━┷━━━━┓
+            |   ┃       ┠──┨ N[0]* ┠─...─┨ N[i-1]* ┠── 'vR*'
+            |   ┗━━━━━━━┛  ┗━━━━━━━┛     ┗━━━━━━━━━┛
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
 
@@ -7715,11 +7793,13 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         The returned ``RP_i`` corresponds to the following contraction,
         where the M's and the N's are in the 'B' form::
 
-            |     'vL'  ->---M[i+1]-- ... --M[L-1]----.
-            |                |              |         |
-            |                |              |         RP[L-1]
-            |                |              |         |
-            |     'vL*' -<---N[i+1]*- ... --N[L-1]*---.
+            |           ┏━━━━━━━━━┓     ┏━━━━━━━━━┓  ┏━━━━━━━━━┓
+            |   'vL' ───┨ M[i+1]  ┠─...─┨ M[L-1]  ┠──┨         ┃
+            |           ┗━━━━┯━━━━┛     ┗━━━━┯━━━━┛  ┃         ┃
+            |                │               │       ┃ RP[L-1] ┃
+            |           ┏━━━━┷━━━━┓     ┏━━━━┷━━━━┓  ┃         ┃
+            |   'vL*' ──┨ N[i+1]* ┠─...─┨ N[L-1]* ┠──┨         ┃
+            |           ┗━━━━━━━━━┛     ┗━━━━━━━━━┛  ┗━━━━━━━━━┛
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
 
@@ -8079,24 +8159,28 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
     The network for a contraction :math:`<bra|Op|ket>` of a local operator `Op`, say exemplary
     at sites `i, i+1` looks like::
 
-        |     .-----M[0]--- ... --M[1]---M[2]--- ... ->--.
-        |     |     |             |      |               |
-        |     |     |             |------|               |
-        |     LP[0] |             |  Op  |               RP[-1]
-        |     |     |             |------|               |
-        |     |     |             |      |               |
-        |     .-----N[0]*-- ... --N[1]*--N[2]*-- ... -<--.
+        |   ┏━━━━━━━┓  ┏━━━━━━━┓     ┏━━━━━━━┓  ┏━━━━━━━┓     ┏━━━━━━━━┓
+        |   ┃       ┠──┨ M[0]  ┠─...─┨ M[1]  ┠──┨ M[2]  ┠─...─┨        ┃
+        |   ┃       ┃  ┗━━━┯━━━┛     ┗━━━┯━━━┛  ┗━━━┯━━━┛     ┃        ┃
+        |   ┃       ┃      │             │          │         ┃        ┃
+        |   ┃       ┃      │         ┏━━━┷━━━━━━━━━━┷━━━┓     ┃        ┃
+        |   ┃ LP[0] ┃      │         ┃        Op        ┃     ┃ RP[-1] ┃
+        |   ┃       ┃      │         ┗━━━┯━━━━━━━━━━┯━━━┛     ┃        ┃
+        |   ┃       ┃      │             │          │         ┃        ┃
+        |   ┃       ┃  ┏━━━┷━━━┓     ┏━━━┷━━━┓  ┏━━━┷━━━┓     ┃        ┃
+        |   ┃       ┠──┨ N[0]* ┠─...─┨ N[1]* ┠──┨ N[2]* ┠─...─┨        ┃
+        |   ┗━━━━━━━┛  ┗━━━━━━━┛     ┗━━━━━━━┛  ┗━━━━━━━┛     ┗━━━━━━━━┛
 
     This class stores the partial contractions `LP` and `RP` coming from the left and right up to
     each bond, allowing efficient calculations of expectation values, correlation functions etc.
 
-    We use the following label convention (where arrows indicate `qconj`)::
+    We use the following label convention::
 
-        |    .-->- vR           vL ->-.
-        |    |                        |
-        |    LP                       RP
-        |    |                        |
-        |    .--<- vR*         vL* -<-.
+        |   ┏━━━━━━┓                 ┏━━━━━━┓
+        |   ┃      ┠── vR      vL ───┨      ┃
+        |   ┃  LP  ┃                 ┃  RP  ┃
+        |   ┃      ┠── vR*    vL* ───┨      ┃
+        |   ┗━━━━━━┛                 ┗━━━━━━┛
 
     """
 
@@ -8162,14 +8246,20 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):  # TODO: adapt for Lin
 
     Given two MPS, we define the transfer matrix as::
 
-        |    ---M[i]---M[i+1]- ... --M[i+L]---
-        |       |      |             |
-        |    ---N[j]*--N[j+1]* ... --N[j+L]*--
+        |     ┏━━━━━━━┓  ┏━━━━━━━━━┓     ┏━━━━━━━━━┓
+        |   ──┨ M[i]  ┠──┨ M[i+1]  ┠─...─┨ M[i+L]  ┠──
+        |     ┗━━━┯━━━┛  ┗━━━━┯━━━━┛     ┗━━━━┯━━━━┛
+        |         │           │               │
+        |     ┏━━━┷━━━┓  ┏━━━━┷━━━━┓     ┏━━━━┷━━━━┓
+        |   ──┨ N[j]* ┠──┨ N[j+1]* ┠─...─┨ N[j+L]* ┠──
+        |     ┗━━━━━━━┛  ┗━━━━━━━━━┛     ┗━━━━━━━━━┛
 
     Here the `N` denotes the matrices of the bra and `M` the ones of the ket, respectively.
     To view it as a `matrix`, we combine the left and right indices to pipes::
 
-        |  (vL.vL*) ->-TM->- (vR.vR*)   acting on  (vL.vL*) ->-RP
+        |               ┏━━━━━━┓                                    ┏━━━━━━┓
+        |   (vL.vL*) ───┨  TM  ┠── (vR.vR*)   acting on (vL.vL*) ───┨  RP  ┃
+        |               ┗━━━━━━┛                                    ┗━━━━━━┛
 
     Note that we keep all M and N as copies.
 
