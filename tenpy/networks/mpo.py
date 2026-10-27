@@ -1374,25 +1374,29 @@ class MPO(MPSGeometry):
         return TermList(all_terms, all_prefs)
 
     def dagger(self):
-        """Return hermitian conjugate copy of self."""
+        """Return hermitian conjugate copy of self.
+
+        The hermitian conjugate is taken on each ``W`` separately, i.e. the virtual structure
+        (including the ``'IdL'`` / ``'IdR'`` summand labels) is unchanged and only the physical legs
+        are transposed and the entries are complex conjugated. Left stays left: the result keeps the
+        labels ``'wL'`` and ``'wR'`` in place (there is no ``'wL' <-> 'wR*'`` swap).
+
+        The virtual legs of the result are *dualized* (``is_dual`` is flipped, they carry the
+        conjugate charges). Hence the result can in general not be combined with `self` on the
+        virtual level, e.g. ``H + H.dagger()`` fails with an incompatible-legs error, since
+        lasyten has no tensor-level leg flip. For ``explicit_plus_hc=True`` a copy is returned.
+        """
         if self.explicit_plus_hc:
-            return self.copy()
-        if self.bc != 'finite':
-            raise NotImplementedError("MPO.dagger() for bc != 'finite' is not yet supported")
-        # for finite bc, the `_W` tensors have the same structure as a lasyten Coupling's
-        # `factorization` (trivial boundary legs), so we can round-trip through `Coupling` to
-        # get the hermitian conjugate at the tensor level.
-        coupling = Coupling(sites=list(self.sites), factorization=list(self._W))
-        hc_coupling = Coupling.from_tensor(lasy.dagger(coupling.to_tensor()), sites=list(self.sites))
-        return MPO(
-            self.sites,
-            hc_coupling.factorization,
-            self.bc,
-            self.IdL,
-            self.IdR,
-            self.max_range,
-            mps_unit_cell_width=self.unit_cell_width,
-        )
+            new = self.copy()
+            new._W = list(self._W)  # `copy` is shallow; do not share the list with `self`
+            return new
+        Ws = []
+        for W in self._W:
+            # lasy.dagger gives labels [p, wR*, p*, wL*]; a cyclic (i.e. planar, braid-free) permutation
+            # brings them back to the standard leg order, which also works for fermions and anyons.
+            W = lasy.planar_permute_legs(lasy.dagger(W), codomain=['wL*', 'p'], domain=['p*', 'wR*'])
+            Ws.append(W.relabel({'wL*': 'wL', 'wR*': 'wR'}))
+        return MPO(self.sites, Ws, self.bc, self.max_range, mps_unit_cell_width=self.unit_cell_width)
 
     def is_hermitian(self, eps: float = 1.0e-10, max_range: int | None = None):
         """Check if `self` is a hermitian MPO.

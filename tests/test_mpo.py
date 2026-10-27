@@ -4,8 +4,9 @@
 import lasyten as lasy
 import numpy as np
 import pytest
-from lasyten.models.couplings import Coupling, heisenberg_coupling, spin_field_coupling
-from lasyten.models.sites import SpinSite
+from lasyten import ElementarySpace
+from lasyten.models.couplings import Coupling, heisenberg_coupling, hopping, spin_field_coupling
+from lasyten.models.sites import AnyonSite, FibonacciAnyonSite, SpinlessFermionSite, SpinSite
 from numpy import testing as npt
 from scipy import linalg as spla
 
@@ -335,6 +336,176 @@ def test_MPO_hermitian():
     assert not _is_hermitian_coupling(L, site, H)
     H = _build_hermitian_test_coupling(L, filler, [(c_mp, (0, 3)), (c_pm, (0, 3))])
     assert _is_hermitian_coupling(L, site, H)
+
+
+def _mpo_to_dense(M, L):
+    labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
+    dim = M.sites[0].dim
+    return Coupling(list(M.sites), factorization=list(M._W)).to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
+
+
+def test_MPO_dagger():
+    """MPO.dagger agrees with the dense hermitian conjugate and keeps the IdL / IdR structure."""
+    L = 4
+    site = SpinSite(S=0.5, conserve=None)
+    Sm = site.get_op('Sm').to_numpy()
+    Sp = site.get_op('Sp').to_numpy()
+    Sz = site.get_op('Sz').to_numpy()
+    filler = spin_field_coupling([site], hz=0.0)
+    # non-hermitian: complex prefactors / one-sided hopping
+    c_zz = _hopping_coupling(site, 1j * Sz, Sz)
+    c_mp = _hopping_coupling(site, Sm, Sp)
+    H = _build_hermitian_test_coupling(L, filler, [(c_mp, (0, 3)), (c_zz, (1, 2))])
+    M = mpo.MPO(list(H.sites), H.factorization, 'finite', mps_unit_cell_width=L)
+    M_dag = M.dagger()
+    M_dag.test_sanity()
+    H_dense = _mpo_to_dense(M, L)
+    H_dag_dense = _mpo_to_dense(M_dag, L)
+    assert not np.allclose(H_dense, H_dense.conj().T)
+    npt.assert_allclose(H_dag_dense, H_dense.conj().T, atol=1e-14)
+    # the summand labels of the virtual legs are unchanged
+    for W, W_dag in zip(M._W, M_dag._W):
+        assert W_dag.labels == ['wL', 'p', 'wR', 'p*']
+        assert W.get_leg('wL').summand_labels == W_dag.get_leg('wL').summand_labels
+        assert W.get_leg('wR').summand_labels == W_dag.get_leg('wR').summand_labels
+    # dagger is an involution
+    npt.assert_allclose(_mpo_to_dense(M_dag.dagger(), L), H_dense, atol=1e-14)
+
+    # symmetric, hermitian model
+    M = SpinChain(dict(L=L, Jx=1.0, Jy=0.5, Jz=1.0, hz=0.2, bc_MPS='finite', conserve='best')).H_MPO
+    M_dag = M.dagger()
+    M_dag.test_sanity()
+    npt.assert_allclose(_mpo_to_dense(M_dag, L), _mpo_to_dense(M, L), atol=1e-14)
+
+
+def _mpo_to_tensor(M):
+    """Contract all ``W`` into one lasyten tensor, without a dense basis (works for anyons)."""
+    return Coupling(list(M.sites), factorization=list(M._W)).to_tensor()
+
+
+def _check_dagger_tensor(M):
+    """`M.dagger()` agrees with ``lasy.dagger`` of the contracted MPO and is an involution."""
+    M_dag = M.dagger()
+    M_dag.test_sanity()
+    T, T_dag = _mpo_to_tensor(M), _mpo_to_tensor(M_dag)
+    assert T_dag.labels == lasy.dagger(T).labels
+    assert lasy.almost_equal(T_dag, lasy.dagger(T))
+    assert not lasy.almost_equal(T, lasy.dagger(T))  # the test case is not hermitian
+    for W, W_dag in zip(M._W, M_dag._W):
+        assert W_dag.labels == ['wL', 'p', 'wR', 'p*']
+        for leg in ['wL', 'wR']:
+            if hasattr(W.get_leg(leg), 'summand_labels'):  # e.g. not for random W tensors
+                assert W.get_leg(leg).summand_labels == W_dag.get_leg(leg).summand_labels
+    assert lasy.almost_equal(_mpo_to_tensor(M_dag.dagger()), T)
+
+
+@pytest.mark.parametrize('conserve', ['N', 'parity'])
+@pytest.mark.parametrize('pairs', [[(0, 1), (1, 2), (2, 3)], [(0, 3), (1, 2)]], ids=['nearest', 'long_range'])
+def test_MPO_dagger_fermions(conserve, pairs, L=4):
+    """MPO.dagger needs planar leg permutations (no braids), e.g. for the Jordan-Wigner strings."""
+    site = SpinlessFermionSite(conserve=conserve)
+    # `hopping` is hermitian, so a complex prefactor makes the MPO non-hermitian
+    couplings = [hopping([site, site]) for _ in pairs]
+    H = to_single_coupling(couplings, [list(pair) for pair in pairs], [1j] * len(pairs), [0] * len(pairs))
+    M = mpo.MPO(list(H.sites), H.factorization, 'finite', mps_unit_cell_width=L)
+    _check_dagger_tensor(M)
+
+
+def test_MPO_dagger_anyons(L=3):
+    """MPO.dagger for Fibonacci anyons, with random complex W tensors on non-trivial virtual spaces."""
+    site = FibonacciAnyonSite()
+    sym = site.symmetry
+    vac, tau = sym.trivial_sector, site.leg.sector_decomposition[1]
+    trivial = ElementarySpace.from_trivial_sector(1, symmetry=sym)
+    virtual = ElementarySpace.from_defining_sectors(sym, [vac, tau], [1, 1])
+    spaces = [trivial] + [virtual] * (L - 1) + [trivial]
+    Ws = [
+        lasy.SymmetricTensor.from_random_normal(
+            [spaces[i], site.leg],
+            [site.leg, spaces[i + 1]],
+            labels=[['wL', 'p'], ['p*', 'wR']],
+            dtype=lasy.Dtype.complex128,
+        )
+        for i in range(L)
+    ]
+    M = mpo.MPO([site] * L, Ws, 'finite', mps_unit_cell_width=L)
+    _check_dagger_tensor(M)
+
+
+def test_MPO_dagger_explicit_plus_hc():
+    """For ``explicit_plus_hc=True`` the result does not share its list of ``W`` with the original."""
+    M = SpinChain(dict(L=3, Jx=1.0, Jy=0.5, Jz=1.0, hz=0.2, bc_MPS='finite', conserve=None)).H_MPO
+    M.explicit_plus_hc = True
+    W_orig = list(M._W)
+    M_dag = M.dagger()
+    assert M_dag.explicit_plus_hc
+    assert M_dag._W is not M._W
+    M_dag._W[0] = M_dag._W[1]
+    M_dag._W.pop()
+    assert len(M._W) == len(W_orig)
+    assert all(a is b for a, b in zip(M._W, W_orig))
+
+
+@pytest.mark.parametrize('name', ['SU2_2', 'Ising'])
+def test_MPO_dagger_anyons_nonabelian(name, L=2):
+    """MPO.dagger for non-abelian anyons, random complex W tensors containing all sectors."""
+    if name == 'SU2_2':
+        category = lasy.SU2_kAnyonCategory(2)
+    else:
+        category = lasy.IsingAnyonCategory(3)
+    site = AnyonSite(lasy.Symmetry([category]))
+    sym = site.symmetry
+    sectors = [np.array(s) for s in site.leg.sector_decomposition]
+    trivial = ElementarySpace.from_trivial_sector(1, symmetry=sym)
+    virtual = ElementarySpace.from_defining_sectors(sym, sectors, [1] * len(sectors))
+    spaces = [trivial] + [virtual] * (L - 1) + [trivial]
+    Ws = [
+        lasy.SymmetricTensor.from_random_normal(
+            [spaces[i], site.leg],
+            [site.leg, spaces[i + 1]],
+            labels=[['wL', 'p'], ['p*', 'wR']],
+            dtype=lasy.Dtype.complex128,
+        )
+        for i in range(L)
+    ]
+    M = mpo.MPO([site] * L, Ws, 'finite', mps_unit_cell_width=L)
+    _check_dagger_tensor(M)
+
+
+def test_MPO_dagger_infinite(L=4):
+    """MPO.dagger of an infinite MPO: projecting to a finite chain gives the conjugate transpose."""
+    site = SpinSite(S=0.5, conserve=None)
+
+    def cell(name, pref=1.0):
+        op = (site.get_op(name) * pref).as_SymmetricTensor()
+        op = lasy.add_trivial_leg(op, codomain_pos=0, label='wL', is_dual=False)
+        return lasy.add_trivial_leg(op, domain_pos=-1, label='wR', is_dual=False)
+
+    Id = cell('Id')
+    grid = [
+        [Id, cell('Sp'), cell('Sz', 0.7j), cell('Sz', 0.3 + 0.2j)],
+        [None, None, None, cell('Sm')],
+        [None, None, None, cell('Sz')],
+        [None, None, None, Id],
+    ]
+    labels = ['IdL', 'a', 'b', 'IdR']
+    W = lasy.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*'], row_labels=labels, col_labels=labels)
+    M = mpo.MPO([site], [W], 'infinite', mps_unit_cell_width=1)
+    M.test_sanity()
+    M_dag = M.dagger()
+    M_dag.test_sanity()
+    assert M_dag.bc == 'infinite'
+
+    def finite_dense(W):
+        n = len(W.get_leg('wL').summand_labels)
+        first = lasy.tensor_subgrid(W, ['IdL'], list(range(n)), 'wL', 'wR')
+        last = lasy.tensor_subgrid(W, list(range(n)), ['IdR'], 'wL', 'wR')
+        H = mpo.MPO([site] * L, [first] + [W] * (L - 2) + [last], 'finite', mps_unit_cell_width=L)
+        return _mpo_to_dense(H, L)
+
+    D, D_dag = finite_dense(M._W[0]), finite_dense(M_dag._W[0])
+    assert not np.allclose(D, D.conj().T)  # the test case is not hermitian
+    npt.assert_allclose(D_dag, D.conj().T, atol=1e-14)
 
 
 @pytest.mark.parametrize('bc', ['infinite', 'finite'])
