@@ -711,7 +711,7 @@ class Lattice:
             _ = self.mps_sites()  # populate cache
         return self._mps_sites_cache[i]
 
-    def mps_sites(self):
+    def mps_sites(self) -> list[lasy.Site]:
         """Return a list of sites for all MPS indices.
 
         Equivalent to ``[self.site(i) for i in range(self.N_sites)]``.
