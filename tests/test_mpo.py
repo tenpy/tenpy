@@ -4,12 +4,13 @@
 import lasyten as lasy
 import numpy as np
 import pytest
-from lasyten.models.couplings import Coupling, heisenberg_coupling, spin_field_coupling
+from lasyten.models.couplings import Coupling
 from lasyten.models.sites import SpinSite
 from numpy import testing as npt
 from scipy import linalg as spla
 
 from tenpy.algorithms import ExactDiag
+from tenpy.models import lattice, model
 from tenpy.models.spins import SpinChain
 from tenpy.networks import mpo
 from tenpy.networks.terms import CouplingTerms, OnsiteTerms
@@ -53,44 +54,6 @@ def test_MPO():
             assert H2.L == 2
 
 
-def test_MPOGraph():
-    L = 4
-    site = SpinSite(S=0.5, conserve=None)
-    c_nn = heisenberg_coupling([site, site], J=1.0)
-    c_field = spin_field_coupling([site], hz=1.0)
-
-    g = mpo.MPOGraph([site] * L, bc='finite', unit_cell_width=L)
-    g.add_coupling_as_term(c_nn, positions=[0, 1], strength=0.5)
-    g.add_coupling_as_term(c_nn, positions=[0, 3], strength=0.1)
-    g.add_coupling_as_term(c_field, positions=[2], strength=0.3)
-    g.add_missing_IdL_IdR_for_couplings()
-    repr(g)
-
-    H = _coupling_to_dense(g.build_coupling(name='H'), L)
-    terms = [(0.5, {0: op, 1: op}) for op in ('Sx', 'Sy', 'Sz')]
-    terms += [(0.1, {0: op, 3: op}) for op in ('Sx', 'Sy', 'Sz')]
-    terms += [(0.3, {2: 'Sz'})]
-    np.testing.assert_allclose(H, _dense_Hamiltonian(site, L, terms), atol=1e-10)
-
-    g_inf = mpo.MPOGraph([site] * L, bc='infinite', unit_cell_width=L)
-    g_inf.add_coupling_as_term(c_nn, positions=[0, 1])
-    with pytest.raises(ValueError):
-        g_inf.build_coupling()
-
-    with pytest.raises(ValueError):
-        mpo.MPOGraph([site] * L, bc='finite', unit_cell_width=L).add_coupling_as_term(
-            c_nn, positions=[1, 0]
-        )  # descending
-    with pytest.raises(ValueError):
-        mpo.MPOGraph([site] * L, bc='finite', unit_cell_width=L).add_coupling_as_term(
-            c_nn, positions=[0]
-        )  # wrong count
-    with pytest.raises(ValueError):
-        mpo.MPOGraph([site] * L, bc='finite', unit_cell_width=L).add_coupling_as_term(
-            c_nn, positions=[0, 1], split=5
-        )  # out of range
-
-
 def test_MPOGraph_term_conversion():
     pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
     L = 4
@@ -123,52 +86,6 @@ def test_MPOGraph_term_conversion():
     g4.add(1, ('left', 0, 'Sp', 'Id'), ('right', 2, 'Sm', 'Id'), 'Sz', 3.0)
     g4.add(2, ('right', 2, 'Sm', 'Id'), 'IdR', 'Sm', 1.0)
     assert g4.graph == g3.graph
-
-
-def test_MPOGraph_coupling_hash_tuples():
-    """Test that MPOGraph.add_coupling_as_term creates distinct couplings without collisions."""
-
-    L = 4
-    spin_sites = [SpinSite(S=0.5, conserve='Sz') for _ in range(L)]
-
-    coupling1 = heisenberg_coupling([spin_sites[0], spin_sites[1]], J=1.0)
-    coupling2 = heisenberg_coupling([spin_sites[0], spin_sites[1]], J=2.0)
-    coupling3 = spin_field_coupling([spin_sites[0]], hz=0.5)
-
-    assert coupling1 != coupling2
-    assert coupling1 != coupling3
-    assert coupling2 != coupling3
-
-    coupling1_again = heisenberg_coupling([spin_sites[0], spin_sites[1]], J=1.0)
-    assert coupling1 == coupling1_again
-    assert hash(coupling1) == hash(coupling1_again)
-
-    graph_sites = [SpinSite(S=0.5, conserve='Sz') for _ in range(L)]
-    graph = mpo.MPOGraph(graph_sites, bc='finite', unit_cell_width=L)
-
-    graph.add_coupling_as_term(coupling1)
-    graph.add_coupling_as_term(coupling2)
-    graph.add_coupling_as_term(coupling3)
-
-    graph.add_missing_IdL_IdR_for_couplings()
-
-    assert graph._coupling_graph is not None
-    assert len(graph._coupling_graph) == L
-
-    # all three couplings start at site 0, each must contribute its own,
-    # edge out of 'IdL', i.e. no accidental key collisions between couplings.
-    assert len(graph._coupling_graph[0]['IdL']) == 3
-
-    # the two 2-site Heisenberg couplings each get their own coupling intermediate state
-    couplings_found = set()
-    for site_graph in graph._coupling_graph:
-        for keyL, row in site_graph.items():
-            for key in (keyL, *row.keys()):
-                if isinstance(key, tuple) and len(key) == 3 and isinstance(key[0], Coupling):
-                    couplings_found.add(key[0])
-
-    assert len(couplings_found) == 2
-    assert couplings_found == {coupling1, coupling2}
 
 
 def test_MPO_conversion():
@@ -286,32 +203,35 @@ def test_MPO_addition(bc, explicit_plus_hc):
     L = 4
     print('bc = ', bc, '-' * 40)
     s = spin_half
-    ot1 = OnsiteTerms(L)
-    ct1 = CouplingTerms(L)
-    ct1.add_coupling_term(2.0, 2, 3, 'Sm', 'Sp')
-    ct1.add_coupling_term(2.0, 2, 3, 'Sp', 'Sm')
-    ct1.add_coupling_term(2.0, 1, 2, 'Sz', 'Sz')
-    ot1.add_onsite_term(3.0, 1, 'Sz')
 
-    with pytest.raises(NotImplementedError, match='TODO: MPO._graph'):
-        _ = mpo.MPOGraph.from_terms((ot1, ct1), [s] * L, bc, unit_cell_width=L).build_MPO()
-    pytest.skip('MPOGraph.build_MPO not ported')
+    def new_model():
+        lat_bc = 'open' if bc == 'finite' else 'periodic'
+        lat = lattice.Chain(L, s, bc=lat_bc, bc_MPS=bc)
+        return model.CouplingModel(lat, [model.SpinCouplingDefinition])
 
-    H1 = mpo.MPOGraph.from_terms((ot1, ct1), [s] * L, bc, unit_cell_width=L).build_MPO()
-    ot2 = OnsiteTerms(4)
-    ct2 = CouplingTerms(4)
-    ct2.add_coupling_term(4.0, 0, 2, 'Sz', 'Sz')
-    ct2.add_coupling_term(4.0, 1, 2, 'Sz', 'Sz')
-    ot2.add_onsite_term(5.0, 1, 'Sz')
-    H2 = mpo.MPOGraph.from_terms((ot2, ct2), [s] * L, bc, unit_cell_width=L).build_MPO()
+    def graph_from_model(M):
+        return mpo.MPOGraph.from_terms(M.get_nonzero_terms(), M, bc, unit_cell_width=M.lattice.mps_unit_cell_width)
+
+    M1 = new_model()
+    M2 = new_model()
+    M12 = new_model()
+
+    str_A = [0, 0, 2.0, 0] if bc == 'infinite' else [0, 0, 2.0]  # dx=1
+    str_B = [0, 2.0, 0, 0] if bc == 'infinite' else [0, 2.0, 0]  # dx=1
+    str_C = [0, 4.0, 7.0, 0] if bc == 'infinite' else [4, 7.0]  # dx=2
+    for M in [M1, M12]:
+        M.add_two_site_coupling(str_A, 'Sm.Sp', [1], x1='sum_over', u1=0, u2=0, plus_hc=True)
+        M.add_two_site_coupling(str_B, 'Sz.Sz', [1], x1='sum_over', u1=0, u2=0)
+        M.add_onsite_operator([0, 3.0, 0, 0], 'Sz', x='sum_over', u=0)
+    cpl_slc = slice(0, 4) if bc == 'infinite' else slice(0, 3)
+    for M in [M2, M12]:
+        M.add_two_site_coupling(str_C, 'Sz.Sz', [2], x1='sum_over', u1=0, u2=0)
+        M.add_onsite_operator([0, 5.0, 0, 0], 'Sz', x='sum_over', u=0)
+
+    H1 = graph_from_model(M1).build_MPO()
+    H2 = graph_from_model(M2).build_MPO()
+    H12 = graph_from_model(M12).build_MPO()
     H12_sum = H1 + H2
-    ot12 = OnsiteTerms(4)
-    ot12 += ot1
-    ot12 += ot2
-    ct12 = CouplingTerms(4)
-    ct12 += ct1
-    ct12 += ct2
-    H12 = mpo.MPOGraph.from_terms((ot12, ct12), [s] * L, bc, unit_cell_width=L).build_MPO()
     assert H12.is_equal(H12_sum)
 
 
@@ -729,16 +649,25 @@ def make_W_np(dt, H: mpo.MPO, approximation: str, finite: bool) -> np.ndarray:
     H_W = [W.to_numpy().transpose([0, 2, 1, 3]) for W in H._W]  # transpose to tenpy v1 leg order
 
     # ensure row/column ordering within MPO tensors
-    has_v1_state_ordering = all(
-        W.get_leg('wL').summand_labels == (['IdL'] if i == 0 and finite else ['IdL', None, 'IdR'])
-        and W.get_leg('wR').summand_labels == (['IdR'] if i == H.L - 1 and finite else ['IdL', None, 'IdR'])
-        for i, W in enumerate(H._W)
-    )
-    has_lexsorted_state_ordering = all(
-        W.get_leg('wL').summand_labels == (['IdL'] if i == 0 and finite else ['IdL', 'IdR', None])
-        and W.get_leg('wR').summand_labels == (['IdR'] if i == H.L - 1 and finite else ['IdL', 'IdR', None])
-        for i, W in enumerate(H._W)
-    )
+    has_v1_state_ordering = True
+    has_lexsorted_state_ordering = True
+    for i, W in enumerate(H._W):
+        labelsL = W.get_leg('wL').summand_labels
+        if i == 0 and finite:
+            has_v1_state_ordering &= labelsL == ['IdL']
+            has_lexsorted_state_ordering &= labelsL == ['IdL']
+        else:
+            has_v1_state_ordering &= labelsL[0] == 'IdL' and labelsL[-1] == 'IdR'
+            has_lexsorted_state_ordering &= labelsL[0] == 'IdL' and labelsL[1] == 'IdR'
+
+        labelsR = W.get_leg('wR').summand_labels
+        if i == H.L - 1 and finite:
+            has_v1_state_ordering &= labelsR == ['IdR']
+            has_lexsorted_state_ordering &= labelsR == ['IdR']
+        else:
+            has_v1_state_ordering &= labelsR[0] == 'IdL' and labelsR[-1] == 'IdR'
+            has_lexsorted_state_ordering &= labelsR[0] == 'IdL' and labelsR[1] == 'IdR'
+
     if has_v1_state_ordering:
         pass
     elif has_lexsorted_state_ordering:
@@ -764,11 +693,6 @@ def test_MPO_make_U(conserve, backend, approximation, bc_MPS, L=6, dt=0.01):
 
     This pure-numpy implementation is also run in the v1 tests, and thus trusted
     """
-    if bc_MPS == 'infinite':
-        with pytest.raises(NotImplementedError):
-            _ = SpinChain(dict(L=L, Jx=1.0, Jy=1.0, Jz=1.0, hz=0.2, bc_MPS=bc_MPS, conserve=conserve))
-        pytest.skip('Models can not create infinite MPOs yet')
-
     M = SpinChain(dict(L=L, Jx=1.0, Jy=1.0, Jz=1.0, hz=0.2, bc_MPS=bc_MPS, conserve=conserve))
     if M.H_MPO._W[0].backend != lasy.get_backend(backend):
         pytest.skip('Can not control model backend yet')

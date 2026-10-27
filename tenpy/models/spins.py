@@ -5,13 +5,11 @@ Uniform lattice of spin-S sites, coupled by nearest-neighbor interactions.
 # Copyright (C) TeNPy Developers, Apache license
 
 import numpy as np
-from lasyten.models.couplings import Coupling
 from lasyten.models.sites import SpinSite
-from lasyten.tensors import dagger
 
 from ..tools import to_array
 from .lattice import Chain
-from .model import CouplingMPOModel, NearestNeighborModel
+from .model import ModelBuilder, SpinCouplingDefinition
 
 __all__ = ['SpinModel', 'SpinChain', 'DipolarSpinChain']
 
@@ -42,7 +40,7 @@ def _coupling_matrix(site1, site2, Jx, Jy, Jz, muJ):
     return h
 
 
-class SpinModel(CouplingMPOModel):
+class SpinModel(ModelBuilder):
     r"""Spin-S sites coupled by nearest neighbor interactions.
 
     The Hamiltonian reads:
@@ -79,6 +77,9 @@ class SpinModel(CouplingMPOModel):
 
     """
 
+    def init_coupling_definitions(self, model_params):
+        return [SpinCouplingDefinition]
+
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5, 'real')
         conserve = model_params.get('conserve', 'best', str)
@@ -105,40 +106,25 @@ class SpinModel(CouplingMPOModel):
         E = to_array(model_params.get('E', 0.0, 'real_or_array'), self.lattice.Ls)
         muJ = model_params.get('muJ', 0.0, 'real_or_array')
 
-        # (u is always 0 as we have only one site in the unit cell)
-        for u in range(len(self.lat.unit_cell)):
-            site = self.lat.unit_cell[u]
-            for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
-                idx = tuple(i_lat)
-                mat = _onsite_matrix(site, hx[idx], hy[idx], hz[idx], D[idx], E[idx])
-                if not np.any(mat != 0.0):
-                    continue
-                coupling = Coupling.from_dense_block(mat, [site], understood_braiding=True)
-                self.add_coupling(coupling, [i])
-        # Jx Sx.Sx + Jy Sy.Sy + Jz Sz.Sz + muJ (Sy_i Sx_j - Sx_i Sy_j)
-        # NB: don't call `possible_couplings` separately per coefficient: it filters out
-        # positions where *that* coefficient is zero, which would misalign the four arrays
-        # whenever e.g. muJ=0 but Jx/Jy/Jz aren't. Get the (unfiltered) positions once via
-        # strength=None, then look up each coefficient at those lattice positions.
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            site1, site2 = self.lat.unit_cell[u1], self.lat.unit_cell[u2]
-            mps_i, mps_j, lat_indices, coupling_shape = self.lat.possible_couplings(u1, u2, dx)
-            Jx_arr = to_array(Jx, coupling_shape)
-            Jy_arr = to_array(Jy, coupling_shape)
-            Jz_arr = to_array(Jz, coupling_shape)
-            muJ_arr = to_array(muJ, coupling_shape)
-            for i, j, lat_idx in zip(mps_i, mps_j, lat_indices):
-                idx = tuple(lat_idx)
-                h = _coupling_matrix(site1, site2, Jx_arr[idx], Jy_arr[idx], Jz_arr[idx], muJ_arr[idx])
-                if not np.any(h != 0.0):
-                    continue
-                h = np.transpose(h, [0, 2, 3, 1])
-                coupling = Coupling.from_dense_block(h, [site1, site2], understood_braiding=True)
-                self.add_coupling(coupling, [int(i), int(j)])
-        # done
+        self.add_onsite_operator(-hx, 'Sx')
+        self.add_onsite_operator(-hy, 'Sy')
+        self.add_onsite_operator(-hz, 'Sz')
+        self.add_onsite_operator(D, 'Sz Sz')
+        self.add_onsite_operator(0.5 * E, 'Sp Sp', plus_hc=True)
+
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
+            if np.all(Jx == Jy) and np.all(Jy == Jz):
+                self.add_two_site_coupling(Jx, 'S.S', dx, x1='sum_over', u1=u1, u2=u2)
+            else:
+                self.add_two_site_coupling(0.25 * (Jx + Jy), 'Sp.Sm', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling(0.25 * (Jx - Jy), 'Sp.Sp', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling(Jz, 'Sz.Sz', dx, x1='sum_over', u1=u1, u2=u2)
+            self.add_two_site_coupling(0.5j * muJ, 'Sp.Sm', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
+
+        return
 
 
-class SpinChain(SpinModel, NearestNeighborModel):
+class SpinChain(SpinModel):
     """The :class:`SpinModel` on a Chain, suitable for TEBD.
 
     See the :class:`SpinModel` for the documentation of parameters.
@@ -148,7 +134,7 @@ class SpinChain(SpinModel, NearestNeighborModel):
     force_default_lattice = True
 
 
-class DipolarSpinChain(CouplingMPOModel):
+class DipolarSpinChain(ModelBuilder):
     r"""Dipole conserving H3-H4 spin-S chain.
 
     The Hamiltonian reads:
@@ -183,6 +169,9 @@ class DipolarSpinChain(CouplingMPOModel):
 
     """
 
+    def init_coupling_definitions(self, model_params):
+        return [SpinCouplingDefinition]
+
     def init_lattice(self, model_params):
         """Initialize a 1D lattice"""
         L = model_params.get('L', 64)
@@ -202,25 +191,6 @@ class DipolarSpinChain(CouplingMPOModel):
         """Add the onsite and coupling terms to the model"""
         J3 = model_params.get('J3', 1)
         J4 = model_params.get('J4', 0)
-        site = self.lat.unit_cell[0]
-        Sp = site.spin_vector[:, :, 0] + 1.0j * site.spin_vector[:, :, 1]
-        Sm = site.spin_vector[:, :, 0] - 1.0j * site.spin_vector[:, :, 1]
-        Sm2 = Sm @ Sm
 
-        # -J3 (Sp_0 Sm_1^2 Sp_2 + h.c.)
-        h3 = np.tensordot(np.tensordot(Sp, Sm2, axes=0), Sp, axes=0)  # [p0,p0*,p1,p1*,p2,p2*]
-        h3 = np.transpose(h3, [0, 2, 4, 5, 3, 1])  # -> [p0,p1,p2,p2*,p1*,p0*]
-        coupling3 = Coupling.from_dense_block(h3, [site, site, site], understood_braiding=True)
-        hc_coupling3 = Coupling.from_tensor(dagger(coupling3.to_tensor()), [site, site, site])
-        for i in range(self.lat.N_sites - 2):
-            self.add_coupling(coupling3, [i, i + 1, i + 2], strength=-J3)
-            self.add_coupling(hc_coupling3, [i, i + 1, i + 2], strength=-np.conj(J3))
-
-        # -J4 (Sp_0 Sm_1 Sm_2 Sp_3 + h.c.)
-        h4 = np.tensordot(np.tensordot(np.tensordot(Sp, Sm, axes=0), Sm, axes=0), Sp, axes=0)
-        h4 = np.transpose(h4, [0, 2, 4, 6, 7, 5, 3, 1])  # -> [p0,p1,p2,p3,p3*,p2*,p1*,p0*]
-        coupling4 = Coupling.from_dense_block(h4, [site, site, site, site], understood_braiding=True)
-        hc_coupling4 = Coupling.from_tensor(dagger(coupling4.to_tensor()), [site, site, site, site])
-        for i in range(self.lat.N_sites - 3):
-            self.add_coupling(coupling4, [i, i + 1, i + 2, i + 3], strength=-J4)
-            self.add_coupling(hc_coupling4, [i, i + 1, i + 2, i + 3], strength=-np.conj(J4))
+        self.add_multi_site_coupling(-J3, 'Sp.SmSm.Sp', dx=[[0], [1], [2]], plus_hc=True)
+        self.add_multi_site_coupling(-J4, 'Sp.Sm.Sm.Sp', dx=[[0], [1], [2], [3]], plus_hc=True)

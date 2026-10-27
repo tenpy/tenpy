@@ -3,7 +3,6 @@
 # Copyright (C) TeNPy Developers, Apache license
 import copy
 from functools import reduce
-from types import SimpleNamespace
 
 import lasyten as lasy
 import numpy as np
@@ -530,17 +529,3 @@ def test_dense_H_from_mpo_matches_reference():
     M = SpinChain(dict(L=4, bc_MPS='finite', conserve=None))
     H = exact_diag.ExactDiag._dense_H_from_mpo(M.H_MPO)
     np.testing.assert_allclose(H, _dense_heisenberg(4), atol=1e-12)
-
-
-def test_build_full_H_errors():
-    L = 3
-    site = SpinSite(0.5, conserve='Sz')
-    H, _ = _heisenberg_tensor(site, L)
-    ED = exact_diag.ExactDiag.from_hamiltonian(H, [site] * L)
-    with pytest.raises(ValueError, match='from_model'):
-        ED.build_full_H_from_mpo()
-    with pytest.raises(ValueError, match='from_model'):
-        ED.build_full_H_from_bonds()
-    infinite_model = SimpleNamespace(lattice=SimpleNamespace(bc_MPS='infinite'))  # infinite models cannot be built yet
-    with pytest.raises(ValueError, match='finite'):
-        exact_diag.ExactDiag.from_model(infinite_model)

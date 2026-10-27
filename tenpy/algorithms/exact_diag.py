@@ -197,10 +197,10 @@ class ExactDiag:
 
         """
         from ..models.lattice import TrivialLattice
-        from ..models.model import MPOModel
+        from ..models.model import HamiltonianMPOModel
 
         assert H_MPO.bc == 'finite'
-        M = MPOModel(TrivialLattice(H_MPO.sites), H_MPO)
+        M = HamiltonianMPOModel(TrivialLattice(H_MPO.sites), H_MPO)
         return cls.from_model(M, *args, **kwargs)
 
     def build_full_H_from_mpo(self):
@@ -213,7 +213,7 @@ class ExactDiag:
         model = self._require_model()
         if self._exceeds_max_size():
             return
-        mpo = model.H_MPO
+        mpo = model.get_H_MPO()
         if mpo.bc != 'finite':
             raise ValueError(f'ExactDiag needs a finite MPO, got bc={mpo.bc!r}.')
         if mpo.L != len(self._sites):
@@ -237,9 +237,10 @@ class ExactDiag:
         :meth:`build_full_H_from_mpo`.
         """
         model = self._require_model()
-        H_bond = getattr(model, 'H_bond', None)
-        if H_bond is None:
-            raise ValueError('The model has no `H_bond`; use `build_full_H_from_mpo` or a NearestNeighborModel.')
+        H_bond = model.get_H_bond()
+        assert all(h is None or isinstance(h, lasy.Coupling) for h in H_bond)
+        H_bond = [None if h is None else h.to_tensor() for h in H_bond]
+
         if self._exceeds_max_size():
             return
         L = len(self._sites)

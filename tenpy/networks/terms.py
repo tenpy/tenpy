@@ -10,9 +10,8 @@ prefactor when specifying e.g. a Hamiltonian.
 import itertools
 import warnings
 from abc import ABCMeta, abstractmethod
-from collections.abc import Sequence
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 import lasyten as lasy
 import numpy as np
@@ -35,29 +34,6 @@ __all__ = [
 ]
 
 
-# FIXME rm
-class DefinesCouplings(Protocol):
-    """Placeholder, just for typehints, until we implement which class handles coupling names"""
-
-    ...
-
-    def coupling_n_sites(self, name: str) -> int: ...
-
-    def decompose_coupling(self, name: str, *sites: ct.Site) -> list[tuple[complex, list[ct.SymmetricTensor]]]: ...
-
-    def permute_coupling(self, name: str, perm: Sequence[int]) -> dict[str, float | complex]: ...
-
-    def _get_switch_LR(self, name: str, *locs: int) -> int:
-        assert self.coupling_n_sites(name) == len(locs)
-        return len(locs) // 2
-
-    def get_coupling(self, name: str, *sites: ct.Site) -> ct.Coupling: ...
-
-    def has_coupling(self, name: str, *sites: ct.Site): ...  # raise ValueError
-
-    def get_hc_coupling_name(self, name: str) -> str: ...
-
-
 class Terms(Hdf5Exportable, metaclass=ABCMeta):
     """Base class for representations of terms that can be added to an MPO.
 
@@ -73,13 +49,15 @@ class Terms(Hdf5Exportable, metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def add_to_graph(self, graph: MPOGraph):
+    def add_to_graph(self, graph: MPOGraph, model: CouplingModel):
         """Add the represented terms to an MPOGraph.
 
         Parameters
         ----------
         graph : :class:`~tenpy.networks.mpo.MPOGraph`
             The graph into which the terms from :attr:`onsite_terms` should be added.
+        model : :class:`~tenpy.models.model.CouplingModel`
+            The model, used e.g. to translate coupling names in the terms to concrete tensors
 
         """
 
@@ -448,12 +426,16 @@ class OnsiteTerms(Terms):
         term = self.onsite_terms[i]
         term[op] = term.get(op, 0) + strength
 
-    def add_to_graph(self, graph: MPOGraph):
-        raise NotImplementedError  # TODO review MPOGraph first
-        assert self.L == graph.L
+    def __iter__(self):
         for i, terms in enumerate(self.onsite_terms):
             for opname, strength in terms.items():
-                graph.add(i, 'IdL', 'IdR', opname, strength)
+                yield i, opname, strength
+
+    def add_to_graph(self, graph: MPOGraph, model: CouplingModel):
+        assert self.L == graph.L
+        for i, opname, strength in self:
+            # note: over/under does not matter since the virtual leg is trivial
+            graph.add_onsite(i, 'IdL', 'IdR', opname, strength, overbraid=True, exist_ok=True)
         if graph.max_range is not None:
             graph.max_range = max(graph.max_range, 1)
 
@@ -538,14 +520,20 @@ class OnsiteTerms(Terms):
                 dist_L, dist_R = distribute
             if dist_L != 0.0:
                 i = (j - 1) % self.L
-                h = ct.outer(
-                    sites[i].identity_tensor, H_j, relabel1={'p': 'p0', 'p*': 'p0*'}, relabel2={'p': 'p1', 'p*': 'p1*'}
+                h = lasy.outer(
+                    sites[i].get_op('Id').as_SymmetricTensor(),
+                    H_j.as_SymmetricTensor(),
+                    relabel1={'p': 'p0', 'p*': 'p0*'},
+                    relabel2={'p': 'p1', 'p*': 'p1*'},
                 )
                 H_bond[j] = add_with_None_0(H_bond[j], dist_L * h)
             if dist_R != 0.0:
                 k = (j + 1) % self.L
-                h = ct.outer(
-                    H_j, sites[k].identity_tensor, relabel1={'p': 'p0', 'p*': 'p0*'}, relabel2={'p': 'p1', 'p*': 'p1*'}
+                h = lasy.outer(
+                    H_j.as_SymmetricTensor(),
+                    sites[k].get_op('Id').as_SymmetricTensor(),
+                    relabel1={'p': 'p0', 'p*': 'p0*'},
+                    relabel2={'p': 'p1', 'p*': 'p1*'},
                 )
                 H_bond[k] = add_with_None_0(H_bond[k], dist_R * h)
         assert all(H is None or H.labels_are('p0', 'p1', 'p1*', 'p0*', planar=True) for H in H_bond)
@@ -736,29 +724,32 @@ class CouplingTerms(Terms):
                         ax.text(loc[0], loc[1], annotate)
         # done
 
-    def add_to_graph(self, graph: MPOGraph):
-        raise NotImplementedError  # TODO adapt MPOGraph first
+    def add_to_graph(self, graph: MPOGraph, model: CouplingModel):
+        if model.symmetry.has_symmetric_braid:
+            overbraid = True  # it doesnt matter
+        else:
+            raise NotImplementedError  # TODO how do we specify??
+
         assert self.L == graph.L
         # structure of coupling terms:
-        # {i: {('opname_i', 'opname_string'): {j: {'opname_j': strength}}}}
-        # TODO consider using
-        # for i, name, j, strength in self:
-        for i, d1 in self.coupling_terms.items():
-            for (opname_i, op_string), d2 in d1.items():
-                label = ('left', i, opname_i, op_string)
-                graph.add(i, 'IdL', label, opname_i, 1.0, skip_existing=True)
-                for j, d3 in d2.items():
-                    label_j = graph.add_string_left_to_right(i, j, label, op_string)
-                    for opname_j, strength in d3.items():
-                        graph.add(j, label_j, 'IdR', opname_j, strength)
+        for i, coupling_name, j, strength in self:
+            coupling = model.get_coupling(coupling_name, [graph.sites[i], graph.sites[j % graph.L]])
+            for n, c in enumerate(coupling.elementary_decomposition()):
+                WL, WR = c.factorization
+                # TODO first workaround solution: not re-using any existing edges.
+                label = f'{coupling_name}#{n}_{int(i)}_{int(j)}'  # some (probably) unique label
+                graph.add(i, 'IdL', label, WL)
+                for k in range(i + 1, j):
+                    graph.add_identity(k, label, label, overbraid=overbraid)
+                graph.add(j, label, 'IdR', WR, strength)
         if graph.max_range is not None:
             graph.max_range = max(graph.max_range, self.max_range())
 
     def __iter__(self):
         for i, terms_i in self.coupling_terms.items():
-            for n, terms_i_n in terms_i.items():
+            for coupling_name, terms_i_n in terms_i.items():
                 for j, strength in terms_i_n.items():
-                    yield i, n, j, strength
+                    yield i, coupling_name, j, strength
 
     def to_nn_bond_tensors(self, sites: list[lasy.Site], model: CouplingModel) -> list[lasy.SymmetricTensor]:
         """Convert the :attr:`coupling_terms` into tensors on nearest neighbor bonds.
@@ -788,9 +779,10 @@ class CouplingTerms(Terms):
                 raise ValueError('not nearest neighbor')
             if not sites[i].symmetry.trivial_shift:
                 raise NotImplementedError
-            h = model.get_coupling(coupling_name, sites[i], sites[j % self.L])
-            H_bond[j] = add_with_None_0(H_bond[j], strength * h.to_tensor())
-        assert all(h.labels_are('p0', 'p1', 'p1*', 'p0*', planar=True))
+            h = model.get_coupling(coupling_name, [sites[i], sites[j % self.L]])
+            H_bond[j % self.L] = add_with_None_0(H_bond[j % self.L], strength * h.to_tensor())
+        assert all(h is None or h.labels_are('p0', 'p1', 'p1*', 'p0*', planar=True) for h in H_bond)
+        return H_bond
 
     def remove_zeros(self, tol_zero: float = 1e-15, inplace: bool = True) -> CouplingTerms:
         if not inplace:
@@ -852,7 +844,7 @@ class CouplingTerms(Terms):
             assert 0 <= i < L
             if not i < j:
                 raise ValueError('wrong order of indices in coupling terms')
-            model.test_coupling(name, [sites[i], sites[j % L]])
+            model.test_coupling(name, [i, j % L])
         return
 
 
@@ -922,8 +914,9 @@ class MultiCouplingTerms(Terms):
     def add_coupling_term(self, strength: float | complex, i: int, j: int, coupling_name: str):
         self.add_multi_coupling_term(strength, [i, j], coupling_name)
 
-    def add_to_graph(self, graph: MPOGraph):
-        raise NotImplementedError  # TODO adapt MPOGraph first / maybe do this via termlist only?
+    def add_to_graph(self, graph: MPOGraph, model: CouplingModel):
+        for ijkl, name, strength in self:
+            raise NotImplementedError  # TODO adapt MPOGraph first / maybe do this via termlist only?
 
     def remove_zeros(self, tol_zero: float = 1e-15, inplace: bool = True) -> MultiCouplingTerms:
         if not inplace:
@@ -1139,7 +1132,7 @@ class ExponentiallyDecayingTerms(Terms):
 
         self.centered_terms.append((strength, lambda_, op_i, op_j, i, subsites, op_string))
 
-    def add_to_graph(self, graph):
+    def add_to_graph(self, graph: MPOGraph, model: CouplingModel):
         # TODO this was a param before, but signatures got unified.
         #      is it ever used? maybe it can be a (class) attr?
         key = 'exp-decay'

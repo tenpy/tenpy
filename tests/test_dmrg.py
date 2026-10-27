@@ -176,18 +176,9 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
 
     L = 2 if bc_MPS == 'infinite' else 8
 
-    if bc_MPS == 'finite':
-        model_params = dict(L=L, J=1.0, g=g, bc_MPS=bc_MPS, conserve=None)
-        M = TFIChain(model_params)
-    if bc_MPS == 'infinite':
-        site = lasy.models.sites.SpinSite()
-        lat = Chain(L, site, bc_MPS='infinite', bc='periodic')
-        SigmaX_SigmaX = lasy.models.couplings.spin_spin_coupling([site, site], Jx=4)
-        g_SigmaZ = lasy.models.couplings.spin_field_coupling([site], hz=2 * g)
-        M = WorkaroundNNModel(site, SigmaX_SigmaX, g_SigmaZ, bc_MPS=bc_MPS, lat=lat)
-
-    state = [0] * L  # Ferromagnetic Ising
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
+    model_params = dict(L=L, J=1.0, g=g, bc_MPS=bc_MPS, conserve=None)
+    M = TFIChain(model_params)
+    psi = mps.MPS.from_lat_product_state(M.lattice, [[0]] * L)  # Ferromagnetic Ising
     dmrg_pars = {
         'combine': combine,
         'mixer': mixer,
@@ -241,7 +232,7 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
         assert abs((Edmrg - Eexact) / Eexact) < 1.0e-10
 
         # Compare the energy via H_bond
-        bond_energies = [psi.expectation_value(H, i) for i, H in enumerate(M.H_bond)]
+        bond_energies = [psi.expectation_value(H, i) for i, H in enumerate(M.get_H_bond())]
         Edmrg2 = np.mean(bond_energies)
         assert abs((Edmrg - Edmrg2) / Edmrg2) < max(1.0e-10, np.max(psi.norm_test()))
 

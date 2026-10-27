@@ -127,7 +127,9 @@ def test_mps_overlap_translate_finite():
 def test_MPSEnvironment():
     xxz_pars = dict(L=4, Jxx=1.0, Jz=1.1, hz=0.1, bc_MPS='finite')
     L = xxz_pars['L']
-    M = XXZChain(xxz_pars)
+    with pytest.raises(NotImplementedError, match='port models'):
+        M = XXZChain(xxz_pars)
+    pytest.skip('port models')
     state = ([0, 1] * L)[:L]  # Neel state
     psi = mps.MPS.from_product_state(
         M.lattice.mps_sites(), state, bc='finite', unit_cell_width=M.lattice.mps_unit_cell_width

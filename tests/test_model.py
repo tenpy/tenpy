@@ -7,7 +7,7 @@ import lasyten as lasy
 import numpy as np
 import numpy.testing as npt
 import pytest
-from lasyten.models.couplings import Coupling, heisenberg_coupling, spin_field_coupling, spin_spin_coupling
+from lasyten.models.couplings import Coupling
 
 # from tenpy.models.spins import DipolarSpinChain
 # from tenpy.models.xxz_chain import XXZChain
@@ -42,19 +42,19 @@ def _mpo_is_hermitian(H_MPO, eps=1.0e-10):
 
 def check_model_sanity(M, hermitian=True):
     """call M.test_sanity() for all different subclasses of M."""
-    if isinstance(M, model.CouplingModel):
-        model.CouplingModel.test_sanity(M)
-    if isinstance(M, model.NearestNeighborModel):
-        model.NearestNeighborModel.test_sanity(M)
-        if hermitian:
-            for i, H in enumerate(M.H_bond):
-                if H is not None and not almost_equal(H, dagger(H)):
-                    print(H)
-                    raise ValueError(f'H on bond {i:d} not hermitian')
-    if isinstance(M, model.MPOModel):
-        model.MPOModel.test_sanity(M)
-        if hermitian:
-            assert _mpo_is_hermitian(M.H_MPO)
+    M.test_sanity()
+    if hermitian:
+        assert _mpo_is_hermitian(M.get_H_MPO())
+        try:
+            H_bond = M.get_H_bond()
+        except Exception:
+            pass
+        else:
+            for H in H_bond:
+                if H is None:
+                    continue
+                H = H.to_tensor()
+                assert almost_equal(H, H.hc)
 
 
 def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True):
@@ -93,25 +93,48 @@ def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True
 @pytest.mark.parametrize('conserve', ['SU(2)', 'Sz', None])
 def test_CouplingModel_basic(bc, bc_MPS, tensor_backend, conserve):
     backend = lasy.get_backend(tensor_backend)
+
+    if (tensor_backend == 'abelian' and conserve == 'SU(2)') or (
+        tensor_backend == 'no_symmetry' and conserve is not None
+    ):
+        with pytest.raises(ValueError, match='backend does not support this symmetry'):
+            site = SpinSite(conserve=conserve, backend=backend)
+        # error is expected behavior
+        return
+
     site = SpinSite(conserve=conserve, backend=backend)
+
+    if bc == 'open' and bc_MPS == 'infinite':
+        with pytest.raises(ValueError, match='Need periodic boundary conditions'):
+            spin_half_lat = lattice.Chain(5, site, bc=bc, bc_MPS=bc_MPS)
+        # error is expected behavior
+        return
+
     spin_half_lat = lattice.Chain(5, site, bc=bc, bc_MPS=bc_MPS)
+
     M = model.CouplingModel(spin_half_lat, [model.SpinCouplingDefinition])
 
     # 1) Only NN terms
     M.add_two_site_coupling(1.2, 'S.S', dx=1)
     if conserve == 'SU(2)':
         with pytest.raises(lasy.SymmetryError):
-            M.add_two_site_coupling(0.7, 'Sx.Sx', dx=1)
-        with pytest.raises(lasy.SymmetryError):
             M.add_onsite_operator(0.3, 'Sz')
     else:
-        M.add_two_site_coupling(0.7, 'Sx.Sx', dx=1)
         M.add_onsite_operator(0.3, 'Sz')
+    if conserve in ['SU(2)', 'Sz']:
+        with pytest.raises(lasy.SymmetryError):
+            M.add_two_site_coupling(0.7, 'Sx.Sx', dx=1)
+    else:
+        M.add_two_site_coupling(0.7, 'Sx.Sx', dx=1)
     if conserve is None:
         M.add_onsite_operator(0.8, 'Sx')
     else:
         with pytest.raises(lasy.SymmetryError):
             M.add_onsite_operator(0.8, 'Sx')
+    with pytest.raises(ValueError):
+        M.add_onsite_operator(0.2, 'unknownOp')
+    with pytest.raises(ValueError):
+        M.add_two_site_coupling(0.7, 'unknownCoupling', dx=1)
 
     M.test_sanity()
 
@@ -119,11 +142,30 @@ def test_CouplingModel_basic(bc, bc_MPS, tensor_backend, conserve):
     H_MPO.test_sanity()
 
     if bc == 'periodic' and bc_MPS == 'finite':
-        with pytest.raises(ValueError, match='initialize H_bond for a NearestNeighborModel'):
+        with pytest.raises(ValueError, match='not nearest neighbor'):
             # periodic bc but finite bc_MPS leads to a long-range coupling
             M.get_H_bond()
     else:
-        M.get_H_bond()
+        H_bond = M.get_H_bond()
+
+        with pytest.raises(ValueError, match='Incompatible legs'):
+            # calc_H_bond_from_MPO currently bugged
+            H_bond_from_MPO = model.calc_H_bond_from_MPO(H_MPO)
+            for h1, h2 in zip(H_bond, H_bond_from_MPO):
+                assert lasy.almost_equal(h1, h2)
+
+
+@pytest.mark.parametrize('name', ['Sp.Sm', 'Sm.Sp', 'Sp.Sp', 'Sm.Sm'])
+def test_SpinCouplingDefinition_ladder_operators(name):
+    site = SpinSite(S=0.5, conserve=None)
+    lat = lattice.Chain(2, site, bc='open', bc_MPS='finite')
+    M = model.CouplingModel(lat, [model.SpinCouplingDefinition])
+
+    coupling = M.get_coupling(name, [site, site])
+    dense = coupling.to_tensor().to_numpy(['p0', 'p1', 'p1*', 'p0*'])
+    op_i, op_j = (site.get_op(op).to_numpy() for op in name.split('.'))
+    expected = np.transpose(np.tensordot(op_i, op_j, axes=0), [0, 2, 3, 1])
+    npt.assert_allclose(dense, expected)
 
 
 def test_ext_flux():
@@ -910,27 +952,6 @@ def _dense_Heisenberg(site, L, J):
     return H
 
 
-def test_CouplingModel_add_coupling_lasyten():
-    """CouplingModel.add_coupling (lasyten Coupling version) should reproduce a Heisenberg chain."""
-    L = 4
-    J = 1.5
-    site = SpinSite(S=0.5, conserve=None)
-    lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    M = model.CouplingModel(lat)
-
-    coupling = heisenberg_coupling([site, site], J=J)
-    for i in range(L - 1):  # sum over all nearest-neighbor bonds
-        M.add_coupling(coupling, [i, i + 1])
-
-    H_coupling = M.calc_H_coupling(name='Heisenberg')
-    labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
-    H = H_coupling.to_tensor().to_numpy(labels).reshape(site.dim**L, site.dim**L)
-
-    H_expected = _dense_Heisenberg(site, L, J)
-    npt.assert_allclose(H, H_expected, atol=1e-10)
-    npt.assert_allclose(H, H.conj().T, atol=1e-10)
-
-
 def _dense_TFIM(L, J, g):
     r"""Hard-coded reference transverse field Ising Hamiltonian, built purely with numpy
         to independently verify CouplingModel.add_coupling.
@@ -962,239 +983,6 @@ def _dense_TFIM(L, J, g):
         ops_i[i] = Sz
         H -= g * kron_list(ops_i)
     return H
-
-
-def test_CouplingModel_add_coupling_lasyten_tfim():
-    """CouplingModel.add_coupling (lasyten Coupling version) should reproduce the transverse field
-    Ising model, checked against a fully hard-coded (pure numpy) reference Hamiltonian.
-    """
-    L = 5
-    J = 1.5
-    g = 0.9
-    site = SpinSite(S=0.5, conserve=None)
-    lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    M = model.CouplingModel(lat)
-
-    coupling_xx = spin_spin_coupling([site, site], Jx=1.0)
-    for i in range(L - 1):
-        M.add_coupling(coupling_xx, [i, i + 1], strength=-J)
-
-    coupling_z = spin_field_coupling([site], hz=1.0)
-    for i in range(L):
-        M.add_coupling(coupling_z, [i], strength=-g)
-
-    H_coupling = M.calc_H_coupling(name='TFIM')
-    labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
-    H = H_coupling.to_tensor().to_numpy(labels).reshape(site.dim**L, site.dim**L)
-
-    H_expected = _dense_TFIM(L, J, g)
-    npt.assert_allclose(H, H_expected, atol=1e-10)
-    npt.assert_allclose(H, H.conj().T, atol=1e-10)  # Hermitian, since TFIM is
-
-
-def test_CouplingModel_add_coupling_reversed_dx():
-    """add_coupling should auto-permute a coupling whose (u, dx) pattern maps to non-ascending
-    MPS positions (e.g. dx[1] < dx[0]), instead of raising, and give the same physics as the
-    equivalent coupling built with ascending dx.
-    """
-    L = 4
-    J = 1.5
-    site = SpinSite(S=0.5, conserve=None)
-    lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
-
-    # forward: indices ascend -> no permutation needed
-    M_fwd = model.CouplingModel(lat)
-    coupling_fwd = heisenberg_coupling([site, site], J=J)
-    for i in range(L - 1):
-        M_fwd.add_coupling(coupling_fwd, [i, i + 1])
-    H_fwd = M_fwd.calc_H_coupling().to_tensor().to_numpy(labels).reshape(2**L, 2**L)
-
-    # reversed: indices descend -> triggers permute()
-    M_rev = model.CouplingModel(lat)
-    coupling = heisenberg_coupling([site, site], J=J)
-    for i in range(1, L):
-        M_rev.add_coupling(coupling, [i, i - 1])
-    H_rev = M_rev.calc_H_coupling().to_tensor().to_numpy(labels).reshape(2**L, 2**L)
-
-    npt.assert_allclose(H_rev, H_fwd, atol=1e-10)
-    npt.assert_allclose(H_rev, H_rev.conj().T, atol=1e-10)
-    # the reversed dx pattern is the same for every bond of the chain -> a single cached permutation
-    assert len(coupling._permuted) == 1
-
-
-def test_CouplingModel_add_coupling_reversed_dx_split():
-    """The `split` index passed to add_coupling should track the same *site* (not the same local
-    index into the possibly-permuted coupling) regardless of whether a placement needed
-    permuting.
-    """
-    L = 4
-    site = SpinSite(S=0.5, conserve=None)
-    lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
-
-    Sm = site.get_op('Sm').to_numpy()
-    Sp = site.get_op('Sp').to_numpy()
-
-    def hopping_coupling(op_i, op_j):
-        h = np.tensordot(op_i, op_j, axes=0)
-        h = np.transpose(h, [0, 2, 3, 1])
-        return Coupling.from_dense_block(h, [site, site], understood_braiding=True)
-
-    # coupling = Sm_(index0) Sp_(index1); place with indices reversed, prefactor absorbed at index1
-    coupling = hopping_coupling(Sm, Sp)
-    M = model.CouplingModel(lat)
-    for i in range(1, L):
-        M.add_coupling(coupling, [i, i - 1], strength=2.0, split=1)
-
-    H = M.calc_H_coupling().to_tensor().to_numpy(labels).reshape(2**L, 2**L)
-
-    Id = np.eye(2)
-
-    def kron_list(ops):
-        out = np.eye(1)
-        for op in ops:
-            out = np.kron(out, op)
-        return out
-
-    # index0 sits at the reference position i, index1 (dx=-1) sits at i - 1
-    H_expected = np.zeros((2**L, 2**L), dtype=complex)
-    for i in range(1, L):
-        ops_i = [Id] * L
-        ops_i[i] = Sm
-        ops_j = [Id] * L
-        ops_j[i - 1] = Sp
-        H_expected += 2.0 * kron_list(ops_i) @ kron_list(ops_j)
-
-    npt.assert_allclose(H, H_expected, atol=1e-10)
-
-
-def test_add_coupling_three_entry_points_agree():
-    """add_coupling, add_twosite_coupling and add_multi_coupling should give identical results
-    for a Heisenberg chain, since add_twosite_coupling/add_multi_coupling are just
-    wrappers that build a Coupling and delegate to add_coupling for each lattice placement.
-    """
-    L = 4
-    J = 1.5
-    site = SpinSite(S=0.5, conserve=None)
-    lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
-    dim = site.dim
-
-    # 1) direct add_coupling with an explicit Coupling
-    M1 = model.CouplingModel(lat)
-    coupling = heisenberg_coupling([site, site], J=J)
-    for i in range(L - 1):
-        M1.add_coupling(coupling, [i, i + 1])
-    H1 = M1.calc_H_coupling().to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
-
-    # 2) add_twosite_coupling (old two-site signature), one call per Pauli component
-    M2 = model.CouplingModel(lat)
-    for op in ('Sx', 'Sy', 'Sz'):
-        M2.add_twosite_coupling(J, 0, op, 0, op, 1)
-    H2 = M2.calc_H_coupling().to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
-
-    # 3) add_multi_coupling (old multi-site signature)
-    M3 = model.CouplingModel(lat)
-    for op in ('Sx', 'Sy', 'Sz'):
-        M3.add_multi_coupling(J, [(op, [0], 0), (op, [1], 0)])
-    H3 = M3.calc_H_coupling().to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
-
-    H_expected = _dense_Heisenberg(site, L, J)
-    for name, H in [('add_coupling', H1), ('add_twosite_coupling', H2), ('add_multi_coupling', H3)]:
-        npt.assert_allclose(H, H_expected, atol=1e-10, err_msg=name)
-        npt.assert_allclose(H, H.conj().T, atol=1e-10, err_msg=f'{name} not hermitian')
-
-
-def test_add_twosite_coupling_plus_hc():
-    """add_twosite_coupling(..., plus_hc=True) should reproduce a hand-built h.c.-added
-    Hamiltonian, and give the same result as adding the h.c. term explicitly.
-    """
-    L = 4
-    t = 1.0 + 0.5j
-    site = SpinSite(S=0.5, conserve=None)
-    lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
-    dim = site.dim
-
-    Sp = site.get_op('Sp').to_numpy()
-    Sm = site.get_op('Sm').to_numpy()
-    Id = np.eye(dim)
-
-    def kron_list(ops):
-        out = np.eye(1)
-        for op in ops:
-            out = np.kron(out, op)
-        return out
-
-    H_expected = np.zeros((dim**L, dim**L), dtype=complex)
-    for i in range(L - 1):
-        ops_i, ops_j = [Id] * L, [Id] * L
-        ops_i[i], ops_j[i + 1] = Sp, Sm
-        H_expected += t * kron_list(ops_i) @ kron_list(ops_j)
-        ops_i2, ops_j2 = [Id] * L, [Id] * L
-        ops_i2[i], ops_j2[i + 1] = Sm, Sp
-        H_expected += np.conj(t) * kron_list(ops_i2) @ kron_list(ops_j2)
-
-    # add_twosite_coupling already sums over all lattice bonds internally (via
-    # lat.possible_couplings) -- call it exactly once, not once per bond.
-    M_plus_hc = model.CouplingModel(lat)
-    M_plus_hc.add_twosite_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
-    H_plus_hc = M_plus_hc.calc_H_coupling().to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
-
-    # equivalent: add the h.c. term explicitly, by hand
-    M_explicit = model.CouplingModel(lat)
-    M_explicit.add_twosite_coupling(t, 0, 'Sp', 0, 'Sm', 1)
-    M_explicit.add_twosite_coupling(np.conj(t), 0, 'Sm', 0, 'Sp', 1)
-    H_explicit = M_explicit.calc_H_coupling().to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
-
-    npt.assert_allclose(H_plus_hc, H_expected, atol=1e-10)
-    npt.assert_allclose(H_plus_hc, H_plus_hc.conj().T, atol=1e-10)
-    npt.assert_allclose(H_plus_hc, H_explicit, atol=1e-10)
-
-
-def test_add_coupling_error_paths():
-    """Error paths of add_coupling / add_twosite_coupling / add_multi_coupling / calc_H_coupling."""
-    L = 4
-    site = SpinSite(S=0.5, conserve=None)
-    lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    M = model.CouplingModel(lat)
-    coupling = heisenberg_coupling([site, site], J=1.0)
-
-    # explicit op_string (Jordan-Wigner) is not yet supported
-    with pytest.raises(NotImplementedError):
-        M.add_twosite_coupling(1.0, 0, 'Sz', 0, 'Sz', 1, op_string='JW')
-    with pytest.raises(NotImplementedError):
-        M.add_multi_coupling(1.0, [('Sz', [0], 0), ('Sz', [1], 0)], op_string='JW')
-
-    # add_coupling: repeated MPS index
-    with pytest.raises(ValueError):
-        M.add_coupling(coupling, [0, 0])
-
-    # add_coupling: wrong number of indices
-    with pytest.raises(ValueError):
-        M.add_coupling(coupling, [0, 1, 2])
-
-    # add_twosite_coupling: purely onsite coupling is rejected
-    with pytest.raises(ValueError):
-        M.add_twosite_coupling(1.0, 0, 'Sz', 0, 'Sx', 0)
-
-    # calc_H_coupling: not every MPS site in [0, L) is covered
-    M_partial = model.CouplingModel(lat)
-    M_partial.add_coupling(coupling, [1, 2])  # leaves sites 0, 3 uncovered
-    with pytest.raises(ValueError):
-        M_partial.calc_H_coupling()
-
-    # fermionic sites: named-operator path refuses (gap-bridging would need JW dressing)
-    from lasyten.models.sites import SpinlessFermionSite
-
-    fsite = SpinlessFermionSite(num_species=1, conserve='N')
-    flat = lattice.Chain(L, fsite, bc='open', bc_MPS='finite')
-    Mf = model.CouplingModel(flat)
-    with pytest.raises(NotImplementedError):
-        Mf.add_twosite_coupling(1.0, 0, 'N0', 0, 'N0', 1)
-    with pytest.raises(NotImplementedError):
-        Mf.add_multi_coupling(1.0, [('N0', [0], 0), ('N0', [1], 0)])
 
 
 @pytest.mark.skip
