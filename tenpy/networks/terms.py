@@ -207,7 +207,7 @@ class TermList(Hdf5Exportable):
         Parameters
         ----------
         lattice : :class:`~tenpy.models.lattice.Lattice`
-            The underlying lattice to be used for conversion, e.g. `M.lat` from a
+            The underlying lattice to be used for conversion, e.g. `M.lattice` from a
             :class:`~tenpy.models.model.Model`.
         terms : list of list of (str, tuple)
             List of terms, where each `term` is a tuple ``(opname, lat_idx)`` with
@@ -657,8 +657,8 @@ class CouplingTerms(Terms):
         ax : :class:`matplotlib.axes.Axes`
             The axes on which we should plot.
         lat : :class:`~tenpy.models.lattice.Lattice`
-            The lattice for plotting the couplings, most probably the ``M.lat`` of the
-            corresponding model ``M``, see :attr:`~tenpy.models.model.Model.lat`.
+            The lattice for plotting the couplings, most probably the ``M.lattice`` of the
+            corresponding model ``M``, see :attr:`~tenpy.models.model.Model.lattice`.
         style_map : function | None
             Function which get's called with arguments ``i, j, coupling_name, strength``
             for each two-site coupling and should return a keyword-dictionary with the desired
