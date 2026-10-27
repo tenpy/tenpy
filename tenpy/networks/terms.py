@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Protocol
 
-import cyten as ct
+import lasyten as lasy
 import numpy as np
 
 from ..tools import Hdf5Exportable, add_with_None_0
@@ -84,7 +84,7 @@ class Terms(Hdf5Exportable, metaclass=ABCMeta):
         """
 
     @abstractmethod
-    def test_terms(self, sites: list[ct.Site], model: CouplingModel):
+    def test_terms(self, sites: list[lasy.Site], model: CouplingModel):
         """Check that the terms are valid for a given model on given sites.
 
         Raises
@@ -271,11 +271,11 @@ class TermList(Hdf5Exportable):
                 op, i = term[0]
                 ot.add_onsite_term(strength, i, op)
             elif len(term) == 2:
-                args = ct.coupling_term_handle_JW(strength, term, sites)  # TODO no longer exists!
-                ct.add_coupling_term(*args)
+                args = lasy.coupling_term_handle_JW(strength, term, sites)  # TODO no longer exists!
+                lasy.add_coupling_term(*args)
             elif len(term) > 2:
-                args = ct.multi_coupling_term_handle_JW(strength, term, sites)  # TODO no longer exists!
-                ct.add_multi_coupling_term(*args)
+                args = lasy.multi_coupling_term_handle_JW(strength, term, sites)  # TODO no longer exists!
+                lasy.add_multi_coupling_term(*args)
             else:
                 raise ValueError('term without entry!?')
         return ot, ct
@@ -406,7 +406,7 @@ class OnsiteTerms(Terms):
 
     Represents a sum of onsite terms where the operators are only given by their name
     (in the form of a string). What the operator represents is later given by a list of
-    :class:`cyten.Site` via :meth:`~cyten.Site.get_op`.
+    :class:`lasyten.Site` via :meth:`~lasyten.Site.get_op`.
 
     Parameters
     ----------
@@ -457,18 +457,18 @@ class OnsiteTerms(Terms):
         if graph.max_range is not None:
             graph.max_range = max(graph.max_range, 1)
 
-    def to_tensors(self, sites: list[ct.Site]) -> ct.SymmetricTensor | None:
+    def to_tensors(self, sites: list[lasy.Site]) -> lasy.SymmetricTensor | None:
         """Convert the represneted onsite terms into a list of tensors.
 
         Parameters
         ----------
-        sites : list of :class:`cyten.Site`
+        sites : list of :class:`lasyten.Site`
             Defines the local Hilbert space for each site.
             Used to translate the operator names into tensors.
 
         Returns
         -------
-        onsite_arrays : list of {:class:`~cyten.SymmetricTensor` | ``None``}
+        onsite_arrays : list of {:class:`~lasyten.SymmetricTensor` | ``None``}
             Onsite terms represented by ``self``. Entry ``i`` of the list lives on ``sites[i]``.
             An entry ``None`` represents zero.
 
@@ -495,8 +495,8 @@ class OnsiteTerms(Terms):
 
     def add_to_nn_bond_tensors(
         self,
-        H_bond: list[ct.SymmetricTensor],
-        sites: list[ct.Site],
+        H_bond: list[lasy.SymmetricTensor],
+        sites: list[lasy.Site],
         finite: bool,
         distribute: tuple[float, float] = (0.5, 0.5),
     ):
@@ -504,13 +504,13 @@ class OnsiteTerms(Terms):
 
         Parameters
         ----------
-        H_bond : list of {:class:`~cyten.SymmetricTensor` | None}
+        H_bond : list of {:class:`~lasyten.SymmetricTensor` | None}
             Bond terms representing a sum ``sum_i H_bond[i]``, where ``H_bond[i]`` acts on
             sites ``(i-1, i)``, ``None`` represents 0.
             The list in modified *in-place*, such that the :attr:`onsite_terms` represented by
             this instance are added to it.
             Legs of each ``H_bond[i]`` are ``['p0', 'p0*', 'p1', 'p1*']``.
-        sites : list of :class:`cyten.Site`
+        sites : list of :class:`lasyten.Site`
             Defines the local Hilbert space for each site.
             Used to translate the operator names into tensors.
         distribute : (float, float)
@@ -578,7 +578,7 @@ class OnsiteTerms(Terms):
                 self_t[key] = self_t.get(key, 0.0) + value
         return self
 
-    def test_terms(self, sites: list[ct.Site], model: CouplingModel):
+    def test_terms(self, sites: list[lasy.Site], model: CouplingModel):
         """Check that all given operators exist in the `sites`."""
         for site, terms in zip(sites, self.onsite_terms):
             for opname in terms:
@@ -760,12 +760,12 @@ class CouplingTerms(Terms):
                 for j, strength in terms_i_n.items():
                     yield i, n, j, strength
 
-    def to_nn_bond_tensors(self, sites: list[ct.Site], model: CouplingModel) -> list[ct.SymmetricTensor]:
+    def to_nn_bond_tensors(self, sites: list[lasy.Site], model: CouplingModel) -> list[lasy.SymmetricTensor]:
         """Convert the :attr:`coupling_terms` into tensors on nearest neighbor bonds.
 
         Parameters
         ----------
-        sites : list of :class:`cyten.Site`
+        sites : list of :class:`lasyten.Site`
             Defines the local Hilbert space for each site.
         model:
             TODO remains to implement/define clearly. Some object that can translate coupling
@@ -773,7 +773,7 @@ class CouplingTerms(Terms):
 
         Returns
         -------
-        H_bond : list of {:class:`~cyten.SymmetricTensor` | None}
+        H_bond : list of {:class:`~lasyten.SymmetricTensor` | None}
             The :attr:`coupling_terms` rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
             ``H_bond[i]`` acts on sites ``(i-1, i)``, ``None`` represents 0.
             Legs of each ``H_bond[i]`` are ``['p0', 'p1', 'p1*', 'p0*']``.
@@ -846,7 +846,7 @@ class CouplingTerms(Terms):
                     self_i_n[j] = self_i_n.get(j, 0.0) + other_strength
         return self
 
-    def test_terms(self, sites: list[ct.Site], model: CouplingModel):
+    def test_terms(self, sites: list[lasy.Site], model: CouplingModel):
         L = self.L
         for i, name, j, _ in self:
             assert 0 <= i < L
@@ -958,7 +958,7 @@ class MultiCouplingTerms(Terms):
                 for ijkl, strength in _iter_dicts_recursive(self_i_n):
                     yield ijkl, n, strength
 
-    def test_terms(self, sites: list[ct.Site], model: CouplingModel):
+    def test_terms(self, sites: list[lasy.Site], model: CouplingModel):
         L = self.L
         for ijkl, name, strength in self:
             assert 0 <= ijkl[0] < L
@@ -1341,7 +1341,7 @@ class ExponentiallyDecayingTerms(Terms):
     def max_range(self):
         return np.inf
 
-    def test_terms(self, sites: list[ct.Site], model: CouplingModel):
+    def test_terms(self, sites: list[lasy.Site], model: CouplingModel):
         """Check the format of self.exp_decaying_terms."""
         for term in self.exp_decaying_terms:
             strength, lambda_, op_i, op_j, subsites, subsites_start, op_string = term

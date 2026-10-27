@@ -3,7 +3,7 @@
 # Copyright (C) TeNPy Developers, Apache license
 import copy
 
-import cyten as ct
+import lasyten as lasy
 import numpy as np
 import pytest
 
@@ -11,7 +11,7 @@ import pytest
 from tenpy.networks import mpo
 from tenpy.networks.terms import *
 
-spin_half = ct.models.SpinSite(0.5, conserve='Sz')
+spin_half = lasy.models.SpinSite(0.5, conserve='Sz')
 
 
 def test_TermList():
@@ -78,11 +78,11 @@ def test_onsite_terms():
 
 def test_coupling_terms(backend=None):
     pytest.skip('Test needs to change')
-    spin_half = ct.models.SpinSite(0.5, conserve='Sz', backend=backend)
+    spin_half = lasy.models.SpinSite(0.5, conserve='Sz', backend=backend)
     L = 4
     sites = []
     for i in range(L):
-        s = ct.Site(spin_half.leg)
+        s = lasy.Site(spin_half.leg)
         s.add_op(f'X_{i:d}', 2.0 * np.eye(2))
         s.add_op(f'Y_{i:d}', 3.0 * np.eye(2))
         s.add_op('S1', 4.0 * np.eye(2))

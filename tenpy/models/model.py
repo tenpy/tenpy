@@ -64,9 +64,9 @@ class EvolutionModel(metaclass=ABCMeta):
     ----------
     lattice: :class:`~tenpy.Lattice`
         Note that the lattice sets the symmetry and backend to be used.
-    symmetry: :class:`cyten.Symmetry`
+    symmetry: :class:`lasyten.Symmetry`
         The symmetry for all tensors to be used.
-    backend: :class:`cyten.TensorBackend`
+    backend: :class:`lasyten.TensorBackend`
         The backend for all tensors to be used
     model_params: Config
         The model parameters
@@ -101,7 +101,7 @@ class EvolutionModel(metaclass=ABCMeta):
 
         Returns
         -------
-        gates: list of (int, :class:`cyten.Tensor`)
+        gates: list of (int, :class:`lasyten.Tensor`)
             Entries ``i, U`` indicate to apply gate ``U`` on MPS sites ``i, i + 1``.
             TODO is this a good format?
 
@@ -145,7 +145,7 @@ class HamiltonianModel(EvolutionModel, metaclass=ABCMeta):
 
         Returns
         -------
-        H_bond: list of :class:`cyten.Tensor`
+        H_bond: list of :class:`lasyten.Tensor`
             The two-site bond terms such that ``H = sum_i H_bond[i]``.
             ``H_bond[i]`` acts in sites ``(i - 1, i)``.
             For finite systems, we have ``H_bond[0] = None``.
@@ -804,7 +804,7 @@ def calc_H_bond_from_MPO(H_MPO: MPO, tol_zero: float = 1e-15) -> list[lasy.Tenso
 
     Returns
     -------
-    H_bond : list of :class:`cyten.Tensor`
+    H_bond : list of :class:`lasyten.Tensor`
         The two-site bond terms such that ``H = sum_i H_bond[i]``.
         ``H_bond[i]`` acts in sites ``(i - 1, i)``.
         For finite systems, we have ``H_bond[0] = None``.
