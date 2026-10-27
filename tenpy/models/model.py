@@ -877,15 +877,15 @@ class ModelBuilder(CouplingModel):
     force_default_lattice = False
 
     def __init__(self, model_params):
-        if getattr(self, '_called_CouplingMPOModel_init', False):
+        if getattr(self, '_called_ModelBuilder_init', False):
             # If we ignore this, the same terms get added to self multiple times.
             # In the best case, this would just rescale the energy;
             # in the worst case we get the wrong Hamiltonian.
-            raise ValueError('Called CouplingMPOModel.__init__(...) multiple times.')
+            raise ValueError('Called ModelBuilder.__init__(...) multiple times.')
             # To fix this problem, follow the instructions for subclassing in :doc:`/intro/model`.
         self.name = self.__class__.__name__
         self.options = model_params = asConfig(model_params, self.name)
-        self._called_CouplingMPOModel_init = True
+        self._called_ModelBuilder_init = True
         self.manually_call_init_H = getattr(self, 'manually_call_init_H', False)
         explicit_plus_hc = model_params.get('explicit_plus_hc', False, bool)
         # 1-4) initialize lattice

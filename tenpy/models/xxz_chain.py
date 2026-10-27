@@ -10,7 +10,7 @@ from lasyten.models.sites import SpinSite
 
 from ..tools import asConfig, to_array
 from .lattice import Chain
-from .model import CouplingModel, CouplingMPOModel, MPOModel, NearestNeighborModel
+from .model import CouplingModel, ModelBuilder, MPOModel, NearestNeighborModel
 
 __all__ = ['XXZChain', 'XXZChain2']
 
@@ -90,11 +90,11 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
 
 
-class XXZChain2(CouplingMPOModel, NearestNeighborModel):
+class XXZChain2(ModelBuilder):
     """Another implementation of the Spin-1/2 XXZ chain with Sz conservation.
 
     This implementation takes the same parameters as the :class:`XXZChain`, but is implemented
-    based on the :class:`~tenpy.models.model.CouplingMPOModel`.
+    based on the :class:`~tenpy.models.model.ModelBuilder`.
 
     Parameters
     ----------
@@ -117,19 +117,8 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
         Jxx = model_params.get('Jxx', 1.0, 'real_or_array')
         Jz = model_params.get('Jz', 1.0, 'real_or_array')
         hz = to_array(model_params.get('hz', 0.0, 'real_or_array'), self.lattice.Ls)
-        # add terms
-        for u in range(len(self.lattice.unit_cell)):
-            site = self.lattice.unit_cell[u]
-            field = spin_field_coupling([site], hz=1.0)
-            for i, i_lat in zip(*self.lattice.mps_lat_idx_fix_u(u)):
-                self.add_coupling(field, [i], strength=-hz[tuple(i_lat)])
+
+        self.add_onsite_operator(-hz, 'Sz')
         for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
-            site1, site2 = self.lattice.unit_cell[u1], self.lattice.unit_cell[u2]
-            coupling_xy = spin_spin_coupling([site1, site2], Jx=1.0, Jy=1.0)
-            coupling_z = spin_spin_coupling([site1, site2], Jz=1.0)
-            mps_i, mps_j, Jxx_vals = self.lattice.possible_couplings_strengths(u1, u2, dx, Jxx)
-            for i, j, strength in zip(mps_i, mps_j, Jxx_vals):
-                self.add_coupling(coupling_xy, [int(i), int(j)], strength=strength)
-            mps_i, mps_j, Jz_vals = self.lattice.possible_couplings_strengths(u1, u2, dx, Jz)
-            for i, j, strength in zip(mps_i, mps_j, Jz_vals):
-                self.add_coupling(coupling_z, [int(i), int(j)], strength=strength)
+            self.add_two_site_coupling(0.5 * Jxx, 'Sp.Sm', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
+            self.add_two_site_coupling(Jz, 'Sz.Sz', dx, x1='sum_over', u1=u1, u2=u2)
