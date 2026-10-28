@@ -733,8 +733,8 @@ class CouplingTerms(Terms):
         assert self.L == graph.L
         # structure of coupling terms:
         for i, coupling_name, j, strength in self:
-            coupling = model.get_coupling(coupling_name, [graph.sites[i], graph.sites[j % graph.L]])
-            for n, c in enumerate(coupling.elementary_decomposition()):
+            elementary_couplings = model.couplings[coupling_name].elementary_decomposition()
+            for n, c in enumerate(elementary_couplings):
                 WL, WR = c.factorization
                 # TODO first workaround solution: not re-using any existing edges.
                 label = f'{coupling_name}#{n}_{int(i)}_{int(j)}'  # some (probably) unique label
@@ -779,8 +779,8 @@ class CouplingTerms(Terms):
                 raise ValueError('not nearest neighbor')
             if not sites[i].symmetry.trivial_shift:
                 raise NotImplementedError
-            h = model.get_coupling(coupling_name, [sites[i], sites[j % self.L]])
-            H_bond[j % self.L] = add_with_None_0(H_bond[j % self.L], strength * h.to_tensor())
+            h = model.couplings[coupling_name].to_tensor()
+            H_bond[j % self.L] = add_with_None_0(H_bond[j % self.L], strength * h)
         assert all(h is None or h.labels_are('p0', 'p1', 'p1*', 'p0*', planar=True) for h in H_bond)
         return H_bond
 

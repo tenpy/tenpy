@@ -90,11 +90,11 @@ def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True
 @pytest.mark.parametrize('bc', ['open', 'periodic'])
 @pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
 @pytest.mark.parametrize('tensor_backend', ['fusion_tree', 'abelian', 'no_symmetry'])
-@pytest.mark.parametrize('conserve', ['SU(2)', 'Sz', None])
+@pytest.mark.parametrize('conserve', ['SU2', 'Sz', 'parity', None])
 def test_CouplingModel_basic(bc, bc_MPS, tensor_backend, conserve):
     backend = lasy.get_backend(tensor_backend)
 
-    if (tensor_backend == 'abelian' and conserve == 'SU(2)') or (
+    if (tensor_backend == 'abelian' and conserve == 'SU2') or (
         tensor_backend == 'no_symmetry' and conserve is not None
     ):
         with pytest.raises(ValueError, match='backend does not support this symmetry'):
@@ -112,25 +112,30 @@ def test_CouplingModel_basic(bc, bc_MPS, tensor_backend, conserve):
 
     spin_half_lat = lattice.Chain(5, site, bc=bc, bc_MPS=bc_MPS)
 
-    M = model.CouplingModel(spin_half_lat, [model.SpinCouplingDefinition])
+    M = model.CouplingModel(spin_half_lat)
+    M.define_coupling(
+        lasy.models.spin_spin_coupling([site, site], Jx=1, Jy=1, Jz=1, backend=backend, name='S.S'),
+        hc='S.S',
+        permute='invariant',
+    )
+    if conserve not in ['SU2', 'Sz']:
+        M.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jx=1, backend=backend, name='Sx.Sx'),
+            hc='Sx.Sx',
+            permute='invariant',
+        )
 
     # 1) Only NN terms
     M.add_two_site_coupling(1.2, 'S.S', dx=1)
-    if conserve == 'SU(2)':
+    if conserve == 'SU2':
         with pytest.raises(lasy.SymmetryError):
             M.add_onsite_operator(0.3, 'Sz')
     else:
         M.add_onsite_operator(0.3, 'Sz')
-    if conserve in ['SU(2)', 'Sz']:
-        with pytest.raises(lasy.SymmetryError):
-            M.add_two_site_coupling(0.7, 'Sx.Sx', dx=1)
-    else:
+    if conserve not in ['SU2', 'Sz']:
         M.add_two_site_coupling(0.7, 'Sx.Sx', dx=1)
     if conserve is None:
         M.add_onsite_operator(0.8, 'Sx')
-    else:
-        with pytest.raises(lasy.SymmetryError):
-            M.add_onsite_operator(0.8, 'Sx')
     with pytest.raises(ValueError):
         M.add_onsite_operator(0.2, 'unknownOp')
     with pytest.raises(ValueError):
@@ -153,19 +158,6 @@ def test_CouplingModel_basic(bc, bc_MPS, tensor_backend, conserve):
             H_bond_from_MPO = model.calc_H_bond_from_MPO(H_MPO)
             for h1, h2 in zip(H_bond, H_bond_from_MPO):
                 assert lasy.almost_equal(h1, h2)
-
-
-@pytest.mark.parametrize('name', ['Sp.Sm', 'Sm.Sp', 'Sp.Sp', 'Sm.Sm'])
-def test_SpinCouplingDefinition_ladder_operators(name):
-    site = SpinSite(S=0.5, conserve=None)
-    lat = lattice.Chain(2, site, bc='open', bc_MPS='finite')
-    M = model.CouplingModel(lat, [model.SpinCouplingDefinition])
-
-    coupling = M.get_coupling(name, [site, site])
-    dense = coupling.to_tensor().to_numpy(['p0', 'p1', 'p1*', 'p0*'])
-    op_i, op_j = (site.get_op(op).to_numpy() for op in name.split('.'))
-    expected = np.transpose(np.tensordot(op_i, op_j, axes=0), [0, 2, 3, 1])
-    npt.assert_allclose(dense, expected)
 
 
 def test_ext_flux():

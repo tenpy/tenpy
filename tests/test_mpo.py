@@ -207,7 +207,23 @@ def test_MPO_addition(bc, explicit_plus_hc):
     def new_model():
         lat_bc = 'open' if bc == 'finite' else 'periodic'
         lat = lattice.Chain(L, s, bc=lat_bc, bc_MPS=bc)
-        return model.CouplingModel(lat, [model.SpinCouplingDefinition])
+        M = model.CouplingModel(lat)
+        M.define_coupling(
+            lasy.models.spin_spin_coupling([s, s], Jmp=1, backend=s.backend, name='Sm.Sp'),
+            hc='Sp.Sm',
+            permute='swap_hc',
+        )
+        M.define_coupling(
+            lasy.models.spin_spin_coupling([s, s], Jx=1, backend=s.backend, name='Sx.Sx'),
+            hc='Sx.Sx',
+            permute='invariant',
+        )
+        M.define_coupling(
+            lasy.models.spin_spin_coupling([s, s], Jz=1, backend=s.backend, name='Sz.Sz'),
+            hc='Sz.Sz',
+            permute='invariant',
+        )
+        return M
 
     def graph_from_model(M):
         return mpo.MPOGraph.from_terms(M.get_nonzero_terms(), M, bc, unit_cell_width=M.lattice.mps_unit_cell_width)

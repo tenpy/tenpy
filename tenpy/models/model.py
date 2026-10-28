@@ -6,27 +6,6 @@ Couplings in Models
 -------------------
 TODO elaborate on the system of couplings
 
-Three two of operators for which we work with string representations
-
-Onsite Operators
-~~~~~~~~~~~~~~~~
-In LaSyTen, each Site defines a set of named onsite operators, see :attr:`lasyten.Site.onsite_operators`.
-
-Couplings
-~~~~~~~~~
-In a :class:`CouplingModel`, multi-site operators, called couplings are defined by name,
-see e.g. :meth:`CouplingModel.get_coupling`.
-
-These couplings have a well defined site order, and their behavior under permuting it is defined
-in :meth:`CouplingModel.permute_coupling`. Common cases are that couplings do not change under site
-permutation, such as e.g. for the Heisenberg coupling, or that they become a different named coupling,
-such as e.g. for a single hopping :math:`S^{+}_i S^{-}_j` without its hc counterpart.
-
-The coupling *names* are agnostic of the symmetry that is currently enforced, though some couplings
-may not be defined for all symmetries. E.g. an Ising coupling :math:`S^x_i S^x_j` is not defined
-if SU(2) is conserved, since it is not SU(2)-symmetric.
-The coupling names are also, as far as possible, agnostic of the sites they act on, e.g. the names
-of spin couplings are the same, no matter what total spin the underlying sites have.
 
 """
 # Copyright (C) TeNPy Developers, Apache license
@@ -35,7 +14,7 @@ import inspect
 import itertools
 import logging
 from abc import ABCMeta, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Literal
 
 import lasyten as lasy
@@ -45,7 +24,7 @@ from numpy.typing import ArrayLike
 from ..networks import MPO, MPOGraph
 from ..networks.mpo import partition_W
 from ..networks.terms import CouplingTerms, ExponentiallyDecayingTerms, MultiCouplingTerms, OnsiteTerms, Terms
-from ..tools import asConfig, to_array
+from ..tools import asConfig, perm_sign, to_array
 from .lattice import HelicalLattice, IrregularLattice, Lattice, MultiSpeciesLattice, get_lattice
 
 __all__ = [
@@ -57,6 +36,10 @@ __all__ = [
     'Model',
     'NearestNeighborModel',
 ]
+
+type CouplingPermuteSpec = (
+    Literal['invariant', 'odd', 'swap_hc'] | Callable[[Sequence[int], dict[str, float | complex]]]
+)
 
 
 # TODO placeholders
@@ -231,178 +214,6 @@ class HamiltonianMPOModel(HamiltonianModel):
         raise NotImplementedError('Can not exponentiate generic MPOs.')
 
 
-class CouplingDefinition(metaclass=ABCMeta):
-    """Defines the meaning of coupling names in models.
-
-    Attributes
-    ----------
-    backend
-        ...
-    symmetry
-        ...
-    coupling_names : set of str
-        The coupling names that are defined
-    num_sites : dict {str: int}
-        A mapping from coupling name to the number of sites the coupling acts on
-    hc_map : dict {str: str}
-        A mapping from coupling name to the name of the hc coupling
-
-    """
-
-    def __init__(
-        self,
-        backend: lasy.TensorBackend,
-        symmetry: lasy.Symmetry,
-        coupling_names: Sequence[str] = [],
-        num_sites: dict[str, int] = {},
-        hc_map: dict[str, str] = {},
-    ):
-        self.backend = backend
-        self.symmetry = symmetry
-        self.coupling_names = coupling_names = set(coupling_names)
-        self.num_sites = num_sites.copy()
-        self.hc_map = hc_map.copy()
-
-    def test_sanity(self):
-        assert set(self.num_sites.keys()) == set(self.hc_map.keys()) == self.coupling_names
-        assert set(self.hc_map.values()).issubset(self.coupling_names)
-        for op, hc in self.hc_map.items():
-            assert self.hc_map[hc] == op
-
-    @abstractmethod
-    def permute_sites(self, name: str, perm: Sequence[int]) -> dict[str, float | complex]:
-        """Define the behavior of a coupling under permutation of sites.
-
-        TODO: double check that perm is handled "the right way around", i.e. avoid
-        mixing up perm and inverse perm
-
-        Returns
-        -------
-        linear_compination : dict {str: float | complex}
-            The permuted coupling, expressed as a linear combination, where the keys
-            are coupling names and the values their prefactors in the linear combination.
-
-        """
-        ...
-
-    @abstractmethod
-    def get_coupling(self, name: str, sites: Sequence[lasy.Site]) -> lasy.Coupling:
-        """Build the coupling on the given `sites`."""
-        ...
-
-    def test_valid(self, name: str, sites: Sequence[lasy.Site]):
-        """Test if the given coupling `name` is valid on the `sites`"""
-        # subclasses should extend this
-        if name not in self.coupling_names:
-            raise ValueError(f'Unknonwn coupling name: {name}')
-
-
-class SpinCouplingDefinition(CouplingDefinition):
-    r"""Defines common couplings on :class:`~lasyten.SpinSite` s.
-
-    The available couplings are::
-
-        --------------  -----------------------------------------------------
-        Name            Definition / Notes
-        --------------  -----------------------------------------------------
-        Sx.Sx           :math:`S^x_i S^x_j`
-        Sy.Sy           :math:`S^y_i S^y_j`
-        Sz.Sz           :math:`S^z_i S^z_j`
-        S.S             :math:`\vec{S}_i \cdot \vec{S}_j`
-        Sp.Sm           :math:`S^{+}_i+ S^{-}_j` *without* the hc!
-        Sm.Sp           :math:`S^{-}_i S^{+}_j` *without* the hc!
-        Sp.Sp           :math:`S^{+}_i S^{+}_j` *without* the hc!
-        Sm.Sm           :math:`S^{-}_i S^{-}_j` *without* the hc!
-        chiral3spin     :math:`\vec{S}_i \cdot (\vec{S}_j \times \vec{S}_k)`
-        --------------  -----------------------------------------------------
-
-    TODO extend as needed!
-    TODO make boson, fermion, clock, mixed definitions
-    TODO do they live here?
-    """
-
-    def __init__(self, backend: lasy.TensorBackend, symmetry: lasy.Symmetry):
-        tmp = {
-            'Sx.Sx': (2, 'Sx.Sx'),
-            'Sy.Sy': (2, 'Sy.Sy'),
-            'Sz.Sz': (2, 'Sz.Sz'),
-            'S.S': (2, 'S.S'),
-            'Sp.Sm': (2, 'Sm.Sp'),
-            'Sm.Sp': (2, 'Sp.Sm'),
-            'Sp.Sp': (2, 'Sm.Sm'),
-            'Sm.Sm': (2, 'Sp.Sp'),
-            'chiral3spin': (3, 'chiral3spin'),
-        }
-        num_sites = {k: num for k, (num, hc) in tmp.items()}
-        hc_map = {k: hc for k, (num, hc) in tmp.items()}
-        super().__init__(backend, symmetry, coupling_names=tmp.keys(), num_sites=num_sites, hc_map=hc_map)
-
-    def get_spin_conserve(self, sites: list[lasy.Site]) -> Literal['SU(2)', 'Sz', 'parity', None]:
-        if not isinstance(sites[0], lasy.models.SpinSite):
-            raise NotImplementedError
-        res = sites[0].conserve
-        if any(s.conserve != res for s in sites[1:]):
-            raise lasy.SymmetryError('Inconsistent conserve for sites!')
-        return res
-
-    def get_coupling(self, name, sites):
-        if name == 'Sx.Sx':
-            return lasy.models.spin_spin_coupling(sites, Jx=1, backend=self.backend)
-        if name == 'Sy.Sy':
-            return lasy.models.spin_spin_coupling(sites, Jy=1, backend=self.backend)
-        if name == 'Sz.Sz':
-            return lasy.models.spin_spin_coupling(sites, Jz=1, backend=self.backend)
-        if name == 'S.S':
-            return lasy.models.spin_spin_coupling(sites, Jx=1, Jy=1, Jz=1, backend=self.backend)
-        if name in ['Sp.Sm', 'Sm.Sp', 'Sp.Sp', 'Sm.Sm']:
-            # TODO will build them in some other place anyway...
-            spin_ops = []
-            for site in sites:
-                Sx, Sy = site.spin_vector[:, :, 0], site.spin_vector[:, :, 1]
-                spin_ops.append({'Sp': Sx + 1j * Sy, 'Sm': Sx - 1j * Sy})
-            op_i, op_j = (spin_ops[i][op] for i, op in enumerate(name.split('.')))
-            h = np.tensordot(op_i, op_j, axes=0)
-            h = np.transpose(h, [0, 2, 3, 1])
-            return lasy.Coupling.from_dense_block(h, sites, understood_braiding=True)
-        if name == 'chiral3spin':
-            return lasy.models.chiral_3spin_coupling(sites)
-        raise ValueError(f'Unknown name: {name}')
-
-    def permute_sites(self, name, perm):
-        if name in ['Sx.Sx', 'Sy.Sy', 'Sz.Sz', 'S.S']:
-            return {name: 1}
-        perm = np.asarray(perm, int)
-        if np.all(perm == np.arange(len(perm))):
-            return {name: 1}
-        if name == 'Sm.Sp':
-            return {'Sp.Sm': 1}  # trivial permutation already excluded -> must be swap
-        if name == 'Sp.Sm':
-            return {'Sm.Sp': 1}  # trivial permutation already excluded -> must be swap
-        if name == 'chiral3spin':
-            if np.all(perm == np.array([1, 2, 0])) or np.all(perm == np.array([2, 0, 1])):
-                return {name: +1}
-            else:
-                return {name: -1}
-        raise ValueError(f'Unknown name: {name}')
-
-    def test_valid(self, name, sites):
-        super().test_valid(name, sites)
-        conserve = self.get_spin_conserve(sites)  # <- does all checks on sites (are spin, are consistent)
-
-        if name in ['Sx.Sx', 'Sy.Sy', 'Sz.Sz']:
-            coupling_allowed = conserve in ['parity', 'None', None]
-        elif name in ['Sp.Sm', 'Sm.Sp', 'Sp.Sp', 'Sm.Sm']:
-            coupling_allowed = conserve in ['Sz', 'parity', 'None', None]
-        elif name in ['S.S', 'chiral3spin']:
-            coupling_allowed = True
-        else:
-            # invalid name should have already been caught in super() -> this must be a bug!
-            raise NotImplementedError
-
-        if not coupling_allowed:
-            raise lasy.SymmetryError(f'Coupling {name} is not supported for {conserve=}')
-
-
 class CouplingModel(HamiltonianModel):
     """A model, which defines a Hamiltonian in terms of couplings.
 
@@ -413,9 +224,6 @@ class CouplingModel(HamiltonianModel):
     ----------
     lattice
         TODO
-    coupling_definitions
-        TODO
-        Note that :class:`OnsiteCouplingDefinition` is automatically added.
     explicit_plus_hc
         TODO
 
@@ -429,6 +237,31 @@ class CouplingModel(HamiltonianModel):
         Note that :meth:`add_onsite_operator`, :meth:`add_two_site_coupling`, :meth:`add_multi_site_coupling`
         and :meth:`add_exponentially_decaying_coupling` respect this flag, ensuring that the
         *represented* Hamiltonian is independent of the `explicit_plus_hc` flag.
+    onsite_terms
+        TODO
+    coupling_terms
+        TODO
+    multi_coupling_terms
+        TODO
+    exp_decaying_terms
+        TODO
+    couplings : dict {str: :class:`lasyten.Coupling`}
+        Definition of the coupling names available in this model.
+        Couplings need to be defined via :meth:`define_coupling`, by default,
+        a :class:`CouplingModel` has no couplings defined.
+    coupling_hc_map : dict {str: str}
+        A mapping from coupling name to the name of the hc coupling.
+    coupling_permute : dict {str: str | callable}
+        Defines the behavior of the :attr:`couplings` under permutation of sites.
+        Possible values are::
+
+            - ``'invariant'`` indicates that the coupling does not change under any permutation
+            - ``'odd'`` indicates that the coupling is invariant under even permutations and maps
+              to negative itself under odd permutations
+            - ``'swap_hc'`` is only allowed for two-site couplings and indicates that the coupling
+              maps to its hc, given by :attr:`coupling_hc_map` under swapping the sites
+            - A callable ``permute(perm: Sequence[int]) -> dict[str, float | complex]`` that realizes
+              :meth:`permute_coupling` for this coupling.
 
     """
 
@@ -437,7 +270,6 @@ class CouplingModel(HamiltonianModel):
     def __init__(
         self,
         lattice: Lattice,
-        coupling_definitions: Sequence[CouplingDefinition | type[CouplingDefinition]],
         explicit_plus_hc: bool = False,
     ):
         self._H_MPO: MPO | None = None
@@ -448,10 +280,11 @@ class CouplingModel(HamiltonianModel):
         self.multi_coupling_terms = MultiCouplingTerms(L)
         self.exp_decaying_terms = ExponentiallyDecayingTerms(L)
         self.explicit_plus_hc = explicit_plus_hc
-        self.coupling_definitions = [
-            d if isinstance(d, CouplingDefinition) else d(backend=lattice.backend, symmetry=lattice.symmetry)
-            for d in coupling_definitions
-        ]
+
+        self.couplings: dict[str, lasy.Coupling] = {}
+        self.coupling_hc_map: dict[str, str] = {}
+        self.coupling_permute: dict[str, CouplingPermuteSpec] = {}
+
         HamiltonianModel.__init__(self, lattice=lattice)
 
     def test_sanity(self):
@@ -463,44 +296,71 @@ class CouplingModel(HamiltonianModel):
         self.multi_coupling_terms.test_terms(sites, self)
         self.exp_decaying_terms.test_terms(sites, self)
 
-        # check coupling_definitions
-        seen_names = []
-        for d in self.coupling_definitions:
-            d.test_sanity()
-            assert all(n not in seen_names for n in d.coupling_names)
-            seen_names.extend(d.coupling_names)
+        for name, coupling in self.couplings.items():
+            assert coupling.factorization[0].symmetry == self.symmetry
+            assert coupling.factorization[0].backend == self.backend
+            coupling.test_sanity()
+
+            hc_name = self.coupling_hc_map[name]
+            assert self.coupling_hc_map[hc_name] == name
+            hc_coupling = self.couplings[hc_name]
+            assert lasy.almost_equal(coupling.to_tensor(), hc_coupling.to_tensor().hc)  # TODO is this cheap enough?
+            assert coupling.num_sites == hc_coupling.num_sites
+            assert (
+                self.coupling_permute[name] is self.coupling_permute[hc_name]
+            )  # TODO is this ok? otherwise we would need to compare action of the function on a few / all perms...
 
         return super().test_sanity()
 
-    def coupling_num_sites(self, coupling_name: str) -> int:
-        for d in self.coupling_definitions:
-            if coupling_name not in d.coupling_names:
-                continue
-            return d.num_sites[coupling_name]
-        raise ValueError(f'Unknown coupling name {coupling_name}')
+    def define_coupling(self, coupling: lasy.Coupling, hc: str, permute: CouplingPermuteSpec):
+        """Add a coupling to the list of named :attr:`couplings` available in the model
+
+        Parameters
+        ----------
+        coupling: :class:`lasyten.Coupling`
+            The new coupling. Must be named (have :attr:`lasyten.Coupling.name` set)
+        hc: str
+            The name for the hermitian conjugate coupling
+        permute: ``'invariant'``| ``'odd'`` | ``'swap_hc'`` | callable
+            Specifies how the coupling transforms under permutation of sites.
+            ``'invariant'`` means it does not change under any permutation.
+            ``'odd'`` means it stays invariant under even permutations and maps to negative itself under odd.
+            ``'swap_hc'`` is only valid for two-site couplings and means if sites are swapped it maps to its hc.
+            For the general case, specify a callable ``permute(perm: Sequence[int]) -> dict[str, float | complex]``
+            that expresses the permuted coupling as a linear combination of the keys with the values as prefactors.
+
+        """
+        if coupling.name is None:
+            raise ValueError('Coupling must be named')
+        if coupling.name in self.couplings:
+            raise ValueError('Coupling name already defined')
+        assert permute in ['invariant', 'odd', 'swap_hc'] or hasattr(permute, '__call__')
+        self.couplings[coupling.name] = coupling
+        self.coupling_hc_map[coupling.name] = hc
+        self.coupling_permute[coupling.name] = permute
+        if hc in self.coupling_hc_map:
+            assert self.coupling_hc_map[hc] == coupling.name
+        else:
+            self.couplings[hc] = coupling.dagger(new_name=hc)
+            self.coupling_hc_map[hc] = coupling.name
+            self.coupling_permute[hc] = permute
+        return
 
     def permute_coupling(self, coupling_name: str, perm: Sequence[int]) -> dict[str, float | complex]:
         if not self.symmetry.has_trivial_braid:
             raise NotImplementedError  # current design does not cover this well...
-        for d in self.coupling_definitions:
-            if coupling_name not in d.coupling_names:
-                continue
-            return d.permute_sites(coupling_name, perm)
-        raise ValueError(f'Unknown coupling name {coupling_name}')
 
-    def get_coupling(self, coupling_name: str, sites: Sequence[lasy.Site]) -> lasy.Coupling:
-        for d in self.coupling_definitions:
-            if coupling_name not in d.coupling_names:
-                continue
-            return d.get_coupling(coupling_name, sites)
-        raise ValueError(f'Unknown coupling name {coupling_name}')
-
-    def get_hc_coupling_name(self, coupling_name: str) -> str:
-        for d in self.coupling_definitions:
-            if coupling_name not in d.coupling_names:
-                continue
-            return d.hc_map[coupling_name]
-        raise ValueError(f'Unknown coupling name {coupling_name}')
+        if self.coupling_permute[coupling_name] == 'invariant':
+            return {coupling_name: 1}
+        if self.coupling_permute[coupling_name] == 'odd':
+            return {coupling_name: perm_sign(perm)}
+        if self.coupling_permute[coupling_name] == 'swap_hc':
+            assert self.couplings[coupling_name].num_sites == 2
+            if perm_sign(perm) == +1:
+                return {coupling_name: 1}
+            else:
+                return {self.coupling_hc_map[coupling_name]: 1}
+        return self.coupling_permute(perm)
 
     def test_coupling(self, coupling_name: str, sites: Sequence[int]):
         """Test if the `coupling_name` is defined, and valid on the `sites`.
@@ -513,11 +373,13 @@ class CouplingModel(HamiltonianModel):
         """
         mps_sites = self.lattice.mps_sites()
         sites = [mps_sites[i % len(mps_sites)] for i in sites]
-        for d in self.coupling_definitions:
-            if coupling_name not in d.coupling_names:
-                continue
-            return d.test_valid(coupling_name, sites)
-        raise ValueError(f'Unknown coupling name {coupling_name}')
+        try:
+            coupling = self.couplings[coupling_name]
+        except KeyError:
+            raise ValueError(f'Unknown coupling name {coupling_name}') from None
+        for s, W in zip(sites, coupling.factorization):
+            if s.leg != W.get_leg('p'):
+                raise ValueError('Incompatible leg for the given site')
 
     def invalidate_caches(self):
         self._H_MPO = None
@@ -743,8 +605,7 @@ class CouplingModel(HamiltonianModel):
         self, pref: float | complex, i: int, j: int, coupling_name: str, plus_hc: bool = False
     ):
         if plus_hc:
-            hc_name = self.get_hc_coupling_name(coupling_name)
-            self._add_two_site_coupling_mps(np.conj(pref), i, j, hc_name, plus_hc=False)
+            self._add_two_site_coupling_mps(np.conj(pref), i, j, self.coupling_hc_map[coupling_name], plus_hc=False)
 
         self.test_coupling(coupling_name, [i, j])
 
@@ -812,7 +673,7 @@ class CouplingModel(HamiltonianModel):
         if np.all(np.abs(strength) < self.tol_zero_strength):
             return
 
-        N = self.coupling_num_sites(coupling_name)
+        N = self.couplings[coupling_name].num_sites
         if u == 'sum_over_independent':
             for _u in itertools.product(range(len(self.lattice.unit_cell)), repeat=N):
                 self.add_multi_site_coupling(strength, coupling_name, dx, x, _u, plus_hc=plus_hc)
@@ -846,8 +707,7 @@ class CouplingModel(HamiltonianModel):
         self, pref: float | complex, ijkl: Sequence[int], coupling_name: str, plus_hc: bool = False
     ):
         if plus_hc:
-            hc_name = self.get_hc_coupling_name(coupling_name)
-            self._add_multi_coupling_mps(np.conj(pref), ijkl, hc_name, plus_hc=False)
+            self._add_multi_coupling_mps(np.conj(pref), ijkl, self.coupling_hc_map[coupling_name], plus_hc=False)
         self.test_coupling(coupling_name, ijkl)
         if lasy.tools.duplicate_entries(ijkl):
             raise ValueError('Can not act on the same site twice!')
@@ -867,7 +727,10 @@ class CouplingModel(HamiltonianModel):
 
 
 class ModelBuilder(CouplingModel):
-    """Plays the role of the old CouplingMPOModel, where you just have to override some methods"""
+    """Plays the role of the old CouplingMPOModel, where you just have to override some methods
+
+    TODO explain what *needs* to be overridden and what *can* be overriden.
+    """
 
     #: class or str: The default lattice class or class name to be used in :meth:`init_lattice`.
     default_lattice = 'Chain'
@@ -891,19 +754,24 @@ class ModelBuilder(CouplingModel):
         # 1-4) initialize lattice
         lattice = self.init_lattice(model_params)
         # 5) initialize CouplingModel
-        coupling_definitions = self.init_coupling_definitions(model_params)
-        CouplingModel.__init__(
-            self, lattice, coupling_definitions=coupling_definitions, explicit_plus_hc=explicit_plus_hc
-        )
+        CouplingModel.__init__(self, lattice, explicit_plus_hc=explicit_plus_hc)
         # 6) add terms of the Hamiltonian
+        self.init_couplings(model_params)
         self.init_terms(model_params)
         # finally checks for misspelled parameter names
         model_params.warn_unused()
         self.H_MPO = self.get_H_MPO()  # TODO workaround -> instead should make models use the getter!
 
-    def init_coupling_definitions(self, model_params) -> list[CouplingDefinition | type[CouplingDefinition]]:
-        """TODO"""
-        return []  # should be implemented in subclasses
+    def init_couplings(self, model_params):
+        """Initialize all couplings for the given model.
+
+        This function should define the couplings to be used in the model using :meth:`define_coupling`.
+        At this point in the initialization, the :attr:`lattice` and :attr:`backend` attributes are
+        already initialized and can be used to build the couplings.
+
+        TODO elaborate
+        """
+        pass  # by default, do not define any couplings
 
     def init_lattice(self, model_params):
         """Initialize a lattice for the given model parameters.

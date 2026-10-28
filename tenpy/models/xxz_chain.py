@@ -5,13 +5,12 @@ this module is more to serve as a pedagogical example for a model.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import lasyten as lasy
 import numpy as np
-from lasyten.models.couplings import spin_field_coupling, spin_spin_coupling
-from lasyten.models.sites import SpinSite
 
 from ..tools import asConfig, to_array
 from .lattice import Chain
-from .model import CouplingModel, ModelBuilder, MPOModel, NearestNeighborModel, SpinCouplingDefinition
+from .model import CouplingModel, ModelBuilder, MPOModel, NearestNeighborModel
 
 __all__ = ['XXZChain', 'XXZChain2']
 
@@ -107,14 +106,30 @@ class XXZChain2(ModelBuilder):
     default_lattice = 'Chain'
     force_default_lattice = True
 
-    def init_coupling_definitions(self, model_params):
-        return [SpinCouplingDefinition]
-
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
             conserve = 'Sz'
-        return SpinSite(S=0.5, conserve=conserve)  # use predefined Site
+        self.conserve = conserve
+        return lasy.sites.SpinSite(S=0.5, conserve=conserve)  # use predefined Site
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jx=1, Jy=1, Jz=1, backend=self.backend, name='S.S'),
+            hc='S.S',
+            permute='invariant',
+        )
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jpm=1, backend=self.backend, name='Sp.Sm'),
+            hc='Sm.Sp',
+            permute='swap_hc',
+        )
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jz=1, backend=self.backend, name='Sz.Sz'),
+            hc='Sz.Sz',
+            permute='invariant',
+        )
 
     def init_terms(self, model_params):
         # read out parameters

@@ -8,12 +8,12 @@ We choose the field along z to allow to conserve the parity, if desired.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import lasyten as lasy
 import numpy as np
-from lasyten.models.sites import SpinSite
 
 from ..tools import to_array
 from .lattice import Chain
-from .model import ModelBuilder, NearestNeighborModel, SpinCouplingDefinition
+from .model import ModelBuilder, NearestNeighborModel
 
 __all__ = ['TFIModel', 'TFIChain']
 
@@ -50,17 +50,21 @@ class TFIModel(ModelBuilder):
 
     """
 
-    def init_coupling_definitions(self, model_params):
-        return [SpinCouplingDefinition]
-
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity', str)
         assert conserve != 'Sz'
         if conserve == 'best':
             conserve = 'parity'
             self.logger.info('%s: set conserve to %s', self.name, conserve)
-        site = SpinSite(S=0.5, conserve=conserve)
-        return site
+        return lasy.sites.SpinSite(S=0.5, conserve=conserve)
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jx=1, backend=self.backend, name='Sx.Sx'),
+            hc='Sx.Sx',
+            permute='invariant',
+        )
 
     def init_terms(self, model_params):
         J = np.asarray(model_params.get('J', 1.0, 'real_or_array'))

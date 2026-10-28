@@ -2,14 +2,16 @@
 
 Uniform lattice of spin-S sites, coupled by nearest-neighbor interactions.
 """
-# Copyright (C) TeNPy Developers, Apache license
 
+# Copyright (C) TeNPy Developers, Apache license
+from typing import Literal
+
+import lasyten as lasy
 import numpy as np
-from lasyten.models.sites import SpinSite
 
 from ..tools import to_array
 from .lattice import Chain
-from .model import ModelBuilder, SpinCouplingDefinition
+from .model import ModelBuilder
 
 __all__ = ['SpinModel', 'SpinChain', 'DipolarSpinChain']
 
@@ -68,7 +70,7 @@ class SpinModel(ModelBuilder):
 
         S : {0.5, 1, 1.5, 2, ...}
             The 2S+1 local states range from m = -S, -S+1, ... +S.
-        conserve : 'best' | 'Sz' | 'parity' | None
+        conserve : 'best' | 'SU2' | 'Sz' | 'parity' | None
             What should be conserved. See :class:`~lasyten.models.sites.SpinSite`.
             For ``'best'``, we check the parameters what can be preserved.
         Jx, Jy, Jz, hx, hy, hz, muJ, D, E  : float | array
@@ -77,23 +79,55 @@ class SpinModel(ModelBuilder):
 
     """
 
-    def init_coupling_definitions(self, model_params):
-        return [SpinCouplingDefinition]
+    conserve: Literal['SU2', 'Sz', 'parity'] | None  # set during init_sites
 
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5, 'real')
         conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
             # check how much we can conserve
-            if not model_params.any_nonzero([('Jx', 'Jy'), 'hx', 'hy', 'E'], 'check Sz conservation'):
+            if not model_params.any_nonzero(
+                [('Jx', 'Jy', 'Jz'), 'muJ', 'hx', 'hy', 'hz', 'D', 'E'], 'check SU(2) conservation'
+            ):
+                conserve = 'SU2'
+            elif not model_params.any_nonzero([('Jx', 'Jy'), 'hx', 'hy', 'E'], 'check Sz conservation'):
                 conserve = 'Sz'
             elif not model_params.any_nonzero(['hx', 'hy'], 'check parity conservation'):
                 conserve = 'parity'
             else:
                 conserve = None
             self.logger.info('%s: set conserve to %s', self.name, conserve)
-        site = SpinSite(S=S, conserve=conserve)
+        assert conserve in ['SU2', 'Sz', 'parity', None]
+        self.conserve = conserve
+        site = lasy.sites.SpinSite(S=S, conserve=conserve)
         return site
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jx=1, Jy=1, Jz=1, backend=self.backend, name='S.S'),
+            hc='S.S',
+            permute='invariant',
+        )
+        if self.conserve != 'SU2':
+            self.define_coupling(
+                lasy.models.spin_spin_coupling([site, site], Jz=1, backend=self.backend, name='Sz.Sz'),
+                hc='Sz.Sz',
+                permute='invariant',
+            )
+            self.define_coupling(
+                lasy.models.spin_spin_coupling([site, site], Jpm=1, backend=self.backend, name='Sp.Sm'),
+                hc='Sm.Sp',
+                permute='swap_hc',
+            )
+        if self.conserve not in ['SU2', 'Sz']:
+            self.define_coupling(
+                lasy.models.spin_spin_coupling([site, site], Jpp=1, backend=self.backend, name='Sp.Sp'),
+                hc='Sm.Sm',
+                permute='invariant',
+            )
+        return
 
     def init_terms(self, model_params):
         Jx = model_params.get('Jx', 1.0, 'real_or_array')
@@ -168,9 +202,6 @@ class DipolarSpinChain(ModelBuilder):
             Coupling as defined for the Hamiltonian above.
 
     """
-
-    def init_coupling_definitions(self, model_params):
-        return [SpinCouplingDefinition]
 
     def init_lattice(self, model_params):
         """Initialize a 1D lattice"""
