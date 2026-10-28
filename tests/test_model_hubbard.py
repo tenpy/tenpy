@@ -41,7 +41,7 @@ def test_DipolarBoseHubbardChain():
     Nmax = 4
     model = hubbard.DipolarBoseHubbardChain(dict(conserve='dipole', Nmax=Nmax))
     expect_N = np.arange(Nmax + 1)
-    for i, s in enumerate(model.lat.mps_sites()):
+    for i, s in enumerate(model.lattice.mps_sites()):
         expect_dipole = i * expect_N
         expect_charges = np.array([expect_N, expect_dipole]).T
         assert np.all(s.leg.charges == expect_charges)

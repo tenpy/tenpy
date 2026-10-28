@@ -74,7 +74,7 @@ In the initialization method ``__init__(self, ...)`` of this class you can then 
    can come in handy, for example::
 
        self.add_onsite(-np.asarray(h), 0, 'Sz')
-       for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+       for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
            self.add_coupling(0.5*J, u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
            self.add_coupling(    J, u1, 'Sz', u2, 'Sz', dx)
 

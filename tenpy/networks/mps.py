@@ -2830,7 +2830,7 @@ class MPS(BaseMPSExpectationValue):
             >>> M = tenpy.models.tf_ising.TFIChain({'L': L})
             >>> p_state = ['up', 'down'] * (L // 2)  # repeats entries L/2 times
             >>> psi = MPS.from_product_state(
-            ...     M.lat.mps_sites(), p_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+            ...     M.lattice.mps_sites(), p_state, bc=M.lattice.bc_MPS, unit_cell_width=M.lattice.mps_unit_cell_width
             ... )
 
         The meaning of the labels ``"up","down"`` is defined by the :class:`~tenpy.networks.Site`,
@@ -2850,7 +2850,11 @@ class MPS(BaseMPSExpectationValue):
             >>> bloch_sphere_state = np.array([np.cos(theta / 2), np.exp(1.0j * phi) * np.sin(theta / 2)])
             >>> p_state[L // 2] = bloch_sphere_state  # replace one spin in center
             >>> psi = MPS.from_product_state(
-            ...     [spin] * L, p_state, bc=M.lat.bc_MPS, dtype=complex, unit_cell_width=M.lat.mps_unit_cell_width
+            ...     [spin] * L,
+            ...     p_state,
+            ...     bc=M.lattice.bc_MPS,
+            ...     dtype=complex,
+            ...     unit_cell_width=M.lattice.mps_unit_cell_width,
             ... )
 
         Note that for the more general :class:`~tenpy.models.spins.SpinChain`,
@@ -8471,7 +8475,7 @@ class InitialStateBuilder:
     Examples
     --------
     If you use the :class:`~tenpy.simulations.simulation.Simulation` setup, it will extract
-    the `lattice` and `model_dtype` from the :attr:`~tenpy.models.model.Model.lat` and MPO dtype.
+    the `lattice` and `model_dtype` from the :attr:`~tenpy.models.model.Model.lattice` and MPO dtype.
     Let's assume that we have a lattice `lat` with :class:`~tenpy.networks.site.SpinHalfSite`
     on a square lattices. Then you could initialize a Neel state like this:
 

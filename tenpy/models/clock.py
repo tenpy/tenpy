@@ -65,9 +65,9 @@ class ClockModel(CouplingMPOModel):
     def init_terms(self, model_params):
         J = np.asarray(model_params.get('J', 1.0, 'real_or_array'))
         g = np.asarray(model_params.get('g', 1.0, 'real_or_array'))
-        for u in range(len(self.lat.unit_cell)):
+        for u in range(len(self.lattice.unit_cell)):
             self.add_onsite(-g, u, 'Z', plus_hc=True)
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             self.add_coupling(-J, u1, 'X', u2, 'Xhc', dx, plus_hc=True)
 
 

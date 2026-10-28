@@ -98,10 +98,10 @@ class AKLTChain(NearestNeighborModel, MPOModel):
         BB = np.tensordot(B, B.conj(), axes=[[0, 2], [0, 2]])
         assert np.linalg.norm(np.eye(2) - BB) < 1.0e-14, 'BB=' + str(BB).replace('\n', '  ')
 
-        L = self.lat.N_sites
+        L = self.lattice.N_sites
         Bs = [B] * L
 
-        if self.lat.bc_MPS == 'finite':
+        if self.lattice.bc_MPS == 'finite':
             # project onto one of the two virtual states on the left/right most state.
             # It's a ground state whatever you choose here,
             # but we project to different indices to allow Sz conservation
@@ -112,21 +112,21 @@ class AKLTChain(NearestNeighborModel, MPOModel):
         else:
             form = 'B'
 
-        spin1 = self.lat.unit_cell[0]
-        if self.lat.bc_MPS != 'finite' and spin1.conserve in ['Sz', 'parity']:
+        spin1 = self.lattice.unit_cell[0]
+        if self.lattice.bc_MPS != 'finite' and spin1.conserve in ['Sz', 'parity']:
             charges = [[0], [2]] if spin1.conserve == 'Sz' else [[0], [1]]
             legL = npc.LegCharge.from_qflat(spin1.leg.chinfo, charges)
         else:
             legL = None
 
         res = MPS.from_Bflat(
-            self.lat.mps_sites(),
+            self.lattice.mps_sites(),
             Bs,
-            bc=self.lat.bc_MPS,
+            bc=self.lattice.bc_MPS,
             permute=True,
             form=form,
             legL=legL,
-            unit_cell_width=self.lat.mps_unit_cell_width,
+            unit_cell_width=self.lattice.mps_unit_cell_width,
         )
         if form is None:
             res.canonical_form()

@@ -96,7 +96,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
         hy = model_params.get('hy', 0.0, 'real_or_array')
         hz = model_params.get('hz', 0.0, 'real_or_array')
 
-        # Only valid for self.lat being a Chain...
+        # Only valid for self.lattice being a Chain...
         self.add_onsite(-hx, 0, 'Sx0')
         self.add_onsite(-hy, 0, 'Sy0')
         self.add_onsite(-hz, 0, 'Sz0')
@@ -190,18 +190,18 @@ class SpinChainNNN2(CouplingMPOModel):
         hy = model_params.get('hy', 0.0, 'real_or_array')
         hz = model_params.get('hz', 0.0, 'real_or_array')
 
-        for u in range(len(self.lat.unit_cell)):
+        for u in range(len(self.lattice.unit_cell)):
             self.add_onsite(-hx, u, 'Sx')
             self.add_onsite(-hy, u, 'Sy')
             self.add_onsite(-hz, u, 'Sz')
         # Sp = Sx + i Sy, Sm = Sx - i Sy,  Sx = (Sp+Sm)/2, Sy = (Sp-Sm)/2i
         # Sx.Sx = 0.25 ( Sp.Sm + Sm.Sp + Sp.Sp + Sm.Sm )
         # Sy.Sy = 0.25 ( Sp.Sm + Sm.Sp - Sp.Sp - Sm.Sm )
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             self.add_coupling((Jx + Jy) / 4.0, u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
             self.add_coupling((Jx - Jy) / 4.0, u1, 'Sp', u2, 'Sp', dx, plus_hc=True)
             self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)
-        for u1, u2, dx in self.lat.pairs['next_nearest_neighbors']:
+        for u1, u2, dx in self.lattice.pairs['next_nearest_neighbors']:
             self.add_coupling((Jxp + Jyp) / 4.0, u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
             self.add_coupling((Jxp - Jyp) / 4.0, u1, 'Sp', u2, 'Sp', dx, plus_hc=True)
             self.add_coupling(Jzp, u1, 'Sz', u2, 'Sz', dx)

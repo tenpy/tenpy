@@ -208,7 +208,7 @@ def m_onsite_expectation_value(results, psi, model, simulation, opname, results_
     if results_key in results:
         raise ValueError(f'key {results_key!r} already exists in results')
     if fix_u is not None:
-        kwargs['sites'] = model.lat.mps_idx_fix_u(fix_u)
+        kwargs['sites'] = model.lattice.mps_idx_fix_u(fix_u)
 
     # the actual "measurement"
     exp_vals = psi.expectation_value(opname, **kwargs)
@@ -216,9 +216,9 @@ def m_onsite_expectation_value(results, psi, model, simulation, opname, results_
     assert exp_vals.ndim == 1  # here exp_vals is given in MPS indices i
     # now reshape/reorder to index (x, y, u)
     if fix_u is None and 'sites' in kwargs:
-        exp_vals = model.lat.mps2lat_values_masked(exp_vals, mps_inds=kwargs['sites'])
+        exp_vals = model.lattice.mps2lat_values_masked(exp_vals, mps_inds=kwargs['sites'])
     else:
-        exp_vals = model.lat.mps2lat_values(exp_vals, u=fix_u)
+        exp_vals = model.lattice.mps2lat_values(exp_vals, u=fix_u)
     results[results_key] = exp_vals
 
 
@@ -263,12 +263,12 @@ def m_correlation_length(results, psi, model, simulation, results_key='correlati
     elif unit == 'MPS_sites_ungrouped':
         corr = corr * psi.grouped
     elif unit == 'lattice_rings':
-        lat = model.lat
+        lat = model.lattice
         if lat.N_sites_per_ring is None:
             raise ValueError("lattice doesn't define N_sites_per_ring")
         corr = corr * psi.grouped / lat.N_sites_per_ring
     elif unit == 'lattice_spacing':
-        lat = model.lat
+        lat = model.lattice
         if lat.N_sites_per_ring is None:
             raise ValueError("lattice doesn't define N_sites_per_ring")
         corr = corr * psi.grouped / lat.N_sites_per_ring / np.inner(lat.basis[0], lat.cylinder_axis)

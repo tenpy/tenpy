@@ -410,9 +410,9 @@ class MixedXKModel(CouplingMPOModel):
             The x dependence (and corresponding dimension in `couplings`) can be omitted.
 
         """
-        N_orb = self.lat.N_orb
-        Lx = self.lat.N_rings
-        Ly = self.lat.Ly
+        N_orb = self.lattice.N_orb
+        Lx = self.lattice.N_rings
+        Ly = self.lattice.Ly
         N_r = Ly * N_orb
         if np.asarray(couplings).ndim == 4:
             couplings = np.asarray(couplings)[np.newaxis, ...]
@@ -441,9 +441,9 @@ class MixedXKModel(CouplingMPOModel):
 
         """
         assert dx != 0
-        N_orb = self.lat.N_orb
-        Nx = self.lat.N_rings - int(self.lat.bc[0]) * abs(dx)
-        Ly = self.lat.Ly
+        N_orb = self.lattice.N_orb
+        Nx = self.lattice.N_rings - int(self.lattice.bc[0]) * abs(dx)
+        Ly = self.lattice.Ly
         N_r = Ly * N_orb
         if np.asarray(couplings).ndim == 4:
             couplings = np.asarray(couplings)[np.newaxis, ...]
@@ -471,9 +471,9 @@ class MixedXKModel(CouplingMPOModel):
             annihilation operators of given ring, momentum and orbital.
 
         """
-        N_orb = self.lat.N_orb
-        Lx = self.lat.N_rings
-        Ly = self.lat.Ly
+        N_orb = self.lattice.N_orb
+        Lx = self.lattice.N_rings
+        Ly = self.lattice.Ly
         N_r = Ly * N_orb
         if np.asarray(couplings).ndim == 8:
             couplings = np.asarray(couplings)[np.newaxis, ...]
@@ -513,9 +513,9 @@ class MixedXKModel(CouplingMPOModel):
 
         """
         assert dx != 0
-        Nx = self.lat.N_rings - int(self.lat.bc[0]) * abs(dx)
-        N_orb = self.lat.N_orb
-        Ly = self.lat.Ly
+        Nx = self.lattice.N_rings - int(self.lattice.bc[0]) * abs(dx)
+        N_orb = self.lattice.N_orb
+        Ly = self.lattice.Ly
         N_r = Ly * N_orb
         if np.asarray(couplings).ndim == 8:
             couplings = np.asarray(couplings)[np.newaxis, ...]
@@ -553,7 +553,7 @@ class MixedXKModel(CouplingMPOModel):
             Terms representing the operator `A` in x-k-space.
 
         """
-        xk_lat = self.lat
+        xk_lat = self.lattice
         N_orb = xk_lat.N_orb
         Ly = xk_lat.Ly
         conserve_k = 'ky' in xk_lat.site(0).leg.chinfo.names
@@ -635,7 +635,7 @@ class MixedXKModel(CouplingMPOModel):
         orbital_coeffs = [np.asarray(op) for op in orbital_coeffs]
         assert num_ops == len(rs_coords)
         num_c_cd = num_ops * 2
-        xk_lat = self.lat
+        xk_lat = self.lattice
         Ly = xk_lat.Ly
         conserve_k = 'ky' in xk_lat.site(0).leg.chinfo.names
         terms = []
@@ -695,7 +695,7 @@ class MixedXKModel(CouplingMPOModel):
         assert all([num_ops == len(orbs) for _, orbs in coeff_orbitals])
         # TODO: add support for 'N' and '1-N' by splitting them
         # Currently supported by use of orbital_coeffs
-        xk_lat = self.lat
+        xk_lat = self.lattice
         Ly = xk_lat.Ly
         conserve_k = 'ky' in xk_lat.site(0).leg.chinfo.names
         terms = []
@@ -746,7 +746,7 @@ class SpinlessMixedXKSquare(MixedXKModel):
         # Read out parameters
         t = model_params.get('t', 1.0, 'real_or_array')
         V = model_params.get('V', 1.0, 'real_or_array')
-        xk_lat = self.lat
+        xk_lat = self.lattice
         Ly = xk_lat.Ly
         N_orb = xk_lat.N_orb
         assert N_orb == 1
@@ -802,7 +802,7 @@ class HubbardMixedXKSquare(MixedXKModel):
         # Read out parameters
         t = model_params.get('t', 1.0, 'real_or_array')
         U = model_params.get('U', 1.0, 'real_or_array')
-        xk_lat = self.lat
+        xk_lat = self.lattice
         Ly = xk_lat.Ly
         N_orb = xk_lat.N_orb
 

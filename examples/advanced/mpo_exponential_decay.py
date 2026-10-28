@@ -117,7 +117,7 @@ def example_run_dmrg():
     model_params = dict(L=2, Jxx=1, Jz=1.5, xi=0.8)
     model = ExponentiallyDecayingHeisenberg(model_params)
     psi = MPS.from_product_state(
-        model.lat.mps_sites(), ['up', 'down'], bc='infinite', unit_cell_width=model.lat.mps_unit_cell_width
+        model.lattice.mps_sites(), ['up', 'down'], bc='infinite', unit_cell_width=model.lattice.mps_unit_cell_width
     )
     dmrg_params = {
         'mixer': True,

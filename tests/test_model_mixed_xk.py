@@ -39,13 +39,13 @@ def test_mixed_spinless():
         [['full'], ['empty'], ['full'], ['empty']],
         [['full'], ['empty'], ['full'], ['empty']],
     ]  # half filling
-    psi = MPS.from_lat_product_state(M.lat, product_state)
+    psi = MPS.from_lat_product_state(M.lattice, product_state)
     info = dmrg.run(psi, M, dmrg_params)
     E_real = info['E']
 
     # measure particle number and Cd C correlators
-    N_real = M.lat.mps2lat_values(psi.expectation_value('N'))
-    CdC_real = M.lat.mps2lat_values(psi.correlation_function('Cd', 'C')[0, :])
+    N_real = M.lattice.mps2lat_values(psi.expectation_value('N'))
+    CdC_real = M.lattice.mps2lat_values(psi.correlation_function('Cd', 'C')[0, :])
 
     # mixed space
     model_params = dict(t=J, V=V, Lx=Lx, Ly=Ly, bc_MPS='finite', conserve_k=True)
@@ -53,7 +53,7 @@ def test_mixed_spinless():
 
     # initial product state with momentum 0
     product_xk = [['full', 'empty', 'full', 'empty'], ['full', 'empty', 'full', 'empty']]
-    psi_xk = MPS.from_lat_product_state(M.lat, product_xk)
+    psi_xk = MPS.from_lat_product_state(M.lattice, product_xk)
     info = dmrg.run(psi_xk, M, dmrg_params)  # the main work...
     E_mixed = info['E']
 
@@ -92,13 +92,13 @@ def test_mixed_hubbard():
     }
     product_state = [[['full'], ['empty'], ['full']],
                      [['full'], ['empty'], ['empty']]]  # fmt: skip
-    psi = MPS.from_lat_product_state(M.lat, product_state)
+    psi = MPS.from_lat_product_state(M.lattice, product_state)
     info = dmrg.run(psi, M, dmrg_params)
     E_real = info['E']
 
     # measure Sz onsite and SpSm correlators
-    Sz_real = M.lat.mps2lat_values(psi.expectation_value('Sz'))
-    SpSm_real = M.lat.mps2lat_values(psi.correlation_function('Sp', 'Sm')[0, :])
+    Sz_real = M.lattice.mps2lat_values(psi.expectation_value('Sz'))
+    SpSm_real = M.lattice.mps2lat_values(psi.correlation_function('Sp', 'Sm')[0, :])
 
     # mixed space
     # implemented with two spinless fermion sites for up/down !
@@ -110,7 +110,7 @@ def test_mixed_hubbard():
         ['full', 'full', 'full', 'empty', 'empty', 'empty'],
         ['full', 'full', 'empty', 'empty', 'empty', 'full'],
     ]
-    psi_xk = MPS.from_lat_product_state(M2.lat, product_xk)
+    psi_xk = MPS.from_lat_product_state(M2.lattice, product_xk)
     info = dmrg.run(psi_xk, M2, dmrg_params)  # the main work...
     E_mixed = info['E']
 

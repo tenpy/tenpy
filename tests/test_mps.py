@@ -11,7 +11,7 @@ import pytest
 # from tenpy.algorithms import tebd
 # from tenpy.models.aklt import AKLTChain
 from tenpy.models.lattice import Chain, MultiSpeciesLattice, Square
-from tenpy.models.xxz_chain import XXZChain
+from tenpy.models.xxz_chain import XXZChain2
 from tenpy.networks import mps, site
 from tenpy.networks.terms import TermList
 from tenpy.tools import misc
@@ -125,11 +125,13 @@ def test_mps_overlap_translate_finite():
 
 
 def test_MPSEnvironment():
-    xxz_pars = dict(L=4, Jxx=1.0, Jz=1.1, hz=0.1, bc_MPS='finite')
+    xxz_pars = dict(L=4, Jxx=1.0, Jz=1.1, hz=0.1, bc_MPS='finite', conserve='parity')
     L = xxz_pars['L']
-    M = XXZChain(xxz_pars)
+    M = XXZChain2(xxz_pars)
     state = ([0, 1] * L)[:L]  # Neel state
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc='finite', unit_cell_width=M.lat.mps_unit_cell_width)
+    psi = mps.MPS.from_product_state(
+        M.lattice.mps_sites(), state, bc='finite', unit_cell_width=M.lattice.mps_unit_cell_width
+    )
     env = mps.MPSEnvironment(psi, psi)
     env.get_LP(3, True)
     env.get_RP(0, True)

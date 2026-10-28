@@ -1,14 +1,14 @@
 """A collection of tests for (classes in) :mod:`tenpy.algorithms.mps_common`."""
 
 # Copyright (C) TeNPy Developers, Apache license
+
 import lasyten as lasy
 import numpy as np
 import numpy.testing as npt
-from lasyten.models.couplings import spin_field_coupling, spin_spin_coupling
 from lasyten.models.sites import SpinSite
 
 from tenpy.algorithms.mps_common import TwoSiteH, VariationalCompression
-from tenpy.models import lattice, model
+from tenpy.models import tf_ising
 from tenpy.networks.mps import MPS, MPSEnvironment
 from tenpy.tools import TruncationError
 
@@ -156,7 +156,7 @@ class _BoundaryMPOEnv:
         return self.RP
 
 
-def test_two_site_h_matvec():
+def test_two_site_h_matvec(J=1.5, g=0.9):
     """Check `TwoSiteH.matvec` against a hand-coded dense Hamiltonian, on a 2-site Ising model.
 
     Nothing has ever exercised the ``PlanarDiagram``/``matvec`` machinery `OneSiteH`/`TwoSiteH`
@@ -164,17 +164,11 @@ def test_two_site_h_matvec():
     `combine_theta` is a no-op and never calls `matvec`. This builds a real (tiny) Hamiltonian MPO
     and checks the actual LP-W0-W1-RP contraction.
     """
-    J, g = 1.5, 0.9
-    site = SpinSite(S=0.5, conserve=None)
-    lat = lattice.Chain(2, site, bc='open', bc_MPS='finite')
-    M = model.CouplingModel(lat)
-    M.add_coupling(spin_spin_coupling([site, site], Jx=1.0), [0, 1], strength=-J)
-    for i in range(2):
-        M.add_coupling(spin_field_coupling([site], hz=1.0), [i], strength=-g)
-    H_MPO = M.calc_H_MPO()
-
+    M = tf_ising.TFIChain(dict(L=2, bc_MPS='finite', conserve=None, J=J, g=g))
+    H_MPO = M.get_H_MPO()
+    site = M.lattice.mps_sites()[0]
     rng = np.random.default_rng(2)
-    d = site.dim
+    d = 2
     block = rng.normal(size=(d, d)) + 1.0j * rng.normal(size=(d, d))
     block /= np.linalg.norm(block)
     backend = lasy.get_backend('no_symmetry', 'numpy')
@@ -191,8 +185,8 @@ def test_two_site_h_matvec():
 
     # hard-coded reference Hamiltonian, built purely with numpy (same spin-1/2 basis convention
     # as SpinSite(S=0.5, conserve=None): state 0 = down, state 1 = up)
-    Sx = np.array([[0, 0.5], [0.5, 0]])
-    Sz = np.array([[-0.5, 0], [0, 0.5]])
+    Sx = np.array([[0, 1], [1, 0]])
+    Sz = np.array([[-1, 0], [0, 1]])
     Id = np.eye(2)
     H_dense = -J * np.kron(Sx, Sx) - g * (np.kron(Sz, Id) + np.kron(Id, Sz))
     want_dense = (H_dense @ block.reshape(d * d)).reshape(d, d)

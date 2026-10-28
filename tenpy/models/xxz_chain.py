@@ -5,12 +5,12 @@ this module is more to serve as a pedagogical example for a model.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from lasyten.models.couplings import spin_field_coupling, spin_spin_coupling
-from lasyten.models.sites import SpinSite
+import lasyten as lasy
+import numpy as np
 
 from ..tools import asConfig, to_array
 from .lattice import Chain
-from .model import CouplingModel, CouplingMPOModel, MPOModel, NearestNeighborModel
+from .model import CouplingModel, ModelBuilder, MPOModel, NearestNeighborModel
 
 __all__ = ['XXZChain', 'XXZChain2']
 
@@ -52,6 +52,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     """
 
     def __init__(self, model_params):
+        raise NotImplementedError('port models')
         # 0) read out/set default parameters
         model_params = asConfig(model_params, 'XXZChain')
         L = model_params.get('L', 2, int)
@@ -77,10 +78,10 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         # Jxx/2 (Sp_i Sm_j + Sm_i Sp_j) = Jxx (Sx_i Sx_j + Sy_i Sy_j)
         coupling_xy = spin_spin_coupling([site, site], Jx=1.0, Jy=1.0)
         coupling_z = spin_spin_coupling([site, site], Jz=1.0)
-        mps_i, mps_j, Jxx_vals = self.lat.possible_couplings_strengths(0, 0, [1], Jxx)
+        mps_i, mps_j, Jxx_vals = self.lattice.possible_couplings_strengths(0, 0, [1], Jxx)
         for i, j, strength in zip(mps_i, mps_j, Jxx_vals):
             self.add_coupling(coupling_xy, [int(i), int(j)], strength=strength)
-        mps_i, mps_j, Jz_vals = self.lat.possible_couplings_strengths(0, 0, [1], Jz)
+        mps_i, mps_j, Jz_vals = self.lattice.possible_couplings_strengths(0, 0, [1], Jz)
         for i, j, strength in zip(mps_i, mps_j, Jz_vals):
             self.add_coupling(coupling_z, [int(i), int(j)], strength=strength)
         # 7) initialize H_MPO
@@ -89,11 +90,11 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
 
 
-class XXZChain2(CouplingMPOModel, NearestNeighborModel):
+class XXZChain2(ModelBuilder):
     """Another implementation of the Spin-1/2 XXZ chain with Sz conservation.
 
     This implementation takes the same parameters as the :class:`XXZChain`, but is implemented
-    based on the :class:`~tenpy.models.model.CouplingMPOModel`.
+    based on the :class:`~tenpy.models.model.ModelBuilder`.
 
     Parameters
     ----------
@@ -109,26 +110,37 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
         conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
             conserve = 'Sz'
-        return SpinSite(S=0.5, conserve=conserve)  # use predefined Site
+        self.conserve = conserve
+        return lasy.sites.SpinSite(S=0.5, conserve=conserve)  # use predefined Site
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jx=1, Jy=1, Jz=1, backend=self.backend, name='S.S'),
+            hc='S.S',
+            permute='invariant',
+        )
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jpm=1, backend=self.backend, name='Sp.Sm'),
+            hc='Sm.Sp',
+            permute='swap_hc',
+        )
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jz=1, backend=self.backend, name='Sz.Sz'),
+            hc='Sz.Sz',
+            permute='invariant',
+        )
 
     def init_terms(self, model_params):
         # read out parameters
         Jxx = model_params.get('Jxx', 1.0, 'real_or_array')
         Jz = model_params.get('Jz', 1.0, 'real_or_array')
-        hz = to_array(model_params.get('hz', 0.0, 'real_or_array'), self.lat.Ls)
-        # add terms
-        for u in range(len(self.lat.unit_cell)):
-            site = self.lat.unit_cell[u]
-            field = spin_field_coupling([site], hz=1.0)
-            for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
-                self.add_coupling(field, [i], strength=-hz[tuple(i_lat)])
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            site1, site2 = self.lat.unit_cell[u1], self.lat.unit_cell[u2]
-            coupling_xy = spin_spin_coupling([site1, site2], Jx=1.0, Jy=1.0)
-            coupling_z = spin_spin_coupling([site1, site2], Jz=1.0)
-            mps_i, mps_j, Jxx_vals = self.lat.possible_couplings_strengths(u1, u2, dx, Jxx)
-            for i, j, strength in zip(mps_i, mps_j, Jxx_vals):
-                self.add_coupling(coupling_xy, [int(i), int(j)], strength=strength)
-            mps_i, mps_j, Jz_vals = self.lat.possible_couplings_strengths(u1, u2, dx, Jz)
-            for i, j, strength in zip(mps_i, mps_j, Jz_vals):
-                self.add_coupling(coupling_z, [int(i), int(j)], strength=strength)
+        hz = to_array(model_params.get('hz', 0.0, 'real_or_array'), self.lattice.Ls)
+
+        self.add_onsite_operator(-hz, 'Sz')
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
+            if np.all(Jz == Jxx):
+                self.add_two_site_coupling(Jz, 'S.S', dx, x1='sum_over', u1=u1, u2=u2)
+            else:
+                self.add_two_site_coupling(0.5 * Jxx, 'Sp.Sm', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling(Jz, 'Sz.Sz', dx, x1='sum_over', u1=u1, u2=u2)

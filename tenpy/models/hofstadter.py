@@ -217,10 +217,10 @@ class HofstadterFermions(CouplingMPOModel):
         phases_x, phases_y = hopping_phases(
             p,
             q,
-            Lx=self.lat.shape[0],
-            Ly=self.lat.shape[1],
-            pbc_x=not self.lat.bc[0],
-            pbc_y=not self.lat.bc[1],
+            Lx=self.lattice.shape[0],
+            Ly=self.lattice.shape[1],
+            pbc_x=not self.lattice.bc[0],
+            pbc_y=not self.lattice.bc[1],
             gauge=gauge,
         )
         hop_x = -Jx * phases_x
@@ -316,10 +316,10 @@ class HofstadterBosons(CouplingMPOModel):
         phases_x, phases_y = hopping_phases(
             p,
             q,
-            Lx=self.lat.shape[0],
-            Ly=self.lat.shape[1],
-            pbc_x=not self.lat.bc[0],
-            pbc_y=not self.lat.bc[1],
+            Lx=self.lattice.shape[0],
+            Ly=self.lattice.shape[1],
+            pbc_x=not self.lattice.bc[0],
+            pbc_y=not self.lattice.bc[1],
             gauge=gauge,
         )
         hop_x = -Jx * phases_x

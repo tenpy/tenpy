@@ -176,18 +176,9 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
 
     L = 2 if bc_MPS == 'infinite' else 8
 
-    if bc_MPS == 'finite':
-        model_params = dict(L=L, J=1.0, g=g, bc_MPS=bc_MPS, conserve=None)
-        M = TFIChain(model_params)
-    if bc_MPS == 'infinite':
-        site = lasy.models.sites.SpinSite()
-        lat = Chain(L, site, bc_MPS='infinite', bc='periodic')
-        SigmaX_SigmaX = lasy.models.couplings.spin_spin_coupling([site, site], Jx=4)
-        g_SigmaZ = lasy.models.couplings.spin_field_coupling([site], hz=2 * g)
-        M = WorkaroundNNModel(site, SigmaX_SigmaX, g_SigmaZ, bc_MPS=bc_MPS, lat=lat)
-
-    state = [0] * L  # Ferromagnetic Ising
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
+    model_params = dict(L=L, J=1.0, g=g, bc_MPS=bc_MPS, conserve=None)
+    M = TFIChain(model_params)
+    psi = mps.MPS.from_lat_product_state(M.lattice, [[0]] * L)  # Ferromagnetic Ising
     dmrg_pars = {
         'combine': combine,
         'mixer': mixer,
@@ -241,7 +232,7 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
         assert abs((Edmrg - Eexact) / Eexact) < 1.0e-10
 
         # Compare the energy via H_bond
-        bond_energies = [psi.expectation_value(H, i) for i, H in enumerate(M.H_bond)]
+        bond_energies = [psi.expectation_value(H, i) for i, H in enumerate(M.get_H_bond())]
         Edmrg2 = np.mean(bond_energies)
         assert abs((Edmrg - Edmrg2) / Edmrg2) < max(1.0e-10, np.max(psi.norm_test()))
 
@@ -287,7 +278,7 @@ def test_dmrg_heisenberg_vs_exact(combine, n, conserve, tensor_backend, L=8):
         pytest.skip()
 
     M = SpinChain(dict(L=L, bc_MPS='finite', conserve=conserve))
-    site: lasy.Site = M.lat.unit_cell[0]
+    site: lasy.Site = M.lattice.unit_cell[0]
 
     # verify we initialized with the right symmetry
     if conserve == 'SU2':
@@ -307,11 +298,11 @@ def test_dmrg_heisenberg_vs_exact(combine, n, conserve, tensor_backend, L=8):
     assert site.backend == lasy.get_backend(tensor_backend)
 
     psi = mps.MPS.from_desired_bond_dimension(
-        M.lat.mps_sites(),
+        M.lattice.mps_sites(),
         30,
         bc='finite',
         total_charge=site.leg.symmetry.trivial_sector,
-        unit_cell_width=M.lat.mps_unit_cell_width,
+        unit_cell_width=M.lattice.mps_unit_cell_width,
     )
     dmrg_pars = {
         'combine': combine,
@@ -349,7 +340,7 @@ def test_dmrg_heisenberg_vs_exact(combine, n, conserve, tensor_backend, L=8):
         domain=[site.leg] * L,
         labels=[[f'p{i}' for i in range(L)], [f'p{i}*' for i in range(L)]],
     )
-    ED = ExactDiag.from_hamiltonian(H, M.lat.mps_sites())
+    ED = ExactDiag.from_hamiltonian(H, M.lattice.mps_sites())
     ED.full_diagonalization()
     E_ED, psi_ED = ED.groundstate()
     np.testing.assert_allclose(E_ED, np.linalg.eigvalsh(H_ref)[0], atol=1e-10)
@@ -373,7 +364,7 @@ def test_dmrg_rerun(L=2):
     bc_MPS = 'infinite'
     model_params = dict(L=L, J=1.0, g=1.5, bc_MPS=bc_MPS, conserve=None)
     M = TFIChain(model_params)
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
+    psi = mps.MPS.from_lat_product_state(M.lattice, [[0] * L])
     dmrg_pars = {'chi_list': {0: 5, 5: 10}, 'N_sweeps_check': 4, 'combine': True}
     eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_pars)
     E1, _ = eng.run()
@@ -409,7 +400,7 @@ def test_dmrg_diag_method(engine, diag_method, tol=1.0e-6):
     # make sure below that we stay in that sector, if we're supposed to.
     init_Sz_4 = ['up', 'down', 'up', 'up', 'up', 'down']
     psi_Sz_4 = mps.MPS.from_product_state(
-        M.lat.mps_sites(), init_Sz_4, bc=bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+        M.lattice.mps_sites(), init_Sz_4, bc=bc_MPS, unit_cell_width=M.lattice.mps_unit_cell_width
     )
     dmrg_pars = {
         'N_sweeps_check': 1,
@@ -460,7 +451,9 @@ def test_dmrg_excited(eps=1.0e-12):
     print('charges : ', [psi.qtotal for psi in psi_ED])
 
     # first DMRG run
-    psi0 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc, unit_cell_width=M.lat.mps_unit_cell_width)
+    psi0 = mps.MPS.from_product_state(
+        M.lattice.mps_sites(), [0] * L, bc=bc, unit_cell_width=M.lattice.mps_unit_cell_width
+    )
     dmrg_pars = {'N_sweeps_check': 1, 'lanczos_params': {'reortho': False}, 'diag_method': 'lanczos', 'combine': True}
     eng0 = dmrg.TwoSiteDMRGEngine(psi0, M, dmrg_pars)
     E0, psi0 = eng0.run()
@@ -468,7 +461,9 @@ def test_dmrg_excited(eps=1.0e-12):
     ov = npc.inner(psi_ED[0], ED.mps_to_full(psi0), 'range', do_conj=True)
     assert abs(abs(ov) - 1.0) < eps  # unique groundstate: finite size gap!
     # second DMRG run for first excited state
-    psi1 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc, unit_cell_width=M.lat.mps_unit_cell_width)
+    psi1 = mps.MPS.from_product_state(
+        M.lattice.mps_sites(), [0] * L, bc=bc, unit_cell_width=M.lattice.mps_unit_cell_width
+    )
     eng1 = dmrg.TwoSiteDMRGEngine(psi1, M, dmrg_pars, orthogonal_to=[psi0])
     E1, psi1 = eng1.run()
     assert abs((E1 - ED.E[1]) / ED.E[1]) < eps
@@ -477,7 +472,7 @@ def test_dmrg_excited(eps=1.0e-12):
     # and a third one to check with 2 eigenstates
     # note: different initial state necessary, otherwise H is 0
     psi2 = mps.MPS.from_singlets(
-        psi0.sites[0], L, [(0, 1), (2, 3), (4, 5), (6, 7)], bc=bc, unit_cell_width=M.lat.mps_unit_cell_width
+        psi0.sites[0], L, [(0, 1), (2, 3), (4, 5), (6, 7)], bc=bc, unit_cell_width=M.lattice.mps_unit_cell_width
     )
     eng2 = dmrg.TwoSiteDMRGEngine(psi2, M, dmrg_pars, orthogonal_to=[psi0, psi1])
     E2, psi2 = eng2.run()
@@ -497,10 +492,10 @@ def test_enlarge_mps_unit_cell():
     M_4 = TFIChain(model_params)
     M_4.enlarge_mps_unit_cell(2)
     psi_2 = mps.MPS.from_product_state(
-        M_2.lat.mps_sites(), ['up', 'up'], bc=bc_MPS, unit_cell_width=M_2.lat.mps_unit_cell_width
+        M_2.lattice.mps_sites(), ['up', 'up'], bc=bc_MPS, unit_cell_width=M_2.lattice.mps_unit_cell_width
     )
     psi_4 = mps.MPS.from_product_state(
-        M_2.lat.mps_sites(), ['up', 'up'], bc=bc_MPS, unit_cell_width=M_2.lat.mps_unit_cell_width
+        M_2.lattice.mps_sites(), ['up', 'up'], bc=bc_MPS, unit_cell_width=M_2.lattice.mps_unit_cell_width
     )
     psi_4.enlarge_mps_unit_cell(2)
     dmrg_params = {
@@ -537,11 +532,11 @@ def test_dmrg_explicit_plus_hc(N, bc_MPS, tol=1.0e-13, bc='finite'):
     M2 = SpinChain(model_params)
     assert M2.H_MPO.explicit_plus_hc
     psi1 = mps.MPS.from_product_state(
-        M1.lat.mps_sites(), ['up', 'down'] * N, bc=bc_MPS, unit_cell_width=M1.lat.mps_unit_cell_width
+        M1.lattice.mps_sites(), ['up', 'down'] * N, bc=bc_MPS, unit_cell_width=M1.lattice.mps_unit_cell_width
     )
     E1, psi1 = dmrg.TwoSiteDMRGEngine(psi1, M1, dmrg_params).run()
     psi2 = mps.MPS.from_product_state(
-        M2.lat.mps_sites(), ['up', 'down'] * N, bc=bc_MPS, unit_cell_width=M2.lat.mps_unit_cell_width
+        M2.lattice.mps_sites(), ['up', 'down'] * N, bc=bc_MPS, unit_cell_width=M2.lattice.mps_unit_cell_width
     )
     E2, psi2 = dmrg.TwoSiteDMRGEngine(psi2, M2, dmrg_params).run()
     print(E1, E2, abs(E1 - E2))
@@ -551,7 +546,7 @@ def test_dmrg_explicit_plus_hc(N, bc_MPS, tol=1.0e-13, bc='finite'):
     assert abs(ov - 1) < tol
     dmrg_params['combine'] = True
     psi3 = mps.MPS.from_product_state(
-        M2.lat.mps_sites(), ['up', 'down'] * N, bc=bc_MPS, unit_cell_width=M2.lat.mps_unit_cell_width
+        M2.lattice.mps_sites(), ['up', 'down'] * N, bc=bc_MPS, unit_cell_width=M2.lattice.mps_unit_cell_width
     )
     E3, psi3 = dmrg_parallel.DMRGThreadPlusHC(psi3, M2, dmrg_params).run()
     print(E1, E3, abs(E1 - E3))
@@ -575,7 +570,7 @@ def test_dmrg_dipole_conservation(N, bc_MPS, S=1, tol=1.0e-13, J4=0.0):
         warnings.simplefilter('ignore')
         M_dip = DipolarSpinChain(dict(L=2 * N, S=S, J3=1.0, J4=J4, bc_MPS=bc_MPS, conserve='dipole'))
         psi_dip = mps.MPS.from_product_state(
-            M_dip.lat.mps_sites(), initial_state, bc=bc_MPS, unit_cell_width=M_dip.lat.mps_unit_cell_width
+            M_dip.lattice.mps_sites(), initial_state, bc=bc_MPS, unit_cell_width=M_dip.lattice.mps_unit_cell_width
         )
         E_dip, psi_dip = dmrg.TwoSiteDMRGEngine(psi_dip, M_dip, dmrg_params).run()
 
@@ -584,7 +579,7 @@ def test_dmrg_dipole_conservation(N, bc_MPS, S=1, tol=1.0e-13, J4=0.0):
         warnings.simplefilter('ignore')
         M = DipolarSpinChain(dict(L=2 * N, S=S, J3=1.0, J4=J4, bc_MPS=bc_MPS, conserve='Sz'))
         psi = mps.MPS.from_product_state(
-            M.lat.mps_sites(), initial_state, bc=bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+            M.lattice.mps_sites(), initial_state, bc=bc_MPS, unit_cell_width=M.lattice.mps_unit_cell_width
         )
         E, psi = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params).run()
 
@@ -610,7 +605,7 @@ def test_dmrg_mixer_cleanup(L, bc_MPS):
     model_params = dict(L=L, Jx=1.0, Jy=1.0, Jz=2.5, hz=5.125, bc_MPS=bc_MPS, conserve='parity')
     dmrg_params = dict(N_sweeps_check=2, mixer=True, trunc_params={'chi_max': 50})
     model = SpinChain(model_params)
-    psi = mps.MPS.from_lat_product_state(model.lat, [['up'], ['down']])
+    psi = mps.MPS.from_lat_product_state(model.lattice, [['up'], ['down']])
     engine = dmrg.TwoSiteDMRGEngine(psi, model, dmrg_params)
     # do a few steps of engine.run()
     engine.shelve = False
@@ -673,15 +668,15 @@ def test_segment_dmrg(model):
         model = _TransverseClusterModel({})
 
     # first dmrg run for *infinite* lattice
-    psi0_infinite = mps.MPS.from_lat_product_state(model.lat, [['up']])
+    psi0_infinite = mps.MPS.from_lat_product_state(model.lattice, [['up']])
     trunc_params = dict(chi_max=100, svd_min=1e-10)
     dmrg_params = dict(mixer=True, max_E_err=1e-10, trunc_params=trunc_params)
     eng0 = dmrg.TwoSiteDMRGEngine(psi0_infinite, model, dmrg_params)
     eng0.run()
 
     model_segment = model.extract_segment(enlarge=10)
-    psi0_segment = psi0_infinite.extract_segment(*model_segment.lat.segment_first_last)
-    init_env_data = eng0.env.get_initialization_data(*model_segment.lat.segment_first_last)
+    psi0_segment = psi0_infinite.extract_segment(*model_segment.lattice.segment_first_last)
+    init_env_data = eng0.env.get_initialization_data(*model_segment.lattice.segment_first_last)
 
     psi1_segment = psi0_segment.copy()
     psi1_segment.perturb()

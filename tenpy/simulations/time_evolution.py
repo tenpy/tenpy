@@ -327,10 +327,10 @@ class TimeDependentCorrelation(RealTimeEvolution):
         elif mps_idx is not None:
             idx = to_iterable(mps_idx)
         elif lat_idx is not None:
-            idx = to_iterable(self.model.lat.lat2mps_idx(lat_idx))
+            idx = to_iterable(self.model.lattice.lat2mps_idx(lat_idx))
         else:
             # default to the middle of the MPS sites
-            idx = to_iterable(self.model.lat.N_sites // 2)
+            idx = to_iterable(self.model.lattice.N_sites // 2)
         # tiling
         if len(ops) > len(idx):
             if len(idx) != 1:

@@ -38,7 +38,7 @@ def test_DipolarSpinChain():
     L = 6  # use size small enough for ED
     model = spins.DipolarSpinChain(dict(S=1, J4=1, conserve='dipole', L=L))
     expect_2Sz = np.array([-2, 0, 2])
-    for i, s in enumerate(model.lat.mps_sites()):
+    for i, s in enumerate(model.lattice.mps_sites()):
         expect_dipole = i * expect_2Sz
         expect_charges = np.array([expect_2Sz, expect_dipole]).T
         assert np.all(s.leg.charges == expect_charges)

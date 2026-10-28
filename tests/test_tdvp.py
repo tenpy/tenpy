@@ -34,7 +34,7 @@ def test_tdvp(eps=1.0e-5):
     # prepare system in product state
     product_state = ['up', 'down'] * (L // 2)
     psi_tebd = MPS.from_product_state(
-        M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+        M.lattice.mps_sites(), product_state, bc=M.lattice.bc_MPS, unit_cell_width=M.lattice.mps_unit_cell_width
     )
 
     N_steps = 2
@@ -96,7 +96,7 @@ def test_fixes_339(L=8, chi=10, dt=0.5):
     trunc_params = dict(chi_max=chi, svd_min=1e-10, trunc_cut=None)
     tdvp_params = dict(start_time=0, dt=dt, N_steps=1, trunc_params=trunc_params)
     model = SpinChain(model_params)
-    psi = MPS.from_lat_product_state(model.lat, [['up'], ['down']])
+    psi = MPS.from_lat_product_state(model.lattice, [['up'], ['down']])
     tdvp2 = tdvp.TwoSiteTDVPEngine(psi, model, tdvp_params)
 
     # evolve for a bit to saturate bond dimension and incur some error

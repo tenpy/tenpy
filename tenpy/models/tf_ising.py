@@ -8,18 +8,17 @@ We choose the field along z to allow to conserve the parity, if desired.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import lasyten as lasy
 import numpy as np
-from lasyten.models.couplings import spin_field_coupling, spin_spin_coupling
-from lasyten.models.sites import SpinSite
 
 from ..tools import to_array
 from .lattice import Chain
-from .model import CouplingMPOModel, NearestNeighborModel
+from .model import ModelBuilder, NearestNeighborModel
 
 __all__ = ['TFIModel', 'TFIChain']
 
 
-class TFIModel(CouplingMPOModel):
+class TFIModel(ModelBuilder):
     r"""Transverse field Ising model on a general lattice.
 
     The Hamiltonian reads:
@@ -57,26 +56,25 @@ class TFIModel(CouplingMPOModel):
         if conserve == 'best':
             conserve = 'parity'
             self.logger.info('%s: set conserve to %s', self.name, conserve)
-        site = SpinSite(S=0.5, conserve=conserve)
-        return site
+        return lasy.sites.SpinSite(S=0.5, conserve=conserve)
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jx=1, backend=self.backend, name='Sx.Sx'),
+            hc='Sx.Sx',
+            permute='invariant',
+        )
 
     def init_terms(self, model_params):
         J = np.asarray(model_params.get('J', 1.0, 'real_or_array'))
-        g = to_array(model_params.get('g', 1.0, 'real_or_array'), self.lat.Ls)
-        for u in range(len(self.lat.unit_cell)):
-            site = self.lat.unit_cell[u]
-            # sigma^z = 2 * S^z
-            field = spin_field_coupling([site], hz=2.0)
-            for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
-                self.add_coupling(field, [i], strength=-g[tuple(i_lat)])
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            site1, site2 = self.lat.unit_cell[u1], self.lat.unit_cell[u2]
+        g = to_array(model_params.get('g', 1.0, 'real_or_array'), self.lattice.Ls)
+        # sigma^z = 2 * S^z
+        self.add_onsite_operator(-2 * g, 'Sz', x='sum_over', u='sum_over')
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             # sigma^x_i sigma^x_j = 4 * S^x_i S^x_j
-            coupling = spin_spin_coupling([site1, site2], Jx=4.0)
-            mps_i, mps_j, strength_vals = self.lat.possible_couplings_strengths(u1, u2, dx, J)
-            for i, j, strength in zip(mps_i, mps_j, strength_vals):
-                self.add_coupling(coupling, [int(i), int(j)], strength=-strength)
-        # done
+            self.add_two_site_coupling(-4 * J, 'Sx.Sx', dx, x1='sum_over', u1=u1, u2=u2)
+        return
 
 
 class TFIChain(TFIModel, NearestNeighborModel):

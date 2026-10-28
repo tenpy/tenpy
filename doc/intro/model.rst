@@ -34,11 +34,11 @@ with the following example code to implement an anisotropic Heisenberg model on 
             hx = model_params.get('hx', 0.)
             hz = model_params.get('hz', 0.)
 
-            for u in range(len(self.lat.unit_cell)):
+            for u in range(len(self.lattice.unit_cell)):
                 self.add_onsite(-hx, u, 'Sx')
                 self.add_onsite(-hz, u, 'Sz')
 
-            for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
                 self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)
                 self.add_coupling(.5 * Jx, u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
 
@@ -226,7 +226,7 @@ The Hamiltonian
 The last ingredient we need to implement for a custom model is its Hamiltonian.
 To that end, we override the :meth:`~tenpy.models.model.CouplingMPOModel.init_terms` method.
 At this point during model initialization, the lattice is already initialized, and we
-may access ``self.lat`` and use e.g. the :attr:`~tenpy.models.lattice.Lattice.pairs` attribute
+may access ``self.lattice`` and use e.g. the :attr:`~tenpy.models.lattice.Lattice.pairs` attribute
 for convenient definition of couplings between e.g. nearest-neighbor pairs.
 
 There are a bunch of convenience methods implemented in :class:`~tenpy.models.model.CouplingModel`,
@@ -280,11 +280,11 @@ For our example, we define the Hamiltonian by implementing::
             hx = model_params.get('hx', 0.)
             hz = model_params.get('hz', 0.)
 
-            for u in range(len(self.lat.unit_cell)):
+            for u in range(len(self.lattice.unit_cell)):
                 self.add_onsite(-hx, u, 'Sx')
                 self.add_onsite(-hz, u, 'Sz')
 
-            for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
                 self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)
 
                 # Sx and Sy violate Sz conservation.
@@ -359,9 +359,9 @@ To visualize the site order of the lattice, you may run the following snippet::
     import matplotlib.pyplot as plt
     plt.figure(figsize=(5, 6))
     ax = plt.gca()
-    model.lat.plot_coupling(ax)
-    model.lat.plot_sites(ax)
-    model.lat.plot_order(ax)
+    model.lattice.plot_coupling(ax)
+    model.lattice.plot_sites(ax)
+    model.lattice.plot_order(ax)
     plt.show()
 
 
@@ -382,9 +382,9 @@ To visualize the site order of the lattice, you may run the following snippet::
     model = MyModel({'lattice': 'Square', 'Lx': 2, 'Ly': 3})
     plt.figure(figsize=(5, 6))
     ax = plt.gca()
-    model.lat.plot_coupling(ax)
-    model.lat.plot_sites(ax)
-    model.lat.plot_order(ax)
+    model.lattice.plot_coupling(ax)
+    model.lattice.plot_sites(ax)
+    model.lattice.plot_order(ax)
     plt.show()
 
 
