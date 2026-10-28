@@ -263,6 +263,9 @@ class Sweep(Algorithm):
             cache = self.env.cache  # re-initialize and reuse the cache!
             cache.clear()  # remove old entries which might no longer be valid
         self.env = MPOEnvironment(self.psi, H, self.psi, cache=cache, **init_env_data)
+        # env_checkpoint_every : int | None
+        #     Keep only every k-th environment (finite systems); the others are recomputed when needed.
+        self.env.checkpoint_every = self.options.get('env_checkpoint_every', None, int)
 
     def _init_ortho_to_envs(self, orthogonal_to, resume_data):
         # (re)initialize ortho_to_envs

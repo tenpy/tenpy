@@ -6254,6 +6254,11 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         self._RP_keys = [f'RP_{i:d}' for i in range(L)]
         self._LP_age = [None] * L
         self._RP_age = [None] * L
+        #: If set to an int `k` (finite systems only), keep only every `k`-th left/right environment plus the
+        #: segment next to the most recently stored one; dropped ones are recomputed exactly by
+        #: :meth:`get_LP` / :meth:`get_RP` from the nearest stored one when needed (checkpointing).
+        #: Reduces environment memory from ~L to ~L/k + 2k tensors for ~1 extra contraction per site and sweep.
+        self.checkpoint_every = None
         if cache is None:
             cache = DictCache.trivial()
         self.cache = cache
@@ -6542,6 +6547,12 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         i, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         self.cache[self._LP_keys[i]] = self.shift_Array_unit_cells(LP, -num_unit_cells)
         self._LP_age[i] = age
+        k = self.checkpoint_every
+        if k and self.finite:
+            lo = i - i % k  # keep LP_j for j in (lo, i] and every multiple of k
+            for j, key in enumerate(self._LP_keys):
+                if j % k and j <= lo and key in self.cache:
+                    self.del_LP(j)
 
     def set_RP(self, i, RP, age):
         """Store part to the right of site `i`. No copy is made!
@@ -6551,6 +6562,12 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         i, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         self.cache[self._RP_keys[i]] = self.shift_Array_unit_cells(RP, -num_unit_cells)
         self._RP_age[i] = age
+        k = self.checkpoint_every
+        if k and self.finite:
+            hi = i + (-i) % k  # keep RP_j for j in [i, hi), every multiple of k, and RP_{L-1}
+            for j, key in enumerate(self._RP_keys):
+                if j % k and j != self.L - 1 and j >= hi and key in self.cache:
+                    self.del_RP(j)
 
     def del_LP(self, i):
         """Delete stored part strictly to the left of site `i`."""
