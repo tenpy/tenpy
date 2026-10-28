@@ -5,12 +5,13 @@ this module is more to serve as a pedagogical example for a model.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import numpy as np
 from lasyten.models.couplings import spin_field_coupling, spin_spin_coupling
 from lasyten.models.sites import SpinSite
 
 from ..tools import asConfig, to_array
 from .lattice import Chain
-from .model import CouplingModel, ModelBuilder, MPOModel, NearestNeighborModel
+from .model import CouplingModel, ModelBuilder, MPOModel, NearestNeighborModel, SpinCouplingDefinition
 
 __all__ = ['XXZChain', 'XXZChain2']
 
@@ -106,6 +107,9 @@ class XXZChain2(ModelBuilder):
     default_lattice = 'Chain'
     force_default_lattice = True
 
+    def init_coupling_definitions(self, model_params):
+        return [SpinCouplingDefinition]
+
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
@@ -120,5 +124,8 @@ class XXZChain2(ModelBuilder):
 
         self.add_onsite_operator(-hz, 'Sz')
         for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
-            self.add_two_site_coupling(0.5 * Jxx, 'Sp.Sm', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
-            self.add_two_site_coupling(Jz, 'Sz.Sz', dx, x1='sum_over', u1=u1, u2=u2)
+            if np.all(Jz == Jxx):
+                self.add_two_site_coupling(Jz, 'S.S', dx, x1='sum_over', u1=u1, u2=u2)
+            else:
+                self.add_two_site_coupling(0.5 * Jxx, 'Sp.Sm', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling(Jz, 'Sz.Sz', dx, x1='sum_over', u1=u1, u2=u2)

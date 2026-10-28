@@ -125,7 +125,7 @@ def test_mps_overlap_translate_finite():
 
 
 def test_MPSEnvironment():
-    xxz_pars = dict(L=4, Jxx=1.0, Jz=1.1, hz=0.1, bc_MPS='finite')
+    xxz_pars = dict(L=4, Jxx=1.0, Jz=1.1, hz=0.1, bc_MPS='finite', conserve='parity')
     L = xxz_pars['L']
     M = XXZChain2(xxz_pars)
     state = ([0, 1] * L)[:L]  # Neel state

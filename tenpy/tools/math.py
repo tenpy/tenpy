@@ -306,4 +306,4 @@ def rq_li(A, cutoff=1.0e-15):
 
     """
     q, r = qr_li(A.T[:, ::-1], cutoff)
-    return r.T[::-1, ::-1], q.T[::-1, :] 
+    return r.T[::-1, ::-1], q.T[::-1, :]
