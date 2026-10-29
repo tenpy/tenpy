@@ -1,0 +1,3 @@
+- Add the option ``env_checkpoint_every`` for finite MPS sweep engines (DMRG, TDVP): keep only every k-th
+  environment; the others are recomputed exactly from the nearest stored one when needed. Reduces environment
+  memory from ~L to ~L/k + 2k tensors.
