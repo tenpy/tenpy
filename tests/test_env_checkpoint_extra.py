@@ -67,7 +67,7 @@ def test_tdvp():
 def test_disk_cache(tmp_path):
     def run(k, d):
         with CacheFile.open(storage_class='PickleStorage', directory=str(d), delete=False) as cache:
-            res = dmrg_run(dmrg.TwoSiteDMRGEngine, None, k, cache=cache, extra=dict(cache_threshold_chi=0))
+            res = dmrg_run(dmrg.TwoSiteDMRGEngine, None, k, cache=cache)
             n = len([f for f in glob.glob(os.path.join(d, '**', '*'), recursive=True) if os.path.isfile(f)])
         return res, n
 
