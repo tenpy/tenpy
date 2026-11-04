@@ -6099,14 +6099,19 @@ class MPS(BaseMPSExpectationValue):
             (which indicates a degenerate "cat" state, e.g., for spontaneous symmetry breaking).
 
         """
-        # TODO
         assert not self.finite
+        if any(isinstance(B, lasy.HiddenLegTensor) for B in self._B):
+            raise NotImplementedError('canonical_form_infinite1 does not support a non-trivial total charge yet.')
         L = self.L
-        i1 = np.argmin(self.chi) % L  # start at this bond
+        # start at the bond with the smallest dimension (note: ``MPS.chi`` counts multiplets, not dimensions)
+        i1 = int(np.argmin([B.get_leg('vL').dim for B in self._B])) % L
         if any([(f is None) for f in self.form]):
             # ignore any 'S' and canonical form, just state that we are in 'B' form
             self.form = self._parse_form('B')
-            self._S[i1] = np.ones(self.chi[i1], dtype=np.float64)  # (later used for guess of Gl)
+            # trivial S[i1] (later used for the guess of Gl)
+            self._S[i1] = lasy.DiagonalTensor.from_eye(
+                self._B[i1].get_leg('vL'), self.backend, ['vL', 'vR'], self.dtype.to_real, self.device
+            )
         else:
             # was in canonical form before; bring back into canonical form
             # -> make sure we don't use multiple S on one bond in our definition of the MPS
@@ -6122,9 +6127,9 @@ class MPS(BaseMPSExpectationValue):
             self.norm *= np.sqrt(norm)
         # make Gr diagonal to Wr
         Wr, Kl, Kr = self._canonical_form_correct_right(i1, Gr)
-        # guess for Gl
-        Gl = npc.tensordot(Kr.scale_axis(self.get_SL(i1) ** 2, 1), Kl, axes=['vR', 'vL'])
-        Gl.iset_leg_labels(['vR*', 'vR'])
+        # guess for Gl = Kr S^2 Kl, i.e. S^2 expressed in the new basis
+        S2 = self.get_SL(i1) ** 2
+        Gl = lasy.compose(Kr, lasy.scale_axis(Kl, S2, 'vL')).set_labels(['vR*', 'vR'])
         # find dominant left eigenvector
         norm, Gl = self._canonical_form_dominant_gram_matrix(i1, True, tol_xi, Gl)
         if abs(1.0 - norm) > 1.0e-13:
@@ -6137,15 +6142,18 @@ class MPS(BaseMPSExpectationValue):
         # bring bond to canonical form
         Gl, Yl, Yr = self._canonical_form_correct_left(i1, Gl, Wr)
         Gl = self.shift_Tensor_unit_cells(Gl, -1)
-        Wr = np.ones(Yr.legs[0].ind_len, np.float64)
-        # now the bond (i1-1,i1) is in canonical form
+        # now the bond (i1-1,i1) is in canonical form; the right eigenvector is the identity
+        Wr = lasy.DiagonalTensor.from_eye(
+            self.get_SL(i1).get_leg('vL'), self.backend, ['vL', 'vR'], self.dtype.to_real, self.device
+        )
         Wr_list[i1] = Wr  # diag(Wr) is right eigenvector on bond (i1-1, i1)
 
         # phase 2: sweep from right to left; find other right eigenvectors and make them diagonal
         for j1 in range(i1 - 1, i1 - L, -1):
             B1 = self.get_B(j1, 'B')
-            axes = [self._p_label + ['vR'], self._get_p_label('*') + ['vR*']]
-            Gr = npc.tensordot(B1.scale_axis(Wr, 'vR'), B1.conj(), axes=axes)
+            # (transpose: the diagonal `Wr` has its leg in the codomain, while the RP's `vL` is in the domain)
+            RP = Wr.T.copy().set_labels(['vL*', 'vL']).as_SymmetricTensor()
+            Gr = mps_contraction_diagram_operations['TM @ RP2'].evaluate(dict(RP=RP, ket=B1, bra=B1.hc))
             Wr, Kl, Kr = self._canonical_form_correct_right(j1, Gr)
             Wr_list[j1 % L] = Wr
 
@@ -6154,12 +6162,7 @@ class MPS(BaseMPSExpectationValue):
         for j1 in range(i1 - L + 1, i1, +1):
             # find Gl on bond j1-1, j1
             B1 = self.get_B(j1 - 1, 'B')
-            Gl = npc.tensordot(
-                B1.conj(),  # old B1; now on site j1-1
-                npc.tensordot(Gl, B1, axes=['vR', 'vL']),
-                axes=[self._get_p_label('*') + ['vL*'], self._p_label + ['vR*']],
-            )
-            # axes=[['p*', 'vL*'], ['p', 'vR*']])
+            Gl = mps_contraction_diagram_operations['LP2 @ TM'].evaluate(dict(LP=Gl, ket=B1, bra=B1.hc))
             Gl, Yl, Yr = self._canonical_form_correct_left(j1, Gl, Wr_list[j1 % L])
         # done
 
@@ -7425,14 +7428,20 @@ class MPS(BaseMPSExpectationValue):
         """Find dominant eigenvector of the transfer matrix starting between sites (bond0-1,bond0).
 
         Find right (transpose=False) or left (transpose=True) eigenvector of the transfermatrix.
+
+        Returns
+        -------
+        eta : float | complex
+            The dominant eigenvalue.
+        G : :class:`~lasyten.SymmetricTensor`
+            The dominant eigenvector, with legs ``'vL*', 'vL'`` (right eigenvector)
+            or ``'vR*', 'vR'`` (left eigenvector).
         """
-        # TODO
         TM = TransferMatrix(self, self, bond0, bond0, transpose=transpose, charge_sector=0)
         if guess is None:
             diag = self.get_SL(bond0) ** 2 if transpose else 1.0
             guess = TM.initial_guess(diag)
-        guess = guess.combine_legs([0, 1], pipes=TM.pipe)
-        eta, V = TM.eigenvectors(self._transfermatrix_keep, v0_npc=guess, which='LM')
+        eta, V = TM.eigenvectors(self._transfermatrix_keep, v0=guess, which='LM')
         self._transfermatrix_keep = len(eta)
         if len(eta) > 1:
             if np.abs(eta[0]) > np.abs(eta[1]):
@@ -7442,17 +7451,17 @@ class MPS(BaseMPSExpectationValue):
             if xi > tol_xi:
                 raise ValueError(f'Degenerate spectrum of TransferMatrix (corr length xi={xi:.3e})')
         eta, G = eta[0], V[0]
-        G = G.split_legs()
         # note: the dominant eigenvector should be hermitian and positive
         # removes phase (arbitrary for eigenvectors!) and normalize
         # right eigenvectors should have trace chi, left ones trace 1
         # (since we expect something close to eye(chi) for right and diag(S**2) for left G)
-        norm = 1.0 if transpose else G.shape[0]
-        G *= norm / npc.trace(G, 0, 1)
-        if self.dtype.kind != 'c':  # psi is real -> G should be real
+        # (note that chi is the dimension of the virtual space, not the number of multiplets)
+        chi = G.get_leg('vR' if transpose else 'vL').dim
+        norm = 1.0 if transpose else chi
+        G = G * (norm / lasy.trace(G).to_numpy())
+        if self.dtype.is_real:  # psi is real -> G should be real
             eta = np.abs(eta)
-            G.iunary_blockwise(np.real)
-        return eta, G  # G has legs vL, vL* or vR, vR*
+        return eta, G  # G has legs vL*, vL or vR*, vR
 
     def _canonical_form_correct_right(self, i1, Gr, eps=2.0 * np.finfo(np.double).eps):
         """Given the right gram matrix Gr, updated the bond (i0, i1), where i0 = i1 - 1.
@@ -7463,28 +7472,45 @@ class MPS(BaseMPSExpectationValue):
         If `Wr` has (almost) zero entries, reduce the bond dimension at the given bond.
         Then ``Gr -> Wr``.
         Return Wr normalized to ``sum(Wr) = chi``.
+
+        Parameters
+        ----------
+        i1 : int
+            The site to the right of the bond.
+        Gr : :class:`~lasyten.SymmetricTensor`
+            The right gram matrix with legs ``'vL*', 'vL'``.
+
+        Returns
+        -------
+        Wr : :class:`~lasyten.DiagonalTensor`
+            The eigenvalues of `Gr` (labels ``'vL', 'vR'``), normalized to ``trace(Wr) = chi``.
+        Kl, Kr : :class:`~lasyten.SymmetricTensor`
+            The gauge transformations that were applied to ``B[i0]`` (``compose(B, Kl)``)
+            and ``B[i1]`` (``partial_compose(B, Kr, 'vL')``), with labels ``'vL', 'vR'``.
         """
-        # TODO
-        Gr.itranspose(['vL', 'vL*'])
-        W, XH = npc.eigh(Gr)  # -> XH has legs vL vL* = vL vR
-        if np.sign(W[np.argmax(np.abs(W))]) == -1:  # fix sign
-            W = -W  # should actually never happen:  we initially normalize tr(Gr) = chi > 0
+        Gr = lasy.planar_permute_legs(Gr, codomain=['vL*'], domain=['vL'])
+        Gr = 0.5 * (Gr + Gr.hc)  # (should be hermitian already, up to numerical noise)
+        W, Y = lasy.eigh(Gr, new_labels=['vR', 'vL'], sort='>')  # Gr = Y W Y^dagger
+        if abs(W.min().to_numpy()) > abs(W.max().to_numpy()):  # fix sign
+            W = W * -1.0  # should actually never happen:  we initially normalize tr(Gr) = chi > 0
         # discard small values on order of machine precision
-        proj = W > eps
-        if np.count_nonzero(proj) < len(W):
+        mask = lasy.Mask.from_DiagonalTensor(W > eps)
+        chi_old, chi = mask.large_leg.dim, mask.small_leg.dim
+        if chi < chi_old:
             # project into non-degenerate subspace, reducing the bond dimensions!
-            if np.count_nonzero(proj) < len(W) * 0.9:
+            if chi < chi_old * 0.9:
                 logger.warning('canonical_form_infinite: project to significantly smaller chi')
-            XH.iproject(proj, axes=1)
-            W = W[proj]
-        norm = len(W) / np.sum(W)
-        W *= norm
+            Y = lasy.apply_mask(Y, mask, 'vR')
+            W = lasy.tensors.apply_mask_DiagonalTensor(W, mask)
+        norm = chi / lasy.trace(W).to_numpy()
+        W = W * norm
         norm = np.sqrt(norm)  # (norm doesn't change eigenvalue of TM)
-        Kl = XH.iset_leg_labels(['vL', 'vR']) * (1.0 / norm)
-        Kr = XH.transpose().iconj().iset_leg_labels(['vL', 'vR']) * norm
+        # the right gram matrix of the new tensors is diag(W): Kr = Y^T and Kl = conj(Y), see `Y` convention above
+        Kl = (Y.hc.T / norm).set_labels(['vL', 'vR'])
+        Kr = (Y.T * norm).set_labels(['vL', 'vR'])
         i0 = i1 - 1
-        self.set_B(i0, npc.tensordot(self.get_B(i0), Kl, axes=['vR', 'vL']))
-        self.set_B(i1, npc.tensordot(Kr, self.get_B(i1), axes=['vR', 'vL']))
+        self.set_B(i0, lasy.compose(self.get_B(i0), Kl))
+        self.set_B(i1, lasy.tensors.partial_compose(self.get_B(i1), Kr, 'vL'))
         return W, Kl, Kr
 
     def _canonical_form_correct_left(self, i1, Gl, Wr, eps=2.0 * np.finfo(np.double).eps):
@@ -7501,34 +7527,42 @@ class MPS(BaseMPSExpectationValue):
         and dominant right eigenvector is
         diag(Wr) -> Y 1/sqrt(Wr) diag(Wr) 1/sqrt(W) Y^H = diag(1)
         i.e., we brought the bond to canonical form and `S` is the Schmidt spectrum.
+
+        Returns
+        -------
+        Gl : :class:`~lasyten.SymmetricTensor`
+            The new left gram matrix ``S^2`` with legs ``'vR*', 'vR'``.
+        Yl, Yr : :class:`~lasyten.SymmetricTensor`
+            The unitary parts of the gauge transformations applied to ``B[i0]`` and ``B[i1]``.
         """
-        # TODO
-        sqrt_Wr = np.sqrt(Wr)
-        Gl.itranspose(['vR*', 'vR'])
-        rhor = Gl.scale_axis(sqrt_Wr, 0).iscale_axis(sqrt_Wr, 1)
-        S2, YH = npc.eigh(rhor, sort='>')  # YH has legs 'vR*', 'vR'
-        S2 /= np.sum(S2)  # equivalent to normalizing tr(rhor)=1
+        sqrt_Wr = lasy.sqrt(Wr)
+        Gl = lasy.planar_permute_legs(Gl, codomain=['vR*'], domain=['vR'])
+        rhor = lasy.scale_axis(lasy.scale_axis(Gl, sqrt_Wr, 'vR*'), sqrt_Wr, 'vR')
+        rhor = 0.5 * (rhor + rhor.hc)  # (should be hermitian already, up to numerical noise)
+        S2, Y = lasy.eigh(rhor, new_labels=['vR', 'vL'], sort='>')  # rhor = Y S2 Y^dagger
+        S2 = S2 / lasy.trace(S2)  # equivalent to normalizing tr(rhor)=1
         s_norm = 1.0
         # discard small values on order of machine precision
-        proj = S2 > eps
-        if np.count_nonzero(proj) < len(S2):
+        mask = lasy.Mask.from_DiagonalTensor(S2 > eps)
+        chi_old, chi = mask.large_leg.dim, mask.small_leg.dim
+        if chi < chi_old:
             # project into non-degenerate subspace, reducing the bond dimensions!
-            if np.count_nonzero(proj) < len(S2) * 0.9:
+            if chi < chi_old * 0.9:
                 logger.warning('canonical_form_infinite: project to significantly smaller chi')
-            YH.iproject(proj, axes=1)
-            S2 = S2[proj]
-            s_norm = np.sqrt(np.sum(S2))
-        S = np.sqrt(S2) / s_norm
+            Y = lasy.apply_mask(Y, mask, 'vR')
+            S2 = lasy.tensors.apply_mask_DiagonalTensor(S2, mask)
+            s_norm = np.sqrt(lasy.trace(S2).to_numpy())
+        S = lasy.sqrt(S2) / s_norm
         self.set_SL(i1, S)
-        Yl = YH.scale_axis(sqrt_Wr / s_norm, 0).iset_leg_labels(['vL', 'vR'])
-        Yr = YH.transpose().iconj().scale_axis(1.0 / sqrt_Wr, 1).iset_leg_labels(['vL', 'vR'])
+        Yl = (Y.copy() / s_norm).set_labels(['vL', 'vR'])
+        Yr = Y.hc.copy().set_labels(['vL', 'vR'])
         i0 = i1 - 1
-        self.set_B(i0, npc.tensordot(self.get_B(i0), Yl, axes=['vR', 'vL']))
-        self.set_B(i1, npc.tensordot(Yr, self.get_B(i1), axes=['vR', 'vL']))
-        Gl = npc.tensordot(Gl, Yl, axes=['vR', 'vL'])
-        Gl = npc.tensordot(Yl.conj(), Gl, axes=['vL*', 'vR*'])  # labels 'vR*', 'vR'
-        Gl /= npc.trace(Gl)
-        # Gl is diag(S**2) up to numerical errors...
+        B0 = lasy.scale_axis(self.get_B(i0), sqrt_Wr, 'vR')
+        self.set_B(i0, lasy.compose(B0, Yl))
+        B1 = lasy.scale_axis(self.get_B(i1), 1.0 / sqrt_Wr, 'vL')
+        self.set_B(i1, lasy.tensors.partial_compose(B1, Yr, 'vL'))
+        # the new Gl is diag(S**2), up to numerical errors
+        Gl = (S**2).copy().set_labels(['vR*', 'vR']).as_SymmetricTensor()
         return Gl, Yl, Yr
 
     def outer_virtual_legs(self) -> tuple[lasy.ElementarySpace, lasy.ElementarySpace]:
