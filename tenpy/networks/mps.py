@@ -6313,7 +6313,7 @@ class MPS(BaseMPSExpectationValue):
 
     def correlation_length2(
         self, target: int = 1, tol_ev0: float | None = 1.0e-8, charge_sector=0, return_charges: bool = False
-    ) -> float | np.ndarray | tuple[float | np.ndarray, lasy.SectorArray]:
+    ) -> float | np.ndarray | tuple[float | np.ndarray, lasy.Sector | list[lasy.Sector]]:
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
         Assumes that `self` is in canonical form.
@@ -6337,7 +6337,10 @@ class MPS(BaseMPSExpectationValue):
         Parameters
         ----------
         target : int
-            We look for the `target` + 1 largest eigenvalues.
+            We look for the `target` + 1 largest eigenvalues (in absolute value, over all `charge_sector`\ s).
+            Fewer than `target` correlation lengths are returned if fewer eigenvalues are found, e.g. if the
+            sectors contain less eigenvectors, or if eigenvalues are exactly degenerate (e.g. for SU(2) multiplets
+            or complex conjugate pairs), which a single Krylov run does not resolve.
         tol_ev0 : float | None
             Print warning if largest eigenvalue deviates from 1 by more than `tol_ev0`.
             If `None`, **assume** dominant eigenvector in 0-charge-sector to be 1 for
@@ -6347,8 +6350,10 @@ class MPS(BaseMPSExpectationValue):
             of the TransferMatrix.
             ``None`` stands for *all* sectors, ``0`` stands for the trivial charge sector.
             Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in trivial sector.
-            If you pass a sector array, this function returns `target` dominant eigenvalues in
-            each of those sectors.
+            If you pass several sectors (a sector array or a list), the eigenvalues of all of them are
+            pooled and this function returns the overall `target` dominant ones.
+            For ``None``, we only look in one of each pair of sectors ``q, -q``, see
+            :meth:`correlation_length_charge_sectors`, since they have identical eigenvalues.
         return_charges : bool
             If True, return the charge sectors along with the eigenvalues.
 
@@ -6379,7 +6384,7 @@ class MPS(BaseMPSExpectationValue):
 
     def correlation_length(
         self, target: int = 1, tol_ev0: float | None = 1.0e-8, charge_sector=0, return_charges: bool = False
-    ) -> float | np.ndarray | tuple[float | np.ndarray, lasy.SectorArray]:
+    ) -> float | np.ndarray | tuple[float | np.ndarray, lasy.Sector | list[lasy.Sector]]:
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
         .. deprecated ::
@@ -6395,8 +6400,6 @@ class MPS(BaseMPSExpectationValue):
         ----------
         target, tol_ev0, charge_sector, return_charges
             same as for :meth:`correlation_length2`.
-        _ignore_warning : bool
-            Flag to suppress the ``DeprecationWarning``.
 
         Returns
         -------
@@ -6436,24 +6439,27 @@ class MPS(BaseMPSExpectationValue):
                     return 0, zero_charge
                 return [0] * target, [zero_charge] * target
             return 0.0 if target == 1 else [0] * target
-        # normalize the `charge_sector` to ``None`` (all sectors) or a list of sectors
+        # normalize the `charge_sector` to a list of sectors
         if charge_sector is None:
-            sectors = None
-        elif isinstance(charge_sector, (int, str)):
-            if not (charge_sector == 0 or charge_sector == 'trivial'):
-                raise ValueError(f'invalid charge_sector {charge_sector!r}')
-            sectors = [zero_charge]
-        elif isinstance(charge_sector, lasy.Sector):
-            sectors = [charge_sector]
+            # bra and ket are identical: the sectors `q` and `-q` have the same eigenvalues, only look in one of them
+            sectors = list(self.correlation_length_charge_sectors())
+        elif isinstance(charge_sector, (lasy.Sector, int, np.integer, str)):
+            sectors = [_normalize_sector(charge_sector, self.symmetry)]
         else:
-            sectors = list(charge_sector)  # e.g. a SectorArray
-        num = max(target + 1, self._transfermatrix_keep)
+            sectors = []  # e.g. a SectorArray; we need every sector only once
+            for sector in charge_sector:
+                sector = _normalize_sector(sector, self.symmetry)
+                if sector not in sectors:
+                    sectors.append(sector)
+        # one more than needed: for real tensors, eigenvalues come in complex conjugate pairs,
+        # which a Krylov method does not resolve (slow or no convergence) if it only looks for one of them.
+        num = max(target + 2, self._transfermatrix_keep)
         T = TransferMatrix(self, self, charge_sector=0, form='B')
         E = []
         V_charges = []
-        for sector in [None] if sectors is None else sectors:
+        for sector in sectors:
             # the trivial sector is special-cased (no charge leg) in the TransferMatrix
-            T.charge_sector = None if sector is None else (0 if sector == zero_charge else sector)
+            T.charge_sector = 0 if sector == zero_charge else sector
             with warnings.catch_warnings():
                 # a sector can have less than `num` vectors (e.g. just one for the trivial sector of an AKLT state)
                 warnings.filterwarnings('ignore', 'TransferMatrix.eigenvectors: reduce num_ev')
@@ -6465,7 +6471,7 @@ class MPS(BaseMPSExpectationValue):
         E = np.array(E)[sort]
         if return_charges:
             V_charges = [V_charges[i] for i in sort]
-        looked_in_zero_charge_sector = sectors is None or any(sector == zero_charge for sector in sectors)
+        looked_in_zero_charge_sector = any(sector == zero_charge for sector in sectors)
 
         if not looked_in_zero_charge_sector:
             # need to add the eigval 1 from the 0 charge sector
@@ -6474,7 +6480,7 @@ class MPS(BaseMPSExpectationValue):
                 T.charge_sector = 0
                 with warnings.catch_warnings():
                     warnings.filterwarnings('ignore', 'TransferMatrix.eigenvectors: reduce num_ev')
-                    E0, _ = T.eigenvectors(num, which='LM')
+                    E0, _ = T.eigenvectors(1, which='LM')
                 E0 = E0[0]
             else:
                 E0 = 1.0  # explicitly set it by hand
@@ -6489,7 +6495,8 @@ class MPS(BaseMPSExpectationValue):
                 if prec is not None:
                     logger.warning(
                         'correlation_length: other charge sector has eigenvalue '
-                        f' bigger than the eigenvalue 1. in the zero charge sector, but still within precision {prec:.1e}'
+                        'bigger than the eigenvalue 1. in the zero charge sector, '
+                        f'but still within precision {prec:.1e}'
                     )
                     E0 = E[0] + prec
                 else:
@@ -6507,7 +6514,8 @@ class MPS(BaseMPSExpectationValue):
                 'Use `charge_sector=None` to look in all sectors.'
             )
         E = np.array(E)
-        xis = -1.0 / np.log(np.abs(E[1 : target + 1] / E[0])) * self.L
+        with np.errstate(divide='ignore'):  # an eigenvalue can be exactly zero, which means xi = 0
+            xis = -1.0 / np.log(np.abs(E[1 : target + 1] / E[0])) * self.L
         # finally return
         if return_charges:
             if target == 1:
@@ -7216,12 +7224,12 @@ class MPS(BaseMPSExpectationValue):
             performing the truncation.
 
         """
+        raise NotImplementedError('compute_K is not ported to lasyten yet')
         # TODO
         from ..models.lattice import Lattice  # dynamical import to avoid import loops
 
         if self.finite:
             raise ValueError('Works only for infinite b.c.')
-        raise NotImplementedError('compute_K is not ported to lasyten yet')
 
         if isinstance(perm, Lattice):
             lat = perm
@@ -7440,6 +7448,7 @@ class MPS(BaseMPSExpectationValue):
         G : :class:`~lasyten.SymmetricTensor`
             The dominant eigenvector, with legs ``'vL*', 'vL'`` (right eigenvector)
             or ``'vR*', 'vR'`` (left eigenvector).
+
         """
         TM = TransferMatrix(self, self, bond0, bond0, transpose=transpose, charge_sector=0)
         if guess is None:
@@ -7491,6 +7500,7 @@ class MPS(BaseMPSExpectationValue):
         Kl, Kr : :class:`~lasyten.SymmetricTensor`
             The gauge transformations that were applied to ``B[i0]`` (``compose(B, Kl)``)
             and ``B[i1]`` (``partial_compose(B, Kr, 'vL')``), with labels ``'vL', 'vR'``.
+
         """
         Gr = lasy.planar_permute_legs(Gr, codomain=['vL*'], domain=['vL'])
         Gr = 0.5 * (Gr + Gr.hc)  # (should be hermitian already, up to numerical noise)
@@ -7504,7 +7514,7 @@ class MPS(BaseMPSExpectationValue):
             # project into non-degenerate subspace, reducing the bond dimensions!
             if chi < chi_old * 0.9:
                 logger.warning('canonical_form_infinite: project to significantly smaller chi')
-            Y = lasy.apply_mask(Y, mask, 'vR')
+            Y = _apply_mask_to_domain_leg(Y, mask, 'vR')
             W = lasy.tensors.apply_mask_DiagonalTensor(W, mask)
         norm = chi / lasy.trace(W).to_numpy()
         W = W * norm
@@ -7538,6 +7548,7 @@ class MPS(BaseMPSExpectationValue):
             The new left gram matrix ``S^2`` with legs ``'vR*', 'vR'``.
         Yl, Yr : :class:`~lasyten.SymmetricTensor`
             The unitary parts of the gauge transformations applied to ``B[i0]`` and ``B[i1]``.
+
         """
         sqrt_Wr = lasy.sqrt(Wr)
         Gl = lasy.planar_permute_legs(Gl, codomain=['vR*'], domain=['vR'])
@@ -7553,12 +7564,12 @@ class MPS(BaseMPSExpectationValue):
             # project into non-degenerate subspace, reducing the bond dimensions!
             if chi < chi_old * 0.9:
                 logger.warning('canonical_form_infinite: project to significantly smaller chi')
-            Y = lasy.apply_mask(Y, mask, 'vR')
+            Y = _apply_mask_to_domain_leg(Y, mask, 'vR')
             S2 = lasy.tensors.apply_mask_DiagonalTensor(S2, mask)
             s_norm = np.sqrt(lasy.trace(S2).to_numpy())
         S = lasy.sqrt(S2) / s_norm
         self.set_SL(i1, S)
-        Yl = (Y.copy() / s_norm).set_labels(['vL', 'vR'])
+        Yl = (Y / s_norm).set_labels(['vL', 'vR'])
         Yr = Y.hc.copy().set_labels(['vL', 'vR'])
         i0 = i1 - 1
         B0 = lasy.scale_axis(self.get_B(i0), sqrt_Wr, 'vR')
@@ -7566,7 +7577,7 @@ class MPS(BaseMPSExpectationValue):
         B1 = lasy.scale_axis(self.get_B(i1), 1.0 / sqrt_Wr, 'vL')
         self.set_B(i1, lasy.tensors.partial_compose(B1, Yr, 'vL'))
         # the new Gl is diag(S**2), up to numerical errors
-        Gl = (S**2).copy().set_labels(['vR*', 'vR']).as_SymmetricTensor()
+        Gl = (S**2).set_labels(['vR*', 'vR']).as_SymmetricTensor()
         return Gl, Yl, Yr
 
     def outer_virtual_legs(self) -> tuple[lasy.ElementarySpace, lasy.ElementarySpace]:
@@ -8691,8 +8702,8 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
         num_ev: int = 1,
         which: str = 'LM',
         v0: lasy.SymmetricTensor | None = None,
-        tol: float = 1.0e-13,
-        N_max: int = 40,
+        tol: float | None = None,
+        N_max: int = 80,
         max_restarts: int = 50,
     ) -> tuple[np.ndarray, list[lasy.SymmetricTensor]]:
         """Find (dominant) eigenvector(s) of self with the :class:`~lasyten.tensors.krylov_based.Arnoldi` method.
@@ -8713,9 +8724,11 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
         v0 : :class:`~lasyten.SymmetricTensor` | None
             Initial guess, with legs as for :meth:`matvec`. Defaults to :meth:`initial_guess`.
             Ignored for ``charge_sector=None``.
-        tol : float
+        tol : float | None
             Tolerance for the residuals ``norm(self.matvec(v) - eta * v)`` of the normalized eigenvectors
             `v`, relative to the largest magnitude of the eigenvalues `eta`.
+            Defaults to ``1e-13`` for a single eigenvector. If we look for several, the transfer matrix is not
+            normal and subdominant eigenvalues (e.g. complex conjugate pairs) do not converge that far: ``1e-10``.
         N_max : int
             Maximum dimension of the Krylov space in each Arnoldi run.
         max_restarts : int
@@ -8732,8 +8745,10 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
         if self.charge_sector is None:
             eta, w = [], []
             try:
+                trivial_sector = self.charge_leg.symmetry.trivial_sector
                 for sector in self.charge_leg.defining_sectors:
-                    self.charge_sector = sector
+                    # the trivial sector is special-cased (no charge leg, identity as initial guess)
+                    self.charge_sector = 0 if sector == trivial_sector else sector
                     with warnings.catch_warnings():
                         warnings.filterwarnings('ignore', 'TransferMatrix.eigenvectors: reduce num_ev')
                         eta_s, w_s = self.eigenvectors(num_ev, which, None, tol, N_max, max_restarts)
@@ -8760,9 +8775,11 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
             v = v0 / lasy.norm(v0)
             eta = np.atleast_1d(np.real_if_close(lasy.inner(v, self.matvec(v)).to_numpy()))
             return eta, [v]
+        if tol is None:
+            tol = 1.0e-13 if num_ev == 1 else 1.0e-10
         N = int(min(N_max, dim))
         options = dict(num_ev=num_ev, which=which, N_min=min(N, num_ev + 2), N_max=N, N_cache=N, E_tol=0.1 * tol)
-        for _ in range(max_restarts + 1):
+        for restart in range(max_restarts + 1):
             eta, w, _ = lasy.tensors.Arnoldi(self, v0, options).run()
             # Arnoldi might stop early (if v0 is in an invariant subspace) with less than `num_ev` vectors
             eta = np.asarray(eta)[: len(w)]
@@ -8773,6 +8790,11 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
             scale = max(np.max(np.abs(eta)), np.finfo(float).tiny)
             residuals = [lasy.norm(self.matvec(v) - complex(e) * v).to_numpy() for e, v in zip(eta, w)]
             if len(w) == num_ev and max(residuals) <= tol * scale:
+                break
+            if restart > 0 and 0 < len(w) < num_ev and max(residuals) <= tol * scale:
+                # Even after restarting with the full Krylov space (and some noise), we find less than `num_ev`
+                # vectors, all of them converged: there are no further eigenvectors reachable by the
+                # Krylov method (e.g. an exactly invariant subspace of smaller dimension than `dim`).
                 break
             # restart from the sum of the eigenvector estimates, with some noise to leave invariant subspaces
             noise = lasy.SymmetricTensor.from_random_normal(
@@ -9418,6 +9440,32 @@ def _permute_theta_for_svd(theta: lasy.Tensor, charge_leg_right: bool) -> lasy.T
     if charge_leg_right:
         return lasy.planar_permute_legs(theta, codomain=['vL', 'p0'], domain=hidden[::-1] + ['vR', 'p1'])
     return lasy.planar_permute_legs(theta, codomain=hidden + ['vL', 'p0'], domain=['vR', 'p1'])
+
+
+def _normalize_sector(charge_sector, symmetry: lasy.Symmetry) -> lasy.Sector:
+    """Convert one entry of a `charge_sector` argument (a sector, ``0`` or ``'trivial'``) to a Sector."""
+    if isinstance(charge_sector, lasy.Sector):
+        return charge_sector
+    if isinstance(charge_sector, str):
+        valid = charge_sector == 'trivial'
+    elif isinstance(charge_sector, (int, np.integer)):
+        valid = charge_sector == 0
+    else:
+        return lasy.Sector(charge_sector)
+    if not valid:
+        raise ValueError(f'invalid charge_sector {charge_sector!r}')
+    return symmetry.trivial_sector
+
+
+def _apply_mask_to_domain_leg(T: lasy.SymmetricTensor, mask: lasy.Mask, leg: str) -> lasy.SymmetricTensor:
+    """Project the leg `leg` of `T`, which is in the *domain*, with the `mask` of the (larger) space of that leg.
+
+    :func:`~lasyten.apply_mask` does not accept this combination of legs: the domain leg of `T` is the dual
+    of the ``mask.large_leg``. Contracting with the adjoint mask does the job and keeps the label `leg`.
+    """
+    mask = mask.copy()
+    mask.set_labels([leg + '*', '_'])  # codomain label contracts with the domain leg `leg` of `T`
+    return lasy.compose(T, mask.hc)
 
 
 def _project_onto_single_summand(B: lasy.SymmetricTensor, leg: str) -> lasy.SymmetricTensor:
