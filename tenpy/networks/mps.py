@@ -3212,7 +3212,7 @@ class MPS(BaseMPSExpectationValue):
                     'of the desired bond dimension or a converged charge distribution.'
                 )
             for i in range(L):
-                virtual_spaces[i] = _truncate_virtual_space(virtual_spaces[i], chi=chis[i])
+                virtual_spaces[i] = _truncate_virtual_space(virtual_spaces[i], None, chi=chis[i])
 
         res = cls.from_desired_virtual_spaces(
             sites, virtual_spaces, bc, dtype, total_charge, norm, unit_cell_width, device, understood_shift_symmetry
