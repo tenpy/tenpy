@@ -35,7 +35,7 @@ __all__ = [
 ]
 
 type CouplingPermuteSpec = (
-    Literal['invariant', 'odd', 'swap_hc'] | Callable[[Sequence[int], dict[str, float | complex]]]
+    Literal['invariant', 'odd', 'swap_hc', None] | Callable[[Sequence[int], dict[str, float | complex]]]
 )
 
 
