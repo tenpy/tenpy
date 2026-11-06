@@ -31,6 +31,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Operating System :: Unix",
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",
@@ -85,9 +86,9 @@ version = {attr = "tenpy.__version__"}
 [tool.cibuildwheel]
 # Disable building 32bit windows wheels (h5py does not support it)
 # Disable musllinux : would need to install BLAS/LAPACK
-# Disable free-threaded python 3.14 (h5py not yet supported), see issue 570
+# Disable free-threaded python (h5py not yet supported), see issue 570
 #   (https://github.com/tenpy/tenpy/issues/570)
-skip = "*-win32 *-musllinux_* cp314t-*"
+skip = "*-win32 *-musllinux_* cp314t-* cp315t-*"
 # Build separate wheels for macOS's different architectures.
 macos.archs = ["x86_64", "arm64"]
 # Build only on Linux architectures that don't need qemu emulation.

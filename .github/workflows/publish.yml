@@ -35,7 +35,7 @@ jobs:
 
     - name: Build wheels
       # configuration in pyproject.toml
-      uses: pypa/cibuildwheel@v3.2.1
+      uses: pypa/cibuildwheel@v4.3.5
       with:
         output-dir: dist
 
