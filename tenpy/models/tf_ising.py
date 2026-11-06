@@ -15,7 +15,7 @@ import numpy as np
 
 from ..tools import to_array
 from .lattice import Chain
-from .model import ModelBuilder, NearestNeighborModel
+from .model import ModelBuilder
 
 __all__ = ['TFIModel', 'TFIChain']
 
@@ -81,7 +81,7 @@ class TFIModel(ModelBuilder):
         return
 
 
-class TFIChain(TFIModel, NearestNeighborModel):
+class TFIChain(TFIModel):
     """The :class:`TFIModel` on a Chain, suitable for TEBD.
 
     See the :class:`TFIModel` for the documentation of parameters.

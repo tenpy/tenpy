@@ -7,7 +7,7 @@ import time
 import lasyten as lasy
 import numpy as np
 
-from ..models import Model
+from ..models import EvolutionModel
 from ..networks import MPS
 from ..tools import DictCache, EventHandler, TruncationError, asConfig, consistency_check, svd_theta
 
@@ -62,8 +62,8 @@ class Algorithm:
     ----------
     psi :
         Tensor network to be updated by the algorithm.
-    model : :class:`~tenpy.models.model.Model`
-        Model with the representation of the hamiltonian suitable for the algorithm.
+    model : :class:`~tenpy.models.model.EvolutionModel`
+        Model that defines the physical problem, e.g. usually by defining a Hamiltonian.
     options : :class:`~tenpy.tools.params.Config`
         Optional parameters.
     checkpoint : :class:`~tenpy.tools.events.EventHandler`
@@ -79,7 +79,7 @@ class Algorithm:
 
     """
 
-    def __init__(self, psi: MPS, model: Model, options, *, resume_data=None, cache=None):
+    def __init__(self, psi: MPS, model: EvolutionModel, options, *, resume_data=None, cache=None):
         self.options = asConfig(options, self.__class__.__name__)
         self.trunc_params = self.options.subconfig('trunc_params')
         self.psi = psi

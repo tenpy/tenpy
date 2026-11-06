@@ -13,7 +13,7 @@ from tenpy.networks.site import SpinHalfSite
 
 from tenpy.algorithms.dmrg import TwoSiteDMRGEngine as dmrg_eng
 from tenpy.models.lattice import Square
-from tenpy.models.model import CouplingModel, MPOModel
+from tenpy.models.model import CouplingModel
 from tenpy.models.tf_ising import TFIChain
 from tenpy.networks.mpo import MPO, MPOEnvironment, MPOEnvironmentBuilder, MPOTransferMatrix
 from tenpy.networks.mps import MPS

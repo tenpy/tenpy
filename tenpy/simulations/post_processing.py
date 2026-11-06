@@ -18,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ..models import Model
+from ..models import EvolutionModel
 from ..tools import (
     Config,
     find_subclass,
@@ -221,7 +221,7 @@ class DataLoader:
     def _get_model(self):
         model_class_name = self.sim_params['model_class']
         model_params = self.sim_params['model_params']
-        model_class = find_subclass(Model, model_class_name)
+        model_class = find_subclass(EvolutionModel, model_class_name)
         return model_class(model_params)
 
     @property

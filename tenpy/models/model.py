@@ -32,32 +32,11 @@ __all__ = [
     'RandomUnitaryEvolution',
     'HamiltonianModel',
     'HamiltonianMPOModel',
-    'CouplingModel',
-    'Model',
-    'NearestNeighborModel',
 ]
 
 type CouplingPermuteSpec = (
     Literal['invariant', 'odd', 'swap_hc'] | Callable[[Sequence[int], dict[str, float | complex]]]
 )
-
-
-# TODO placeholders
-class Model:
-    pass
-
-
-class NearestNeighborModel(Model):
-    pass
-
-
-class MPOModel(Model):
-    pass
-
-
-class CouplingMPOModel(MPOModel):
-    def __init__(self, params):
-        self.params = params
 
 
 class EvolutionModel(metaclass=ABCMeta):

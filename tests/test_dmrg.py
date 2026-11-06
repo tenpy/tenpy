@@ -13,7 +13,7 @@ from scipy import integrate
 from tenpy.algorithms import dmrg, dmrg_parallel
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.models.lattice import Chain
-from tenpy.models.model import CouplingModel, MPOModel
+from tenpy.models.model import CouplingModel
 from tenpy.models.spins import DipolarSpinChain, SpinChain
 from tenpy.models.tf_ising import TFIChain
 from tenpy.networks import mps
@@ -607,8 +607,9 @@ def test_dmrg_mixer_cleanup(L, bc_MPS):
         assert np.allclose(engine.psi.expectation_value(op), old_psi.expectation_value(op))
 
 
-class _TransverseClusterModel(CouplingModel, MPOModel):
+class _TransverseClusterModel(CouplingModel):
     def __init__(self, model_params):
+        raise NotImplementedError  # TODO port to v2
         L = model_params.get('L', 2)
         B = model_params.get('B', 0)
         bc_MPS = model_params.get('bc_MPS', 'infinite')

@@ -506,19 +506,27 @@ def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc,
     assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
 
 
-class MyMod(model.CouplingMPOModel, model.NearestNeighborModel):
+class MyMod(model.ModelBuilder):
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
-        return tenpy.networks.site.SpinHalfSite(conserve, True)
+        return lasy.sites.SpinSite(S=0.5, conserve=conserve)
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jx=1, name='Sx.Sx'), hc='Sx.Sx', permute='invariant'
+        )
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jy=1, name='Sy.Sy'), hc='Sy.Sy', permute='invariant'
+        )
 
     def init_terms(self, model_params):
         x = model_params.get('x', 1.0)
         y = model_params.get('y', 0.25)
-        self.add_onsite_term(y, 0, 'Sz')
-        self.add_local_term(y, [('Sz', [4, 0])])
-        self.add_coupling_term(x, 0, 1, 'Sx', 'Sx')
-        self.add_coupling_term(2.0 * x, 1, 2, 'Sy', 'Sy')
-        self.add_local_term(3.0 * x, [('Sy', [3, 0]), ('Sy', [4, 0])])
+        self.add_onsite_operator(y, 'Sz')
+        self.add_onsite_operator(y, 'Sz', x=4, u=0)
+        self._add_two_site_coupling_mps(x, 0, 1, 'Sx.Sx')
+        self.add_two_site_coupling(3 * x, 'Sy.Sy', dx=1, x1=3)
 
 
 def test_CouplingMPOModel_group():
@@ -802,8 +810,9 @@ def test_model_plus_hc(which_site, which_ops, op_string, L=6):
         compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
 
-class DisorderedLatticeModel(model.CouplingMPOModel):
+class DisorderedLatticeModel(model.ModelBuilder):
     def init_sites(self, model_params):
+        raise NotImplementedError  # TODO adapt
         conserve = model_params.get('conserve', 'parity')
         return tenpy.networks.site.SpinHalfSite(conserve)
 
@@ -870,10 +879,11 @@ def test_fixes_511(L=6, t=1.234, tp=2.54):
     pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     # https://github.com/tenpy/tenpy/issues/511
 
-    class TTprimeSpinfulChain(model.CouplingMPOModel):
+    class TTprimeSpinfulChain(model.ModelBuilder):
         """Spin-1/2 fermions on a 1D chain with NN hopping t and NNN hopping t'."""
 
         def init_sites(self, p):
+            raise NotImplementedError
             # conserve total N and Sz; degenerate spin DOF
             return tenpy.networks.site.SpinHalfFermionSite(cons_N=None, cons_Sz=None)
 
