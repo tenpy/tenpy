@@ -8720,7 +8720,7 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
         if dim == 1:
             # the only vector is an eigenvector (and Arnoldi needs at least 2 steps)
             v = v0 / lasy.norm(v0)
-            eta = np.real_if_close(lasy.inner(v, self.matvec(v)).to_numpy())
+            eta = np.atleast_1d(np.real_if_close(lasy.inner(v, self.matvec(v)).to_numpy()))
             return eta, [v]
         N = int(min(N_max, dim))
         options = dict(num_ev=num_ev, which=which, N_min=min(N, num_ev + 2), N_max=N, N_cache=N, E_tol=0.1 * tol)
@@ -8751,7 +8751,7 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
                 'restarts',
                 stacklevel=2,
             )
-        eta = np.real_if_close(eta)
+        eta = np.atleast_1d(np.real_if_close(eta))
         return eta, w
 
     def eigenvector_charge(self, vec: lasy.SymmetricTensor) -> lasy.Sector:
