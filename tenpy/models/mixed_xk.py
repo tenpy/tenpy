@@ -69,11 +69,10 @@ import itertools as it
 import numpy as np
 
 # from ..linalg import np_conserved as npc
-from ..networks.site import FermionSite
 from ..networks.terms import TermList
 from ..tools import inverse_permutation, to_array, to_iterable
 from .lattice import Lattice
-from .model import CouplingMPOModel
+from .model import ModelBuilder
 
 __all__ = ['MixedXKLattice', 'MixedXKModel', 'SpinlessMixedXKSquare', 'HubbardMixedXKSquare']
 
@@ -337,7 +336,7 @@ class MixedXKLattice(Lattice):
                 delta_q[(k + q) % Ly, k] = 1
 
 
-class MixedXKModel(CouplingMPOModel):
+class MixedXKModel(ModelBuilder):
     """Base class for a Hamiltonian represented in mixed x-k-space on a cylinder.
 
     All parameters are collected in a single dictionary `model_params`, which
@@ -365,6 +364,9 @@ class MixedXKModel(CouplingMPOModel):
         resulting from this real-space lattice.
 
     """
+
+    def __init__(self, model_params):
+        raise NotImplementedError
 
     def init_lattice(self, model_params, N_orb, chinfo, charges):
         """Initialize a MixedXKLattice for the given model parameters.

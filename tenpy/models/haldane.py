@@ -1,16 +1,18 @@
 """Bosonic and fermionic Haldane models."""
-# Copyright (C) TeNPy Developers, Apache license
 
+# Copyright (C) TeNPy Developers, Apache license
+from typing import Literal
+
+import lasyten as lasy
 import numpy as np
 
-from ..networks.site import BosonSite, FermionSite
 from .lattice import Honeycomb
-from .model import CouplingMPOModel
+from .model import ModelBuilder
 
 __all__ = ['BosonicHaldaneModel', 'FermionicHaldaneModel']
 
 
-class BosonicHaldaneModel(CouplingMPOModel):
+class BosonicHaldaneModel(ModelBuilder):
     r"""Hardcore bosonic Haldane model.
 
     The Hamiltonian reads:
@@ -54,11 +56,23 @@ class BosonicHaldaneModel(CouplingMPOModel):
 
     default_lattice = Honeycomb
     force_default_lattice = True
+    conserve: Literal['N', 'parity', None]
 
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N', str)
-        site = BosonSite(conserve=conserve)
-        return site
+        if conserve == 'best':
+            conserve = 'N'
+        self.conserve = conserve
+        return lasy.sites.SpinlessBosonSite(conserve=conserve)
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(
+            lasy.models.hopping([site, site], t_left=1, t_right=0, name='Bd.B'), hc='B.Bd', permute='swap_hc'
+        )
+        self.define_coupling(
+            lasy.models.density_density_interaction([site, site], name='N.N'), hc='N.N', permute='invariant'
+        )
 
     def init_terms(self, model_params):
         t1 = np.asarray(model_params.get('t1', -1.0, 'real_or_array'))
@@ -68,13 +82,13 @@ class BosonicHaldaneModel(CouplingMPOModel):
         mu = np.asarray(model_params.get('mu', 0.0, 'real_or_array'))
         phi_ext = model_params.get('phi_ext', 0.0, 'real')
 
-        self.add_onsite(mu, 0, 'N', category='mu N')
-        self.add_onsite(-mu, 1, 'N', category='mu N')
+        self.add_onsite_operator(mu, 'N', u=0)
+        self.add_onsite_operator(-mu, 'N', u=1)
 
         for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, 2 * np.pi * phi_ext])
-            self.add_coupling(t1_phi, u1, 'Bd', u2, 'B', dx, category='t1 Bd_i B_j', plus_hc=True)
-            self.add_coupling(V, u1, 'N', u2, 'N', dx, category='V N_i N_j')
+            self.add_two_site_coupling(t1_phi, 'Bd.B', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
+            self.add_two_site_coupling(V, 'N.N', dx, x1='sum_over', u1=u1, u2=u2)
 
         for u1, u2, dx in [
             (0, 0, np.array([-1, 1])),
@@ -85,10 +99,10 @@ class BosonicHaldaneModel(CouplingMPOModel):
             (1, 1, np.array([-1, 0])),
         ]:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, 2 * np.pi * phi_ext])
-            self.add_coupling(t2_phi, u1, 'Bd', u2, 'B', dx, category='t2 Bd_i B_j', plus_hc=True)
+            self.add_two_site_coupling(t2_phi, 'Bd.B', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
 
 
-class FermionicHaldaneModel(CouplingMPOModel):
+class FermionicHaldaneModel(ModelBuilder):
     r"""Spinless fermionic Haldane model.
 
     The Hamiltonian reads:
@@ -121,7 +135,7 @@ class FermionicHaldaneModel(CouplingMPOModel):
     .. cfg:config :: FermionicHaldaneModel
         :include: CouplingMPOModel
 
-        conserve : 'best' | 'N' | 'parity' | None
+        conserve : 'best' | 'N' | 'parity'
             What should be conserved. See :class:`~tenpy.networks.Site.FermionSite`.
             For ``'best'``, we check the parameters what can be preserved.
         t1, t2, V, mu : float | array
@@ -136,11 +150,24 @@ class FermionicHaldaneModel(CouplingMPOModel):
 
     default_lattice = Honeycomb
     force_default_lattice = True
+    conserve: Literal['N', 'parity']
 
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N', str)
-        site = FermionSite(conserve=conserve)
-        return site
+        if conserve == 'best':
+            conserve = 'N'
+        self.conserve = conserve
+        self._check_fermion_conserve(conserve)
+        return lasy.sites.SpinlessFermionSite(conserve=conserve)
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(
+            lasy.models.hopping([site, site], t_left=1, t_right=0, name='Cd.C'), hc='C.Cd', permute='swap_hc'
+        )
+        self.define_coupling(
+            lasy.models.density_density_interaction([site, site], name='N.N'), hc='N.N', permute='invariant'
+        )
 
     def init_terms(self, model_params):
         t1 = np.asarray(model_params.get('t1', -1.0, 'real_or_array'))
@@ -150,13 +177,13 @@ class FermionicHaldaneModel(CouplingMPOModel):
         mu = np.asarray(model_params.get('mu', 0.0, 'real_or_array'))
         phi_ext = model_params.get('phi_ext', 0.0, 'real')
 
-        self.add_onsite(mu, 0, 'N', category='mu N')
-        self.add_onsite(-mu, 1, 'N', category='mu N')
+        self.add_onsite_operator(mu, 'N', u=0)
+        self.add_onsite_operator(-mu, 'N', u=1)
 
         for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, 2 * np.pi * phi_ext])
-            self.add_coupling(t1_phi, u1, 'Cd', u2, 'C', dx, category='t1 Cd_i C_j', plus_hc=True)
-            self.add_coupling(V, u1, 'N', u2, 'N', dx, category='V N_i N_j')
+            self.add_two_site_coupling(t1_phi, 'Cd.C', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
+            self.add_two_site_coupling(V, 'N.N', dx, x1='sum_over', u1=u1, u2=u2)
 
         for u1, u2, dx in [
             (0, 0, np.array([-1, 1])),
@@ -167,4 +194,4 @@ class FermionicHaldaneModel(CouplingMPOModel):
             (1, 1, np.array([-1, 0])),
         ]:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, 2 * np.pi * phi_ext])
-            self.add_coupling(t2_phi, u1, 'Cd', u2, 'C', dx, category='t2 Cd_i C_j', plus_hc=True)
+            self.add_two_site_coupling(t2_phi, 'Cd.C', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)

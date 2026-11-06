@@ -16,7 +16,7 @@ from tenpy.models.lattice import Chain
 from tenpy.models.model import CouplingModel, MPOModel
 from tenpy.models.spins import DipolarSpinChain, SpinChain
 from tenpy.models.tf_ising import TFIChain
-from tenpy.networks import MPO, mps
+from tenpy.networks import mps
 from tenpy.tools import asConfig
 
 
@@ -39,44 +39,6 @@ class _DummyEffH:
 
     def to_tensor(self):
         return self.tensor
-
-
-class WorkaroundNNModel:
-    def __init__(self, site: lasy.Site, nn_interaction: lasy.Coupling, onsite: lasy.Coupling, bc_MPS: str, lat):
-        self.site = site
-        self.nn_interaction = nn_interaction
-        self.onsite = onsite
-        self.bc_MPS = bc_MPS
-        self.lat = lat
-
-        A, B = nn_interaction.factorization
-        (C,) = onsite.factorization
-        Id = site.identity_tensor(w=C.get_leg('wL'))
-        grid = [[Id, A, C], [None, None, B], [None, None, Id]]
-        W = lasy.tensor_from_grid(
-            grid, labels=['wL', 'p', 'wR', 'p*'], row_labels=['IdL', None, 'IdR'], col_labels=['IdL', None, 'IdR']
-        )
-
-        Id_C = lasy.planar_contraction(
-            Id, C, 'wR', 'wL', relabel1={'p': 'p0', 'p*': 'p0*'}, relabel2={'p': 'p1', 'p*': 'p1*'}
-        )
-        Id_C = lasy.squeeze_legs(Id_C, ['wL', 'wR'])
-        Id_C = lasy.planar_permute_legs(Id_C, codomain=['p0', 'p1'])
-
-        C_Id = lasy.planar_contraction(
-            C, Id, 'wR', 'wL', relabel1={'p': 'p0', 'p*': 'p0*'}, relabel2={'p': 'p1', 'p*': 'p1*'}
-        )
-        C_Id = lasy.squeeze_legs(C_Id, ['wL', 'wR'])
-        C_Id = lasy.planar_permute_legs(C_Id, codomain=['p0', 'p1'])
-
-        if bc_MPS == 'infinite':
-            L = lat.Ls[0]
-            self.H_MPO: MPO = MPO([site] * L, [W] * L, bc='infinite', max_range=2, mps_unit_cell_width=1)
-            H_bond = nn_interaction.to_tensor() + 0.5 * Id_C + 0.5 * C_Id
-            H_bond = lasy.Coupling.from_tensor(H_bond, [site, site], name='H_bond')
-            self.H_bond = [H_bond] * L
-        else:
-            raise NotImplementedError
 
 
 @pytest.mark.parametrize(
@@ -437,7 +399,7 @@ def test_dmrg_excited(eps=1.0e-12):
     # (without truncation)
     L, g = 8, 1.3
     bc = 'finite'
-    model_params = dict(L=L, J=1.0, g=g, bc_MPS=bc, conserve='parity', sort_charge=True)
+    model_params = dict(L=L, J=1.0, g=g, bc_MPS=bc, conserve='parity')
     M = TFIChain(model_params)
     # compare to exact solution
     ED = ExactDiag.from_model(M)

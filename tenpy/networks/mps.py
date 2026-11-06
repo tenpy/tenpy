@@ -2844,7 +2844,7 @@ class MPS(BaseMPSExpectationValue):
 
         .. doctest :: MPS.from_product_state
 
-            >>> spin = tenpy.networks.site.SpinHalfSite(conserve=None, sort_charge=False)
+            >>> spin = tenpy.networks.site.SpinHalfSite(conserve=None)
             >>> p_state = ['up', 'down'] * (L // 2)  # repeats entries L/2 times
             >>> theta, phi = np.pi / 4, np.pi / 6
             >>> bloch_sphere_state = np.array([np.cos(theta / 2), np.exp(1.0j * phi) * np.sin(theta / 2)])
@@ -8271,6 +8271,7 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):  # TODO: adapt for Lin
 
         bra_N and ket_M are *not* reversed for transpose=False, i.e. ordered left to right.
         """
+        raise NotImplementedError('MPS transfermatrix not ported')
         self.L = L = len(bra_N)
         if unit_cell_width is None:
             # TODO: deprecate the default value.

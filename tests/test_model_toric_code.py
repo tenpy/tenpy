@@ -1,8 +1,4 @@
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
-
-pytest.skip(allow_module_level=True)
-
 import numpy as np
 import pytest
 from test_model import check_general_model
@@ -14,9 +10,13 @@ from tenpy.networks.mps import MPS
 
 @pytest.mark.slow
 def test_ToricCode_general():
+    with pytest.raises(NotImplementedError, match='MultiCouplingTerms add to graph'):
+        ToricCode(dict(Lx=2, Ly=3, bc_MPS='infinite')).get_H_MPO()
+    pytest.xfail('MultiCouplingTerms add to graph')
+
     check_general_model(
         ToricCode,
-        dict(Lx=2, Ly=3, bc_MPS='infinite', sort_charge=True),
+        dict(Lx=2, Ly=3, bc_MPS='infinite'),
         {
             'conserve': [None, 'parity'],
         },
@@ -25,7 +25,11 @@ def test_ToricCode_general():
 
 @pytest.mark.slow
 def test_ToricCode(Lx=1, Ly=2):
-    model_params = {'Lx': Lx, 'Ly': Ly, 'bc_MPS': 'infinite', 'sort_charge': True}
+    with pytest.raises(NotImplementedError, match='MultiCouplingTerms add to graph'):
+        ToricCode(dict(Lx=2, Ly=3, bc_MPS='infinite')).get_H_MPO()
+    pytest.xfail('MultiCouplingTerms add to graph')
+
+    model_params = {'Lx': Lx, 'Ly': Ly, 'bc_MPS': 'infinite'}
     M = ToricCode(model_params)
     psi = MPS.from_product_state(
         M.lattice.mps_sites(), [0] * M.lattice.N_sites, bc='infinite', unit_cell_width=M.lattice.mps_unit_cell_width

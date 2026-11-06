@@ -1,14 +1,13 @@
 """tJ model"""
 # Copyright (C) TeNPy Developers, Apache license
 
-from ..networks.site import SpinHalfHoleSite
 from .lattice import Chain
-from .model import CouplingMPOModel, NearestNeighborModel
+from .model import ModelBuilder
 
 __all__ = ['tJModel', 'tJChain']
 
 
-class tJModel(CouplingMPOModel):
+class tJModel(ModelBuilder):
     r"""Spin-1/2 t-J model.
 
     The Hamiltonian reads:
@@ -52,6 +51,10 @@ class tJModel(CouplingMPOModel):
 
     """
 
+    def __init__(self, model_params):
+        # TODO can prbly implement very similarly to the hubbard models
+        raise NotImplementedError('Need to implement SpinHalfHoleSite in lasy')
+
     def init_sites(self, model_params):
         cons_N = model_params.get('cons_N', 'N', str)
         cons_Sz = model_params.get('cons_Sz', 'Sz', str)
@@ -72,7 +75,7 @@ class tJModel(CouplingMPOModel):
             self.add_coupling(-J / 4, u1, 'Ntot', u2, 'Ntot', dx)
 
 
-class tJChain(tJModel, NearestNeighborModel):
+class tJChain(tJModel):
     """The :class:`tJModel` on a Chain, suitable for TEBD.
 
     See the :class:`tJModel` for the documentation of parameters.

@@ -3,19 +3,21 @@
 The XXZ chain is contained in the more general :class:`~tenpy.models.spins.SpinChain`; the idea of
 this module is more to serve as a pedagogical example for a model.
 """
+
 # Copyright (C) TeNPy Developers, Apache license
+from typing import Literal
 
 import lasyten as lasy
 import numpy as np
 
 from ..tools import asConfig, to_array
 from .lattice import Chain
-from .model import CouplingModel, ModelBuilder, MPOModel, NearestNeighborModel
+from .model import ModelBuilder
 
 __all__ = ['XXZChain', 'XXZChain2']
 
 
-class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
+class XXZChain(ModelBuilder):
     r"""Spin-1/2 XXZ chain with Sz conservation.
 
     The Hamiltonian reads:
@@ -105,6 +107,7 @@ class XXZChain2(ModelBuilder):
 
     default_lattice = 'Chain'
     force_default_lattice = True
+    conserve: Literal['Sz', 'parity', None]
 
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'best', str)
@@ -116,17 +119,17 @@ class XXZChain2(ModelBuilder):
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell
         self.define_coupling(
-            lasy.models.spin_spin_coupling([site, site], Jx=1, Jy=1, Jz=1, backend=self.backend, name='S.S'),
+            lasy.models.spin_spin_coupling([site, site], Jx=1, Jy=1, Jz=1, name='S.S'),
             hc='S.S',
             permute='invariant',
         )
         self.define_coupling(
-            lasy.models.spin_spin_coupling([site, site], Jpm=1, backend=self.backend, name='Sp.Sm'),
+            lasy.models.spin_spin_coupling([site, site], Jpm=1, name='Sp.Sm'),
             hc='Sm.Sp',
             permute='swap_hc',
         )
         self.define_coupling(
-            lasy.models.spin_spin_coupling([site, site], Jz=1, backend=self.backend, name='Sz.Sz'),
+            lasy.models.spin_spin_coupling([site, site], Jz=1, name='Sz.Sz'),
             hc='Sz.Sz',
             permute='invariant',
         )

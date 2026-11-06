@@ -1,12 +1,13 @@
 """Bosonic and fermionic Hubbard models."""
-# Copyright (C) TeNPy Developers, Apache license
 
+# Copyright (C) TeNPy Developers, Apache license
+from typing import Literal
+
+import lasyten as lasy
 import numpy as np
 
-from ..networks.site import BosonSite, FermionSite, SpinHalfFermionSite, spin_half_species
-from ..tools import asConfig
 from .lattice import Chain
-from .model import CouplingMPOModel, NearestNeighborModel
+from .model import ModelBuilder
 
 __all__ = [
     'BoseHubbardModel',
@@ -18,7 +19,7 @@ __all__ = [
 ]
 
 
-class BoseHubbardModel(CouplingMPOModel):
+class BoseHubbardModel(ModelBuilder):
     r"""Spinless Bose-Hubbard model.
 
     The Hamiltonian is:
@@ -59,6 +60,8 @@ class BoseHubbardModel(CouplingMPOModel):
 
     """
 
+    conserve: Literal['N', 'parity', None]
+
     def init_sites(self, model_params):
         n_max = model_params.get('n_max', 3, int)
         filling = model_params.get('filling', 0.5, 'real')
@@ -66,8 +69,19 @@ class BoseHubbardModel(CouplingMPOModel):
         if conserve == 'best':
             conserve = 'N'
             self.logger.info('%s: set conserve to %s', self.name, conserve)
-        site = BosonSite(Nmax=n_max, conserve=conserve, filling=filling)
-        return site
+        self.conserve = conserve
+        return lasy.sites.SpinlessBosonSite(Nmax=n_max, conserve=conserve, filling=filling)
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(
+            lasy.models.hopping([site, site], t_left=1, t_right=0, species=None, name='Bd.B'),
+            hc='sum_B.Bd',
+            permute='swap_hc',
+        )
+        self.define_coupling(
+            lasy.models.density_density_interaction([site, site], name='N.N'), hc='Ntot.Ntot', permute='invariant'
+        )
 
     def init_terms(self, model_params):
         # 0) Read and set parameters.
@@ -76,60 +90,29 @@ class BoseHubbardModel(CouplingMPOModel):
         V = model_params.get('V', 0.0, 'real_or_array')
         mu = model_params.get('mu', 0, 'real_or_array')
         phi_ext = model_params.get('phi_ext', None, 'real')
-        for u in range(len(self.lattice.unit_cell)):
-            self.add_onsite(-mu - U / 2.0, u, 'N')
-            self.add_onsite(U / 2.0, u, 'NN')
+
+        self.add_onsite_operator(-mu - U / 2, 'N')
+        self.add_onsite_operator(U / 2, 'NN')
         for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             if phi_ext is None:
                 hop = -t
             else:
                 hop = self.coupling_strength_add_ext_flux(-t, dx, [0, 2 * np.pi * phi_ext])
-            self.add_coupling(hop, u1, 'Bd', u2, 'B', dx, plus_hc=True)
-            self.add_coupling(V, u1, 'N', u2, 'N', dx)
+            self.add_two_site_coupling(hop, 'Bd.B', dx, u1=u1, u2=u2, plus_hc=True)
+            self.add_two_site_coupling(V, 'N.N', dx, u1=u1, u2=u2)
 
 
-class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
+class BoseHubbardChain(BoseHubbardModel):
     """The :class:`BoseHubbardModel` on a Chain, suitable for TEBD.
 
     See the :class:`BoseHubbardModel` for the documentation of parameters.
     """
 
-    def __init__(self, model_params):
-        model_params = asConfig(model_params, self.__class__.__name__)
-        model_params.setdefault('lattice', 'Chain')
-        CouplingMPOModel.__init__(self, model_params)
-
-    def estimate_RAM_saving_factor(self):
-        """Returns the expected saving factor for RAM based on charge conservation.
-
-        For the BoseHubbardChain this factor was found to be between 1/7 and 1/10,
-        therefore we let it default to 1/8 (for particle number conservation).
-
-        Returns
-        -------
-        factor : int
-            saving factor, due to conservation
-
-        Options
-        -------
-        .. cfg:configoptions :: Model
-
-            mem_saving_factor :: None | int
-                Quantizes the RAM saving, due to conservation laws.
-                By default it is 1/8 for the BoseHubbardChain.
-                However, this factor might be overwritten, if a better approximation is known.
-                In this case one can pass it via the argument `mem_saving_factor` to the model.
-
-        """
-        chinfo = self.lattice.unit_cell[0].leg.chinfo  # TODO use self.lattice.symmetry
-        savings = 1.0
-        for mod in chinfo.mod:
-            if mod == 1:
-                savings *= 1 / 8.0  # this is what we found empirically
-        return self.options.get('mem_saving_factor', savings, 'real')
+    default_lattice = Chain
+    force_default_lattice = True
 
 
-class FermiHubbardModel(CouplingMPOModel):
+class FermiHubbardModel(ModelBuilder):
     r"""Spin-1/2 Fermi-Hubbard model.
 
     The Hamiltonian reads:
@@ -163,7 +146,7 @@ class FermiHubbardModel(CouplingMPOModel):
         cons_N : {'N' | 'parity' | None}
             Whether particle number is conserved,
             see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
-        cons_Sz : {'Sz' | 'parity' | None}
+        cons_Sz : {'SU2' | 'Sz' | 'parity' | None}
             Whether spin is conserved,
             see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
         t, U, mu : float | array
@@ -177,11 +160,24 @@ class FermiHubbardModel(CouplingMPOModel):
 
     """
 
+    cons_N: Literal['N', 'parity', None]
+    cons_S: Literal['SU2', 'Sz', 'parity', None]
+
     def init_sites(self, model_params):
-        cons_N = model_params.get('cons_N', 'N', str)
-        cons_Sz = model_params.get('cons_Sz', 'Sz', str)
-        site = SpinHalfFermionSite(cons_N=cons_N, cons_Sz=cons_Sz)
-        return site
+        self.cons_N = cons_N = model_params.get('cons_N', 'N', str)
+        self.cons_S = cons_S = model_params.get('cons_S', 'SU2', str)
+        return lasy.sites.SpinHalfFermionSite(conserve_N=cons_N, conserve_S=cons_S)
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(
+            lasy.models.hopping([site, site], t_left=1, t_right=0, species=None, name='sum_Cd.C'),
+            hc='sum_C.Cd',
+            permute='swap_hc',
+        )  # summed over all species, i.e. Cud.Cu + Cdd.Cd
+        self.define_coupling(
+            lasy.models.density_density_interaction([site, site], name='Ntot.Ntot'), hc='Ntot.Ntot', permute='invariant'
+        )  # Ntot, i.e. summing over all species on each site is default
 
     def init_terms(self, model_params):
         # 0) Read out/set default parameters.
@@ -191,20 +187,18 @@ class FermiHubbardModel(CouplingMPOModel):
         mu = model_params.get('mu', 0.0, 'real_or_array')
         phi_ext = model_params.get('phi_ext', None, 'real')
 
-        for u in range(len(self.lattice.unit_cell)):
-            self.add_onsite(-mu, u, 'Ntot')
-            self.add_onsite(U, u, 'NuNd')
+        self.add_onsite_operator(-mu, 'Ntot')
+        self.add_onsite_operator(U, 'NupNdown')
         for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             if phi_ext is None:
                 hop = -t
             else:
                 hop = self.coupling_strength_add_ext_flux(-t, dx, [0, 2 * np.pi * phi_ext])
-            self.add_coupling(hop, u1, 'Cdu', u2, 'Cu', dx, plus_hc=True)
-            self.add_coupling(hop, u1, 'Cdd', u2, 'Cd', dx, plus_hc=True)
-            self.add_coupling(V, u1, 'Ntot', u2, 'Ntot', dx)
+            self.add_two_site_coupling(hop, 'sum_Cd.C', dx, u1=u1, u2=u2, plus_hc=True)
+            self.add_two_site_coupling(V, 'Ntot.Ntot', dx, u1=u1, u2=u2)
 
 
-class FermiHubbardChain(FermiHubbardModel, NearestNeighborModel):
+class FermiHubbardChain(FermiHubbardModel):
     """The :class:`FermiHubbardModel` on a Chain, suitable for TEBD.
 
     See the :class:`FermiHubbardModel` for the documentation of parameters.
@@ -214,7 +208,7 @@ class FermiHubbardChain(FermiHubbardModel, NearestNeighborModel):
     force_default_lattice = True
 
 
-class FermiHubbardModel2(CouplingMPOModel):
+class FermiHubbardModel2(ModelBuilder):
     """Another implementation of the :class:`FermiHubbardModel`, but with local dimension 2.
 
     This class implements the same Hamiltonian as :class:`FermiHubbardModel`:
@@ -242,6 +236,7 @@ class FermiHubbardModel2(CouplingMPOModel):
     """
 
     def init_sites(self, model_params):
+        raise NotImplementedError('spin_half_species not ported')
         cons_N = model_params.get('cons_N', 'N', str)
         cons_Sz = model_params.get('cons_Sz', 'Sz', str)
         return spin_half_species(FermionSite, cons_N=cons_N, cons_Sz=cons_Sz)
@@ -272,7 +267,7 @@ class FermiHubbardModel2(CouplingMPOModel):
             self.add_coupling(V, u1, 'N', u2, 'N', dx)
 
 
-class DipolarBoseHubbardChain(CouplingMPOModel):
+class DipolarBoseHubbardChain(ModelBuilder):
     r"""Dipole-conserving spinless Bose-Hubbard model.
 
     The Hamiltonian is:
@@ -310,12 +305,28 @@ class DipolarBoseHubbardChain(CouplingMPOModel):
         if conserve == 'best':
             conserve = 'dipole'
             self.logger.info('%s: set conserve to %s', self.name, conserve)
+        if conserve == 'dipole':
+            raise NotImplementedError('shift-symmetry')
+        self.conserve = conserve
         bc_MPS = model_params.get('bc_MPS', 'finite')
         bc = 'periodic' if bc_MPS in ['infinite', 'segment'] else 'open'
         bc = model_params.get('bc', bc)
-        site = BosonSite(Nmax=Nmax, conserve=conserve)
+        site = lasy.sites.SpinlessBosonSite(Nmax=Nmax, conserve=conserve)
         lattice = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
         return lattice
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        Bd_B = lasy.models.hopping([site, site], t_left=1, t_right=0).to_tensor()
+        B_Bd = Bd_B.hc
+        h3 = lasy.planar_contraction(Bd_B, B_Bd, 'p1', 'p0*', relabel2={'p0': 'p1', 'p1': 'p2', 'p1*': 'p2*'})
+        h4 = lasy.outer(Bd_B, B_Bd, relabel2={'p0': 'p2', 'p0*': 'p2*', 'p1': 'p3', 'p1*': 'p3*'})
+        self.define_coupling(
+            lasy.Coupling.from_tensor(h3, [site, site, site], name='Bd.BB.Bd'), hc='B.BdBd.B', permute=None
+        )
+        self.define_coupling(
+            lasy.Coupling.from_tensor(h4, [site, site, site, site], name='Bd.B.B.Bd'), hc='B.Bd.Bd.B', permute=None
+        )
 
     def init_terms(self, model_params):
         """Add the onsite and coupling terms to the model"""
@@ -325,9 +336,9 @@ class DipolarBoseHubbardChain(CouplingMPOModel):
         mu = model_params.get('mu', 0)
 
         # dipole hopping
-        self.add_multi_coupling(-t, [('Bd', 0, 0), ('B', 1, 0), ('B', 1, 0), ('Bd', 2, 0)], plus_hc=True)
-        self.add_multi_coupling(-t4, [('Bd', 0, 0), ('B', 1, 0), ('B', 2, 0), ('Bd', 3, 0)], plus_hc=True)
+        self.add_multi_site_coupling(-t, 'Bd.BB.Bd', [[0], [1], [2]], plus_hc=True)
+        self.add_multi_site_coupling(-t4, 'Bd.B.B.Bd', [[0], [1], [2], [3]], plus_hc=True)
 
         # on-site interactions and chemical potential
-        self.add_onsite(U / 2.0, 0, 'NN')
-        self.add_onsite(-mu - U / 2.0, 0, 'N')
+        self.add_onsite_operator(U / 2, 'NN')
+        self.add_onsite_operator(-mu - U / 2, 'N')

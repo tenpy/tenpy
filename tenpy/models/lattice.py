@@ -1351,7 +1351,7 @@ class Lattice:
         # make 3D arrays ["iteration over lattice", "operator", "spatial direction"]
         # recall numpy broadcasting: 1D equivalent to [np.newaxis, np.newaxis, :]
         dx = np.asarray(dx, int).reshape([1, M, D])
-        u = np.asarray(dx, int).reshape([1, M, 1])
+        u = np.asarray(u, int).reshape([1, M, 1])
         coupling_shape, shift_lat_indices = self.multi_coupling_shape(dx[0, :, :])
         if any([s == 0 for s in coupling_shape]):
             return np.zeros([0, M], int), np.zeros([0, D], int), coupling_shape
@@ -1858,7 +1858,7 @@ class MultiSpeciesLattice(Lattice):
 
         >>> simple_lat = Square(2, 3, None)
         >>> f = tenpy.networks.site.FermionSite(conserve='N')
-        >>> s = tenpy.networks.site.SpinHalfSite(conserve='Sz', sort_charge=False)
+        >>> s = tenpy.networks.site.SpinHalfSite(conserve='Sz')
         >>> tenpy.networks.site.set_common_charges([f, s], 'independent')
         [array([0, 1]), array([1, 0])]
         >>> fs_lat = MultiSpeciesLattice(simple_lat, [f, s], ['f', 's'])

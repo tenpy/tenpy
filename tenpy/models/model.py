@@ -321,20 +321,21 @@ class CouplingModel(HamiltonianModel):
             The new coupling. Must be named (have :attr:`lasyten.Coupling.name` set)
         hc: str
             The name for the hermitian conjugate coupling
-        permute: ``'invariant'``| ``'odd'`` | ``'swap_hc'`` | callable
+        permute: ``'invariant'``| ``'odd'`` | ``'swap_hc'`` | callable | None
             Specifies how the coupling transforms under permutation of sites.
             ``'invariant'`` means it does not change under any permutation.
             ``'odd'`` means it stays invariant under even permutations and maps to negative itself under odd.
             ``'swap_hc'`` is only valid for two-site couplings and means if sites are swapped it maps to its hc.
             For the general case, specify a callable ``permute(perm: Sequence[int]) -> dict[str, float | complex]``
             that expresses the permuted coupling as a linear combination of the keys with the values as prefactors.
+            ``None`` means undefined and restricts the way the coupling can be used.
 
         """
         if coupling.name is None:
             raise ValueError('Coupling must be named')
         if coupling.name in self.couplings:
             raise ValueError('Coupling name already defined')
-        assert permute in ['invariant', 'odd', 'swap_hc'] or hasattr(permute, '__call__')
+        assert permute in ['invariant', 'odd', 'swap_hc', None] or hasattr(permute, '__call__')
         self.couplings[coupling.name] = coupling
         self.coupling_hc_map[coupling.name] = hc
         self.coupling_permute[coupling.name] = permute
@@ -347,9 +348,10 @@ class CouplingModel(HamiltonianModel):
         return
 
     def permute_coupling(self, coupling_name: str, perm: Sequence[int]) -> dict[str, float | complex]:
-        if not self.symmetry.has_trivial_braid:
+        if not self.symmetry.has_symmetric_braid:
             raise NotImplementedError  # current design does not cover this well...
-
+        if self.coupling_permute[coupling_name] is None:
+            raise ValueError(f'Permutation behavior of coupling {coupling_name} undefined')
         if self.coupling_permute[coupling_name] == 'invariant':
             return {coupling_name: 1}
         if self.coupling_permute[coupling_name] == 'odd':
@@ -724,6 +726,96 @@ class CouplingModel(HamiltonianModel):
 
     def add_exponentially_decaying_centered_terms(self):
         raise NotImplementedError  # TODO skipped for now
+
+    def coupling_strength_add_ext_flux(self, strength, dx, phase):
+        """Add an external flux to the coupling strength.
+
+        When performing DMRG on a "cylinder" geometry, it might be useful to put an "external flux"
+        through the cylinder. This means that a particle hopping around the cylinder should
+        pick up a phase given by the external flux :cite:`resta1998`.
+        This is also called "twisted boundary conditions" in literature.
+        This function adds a complex phase to the `strength` array on some bonds, such that
+        particles hopping in positive direction around the cylinder pick up `exp(+i phase)`.
+
+        .. warning ::
+            For the sign of `phase` it is important that you consistently use the creation
+            operator as `op1` and the annihilation operator as `op2` in :meth:`add_coupling`.
+
+        Parameters
+        ----------
+        strength : scalar | array
+            The strength to be used in :meth:`add_coupling`, when no external flux would be
+            present.
+        dx : iterable of int
+            Translation vector (of the unit cell) between `op1` and `op2` in :meth:`add_coupling`.
+        phase : iterable of float
+            The phase of the external flux for hopping in each direction of the lattice.
+            E.g., if you want flux through the cylinder on which you have an infinite MPS,
+            you should give ``phase=[0, phi]`` such that particles pick up a phase `phi` when
+            hopping around the cylinder.
+
+        Returns
+        -------
+        strength : complex array
+            The strength array to be used as `strength` in :meth:`add_coupling`
+            with the given `dx`.
+
+        Examples
+        --------
+        Let's say you have an infinite MPS on a cylinder, and want to add nearest-neighbor
+        hopping of fermions with the :class:`~tenpy.networks.site.FermionSite`.
+        The cylinder axis is the `x`-direction of the lattice, so to put a flux through the
+        cylinder, you want particles hopping *around* the cylinder to pick up a phase `phi`
+        given by the external flux.
+
+        .. testsetup :: coupling_strength_add_ext_flux
+
+            self = tenpy.models.fermions_spinless.FermionModel(dict(lattice='Square', Lx=3, Ly=3))
+            self.manually_call_init_H = True
+
+        .. doctest :: coupling_strength_add_ext_flux
+
+            >>> strength = 1.0  # hopping strength without external flux
+            >>> phi = np.pi / 4  # determines the external flux strength
+            >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            ...     strength_with_flux = self.coupling_strength_add_ext_flux(strength, dx, [0, phi])
+            ...     self.add_coupling(strength_with_flux, u1, 'Cd', u2, 'C', dx)
+            ...     self.add_coupling(np.conj(strength_with_flux), u2, 'Cd', u1, 'C', -dx)
+
+        """
+        c_shape = self.lattice.coupling_shape(dx)[0]
+        strength = to_array(strength, c_shape)
+        # make strength complex
+        complex_dtype = np.result_type('c8', strength.dtype)
+        strength = np.asarray(strength, complex_dtype)
+        if len(phase) != self.lattice.dim:
+            raise ValueError('Expected one phase per lattice dimension.')
+        for ax in range(self.lattice.dim):
+            if self.lattice.bc[ax]:  # open boundary conditions
+                if phase[ax]:
+                    raise ValueError('Nonzero phase for external flux along non-periodic b.c.')
+                continue
+            if abs(dx[ax]) == 0:
+                continue  # nothing to do
+            slices = [slice(None) for _ in range(self.lattice.dim)]
+            slices[ax] = slice(-abs(dx[ax]), None)
+            # the last ``abs(dx[ax])`` entries in the axis `ax` correspond to hopping
+            # across the periodic b.c.
+            slices = tuple(slices)
+            if dx[ax] > 0:
+                strength[slices] *= np.exp(-1.0j * phase[ax])  # hopping in *negative* y-direction
+            else:
+                strength[slices] *= np.exp(1.0j * phase[ax])  # hopping in *positive* y-direction
+        return strength
+
+    def _check_fermion_conserve(self, conserve_N: str | None):
+        if conserve_N in [None, 'None']:
+            msg = (
+                'To simulate fermionic statistics correctly, need to at least conserve the '
+                'fermion parity! None is not allowed.'
+            )
+            raise lasy.SymmetryError(msg)
+        return
 
 
 class ModelBuilder(CouplingModel):

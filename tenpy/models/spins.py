@@ -106,24 +106,24 @@ class SpinModel(ModelBuilder):
         site, *_ = self.lattice.unit_cell
 
         self.define_coupling(
-            lasy.models.spin_spin_coupling([site, site], Jx=1, Jy=1, Jz=1, backend=self.backend, name='S.S'),
+            lasy.models.spin_spin_coupling([site, site], Jx=1, Jy=1, Jz=1, name='S.S'),
             hc='S.S',
             permute='invariant',
         )
         if self.conserve != 'SU2':
             self.define_coupling(
-                lasy.models.spin_spin_coupling([site, site], Jz=1, backend=self.backend, name='Sz.Sz'),
+                lasy.models.spin_spin_coupling([site, site], Jz=1, name='Sz.Sz'),
                 hc='Sz.Sz',
                 permute='invariant',
             )
             self.define_coupling(
-                lasy.models.spin_spin_coupling([site, site], Jpm=1, backend=self.backend, name='Sp.Sm'),
+                lasy.models.spin_spin_coupling([site, site], Jpm=1, name='Sp.Sm'),
                 hc='Sm.Sp',
                 permute='swap_hc',
             )
         if self.conserve not in ['SU2', 'Sz']:
             self.define_coupling(
-                lasy.models.spin_spin_coupling([site, site], Jpp=1, backend=self.backend, name='Sp.Sp'),
+                lasy.models.spin_spin_coupling([site, site], Jpp=1, name='Sp.Sp'),
                 hc='Sm.Sm',
                 permute='invariant',
             )

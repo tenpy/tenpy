@@ -2662,7 +2662,7 @@ class MPOEnvironment(BaseEnvironment):
             labels=['wL', 'wR'],
             device=init_LP.device,
         )
-        init_LP = lasy.tdot(init_LP, mask, 'wR', 'wL')
+        init_LP = lasy.tdot(init_LP, mask, 'wR', 'wL')  # TODO this should be some apply method, no??
         # TODO do we care about the leg arrangement or not?
         for j in range(i0, i):
             init_LP = self._contract_LP(j, init_LP)

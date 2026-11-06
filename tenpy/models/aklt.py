@@ -4,21 +4,21 @@ The AKLT model is famous for having a very simple ground state MPS of bond dimen
 Writing down the Hamiltonian is easiest done in terms of bond couplings.
 This class thus serves as an example how this can be done.
 """
-# Copyright (C) TeNPy Developers, Apache license
 
+# Copyright (C) TeNPy Developers, Apache license
+from typing import Literal
+
+import lasyten as lasy
 import numpy as np
 
-# from ..linalg import np_conserved as npc
 from ..networks.mps import MPS
-from ..networks.site import SpinSite, kron
-from ..tools import asConfig
 from .lattice import Chain
-from .model import MPOModel, NearestNeighborModel
+from .model import ModelBuilder
 
 __all__ = ['AKLTChain']
 
 
-class AKLTChain(NearestNeighborModel, MPOModel):
+class AKLTChain(ModelBuilder):
     r"""A simple implementation of the AKLT model.
 
     Here we define the Hamiltonian on a chain of S=1 spins as originally defined by
@@ -32,38 +32,25 @@ class AKLTChain(NearestNeighborModel, MPOModel):
                      +\frac{1}{3} (\vec{S}_i \cdot \vec{S}_{i+1})^2)
     """
 
-    def __init__(self, model_params):
-        model_params = asConfig(model_params, 'AKLTModel')
-        L = model_params.get('L', 2, int)
-        conserve = model_params.get('conserve', 'Sz', str)
+    default_lattice = Chain
+    force_default_lattice = True
+    conserve: Literal['SU2', 'Sz', 'parity', None]
+
+    def init_sites(self, model_params):
+        conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
-            conserve = 'Sz'
-            self.logger.info('%s: set conserve to %s', self.name, conserve)
-        sort_charge = model_params.get('sort_charge', True, bool)
-        site = SpinSite(S=1.0, conserve=conserve, sort_charge=sort_charge)
+            conserve = 'SU2'
+        assert conserve in ['SU2', 'Sz', 'parity', 'None', None]
+        self.conserve = conserve
+        return lasy.sites.SpinSite(S=1, conserve=conserve)
 
-        # lattice
-        bc_MPS = model_params.get('bc_MPS', 'finite', str)
-        bc = 'open' if bc_MPS == 'finite' else 'periodic'
-        lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(lasy.models.aklt_coupling([site, site], name='AKLT'), hc='AKLT', permute='invariant')
 
-        Sp, Sm, Sz = site.Sp, site.Sm, site.Sz
-        S_dot_S = 0.5 * (kron(Sp, Sm) + kron(Sm, Sp)) + kron(Sz, Sz)
-        S_dot_S_square = npc.tensordot(S_dot_S, S_dot_S, [['(p0*.p1*)'], ['(p0.p1)']])
-
-        H_bond = S_dot_S + S_dot_S_square / 3.0
-        # P_2 = H_bond * 0.5 + 1/3 * npc.eye_like(S_dot_S)
-
+    def init_terms(self, model_params):
         J = model_params.get('J', 1.0, 'real_or_array')
-        H_bond = J * H_bond.split_legs().transpose(['p0', 'p1', 'p0*', 'p1*'])
-        H_bond = [H_bond] * L
-        # H_bond[i] acts on sites (i-1, i)
-        if bc_MPS == 'finite':
-            H_bond[0] = None
-        # 7) initialize H_bond (the order of 7/8 doesn't matter)
-        NearestNeighborModel.__init__(self, lat, H_bond)
-        # 9) initialize H_MPO
-        MPOModel.__init__(self, lat, self.calc_H_MPO_from_bond())
+        self.add_two_site_coupling(J, 'AKLT', dx=1)
 
     def psi_AKLT(self):
         """Initialize the chi=2 MPS which is exact ground state of the AKLT model.
@@ -84,6 +71,7 @@ class AKLTChain(NearestNeighborModel, MPOModel):
         # and proj is the projector from two spin-1/2 to spin-1.
         # indexing of basis states:
         # spin-1/2: 0=|m=-1/2>, 1=|m=+1/2>;  spin-1: 0=|m=-1>, 1=|m=0> 2=|m=+1>
+        raise NotImplementedError('not yet ported to v2')
         sL = np.sqrt(0.5) * np.array([[1.0, 0.0], [0.0, -1.0]])  # p2 vR
         sR = np.array([[0.0, 1.0], [1.0, 0.0]])  # vL p1
         proj = np.zeros([3, 2, 2])  # p p1 p2

@@ -15,7 +15,6 @@ from tenpy.models.spins import SpinChain
 from tenpy.networks import mpo
 from tenpy.networks.terms import CouplingTerms, OnsiteTerms
 
-# spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 spin_half = SpinSite(S=0.5, conserve=None)
 
 
@@ -173,7 +172,7 @@ def test_MPO_conversion():
 
 def test_MPOEnvironment():
     pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')
-    xxz_pars = dict(L=4, Jxx=1.0, Jz=1.1, hz=0.1, bc_MPS='finite', sort_charge=True)
+    xxz_pars = dict(L=4, Jxx=1.0, Jz=1.1, hz=0.1, bc_MPS='finite')
     L = xxz_pars['L']
     M = XXZChain(xxz_pars)
     state = ([[0], [1]] * L)[:L]  # Neel
@@ -209,17 +208,17 @@ def test_MPO_addition(bc, explicit_plus_hc):
         lat = lattice.Chain(L, s, bc=lat_bc, bc_MPS=bc)
         M = model.CouplingModel(lat)
         M.define_coupling(
-            lasy.models.spin_spin_coupling([s, s], Jmp=1, backend=s.backend, name='Sm.Sp'),
+            lasy.models.spin_spin_coupling([s, s], Jmp=1, name='Sm.Sp'),
             hc='Sp.Sm',
             permute='swap_hc',
         )
         M.define_coupling(
-            lasy.models.spin_spin_coupling([s, s], Jx=1, backend=s.backend, name='Sx.Sx'),
+            lasy.models.spin_spin_coupling([s, s], Jx=1, name='Sx.Sx'),
             hc='Sx.Sx',
             permute='invariant',
         )
         M.define_coupling(
-            lasy.models.spin_spin_coupling([s, s], Jz=1, backend=s.backend, name='Sz.Sz'),
+            lasy.models.spin_spin_coupling([s, s], Jz=1, name='Sz.Sz'),
             hc='Sz.Sz',
             permute='invariant',
         )

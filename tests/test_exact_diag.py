@@ -310,7 +310,7 @@ def test_ED():
     from tenpy.models import XXZChain
 
     # just quickly check that it runs without errors for a small system
-    xxz_pars = dict(L=4, Jxx=1.0, Jz=1.0, hz=0.1, bc_MPS='finite', sort_charge=True)
+    xxz_pars = dict(L=4, Jxx=1.0, Jz=1.0, hz=0.1, bc_MPS='finite')
     M = XXZChain(xxz_pars)
     ED = exact_diag.ExactDiag.from_model(M)
     ED.build_full_H_from_mpo()

@@ -916,7 +916,7 @@ class MultiCouplingTerms(Terms):
 
     def add_to_graph(self, graph: MPOGraph, model: CouplingModel):
         for ijkl, name, strength in self:
-            raise NotImplementedError  # TODO adapt MPOGraph first / maybe do this via termlist only?
+            raise NotImplementedError('MultiCouplingTerms add to graph')
 
     def remove_zeros(self, tol_zero: float = 1e-15, inplace: bool = True) -> MultiCouplingTerms:
         if not inplace:
@@ -948,7 +948,7 @@ class MultiCouplingTerms(Terms):
     def __iter__(self):
         for i, self_i in self.coupling_terms.items():
             for n, self_i_n in self_i.items():
-                for ijkl, strength in _iter_dicts_recursive(self_i_n):
+                for ijkl, strength in _iter_dicts_recursive([], self_i_n):
                     yield ijkl, n, strength
 
     def test_terms(self, sites: list[lasy.Site], model: CouplingModel):
@@ -995,7 +995,7 @@ def _iter_dicts_recursive(keys: list[int], dict_or_val: dict[int, complex] | com
         for key, val in dict_or_val.items():
             yield from _iter_dicts_recursive([*keys, key], val)
     else:
-        yield keys, val
+        yield keys, dict_or_val
 
 
 class ExponentiallyDecayingTerms(Terms):

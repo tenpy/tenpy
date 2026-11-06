@@ -1,7 +1,4 @@
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
-
-pytest.skip(allow_module_level=True)
 import numpy as np
 import pytest
 from test_model import check_general_model
@@ -11,6 +8,7 @@ from tenpy.models.hofstadter import HofstadterBosons, HofstadterFermions, hoppin
 
 
 def test_HofstadterBosons():
+    pytest.skip('PBC bug')
     model_pars = {'Lx': 3, 'Ly': 3, 'phi': (1, 3), 'conserve': 'N', 'U': 0.456, 'mu': 0.123, 'Nmax': 1}
     check_general_model(
         HofstadterBosons,
@@ -26,6 +24,7 @@ def test_HofstadterBosons():
 
 
 def test_HofstadterFermions():
+    pytest.skip('PBC bug')
     model_pars = {'Lx': 3, 'Ly': 3, 'phi': (1, 3), 'conserve': 'N', 'v': 0.456, 'mu': 0.123}
     check_general_model(
         HofstadterFermions,
@@ -97,6 +96,7 @@ _HofstadterFermions_spectra = {
 @pytest.mark.parametrize('bc_x', ['periodic', 'open'])
 @pytest.mark.parametrize('bc_y', ['periodic', 'open'])
 @pytest.mark.parametrize('gauge', ['landau_x', 'landau_y', 'symmetric'])
+@pytest.mark.skip('Needs MPOGraph optimizations or its very slow')
 def test_ED_spectrum_HofstadterFermions(bc_x, bc_y, gauge):
     model_params = dict(v=1, Lx=3, Ly=3, bc_x=bc_x, bc_y=bc_y, conserve='N', gauge=gauge)
 
@@ -173,6 +173,7 @@ _HofstadterBosons_spectra = {
 @pytest.mark.parametrize('bc_x', ['periodic', 'open'])
 @pytest.mark.parametrize('bc_y', ['periodic', 'open'])
 @pytest.mark.parametrize('gauge', ['landau_x', 'landau_y', 'symmetric'])
+@pytest.mark.skip('Needs MPOGraph optimizations or its very slow')
 def test_ED_spectrum_HofstadterBosons(bc_x, bc_y, gauge):
     model_params = dict(U=1, Lx=3, Ly=3, bc_x=bc_x, bc_y=bc_y, conserve='N', Nmax=1, gauge=gauge)
 

@@ -3,13 +3,15 @@
 As we put the model on a cylinder, the name "toric code" is a bit misleading, but it is the
 established name for this model...
 """
-# Copyright (C) TeNPy Developers, Apache license
 
+# Copyright (C) TeNPy Developers, Apache license
+from typing import Literal
+
+import lasyten as lasy
 import numpy as np
 
-from ..networks.site import SpinHalfSite
 from .lattice import Lattice, _parse_sites, get_order
-from .model import CouplingMPOModel
+from .model import ModelBuilder
 
 __all__ = ['DualSquare', 'ToricCode']
 
@@ -87,7 +89,7 @@ class DualSquare(Lattice):
         return super().ordering(order)
 
 
-class ToricCode(CouplingMPOModel):
+class ToricCode(ModelBuilder):
     r"""Toric code model.
 
     The Hamiltonian reads:
@@ -118,8 +120,6 @@ class ToricCode(CouplingMPOModel):
             Dimension of the lattice, number of plaquettes around the cylinder.
         conserve : 'parity' | None
             What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
-        sort_charge : bool
-            Whether to sort by charges of physical legs. `True` by default.
         Jv, Jp : float | array
             Couplings as defined for the Hamiltonian above.
         order : str
@@ -140,22 +140,28 @@ class ToricCode(CouplingMPOModel):
 
     default_lattice = DualSquare
     force_default_lattice = True
+    conserve: Literal['parity', None]
 
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity', str)
-        sort_charge = model_params.get('sort_charge', True, bool)
-        site = SpinHalfSite(conserve, sort_charge=sort_charge)
-        return site
+        if conserve == 'best':
+            conserve = 'parity'
+        self.conserve = conserve
+        return lasy.sites.SpinSite(S=0.5, conserve=conserve)
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        XX = lasy.models.spin_spin_coupling([site, site], Jx=4).to_tensor()  # X.X = (2.Sx).(2.Sx) = 4.Sx.Sx
+        XXXX = lasy.outer(XX, XX, relabel2={'p0': 'p2', 'p0*': 'p2*', 'p1': 'p3', 'p1*': 'p3*'})
+        XXXX = lasy.Coupling.from_tensor(XXXX, [site, site, site, site], name='XXXX')
+        self.define_coupling(XXXX, hc='XXXX', permute='invariant')
+        ZZ = lasy.models.spin_spin_coupling([site, site], Jz=4).to_tensor()
+        ZZZZ = lasy.outer(ZZ, ZZ, relabel2={'p0': 'p2', 'p0*': 'p2*', 'p1': 'p3', 'p1*': 'p3*'})
+        ZZZZ = lasy.Coupling.from_tensor(ZZZZ, [site, site, site, site], name='ZZZZ')
+        self.define_coupling(ZZZZ, hc='ZZZZ', permute='invariant')
 
     def init_terms(self, model_params):
         Jv = np.asarray(model_params.get('Jv', 1.0, 'real_or_array'))
         Jp = np.asarray(model_params.get('Jp', 1.0, 'real_or_array'))
-        # vertex/star term
-        self.add_multi_coupling(
-            -Jv, [('Sigmax', [0, 0], 1), ('Sigmax', [0, 0], 0), ('Sigmax', [-1, 0], 1), ('Sigmax', [0, -1], 0)]
-        )
-        # plaquette term
-        self.add_multi_coupling(
-            -Jp, [('Sigmaz', [0, 0], 1), ('Sigmaz', [0, 0], 0), ('Sigmaz', [0, 1], 1), ('Sigmaz', [1, 0], 0)]
-        )
-        # done
+        self.add_multi_site_coupling(-Jv, 'XXXX', dx=[[0, 0], [0, 0], [-1, 0], [0, -1]], u=[1, 0, 1, 0])
+        self.add_multi_site_coupling(-Jp, 'ZZZZ', dx=[[0, 0], [0, 0], [0, 1], [1, 0]], u=[1, 0, 1, 0])

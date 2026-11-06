@@ -6,7 +6,9 @@ the idea is more to serve as a pedagogical example for a 'model'.
 
 We choose the field along z to allow to conserve the parity, if desired.
 """
+
 # Copyright (C) TeNPy Developers, Apache license
+from typing import Literal
 
 import lasyten as lasy
 import numpy as np
@@ -50,6 +52,8 @@ class TFIModel(ModelBuilder):
 
     """
 
+    conserve: Literal['parity', None]
+
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity', str)
         assert conserve != 'Sz'
@@ -61,7 +65,7 @@ class TFIModel(ModelBuilder):
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell
         self.define_coupling(
-            lasy.models.spin_spin_coupling([site, site], Jx=1, backend=self.backend, name='Sx.Sx'),
+            lasy.models.spin_spin_coupling([site, site], Jx=1, name='Sx.Sx'),
             hc='Sx.Sx',
             permute='invariant',
         )
