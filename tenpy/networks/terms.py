@@ -739,9 +739,14 @@ class CouplingTerms(Terms):
                 # TODO first workaround solution: not re-using any existing edges.
                 label = f'{coupling_name}#{n}_{int(i)}_{int(j)}'  # some (probably) unique label
                 graph.add(i, 'IdL', label, WL)
+                key = label
                 for k in range(i + 1, j):
-                    graph.add_identity(k, label, label, overbraid=overbraid)
-                graph.add(j, label, 'IdR', WR, strength)
+                    next_key = key
+                    if not graph.finite and k % graph.L == 0:
+                        next_key = f'{key}_unit_cell_{k}'
+                    graph.add_identity(k, key, next_key, overbraid=overbraid)
+                    key = next_key
+                graph.add(j, key, 'IdR', WR, strength)
         if graph.max_range is not None:
             graph.max_range = max(graph.max_range, self.max_range())
 

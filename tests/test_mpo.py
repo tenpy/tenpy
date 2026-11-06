@@ -250,6 +250,45 @@ def test_MPO_addition(bc, explicit_plus_hc):
     assert H12.is_equal(H12_sum)
 
 
+@pytest.mark.parametrize('j', [3, 4, 7])
+def test_MPOGraph_coupling_across_unit_cell_boundary(j):
+    L = 3
+    s = spin_half
+    lat = lattice.Chain(L, s, bc='periodic', bc_MPS='infinite')
+    M = model.CouplingModel(lat)
+    M.define_coupling(
+        lasy.models.spin_spin_coupling([s, s], Jz=1, name='Sz.Sz'),
+        hc='Sz.Sz',
+        permute='invariant',
+    )
+    ct = CouplingTerms(L)
+    ct.add_coupling_term(1.0, L - 1, j, 'Sz.Sz')
+
+    graph = mpo.MPOGraph.from_terms((ct,), M, bc='infinite', unit_cell_width=L)
+    H = graph.build_MPO()
+    H.test_sanity()
+
+    expected_wraps = sum(k % L == 0 for k in range(L, j))
+    wrap_edges = [
+        (keyL, keyR)
+        for keyL, edges in graph.graph[0].items()
+        for keyR in edges
+        if keyL not in ('IdL', 'IdR') and keyR not in ('IdL', 'IdR') and keyL != keyR
+    ]
+    assert len(wrap_edges) == expected_wraps
+
+
+def test_MPOGraph_add_onsite_infers_virtual_leg_from_periodic_right_boundary():
+    L = 3
+    graph = mpo.MPOGraph([spin_half] * L, bc='infinite', unit_cell_width=L)
+    graph.states[0]['right_state'] = graph.states[0]['IdL']
+
+    graph.add_identity(L - 1, 'left_state', 'right_state', overbraid=True)
+
+    assert graph.states[L]['right_state'] == graph.states[0]['right_state']
+    graph.build_MPO().test_sanity()
+
+
 @pytest.mark.parametrize('sites', [None, [0], [1], [0, 1, 2, 3], [2, 3], [3, 2]])
 def test_MPO_plus_identity(sites, alpha=0.7, beta=0.42):
     pytest.skip('MPO test skipped for now, as it is not yet adapted to lasyten coupling framework')

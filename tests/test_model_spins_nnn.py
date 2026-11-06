@@ -20,7 +20,6 @@ def test_SpinChainNNN():
 
 
 def test_SpinChainNNN2():
-    pytest.skip('PBC broken')  # TODO
     check_general_model(
         spins_nnn.SpinChainNNN2,
         {'hz': 0.5, 'Jx': -2.0, 'Jy': -2.0, 'Jz': 0.4, 'L': 4},

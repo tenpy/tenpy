@@ -15,7 +15,6 @@ def test_ClockChain_general():
 
 @pytest.mark.slow
 def test_ClockModel2D_general():
-    pytest.skip('PBC broken')  # TODO
     check_general_model(
         ClockModel,
         dict(Lx=2, J=1.0, g=0.1, q=3),

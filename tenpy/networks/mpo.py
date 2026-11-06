@@ -2298,6 +2298,16 @@ class MPOGraph(MPSGeometry):
         The virtual leg passes over the onsite tensor if ``overbraid``.
         """
         i = i % self.L
+        if not self.finite and i == 0 and keyL in self.states[self.L]:
+            w = self.states[self.L][keyL]
+            if keyL in self.states[i] and self.states[i][keyL] != w:
+                raise ValueError('Incompatible virtual legs across the MPO unit-cell boundary')
+            self.states[i][keyL] = w
+        if not self.finite and i == self.L - 1 and keyR in self.states[0]:
+            w = self.states[0][keyR]
+            if keyR in self.states[self.L] and self.states[self.L][keyR] != w:
+                raise ValueError('Incompatible virtual legs across the MPO unit-cell boundary')
+            self.states[self.L][keyR] = w
         if keyL in self.states[i] and keyR in self.states[i + 1]:
             w = self.states[i][keyL]
             if not w == self.states[i + 1][keyR]:
