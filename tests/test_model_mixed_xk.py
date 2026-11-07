@@ -45,7 +45,8 @@ def test_mixed_spinless():
         from tenpy.tools import asConfig
 
         dmrg_params = asConfig(dmrg_params, 'TwoSiteDMRGEngine')
-        dmrg_params.touch('mixer', 'max_E_err', 'max_S_err', 'trunc_params')  # to avoid warnings...
+        dmrg_params.touch(*dmrg_params.keys())  # to avoid warnings...
+        dmrg_params.subconfig('trunc_params').touch('chi_max', 'svd_min')
         info = dmrg.run(psi, M, dmrg_params, resume_data={'init_env_data': dict(start_env_sites=0)})
     pytest.xfail('fermionic DMRG')
 
