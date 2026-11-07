@@ -44,7 +44,7 @@ class FermionModel(ModelBuilder):
         :include: CouplingMPOModel
 
         conserve : 'best' | 'N' | 'parity'
-            What should be conserved. See :class:`~tenpy.networks.Site.FermionSite`.
+            What should be conserved. See :class:`lasyten.sites.SpinlessFermionSite`.
             For ``'best'``, we check the parameters what can be preserved.
         J, V, mu : float | array
             Hopping, interaction and chemical potential as defined for the Hamiltonian above.

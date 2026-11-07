@@ -48,7 +48,7 @@ class BoseHubbardModel(ModelBuilder):
         filling : float
             Average filling.
         conserve: {'best' | 'N' | 'parity' | None}
-            What should be conserved. See :class:`~tenpy.networks.Site.BosonSite`.
+            What should be conserved. See :class:`~lasyten.sites.SpinlessBosonSite`.
         t, U, V, mu: float | array
             Couplings as defined in the Hamiltonian above. Note the signs!
             Defaults to `t=1.` without interaction ``V=U=0`` and ``mu=0``.
@@ -145,10 +145,10 @@ class FermiHubbardModel(ModelBuilder):
 
         cons_N : {'N' | 'parity' | None}
             Whether particle number is conserved,
-            see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
+            see :class:`~lasyten.sites.SpinHalfFermionSite` for details.
         cons_Sz : {'SU2' | 'Sz' | 'parity' | None}
             Whether spin is conserved,
-            see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
+            see :class:`~lasyten.sites.SpinHalfFermionSite` for details.
         t, U, mu : float | array
             Couplings as defined for the Hamiltonian above. Note the signs!
             Defaults to ``t=1`` without interaction ``U=0`` and ``mu=0``.
@@ -214,8 +214,8 @@ class FermiHubbardModel2(ModelBuilder):
     This class implements the same Hamiltonian as :class:`FermiHubbardModel`:
 
 
-    However, it does not use the :class:`~tenpy.networks.site.SpinHalfFermionSite`, but two plain
-    :class:`~tenpy.networks.site.FermionSite` for individual spin-up/down fermions, combined in the
+    However, it does not use the :class:`~lasyten.sites.SpinHalfFermionSite`, but two plain
+    :class:`lasyten.sites.SpinlessFermionSite` for individual spin-up/down fermions, combined in the
     :class:`~tenpy.models.lattice.MultiSpeciesLattice`.
 
     Formally, not grouping the Sites leads to a better scaling of DMRG;
@@ -291,7 +291,7 @@ class DipolarBoseHubbardChain(ModelBuilder):
         Nmax : int
             Maximum number of bosons per site.
         conserve : {'best' | 'dipole' | 'N' | 'parity' | None}
-            What should be conserved. See :class:`~tenpy.networks.site.BosonSite`.
+            What should be conserved. See :class:`~lasyten.sites.SpinlessBosonSite`.
         t, t4, U, mu : float | array
             Couplings as defined in the Hamiltonian above. Note the signs!
 

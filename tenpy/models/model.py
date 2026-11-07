@@ -743,7 +743,7 @@ class CouplingModel(HamiltonianModel):
         Examples
         --------
         Let's say you have an infinite MPS on a cylinder, and want to add nearest-neighbor
-        hopping of fermions with the :class:`~tenpy.networks.site.FermionSite`.
+        hopping of fermions with the :class:`lasyten.sites.SpinlessFermionSite`.
         The cylinder axis is the `x`-direction of the lattice, so to put a flux through the
         cylinder, you want particles hopping *around* the cylinder to pick up a phase `phi`
         given by the external flux.
@@ -966,7 +966,7 @@ class ModelBuilder(CouplingModel):
         """Define the local Hilbert space and operators; needs to be implemented in subclasses.
 
         This function gets called by :meth:`init_lattice` to get the
-        :class:`~tenpy.networks.site.Site` for the lattice unit cell.
+        :class:`~lasyten.Site` for the lattice unit cell.
 
         .. note ::
             Initializing the sites requires to define the conserved quantum numbers.
@@ -984,7 +984,7 @@ class ModelBuilder(CouplingModel):
 
         Returns
         -------
-        sites : (tuple of) :class:`~tenpy.networks.site.Site`
+        sites : (tuple of) :class:`~lasyten.Site`
             The local sites of the lattice, defining the local basis states and operators.
         optional_species_names : not set | list of str | None
             You should usually just return the (tuple of) `sites`.

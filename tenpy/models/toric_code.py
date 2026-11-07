@@ -44,7 +44,7 @@ class DualSquare(Lattice):
     ----------
     Lx, Ly : int
         Dimensions of the original lattice. This lattice has `2*Lx*Ly` sites.
-    sites : :class:`~tenpy.networks.site.Site`
+    sites : :class:`~lasyten.Site`
         The sites for the horizontal (first entry) and vertical (second entry) bonds.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
@@ -119,7 +119,7 @@ class ToricCode(ModelBuilder):
         Lx, Ly: int
             Dimension of the lattice, number of plaquettes around the cylinder.
         conserve : 'parity' | None
-            What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
+            What should be conserved. See :class:`~lasyten.sites.SpinSite`.
         Jv, Jp : float | array
             Couplings as defined for the Hamiltonian above.
         order : str

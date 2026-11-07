@@ -176,7 +176,7 @@ class HofstadterFermions(ModelBuilder):
             Length of the lattice in x- and y-direction.
         filling : tuple
             Average number of fermions per site, defined as a fraction ``(numerator, denominator)``
-            Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.FermionSite`.
+            Changes the definition of ``'dN'`` in the :class:`lasyten.sites.SpinlessFermionSite`.
             Default ``(1, 8)``, i.e. one particle per eight sites.
         Jx, Jy, mu, v : float
             Hamiltonian parameter as defined above. Defaults are ``Jx = Jy = 1``, ``mu = v = 0``.
@@ -285,7 +285,7 @@ class HofstadterBosons(ModelBuilder):
             Maximum number of bosons per site. Default ``3``.
         filling : tuple
             Average number of bosons per site, defined as a fraction ``(numerator, denominator)``
-            Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.BosonSite`.
+            Changes the definition of ``'dN'`` in the :class:`~lasyten.sites.SpinlessBosonSite`.
             Default ``(1, 8)``, i.e. one particle per eight sites.
         Jx, Jy, mu, U : float
             Hamiltonian parameter as defined above. Defaults are ``Jx = Jy = 1``, ``mu = U = 0``.

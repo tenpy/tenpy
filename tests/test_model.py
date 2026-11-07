@@ -385,12 +385,12 @@ def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc,
     pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     """test add_exponentially_decaying coupling by comparing with manual couplings"""
     if use_fermions:
-        s = tenpy.networks.site.FermionSite(None)
+        s = lasyten.sites.SpinlessFermionSite(None)
         op_i = 'Cd'
         op_j = 'C'
         anti_commute_sign = -1
     else:
-        s = tenpy.networks.site.SpinHalfSite(None)
+        s = lasyten.sites.SpinSite(None)
         op_i = 'Sp'
         op_j = 'Sm'
         anti_commute_sign = +1
@@ -661,11 +661,11 @@ def test_model_plus_hc(which_site, which_ops, op_string, L=6):
     pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     """Same as `test_model_plus_hc`, but uses fermions and default JW behavior"""
     if which_site == 'spin':
-        lat = lattice.Chain(L=L, site=tenpy.networks.site.SpinHalfSite(None))
+        lat = lattice.Chain(L=L, site=lasyten.sites.SpinSite(None))
     elif which_site == 'fermion':
-        lat = lattice.Chain(L=L, site=tenpy.networks.site.FermionSite(None))
+        lat = lattice.Chain(L=L, site=lasyten.sites.SpinlessFermionSite(None))
     elif which_site == 'spin-fermion':
-        lat = lattice.Chain(L=L, site=tenpy.networks.site.SpinHalfFermionSite(None, None))
+        lat = lattice.Chain(L=L, site=lasyten.sites.SpinHalfFermionSite(None, None))
     else:
         raise ValueError
 
@@ -814,7 +814,7 @@ class DisorderedLatticeModel(model.ModelBuilder):
     def init_sites(self, model_params):
         raise NotImplementedError  # TODO adapt
         conserve = model_params.get('conserve', 'parity')
-        return tenpy.networks.site.SpinHalfSite(conserve)
+        return lasyten.sites.SpinSite(conserve)
 
     def init_lattice(self, model_params):
         lat = super().init_lattice(model_params)
@@ -885,7 +885,7 @@ def test_fixes_511(L=6, t=1.234, tp=2.54):
         def init_sites(self, p):
             raise NotImplementedError
             # conserve total N and Sz; degenerate spin DOF
-            return tenpy.networks.site.SpinHalfFermionSite(cons_N=None, cons_Sz=None)
+            return lasyten.sites.SpinHalfFermionSite(cons_N=None, cons_Sz=None)
 
         # CouplingMPOModel already defaults to a Chain lattice with length p['L'].
 

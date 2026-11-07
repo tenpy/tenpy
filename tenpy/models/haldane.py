@@ -42,7 +42,7 @@ class BosonicHaldaneModel(ModelBuilder):
         :include: CouplingMPOModel
 
         conserve : 'best' | 'N' | 'parity' | None
-            What should be conserved. See :class:`~tenpy.networks.Site.BosonSite`.
+            What should be conserved. See :class:`lasyten.sites.SpinlessBosonSite`.
             For ``'best'``, we check the parameters that can be preserved.
         t1, t2, V, mu : float | array
             Hopping, interaction and chemical potential as defined for the Hamiltonian above.
@@ -136,7 +136,7 @@ class FermionicHaldaneModel(ModelBuilder):
         :include: CouplingMPOModel
 
         conserve : 'best' | 'N' | 'parity'
-            What should be conserved. See :class:`~tenpy.networks.Site.FermionSite`.
+            What should be conserved. See :class:`lasyten.sites.SpinlessFermionSite`.
             For ``'best'``, we check the parameters what can be preserved.
         t1, t2, V, mu : float | array
             Hopping, interaction and chemical potential as defined for the Hamiltonian above.

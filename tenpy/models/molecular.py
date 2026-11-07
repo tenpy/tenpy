@@ -45,10 +45,10 @@ class MolecularModel(ModelBuilder):
 
         cons_N : {'N' | 'parity'}
             Whether particle number is conserved,
-            see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
+            see :class:`~lasyten.sites.SpinHalfFermionSite` for details.
         cons_S : {'SU2' | 'Sz' | 'parity' | None}
             Whether spin is conserved,
-            see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
+            see :class:`~lasyten.sites.SpinHalfFermionSite` for details.
         one_body_tensor : array
             One-body tensor with shape `(norb, norb)`.
         two_body_tensor : array

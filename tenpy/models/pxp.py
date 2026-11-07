@@ -34,7 +34,7 @@ class PXPChain(ModelBuilder):
         :include: CouplingMPOModel
 
         conserve : 'best' | None
-            What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
+            What should be conserved. See :class:`~lasyten.sites.SpinSite`.
         J, J_boundary : float | array
             Couplings as defined for the Hamiltonian above.
     """

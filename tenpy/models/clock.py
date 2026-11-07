@@ -27,7 +27,7 @@ class ClockModel(ModelBuilder):
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs, each pair appearing
     exactly once.
     The operators :math:`X_i` and :math:`Z_i` are :math:`N \times N` generalizations of
-    the Pauli X and Z operators, see :class:`~tenpy.networks.site.ClockSite`.
+    the Pauli X and Z operators, see :class:`lasyten.sites.ClockSite`.
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
@@ -42,7 +42,7 @@ class ClockModel(ModelBuilder):
         :include: CouplingMPOModel
 
         conserve : None | 'Z_N'
-            What should be conserved. See :class:`~tenpy.networks.Site.ClockSite`.
+            What should be conserved. See :class:`lasyten.sites.ClockSite`.
         q : int
             The number of states per site.
         J, g : float | array

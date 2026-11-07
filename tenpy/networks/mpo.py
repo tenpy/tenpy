@@ -684,7 +684,7 @@ class MPO(MPSGeometry):
 
         .. testsetup :: from_wavepacket
 
-            from tenpy.networks.site import FermionSite
+            from lasyten.sites import SpinlessFermionSite
             from tenpy.networks.mpo import MPO
             from tenpy.networks.mps import MPS
             import numpy as np
@@ -700,7 +700,7 @@ class MPO(MPSGeometry):
             >>> x = np.arange(L)
             >>> coeff = np.exp(-1.0j * k0 * x) * np.exp(-0.5 * (x - x0) ** 2 / sigma**2)
             >>> coeff /= np.linalg.norm(coeff)
-            >>> site = FermionSite(conserve='N')
+            >>> site = SpinlessFermionSite(conserve='N')
             >>> wp = MPO.from_wavepacket([site] * L, coeff, 'Cd')
             >>> wp.chi == [1] + [2] * (L - 1) + [1]
             True
@@ -3735,7 +3735,7 @@ def grid_insert_ops(site, grid):
 
     Parameters
     ----------
-    site : :class:`~tenpy.networks.site`
+    site : :class:`lasyten.Site`
         The site on which the grid acts.
     grid : list of list of `entries`
         Represents a single matrix `W` of an MPO, i.e. the lists correspond to the legs

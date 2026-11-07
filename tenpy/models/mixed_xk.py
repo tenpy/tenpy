@@ -10,7 +10,7 @@ Inside each ring, we consider `Ly` repetitions of `N_orb` independent fermionic 
 the cylinder. Each orbital is one fermionic state that can be occupied or empty and corresponds to
 a unique creation/annihilation operator in second quantization.
 We will also refer to the orbitals as "site"; they will be represented
-by the 2-dimensional Hilbert space of a :class:`~tenpy.networks.site.FermionSite`.
+by the 2-dimensional Hilbert space of a :class:`lasyten.sites.SpinlessFermionSite`.
 
 The real-space operators :math:`c^{(\dagger)}_{i,j,l}` are index by
 x-coordinate :math:`x = 0, ... , N_{rings}-1` along the cylinder axis,
@@ -103,7 +103,7 @@ class MixedXKLattice(Lattice):
         The circumference of the cylinder: the number of possible `k` values.
     N_orb: int
         Number of orbitals. A single 'ring' of the cylinder contains ``N_orb*Ly`` sites.
-    sites : list of :class:`~tenpy.networks.site.Site`
+    sites : list of :class:`~lasyten.Site`
         The sites making up the unit cell, in the order specified by ring_order.
     ring_order : 1D array, len Ly*N_orb
         Gives the order of the sites within a ring for the DMRG snake;

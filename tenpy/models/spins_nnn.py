@@ -59,7 +59,7 @@ class SpinChainNNN(ModelBuilder):
         S : {0.5, 1, 1.5, 2, ...}
             The 2S+1 local states range from m = -S, -S+1, ... +S.
         conserve : 'best' | 'Sz' | 'parity' | None
-            What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
+            What should be conserved. See :class:`lasyten.sites.SpinSite`.
         Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
             Coupling as defined for the Hamiltonian above.
             Defaults to all ``Jx=Jy=Jz=Jxp=Jyp=Jzp=1`` and zero fields ``h*=0``.
@@ -156,7 +156,7 @@ class SpinChainNNN2(ModelBuilder):
         S : {0.5, 1, 1.5, 2, ...}
             The 2S+1 local states range from m = -S, -S+1, ... +S.
         conserve : 'best' | 'SU2' | 'Sz' | 'parity' | None
-            What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
+            What should be conserved. See :class:`lasyten.sites.SpinSite`.
             For ``'best'``, we check the parameters what can be preserved.
         Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
             Coupling as defined for the Hamiltonian above.

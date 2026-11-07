@@ -174,7 +174,7 @@ class PurificationMPS(MPS):
 
         Parameters
         ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~lasyten.Site`
             The sites defining the physical local Hilbert spaces.
         rho : :class:`~tenpy.linalg.np_conserved.Array`
             The full density matrix.
@@ -224,7 +224,7 @@ class PurificationMPS(MPS):
 
         Parameters
         ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~lasyten.Site`
             The sites defining the local Hilbert space.
             For usual :class:`tenpy.models.model.Model` given by `model.lattice.mps_sites()`.
         bc : {'finite', 'segment', 'infinite'}
@@ -268,7 +268,7 @@ class PurificationMPS(MPS):
 
         Parameters
         ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~lasyten.Site`
             The sites defining the local Hilbert space (on the physical legs).
             For usual :class:`tenpy.models.model.Model` given by `model.lattice.mps_sites()`.
         charge_sector : tuple of int
@@ -531,7 +531,7 @@ class PurificationMPS(MPS):
         -------
         sigmas : list of int | list of float
             On each site the index of the local basis that was measured for the PHYSICAL site only,
-            as specified in the corresponding :class:`~tenpy.networks.site.Site` in :attr:`sites`.
+            as specified in the corresponding :class:`~lasyten.Site` in :attr:`sites`.
             Note that this can change depending on whether/what charges you conserve!
             Explicitly specifying the measurement operator will avoid that issue.
             We DO NOT return any measurement outcomes/indices for the ancilla leg, even if they

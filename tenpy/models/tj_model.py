@@ -41,10 +41,10 @@ class tJModel(ModelBuilder):
 
         cons_N : {'N' | 'parity' | None}
             Whether particle number is conserved,
-            see :class:`~tenpy.networks.site.SpinHalfHoleSite` for details.
+            see :class:`lasyten.sites.SpinHalfHoleSite` for details.
         cons_Sz : {'Sz' | 'parity' | None}
             Whether spin is conserved,
-            see :class:`~tenpy.networks.site.SpinHalfHoleSite` for details.
+            see :class:`lasyten.sites.SpinHalfHoleSite` for details.
         t, J: float | array
             Couplings as defined for the Hamiltonian above. Note the signs!
             Defaults to ``t=J=1``

@@ -223,7 +223,7 @@ class TermList(Hdf5Exportable):
 
         Parameters
         ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~lasyten.Site`
             Defines the local Hilbert space for each site.
             Used to check whether the operators need Jordan-Wigner strings.
             The length is used as `L` for the `onsite_terms` and `coupling_terms`.
@@ -287,7 +287,7 @@ class TermList(Hdf5Exportable):
 
         Parameters
         ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~lasyten.Site`
             Defines the local Hilbert space for each site.
             Used to check whether the operators anticommute
             (= whether they need Jordan-Wigner strings) and for multiplication rules.
@@ -327,14 +327,14 @@ def order_combine_term(term, sites):
 
     Takes in a term of operators and sites they acts on, commutes operators to order them by site
     and combines operators acting on the same site with
-    :meth:`~tenpy.networks.site.Site.multiply_op_names`.
+    :meth:`~lasyten.Site.multiply_op_names`.
 
     Parameters
     ----------
     term : a list of (opname_i, i) tuples
         Represents a product of onsite operators with site indices `i` they act on.
         Needs not to be ordered and can have multiple entries acting on the same site.
-    sites : list of :class:`~tenpy.networks.site.Site`
+    sites : list of :class:`~lasyten.Site`
         Defines the local Hilbert space for each site.
         Used to check whether the operators anticommute
         (= whether they need Jordan-Wigner strings) and for multiplication rules.
