@@ -6224,6 +6224,12 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         Used for book-keeping, how large the DMRG system grew:
         ``_RP_age[i]`` stores the number of physical sites involved into the contraction
         network which yields ``self._RP[i]``.
+    checkpoint_every : int | None
+        If set to an int `k` (finite systems only), keep only every `k`-th left/right environment
+        plus the segment next to the most recently stored one; dropped ones are recomputed exactly by
+        :meth:`get_LP` / :meth:`get_RP` from the nearest stored one when needed (checkpointing).
+        Reduces environment memory from ~L to ~L/k + k tensors for ~1 extra contraction per site
+        and sweep. Set by the :cfg:option:`Sweep.env_checkpoint_every` option.
 
     """
 
@@ -6254,10 +6260,6 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         self._RP_keys = [f'RP_{i:d}' for i in range(L)]
         self._LP_age = [None] * L
         self._RP_age = [None] * L
-        #: If set to an int `k` (finite systems only), keep only every `k`-th left/right environment plus the
-        #: segment next to the most recently stored one; dropped ones are recomputed exactly by
-        #: :meth:`get_LP` / :meth:`get_RP` from the nearest stored one when needed (checkpointing).
-        #: Reduces environment memory from ~L to ~L/k + 2k tensors for ~1 extra contraction per site and sweep.
         self.checkpoint_every = None
         if cache is None:
             cache = DictCache.trivial()

@@ -85,6 +85,13 @@ class Sweep(Algorithm):
             :math:`O(2 d^3 \chi^3 D)`.
         lanczos_params : dict
             Lanczos parameters as described in :cfg:config:`KrylovBased`.
+        env_checkpoint_every : int | None
+            Finite systems only. If set to `k`, keep only every `k`-th left/right environment (plus
+            those next to the most recently stored one) and recompute the dropped ones exactly from
+            the nearest stored one when needed. Reduces environment memory from ~L to ~L/k + k tensors
+            for ~1 extra contraction per site and sweep; results are unchanged.
+            ``k ~ sqrt(L)`` minimizes the memory. See
+            :attr:`~tenpy.networks.mps.BaseEnvironment.checkpoint_every`.
 
     Attributes
     ----------
@@ -263,8 +270,6 @@ class Sweep(Algorithm):
             cache = self.env.cache  # re-initialize and reuse the cache!
             cache.clear()  # remove old entries which might no longer be valid
         self.env = MPOEnvironment(self.psi, H, self.psi, cache=cache, **init_env_data)
-        # env_checkpoint_every : int | None
-        #     Keep only every k-th environment (finite systems); the others are recomputed when needed.
         self.env.checkpoint_every = self.options.get('env_checkpoint_every', None, int)
 
     def _init_ortho_to_envs(self, orthogonal_to, resume_data):

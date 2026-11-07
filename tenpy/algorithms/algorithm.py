@@ -298,6 +298,10 @@ class Algorithm:
                 # The shape is ordered like (wL, wR, p, p*)
                 env_entries += chis[i] ** 2 * max(W.shape[0], W.shape[1])
                 # max: sweeps need only L, not 2L env tensors
+            k = self.options.get('env_checkpoint_every', None, int) if isinstance(self, Sweep) else None
+            if k and self.psi.bc == 'finite':
+                # checkpointing keeps ~L/k checkpoints plus up to k tensors of the current segment
+                env_entries *= min(1.0, (-(-L // k) + k) / L)
 
             lanczos_entries = 0
             # Additional RAM, if Lanczos is performed
