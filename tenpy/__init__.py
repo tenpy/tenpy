@@ -321,7 +321,6 @@ __all__ = [
     # from tenpy.__init__, i.e. defined below
     'show_config',
     'console_main',
-    'TruncationErrror',
     'svd_theta',
 ]
 
