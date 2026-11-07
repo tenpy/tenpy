@@ -4638,6 +4638,7 @@ class MPS(BaseMPSExpectationValue):
 
         self.sites = self.sites[::-1]
         self.form = [(f if f is None else (f[1], f[0])) for f in self.form[::-1]]
+        raise NotImplementedError('How to braid? This is not planar')
         self._B = [B.replace_labels(['vL', 'vR'], ['vR', 'vL']).transpose(self._B_labels) for B in self._B[::-1]]
         self._S = self._S[::-1]
         self.test_sanity()
