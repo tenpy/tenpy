@@ -148,12 +148,12 @@ class SpinModel(ModelBuilder):
 
         for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             if np.all(Jx == Jy) and np.all(Jy == Jz):
-                self.add_two_site_coupling(Jx, 'S.S', dx, x1='sum_over', u1=u1, u2=u2)
+                self.add_two_site_coupling(Jx, 'S.S', dx, u1=u1, u2=u2)
             else:
-                self.add_two_site_coupling(0.25 * (Jx + Jy), 'Sp.Sm', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
-                self.add_two_site_coupling(0.25 * (Jx - Jy), 'Sp.Sp', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
-                self.add_two_site_coupling(Jz, 'Sz.Sz', dx, x1='sum_over', u1=u1, u2=u2)
-            self.add_two_site_coupling(0.5j * muJ, 'Sp.Sm', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling(0.25 * (Jx + Jy), 'Sp.Sm', dx, u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling(0.25 * (Jx - Jy), 'Sp.Sp', dx, u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling(Jz, 'Sz.Sz', dx, u1=u1, u2=u2)
+            self.add_two_site_coupling(0.5j * muJ, 'Sp.Sm', dx, u1=u1, u2=u2, plus_hc=True)
 
         return
 

@@ -143,7 +143,7 @@ class XXZChain2(ModelBuilder):
         self.add_onsite_operator(-hz, 'Sz')
         for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             if np.all(Jz == Jxx):
-                self.add_two_site_coupling(Jz, 'S.S', dx, x1='sum_over', u1=u1, u2=u2)
+                self.add_two_site_coupling(Jz, 'S.S', dx, u1=u1, u2=u2)
             else:
-                self.add_two_site_coupling(0.5 * Jxx, 'Sp.Sm', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
-                self.add_two_site_coupling(Jz, 'Sz.Sz', dx, x1='sum_over', u1=u1, u2=u2)
+                self.add_two_site_coupling(0.5 * Jxx, 'Sp.Sm', dx, u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling(Jz, 'Sz.Sz', dx, u1=u1, u2=u2)

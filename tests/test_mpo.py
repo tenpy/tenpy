@@ -235,12 +235,12 @@ def test_MPO_addition(bc, explicit_plus_hc):
     str_B = [0, 2.0, 0, 0] if bc == 'infinite' else [0, 2.0, 0]  # dx=1
     str_C = [0, 4.0, 7.0, 0] if bc == 'infinite' else [4, 7.0]  # dx=2
     for M in [M1, M12]:
-        M.add_two_site_coupling(str_A, 'Sm.Sp', [1], x1='sum_over', u1=0, u2=0, plus_hc=True)
-        M.add_two_site_coupling(str_B, 'Sz.Sz', [1], x1='sum_over', u1=0, u2=0)
+        M.add_two_site_coupling(str_A, 'Sm.Sp', [1], u1=0, u2=0, plus_hc=True)
+        M.add_two_site_coupling(str_B, 'Sz.Sz', [1], u1=0, u2=0)
         M.add_onsite_operator([0, 3.0, 0, 0], 'Sz', x='sum_over', u=0)
     cpl_slc = slice(0, 4) if bc == 'infinite' else slice(0, 3)
     for M in [M2, M12]:
-        M.add_two_site_coupling(str_C, 'Sz.Sz', [2], x1='sum_over', u1=0, u2=0)
+        M.add_two_site_coupling(str_C, 'Sz.Sz', [2], u1=0, u2=0)
         M.add_onsite_operator([0, 5.0, 0, 0], 'Sz', x='sum_over', u=0)
 
     H1 = graph_from_model(M1).build_MPO()

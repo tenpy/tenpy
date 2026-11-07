@@ -77,7 +77,7 @@ class ClockModel(ModelBuilder):
         g = np.asarray(model_params.get('g', 1.0, 'real_or_array'))
         self.add_onsite_operator(-g, 'Z', plus_hc=True)
         for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
-            self.add_two_site_coupling(-J, 'X.Xh', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
+            self.add_two_site_coupling(-J, 'X.Xh', dx, u1=u1, u2=u2, plus_hc=True)
 
 
 class ClockChain(ClockModel):

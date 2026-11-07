@@ -77,7 +77,7 @@ class TFIModel(ModelBuilder):
         self.add_onsite_operator(-2 * g, 'Sz', x='sum_over', u='sum_over')
         for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             # sigma^x_i sigma^x_j = 4 * S^x_i S^x_j
-            self.add_two_site_coupling(-4 * J, 'Sx.Sx', dx, x1='sum_over', u1=u1, u2=u2)
+            self.add_two_site_coupling(-4 * J, 'Sx.Sx', dx, u1=u1, u2=u2)
         return
 
 

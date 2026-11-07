@@ -88,8 +88,8 @@ class FermionModel(ModelBuilder):
                 hop = -J
             else:
                 hop = self.coupling_strength_add_ext_flux(-J, dx, [0, phi_ext])
-            self.add_two_site_coupling(hop, 'Cd.C', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
-            self.add_two_site_coupling(V, 'N.N', dx, x1='sum_over', u1=u1, u2=u2)
+            self.add_two_site_coupling(hop, 'Cd.C', dx, u1=u1, u2=u2, plus_hc=True)
+            self.add_two_site_coupling(V, 'N.N', dx, u1=u1, u2=u2)
 
 
 class FermionChain(FermionModel):

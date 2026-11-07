@@ -491,9 +491,9 @@ class CouplingModel(HamiltonianModel):
         strength: ArrayLike,
         coupling_name: str,
         dx: ArrayLike,
-        x1: ArrayLike | Literal['sum_over'] = 'sum_over',
         u1: int | Literal['sum_over_independent'] | Literal['sum_over_matching'] = 'sum_over_matching',
         u2: int | Literal['sum_over_independent'] | Literal['sum_over_matching'] = 'sum_over_matching',
+        x1: ArrayLike | Literal['sum_over'] = 'sum_over',
         plus_hc: bool = False,
     ):
         r"""Add one or more two-site coupling terms.
@@ -519,13 +519,6 @@ class CouplingModel(HamiltonianModel):
             Specifies the operator to add by name, see :ref:`couplings`.
         dx : 1D array-like
             The translation vector from the first to the second site to act on.
-        x1 : 1D array-like | ``'sum_over'``
-            Specifies the position(s) for the first site of the coupling.
-
-            * A 1D array-like requires a finite ``len(x)``-D lattice and specifies a single position.
-            * ``'sum_over'`` adds an extensive sum of coupling terms. Note that `strength` can be
-                used for non-uniform prefactors
-
         u1, u2 : int | ``'sum_over_matching'`` | ``'sum_over_independent'``
             Specifies which site(s) within a unit cell to act on.
 
@@ -536,6 +529,14 @@ class CouplingModel(HamiltonianModel):
               term for all possible combinations ``u1, u2``.
               Note that `strength` applies to all equally. Use multiple calls for `u`-dependent strength.
             * A single ``int`` specifies a single site.
+
+        x1 : 1D array-like | ``'sum_over'``
+            Specifies the position(s) for the first site of the coupling.
+
+            * A 1D array-like requires a finite ``len(x)``-D lattice and specifies a single position.
+            * ``'sum_over'`` adds an extensive sum of coupling terms. Note that `strength` can be
+                used for non-uniform prefactors
+
         plus_hc : bool
             If `True`, the hermitian conjugate of the terms is added automatically.
 

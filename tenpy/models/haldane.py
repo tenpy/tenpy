@@ -87,8 +87,8 @@ class BosonicHaldaneModel(ModelBuilder):
 
         for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, 2 * np.pi * phi_ext])
-            self.add_two_site_coupling(t1_phi, 'Bd.B', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
-            self.add_two_site_coupling(V, 'N.N', dx, x1='sum_over', u1=u1, u2=u2)
+            self.add_two_site_coupling(t1_phi, 'Bd.B', dx, u1=u1, u2=u2, plus_hc=True)
+            self.add_two_site_coupling(V, 'N.N', dx, u1=u1, u2=u2)
 
         for u1, u2, dx in [
             (0, 0, np.array([-1, 1])),
@@ -99,7 +99,7 @@ class BosonicHaldaneModel(ModelBuilder):
             (1, 1, np.array([-1, 0])),
         ]:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, 2 * np.pi * phi_ext])
-            self.add_two_site_coupling(t2_phi, 'Bd.B', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
+            self.add_two_site_coupling(t2_phi, 'Bd.B', dx, u1=u1, u2=u2, plus_hc=True)
 
 
 class FermionicHaldaneModel(ModelBuilder):
@@ -182,8 +182,8 @@ class FermionicHaldaneModel(ModelBuilder):
 
         for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, 2 * np.pi * phi_ext])
-            self.add_two_site_coupling(t1_phi, 'Cd.C', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
-            self.add_two_site_coupling(V, 'N.N', dx, x1='sum_over', u1=u1, u2=u2)
+            self.add_two_site_coupling(t1_phi, 'Cd.C', dx, u1=u1, u2=u2, plus_hc=True)
+            self.add_two_site_coupling(V, 'N.N', dx, u1=u1, u2=u2)
 
         for u1, u2, dx in [
             (0, 0, np.array([-1, 1])),
@@ -194,4 +194,4 @@ class FermionicHaldaneModel(ModelBuilder):
             (1, 1, np.array([-1, 0])),
         ]:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, 2 * np.pi * phi_ext])
-            self.add_two_site_coupling(t2_phi, 'Cd.C', dx, x1='sum_over', u1=u1, u2=u2, plus_hc=True)
+            self.add_two_site_coupling(t2_phi, 'Cd.C', dx, u1=u1, u2=u2, plus_hc=True)
