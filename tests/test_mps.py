@@ -86,7 +86,7 @@ def test_mps_add():
     u, d = 'up', 'down'
     psi1 = mps.MPS.from_product_state([s] * 4, [u, u, d, u], bc='finite', unit_cell_width=4)
     psi2 = mps.MPS.from_product_state([s] * 4, [u, d, u, u], bc='finite', unit_cell_width=4)
-    npt.assert_equal(psi1.get_total_charge(), ct.Sector([2]))
+    npt.assert_equal(psi1.get_total_charge(), lasy.Sector([2]))
     psi_sum = psi1.add(psi2, 0.5**0.5, -(0.5**0.5))
     npt.assert_almost_equal(psi_sum.norm, 1.0)
     npt.assert_almost_equal(psi_sum.overlap(psi1), 0.5**0.5)
@@ -96,11 +96,11 @@ def test_mps_add():
     npt.assert_almost_equal(psi_sum.overlap(psi), 1.0)
 
     psi2_prime = mps.MPS.from_product_state([s] * 4, [u, u, u, u], bc='finite', unit_cell_width=4)
-    npt.assert_equal(psi2_prime.get_total_charge(), ct.Sector([4]))
+    npt.assert_equal(psi2_prime.get_total_charge(), lasy.Sector([4]))
     pytest.skip(_LEGACY)
     psi2_prime.apply_local_op(1, 'Sm', False, False)
     # now psi2_prime is psi2 up to gauging of charges.
-    npt.assert_equal(psi2_prime.get_total_charge(), ct.Sector([2]))
+    npt.assert_equal(psi2_prime.get_total_charge(), lasy.Sector([2]))
     # can MPS.add handle this?
     psi_sum_prime = psi1.add(psi2_prime, 0.5**0.5, -(0.5**0.5))
     npt.assert_almost_equal(psi_sum_prime.overlap(psi), 1.0)
@@ -144,7 +144,7 @@ def test_MPSEnvironment():
 
 def test_different_total_charges():
     # bra and ket in different charge sectors -> vanishing overlap instead of an error during contraction
-    s = ct.sites.SpinSite(S=0.5, conserve='Sz')
+    s = lasy.sites.SpinSite(S=0.5, conserve='Sz')
     psi_a = mps.MPS.from_product_state([s] * 4, ['up', 'up', 'up', 'down'], bc='finite', unit_cell_width=4)
     psi_b = mps.MPS.from_product_state([s] * 4, ['up', 'down', 'up', 'up'], bc='finite', unit_cell_width=4)
     psi_0 = mps.MPS.from_product_state([s] * 4, ['up', 'down', 'up', 'down'], bc='finite', unit_cell_width=4)
@@ -220,7 +220,7 @@ def test_singlet_mps():
 
 
 def test_from_mps_covering():
-    spin = ct.sites.SpinSite(S=0.5, conserve=None)
+    spin = lasy.sites.SpinSite(S=0.5, conserve=None)
     psi_uuu = mps.MPS.from_product_state([spin] * 3, ['up', 'up', 'up'], unit_cell_width=3)
     psi_ddd = mps.MPS.from_product_state([spin] * 3, ['down', 'down', 'down'], unit_cell_width=3)
     GHZ = psi_uuu.add(psi_ddd, 0.5**0.5, -(0.5**0.5))
@@ -253,7 +253,7 @@ def test_from_mps_covering():
     )
 
     # this code is also an example in MPS.from_product_mps_covering
-    ferm = ct.sites.SpinlessFermionSite(conserve='N')
+    ferm = lasy.sites.SpinlessFermionSite(conserve='N')
     lat = MultiSpeciesLattice(Square(4, 2, None), [ferm] * 2, ['up', 'down'])
     ferm_up_down = mps.MPS.from_product_state([ferm] * 4, ['1', '0', '0', '1'], unit_cell_width=4)
     ferm_down_up = mps.MPS.from_product_state([ferm] * 4, ['0', '1', '1', '0'], unit_cell_width=4)
@@ -540,7 +540,7 @@ def test_enlarge_mps_unit_cell():
 
 
 def test_roll_mps_unit_cell():
-    s = ct.sites.SpinSite(S=0.5, conserve='Sz')
+    s = lasy.sites.SpinSite(S=0.5, conserve='Sz')
     psi = mps.MPS.from_product_state([s] * 4, ['down', 'up', 'up', 'up'], bc='infinite', unit_cell_width=4)
     psi1 = psi.copy()
     psi1.roll_mps_unit_cell(1)
