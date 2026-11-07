@@ -81,6 +81,6 @@ def test_cs_projection_with_two_charges():
 
 def test_from_infiniteT_canonical(L=10):
     M = FermiHubbardModel(dict(L=L, cons_Sz='Sz', cons_N='N'))
-    psi = PurificationMPS.from_infiniteT_canonical(M.lat.mps_sites(), (M.lat.N_sites, 0), unit_cell_width=L)
-    assert np.isclose(psi.expectation_value('Ntot').sum(), M.lat.N_sites)
+    psi = PurificationMPS.from_infiniteT_canonical(M.lattice.mps_sites(), (M.lattice.N_sites, 0), unit_cell_width=L)
+    assert np.isclose(psi.expectation_value('Ntot').sum(), M.lattice.N_sites)
     assert np.isclose(psi.expectation_value('Sz').sum(), 0)

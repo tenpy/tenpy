@@ -1,15 +1,16 @@
 # Copyright (C) TeNPy Developers, Apache license
 import pytest
-
-pytest.skip(allow_module_level=True)
 from test_model import check_general_model
 
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.models import spins_nnn
-from tenpy.models.model import NearestNeighborModel
 
 
 def test_SpinChainNNN():
+    with pytest.raises(NotImplementedError, match='grouped-sites'):
+        _ = spins_nnn.SpinChainNNN({})
+    pytest.xfail('grouped-sites')
+
     check_general_model(
         spins_nnn.SpinChainNNN,
         {'hz': 0.5, 'Jx': -2.0, 'Jy': -2.0, 'Jz': 0.4, 'L': 4},
@@ -26,6 +27,10 @@ def test_SpinChainNNN2():
 
 
 def test_SpinChainNNN_comparison():
+    with pytest.raises(NotImplementedError, match='grouped-sites'):
+        _ = spins_nnn.SpinChainNNN({})
+    pytest.xfail('grouped-sites')
+
     model_pars = {'hz': 0.5, 'Jx': -2.0, 'Jy': -2.0, 'Jz': 0.4, 'L': 3, 'conserve': 'Sz', 'bc_MPS': 'finite'}
     M1 = spins_nnn.SpinChainNNN(model_pars.copy())
     model_pars['L'] = 2 * model_pars['L']

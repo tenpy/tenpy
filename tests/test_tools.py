@@ -332,9 +332,9 @@ def test_fixes_consistency_check_IrregularLattice():
 
     ad_hoc_fix = False
     if ad_hoc_fix:
-        model.lat.N_sites_per_ring = 1
+        model.lattice.N_sites_per_ring = 1
 
-    psi = tenpy.MPS.from_lat_product_state(model.lat, [[['up']]])
+    psi = tenpy.MPS.from_lat_product_state(model.lattice, [[['up']]])
     dmrg_params = dict(max_sweeps=2)
     _ = tenpy.algorithms.dmrg.run(psi, model, dmrg_params)
 

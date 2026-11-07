@@ -124,9 +124,9 @@ class ExactDiag:
     @classmethod
     def from_model(cls, model, charge_sector=None, max_size=2e6):
         """Initialize from a finite model."""
-        if model.lat.bc_MPS != 'finite':
+        if model.lattice.bc_MPS != 'finite':
             raise ValueError('Full diagonalization works only on finite systems')
-        res = cls(model.lat.mps_sites(), charge_sector, max_size)
+        res = cls(model.lattice.mps_sites(), charge_sector, max_size)
         res.model = model
         return res
 
@@ -176,7 +176,7 @@ class ExactDiag:
 
         """
         model_segment = model.extract_segment(first, last, enlarge)
-        model_segment.lat.bc_MPS = 'finite'
+        model_segment.lattice.bc_MPS = 'finite'
         model_segment.H_MPO.bc = 'finite'
         if hasattr(model_segment, 'H_bond'):
             del model_segment.H_bond  # invalid since it wouldn't terminate onsite terms correctly
@@ -197,10 +197,10 @@ class ExactDiag:
 
         """
         from ..models.lattice import TrivialLattice
-        from ..models.model import MPOModel
+        from ..models.model import HamiltonianMPOModel
 
         assert H_MPO.bc == 'finite'
-        M = MPOModel(TrivialLattice(H_MPO.sites), H_MPO)
+        M = HamiltonianMPOModel(TrivialLattice(H_MPO.sites), H_MPO)
         return cls.from_model(M, *args, **kwargs)
 
     def build_full_H_from_mpo(self):
@@ -213,7 +213,7 @@ class ExactDiag:
         model = self._require_model()
         if self._exceeds_max_size():
             return
-        mpo = model.H_MPO
+        mpo = model.get_H_MPO()
         if mpo.bc != 'finite':
             raise ValueError(f'ExactDiag needs a finite MPO, got bc={mpo.bc!r}.')
         if mpo.L != len(self._sites):
@@ -237,9 +237,10 @@ class ExactDiag:
         :meth:`build_full_H_from_mpo`.
         """
         model = self._require_model()
-        H_bond = getattr(model, 'H_bond', None)
-        if H_bond is None:
-            raise ValueError('The model has no `H_bond`; use `build_full_H_from_mpo` or a NearestNeighborModel.')
+        H_bond = model.get_H_bond()
+        assert all(h is None or isinstance(h, lasy.Coupling) for h in H_bond)
+        H_bond = [None if h is None else h.to_tensor() for h in H_bond]
+
         if self._exceeds_max_size():
             return
         L = len(self._sites)
@@ -369,7 +370,7 @@ class ExactDiag:
         if not psi.has_pipes:  # plain state with legs p0..p{L-1}: combine into one pipe first
             psi = lasy.combine_legs(psi, list(range(len(self._sites))))
         psi = lasy.split_legs(psi, 0)  # split the combined leg into the physical legs of the sites
-        unit_cell_width = len(self._sites) if self.model is None else self.model.lat.mps_unit_cell_width
+        unit_cell_width = len(self._sites) if self.model is None else self.model.lattice.mps_unit_cell_width
         return MPS.from_full(self._sites, psi, form=canonical_form, unit_cell_width=unit_cell_width)
 
     def sparse_diag(self, k, *args, **kwargs):
@@ -532,7 +533,7 @@ def get_numpy_Hamiltonian(model, from_mpo: bool = True, undo_sort_charge: bool =
         of the local basis order, see `undo_sort_charge`.
 
     """
-    if model.lat.bc_MPS != 'finite':
+    if model.lattice.bc_MPS != 'finite':
         raise ValueError('Model must be defined on a finite lattice.')
     if isinstance(model, CouplingModel):
         return _get_Hamiltonian_from_couplings(model, sparse=False, undo_sort_charge=undo_sort_charge)
@@ -557,7 +558,7 @@ def get_scipy_sparse_Hamiltonian(model, undo_sort_charge: bool = True):
         :func:`numpy.kron` of the local basis order, see `undo_sort_charge`.
 
     """
-    if model.lat.bc_MPS != 'finite':
+    if model.lattice.bc_MPS != 'finite':
         raise ValueError('Model must be defined on a finite lattice.')
 
     if isinstance(model, CouplingModel):
@@ -573,13 +574,13 @@ def _get_numpy_Hamiltonian_ExactDiag_full_H(model, from_mpo: bool, undo_sort_cha
     else:
         ed.build_full_H_from_bonds()
     res = ed.full_H.split_legs()
-    n_sites = model.lat.N_sites
+    n_sites = model.lattice.N_sites
     assert res.rank == 2 * n_sites
     # [p0, p1, ..., p0*, p1*, ...]
     res = res.itranspose([f'p{n}{star}' for star in ['', '*'] for n in range(n_sites)])
     res = res.to_ndarray()
     if undo_sort_charge:
-        perms = [inverse_permutation(site.perm) for site in model.lat.mps_sites()] * 2
+        perms = [inverse_permutation(site.perm) for site in model.lattice.mps_sites()] * 2
         res = res[np.ix_(*perms)]
     dim = np.prod(res.shape[:n_sites])
     return np.reshape(res, (dim, dim))
@@ -600,7 +601,7 @@ def _get_Hamiltonian_from_couplings(model, sparse: bool, undo_sort_charge: bool)
     edt = model.exp_decaying_terms
     term_list = ot.to_TermList() + ct.to_TermList() + edt.to_TermList()
 
-    sites = model.lat.mps_sites()
+    sites = model.lattice.mps_sites()
     dims = [s.leg.ind_len for s in sites]
     if sparse:
         import scipy.sparse as spsp

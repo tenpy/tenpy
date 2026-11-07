@@ -62,7 +62,7 @@ def dummy_function(obj):
 def gen_example_data(version=tenpy.version.full_version):
     if '+' in version:
         version = version.split('+')[0]  # discard '+GITHASH' from version
-    s = tenpy.networks.site.SpinHalfSite(sort_charge=False)
+    s = lasyten.sites.SpinSite(sort_charge=False)
     data = {
         'SpinHalfSite': s,
         'trivial_array': npc.Array.from_ndarray_trivial(np.arange(20).reshape([4, 5])),

@@ -1,7 +1,5 @@
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
-
-pytest.skip(allow_module_level=True)
+import lasyten as lasy
 import numpy as np
 import pytest
 from test_model import check_general_model
@@ -15,7 +13,9 @@ from tenpy.networks.mps import MPS
 
 @pytest.mark.parametrize('model_class', [SpinlessMixedXKSquare, HubbardMixedXKSquare])
 def test_MixedXKModel_general(model_class):
-    check_general_model(model_class, dict(Lx=2, Ly=3, bc_MPS='infinite'))
+    with pytest.raises(NotImplementedError):
+        check_general_model(model_class, dict(Lx=2, Ly=3, bc_MPS='infinite'))
+    pytest.xfail()
 
 
 def test_mixed_spinless():
@@ -39,21 +39,33 @@ def test_mixed_spinless():
         [['full'], ['empty'], ['full'], ['empty']],
         [['full'], ['empty'], ['full'], ['empty']],
     ]  # half filling
-    psi = MPS.from_lat_product_state(M.lat, product_state)
-    info = dmrg.run(psi, M, dmrg_params)
+    psi = MPS.from_lat_product_state(M.lattice, product_state)
+
+    with pytest.raises(lasy.SymmetryError, match='Legs can not be permuted automatically'):
+        from tenpy.tools import asConfig
+
+        dmrg_params = asConfig(dmrg_params, 'TwoSiteDMRGEngine')
+        dmrg_params.touch(*dmrg_params.keys())  # to avoid warnings...
+        dmrg_params.subconfig('trunc_params').touch('chi_max', 'svd_min')
+        info = dmrg.run(psi, M, dmrg_params, resume_data={'init_env_data': dict(start_env_sites=0)})
+    pytest.xfail('fermionic DMRG')
+
+    info = dmrg.run(psi, M, dmrg_params, resume_data={'init_env_data': dict(start_env_sites=0)})
     E_real = info['E']
 
     # measure particle number and Cd C correlators
-    N_real = M.lat.mps2lat_values(psi.expectation_value('N'))
-    CdC_real = M.lat.mps2lat_values(psi.correlation_function('Cd', 'C')[0, :])
+    N_real = M.lattice.mps2lat_values(psi.expectation_value('N'))
+    CdC_real = M.lattice.mps2lat_values(psi.correlation_function('Cd', 'C')[0, :])
 
     # mixed space
     model_params = dict(t=J, V=V, Lx=Lx, Ly=Ly, bc_MPS='finite', conserve_k=True)
-    M = SpinlessMixedXKSquare(model_params)
+    with pytest.raises(NotImplementedError):
+        M = SpinlessMixedXKSquare(model_params)
+    pytest.xfail('mixed_xk not adapted')
 
     # initial product state with momentum 0
     product_xk = [['full', 'empty', 'full', 'empty'], ['full', 'empty', 'full', 'empty']]
-    psi_xk = MPS.from_lat_product_state(M.lat, product_xk)
+    psi_xk = MPS.from_lat_product_state(M.lattice, product_xk)
     info = dmrg.run(psi_xk, M, dmrg_params)  # the main work...
     E_mixed = info['E']
 
@@ -73,7 +85,8 @@ def test_mixed_spinless():
 
 
 @pytest.mark.slow
-def test_mixed_hubbard():
+@pytest.mark.parametrize('cons_S', ['SU2', 'Sz'])
+def test_mixed_hubbard(cons_S):
     """
     compare the Hubbard model on a small square lattice in in real and mixed space
     """
@@ -81,7 +94,9 @@ def test_mixed_hubbard():
     t, U = 1.0, 10
     chimax = 100
     # real space
-    model_params = dict(t=t, U=U, lattice='Square', Lx=Lx, Ly=Ly, bc_x='open', bc_y='cylinder', bc_MPS='finite')
+    model_params = dict(
+        t=t, U=U, lattice='Square', Lx=Lx, Ly=Ly, bc_x='open', bc_y='cylinder', bc_MPS='finite', cons_S=cons_S
+    )
     M = FermiHubbardModel(model_params)
 
     dmrg_params = {
@@ -90,15 +105,28 @@ def test_mixed_hubbard():
         'max_S_err': 1.0e-10,
         'trunc_params': {'chi_max': chimax, 'svd_min': 1.0e-10},
     }
-    product_state = [[['full'], ['empty'], ['full']],
-                     [['full'], ['empty'], ['empty']]]  # fmt: skip
-    psi = MPS.from_lat_product_state(M.lat, product_state)
+
+    if cons_S == 'SU2':
+        site, *_ = M.lattice.unit_cell
+        with pytest.raises(AssertionError, match='can only construct product states for Abelian symmetries'):
+            psi = MPS.from_singlets(site, L=Lx * Ly, pairs=[(0, 1), (2, 3), (4, 5)])
+        pytest.xfail('from_singlet broken for SU(2), uses from_product_state')
+        psi = MPS.from_singlets(site, L=Lx * Ly, pairs=[(0, 1), (2, 3), (4, 5)])
+    else:
+        product_state = [[['full'], ['empty'], ['full']],
+                        [['full'], ['empty'], ['empty']]]  # fmt: skip
+        psi = MPS.from_lat_product_state(M.lattice, product_state)
+
+    with pytest.raises(lasy.SymmetryError, match='Legs can not be permuted automatically'):
+        dmrg.run(psi, M, {})
+    pytest.xfail('fermionic DMRG')
+
     info = dmrg.run(psi, M, dmrg_params)
     E_real = info['E']
 
     # measure Sz onsite and SpSm correlators
-    Sz_real = M.lat.mps2lat_values(psi.expectation_value('Sz'))
-    SpSm_real = M.lat.mps2lat_values(psi.correlation_function('Sp', 'Sm')[0, :])
+    Sz_real = M.lattice.mps2lat_values(psi.expectation_value('Sz'))
+    SpSm_real = M.lattice.mps2lat_values(psi.correlation_function('Sp', 'Sm')[0, :])
 
     # mixed space
     # implemented with two spinless fermion sites for up/down !
@@ -110,7 +138,7 @@ def test_mixed_hubbard():
         ['full', 'full', 'full', 'empty', 'empty', 'empty'],
         ['full', 'full', 'empty', 'empty', 'empty', 'full'],
     ]
-    psi_xk = MPS.from_lat_product_state(M2.lat, product_xk)
+    psi_xk = MPS.from_lat_product_state(M2.lattice, product_xk)
     info = dmrg.run(psi_xk, M2, dmrg_params)  # the main work...
     E_mixed = info['E']
 

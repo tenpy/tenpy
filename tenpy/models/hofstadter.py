@@ -4,15 +4,17 @@
     Long term: implement different lattices.
     Long term: implement variable hopping strengths Jx, Jy.
 """
-# Copyright (C) TeNPy Developers, Apache license
 
+# Copyright (C) TeNPy Developers, Apache license
+from typing import Literal
+
+import lasyten as lasy
 import numpy as np
 
-from ..networks.site import BosonSite, FermionSite
 from .lattice import Square
-from .model import CouplingMPOModel
+from .model import ModelBuilder
 
-__all__ = ['HofstadterBosons', 'HofstadterFermions', 'gauge_hopping', 'hopping_phases']
+__all__ = ['HofstadterBosons', 'HofstadterFermions', 'hopping_phases']
 
 
 def hopping_phases(p: int, q: int, Lx: int, Ly: int, pbc_x: bool, pbc_y: bool, gauge):
@@ -142,7 +144,7 @@ def hopping_phases(p: int, q: int, Lx: int, Ly: int, pbc_x: bool, pbc_y: bool, g
     return phase_x, phase_y
 
 
-class HofstadterFermions(CouplingMPOModel):
+class HofstadterFermions(ModelBuilder):
     r"""Fermions on a square lattice with uniform magnetic flux.
 
     For now, the Hamiltonian reads:
@@ -174,11 +176,11 @@ class HofstadterFermions(CouplingMPOModel):
             Length of the lattice in x- and y-direction.
         filling : tuple
             Average number of fermions per site, defined as a fraction ``(numerator, denominator)``
-            Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.FermionSite`.
+            Changes the definition of ``'dN'`` in the :class:`lasyten.sites.SpinlessFermionSite`.
             Default ``(1, 8)``, i.e. one particle per eight sites.
         Jx, Jy, mu, v : float
             Hamiltonian parameter as defined above. Defaults are ``Jx = Jy = 1``, ``mu = v = 0``.
-        conserve : {'N' | 'parity' | None}
+        conserve : {'N' | 'parity'}
             What quantum number to conserve.
         phi : tuple
             Magnetic flux per plaquette, defined as a fraction ``(numerator, denominator)``.
@@ -196,13 +198,26 @@ class HofstadterFermions(CouplingMPOModel):
 
     default_lattice = Square
     force_default_lattice = True
+    conserve: Literal['N', 'parity']
 
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N', str)
-        filling = model_params.get('filling', (1, 8))
-        filling = filling[0] / filling[1]
-        site = FermionSite(conserve=conserve, filling=filling)
-        return site
+        if conserve == 'best':
+            conserve = 'N'
+        self.conserve = conserve
+        filling_num, filling_denom = model_params.get('filling', (1, 8))
+        filling = filling_num / filling_denom
+        self._check_fermion_conserve(conserve)
+        return lasy.sites.SpinlessFermionSite(conserve=conserve, filling=filling)
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(
+            lasy.models.hopping([site, site], t_left=1, t_right=0, name='Cd.C'), hc='C.Cd', permute='swap_hc'
+        )
+        self.define_coupling(
+            lasy.models.density_density_interaction([site, site], name='N.N'), hc='N.N', permute='invariant'
+        )
 
     def init_terms(self, model_params):
         phi_ext = model_params.get('phi_ext', 0.0, 'real')
@@ -217,29 +232,27 @@ class HofstadterFermions(CouplingMPOModel):
         phases_x, phases_y = hopping_phases(
             p,
             q,
-            Lx=self.lat.shape[0],
-            Ly=self.lat.shape[1],
-            pbc_x=not self.lat.bc[0],
-            pbc_y=not self.lat.bc[1],
+            Lx=self.lattice.shape[0],
+            Ly=self.lattice.shape[1],
+            pbc_x=not self.lattice.bc[0],
+            pbc_y=not self.lattice.bc[1],
             gauge=gauge,
         )
         hop_x = -Jx * phases_x
         hop_y = -Jy * phases_y
 
-        # 6) add terms of the Hamiltonian
-        self.add_onsite(-mu, 0, 'N')
         dx = np.array([1, 0])
-        self.add_coupling(hop_x, 0, 'Cd', 0, 'C', dx)
-        self.add_coupling(np.conj(hop_x), 0, 'Cd', 0, 'C', -dx)  # h.c.
         dy = np.array([0, 1])
         hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, [0, 2.0 * np.pi * phi_ext])
-        self.add_coupling(hop_y, 0, 'Cd', 0, 'C', dy)
-        self.add_coupling(np.conj(hop_y), 0, 'Cd', 0, 'C', -dy)  # h.c.
-        self.add_coupling(v, 0, 'N', 0, 'N', dx)
-        self.add_coupling(v, 0, 'N', 0, 'N', dy)
+
+        self.add_onsite_operator(-mu, 'N')
+        self.add_two_site_coupling(hop_x, 'Cd.C', dx, plus_hc=True)
+        self.add_two_site_coupling(hop_y, 'Cd.C', dy, plus_hc=True)
+        self.add_two_site_coupling(v, 'N.N', dx)
+        self.add_two_site_coupling(v, 'N.N', dy)
 
 
-class HofstadterBosons(CouplingMPOModel):
+class HofstadterBosons(ModelBuilder):
     r"""Bosons on a square lattice with uniform magnetic flux.
 
     For now, the Hamiltonian reads:
@@ -272,7 +285,7 @@ class HofstadterBosons(CouplingMPOModel):
             Maximum number of bosons per site. Default ``3``.
         filling : tuple
             Average number of bosons per site, defined as a fraction ``(numerator, denominator)``
-            Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.BosonSite`.
+            Changes the definition of ``'dN'`` in the :class:`~lasyten.sites.SpinlessBosonSite`.
             Default ``(1, 8)``, i.e. one particle per eight sites.
         Jx, Jy, mu, U : float
             Hamiltonian parameter as defined above. Defaults are ``Jx = Jy = 1``, ``mu = U = 0``.
@@ -294,14 +307,26 @@ class HofstadterBosons(CouplingMPOModel):
 
     default_lattice = Square
     force_default_lattice = True
+    conserve: Literal['N', 'parity', None]
 
     def init_sites(self, model_params):
         Nmax = model_params.get('Nmax', 3, int)
         conserve = model_params.get('conserve', 'N', str)
-        filling = model_params.get('filling', (1, 8))
-        filling = filling[0] / filling[1]
-        site = BosonSite(Nmax=Nmax, conserve=conserve, filling=filling)
-        return site
+        if conserve == 'best':
+            conserve = 'N'
+        self.conserve = conserve
+        filling_num, filling_denom = model_params.get('filling', (1, 8))
+        filling = filling_num / filling_denom
+        return lasy.sites.SpinlessBosonSite(Nmax=Nmax, conserve=conserve, filling=filling)
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(
+            lasy.models.hopping([site, site], t_left=1, t_right=0, name='Bd.B'), hc='B.Bd', permute='swap_hc'
+        )
+        self.define_coupling(
+            lasy.models.density_density_interaction([site, site], name='N.N'), hc='N.N', permute='invariant'
+        )
 
     def init_terms(self, model_params):
         phi_ext = model_params.get('phi_ext', 0.0, 'real')
@@ -311,31 +336,24 @@ class HofstadterBosons(CouplingMPOModel):
         Jx = model_params.get('Jx', 1.0, 'real')
         Jy = model_params.get('Jy', 1.0, 'real')
         gauge = model_params.get('gauge', None)
-        model_params.deprecated_ignore('mx', 'my', extra_msg='This option did not affect the behavior anyway.')
 
         phases_x, phases_y = hopping_phases(
             p,
             q,
-            Lx=self.lat.shape[0],
-            Ly=self.lat.shape[1],
-            pbc_x=not self.lat.bc[0],
-            pbc_y=not self.lat.bc[1],
+            Lx=self.lattice.shape[0],
+            Ly=self.lattice.shape[1],
+            pbc_x=not self.lattice.bc[0],
+            pbc_y=not self.lattice.bc[1],
             gauge=gauge,
         )
         hop_x = -Jx * phases_x
         hop_y = -Jy * phases_y
 
-        # 6) add terms of the Hamiltonian
-        self.add_onsite(U / 2, 0, 'NN')
-        self.add_onsite(-U / 2 - mu, 0, 'N')
         dx = np.array([1, 0])
-        self.add_coupling(hop_x, 0, 'Bd', 0, 'B', dx)
-        self.add_coupling(np.conj(hop_x), 0, 'Bd', 0, 'B', -dx)  # h.c.
         dy = np.array([0, 1])
         hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, [0, 2 * np.pi * phi_ext])
-        self.add_coupling(hop_y, 0, 'Bd', 0, 'B', dy)
-        self.add_coupling(np.conj(hop_y), 0, 'Bd', 0, 'B', -dy)  # h.c.
 
-
-def gauge_hopping(*a, **kw):
-    raise RuntimeError('Deprecated. Use ``hopping_phases`` instead.')
+        self.add_onsite_operator(U / 2, 'NN')
+        self.add_onsite_operator(-U / 2 - mu, 'N')
+        self.add_two_site_coupling(hop_x, 'Bd.B', dx, plus_hc=True)
+        self.add_two_site_coupling(hop_y, 'Bd.B', dy, plus_hc=True)

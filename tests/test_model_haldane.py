@@ -1,8 +1,5 @@
 # Copyright (C) TeNPy Developers, Apache license
 import pytest
-
-pytest.skip(allow_module_level=True)
-import pytest
 from test_model import check_general_model
 
 from tenpy.models.haldane import BosonicHaldaneModel, FermionicHaldaneModel
@@ -16,6 +13,7 @@ def test_BosonicHaldane():
         'phi_ext': 0.1,
         'conserve': 'N',
     }
+    pytest.skip('PBC bug')
     check_general_model(BosonicHaldaneModel, model_pars, {'bc_MPS': ['finite', 'infinite']})
 
 
@@ -27,4 +25,5 @@ def test_FermionicHaldane():
         'phi_ext': 0.1,
         'conserve': 'N',
     }
+    pytest.skip('PBC bug')
     check_general_model(FermionicHaldaneModel, model_pars, {'bc_MPS': ['finite', 'infinite']})

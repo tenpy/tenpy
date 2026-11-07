@@ -812,10 +812,11 @@ class RandomUnitaryEvolution(TEBDEngine):
 
     .. doctest :: RandomUnitaryEvolution
 
+        >>> import lasyten as lasy
         >>> from tenpy.algorithms.tebd import RandomUnitaryEvolution
         >>> from tenpy.networks.mps import MPS
         >>> L = 8
-        >>> spin_half = tenpy.networks.site.SpinHalfSite(conserve='Sz')
+        >>> spin_half = lasy.sites.SpinSite(S=0.5, conserve='Sz')
         >>> psi = MPS.from_product_state(
         ...     [spin_half] * L, ['up', 'down'] * (L // 2), bc='finite', unit_cell_width=L
         ... )  # Neel

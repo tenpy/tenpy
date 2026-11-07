@@ -12,11 +12,8 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 import scipy.linalg as LA
-import tenpy.linalg.np_conserved as npc
-from tenpy.networks.site import SpinHalfSite
 
 from tenpy.algorithms import exact_diag, mpo_evolution, tdvp, tebd
-from tenpy.models.model import CouplingMPOModel, NearestNeighborModel
 from tenpy.models.spins import DipolarSpinChain, SpinChain
 from tenpy.models.tf_ising import TFIChain
 from tenpy.networks.mps import MPS
@@ -56,7 +53,7 @@ def test_ExpMPOEvolution(bc_MPS, approximation, compression, use_eig_based_svd, 
     model_pars = dict(L=L, Jx=1.0, Jy=1.0, Jz=1.0, hz=0.2, bc_MPS=bc_MPS, conserve='best')
     state = ['up', 'down'] * (L // 2)  # Neel
     M = SpinChain(model_pars)
-    psi = MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
+    psi = MPS.from_product_state(M.lattice.mps_sites(), state, bc=bc_MPS, unit_cell_width=M.lattice.mps_unit_cell_width)
 
     options = {
         'dt': dt,
@@ -107,7 +104,11 @@ def test_ExpMPOEvolution_dipolar(bc_MPS, approximation, compression, dt=0.01, nu
     model = DipolarSpinChain(dict(L=L, J3=1.0, J4=0.5, bc_MPS=bc_MPS, conserve='dipole'))
 
     psi = MPS.from_product_state(
-        model.lat.mps_sites(), ['up', 'down'] * (L // 2), bc=bc_MPS, unit_cell_width=L, understood_shift_symmetry=True
+        model.lattice.mps_sites(),
+        ['up', 'down'] * (L // 2),
+        bc=bc_MPS,
+        unit_cell_width=L,
+        understood_shift_symmetry=True,
     )
     options = dict(
         dt=dt,
@@ -290,7 +291,7 @@ def test_time_methods(algorithm):
     M = TFIChain(model_params)
     product_state = ['up'] * L  # prepare system in spin polarized state
     psi = MPS.from_product_state(
-        M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+        M.lattice.mps_sites(), product_state, bc=M.lattice.bc_MPS, unit_cell_width=M.lattice.mps_unit_cell_width
     )
 
     dt = 0.01
@@ -364,7 +365,7 @@ def test_time_dependent_evolution(om=0.2 * np.pi, om0=np.pi, om1=0.5 * np.pi, ep
     M = RabiOscillations(model_params)
     product_state = ['up'] * L  # prepare system in spin polarized state
     psi = MPS.from_product_state(
-        M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+        M.lattice.mps_sites(), product_state, bc=M.lattice.bc_MPS, unit_cell_width=M.lattice.mps_unit_cell_width
     )
 
     dt = 0.025

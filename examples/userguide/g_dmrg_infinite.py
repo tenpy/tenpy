@@ -6,7 +6,7 @@ from tenpy.networks.mps import MPS
 
 N = 2  # number of sites in unit cell
 model = TFIChain({'L': N, 'J': 1.0, 'g': 1.1, 'bc_MPS': 'infinite'})
-sites = model.lat.mps_sites()
+sites = model.lattice.mps_sites()
 psi = MPS.from_product_state(sites, ['up'] * N, 'infinite', unit_cell_width=N)
 dmrg_params = {'trunc_params': {'chi_max': 100, 'svd_min': 1.0e-10}, 'mixer': True}
 info = dmrg.run(psi, model, dmrg_params)
