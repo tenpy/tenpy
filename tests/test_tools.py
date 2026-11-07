@@ -319,7 +319,7 @@ def test_fixes_consistency_check_IrregularLattice():
 
     class SpinModel_triangular_finite(tenpy.models.CouplingMPOModel):
         def init_sites(self, model_params):
-            return tenpy.SpinHalfSite(conserve=None, sort_charge=True)
+            return tenpy.SpinHalfSite(conserve=None, backend=self.backend)
 
         def init_terms(self, model_params):
             self.add_onsite(-1, 0, 'Sz')

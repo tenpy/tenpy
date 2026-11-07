@@ -41,7 +41,7 @@ class FermionModel(ModelBuilder):
     Options
     -------
     .. cfg:config :: FermionModel
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         conserve : 'best' | 'N' | 'parity'
             What should be conserved. See :class:`lasyten.sites.SpinlessFermionSite`.
@@ -66,7 +66,7 @@ class FermionModel(ModelBuilder):
             self.logger.info('%s: set conserve to %s', self.name, conserve)
         self.conserve = conserve
         self._check_fermion_conserve(conserve)
-        return lasy.sites.SpinlessFermionSite(conserve=conserve)
+        return lasy.sites.SpinlessFermionSite(conserve=conserve, backend=self.backend)
 
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell

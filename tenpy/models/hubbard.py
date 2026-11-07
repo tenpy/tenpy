@@ -41,7 +41,7 @@ class BoseHubbardModel(ModelBuilder):
     Options
     -------
     .. cfg:config :: BoseHubbardModel
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         n_max : int
             Maximum number of bosons per site.
@@ -70,7 +70,7 @@ class BoseHubbardModel(ModelBuilder):
             conserve = 'N'
             self.logger.info('%s: set conserve to %s', self.name, conserve)
         self.conserve = conserve
-        return lasy.sites.SpinlessBosonSite(Nmax=n_max, conserve=conserve, filling=filling)
+        return lasy.sites.SpinlessBosonSite(Nmax=n_max, conserve=conserve, filling=filling, backend=self.backend)
 
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell
@@ -141,7 +141,7 @@ class FermiHubbardModel(ModelBuilder):
     Options
     -------
     .. cfg:config :: FermiHubbardModel
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         cons_N : {'N' | 'parity' | None}
             Whether particle number is conserved,
@@ -166,7 +166,7 @@ class FermiHubbardModel(ModelBuilder):
     def init_sites(self, model_params):
         self.cons_N = cons_N = model_params.get('cons_N', 'N', str)
         self.cons_S = cons_S = model_params.get('cons_S', 'SU2', str)
-        return lasy.sites.SpinHalfFermionSite(conserve_N=cons_N, conserve_S=cons_S)
+        return lasy.sites.SpinHalfFermionSite(conserve_N=cons_N, conserve_S=cons_S, backend=self.backend)
 
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell
@@ -286,7 +286,7 @@ class DipolarBoseHubbardChain(ModelBuilder):
     Options
     -------
     .. cfg:config :: DipolarBoseHubbardChain
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         Nmax : int
             Maximum number of bosons per site.

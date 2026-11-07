@@ -203,6 +203,7 @@ class CouplingModel(HamiltonianModel):
     ----------
     lattice
         TODO
+        Note that the lattice fixes the :mod:`lasyten` backend.
     explicit_plus_hc
         TODO
 
@@ -802,6 +803,21 @@ class ModelBuilder(CouplingModel):
     """Plays the role of the old CouplingMPOModel, where you just have to override some methods
 
     TODO explain what *needs* to be overridden and what *can* be overriden.
+
+    Options
+    -------
+    .. cfg:config :: ModelBuilder
+
+        explicit_plus_hc : bool
+            Whether the Hermitian conjugate of the MPO is computed at runtime,
+            rather than saved in the MPO.
+        symmetry_backend : {'fusion_tree' | 'abelian' | 'no_symmetry' | None}
+            Which :mod:`lasyten` backend to use. Either specify explicitly, or if ``None`` (default),
+            choose the minimal backend that supports the symmetry. See :func:`lasyten.get_backend`.
+        block_backend : str
+            Which :mod:`lasyten` block backend to use. See :func:`lasyten.get_backend`.
+            Default ``'numpy'``.
+
     """
 
     #: class or str: The default lattice class or class name to be used in :meth:`init_lattice`.
@@ -824,7 +840,9 @@ class ModelBuilder(CouplingModel):
         self.manually_call_init_H = getattr(self, 'manually_call_init_H', False)
         explicit_plus_hc = model_params.get('explicit_plus_hc', False, bool)
         # 1-4) initialize lattice
+        self.backend = backend = self.init_backend(model_params)
         lattice = self.init_lattice(model_params)
+        assert lattice.backend == backend
         # 5) initialize CouplingModel
         CouplingModel.__init__(self, lattice, explicit_plus_hc=explicit_plus_hc)
         # 6) add terms of the Hamiltonian
@@ -833,6 +851,17 @@ class ModelBuilder(CouplingModel):
         # finally checks for misspelled parameter names
         model_params.warn_unused()
         self.H_MPO = self.get_H_MPO()  # TODO workaround -> instead should make models use the getter!
+
+    def init_backend(self, model_params) -> lasy.TensorBackend:
+        symmetry_backend = model_params.get('symmetry_backend', None)
+        block_backend = model_params.get('block_backend', 'numpy')
+        if symmetry_backend is None:
+            # temporarily run to figure out the symmetry
+            self.backend = lasy.get_backend('fusion_tree', block_backend)
+            _lat = self.init_lattice(model_params)
+            self.backend = None
+            symmetry_backend = _lat.symmetry
+        return lasy.get_backend(symmetry_backend, block_backend)
 
     def init_couplings(self, model_params):
         """Initialize all couplings for the given model.
@@ -977,6 +1006,9 @@ class ModelBuilder(CouplingModel):
         If you need to initialize more than one site, the function
         :func:`tenpy.networks.site.set_common_charges` should be helpful.
 
+        When this function is called, the :attr:`backend` is already set and should be used as
+        the backend for the sites.
+
         Parameters
         ----------
         model_params : dict
@@ -992,19 +1024,7 @@ class ModelBuilder(CouplingModel):
             :class:`~tenpy.models.lattice.MultiSpeciesLattice` should be used.
 
         """
-        # example:
-        #     conserve = model_params.get('conserve', 'best', str)
-        #     if conserve == 'best':
-        #         # might check other model_params to see what's actually best possible
-        #         conserve = 'Sz'
-        #     return SpinHalfSite(conserve=conserve)
-        # or if you want to use the MultiSpeciesLattice, e.g. for spin-full fermions:
-        #     f_up, f_down = FermionSite('N'), FermionSite('N')
-        #     set_common_charges([f_up, f_down], 'independent')
-        #     # 'independent' for conserving N_up and N_down individually, 'same' for total N
-        #     return [f_up, f_down], ["up", "down"]
         raise NotImplementedError('Subclasses should implement `init_sites`')
-        # or at least redefine the lattice
 
     def init_terms(self, model_params):
         """Add the onsite and coupling terms to the model; subclasses should implement this."""

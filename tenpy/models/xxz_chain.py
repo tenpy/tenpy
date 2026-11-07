@@ -38,7 +38,7 @@ class XXZChain(ModelBuilder):
     Options
     -------
     .. cfg:config :: XXZChain
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         L : int
             Length of the chain.
@@ -114,7 +114,7 @@ class XXZChain2(ModelBuilder):
         if conserve == 'best':
             conserve = 'Sz'
         self.conserve = conserve
-        return lasy.sites.SpinSite(S=0.5, conserve=conserve)  # use predefined Site
+        return lasy.sites.SpinSite(S=0.5, conserve=conserve, backend=self.backend)  # use predefined Site
 
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell

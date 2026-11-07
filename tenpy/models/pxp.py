@@ -31,7 +31,7 @@ class PXPChain(ModelBuilder):
     Options
     -------
     .. cfg:config :: PXPChain
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         conserve : 'best' | None
             What should be conserved. See :class:`~lasyten.sites.SpinSite`.
@@ -50,7 +50,7 @@ class PXPChain(ModelBuilder):
             conserve = None
         self.conserve = conserve
         assert conserve in [None, 'None']
-        return lasy.sites.SpinSite(S=0.5, conserve=conserve)
+        return lasy.sites.SpinSite(S=0.5, conserve=conserve, backend=self.backend)
 
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell

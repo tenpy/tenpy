@@ -345,7 +345,7 @@ class MixedXKModel(ModelBuilder):
     Options
     -------
     .. cfg:config :: MixedXKModel
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         xy_lattice : 'Square'
             The real-space lattice geometry. Currently, only "Square" is implemented.

@@ -51,7 +51,7 @@ class SpinChainNNN(ModelBuilder):
     Options
     -------
     .. cfg:config :: SpinChainNNN
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         L : int
             Length of the chain in terms of :class:`~tenpy.networks.site.GroupedSite`,
@@ -151,7 +151,7 @@ class SpinChainNNN2(ModelBuilder):
     Options
     -------
     .. cfg:config :: SpinChainNNN2
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         S : {0.5, 1, 1.5, 2, ...}
             The 2S+1 local states range from m = -S, -S+1, ... +S.
@@ -180,7 +180,7 @@ class SpinChainNNN2(ModelBuilder):
                 conserve = None
             self.logger.info('%s: set conserve to %s', self.name, conserve)
         self.conserve = conserve
-        return lasy.sites.SpinSite(S=S, conserve=conserve)
+        return lasy.sites.SpinSite(S=S, conserve=conserve, backend=self.backend)
 
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell

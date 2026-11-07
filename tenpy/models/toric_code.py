@@ -114,7 +114,7 @@ class ToricCode(ModelBuilder):
     Options
     -------
     .. cfg:config :: ToricCode
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         Lx, Ly: int
             Dimension of the lattice, number of plaquettes around the cylinder.
@@ -147,7 +147,7 @@ class ToricCode(ModelBuilder):
         if conserve == 'best':
             conserve = 'parity'
         self.conserve = conserve
-        return lasy.sites.SpinSite(S=0.5, conserve=conserve)
+        return lasy.sites.SpinSite(S=0.5, conserve=conserve, backend=self.backend)
 
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell

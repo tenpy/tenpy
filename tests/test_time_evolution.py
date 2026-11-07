@@ -335,7 +335,7 @@ def test_time_methods(algorithm):
 
 class RabiOscillations(CouplingMPOModel, NearestNeighborModel):
     def init_sites(self, model_params):
-        site = SpinHalfSite(conserve=None)
+        site = SpinHalfSite(conserve=None, backend=self.backend)
         site.add_op('P1', -0.5 * (site.Sigmaz - site.Id))
         return site
 

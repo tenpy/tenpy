@@ -170,7 +170,7 @@ class HofstadterFermions(ModelBuilder):
     Options
     -------
     .. cfg:config :: HofstadterFermions
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         Lx, Ly : int
             Length of the lattice in x- and y-direction.
@@ -208,7 +208,7 @@ class HofstadterFermions(ModelBuilder):
         filling_num, filling_denom = model_params.get('filling', (1, 8))
         filling = filling_num / filling_denom
         self._check_fermion_conserve(conserve)
-        return lasy.sites.SpinlessFermionSite(conserve=conserve, filling=filling)
+        return lasy.sites.SpinlessFermionSite(conserve=conserve, filling=filling, backend=self.backend)
 
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell
@@ -277,7 +277,7 @@ class HofstadterBosons(ModelBuilder):
     Options
     -------
     .. cfg:config :: HofstadterBosons
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         Lx, Ly : int
             Length of the lattice in x- and y-direction.
@@ -317,7 +317,7 @@ class HofstadterBosons(ModelBuilder):
         self.conserve = conserve
         filling_num, filling_denom = model_params.get('filling', (1, 8))
         filling = filling_num / filling_denom
-        return lasy.sites.SpinlessBosonSite(Nmax=Nmax, conserve=conserve, filling=filling)
+        return lasy.sites.SpinlessBosonSite(Nmax=Nmax, conserve=conserve, filling=filling, backend=self.backend)
 
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell

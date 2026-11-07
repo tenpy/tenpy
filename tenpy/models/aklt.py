@@ -42,7 +42,7 @@ class AKLTChain(ModelBuilder):
             conserve = 'SU2'
         assert conserve in ['SU2', 'Sz', 'parity', 'None', None]
         self.conserve = conserve
-        return lasy.sites.SpinSite(S=1, conserve=conserve)
+        return lasy.sites.SpinSite(S=1, conserve=conserve, backend=self.backend)
 
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell

@@ -41,7 +41,7 @@ class MolecularModel(ModelBuilder):
     Options
     -------
     .. cfg:config :: MolecularModel
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         cons_N : {'N' | 'parity'}
             Whether particle number is conserved,
@@ -71,7 +71,7 @@ class MolecularModel(ModelBuilder):
         cons_N = params.get('cons_N', 'N')
         cons_Sz = params.get('cons_Sz', 'Sz')
         self._check_fermion_conserve(cons_N)
-        return lasy.sites.SpinHalfFermionSite(conserve_N=cons_N, conserve_S=cons_Sz)
+        return lasy.sites.SpinHalfFermionSite(conserve_N=cons_N, conserve_S=cons_Sz, backend=self.backend)
 
     def init_lattice(self, params: Config) -> Lattice:
         """Initialize lattice."""

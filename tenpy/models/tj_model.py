@@ -37,7 +37,7 @@ class tJModel(ModelBuilder):
     Options
     -------
     .. cfg:config :: tJModel
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         cons_N : {'N' | 'parity' | None}
             Whether particle number is conserved,
@@ -58,7 +58,7 @@ class tJModel(ModelBuilder):
     def init_sites(self, model_params):
         cons_N = model_params.get('cons_N', 'N', str)
         cons_Sz = model_params.get('cons_Sz', 'Sz', str)
-        site = SpinHalfHoleSite(cons_N=cons_N, cons_Sz=cons_Sz)
+        site = SpinHalfHoleSite(cons_N=cons_N, cons_Sz=cons_Sz, backend=self.backend)
         return site
 
     def init_terms(self, model_params):

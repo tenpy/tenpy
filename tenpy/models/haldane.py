@@ -39,7 +39,7 @@ class BosonicHaldaneModel(ModelBuilder):
     Options
     -------
     .. cfg:config :: BosonicHaldaneModel
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         conserve : 'best' | 'N' | 'parity' | None
             What should be conserved. See :class:`lasyten.sites.SpinlessBosonSite`.
@@ -63,7 +63,7 @@ class BosonicHaldaneModel(ModelBuilder):
         if conserve == 'best':
             conserve = 'N'
         self.conserve = conserve
-        return lasy.sites.SpinlessBosonSite(conserve=conserve)
+        return lasy.sites.SpinlessBosonSite(conserve=conserve, backend=self.backend)
 
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell
@@ -133,7 +133,7 @@ class FermionicHaldaneModel(ModelBuilder):
     Options
     -------
     .. cfg:config :: FermionicHaldaneModel
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         conserve : 'best' | 'N' | 'parity'
             What should be conserved. See :class:`lasyten.sites.SpinlessFermionSite`.
@@ -158,7 +158,7 @@ class FermionicHaldaneModel(ModelBuilder):
             conserve = 'N'
         self.conserve = conserve
         self._check_fermion_conserve(conserve)
-        return lasy.sites.SpinlessFermionSite(conserve=conserve)
+        return lasy.sites.SpinlessFermionSite(conserve=conserve, backend=self.backend)
 
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell

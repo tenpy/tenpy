@@ -12,6 +12,8 @@ from lasyten.models.sites import SpinSite
 from lasyten.tensors import almost_equal, dagger
 
 from tenpy.models import lattice, model
+from tenpy.models.spins import SpinChain
+from tenpy.tools import asConfig
 
 __all__ = ['check_model_sanity', 'check_general_model']
 
@@ -509,7 +511,7 @@ def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc,
 class MyMod(model.ModelBuilder):
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
-        return lasy.sites.SpinSite(S=0.5, conserve=conserve)
+        return lasy.sites.SpinSite(S=0.5, conserve=conserve, backend=self.backend)
 
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell
@@ -527,6 +529,35 @@ class MyMod(model.ModelBuilder):
         self.add_onsite_operator(y, 'Sz', x=4, u=0)
         self._add_two_site_coupling_mps(x, 0, 1, 'Sx.Sx')
         self.add_two_site_coupling(3 * x, 'Sy.Sy', dx=1, x1=3)
+
+
+@pytest.mark.parametrize('symmetry_backend', ['no_symmetry', 'abelian', 'fusion_tree', None])
+@pytest.mark.parametrize('block_backend', ['numpy', 'torch', None])
+@pytest.mark.parametrize('conserve', ['SU2', 'Sz', None])
+def test_ModelBuilder_backend(symmetry_backend, block_backend, conserve):
+    model_params = dict(conserve=conserve, Jx=1, Jy=1, Jz=1)
+    if symmetry_backend is not None:
+        model_params['symmetry_backend'] = symmetry_backend
+    if block_backend is not None:
+        model_params['block_backend'] = block_backend
+
+    conserve_symmetry = lasy.sites.SpinSite(conserve=conserve).symmetry
+    expect_backend: lasy.TensorBackend = lasy.get_backend(
+        conserve_symmetry if symmetry_backend is None else symmetry_backend, block_backend
+    )
+
+    if not expect_backend.supports_symmetry(conserve_symmetry):
+        model_params = asConfig(model_params, 'SpinChain')
+        model_params.touch(*model_params.keys())  # to suppress warnings on __del__
+        with pytest.raises(ValueError, match='backend does not support this symmetry'):
+            M = SpinChain(model_params)
+        return  # error is expected behavior
+
+    M = SpinChain(model_params)
+    M.test_sanity()
+    assert M.backend == expect_backend
+    assert M.lattice.backend == expect_backend
+    assert all(site.backend == expect_backend for site in M.lattice.unit_cell)
 
 
 def test_CouplingMPOModel_group():
@@ -814,7 +845,7 @@ class DisorderedLatticeModel(model.ModelBuilder):
     def init_sites(self, model_params):
         raise NotImplementedError  # TODO adapt
         conserve = model_params.get('conserve', 'parity')
-        return lasyten.sites.SpinSite(conserve)
+        return lasyten.sites.SpinSite(conserve, backend=self.backend)
 
     def init_lattice(self, model_params):
         lat = super().init_lattice(model_params)
@@ -885,7 +916,7 @@ def test_fixes_511(L=6, t=1.234, tp=2.54):
         def init_sites(self, p):
             raise NotImplementedError
             # conserve total N and Sz; degenerate spin DOF
-            return lasyten.sites.SpinHalfFermionSite(cons_N=None, cons_Sz=None)
+            return lasyten.sites.SpinHalfFermionSite(cons_N=None, cons_Sz=None, backend=self.backend)
 
         # CouplingMPOModel already defaults to a Chain lattice with length p['L'].
 
@@ -984,7 +1015,7 @@ def test_fixes_consistency_check_IrregularLattice():
 
     class SpinModel_triangular_finite(tenpy.models.CouplingMPOModel):
         def init_sites(self, model_params):
-            return tenpy.SpinHalfSite(conserve=None)
+            return tenpy.SpinHalfSite(conserve=None, backend=self.backend)
 
         def init_terms(self, model_params):
             self.add_onsite(-1, 0, 'Sz')

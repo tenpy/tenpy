@@ -39,7 +39,7 @@ class ClockModel(ModelBuilder):
     Options
     -------
     .. cfg:config :: ClockModel
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         conserve : None | 'Z_N'
             What should be conserved. See :class:`lasyten.sites.ClockSite`.
@@ -62,7 +62,7 @@ class ClockModel(ModelBuilder):
         q = model_params.get('q', None, int)
         if q is None:
             raise ValueError('Need to specify q.')
-        return lasy.sites.ClockSite(q=q, conserve=conserve)
+        return lasy.sites.ClockSite(q=q, conserve=conserve, backend=self.backend)
 
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell

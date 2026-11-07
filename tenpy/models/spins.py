@@ -66,7 +66,7 @@ class SpinModel(ModelBuilder):
     Options
     -------
     .. cfg:config :: SpinModel
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         S : {0.5, 1, 1.5, 2, ...}
             The 2S+1 local states range from m = -S, -S+1, ... +S.
@@ -99,7 +99,7 @@ class SpinModel(ModelBuilder):
             self.logger.info('%s: set conserve to %s', self.name, conserve)
         assert conserve in ['SU2', 'Sz', 'parity', None]
         self.conserve = conserve
-        site = lasy.sites.SpinSite(S=S, conserve=conserve)
+        site = lasy.sites.SpinSite(S=S, conserve=conserve, backend=self.backend)
         return site
 
     def init_couplings(self, model_params):
@@ -190,7 +190,7 @@ class DipolarSpinChain(ModelBuilder):
     Options
     -------
     .. cfg:config :: DipolarSpinChain
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         S : {0.5, 1, 1.5, 2, ...}
             The 2S+1 local states range from m = -S, -S+1, ... +S.

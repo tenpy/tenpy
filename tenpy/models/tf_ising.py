@@ -42,7 +42,7 @@ class TFIModel(ModelBuilder):
     Options
     -------
     .. cfg:config :: TFIModel
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         conserve : None | 'parity'
             What should be conserved. See :class:`~lasyten.models.sites.SpinSite`.
@@ -60,7 +60,7 @@ class TFIModel(ModelBuilder):
         if conserve == 'best':
             conserve = 'parity'
             self.logger.info('%s: set conserve to %s', self.name, conserve)
-        return lasy.sites.SpinSite(S=0.5, conserve=conserve)
+        return lasy.sites.SpinSite(S=0.5, conserve=conserve, backend=self.backend)
 
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell
