@@ -16,14 +16,16 @@ An example for such a case is given in the file ``examples/c_tebd.py``.
 """
 # Copyright (C) TeNPy Developers, Apache license
 
-from ..networks.site import GroupedSite, SpinSite
+import lasyten as lasy
+import numpy as np
+
 from .lattice import Chain
-from .model import CouplingMPOModel, NearestNeighborModel
+from .model import ModelBuilder
 
 __all__ = ['SpinChainNNN', 'SpinChainNNN2']
 
 
-class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
+class SpinChainNNN(ModelBuilder):
     r"""Spin-S sites coupled by (next-)nearest neighbor interactions on a `GroupedSite`.
 
     The Hamiltonian reads:
@@ -57,7 +59,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
         S : {0.5, 1, 1.5, 2, ...}
             The 2S+1 local states range from m = -S, -S+1, ... +S.
         conserve : 'best' | 'Sz' | 'parity' | None
-            What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
+            What should be conserved. See :class:`lasyten.sites.SpinSite`.
         Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
             Coupling as defined for the Hamiltonian above.
             Defaults to all ``Jx=Jy=Jz=Jxp=Jyp=Jzp=1`` and zero fields ``h*=0``.
@@ -70,6 +72,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
     force_default_lattice = True
 
     def init_sites(self, model_params):
+        raise NotImplementedError('grouped-sites')
         S = model_params.get('S', 0.5, 'real')
         conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
@@ -96,7 +99,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
         hy = model_params.get('hy', 0.0, 'real_or_array')
         hz = model_params.get('hz', 0.0, 'real_or_array')
 
-        # Only valid for self.lat being a Chain...
+        # Only valid for self.lattice being a Chain...
         self.add_onsite(-hx, 0, 'Sx0')
         self.add_onsite(-hy, 0, 'Sy0')
         self.add_onsite(-hz, 0, 'Sz0')
@@ -122,7 +125,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
         self.add_coupling(Jzp, 0, 'Sz1', 0, 'Sz1', 1)
 
 
-class SpinChainNNN2(CouplingMPOModel):
+class SpinChainNNN2(ModelBuilder):
     r"""Spin-S sites coupled by next-nearest neighbor interactions.
 
     The Hamiltonian reads:
@@ -152,11 +155,9 @@ class SpinChainNNN2(CouplingMPOModel):
 
         S : {0.5, 1, 1.5, 2, ...}
             The 2S+1 local states range from m = -S, -S+1, ... +S.
-        conserve : 'best' | 'Sz' | 'parity' | None
-            What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
+        conserve : 'best' | 'SU2' | 'Sz' | 'parity' | None
+            What should be conserved. See :class:`lasyten.sites.SpinSite`.
             For ``'best'``, we check the parameters what can be preserved.
-        sort_charge : bool
-            Whether to sort by charges of physical legs. `True` by default.
         Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
             Coupling as defined for the Hamiltonian above.
 
@@ -167,16 +168,46 @@ class SpinChainNNN2(CouplingMPOModel):
         conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
             # check how much we can conserve
-            if not model_params.any_nonzero([('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'], 'check Sz conservation'):
+            if not model_params.any_nonzero(
+                [('Jx', 'Jy', 'Jz'), ('Jxp', 'Jyp', 'Jzp'), 'hx', 'hy', 'hz'], 'check SU(2) conservation'
+            ):
+                conserve = 'SU2'
+            elif not model_params.any_nonzero([('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'], 'check Sz conservation'):
                 conserve = 'Sz'
             elif not model_params.any_nonzero(['hx', 'hy'], 'check parity conservation'):
                 conserve = 'parity'
             else:
                 conserve = None
             self.logger.info('%s: set conserve to %s', self.name, conserve)
-        sort_charge = model_params.get('sort_charge', True)
-        site = SpinSite(S, conserve, sort_charge=sort_charge)
-        return site
+        self.conserve = conserve
+        return lasy.sites.SpinSite(S=S, conserve=conserve)
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jx=1, Jy=1, Jz=1, name='S.S'),
+            hc='S.S',
+            permute='invariant',
+        )
+        if self.conserve != 'SU2':
+            self.define_coupling(
+                lasy.models.spin_spin_coupling([site, site], Jz=1, name='Sz.Sz'),
+                hc='Sz.Sz',
+                permute='invariant',
+            )
+            self.define_coupling(
+                lasy.models.spin_spin_coupling([site, site], Jpm=1, name='Sp.Sm'),
+                hc='Sm.Sp',
+                permute='swap_hc',
+            )
+        if self.conserve not in ['SU2', 'Sz']:
+            self.define_coupling(
+                lasy.models.spin_spin_coupling([site, site], Jpp=1, name='Sp.Sp'),
+                hc='Sm.Sm',
+                permute='invariant',
+            )
+        return
 
     def init_terms(self, model_params):
         # 0) read out/set default parameters
@@ -190,18 +221,24 @@ class SpinChainNNN2(CouplingMPOModel):
         hy = model_params.get('hy', 0.0, 'real_or_array')
         hz = model_params.get('hz', 0.0, 'real_or_array')
 
-        for u in range(len(self.lat.unit_cell)):
-            self.add_onsite(-hx, u, 'Sx')
-            self.add_onsite(-hy, u, 'Sy')
-            self.add_onsite(-hz, u, 'Sz')
+        self.add_onsite_operator(-hx, 'Sx')
+        self.add_onsite_operator(-hy, 'Sy')
+        self.add_onsite_operator(-hz, 'Sz')
+
         # Sp = Sx + i Sy, Sm = Sx - i Sy,  Sx = (Sp+Sm)/2, Sy = (Sp-Sm)/2i
         # Sx.Sx = 0.25 ( Sp.Sm + Sm.Sp + Sp.Sp + Sm.Sm )
         # Sy.Sy = 0.25 ( Sp.Sm + Sm.Sp - Sp.Sp - Sm.Sm )
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            self.add_coupling((Jx + Jy) / 4.0, u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
-            self.add_coupling((Jx - Jy) / 4.0, u1, 'Sp', u2, 'Sp', dx, plus_hc=True)
-            self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)
-        for u1, u2, dx in self.lat.pairs['next_nearest_neighbors']:
-            self.add_coupling((Jxp + Jyp) / 4.0, u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
-            self.add_coupling((Jxp - Jyp) / 4.0, u1, 'Sp', u2, 'Sp', dx, plus_hc=True)
-            self.add_coupling(Jzp, u1, 'Sz', u2, 'Sz', dx)
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
+            if np.all(Jx == Jy) and np.all(Jy == Jz):
+                self.add_two_site_coupling(Jz, 'S.S', dx, u1=u1, u2=u2)
+            else:
+                self.add_two_site_coupling((Jx + Jy) / 4.0, 'Sp.Sm', dx, u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling((Jx - Jy) / 4.0, 'Sp.Sp', dx, u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling(Jz, 'Sz.Sz', dx, u1=u1, u2=u2)
+        for u1, u2, dx in self.lattice.pairs['next_nearest_neighbors']:
+            if np.all(Jxp == Jyp) and np.all(Jyp == Jzp):
+                self.add_two_site_coupling(Jzp, 'S.S', dx, u1=u1, u2=u2)
+            else:
+                self.add_two_site_coupling((Jxp + Jyp) / 4.0, 'Sp.Sm', dx, u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling((Jxp - Jyp) / 4.0, 'Sp.Sp', dx, u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling(Jzp, 'Sz.Sz', dx, u1=u1, u2=u2)

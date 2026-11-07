@@ -2,18 +2,20 @@
 
 Generalization of transverse field Ising model to higher dimensional on-site Hilbert space.
 """
-# Copyright (C) TeNPy Developers, Apache license
 
+# Copyright (C) TeNPy Developers, Apache license
+from typing import Literal
+
+import lasyten as lasy
 import numpy as np
 
-from ..networks.site import ClockSite
 from .lattice import Chain
-from .model import CouplingMPOModel, NearestNeighborModel
+from .model import ModelBuilder
 
 __all__ = ['ClockModel', 'ClockChain']
 
 
-class ClockModel(CouplingMPOModel):
+class ClockModel(ModelBuilder):
     r"""q-state Quantum clock model on a general lattice
 
     The Hamiltonian reads:
@@ -25,7 +27,7 @@ class ClockModel(CouplingMPOModel):
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs, each pair appearing
     exactly once.
     The operators :math:`X_i` and :math:`Z_i` are :math:`N \times N` generalizations of
-    the Pauli X and Z operators, see :class:`~tenpy.networks.site.ClockSite`.
+    the Pauli X and Z operators, see :class:`lasyten.sites.ClockSite`.
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
@@ -39,10 +41,8 @@ class ClockModel(CouplingMPOModel):
     .. cfg:config :: ClockModel
         :include: CouplingMPOModel
 
-        conserve : None | 'Z'
-            What should be conserved. See :class:`~tenpy.networks.Site.ClockSite`.
-        sort_charge : bool
-            Whether to sort by charges of physical legs. `True` by default.
+        conserve : None | 'Z_N'
+            What should be conserved. See :class:`lasyten.sites.ClockSite`.
         q : int
             The number of states per site.
         J, g : float | array
@@ -51,27 +51,36 @@ class ClockModel(CouplingMPOModel):
 
     """
 
+    conserve: Literal['Z_N', None]
+
     def init_sites(self, model_params):
-        conserve = model_params.get('conserve', 'Z', str)
+        conserve = model_params.get('conserve', 'Z_N', str)
         if conserve == 'best':
-            conserve = 'Z'
+            conserve = 'Z_N'
             self.logger.info('%s: set conserve to %s', self.name, conserve)
+        self.conserve = conserve
         q = model_params.get('q', None, int)
         if q is None:
             raise ValueError('Need to specify q.')
-        sort_charge = model_params.get('sort_charge', True, bool)
-        return ClockSite(q=q, conserve=conserve, sort_charge=sort_charge)
+        return lasy.sites.ClockSite(q=q, conserve=conserve)
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(
+            lasy.models.clock_clock_coupling([site, site], Jx=1, plus_hc=False, name='X.Xh'),
+            hc='Xh.X',
+            permute='swap_hc',
+        )
 
     def init_terms(self, model_params):
         J = np.asarray(model_params.get('J', 1.0, 'real_or_array'))
         g = np.asarray(model_params.get('g', 1.0, 'real_or_array'))
-        for u in range(len(self.lat.unit_cell)):
-            self.add_onsite(-g, u, 'Z', plus_hc=True)
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            self.add_coupling(-J, u1, 'X', u2, 'Xhc', dx, plus_hc=True)
+        self.add_onsite_operator(-g, 'Z', plus_hc=True)
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
+            self.add_two_site_coupling(-J, 'X.Xh', dx, u1=u1, u2=u2, plus_hc=True)
 
 
-class ClockChain(ClockModel, NearestNeighborModel):
+class ClockChain(ClockModel):
     """The :class:`ClockModel` on a Chain, suitable for TEBD.
 
     See the :class:`ClockModel` for the documentation of parameters.

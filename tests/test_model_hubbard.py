@@ -1,7 +1,4 @@
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
-
-pytest.skip(allow_module_level=True)
 import numpy as np
 import pytest
 from test_model import check_general_model
@@ -14,6 +11,9 @@ def test_FermiHubbardModel():
 
 
 def test_FermiHubbardModel2():
+    with pytest.raises(NotImplementedError, match='spin_half_species not ported'):
+        _ = hubbard.FermiHubbardModel2({})
+    pytest.skip('spin_half_species not ported')
     check_general_model(hubbard.FermiHubbardModel2, {'lattice': 'Square', 'Lx': 2, 'Ly': 3}, {'phi_ext': [None, 0.2]})
 
 
@@ -39,9 +39,11 @@ def test_BoseHubbardChain():
 def test_DipolarBoseHubbardChain():
     # check dipolar charges for one specific case
     Nmax = 4
-    model = hubbard.DipolarBoseHubbardChain(dict(conserve='dipole', Nmax=Nmax))
+    with pytest.raises(NotImplementedError, match='shift-symmetry'):
+        model = hubbard.DipolarBoseHubbardChain(dict(conserve='dipole', Nmax=Nmax))
+    pytest.skip('shift-symmetry')
     expect_N = np.arange(Nmax + 1)
-    for i, s in enumerate(model.lat.mps_sites()):
+    for i, s in enumerate(model.lattice.mps_sites()):
         expect_dipole = i * expect_N
         expect_charges = np.array([expect_N, expect_dipole]).T
         assert np.all(s.leg.charges == expect_charges)

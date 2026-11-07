@@ -10,7 +10,7 @@ Inside each ring, we consider `Ly` repetitions of `N_orb` independent fermionic 
 the cylinder. Each orbital is one fermionic state that can be occupied or empty and corresponds to
 a unique creation/annihilation operator in second quantization.
 We will also refer to the orbitals as "site"; they will be represented
-by the 2-dimensional Hilbert space of a :class:`~tenpy.networks.site.FermionSite`.
+by the 2-dimensional Hilbert space of a :class:`lasyten.sites.SpinlessFermionSite`.
 
 The real-space operators :math:`c^{(\dagger)}_{i,j,l}` are index by
 x-coordinate :math:`x = 0, ... , N_{rings}-1` along the cylinder axis,
@@ -69,11 +69,10 @@ import itertools as it
 import numpy as np
 
 # from ..linalg import np_conserved as npc
-from ..networks.site import FermionSite
 from ..networks.terms import TermList
 from ..tools import inverse_permutation, to_array, to_iterable
 from .lattice import Lattice
-from .model import CouplingMPOModel
+from .model import ModelBuilder
 
 __all__ = ['MixedXKLattice', 'MixedXKModel', 'SpinlessMixedXKSquare', 'HubbardMixedXKSquare']
 
@@ -104,7 +103,7 @@ class MixedXKLattice(Lattice):
         The circumference of the cylinder: the number of possible `k` values.
     N_orb: int
         Number of orbitals. A single 'ring' of the cylinder contains ``N_orb*Ly`` sites.
-    sites : list of :class:`~tenpy.networks.site.Site`
+    sites : list of :class:`~lasyten.Site`
         The sites making up the unit cell, in the order specified by ring_order.
     ring_order : 1D array, len Ly*N_orb
         Gives the order of the sites within a ring for the DMRG snake;
@@ -337,7 +336,7 @@ class MixedXKLattice(Lattice):
                 delta_q[(k + q) % Ly, k] = 1
 
 
-class MixedXKModel(CouplingMPOModel):
+class MixedXKModel(ModelBuilder):
     """Base class for a Hamiltonian represented in mixed x-k-space on a cylinder.
 
     All parameters are collected in a single dictionary `model_params`, which
@@ -365,6 +364,9 @@ class MixedXKModel(CouplingMPOModel):
         resulting from this real-space lattice.
 
     """
+
+    def __init__(self, model_params):
+        raise NotImplementedError
 
     def init_lattice(self, model_params, N_orb, chinfo, charges):
         """Initialize a MixedXKLattice for the given model parameters.
@@ -410,9 +412,9 @@ class MixedXKModel(CouplingMPOModel):
             The x dependence (and corresponding dimension in `couplings`) can be omitted.
 
         """
-        N_orb = self.lat.N_orb
-        Lx = self.lat.N_rings
-        Ly = self.lat.Ly
+        N_orb = self.lattice.N_orb
+        Lx = self.lattice.N_rings
+        Ly = self.lattice.Ly
         N_r = Ly * N_orb
         if np.asarray(couplings).ndim == 4:
             couplings = np.asarray(couplings)[np.newaxis, ...]
@@ -441,9 +443,9 @@ class MixedXKModel(CouplingMPOModel):
 
         """
         assert dx != 0
-        N_orb = self.lat.N_orb
-        Nx = self.lat.N_rings - int(self.lat.bc[0]) * abs(dx)
-        Ly = self.lat.Ly
+        N_orb = self.lattice.N_orb
+        Nx = self.lattice.N_rings - int(self.lattice.bc[0]) * abs(dx)
+        Ly = self.lattice.Ly
         N_r = Ly * N_orb
         if np.asarray(couplings).ndim == 4:
             couplings = np.asarray(couplings)[np.newaxis, ...]
@@ -471,9 +473,9 @@ class MixedXKModel(CouplingMPOModel):
             annihilation operators of given ring, momentum and orbital.
 
         """
-        N_orb = self.lat.N_orb
-        Lx = self.lat.N_rings
-        Ly = self.lat.Ly
+        N_orb = self.lattice.N_orb
+        Lx = self.lattice.N_rings
+        Ly = self.lattice.Ly
         N_r = Ly * N_orb
         if np.asarray(couplings).ndim == 8:
             couplings = np.asarray(couplings)[np.newaxis, ...]
@@ -513,9 +515,9 @@ class MixedXKModel(CouplingMPOModel):
 
         """
         assert dx != 0
-        Nx = self.lat.N_rings - int(self.lat.bc[0]) * abs(dx)
-        N_orb = self.lat.N_orb
-        Ly = self.lat.Ly
+        Nx = self.lattice.N_rings - int(self.lattice.bc[0]) * abs(dx)
+        N_orb = self.lattice.N_orb
+        Ly = self.lattice.Ly
         N_r = Ly * N_orb
         if np.asarray(couplings).ndim == 8:
             couplings = np.asarray(couplings)[np.newaxis, ...]
@@ -553,7 +555,7 @@ class MixedXKModel(CouplingMPOModel):
             Terms representing the operator `A` in x-k-space.
 
         """
-        xk_lat = self.lat
+        xk_lat = self.lattice
         N_orb = xk_lat.N_orb
         Ly = xk_lat.Ly
         conserve_k = 'ky' in xk_lat.site(0).leg.chinfo.names
@@ -635,7 +637,7 @@ class MixedXKModel(CouplingMPOModel):
         orbital_coeffs = [np.asarray(op) for op in orbital_coeffs]
         assert num_ops == len(rs_coords)
         num_c_cd = num_ops * 2
-        xk_lat = self.lat
+        xk_lat = self.lattice
         Ly = xk_lat.Ly
         conserve_k = 'ky' in xk_lat.site(0).leg.chinfo.names
         terms = []
@@ -695,7 +697,7 @@ class MixedXKModel(CouplingMPOModel):
         assert all([num_ops == len(orbs) for _, orbs in coeff_orbitals])
         # TODO: add support for 'N' and '1-N' by splitting them
         # Currently supported by use of orbital_coeffs
-        xk_lat = self.lat
+        xk_lat = self.lattice
         Ly = xk_lat.Ly
         conserve_k = 'ky' in xk_lat.site(0).leg.chinfo.names
         terms = []
@@ -746,7 +748,7 @@ class SpinlessMixedXKSquare(MixedXKModel):
         # Read out parameters
         t = model_params.get('t', 1.0, 'real_or_array')
         V = model_params.get('V', 1.0, 'real_or_array')
-        xk_lat = self.lat
+        xk_lat = self.lattice
         Ly = xk_lat.Ly
         N_orb = xk_lat.N_orb
         assert N_orb == 1
@@ -802,7 +804,7 @@ class HubbardMixedXKSquare(MixedXKModel):
         # Read out parameters
         t = model_params.get('t', 1.0, 'real_or_array')
         U = model_params.get('U', 1.0, 'real_or_array')
-        xk_lat = self.lat
+        xk_lat = self.lattice
         Ly = xk_lat.Ly
         N_orb = xk_lat.N_orb
 

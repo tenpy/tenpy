@@ -1,7 +1,4 @@
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
-
-pytest.skip(allow_module_level=True)
 import itertools
 
 import numpy as np
@@ -69,29 +66,9 @@ class MolecularModelTest(MolecularModel):
             )
 
 
-@pytest.mark.parametrize(
-    'cons_N, cons_Sz, norb',
-    [
-        ('N', 'Sz', 3),
-        ('N', 'parity', 3),
-        ('N', None, 3),
-        ('N', 'Sz', 4),
-        ('N', 'parity', 4),
-        ('N', None, 4),
-        ('parity', 'Sz', 3),
-        ('parity', 'parity', 3),
-        ('parity', None, 3),
-        ('parity', 'Sz', 4),
-        ('parity', 'parity', 4),
-        ('parity', None, 4),
-        (None, 'Sz', 3),
-        (None, 'parity', 3),
-        (None, None, 3),
-        (None, 'Sz', 4),
-        (None, 'parity', 4),
-        (None, None, 4),
-    ],
-)
+@pytest.mark.parametrize('cons_N', ['N', 'parity'])
+@pytest.mark.parametrize('cons_Sz', ['Sz', 'parity', None])
+@pytest.mark.parametrize('norb', [3, 4])
 def test_MolecularModel(cons_N, cons_Sz, norb):
     rng = np.random.default_rng()
 
@@ -127,6 +104,15 @@ def test_MolecularModel(cons_N, cons_Sz, norb):
         'two_body_tensor': two_body_tensor,
         'constant': constant,
     }
+
+    with pytest.raises(NotImplementedError):
+        from tenpy.tools import asConfig
+
+        model_params = asConfig(model_params, 'MolecularModel')
+        model_params.touch(*model_params.keys())
+        _ = MolecularModel(model_params)
+    pytest.xfail()
+
     check_general_model(MolecularModel, model_params)
 
     # check the model terms

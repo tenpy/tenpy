@@ -3,17 +3,17 @@
 
 import itertools
 
+import lasyten as lasy
 import numpy as np
 
-from ..networks.site import SpinHalfFermionSite
 from ..tools import Config
 from .lattice import Lattice
-from .model import CouplingMPOModel
+from .model import ModelBuilder
 
 __all__ = ['MolecularModel']
 
 
-class MolecularModel(CouplingMPOModel):
+class MolecularModel(ModelBuilder):
     r"""Spin-1/2 fermion molecular Hamiltonian.
 
     The Hamiltonian reads:
@@ -43,12 +43,12 @@ class MolecularModel(CouplingMPOModel):
     .. cfg:config :: MolecularModel
         :include: CouplingMPOModel
 
-        cons_N : {'N' | 'parity' | None}
+        cons_N : {'N' | 'parity'}
             Whether particle number is conserved,
-            see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
-        cons_Sz : {'Sz' | 'parity' | None}
+            see :class:`~lasyten.sites.SpinHalfFermionSite` for details.
+        cons_S : {'SU2' | 'Sz' | 'parity' | None}
             Whether spin is conserved,
-            see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
+            see :class:`~lasyten.sites.SpinHalfFermionSite` for details.
         one_body_tensor : array
             One-body tensor with shape `(norb, norb)`.
         two_body_tensor : array
@@ -64,13 +64,14 @@ class MolecularModel(CouplingMPOModel):
         else:
             raise ValueError('required parameter one_body_tensor is undefined or not an array')
         self.norb = self.one_body_tensor.shape[0]
-        CouplingMPOModel.__init__(self, params)
+        super().__init__(params)
 
-    def init_sites(self, params: Config) -> SpinHalfFermionSite:
+    def init_sites(self, params: Config):
         """Initialize sites."""
         cons_N = params.get('cons_N', 'N')
         cons_Sz = params.get('cons_Sz', 'Sz')
-        return SpinHalfFermionSite(cons_N=cons_N, cons_Sz=cons_Sz)
+        self._check_fermion_conserve(cons_N)
+        return lasy.sites.SpinHalfFermionSite(conserve_N=cons_N, conserve_S=cons_Sz)
 
     def init_lattice(self, params: Config) -> Lattice:
         """Initialize lattice."""
@@ -87,6 +88,7 @@ class MolecularModel(CouplingMPOModel):
 
     def init_terms(self, params: Config) -> None:
         """Initialize terms."""
+        raise NotImplementedError
         params.touch('one_body_tensor')  # suppress unused key warning
         two_body_tensor = params.get(
             'two_body_tensor',

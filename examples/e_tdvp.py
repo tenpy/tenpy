@@ -35,11 +35,11 @@ def example_TDVP():
     product_state = ['up', 'down'] * (L // 2)
     # starting from a Neel product state which is not an eigenstate of the Heisenberg model
     psi = MPS.from_product_state(
-        heisenberg.lat.mps_sites(),
+        heisenberg.lattice.mps_sites(),
         product_state,
-        bc=heisenberg.lat.bc_MPS,
+        bc=heisenberg.lattice.bc_MPS,
         form='B',
-        unit_cell_width=heisenberg.lat.mps_unit_cell_width,
+        unit_cell_width=heisenberg.lattice.mps_unit_cell_width,
     )
 
     tdvp_params = {

@@ -55,7 +55,7 @@ def main():
 
 
 def run(chi: int):
-    psi = tenpy.MPS.from_lat_product_state(model.lat, [['up'], ['down']])
+    psi = tenpy.MPS.from_lat_product_state(model.lattice, [['up'], ['down']])
     # Selects Sz=0 sector
 
     engine_params['trunc_params'].update(chi_max=chi)

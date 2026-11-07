@@ -581,7 +581,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         .. doctest :: MPS.expectation_value
 
-            >>> spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
+            >>> spin_half = lasyten.sites.SpinSite(conserve=None)
             >>> p_state = ['up', [np.sqrt(0.5), -np.sqrt(0.5)]] * 3
             >>> psi = tenpy.networks.mps.MPS.from_product_state([spin_half] * 6, p_state, unit_cell_width=6)
 
@@ -629,7 +629,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         .. doctest :: MPS.expectation_value
 
-            >>> spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
+            >>> spin_half = lasyten.sites.SpinSite(conserve=None)
             >>> p2_state = [[np.sqrt(0.5), -np.sqrt(0.5)], 'up'] * 3
             >>> phi = tenpy.networks.mps.MPS.from_product_state([spin_half] * 6, p2_state, unit_cell_width=6)
             >>> env = tenpy.networks.mps.MPSEnvironment(phi, psi)
@@ -859,7 +859,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         .. testsetup :: MPS.expectation_value_term
 
-            spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
+            spin_half = lasyten.sites.SpinSite(conserve=None)
             psi = tenpy.networks.mps.MPS.from_product_state([spin_half]*8, ['up']*8, unit_cell_width=8)
 
         .. doctest :: MPS.expectation_value_term
@@ -1041,7 +1041,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         .. doctest :: MPS.correlation_function
 
-            >>> spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
+            >>> spin_half = lasyten.sites.SpinSite(conserve=None)
             >>> p_state = ['up', [np.sqrt(0.5), -np.sqrt(0.5)]] * 3
             >>> psi = tenpy.networks.mps.MPS.from_product_state([spin_half] * 6, p_state, 'infinite', unit_cell_width=6)
 
@@ -1069,7 +1069,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         .. doctest :: MPS.correlation_function
 
-            >>> fermion = tenpy.networks.site.FermionSite(conserve='N')
+            >>> fermion = lasyten.sites.SpinlessFermionSite(conserve='N')
             >>> p_state = ['empty', 'full'] * 3
             >>> psi = tenpy.networks.mps.MPS.from_product_state([fermion] * 6, p_state, 'finite', unit_cell_width=6)
             >>> CdC = psi.correlation_function('Cd', 'C')  # optionally: use `hermitian=True`
@@ -2697,13 +2697,13 @@ class MPS(BaseMPSExpectationValue):
         --------
         TODO
         Let's first consider a :class:`~tenpy.models.lattice.Ladder` composed of a
-        :class:`~tenpy.networks.site.SpinHalfSite` and a
-        :class:`~tenpy.networks.site.FermionSite`.
+        :class:`~lasyten.sites.SpinSite` and a
+        :class:`lasyten.sites.SpinlessFermionSite`.
 
         .. doctest : MPS.from_lat_product_state
 
-            >>> spin_half = tenpy.networks.site.SpinHalfSite()
-            >>> fermion = tenpy.networks.site.FermionSite()
+            >>> spin_half = lasyten.sites.SpinSite()
+            >>> fermion = lasyten.sites.SpinlessFermionSite()
             >>> ladder_i = tenpy.models.lattice.Ladder(2, [spin_half, fermion], bc_MPS='infinite')
 
         To initialize a state of up-spins on the spin sites and half-filled fermions, you can use:
@@ -2830,11 +2830,11 @@ class MPS(BaseMPSExpectationValue):
             >>> M = tenpy.models.tf_ising.TFIChain({'L': L})
             >>> p_state = ['up', 'down'] * (L // 2)  # repeats entries L/2 times
             >>> psi = MPS.from_product_state(
-            ...     M.lat.mps_sites(), p_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+            ...     M.lattice.mps_sites(), p_state, bc=M.lattice.bc_MPS, unit_cell_width=M.lattice.mps_unit_cell_width
             ... )
 
-        The meaning of the labels ``"up","down"`` is defined by the :class:`~tenpy.networks.Site`,
-        in this example a :class:`~tenpy.networks.site.SpinHalfSite`.
+        The meaning of the labels ``"up","down"`` is defined by the :class:`lasyten.Site`,
+        in this example a :class:`~lasyten.sites.SpinSite`.
 
         Extending the example, we can replace the spin in the center with one with arbitrary
         angles ``theta, phi`` in the bloch sphere.
@@ -2844,21 +2844,25 @@ class MPS(BaseMPSExpectationValue):
 
         .. doctest :: MPS.from_product_state
 
-            >>> spin = tenpy.networks.site.SpinHalfSite(conserve=None, sort_charge=False)
+            >>> spin = lasyten.sites.SpinSite(conserve=None)
             >>> p_state = ['up', 'down'] * (L // 2)  # repeats entries L/2 times
             >>> theta, phi = np.pi / 4, np.pi / 6
             >>> bloch_sphere_state = np.array([np.cos(theta / 2), np.exp(1.0j * phi) * np.sin(theta / 2)])
             >>> p_state[L // 2] = bloch_sphere_state  # replace one spin in center
             >>> psi = MPS.from_product_state(
-            ...     [spin] * L, p_state, bc=M.lat.bc_MPS, dtype=complex, unit_cell_width=M.lat.mps_unit_cell_width
+            ...     [spin] * L,
+            ...     p_state,
+            ...     bc=M.lattice.bc_MPS,
+            ...     dtype=complex,
+            ...     unit_cell_width=M.lattice.mps_unit_cell_width,
             ... )
 
         Note that for the more general :class:`~tenpy.models.spins.SpinChain`,
         the order of the two entries for the ``bloch_sphere_state`` would be *exactly the opposite*
         (when we keep the the north-pole of the bloch sphere being the up-state).
-        The reason is that the `SpinChain` uses the general :class:`~tenpy.networks.site.SpinSite`,
+        The reason is that the `SpinChain` uses the general :class:`lasyten.sites.SpinSite`,
         where the states are ordered ascending from ``'down'`` to ``'up'``.
-        The :class:`~tenpy.networks.site.SpinHalfSite` on the other hand uses the order
+        The :class:`~lasyten.sites.SpinSite` on the other hand uses the order
         ``'up', 'down'`` where that the Pauli matrices look as usual.
 
         """
@@ -3684,7 +3688,7 @@ class MPS(BaseMPSExpectationValue):
 
         Parameters
         ----------
-        site : :class:`~tenpy.networks.site.Site`
+        site : :class:`~lasyten.Site`
             The `site` defining the local Hilbert space, taken uniformly for all sites.
         L : int
             The number of sites.
@@ -3802,18 +3806,18 @@ class MPS(BaseMPSExpectationValue):
             |    0  1  2  3  4  5  6
 
         As another example, let's generalize :meth:`from_singlets` to "spin-full" fermions
-        represented by the (spin-less!) :class:`~tenpy.networks.site.FermionSite` with an extra
+        represented by the (spin-less!) :class:`lasyten.sites.SpinlessFermionSite` with an extra
         index for the spin, here `u=0,1` on a 2D square lattice.
 
         .. testsetup :: product_mps_covering
 
             from tenpy.networks.mps import MPS
-            from tenpy.networks.site import FermionSite
+            from lasyten.sites import SpinlessFermionSite
             from tenpy.models.lattice import Square, MultiSpeciesLattice
 
         .. doctest :: product_mps_covering
 
-            >>> ferm = FermionSite(conserve='N')
+            >>> ferm = SpinlessFermionSite(conserve='N')
             >>> lat = MultiSpeciesLattice(Square(4, 2, None), [ferm] * 2, ['up', 'down'])
             >>> ferm_up_down = MPS.from_product_state([ferm] * 4, ['full', 'empty', 'empty', 'full'], unit_cell_width=4)
             >>> ferm_down_up = MPS.from_product_state([ferm] * 4, ['empty', 'full', 'full', 'empty'], unit_cell_width=4)
@@ -5609,7 +5613,7 @@ class MPS(BaseMPSExpectationValue):
         -------
         sigmas : list of int | list of float
             On each site the index of the local basis that was measured,
-            as specified in the corresponding :class:`~tenpy.networks.site.Site` in :attr:`sites`.
+            as specified in the corresponding :class:`~lasyten.Site` in :attr:`sites`.
             Note that this can change depending on whether/what charges you conserve!
             Explicitly specifying the measurement operator will avoid that issue.
         weight : complex
@@ -8267,6 +8271,7 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):  # TODO: adapt for Lin
 
         bra_N and ket_M are *not* reversed for transpose=False, i.e. ordered left to right.
         """
+        raise NotImplementedError('MPS transfermatrix not ported')
         self.L = L = len(bra_N)
         if unit_cell_width is None:
             # TODO: deprecate the default value.
@@ -8471,15 +8476,15 @@ class InitialStateBuilder:
     Examples
     --------
     If you use the :class:`~tenpy.simulations.simulation.Simulation` setup, it will extract
-    the `lattice` and `model_dtype` from the :attr:`~tenpy.models.model.Model.lat` and MPO dtype.
-    Let's assume that we have a lattice `lat` with :class:`~tenpy.networks.site.SpinHalfSite`
+    the `lattice` and `model_dtype` from the :attr:`~tenpy.models.model.Model.lattice` and MPO dtype.
+    Let's assume that we have a lattice `lat` with :class:`~lasyten.sites.SpinSite`
     on a square lattices. Then you could initialize a Neel state like this:
 
     .. testsetup :: InitialStateBuilder
 
         from tenpy.networks.mps import InitialStateBuilder
         import tenpy
-        spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
+        spin_half = lasyten.sites.SpinSite(conserve=None)
         lat = tenpy.models.lattice.Square(4, 4, spin_half)
 
     .. doctest :: InitialStateBuilder

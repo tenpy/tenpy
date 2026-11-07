@@ -23,6 +23,7 @@ dependencies:
   - flake8
   - flake8-rst-docstrings
   - sphinx-lint
+  - pre-commit
   # I/O
   - hdf5=2.1  # temporary pin to avoid incompatible version
   - h5py=3.16

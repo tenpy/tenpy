@@ -1,6 +1,7 @@
 """Shared pytest configuration for the tenpy tests."""
 
 # Copyright (C) TeNPy Developers, Apache license
+import gc
 from pathlib import Path
 
 import lasyten as lasy
@@ -23,3 +24,14 @@ def _sun_data_path():
         return
     with lasy.temporary_options(su_n_data_path=str(_SUN_DATA_PATH)):
         yield
+
+
+@pytest.fixture(autouse=True)
+def gc_after_each():
+    """Run garbage collection after each individual test.
+
+    This guarantees that any warnings from unused config options is raised in the correct test
+    instead of some time later.
+    """
+    yield
+    gc.collect()
