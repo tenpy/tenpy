@@ -10,10 +10,6 @@ from tenpy.networks.mps import MPS
 
 @pytest.mark.slow
 def test_ToricCode_general():
-    with pytest.raises(NotImplementedError, match='MultiCouplingTerms add to graph'):
-        ToricCode(dict(Lx=2, Ly=3, bc_MPS='infinite')).get_H_MPO()
-    pytest.xfail('MultiCouplingTerms add to graph')
-
     check_general_model(
         ToricCode,
         dict(Lx=2, Ly=3, bc_MPS='infinite'),
@@ -25,10 +21,6 @@ def test_ToricCode_general():
 
 @pytest.mark.slow
 def test_ToricCode(Lx=1, Ly=2):
-    with pytest.raises(NotImplementedError, match='MultiCouplingTerms add to graph'):
-        ToricCode(dict(Lx=2, Ly=3, bc_MPS='infinite')).get_H_MPO()
-    pytest.xfail('MultiCouplingTerms add to graph')
-
     model_params = {'Lx': Lx, 'Ly': Ly, 'bc_MPS': 'infinite'}
     M = ToricCode(model_params)
     psi = MPS.from_product_state(
@@ -41,7 +33,17 @@ def test_ToricCode(Lx=1, Ly=2):
         'max_E_err': 1.0e-10,
         'N_sweeps_check': 4,
     }
-    result = dmrg.run(psi, M, dmrg_params)
+
+    with pytest.raises(NotImplementedError, match='Mixer is not ported yet.'):
+        from tenpy.tools import asConfig
+
+        dmrg_params = asConfig(dmrg_params, 'DMRG')
+        dmrg_params.touch(*dmrg_params.keys())
+        dmrg_params.subconfig('trunc_params').touch('chi_max', 'svd_min')
+        result = dmrg.run(psi, M, dmrg_params, resume_data={'init_env_data': dict(start_env_sites=0)})
+    pytest.xfail('Mixer not ported yet')
+
+    result = dmrg.run(psi, M, dmrg_params, resume_data={'init_env_data': dict(start_env_sites=0)})
     E = result['E']
     print('E =', E)
     psi.canonical_form()

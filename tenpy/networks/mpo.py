@@ -2248,6 +2248,8 @@ class MPOGraph(MPSGeometry):
         assert op.codomain_labels == ['wL', 'p']
         assert op.domain_labels == ['p*', 'wR']
 
+        if self.finite and not (-self.L <= i < self.L):
+            raise ValueError('Index out of range for finite system')
         i = i % self.L
         G = self.graph[i]
 
@@ -2328,7 +2330,10 @@ class MPOGraph(MPSGeometry):
         self.add_onsite(i, keyL, keyR, opname='Id', strength=1, overbraid=overbraid, exist_ok=exist_ok)
 
     def add_elementary_two_site_coupling(self, i: int, j: int, coupling: lasy.Coupling, strength, label: str):
-        """Add an elementary two-site coupling. These properties are not checked!"""
+        """Add an elementary two-site coupling on ordered sites ``i < j``.
+
+        These properties are not checked!
+        """
         if self.symmetry.has_symmetric_braid:
             overbraid = True  # it doesnt matter
         else:
@@ -2347,7 +2352,10 @@ class MPOGraph(MPSGeometry):
         self.add(j, key, 'IdR', WR, strength)
 
     def add_elementary_multi_coupling(self, ijkl: Sequence[int], coupling: lasy.Coupling, strength, label: str):
-        """Add an elementary multi-site coupling. These properties are not checked!"""
+        """Add an elementary multi-site coupling on ordered sites (``ijkl`` strictly ascending).
+
+        These properties are not checked!
+        """
         if self.symmetry.has_symmetric_braid:
             overbraid = True  # it doesnt matter
         else:
@@ -2378,6 +2386,7 @@ class MPOGraph(MPSGeometry):
             else:
                 next_key = key
             self.add(i, key, next_key, W, strength=f)
+            key = next_key
 
     def has_edge(self, i, keyL, keyR):
         """True if there is an edge from `keyL` on bond (i-1, i) to `keyR` on bond (i, i+1)."""
