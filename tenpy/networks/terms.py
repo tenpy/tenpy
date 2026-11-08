@@ -901,6 +901,7 @@ class MultiCouplingTerms(Terms):
             d = d.setdefault(i, dict())
         d[iR] = d.get(iR, 0) + strength
         self._max_range = max(self._max_range, iR - iL)
+        # FIXME test
 
     def add_coupling_term(self, strength: float | complex, i: int, j: int, coupling_name: str):
         self.add_multi_coupling_term(strength, [i, j], coupling_name)
