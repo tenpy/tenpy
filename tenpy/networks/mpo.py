@@ -2327,6 +2327,58 @@ class MPOGraph(MPSGeometry):
         """Insert an edge with the identity onsite operator crossing over/under the virtual leg."""
         self.add_onsite(i, keyL, keyR, opname='Id', strength=1, overbraid=overbraid, exist_ok=exist_ok)
 
+    def add_elementary_two_site_coupling(self, i: int, j: int, coupling: lasy.Coupling, strength, label: str):
+        """Add an elementary two-site coupling. These properties are not checked!"""
+        if self.symmetry.has_symmetric_braid:
+            overbraid = True  # it doesnt matter
+        else:
+            raise NotImplementedError  # TODO how do we specify??
+
+        WL, WR = coupling.factorization
+        self.add(i, 'IdL', label, WL)
+        key = label
+        for k in range(i + 1, j):
+            if not self.finite and k % self.L == 0:
+                next_key = f'{label}_unit_cell_{k // self.L}'
+            else:
+                next_key = key
+            self.add_identity(k, key, next_key, overbraid=overbraid)
+            key = next_key
+        self.add(j, key, 'IdR', WR, strength)
+
+    def add_elementary_multi_coupling(self, ijkl: Sequence[int], coupling: lasy.Coupling, strength, label: str):
+        """Add an elementary multi-site coupling. These properties are not checked!"""
+        if self.symmetry.has_symmetric_braid:
+            overbraid = True  # it doesnt matter
+        else:
+            raise NotImplementedError  # TODO how do we specify??
+
+        # arbitrarily choose where to put the strength
+        M = len(ijkl)
+        factors = [1] * M
+        factors[(M + 1) // 2] = strength
+
+        self.add(ijkl[0], 'IdL', label, coupling.factorization[0], strength=factors[0])
+        key = label
+        for i, last_i, W, f in zip(ijkl[1:], ijkl, coupling.factorization[1:], factors[1:]):
+            # identities
+            for k in range(last_i + 1, i):
+                if not self.finite and k % self.L == 0:
+                    next_key = f'{label}_unit_cell_{k // self.L}'
+                else:
+                    next_key = key
+                self.add_identity(k, key, next_key, overbraid=overbraid)
+                key = next_key
+
+            # factor
+            if i == ijkl[-1]:
+                next_key = 'IdR'
+            elif not self.finite and i % self.L == 0:
+                next_key = f'{label}_unit_cell_{i // self.L}'
+            else:
+                next_key = key
+            self.add(i, key, next_key, W, strength=f)
+
     def has_edge(self, i, keyL, keyR):
         """True if there is an edge from `keyL` on bond (i-1, i) to `keyR` on bond (i, i+1)."""
         return keyR in self.graph[i].get(keyL, [])

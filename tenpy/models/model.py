@@ -344,7 +344,7 @@ class CouplingModel(HamiltonianModel):
                 return {self.coupling_hc_map[coupling_name]: 1}
         return self.coupling_permute(perm)
 
-    def test_coupling(self, coupling_name: str, sites: Sequence[int]):
+    def test_coupling(self, coupling_name: str, idcs: Sequence[int]):
         """Test if the `coupling_name` is defined, and valid on the `sites`.
 
         Raises
@@ -354,11 +354,13 @@ class CouplingModel(HamiltonianModel):
 
         """
         mps_sites = self.lattice.mps_sites()
-        sites = [mps_sites[i % len(mps_sites)] for i in sites]
+        sites = [mps_sites[i % len(mps_sites)] for i in idcs]
         try:
             coupling = self.couplings[coupling_name]
         except KeyError:
             raise ValueError(f'Unknown coupling name {coupling_name}') from None
+        if len(idcs) != coupling.num_sites:
+            raise ValueError(f'Mismatch: got {len(idcs)} idcs for a {coupling.num_sites} coupling')
         for s, W in zip(sites, coupling.factorization):
             if s.leg != W.get_leg('p'):
                 raise ValueError('Incompatible leg for the given site')
@@ -689,6 +691,7 @@ class CouplingModel(HamiltonianModel):
     def _add_multi_coupling_mps(
         self, pref: float | complex, ijkl: Sequence[int], coupling_name: str, plus_hc: bool = False
     ):
+        assert coupling_name != 'p.x.p' or len(ijkl) == 3
         if plus_hc:
             self._add_multi_coupling_mps(np.conj(pref), ijkl, self.coupling_hc_map[coupling_name], plus_hc=False)
         self.test_coupling(coupling_name, ijkl)

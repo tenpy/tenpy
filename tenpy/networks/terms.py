@@ -19,7 +19,7 @@ import numpy as np
 from ..tools import Hdf5Exportable, add_with_None_0
 
 if TYPE_CHECKING:
-    from ..models import CouplingModel
+    from ..models.model import CouplingModel
     from .mpo import MPOGraph
 
 
@@ -725,28 +725,13 @@ class CouplingTerms(Terms):
         # done
 
     def add_to_graph(self, graph: MPOGraph, model: CouplingModel):
-        if model.symmetry.has_symmetric_braid:
-            overbraid = True  # it doesnt matter
-        else:
-            raise NotImplementedError  # TODO how do we specify??
-
         assert self.L == graph.L
         # structure of coupling terms:
         for i, coupling_name, j, strength in self:
             elementary_couplings = model.couplings[coupling_name].elementary_decomposition()
             for n, c in enumerate(elementary_couplings):
-                WL, WR = c.factorization
-                # TODO first workaround solution: not re-using any existing edges.
                 label = f'{coupling_name}#{n}_{int(i)}_{int(j)}'  # some (probably) unique label
-                graph.add(i, 'IdL', label, WL)
-                key = label
-                for k in range(i + 1, j):
-                    next_key = key
-                    if not graph.finite and k % graph.L == 0:
-                        next_key = f'{key}_unit_cell_{k}'
-                    graph.add_identity(k, key, next_key, overbraid=overbraid)
-                    key = next_key
-                graph.add(j, key, 'IdR', WR, strength)
+                graph.add_elementary_two_site_coupling(i, j, coupling=c, strength=strength, label=label)
         if graph.max_range is not None:
             graph.max_range = max(graph.max_range, self.max_range())
 
@@ -901,6 +886,7 @@ class MultiCouplingTerms(Terms):
             Names of the coupling.
 
         """
+        assert coupling_name != 'p.x.p' or len(ijkl) == 3
         if len(ijkl) < 2:
             raise ValueError('Need to act on at least 2 sites. Use onsite terms!')
         for i, j in zip(ijkl, ijkl[1:]):
@@ -921,7 +907,10 @@ class MultiCouplingTerms(Terms):
 
     def add_to_graph(self, graph: MPOGraph, model: CouplingModel):
         for ijkl, name, strength in self:
-            raise NotImplementedError('MultiCouplingTerms add to graph')
+            elementary_couplings = model.couplings[name].elementary_decomposition()
+            for n, c in enumerate(elementary_couplings):
+                label = f'{name}#{n}_{"_".join(map(str, ijkl))}'  # some (probably) unique label
+                graph.add_elementary_multi_coupling(ijkl, c, strength, label)
 
     def remove_zeros(self, tol_zero: float = 1e-15, inplace: bool = True) -> MultiCouplingTerms:
         if not inplace:
@@ -953,7 +942,7 @@ class MultiCouplingTerms(Terms):
     def __iter__(self):
         for i, self_i in self.coupling_terms.items():
             for n, self_i_n in self_i.items():
-                for ijkl, strength in _iter_dicts_recursive([], self_i_n):
+                for ijkl, strength in _iter_dicts_recursive([i], self_i_n):
                     yield ijkl, n, strength
 
     def test_terms(self, sites: list[lasy.Site], model: CouplingModel):
@@ -961,7 +950,7 @@ class MultiCouplingTerms(Terms):
         for ijkl, name, strength in self:
             assert 0 <= ijkl[0] < L
             assert all(i < j for i, j in zip(ijkl, ijkl[1:]))
-            model.test_coupling(name, [sites[i % L] for i in ijkl])
+            model.test_coupling(name, ijkl)
         return
 
 
