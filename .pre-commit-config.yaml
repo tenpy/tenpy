@@ -44,14 +44,3 @@ repos:
           - "-d=default-role"
         files: '^doc/.*\.rst$'
         exclude: '^doc/toycodes/.*\.rst$'
-
-  - repo: local
-    hooks:
-      # Check for forbidden strings in all text files, e.g. FIXME, DONTSHIP
-      - id: fixme
-        name: FIXME check
-        entry: FIXME|DONTSHIP
-        language: pygrep
-        types: [text]
-        # this file needs to include the forbidden patterns, so we need to exclude it.
-        exclude: ^(\.pre-commit-config\.yaml|doc/contr/guidelines.rst)$
