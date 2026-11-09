@@ -2344,7 +2344,7 @@ class MPOGraph(MPSGeometry):
         key = label
         for k in range(i + 1, j):
             if not self.finite and k % self.L == 0:
-                next_key = f'{label}_unit_cell_{k // self.L}'
+                next_key = f'{label}#{k // self.L}'
             else:
                 next_key = key
             self.add_identity(k, key, next_key, overbraid=overbraid)
@@ -2372,7 +2372,7 @@ class MPOGraph(MPSGeometry):
             # identities
             for k in range(last_i + 1, i):
                 if not self.finite and k % self.L == 0:
-                    next_key = f'{label}_unit_cell_{k // self.L}'
+                    next_key = f'{label}#{k // self.L}'
                 else:
                     next_key = key
                 self.add_identity(k, key, next_key, overbraid=overbraid)
@@ -2382,7 +2382,7 @@ class MPOGraph(MPSGeometry):
             if i == ijkl[-1]:
                 next_key = 'IdR'
             elif not self.finite and i % self.L == 0:
-                next_key = f'{label}_unit_cell_{i // self.L}'
+                next_key = f'{label}#{i // self.L}'
             else:
                 next_key = key
             self.add(i, key, next_key, W, strength=f)
