@@ -783,6 +783,19 @@ class MPO(MPSGeometry):
         self._W[i_in_unit_cell] = self.shift_Tensor_unit_cells(W, -num_unit_cells)
         self._reset_graph()
 
+    def show_W_grid(self, i: int) -> str:
+        """Visual representation of the block-structure of the W tensor on site `i`.
+
+        For a summarized display, the following cases are distinguished as cells::
+
+            - ``'  '`` i.e. an empty cell, if the cell is zero
+            - ``'Id'`` if the cell is an onsite-identity crossing a virtual wire
+            - ``'~I'`` if the cell is proportional to, but not equal to, the identity
+            - ``'**'`` for any other cell
+
+        """
+        return _show_W_grid(self.get_W(i))
+
     def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
@@ -2397,7 +2410,7 @@ class MPOGraph(MPSGeometry):
 
         Parameters
         ----------
-        explict_plus_hc : bool
+        explicit_plus_hc : bool
             If ``True``, the resulting MPO will represent the operator given by this graph
             plus the hc of that via :attr:`MPO.explicit_plus_hc`.
             In either case the bare MPO tensors will represent the same operator as this graph,
@@ -4021,3 +4034,105 @@ def partition_W(
     assert lasy.almost_equal(lasy.tensor_grid_cell(W, IdR, IdR, 'wL', 'wR'), Id)
 
     return A, B, C, D, Id
+
+
+def _show_W_grid(W: lasy.SymmetricTensor, wL='wL', wR='wR'):
+    """Helper for :meth:`MPO.show_W_grid`."""
+    assert W.codomain_labels[0] == wL  # assumption for checking vs Id below
+    assert W.domain_labels[-1] == wR  # assumption for checking vs Id below
+    wL_labels = W.get_leg(wL).summand_labels
+    wR_labels = W.get_leg(wR).summand_labels
+    assert None not in wL_labels
+    assert None not in wR_labels
+
+    info_grid = np.full((len(wL_labels), len(wR_labels)), '  ', dtype='<U2')
+    for i, labelL in enumerate(wL_labels):
+        for j, labelR in enumerate(wR_labels):
+            cell = lasy.tensor_grid_cell(W, labelL, labelR, wL, wR)
+            cell_norm = lasy.norm(cell)
+            if cell_norm < 1e-14:
+                info_grid[i, j] = '  '
+                continue
+
+            # check overlap with identity
+            if not W.symmetry.has_symmetric_braid:
+                raise NotImplementedError  # should check vs "over Id" *and* "under Id"
+
+            braided = lasy.move_leg(cell, wL, codomain_pos=-1)
+            if braided.codomain == braided.domain:
+                id_ov = lasy.trace(braided)
+                id_norm = lasy.sqrt(cell.domain.dim)
+                if abs(abs(id_ov) - id_norm * cell_norm) < 1e-14:
+                    if abs(id_ov - id_norm**2) < 1e-14:
+                        # exactly identity
+                        info_grid[i, j] = 'Id'
+                    else:
+                        # multiple of identity
+                        info_grid[i, j] = '~I'
+                    continue
+
+            # no special case:
+            info_grid[i, j] = '**'
+
+    row_labels = [str(label) for label in wL_labels]
+    column_labels = [str(label) for label in wR_labels]
+
+    row_symbols = [label if label in ('IdL', 'IdR') else str(index) for index, label in enumerate(row_labels)]
+    column_symbols = [label if label in ('IdL', 'IdR') else str(index) for index, label in enumerate(column_labels)]
+    row_label_width = max(map(len, row_symbols))
+    column_width = max(3, max(max(np.max(np.char.str_len(info_grid)), len(symbol)) for symbol in column_symbols))
+    full_label_width = max(9, max(map(len, row_labels)))
+
+    header = (
+        ' ' * row_label_width
+        + ' || '
+        + ' | '.join(symbol.center(column_width) for symbol in column_symbols)
+        + ' || '
+        + 'row label'.ljust(full_label_width)
+    )
+    divider = (
+        '=' * row_label_width
+        + '=++='
+        + '=+='.join('=' * column_width for _ in column_labels)
+        + '=++='
+        + '=' * full_label_width
+    )
+    row_divider = (
+        '-' * row_label_width
+        + '-++-'
+        + '-+-'.join('-' * column_width for _ in column_labels)
+        + '-++-'
+        + '-' * full_label_width
+    )
+    rows = []
+    for row_number, symbol in enumerate(row_symbols):
+        rows.append(
+            symbol.rjust(row_label_width)
+            + ' || '
+            + ' | '.join(
+                info_grid[row_number, column_index].center(column_width) for column_index in range(len(column_labels))
+            )
+            + ' || '
+            + row_labels[row_number].ljust(full_label_width)
+        )
+        if row_number < len(row_labels) - 1:
+            rows.append(row_divider)
+
+    wrapped_column_labels = []
+    for label in column_labels:
+        compact_width = column_width + 2 if len(label) > 2 * column_width else column_width
+        wrapped_column_labels.append(
+            [label[offset : offset + compact_width] for offset in range(0, len(label), compact_width)] or ['']
+        )
+    rows.append(row_divider)
+    for line_number in range(max(map(len, wrapped_column_labels))):
+        label_fields = []
+        for label_lines in wrapped_column_labels:
+            label = label_lines[line_number] if line_number < len(label_lines) else ''
+            if len(label_lines[0]) > column_width:
+                label_fields.append(label.ljust(column_width + 2))
+            else:
+                label_fields.append(' ' + label.ljust(column_width) + ' ')
+        rows.append(' ' * row_label_width + ' ||' + '|'.join(label_fields) + '||')
+
+    return '\n'.join([header, divider, *rows])
