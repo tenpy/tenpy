@@ -8480,7 +8480,6 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
 
         bra_N and ket_M are *not* reversed for transpose=False, i.e. ordered left to right.
         """
-        raise NotImplementedError('MPS transfermatrix not ported')
         self.L = L = len(bra_N)
         if unit_cell_width is None:
             # TODO: deprecate the default value.
