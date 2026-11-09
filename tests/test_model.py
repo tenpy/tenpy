@@ -240,88 +240,121 @@ def test_CouplingModel_fermions(bc, bc_MPS):
 
 
 def test_CouplingModel_explicit():
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
-    fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
+    s = lasy.sites.SpinlessFermionSite()
+    fermion_lat_cyl = lattice.Square(1, 2, s, bc='periodic', bc_MPS='infinite')
+
     M = model.CouplingModel(fermion_lat_cyl)
-    M.add_onsite(0.125, 0, 'N')
-    M.add_twosite_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), None)  # auto-determine JW-string!
-    M.add_twosite_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), None)
-    M.add_twosite_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), None)
-    M.add_twosite_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), None)
-    M.add_twosite_coupling(4.0, 0, 'N', 0, 'N', (-2, -1), None)  # a full unit cell inbetween!
-    H_mpo = M.calc_H_MPO()
+    M.define_coupling(lasy.models.hopping([s, s], t_right=0, name='Cd.C'), hc='C.Cd', permute='swap_hc')
+    M.define_coupling(lasy.models.density_density_interaction([s, s], name='N.N'), hc='N.N', permute='invariant')
+
+    M.add_onsite_operator(0.125, 'N')
+    M.add_two_site_coupling(0.25, 'Cd.C', dx=[0, 1])
+    M.add_two_site_coupling(0.25, 'Cd.C', dx=[0, -1])
+    M.add_two_site_coupling(1.5, 'Cd.C', dx=[1, 0])
+    M.add_two_site_coupling(1.5, 'Cd.C', dx=[-1, 0])
+    M.add_two_site_coupling(4.0, 'N.N', dx=[-2, -1])  # a full unit cell inbetween!
+
+    H_mpo = M.get_H_MPO()
+
     W0_new = H_mpo.get_W(0)
     W1_new = H_mpo.get_W(1)
-    Id, JW, N = fermion_site.Id, fermion_site.JW, fermion_site.N
-    Cd, C = fermion_site.Cd, fermion_site.C
-    CdJW = Cd.matvec(JW)  # = Cd
-    JWC = JW.matvec(C)  # = C
-    #  H_MPO_graph = tenpy.networks.mpo.MPOGraph.from_terms((M.all_onsite_terms(),
-    #                                                        M.all_coupling_terms(),
-    #                                                        M.exp_decaying_terms),
-    #                                                       M.lattice.mps_sites(),
-    #                                                       M.lattice.bc_MPS,
-    #                                                       unit_cell_width=M.lattice.mps_unit_cell_width)
-    #  H_MPO_graph._set_ordered_states()
-    #  from pprint import pprint
-    #  pprint(H_MPO_graph._ordered_states)
-    #  print(M.all_coupling_terms().to_TermList())
-    #  [{'IdL': 0,
-    #    ('left', 0, 'Cd JW', 'JW'): 1,
-    #    ('left', 0, 'JW C', 'JW'): 2,
-    #    ('left', 0, 'N', 'Id'): 3,
-    #    ('left', 1, 'Cd JW', 'JW'): 4,
-    #    ('left', 1, 'JW C', 'JW'): 5,
-    #    ('left', 1, 'N', 'Id'): 6,
-    #    ('left', 0, 'N', 'Id', 2, 'Id', 'Id'): 7,
-    #    ('left', 1, 'N', 'Id', 3, 'Id', 'Id'): 8},
-    #    'IdR': 9,
-    #   {'IdL': 0,
-    #    ('left', 0, 'Cd JW', 'JW'): 1,
-    #    ('left', 0, 'JW C', 'JW'): 2,
-    #    ('left', 0, 'N', 'Id'): 3,
-    #    ('left', 1, 'Cd JW', 'JW'): 4,
-    #    ('left', 1, 'JW C', 'JW'): 5,
-    #    ('left', 1, 'N', 'Id'): 6},
-    #    ('left', 0, 'N', 'Id', 2, 'Id', 'Id'): 7,
-    #    ('left', 0, 'N', 'Id', 2, 'Id', 'Id', 4, 'Id', 'Id'): 8,
-    #    'IdR': 9,
-    #  0.50000 * Cd JW_0 C_1 +
-    #  1.50000 * Cd JW_0 C_2 +
-    #  0.50000 * JW C_0 Cd_1 +
-    #  1.50000 * JW C_0 Cd_2 +
-    #  4.00000 * N_0 N_5 +
-    #  1.50000 * Cd JW_1 C_3 +
-    #  1.50000 * JW C_1 Cd_3 +
-    #  4.00000 * N_1 N_4
+
+    w_triv = lasy.ElementarySpace.from_trivial_sector(symmetry=M.symmetry)
+    w_odd = lasy.ElementarySpace(M.symmetry, M.symmetry.factors[0].odd)
+    Id_0 = s.get_onsite_W_block('Id', w=w_triv)
+    Id_1 = s.get_onsite_W_block('Id', w=w_odd)
+    N_block = s.get_onsite_W_block('N', w=w_triv)
+    Cd_L, C_R = lasy.models.hopping([s, s], t_right=0).factorization
+    C_L, Cd_R = lasy.models.hopping([s, s], t_left=0).factorization
+    N_L, N_R = lasy.models.density_density_interaction([s, s]).factorization
+
+    print()
+    print(H_mpo.show_W_grid(0))
+    print()
+    print(H_mpo.show_W_grid(1))
 
     # fmt: off
-    W0_ex = [[Id,   CdJW, JWC,  N,    None, None, None, None, None, N*0.125],
-             [None, None, None, None, None, None, None, None, None, C*1.5],
-             [None, None, None, None, None, None, None, None, None, Cd*1.5],
-             [None, None, None, None, None, None, None, Id,   None, None],
-             [None, None, None, None, JW,   None, None, None, None, None],
-             [None, None, None, None, None, JW,   None, None, None, None],
-             [None, None, None, None, None, None, Id,   None, None, None],
-             [None, None, None, None, None, None, None, None, Id,   None],
-             [None, None, None, None, None, None, None, None, None, N*4.0],
-             [None, None, None, None, None, None, None, None, None, Id]]
-    W1_ex = [[Id,   None, None, None, CdJW, JWC,  N,    None, None, N*0.125],
-             [None, JW,   None, None, None, None, None, None, None, C*0.5],
-             [None, None, JW,   None, None, None, None, None, None, Cd*0.5],
-             [None, None, None, Id,   None, None, None, None, None, None],
-             [None, None, None, None, None, None, None, None, None, C*1.5],
-             [None, None, None, None, None, None, None, None, None, Cd*1.5],
-             [None, None, None, None, None, None, None, None, Id,   None],
-             [None, None, None, None, None, None, None, Id,   None, None],
-             [None, None, None, None, None, None, None, None, None, N*4.0],
-             [None, None, None, None, None, None, None, None, None, Id]]
+    # NOTE: we currently do not re-use edges in the MPOGraph
+    #       commented out is what we may expect once we do
+    #       The first two terms (dx=[0, 1] and dx=[0, -1]) act on the exact same sites,
+    #       so those *are* combined
+
+    # W0_ex = [[Id,   Cd_L, C_L,  N_L,  None, None, None, None, None, 0.125 * N_block],
+    #          [None, None, None, None, None, None, None, None, None, 1.5 * C_R      ],
+    #          [None, None, None, None, None, None, None, None, None, 1.5 * Cd_R     ],
+    #          [None, None, None, None, None, None, None, Id,   None, None           ],
+    #          [None, None, None, None, Id,   None, None, None, None, None           ],
+    #          [None, None, None, None, None, Id,   None, None, None, None           ],
+    #          [None, None, None, None, None, None, Id,   None, None, None           ],
+    #          [None, None, None, None, None, None, None, None, Id,   None           ],
+    #          [None, None, None, None, None, None, None, None, None, 4.0 * N_R      ],
+    #          [None, None, None, None, None, None, None, None, None, Id             ]]
+
+    # W1_ex = [[Id,   None, None, None, Cd_L, C_L,  N_L,  None, None, 0.125 * N_block],
+    #          [None, Id,   None, None, None, None, None, None, None, 0.5 * C_R      ],
+    #          [None, None, Id,   None, None, None, None, None, None, .5 * Cd_R      ],
+    #          [None, None, None, Id,   None, None, None, None, None, None           ],
+    #          [None, None, None, None, None, None, None, None, None, 1.5 * C_R      ],
+    #          [None, None, None, None, None, None, None, None, None, 1.5 * Cd_R     ],
+    #          [None, None, None, None, None, None, None, None, Id,   None           ],
+    #          [None, None, None, None, None, None, None, Id,   None, None           ],
+    #          [None, None, None, None, None, None, None, None, None, 4.0 * N_R      ],
+    #          [None, None, None, None, None, None, None, None, None, Id             ]]
+
+    W0_ex = [[Id_0, C_L,  C_L,  None, Cd_L, Cd_L, None, N_L,  None, None, None, 0.125 * N_block],
+             [None, None, None, None, None, None, None, None, None, None, None, 1.5 * Cd_R     ],
+             [None, None, None, Id_1, None, None, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, 1.5 * C_R      ],
+             [None, None, None, None, None, None, Id_1, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, Id_0, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, Id_0, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, Id_0, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, 4.0 * N_R      ],
+             [None, None, None, None, None, None, None, None, None, None, None, Id_0             ]]
+
+    W1_ex = [[Id_0, None, C_L,  None, Cd_L, None, None, N_L,  None, 0.125 * N_block],
+             [None, None, None, None, None, None, None, None, None, 2 * 0.25 * Cd_R],
+             [None, Id_1, None, None, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, 1.5 * Cd_R     ],
+             [None, None, None, None, None, None, None, None, None, 2 * 0.25 * C_R ],
+             [None, None, None, Id_1, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, 1.5 * C_R      ],
+             [None, None, None, None, None, Id_0, None, None, None, None           ],
+             [None, None, None, None, None, None, Id_0, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, 4.0 * N_R      ],
+             [None, None, None, None, None, None, None, None, Id_0, None           ],
+             [None, None, None, None, None, None, None, None, None, Id_0             ]]
     # fmt: on
 
-    W0_ex = npc.grid_outer(W0_ex, W0_new.legs[:2])
-    W1_ex = npc.grid_outer(W1_ex, W1_new.legs[:2])
-    assert npc.norm(W0_new - W0_ex) ** 2 == 0.0  # coupling constants: no rounding errors
-    assert npc.norm(W1_new - W1_ex) ** 2 == 0.0  # coupling constants: no rounding errors
+    # compare cells individually: better for debugging
+    def _compare_grids(W, grid, name):
+        for i, row in enumerate(grid):
+            for j, grid_cell in enumerate(row):
+                W_cell = lasy.tensor_grid_cell(W, i, j, 'wL', 'wR')
+                if grid[i][j] is None:
+                    assert lasy.norm(W_cell) < 1e-16, f'{name}:  not zero: grid[{i}][{j}]'
+                else:
+                    assert W_cell.get_leg('wL') == grid[i][j].get_leg('wL'), f'{name}:  wL mismatch [{i}][{j}]'
+                    assert W_cell.get_leg('wR') == grid[i][j].get_leg('wR'), f'{name}:  wR mismatch [{i}][{j}]'
+                    assert lasy.almost_equal(W_cell, grid[i][j]), f'{name}:  Tensor mismatch: [{i}][{j}]'
+
+    _compare_grids(W0_new, W0_ex, 'W0')
+    _compare_grids(W1_new, W1_ex, 'W1')
+
+    W0_ex = lasy.tensor_from_grid(
+        W0_ex,
+        ['wL', 'p', 'wR', 'p*'],
+        row_labels=W0_new.get_leg('wL').summand_labels,
+        col_labels=W0_new.get_leg('wR').summand_labels,
+    )
+    W1_ex = lasy.tensor_from_grid(
+        W1_ex,
+        ['wL', 'p', 'wR', 'p*'],
+        row_labels=W1_new.get_leg('wL').summand_labels,
+        col_labels=W1_new.get_leg('wR').summand_labels,
+    )
+    assert lasy.almost_equal(W0_new, W0_ex)
+    assert lasy.almost_equal(W1_new, W1_ex)
 
 
 @pytest.mark.parametrize('use_plus_hc, JW', [(False, 'JW'), (False, None), (True, None)])
