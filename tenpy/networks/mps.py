@@ -5755,11 +5755,11 @@ class MPS(BaseMPSExpectationValue):
             if copy is not None:
                 term_list = copy
         # conversion
-        ot, lasy = term_list.to_OnsiteTerms_CouplingTerms(self.sites)
+        ot, ct = term_list.to_OnsiteTerms_CouplingTerms(self.sites)
         bc = 'finite' if self.finite else 'infinite'
-        mpo_graph = mpo.MPOGraph.from_terms((ot, lasy), self.sites, bc, unit_cell_width=self.unit_cell_width)
+        mpo_graph = mpo.MPOGraph.from_terms((ot, ct), self.sites, bc, unit_cell_width=self.unit_cell_width)
         mpo_ = mpo_graph.build_MPO()
-        terms_sum = mpo_.expectation_value(self, max_range=lasy.max_range())
+        terms_sum = mpo_.expectation_value(self, max_range=ct.max_range())
         if not self.finite:
             terms_sum = terms_sum * self.L
         return terms_sum, mpo_
