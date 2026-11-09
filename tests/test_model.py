@@ -310,7 +310,7 @@ def test_CouplingModel_explicit():
              [None, None, None, None, None, None, None, None, None, Id_0, None, None           ],
              [None, None, None, None, None, None, None, None, None, None, Id_0, None           ],
              [None, None, None, None, None, None, None, None, None, None, None, 4.0 * N_R      ],
-             [None, None, None, None, None, None, None, None, None, None, None, Id_0             ]]
+             [None, None, None, None, None, None, None, None, None, None, None, Id_0           ]]
 
     W1_ex = [[Id_0, None, C_L,  None, Cd_L, None, None, N_L,  None, 0.125 * N_block],
              [None, None, None, None, None, None, None, None, None, 2 * 0.25 * Cd_R],
@@ -323,115 +323,135 @@ def test_CouplingModel_explicit():
              [None, None, None, None, None, None, Id_0, None, None, None           ],
              [None, None, None, None, None, None, None, None, None, 4.0 * N_R      ],
              [None, None, None, None, None, None, None, None, Id_0, None           ],
-             [None, None, None, None, None, None, None, None, None, Id_0             ]]
+             [None, None, None, None, None, None, None, None, None, Id_0           ]]
     # fmt: on
 
     # compare cells individually: better for debugging
-    def _compare_grids(W, grid, name):
-        for i, row in enumerate(grid):
-            for j, grid_cell in enumerate(row):
-                W_cell = lasy.tensor_grid_cell(W, i, j, 'wL', 'wR')
-                if grid[i][j] is None:
-                    assert lasy.norm(W_cell) < 1e-16, f'{name}:  not zero: grid[{i}][{j}]'
-                else:
-                    assert W_cell.get_leg('wL') == grid[i][j].get_leg('wL'), f'{name}:  wL mismatch [{i}][{j}]'
-                    assert W_cell.get_leg('wR') == grid[i][j].get_leg('wR'), f'{name}:  wR mismatch [{i}][{j}]'
-                    assert lasy.almost_equal(W_cell, grid[i][j]), f'{name}:  Tensor mismatch: [{i}][{j}]'
-
     _compare_grids(W0_new, W0_ex, 'W0')
     _compare_grids(W1_new, W1_ex, 'W1')
 
-    W0_ex = lasy.tensor_from_grid(
-        W0_ex,
-        ['wL', 'p', 'wR', 'p*'],
-        row_labels=W0_new.get_leg('wL').summand_labels,
-        col_labels=W0_new.get_leg('wR').summand_labels,
-    )
-    W1_ex = lasy.tensor_from_grid(
-        W1_ex,
-        ['wL', 'p', 'wR', 'p*'],
-        row_labels=W1_new.get_leg('wL').summand_labels,
-        col_labels=W1_new.get_leg('wR').summand_labels,
-    )
+    # compare reconstructed tensor: easier to trust
+    W0_ex = lasy.tensor_from_grid(W0_ex, ['wL', 'p', 'wR', 'p*'])
+    W1_ex = lasy.tensor_from_grid(W1_ex, ['wL', 'p', 'wR', 'p*'])
     assert lasy.almost_equal(W0_new, W0_ex)
     assert lasy.almost_equal(W1_new, W1_ex)
 
 
-@pytest.mark.parametrize('use_plus_hc, JW', [(False, 'JW'), (False, None), (True, None)])
-def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
-    fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
-    M = model.CouplingModel(fermion_lat_cyl)
+@pytest.mark.parametrize('use_plus_hc', [True, False])
+def test_CouplingModel_multi_couplings_explicit(use_plus_hc):
+    s = lasy.sites.SpinlessFermionSite()
+    fermion_lat_cyl = lattice.Square(1, 2, s, bc='periodic', bc_MPS='infinite')
+
     # create a weird fermionic model with 3-body interactions
-    M.add_onsite(0.125, 0, 'N')
-    M.add_twosite_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), plus_hc=use_plus_hc)
-    M.add_twosite_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), JW, plus_hc=use_plus_hc)
+    M = model.CouplingModel(fermion_lat_cyl)
+    M.define_coupling(lasy.models.hopping([s, s], t_right=0, name='Cd.C'), hc='C.Cd', permute='swap_hc')
+    M.define_coupling(lasy.models.density_density_interaction([s, s], name='N.N'), hc='N.N', permute='invariant')
+    N_Cd_C = lasy.outer(
+        s.get_op('N').as_SymmetricTensor(),
+        M.couplings['Cd.C'].to_tensor(),
+        relabel1={'p': 'p0', 'p*': 'p0*'},
+        relabel2={'p0': 'p1', 'p0*': 'p1*', 'p1': 'p2', 'p1*': 'p2*'},
+    )
+    Cd_N_C = -1 * lasy.permute_legs(N_Cd_C, codomain=['p1', 'p0', 'p2'], domain=['p1*', 'p0*', 'p2*']).relabel(
+        {'p0': 'p1', 'p0*': 'p1*', 'p1': 'p0', 'p1*': 'p0*'}
+    )
+    Cd_C_N = -1 * lasy.permute_legs(N_Cd_C, codomain=['p0', 'p2', 'p1'], domain=['p0*', 'p2*', 'p1*']).relabel(
+        {'p2': 'p1', 'p2*': 'p1*', 'p1': 'p2', 'p1*': 'p2*'}
+    )
+
+    def N_Cd_C_permute(perm):
+        if np.array_equal(perm, [0, 1, 2]):
+            return {'N.Cd.C': 1.0}
+        if np.array_equal(perm, [0, 2, 1]):
+            return {'N.C.Cd': -1.0}
+        if np.array_equal(perm, [1, 0, 2]):
+            return {'Cd.N.C': -1.0}
+        if np.array_equal(perm, [1, 2, 0]):
+            return {'Cd.C.N': 1.0}
+        if np.array_equal(perm, [2, 1, 0]):
+            return {'C.Cd.N': -1.0}
+        if np.array_equal(perm, [2, 0, 1]):
+            return {'Cd.C.N': 1.0}
+        raise RuntimeError
+
+    M.define_coupling(lasy.Coupling.from_tensor(N_Cd_C, [s, s, s], name='N.Cd.C'), hc='N.C.Cd', permute=N_Cd_C_permute)
+    M.define_coupling(lasy.Coupling.from_tensor(Cd_N_C, [s, s, s], name='Cd.N.C'), hc='C.N.Cd', permute=None)
+    M.define_coupling(lasy.Coupling.from_tensor(Cd_C_N, [s, s, s], name='Cd.C.N'), hc='C.Cd.N', permute=None)
+
+    M.add_onsite_operator(0.125, 'N')
+    M.add_two_site_coupling(0.25, 'Cd.C', dx=[0, 1], plus_hc=use_plus_hc)
+    M.add_two_site_coupling(1.5, 'Cd.C', dx=[1, 0], plus_hc=use_plus_hc)
     if not use_plus_hc:
-        M.add_twosite_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), JW)
-        M.add_twosite_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), JW)
-    # multi_coupling with a full unit cell inbetween the operators!
-    M.add_multi_coupling(4.0, [('N', (0, 0), 0), ('N', (-2, -1), 0)])
-    # some weird mediated hopping along the diagonal
-    M.add_multi_coupling(1.125, [('N', (0, 0), 0), ('Cd', (0, 1), 0), ('C', (1, 0), 0)])
-    H_mpo = M.calc_H_MPO()
+        M.add_two_site_coupling(0.25, 'Cd.C', dx=[0, -1], plus_hc=use_plus_hc)
+        M.add_two_site_coupling(1.5, 'Cd.C', dx=[-1, 0], plus_hc=use_plus_hc)
+    M.add_multi_site_coupling(4.0, 'N.N', dx=[[0, 0], [-2, -1]])
+    M.add_multi_site_coupling(1.125, 'N.Cd.C', dx=[[0, 0], [0, 1], [1, 0]])
+
+    H_mpo = M.get_H_MPO()
+
     W0_new = H_mpo.get_W(0)
     W1_new = H_mpo.get_W(1)
-    Id, JW, N = fermion_site.Id, fermion_site.JW, fermion_site.N
-    Cd, C = fermion_site.Cd, fermion_site.C
-    CdJW = Cd.matvec(JW)  # = Cd
-    JWC = JW.matvec(C)  # = C
-    NJW = N.matvec(JW)
+
+    w_triv = lasy.ElementarySpace.from_trivial_sector(symmetry=M.symmetry)
+    w_odd = lasy.ElementarySpace(M.symmetry, M.symmetry.factors[0].odd)
+    Id_0 = s.get_onsite_W_block('Id', w=w_triv)
+    Id_1 = s.get_onsite_W_block('Id', w=w_odd)
+    N_0 = s.get_onsite_W_block('N', w=w_triv)
+    N_1 = s.get_onsite_W_block('N', w=w_odd)
+    N_block = s.get_onsite_W_block('N', w=w_triv)
+    Cd_L, C_R = lasy.models.hopping([s, s], t_right=0).factorization
+    C_L, Cd_R = lasy.models.hopping([s, s], t_left=0).factorization
+
+    print()
+    print(H_mpo.show_W_grid(0))
+    print()
+    print(H_mpo.show_W_grid(1))
+
     # fmt: off
-    H_MPO_graph = tenpy.networks.mpo.MPOGraph.from_terms((M.all_onsite_terms(),
-                                                          M.all_coupling_terms(),
-                                                          M.exp_decaying_terms),
-                                                         M.lattice.mps_sites(),
-                                                         M.lattice.bc_MPS,
-                                                         unit_cell_width=M.lattice.mps_unit_cell_width)
-    H_MPO_graph._set_ordered_states()
-    from pprint import pprint
-    pprint(H_MPO_graph._ordered_states)
-    pprint(H_MPO_graph._build_grids())
-    print(M.all_coupling_terms().to_TermList())
-    #  0.50000 * Cd JW_0 C_1 +
-    #  1.50000 * Cd JW_0 C_2 +
-    #  0.50000 * JW C_0 Cd_1 +
-    #  1.50000 * JW C_0 Cd_2 +
-    #  1.50000 * Cd JW_1 C_3 +
-    #  1.50000 * JW C_1 Cd_3 +
-    #  4.00000 * N_0 N_5 +
-    #  4.00000 * N_1 N_4 +
-    #  1.12500 * N_0 Cd JW_1 C_2 +
-    #  1.12500 * Cd JW_0 N JW_1 C_3
+    # NOTE: we currently do not re-use edges in the MPOGraph
+    #       commented out is what we may expect once we do
+    #       The first two terms (dx=[0, 1] and dx=[0, -1]) act on the exact same sites,
+    #       so those *are* combined
+    W0_ex = [[Id_0, C_L,  C_L,  None, Cd_L, Cd_L, None, Cd_L, None, N_0,  N_0,  None, None, None, 0.125 * N_block],
+             [None, None, None, None, None, None, None, None, None, None, None, None, None, None, 1.5 * Cd_R     ],
+             [None, None, None, Id_1, None, None, None, None, None, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, None, None, None, 1.5 * C_R      ],
+             [None, None, None, None, None, None, Id_1, None, None, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, Id_1, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, None, None, None, 1.125 * C_R    ],
+             [None, None, None, None, None, None, None, None, None, None, None, Id_0, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, None, Id_0, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, None, None, Id_0, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, None, None, None, 4.0 * N_0      ],
+             [None, None, None, None, None, None, None, None, None, None, None, None, None, None, Id_0           ]]
 
-    W0_ex = [[Id,   CdJW, JWC,  N,    None, None, None, None, None, N*0.125],
-             [None, None, None, None, None, Id,   None, None, None, None],
-             [None, None, None, None, None, None, JW*1.5,   None, None, None],
-             [None, None, None, None, None, None, None, JW*1.5,   None, None],
-             [None, None, None, None, Id,   None, None, None, None, None],
-             [None, None, None, None, None, None, JW*1.125, None, None, None],
-             [None, None, None, None, None, None, None, None, None, C],
-             [None, None, None, None, None, None, None, None, None, Cd],
-             [None, None, None, None, None, None, None, None, None, N],
-             [None, None, None, None, None, None, None, None, Id,   None],
-             [None, None, None, None, None, None, None, None, None, Id]]
-
-    W1_ex = [[Id,   None, CdJW, JWC,  N,    None, None, None, None, None, N*0.125],
-             [None, None, None, None, None, NJW,  JW*1.5, None, None, None, C*0.5],
-             [None, None, None, None, None, None, None, JW*1.5, None, None, Cd*0.5],
-             [None, Id,   None, None, None, None, CdJW*1.125, None, None, None, None],
-             [None, None, None, None, None, None, None, None, Id*4., None, None],
-             [None, None, None, None, None, None, None, None, None, Id*4., None],
-             [None, None, None, None, None, None, None, None, None, None, C],
-             [None, None, None, None, None, None, None, None, None, None, Cd],
-             [None, None, None, None, None, None, None, None, None, None, N],
-             [None, None, None, None, None, None, None, None, None, None, Id]]
+    # Note: the signs come fermionic anti-commutation and were carefully checked by hand.
+    W1_ex = [[Id_0, None, C_L,  None, Cd_L, None, None, None, None, N_0,  None, 0.125 * N_block],
+             [None, None, None, None, None, None, None, None, None, None, None, 2 * 0.25 * Cd_R],
+             [None, Id_1, None, None, None, None, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, 1.5 * Cd_R     ],
+             [None, None, None, None, None, None, None, None, None, None, None, 2 * 0.25 * C_R ],
+             [None, None, None, Id_1, None, None, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, 1.5 * C_R      ],
+             [None, None, None, None, None, -N_1, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, -1.125 * C_R   ],
+             [None, None, None, None, None, None, Cd_L, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, Id_0, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, Id_0, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, 4.0 * N_0      ],
+             [None, None, None, None, None, None, None, None, None, None, Id_0, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, Id_0           ]]
     # fmt: on
-    W0_ex = npc.grid_outer(W0_ex, W0_new.legs[:2])
-    assert npc.norm(W0_new - W0_ex) == 0.0  # coupling constants: no rounding errors
-    W1_ex = npc.grid_outer(W1_ex, W1_new.legs[:2])
 
-    assert npc.norm(W1_new - W1_ex) == 0.0  # coupling constants: no rounding errors
+    # compare cells individually: better for debugging
+    _compare_grids(W0_new, W0_ex, 'W0')
+    _compare_grids(W1_new, W1_ex, 'W1')
+
+    # compare reconstructed tensor: easier to trust
+    W0_ex = lasy.tensor_from_grid(W0_ex, ['wL', 'p', 'wR', 'p*'])
+    W1_ex = lasy.tensor_from_grid(W1_ex, ['wL', 'p', 'wR', 'p*'])
+    assert lasy.almost_equal(W0_new, W0_ex)
+    assert lasy.almost_equal(W1_new, W1_ex)
 
 
 @pytest.mark.parametrize('use_fermions', [False, True], ids=['spins', 'fermions'])
@@ -1087,3 +1107,15 @@ def test_fixes_consistency_check_IrregularLattice():
     psi = tenpy.MPS.from_lat_product_state(model.lattice, [[['up']]])
     dmrg_params = dict(max_sweeps=2)
     _ = tenpy.algorithms.dmrg.run(psi, model, dmrg_params)
+
+
+def _compare_grids(W, grid, name):
+    for i, row in enumerate(grid):
+        for j, grid_cell in enumerate(row):
+            W_cell = lasy.tensor_grid_cell(W, i, j, 'wL', 'wR')
+            if grid_cell is None:
+                assert lasy.norm(W_cell) < 1e-16, f'{name}:  not zero: grid[{i}][{j}]'
+            else:
+                assert W_cell.get_leg('wL') == grid_cell.get_leg('wL'), f'{name}:  wL mismatch [{i}][{j}]'
+                assert W_cell.get_leg('wR') == grid_cell.get_leg('wR'), f'{name}:  wR mismatch [{i}][{j}]'
+                assert lasy.almost_equal(W_cell, grid_cell), f'{name}:  Tensor mismatch: [{i}][{j}]'

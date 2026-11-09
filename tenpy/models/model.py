@@ -342,7 +342,7 @@ class CouplingModel(HamiltonianModel):
                 return {coupling_name: 1}
             else:
                 return {self.coupling_hc_map[coupling_name]: 1}
-        return self.coupling_permute(perm)
+        return self.coupling_permute[coupling_name](perm)
 
     def test_coupling(self, coupling_name: str, idcs: Sequence[int]):
         """Test if the `coupling_name` is defined, and valid on the `sites`.
