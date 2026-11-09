@@ -730,7 +730,7 @@ class CouplingTerms(Terms):
         for i, coupling_name, j, strength in self:
             elementary_couplings = model.couplings[coupling_name].elementary_decomposition()
             for n, c in enumerate(elementary_couplings):
-                label = f'{coupling_name}#{n}_{int(i)}_{int(j)}'  # some (probably) unique label
+                label = f'{coupling_name}:{n}:{int(i)}_{int(j)}'  # some (probably) unique label
                 graph.add_elementary_two_site_coupling(i, j, coupling=c, strength=strength, label=label)
         if graph.max_range is not None:
             graph.max_range = max(graph.max_range, self.max_range())
@@ -909,7 +909,7 @@ class MultiCouplingTerms(Terms):
         for ijkl, name, strength in self:
             elementary_couplings = model.couplings[name].elementary_decomposition()
             for n, c in enumerate(elementary_couplings):
-                label = f'{name}#{n}_{"_".join(map(str, ijkl))}'  # some (probably) unique label
+                label = f'{name}:{n}:{"_".join(map(str, ijkl))}'  # some (probably) unique label
                 graph.add_elementary_multi_coupling(ijkl, c, strength, label)
 
     def remove_zeros(self, tol_zero: float = 1e-15, inplace: bool = True) -> MultiCouplingTerms:
