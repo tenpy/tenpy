@@ -2411,7 +2411,7 @@ class MPOGraph(MPSGeometry):
         """
         self.test_sanity()
         Ws = []
-        ordered_keys = [list(st.keys()) for st in self.states]  # TODO ordering??
+        ordered_keys = [sorted(st, key=_mpo_graph_state_order) for st in self.states]
         for i in range(self.L):
             G = self.graph[i]
             statesL, statesR = self.states[i : i + 2]
@@ -3907,28 +3907,22 @@ def _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, leg0, IdL_0):
 def _mpo_graph_state_order(key):
     """Key-function for sorting they `states` of an MPO Graph.
 
-    For standard TeNPy MPOs we expect keys of the form
-    ``'IdL'``, ``'IdR'``, ``(i, op_i, opstr)`` and recursively ``key + (j, op_j, opstr)``,
-    (Note that op_j can be opstr if ``j-i >= L``.)
-    For multi coupling terms keys have the form ``("left",i, op_i, opstr)``
+    We use the following order::
+
+        - 'IdL' (if it exists)
+        - 'Id' (if it exists, which appears in WI / WII evolution MPOs)
+        - any other keys, ordered alphabetically
+        - 'IdR' (if it exists)
 
     The goal is to ensure that standard TeNPy MPOs yield an upper-right W for the MPO.
     """
-    raise NotImplementedError('TODO: MPO._graph')
-    if isinstance(key, tuple):
-        if key[0] == 'left':  # left states first
-            return (-1, len(key)) + key[1:]
-        elif key[0] == 'right':  # right states afterwards
-            return (1, -len(key)) + key[1:]
-        return key
-    if isinstance(key, str):
-        if key == 'IdL':  # should be first
-            return (-2,)
-        if key == 'IdR':  # should be last
-            return (2,)
-        # fallback: compare strings
-        return (0, key)
-    return (0, str(key))
+    if key == 'IdL':
+        return 0, ''
+    if key == 'Id':
+        return 1, ''
+    if key == 'IdR':
+        return 3, ''
+    return 2, str(key)
 
 
 def _mpo_check_for_iter_LP_RP_infinite(mpo):
