@@ -311,7 +311,7 @@ def test_from_mps_covering():
             ]
         ),
     )
-    pytest.skip('TODO: the cyten SpinlessFermionSite has no charged operators, use couplings')
+    pytest.skip('TODO: the lasyten SpinlessFermionSite has no charged operators, use couplings')
     corrs = psi.term_correlation_function_right([('Cd', 1), ('C', 0)], [('Cd', 0), ('C', 1)], 0, [2, 4, 6])
     npt.assert_almost_equal(corrs, [0.0, -0.5, 0.0])
 
