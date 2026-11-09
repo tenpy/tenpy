@@ -14,6 +14,7 @@ from tenpy.models import lattice, model
 from tenpy.models.spins import SpinChain
 from tenpy.networks import mpo
 from tenpy.networks.terms import CouplingTerms, OnsiteTerms
+from tenpy.tools import asConfig
 
 spin_half = SpinSite(S=0.5, conserve=None)
 
@@ -747,9 +748,17 @@ def test_MPO_make_U(conserve, backend, approximation, bc_MPS, L=6, dt=0.01):
 
     This pure-numpy implementation is also run in the v1 tests, and thus trusted
     """
-    M = SpinChain(dict(L=L, Jx=1.0, Jy=1.0, Jz=1.0, hz=0.2, bc_MPS=bc_MPS, conserve=conserve))
-    if M.H_MPO._W[0].backend != lasy.get_backend(backend):
-        pytest.skip('Can not control model backend yet')
+    if conserve == 'best' and backend == 'no_symmetry':
+        with pytest.raises(ValueError, match='backend does not support this symmetry'):
+            model_params = asConfig(
+                dict(L=L, Jx=1.0, Jy=1.0, Jz=1.0, hz=0.2, bc_MPS=bc_MPS, conserve=conserve, symmetry_backend=backend),
+                'SpinChain',
+            )
+            model_params.touch_all()
+            M = SpinChain(model_params)
+        return  # error is expected behavior
+
+    M = SpinChain(dict(L=L, Jx=1.0, Jy=1.0, Jz=1.0, hz=0.2, bc_MPS=bc_MPS, conserve=conserve, symmetry_backend=backend))
 
     if approximation == 'II':
         with pytest.raises(NotImplementedError):
