@@ -143,19 +143,20 @@ def test_CouplingModel_basic(bc, bc_MPS, tensor_backend, conserve):
         with pytest.raises(ValueError, match='not nearest neighbor'):
             # periodic bc but finite bc_MPS leads to a long-range coupling
             M.get_H_bond()
+        # error is expected behavior
     else:
         H_bond = M.get_H_bond()
 
         with pytest.raises(ValueError, match='Incompatible legs'):
-            # calc_H_bond_from_MPO currently bugged
             H_bond_from_MPO = model.calc_H_bond_from_MPO(H_MPO)
             for h1, h2 in zip(H_bond, H_bond_from_MPO):
                 assert lasy.almost_equal(h1, h2)
+        pytest.xfail('calc_H_bond_from_MPO currently bugged')
 
 
 def test_ext_flux():
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     Lx, Ly = 3, 4
+    fermion_site = lasy.sites.SpinlessFermionSite()
     lat = lattice.Square(Lx, Ly, fermion_site, bc=['periodic', 'periodic'], bc_MPS='infinite')
     M = model.CouplingModel(lat)
     strength = 1.23
@@ -191,31 +192,51 @@ def test_ext_flux():
 
 
 def test_CouplingModel_shift(Lx=3, Ly=3, shift=1):
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     bc = ['periodic', shift]
-    spin_half_square = lattice.Square(Lx, Ly, spin_half_site, bc=bc, bc_MPS='infinite')
+    s = lasy.sites.SpinSite()
+    spin_half_square = lattice.Square(Lx, Ly, s, bc=bc, bc_MPS='infinite')
     M = model.CouplingModel(spin_half_square)
-    M.add_twosite_coupling(1.2, 0, 'Sz', 0, 'Sz', [1, 0])
-    M.add_multi_coupling(0.8, [('Sz', [0, 0], 0), ('Sz', [0, 1], 0), ('Sz', [1, 0], 0)])
+    Sz = s.get_op('Sz').as_SymmetricTensor()
+    Sz_Sz = lasy.outer(Sz, Sz, relabel1={'p': 'p0', 'p*': 'p0*'}, relabel2={'p': 'p1', 'p*': 'p1*'})
+    Sz_Sz_Sz = lasy.outer(Sz_Sz, Sz, relabel2={'p': 'p2', 'p*': 'p2*'})
+    M.define_coupling(lasy.Coupling.from_tensor(Sz_Sz, [s, s], 'Sz.Sz'), hc='Sz.Sz', permute='invariant')
+    M.define_coupling(lasy.Coupling.from_tensor(Sz_Sz_Sz, [s, s, s], 'Sz.Sz.Sz'), hc='Sz.Sz.Sz', permute='invariant')
+    M.add_two_site_coupling(1.2, 'Sz.Sz', dx=[1, 0])
+    M.add_multi_site_coupling(0.8, 'Sz.Sz.Sz', dx=[[0, 0], [0, 1], [1, 0]])
     M.test_sanity()
-    H = M.calc_H_MPO()
-    dims = [W.shape[0] for W in H._W]
-    # check translation invariance of the MPO: at least the dimensions should fit
-    # (the states are differently ordered, so the matrices differ!)
-    for i in range(1, Lx):
-        assert dims[:Ly] == dims[i * Ly : (i + 1) * Ly]
+    H = M.get_H_MPO()
+
+    # check translation invariance of the MPO
+    for y in range(Ly):
+        W = H._W[y]
+        wL_labels = W.get_leg('wL').summand_labels
+        assert 'IdL' in wL_labels
+        assert 'IdR' in wL_labels
+        assert sum(l.startswith('Sz.Sz#') for l in wL_labels) == 3
+        assert sum(l.startswith('Sz.Sz.Sz#') for l in wL_labels) == (4 if y == 0 else 5)
+        for x in range(1, Lx):
+            W_shifted = H._W[y + x * Ly]
+            wL_labels = W_shifted.get_leg('wL').summand_labels
+            assert 'IdL' in wL_labels
+            assert 'IdR' in wL_labels
+            assert sum(l.startswith('Sz.Sz#') for l in wL_labels) == 3
+            assert sum(l.startswith('Sz.Sz.Sz#') for l in wL_labels) == (4 if y == 0 else 5)
+            # comparing tensors is too annoying, since they dont have matching order of cells...
+            # -> at least compare the legs
+            assert W.get_leg('wL').is_isomorphic_to(W_shifted.get_leg('wL'))
 
 
-def test_CouplingModel_fermions():
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
-    for bc, bc_MPS in zip(['open', 'periodic'], ['finite', 'infinite']):
-        fermion_lat = lattice.Chain(5, fermion_site, bc=bc, bc_MPS=bc_MPS)
-        M = model.CouplingModel(fermion_lat)
-        M.add_twosite_coupling(1.2, 0, 'Cd', 0, 'C', 1, 'JW')
-        M.add_twosite_coupling(1.2, 0, 'Cd', 0, 'C', -1, 'JW')
-        M.test_sanity()
-        M.calc_H_MPO()
-        M.calc_H_bond()
+@pytest.mark.parametrize('bc, bc_MPS', [['open', 'finite'], ['periodic', 'infinite']])
+def test_CouplingModel_fermions(bc, bc_MPS):
+    s = lasy.sites.SpinlessFermionSite()
+    fermion_lat = lattice.Chain(5, s, bc=bc, bc_MPS=bc_MPS)
+    M = model.CouplingModel(fermion_lat)
+    M.define_coupling(lasy.models.hopping([s, s], t_right=0, name='Cd.C'), hc='C.Cd', permute='swap_hc')
+    M.add_two_site_coupling(1.2, 'Cd.C', dx=1)
+    M.add_two_site_coupling(1.2, 'Cd.C', dx=-1)
+    M.test_sanity()
+    M.get_H_MPO()
+    M.get_H_bond()
 
 
 def test_CouplingModel_explicit():
