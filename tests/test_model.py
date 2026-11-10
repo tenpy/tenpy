@@ -771,7 +771,7 @@ def test_model_plus_hc(which_site, which_ops, L=6):
         Sp_Sm = 'Cd.C'
         Sm_Sp = 'C.Cd'
         op3 = 'Cd.N.C'
-        op3hc = 'Cd.N.C'
+        op3hc = 'C.N.Cd'
     else:
         raise ValueError
 
