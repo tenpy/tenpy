@@ -13,6 +13,7 @@ TODO elaborate on the system of couplings
 import inspect
 import itertools
 import logging
+import warnings
 from abc import ABCMeta, abstractmethod
 from collections.abc import Callable, Sequence
 from typing import Literal

@@ -623,6 +623,28 @@ def test_ModelBuilder_backend(symmetry_backend, block_backend, conserve):
     assert all(site.backend == expect_backend for site in M.lattice.unit_cell)
 
 
+def test_post_init_add_warnings():
+    m = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
+    expect_msg = 'Adding terms to a ModelBuilder after initialization. This invalidates caches!'
+
+    with pytest.warns(UserWarning, match=expect_msg):
+        m.add_onsite_operator(2, 'Sz')
+
+    with pytest.warns(UserWarning, match=expect_msg):
+        m.add_two_site_coupling(3, 'Sy.Sy', dx=1, x1=3)
+
+    with pytest.warns(UserWarning, match=expect_msg):
+        m.add_multi_site_coupling(2, 'Sx.Sx', dx=[[0, 1]])
+
+    with pytest.warns(UserWarning, match=expect_msg):
+        with pytest.raises(NotImplementedError):
+            m.add_exponentially_decaying_coupling(1, 2, 'Sx.Sx')
+
+    with pytest.warns(UserWarning, match=expect_msg):
+        with pytest.raises(NotImplementedError):
+            m.add_exponentially_decaying_centered_terms(1, 2, 'Sx.Sx', 1)
+
+
 @pytest.mark.parametrize('which_model', ['MyMod', 'XXZ'])
 def test_ModelBuilder_group_sites(which_model):
     if which_model == 'MyMod':
