@@ -1015,15 +1015,16 @@ class ModelBuilder(CouplingModel):
     force_default_lattice = False
 
     def __init__(self, model_params):
-        if getattr(self, '_called_ModelBuilder_init', False):
+        if hasattr(self, '_ModelBuilder_init_done'):
             # If we ignore this, the same terms get added to self multiple times.
             # In the best case, this would just rescale the energy;
             # in the worst case we get the wrong Hamiltonian.
             raise ValueError('Called ModelBuilder.__init__(...) multiple times.')
             # To fix this problem, follow the instructions for subclassing in :doc:`/intro/model`.
+        self._ModelBuilder_init_done = False
+
         self.name = self.__class__.__name__
         self.options = model_params = asConfig(model_params, self.name)
-        self._called_ModelBuilder_init = True
         self.manually_call_init_H = getattr(self, 'manually_call_init_H', False)
         explicit_plus_hc = model_params.get('explicit_plus_hc', False, bool)
         # 1-4) initialize lattice
@@ -1038,6 +1039,14 @@ class ModelBuilder(CouplingModel):
         # finally checks for misspelled parameter names
         model_params.warn_unused()
         self.H_MPO = self.get_H_MPO()  # TODO workaround -> instead should make models use the getter!
+
+        self._ModelBuilder_init_done = True
+
+    def invalidate_caches(self):
+        if self._ModelBuilder_init_done:
+            msg = 'Adding terms to a ModelBuilder after initialization. This invalidates caches!'
+            warnings.warn(msg, UserWarning, 2)
+        super().invalidate_caches()
 
     def init_backend(self, model_params) -> lasy.TensorBackend:
         symmetry_backend = model_params.get('symmetry_backend', None)
