@@ -489,6 +489,7 @@ class CouplingModel(HamiltonianModel):
             self.add_onsite_operator(np.conj(strength), hc_op, x=x, u=u, plus_hc=False)
 
     def _add_onsite_operator_mps(self, pref: float | complex, i: int, op: str):
+        self.invalidate_caches()
         site = self.lattice.mps_sites()[i]
         site.test_op(op)
         self.onsite_terms.add_onsite_term(pref, i, op)
@@ -593,6 +594,7 @@ class CouplingModel(HamiltonianModel):
     def _add_two_site_coupling_mps(
         self, pref: float | complex, i: int, j: int, coupling_name: str, plus_hc: bool = False
     ):
+        self.invalidate_caches()
         if plus_hc:
             self._add_two_site_coupling_mps(np.conj(pref), i, j, self.coupling_hc_map[coupling_name], plus_hc=False)
 
@@ -695,6 +697,7 @@ class CouplingModel(HamiltonianModel):
     def _add_multi_coupling_mps(
         self, pref: float | complex, ijkl: Sequence[int], coupling_name: str, plus_hc: bool = False
     ):
+        self.invalidate_caches()
         assert coupling_name != 'p.x.p' or len(ijkl) == 3
         if plus_hc:
             self._add_multi_coupling_mps(np.conj(pref), ijkl, self.coupling_hc_map[coupling_name], plus_hc=False)
@@ -822,6 +825,7 @@ class CouplingModel(HamiltonianModel):
             Similar terms, but with fixed :math:`i` instead over summing over :math:`i`.
 
         """
+        self.invalidate_caches()  # TODO possibly move this elsewhere?
         raise NotImplementedError('exp_decaying not ported')  # TODO skipped for now
 
     def add_exponentially_decaying_centered_terms(
@@ -888,6 +892,7 @@ class CouplingModel(HamiltonianModel):
             Similar couplings, including a sum over :math:`i`.
 
         """
+        self.invalidate_caches()  # TODO possibly move this elsewhere?
         raise NotImplementedError('exp_decaying not ported')  # TODO skipped for now
 
     def coupling_strength_add_ext_flux(self, strength, dx, phase):
