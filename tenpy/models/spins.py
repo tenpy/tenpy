@@ -251,4 +251,4 @@ def Coupling_from_numpy_onsite(ops: list[np.ndarray], sites: list[lasy.Site], na
     for o in more:
         res = res[..., None, None] * o
     res = np.transpose(res, [*range(0, 2 * N, 2), *reversed(range(1, 2 * N, 2))])
-    return lasy.Coupling.from_dense_block(res, sites, name=name)
+    return lasy.Coupling.from_dense_block(res, sites, name=name, understood_braiding=True)
