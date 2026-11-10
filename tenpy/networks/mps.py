@@ -5675,10 +5675,8 @@ class MPS(BaseMPSExpectationValue):
             raise ValueError("can't take overlap between MPS with different bc")
         if self.finite:
             if ignore_form:
-                # Use TransferMatrix with option to ignore the form
-                TM = TransferMatrix(self, other, charge_sector=charge_sector, form=None)
-                res = TM.matvec(TM.initial_guess(1.0))  # apply transfer matrix to identity
-                return npc.trace(res, 0, 1) * self.norm * other.norm
+                # TODO: Use TransferMatrix with option to ignore the form (still uses np_conserved)
+                raise NotImplementedError('overlap with ignore_form=True is not ported to lasyten yet')
             else:
                 bra = self
                 if other is not self:
@@ -7216,6 +7214,7 @@ class MPS(BaseMPSExpectationValue):
 
         if self.finite:
             raise ValueError('Works only for infinite b.c.')
+        raise NotImplementedError('compute_K is not ported to lasyten yet')
 
         if isinstance(perm, Lattice):
             lat = perm
