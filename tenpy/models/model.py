@@ -1253,7 +1253,7 @@ def calc_H_bond_from_MPO(H_MPO: MPO, tol_zero: float = 1e-15) -> list[lasy.Tenso
         H_onsite.append(lasy.squeeze_legs(D, ['wL', 'wR']))
         B_list.append(B)
         C_list.append(C)
-        Id_list.append(Id)
+        Id_list.append(lasy.squeeze_legs(Id, ['wL', 'wR']))
 
     H_bond = []
     for j in range(H_MPO.L):
@@ -1270,6 +1270,7 @@ def calc_H_bond_from_MPO(H_MPO: MPO, tol_zero: float = 1e-15) -> list[lasy.Tenso
             relabel1={'p': 'p0', 'p*': 'p0*'},
             relabel2={'p': 'p1', 'p*': 'p1*'},
         )
+        h = lasy.planar_permute_legs(h, codomain=['p0', 'p1'], domain=['p0*', 'p1*'])
 
         # add the onsite terms
         strength_i = 1 if H_MPO.finite and i == 0 else 0.5

@@ -137,11 +137,16 @@ def test_CouplingModel_basic(bc, bc_MPS, tensor_backend, conserve):
     else:
         H_bond = M.get_H_bond()
 
-        with pytest.raises(ValueError, match='Incompatible legs'):
-            H_bond_from_MPO = model.calc_H_bond_from_MPO(H_MPO)
-            for h1, h2 in zip(H_bond, H_bond_from_MPO):
-                assert lasy.almost_equal(h1, h2)
-        pytest.xfail('calc_H_bond_from_MPO currently bugged')
+        H_bond_from_MPO = model.calc_H_bond_from_MPO(H_MPO)
+        for h1, h2 in zip(H_bond, H_bond_from_MPO):
+            if h1 is None and h2 is None:
+                pass
+            elif h1 is None:
+                assert lasy.norm(h2) < 1e-14
+            elif h2 is None:
+                assert lasy.norm(h1.to_tensor()) < 1e-14
+            else:
+                assert lasy.almost_equal(h1.to_tensor(), h2)
 
 
 def test_ext_flux():
