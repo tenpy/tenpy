@@ -458,50 +458,55 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc):
 @pytest.mark.parametrize('add_hc', [False, 'manually', 'flag'], ids=['no_hc', 'manual_hc', 'plus_hc'])
 @pytest.mark.parametrize('bc', ['finite', 'infinite'])
 def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc, L=6):
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     """test add_exponentially_decaying coupling by comparing with manual couplings"""
+
     if use_fermions:
-        s = lasyten.sites.SpinlessFermionSite(None)
-        op_i = 'Cd'
-        op_j = 'C'
-        anti_commute_sign = -1
+        s = lasy.sites.SpinlessFermionSite()
+        coupling = 'Cd.C'
+        hc_coupling = 'C.Cd'
     else:
-        s = lasyten.sites.SpinSite(None)
-        op_i = 'Sp'
-        op_j = 'Sm'
-        anti_commute_sign = +1
+        s = lasy.sites.SpinSite()
+        coupling = 'Sp.Sm'
+        hc_coupling = 'Sm.Sp'
 
     lat = lattice.Chain(L=L, site=s, bc=['open' if bc == 'finite' else 'periodic'], bc_MPS=bc)
-    m_exp = model.CouplingModel(lat)
-    m_manual = model.CouplingModel(lat)
+
+    def init_model():
+        M = model.CouplingModel(lat)
+        if use_fermions:
+            M.define_coupling(lasy.models.hopping([s, s], t_right=0, name=coupling), hc=hc_coupling, permute='swap_hc')
+        else:
+            M.define_coupling(
+                lasy.models.spin_spin_coupling([s, s], Jpm=1, name=coupling), hc=hc_coupling, permute='swap_hc'
+            )
+        return M
 
     print('standard case: no subsites')
+    m_exp = init_model()
+    m_manual = init_model()
     a = 3.0 + 0.42j
     l = 0.2
-    m_exp.add_exponentially_decaying_coupling(a, l, op_i, op_j, plus_hc=(add_hc == 'flag'))
+
+    with pytest.raises(NotImplementedError, match='exp_decaying not ported'):
+        m_exp.add_exponentially_decaying_coupling(a, l, coupling, plus_hc=(add_hc == 'flag'))
+    pytest.xfail('exp_decaying not ported')
+
+    m_exp.add_exponentially_decaying_coupling(a, l, coupling, plus_hc=(add_hc == 'flag'))
     if add_hc == 'manually':
-        # interface does not allow us to change the order of operators, so we need to manually
-        # include the sign for anti-commuting them
-        m_exp.add_exponentially_decaying_coupling(
-            anti_commute_sign * np.conj(a), np.conj(l), s.hc_ops[op_i], s.hc_ops[op_j], plus_hc=(add_hc == 'flag')
-        )
+        m_exp.add_exponentially_decaying_coupling(np.conj(a), np.conj(l), hc_coupling)
     max_range = L if bc == 'finite' else int(np.ceil(np.log(1e-10) / np.log(l)))
     for k in range(1, max_range):
-        m_manual.add_twosite_coupling(a * (l**k), 0, op_i, 0, op_j, dx=k, plus_hc=add_hc is not False)
-    assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
+        m_manual.add_two_site_coupling(a * (l**k), coupling, dx=k, plus_hc=add_hc is not False)
+    assert m_exp.get_H_MPO().is_equal(m_manual.get_H_MPO())
 
     print('non-uniform decay')
-    m_exp = model.CouplingModel(lat)
-    m_manual = model.CouplingModel(lat)
+    m_exp = init_model()
+    m_manual = init_model()
     a = 3.0 + 0.42j
     l = np.random.uniform(0.01, 0.2, size=L)
-    m_exp.add_exponentially_decaying_coupling(a, l, op_i, op_j, plus_hc=(add_hc == 'flag'))
+    m_exp.add_exponentially_decaying_coupling(a, l, coupling, plus_hc=(add_hc == 'flag'))
     if add_hc == 'manually':
-        # interface does not allow us to change the order of operators, so we need to manually
-        # include the sign for anti-commuting them
-        m_exp.add_exponentially_decaying_coupling(
-            anti_commute_sign * np.conj(a), np.conj(l), s.hc_ops[op_i], s.hc_ops[op_j]
-        )
+        m_exp.add_exponentially_decaying_coupling(np.conj(a), np.conj(l), hc_coupling)
     # use the max_range from before. since l <= .2, this can only decay faster
     for k in range(1, max_range):
         strength = a
@@ -512,22 +517,18 @@ def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc,
                 strength = strength * np.roll(l, -j)
         if np.all(strength < 1e-10):
             continue
-        m_manual.add_twosite_coupling(strength, 0, op_i, 0, op_j, dx=k, plus_hc=add_hc is not False)
-    assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
+        m_manual.add_two_site_coupling(strength, coupling, dx=k, plus_hc=add_hc is not False)
+    assert m_exp.get_H_MPO().is_equal(m_manual.get_H_MPO())
 
     print('with subsites')
-    m_exp = model.CouplingModel(lat)
-    m_manual = model.CouplingModel(lat)
+    m_exp = init_model()
+    m_manual = init_model()
     a = 3.0 + 0.42j
     l = np.random.uniform(0.01, 0.2, size=L)
     subsites = [1, 3, 5]
-    m_exp.add_exponentially_decaying_coupling(a, l, op_i, op_j, subsites, plus_hc=(add_hc == 'flag'))
+    m_exp.add_exponentially_decaying_coupling(a, l, coupling, subsites, plus_hc=(add_hc == 'flag'))
     if add_hc == 'manually':
-        # interface does not allow us to change the order of operators, so we need to manually
-        # include the sign for anti-commuting them
-        m_exp.add_exponentially_decaying_coupling(
-            anti_commute_sign * np.conj(a), np.conj(l), s.hc_ops[op_i], s.hc_ops[op_j], subsites
-        )
+        m_exp.add_exponentially_decaying_coupling(np.conj(a), np.conj(l), hc_coupling, subsites)
     # use the max_range from before. since l <= .2, this can only decay faster
     # except now we interpret it as a distance *within* subsites
     for n_i, i in enumerate(subsites):
@@ -539,29 +540,24 @@ def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc,
             strength = a
             for m in range(n_i, n_j):
                 strength *= l[subsites[m % len(subsites)]]
-            m_manual.add_coupling_term(
-                strength, i, j, op_i, op_j, plus_hc=add_hc is not False, op_string='JW' if use_fermions else 'Id'
-            )
-    assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
+            m_manual._add_two_site_coupling_mps(strength, i, j, coupling, plus_hc=add_hc is not False)
+    assert m_exp.get_H_MPO().is_equal(m_manual.get_H_MPO())
 
     print('with subsites and subsites_start')
-    m_exp = model.CouplingModel(lat)
-    m_manual = model.CouplingModel(lat)
+    m_exp = init_model()
+    m_manual = init_model()
     a = 3.0 + 0.42j
     l = np.random.uniform(0.01, 0.2, size=L)
     subsites_start = [0, 2]
     subsites = [1, 3, 5]
     m_exp.add_exponentially_decaying_coupling(
-        a, l, op_i, op_j, subsites, subsites_start=subsites_start, plus_hc=(add_hc == 'flag')
+        a, l, coupling, subsites, subsites_start=subsites_start, plus_hc=(add_hc == 'flag')
     )
     if add_hc == 'manually':
-        # interface does not allow us to change the order of operators, so we need to manually
-        # include the sign for anti-commuting them
         m_exp.add_exponentially_decaying_coupling(
-            anti_commute_sign * np.conj(a),
+            np.conj(a),
             np.conj(l),
-            s.hc_ops[op_i],
-            s.hc_ops[op_j],
+            hc_coupling,
             subsites,
             subsites_start=subsites_start,
         )
@@ -576,10 +572,8 @@ def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc,
             strength = a * l[i]
             for m in range(min_n_j, n_j):
                 strength *= l[subsites[m % len(subsites)]]
-            m_manual.add_coupling_term(
-                strength, i, j, op_i, op_j, plus_hc=add_hc is not False, op_string='JW' if use_fermions else 'Id'
-            )
-    assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
+            m_manual._add_two_site_coupling_mps(strength, i, j, coupling, plus_hc=add_hc is not False)
+    assert m_exp.get_H_MPO().is_equal(m_manual.get_H_MPO())
 
 
 class MyMod(model.ModelBuilder):

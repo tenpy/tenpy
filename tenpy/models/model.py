@@ -705,11 +705,186 @@ class CouplingModel(HamiltonianModel):
             self.multi_coupling_terms.add_multi_coupling_term(a * pref, ijkl_sorted, c)
         return
 
-    def add_exponentially_decaying_coupling(self):
-        raise NotImplementedError  # TODO skipped for now
+    def add_exponentially_decaying_coupling(
+        self,
+        strength: float | complex,
+        lambda_: ArrayLike,
+        coupling_name: str,
+        subsites: ArrayLike | None = None,
+        subsites_start: ArrayLike | None = None,
+        plus_hc: bool = False,
+    ):
+        r"""Add an exponentially decaying long-range coupling.
 
-    def add_exponentially_decaying_centered_terms(self):
-        raise NotImplementedError  # TODO skipped for now
+        .. math ::
+            \mathtt{strength} \sum_i \sum_{j > i} \lambda^{|i - j|} h_{i,j}
+
+        where the operator :math:`h_{i,j}` is given by `coupling_name` and acts on sites ``i, j``.
+        Note that the sum over :math:`i, j` is long-range, for infinite systems going beyond the MPS
+        unit cell.
+
+        This can be generalized in several ways, see `lambda_`, `subsites`, `subsites_start`, as
+        well as the notes below.
+
+        Parameters
+        ----------
+        strength : float
+            Overall prefactor.
+        lambda_ : float | 1D array
+            Decay-rate. Either a single number, applied uniformly or a sequence of length :attr:`L`.
+            See notes below for the definition of non-uniform decay rate.
+        coupling_name : str
+            Names for the coupling, see :attr:`couplings`.
+        subsites : 1D array, optional
+            Selects a subset of sites within the MPS unit cell on which the operator acts.
+            Must be sorted. By default (``None``), acts on all sites. See notes below.
+        subsites_start : 1D array, optional
+            Selects a subset of sites within the MPS unit cell where the couplings are started,
+            that is the first site ``i`` that :math:`h_{i,j}` acts on. Must be sorted.
+            By default (``None``), we use the same `subsites` for both operators.
+            If given, couplings "start" on `subsites_start` and "end" on `subsites`, and are only
+            added if ``subsites[j] > subsites_start[i]``. See notes below.
+        plus_hc : bool
+            If `True`, the hermitian conjugate of the term is added automatically.
+
+        Notes
+        -----
+        The simple form in the main docstring can be generalized in several ways.
+
+        First, we can have a non-uniform decay rate `lambda_`, which modifies the added terms to
+
+        .. math ::
+            \mathtt{strength} \sum_{i} \sum_{j > i} ( \prod_{i <= n < j} \lambda_n ) h_{i,j}
+
+        Secondly, we can generalize s.t. only a subset of sites, given by :math:`S` =`subsites`,
+        participates
+
+        .. math ::
+            \mathtt{strength} \sum_{i \in S} \sum_{j \in S, j > i} \Lambda_{i, j} h_{i,j}
+
+        For an infinite system, the sums are extensive, i.e. the sum over :math:`i` goes over all
+        infinitely many unit cells, and all `subsites` within each unit cell.
+        The prefactor is
+
+        .. math ::
+            \Lambda_{i, j} := \prod_{n \in S, i <= n < j} \lambda_n
+
+        With a uniform decay rate, this decays only with the distance *within the subsites*,
+        e.g. we get contributions of the form :math:`\lambda^k h_{S_i, S_{i + k}}`, with the
+        exponent :math:`k`, *not* :math:`|S_{i + k} - S_i|`.
+        With non-uniform decay rates, this means that only the ``lambda_[subsites]`` are used, but
+        we still require a length :attr:`L` sequence.
+
+        Lastly, in addition to `subsites`, we can specify :math:`S_\text{start}` = `subsites_start`,
+        such that :math:`i` and :math:`j` are constrained to *independent* subsets of the unit cell.
+        We then get
+
+        .. math ::
+            \mathtt{strength} \sum_{i \in S_\text{start}} \sum{j \in S, j > i} \Lambda'_{i, j} h_{i,j}
+            \\
+            \Lambda'_{i, j} := \lambda_i \prod_{n \in S, i < n < j} \lambda_n
+
+        such that the prefactor starts with a :math:`\lambda_i` from the "start" site, but then
+        collects factors only from the `subsites`, not the `subsites_start`.
+
+        Examples
+        --------
+        At least for simple enough 1D chains (or ladders), you can use
+        :func:`~tenpy.tools.fit.fit_with_sum_of_exp` to approximate a long-range function
+        with a few sum of exponentials and then add them with this function.
+
+        .. testsetup :: add_exponentially_decaying_coupling
+
+            self = tenpy.models.spins.SpinChain(dict(L=30))
+            self.manually_call_init_H = True
+
+        .. doctest :: add_exponentially_decaying_coupling
+
+            >>> def decay(x):
+            ...     return np.exp(-0.1*x) / x**2
+            >>> from tenpy.tools.fit import fit_with_sum_of_exp, sum_of_exp
+            >>> n_exp = 5
+            >>> fit_range = 50
+            >>> lam, pref = fit_with_sum_of_exp(decay, n_exp, fit_range)
+            >>> x = np.arange(1, fit_range + 1)
+            >>> print('error in fit: {0:.3e}'.format(np.sum(np.abs(decay(x) - sum_of_exp(lam, pref, x)))))
+            error in fit: 1.073e-04
+            >>> for pr, la in zip(pref, lam):
+            ...     self.add_exponentially_decaying_coupling(pr, la, 'N', 'N')
+
+        See Also
+        --------
+        add_exponentially_decaying_centered_terms
+            Similar terms, but with fixed :math:`i` instead over summing over :math:`i`.
+
+        """
+        raise NotImplementedError('exp_decaying not ported')  # TODO skipped for now
+
+    def add_exponentially_decaying_centered_terms(
+        self,
+        strength: float | complex,
+        lambda_: ArrayLike,
+        coupling_name: str,
+        i: int,
+        subsites: ArrayLike | None = None,
+        plus_hc: bool = False,
+    ):
+        r"""Add exponentially decaying terms centered around a single site. Only for finite systems.
+
+        .. math ::
+            \mathtt{strength} \sum_{j \neq i} \lambda^{|i - j|} h_{i,j}
+
+        where the operator :math:`h_{i,j}` is given by `coupling_name` and acts on sites ``i, j``.
+
+        This can be generalized in several ways, see `lambda_`, `subsites`, and the notes below.
+
+        This is similar to :meth:`add_exponentially_decaying_coupling`; the key difference is that
+        here we do *not* sum over :math:`i` and we *do* include terms where ``j < i``.
+
+        Parameters
+        ----------
+        strength : float
+            Overall prefactor.
+        lambda_ : float | 1D array
+            Decay-rate. Either a single number, applied uniformly or a sequence of length :attr:`L`.
+            See notes below for the definition of non-uniform decay rate.
+        coupling_name : str
+            Names for the coupling, see :attr:`couplings`.
+        i : int
+            The "central" site.
+        subsites : 1D array, optional
+            Selects a subset of sites within the MPS unit cell on which the operators act.
+            Must be sorted. By default (``None``), acts on all sites. See notes below.
+        plus_hc : bool
+            If `True`, the hermitian conjugate of the term is added automatically.
+
+        Notes
+        -----
+        The general form of the added terms, with non-uniform `lambda_` and non-trivial `subsites`
+        is
+
+        .. math ::
+            \mathtt{strength} \sum_{j \in \mathtt{subsites}, j \neq i} \Lambda_{i, j} h_{i,j}
+
+        where the prefactor is
+
+        .. math ::
+            \Lambda_{i, j} = \begin{cases}
+                \prod_{n \in S, j < n <= i} \lambda_n  &  \text{if } j < i
+                \\
+                \prod_{n \in S, i <= n < j} \lambda_n  &  \text{if } j > i
+            \end{cases}
+
+        i.e.~we pick up factors `\lambda_n` only from the subsites, and in particular always
+        *including* site :math:`i` and *excluding* site :math:`j`.
+
+        See Also
+        --------
+        add_exponentially_decaying_coupling
+            Similar couplings, including a sum over :math:`i`.
+
+        """
+        raise NotImplementedError('exp_decaying not ported')  # TODO skipped for now
 
     def coupling_strength_add_ext_flux(self, strength, dx, phase):
         """Add an external flux to the coupling strength.
