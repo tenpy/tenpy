@@ -10,10 +10,11 @@ import pytest
 from lasyten.models.sites import SpinSite
 from lasyten.tensors import almost_equal
 
-from tenpy.algorithms import ExactDiag
+from tenpy.algorithms import ExactDiag, dmrg
 from tenpy.models import lattice, model
 from tenpy.models.spins import Coupling_from_numpy_onsite, DipolarSpinChain, SpinChain
 from tenpy.models.xxz_chain import XXZChain2
+from tenpy.networks import MPS
 from tenpy.tools import asConfig
 
 __all__ = ['check_model_sanity', 'check_general_model']
@@ -964,87 +965,29 @@ def test_fixes_511(L=5, t=1.234, tp=2.54):
     assert lasy.almost_equal(H_full['full'], H_full['NN'] + H_full['NNN'])
 
 
-def _dense_Heisenberg(site, L, J):
-    """Reference dense Heisenberg chain Hamiltonian, built directly from the `site` operators."""
-    Sx = site.get_op('Sx').to_numpy()
-    Sy = site.get_op('Sy').to_numpy()
-    Sz = site.get_op('Sz').to_numpy()
-    Id = np.eye(site.dim)
-
-    def kron_list(ops):
-        out = np.eye(1)
-        for op in ops:
-            out = np.kron(out, op)
-        return out
-
-    H = np.zeros((site.dim**L, site.dim**L), dtype=complex)
-    for i in range(L - 1):
-        for S in (Sx, Sy, Sz):
-            ops_i = [Id] * L
-            ops_i[i] = S
-            ops_j = [Id] * L
-            ops_j[i + 1] = S
-            H += J * kron_list(ops_i) @ kron_list(ops_j)
-    return H
-
-
-def _dense_TFIM(L, J, g):
-    r"""Hard-coded reference transverse field Ising Hamiltonian, built purely with numpy
-        to independently verify CouplingModel.add_coupling.
-
-        H = -J \sum_i Sx_i Sx_{i+1} - g \sum_i Sz_i
-
-    Uses the same spin-1/2 basis convention as ``lasyten.models.sites.SpinSite(S=0.5, conserve=None)``:
-    state 0 = down (Sz=-1/2), state 1 = up (Sz=+1/2).
-    """
-    Sx = np.array([[0, 0.5], [0.5, 0]])
-    Sz = np.array([[-0.5, 0], [0, 0.5]])
-    Id = np.eye(2)
-
-    def kron_list(ops):
-        out = np.eye(1)
-        for op in ops:
-            out = np.kron(out, op)
-        return out
-
-    H = np.zeros((2**L, 2**L))
-    for i in range(L - 1):
-        ops_i = [Id] * L
-        ops_i[i] = Sx
-        ops_j = [Id] * L
-        ops_j[i + 1] = Sx
-        H -= J * kron_list(ops_i) @ kron_list(ops_j)
-    for i in range(L):
-        ops_i = [Id] * L
-        ops_i[i] = Sz
-        H -= g * kron_list(ops_i)
-    return H
-
-
-@pytest.mark.skip
 def test_fixes_consistency_check_IrregularLattice():
     # tests if the bug reported at https://tenpy.johannes-hauschild.de/viewtopic.php?t=757 is fixed.
 
-    class SpinModel_triangular_finite(tenpy.models.CouplingMPOModel):
+    class SpinModel_triangular_finite(model.ModelBuilder):
         def init_sites(self, model_params):
-            return tenpy.SpinHalfSite(conserve=None, backend=self.backend)
+            return lasy.sites.SpinSite(backend=self.backend)
 
         def init_terms(self, model_params):
-            self.add_onsite(-1, 0, 'Sz')
+            self.add_onsite_operator(-1, 'Sz')
 
         def init_lattice(self, model_params):
-            regular_lat = tenpy.models.lattice.Triangular(5, 5, self.init_sites(model_params))
-            return tenpy.IrregularLattice(regular_lat, remove=[(0, 0, 0)])
+            regular_lat = lattice.Triangular(5, 5, self.init_sites(model_params))
+            return lattice.IrregularLattice(regular_lat, remove=[(0, 0, 0)])
 
-    model = SpinModel_triangular_finite({})
+    M = SpinModel_triangular_finite({})
 
     ad_hoc_fix = False
     if ad_hoc_fix:
-        model.lattice.N_sites_per_ring = 1
+        M.lattice.N_sites_per_ring = 1
 
-    psi = tenpy.MPS.from_lat_product_state(model.lattice, [[['up']]])
+    psi = MPS.from_lat_product_state(M.lattice, [[['up']]])
     dmrg_params = dict(max_sweeps=2)
-    _ = tenpy.algorithms.dmrg.run(psi, model, dmrg_params)
+    _ = dmrg.run(psi, M, dmrg_params)
 
 
 def _compare_grids(W, grid, name):
