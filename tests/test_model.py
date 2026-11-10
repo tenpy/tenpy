@@ -798,12 +798,18 @@ def test_model_plus_hc(which_site, which_ops, L=6):
     m_explicit.add_two_site_coupling(t, Sp_Sm, dx=1, plus_hc=True)
     compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
+    # To avoid label collisions in the MPOGraph, we undo the 2-site coupling terms above,
+    # since we want to add the exact same couplings via multi coupling again
+    m_manual = init_model()
+    m_plus_hc = init_model()
+    m_explicit = init_model(explicit_plus_hc=True)
+
     print('multi coupling (2-site)')
     t2 = np.random.random(L - 1)
+    m_manual.add_multi_site_coupling(t2, Sm_Sp, dx=[+1, 0])
     m_manual.add_multi_site_coupling(t2, Sp_Sm, dx=[+1, 0])
-    m_manual.add_multi_site_coupling(t2, Sp_Sm, dx=[-1, 0])
-    m_plus_hc.add_multi_site_coupling(t2, Sp_Sm, dx=[+1, 0], plus_hc=True)
-    m_explicit.add_multi_site_coupling(t2, Sp_Sm, dx=[+1, 0], plus_hc=True)
+    m_plus_hc.add_multi_site_coupling(t2, Sm_Sp, dx=[+1, 0], plus_hc=True)
+    m_explicit.add_multi_site_coupling(t2, Sm_Sp, dx=[+1, 0], plus_hc=True)
     compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
     print('multi coupling (3-site)')
