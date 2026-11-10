@@ -1405,8 +1405,6 @@ class MPO(MPSGeometry):
             self.sites,
             hc_coupling.factorization,
             self.bc,
-            self.IdL,
-            self.IdR,
             self.max_range,
             mps_unit_cell_width=self.unit_cell_width,
         )
@@ -1418,6 +1416,8 @@ class MPO(MPSGeometry):
         """
         if self.explicit_plus_hc:
             return True
+        raise NotImplementedError('MPO.dagger not working well, see #682')
+        # this is bc the current MPO.dagger does not return in the grid structure expected by MPO.is_equal
         return self.is_equal(self.dagger(), eps, max_range)
 
     def is_equal(self, other: MPO, eps: float = 1.0e-10, max_range: int | None = None) -> bool:

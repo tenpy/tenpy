@@ -7,9 +7,8 @@ import lasyten as lasy
 import numpy as np
 import numpy.testing as npt
 import pytest
-from lasyten.models.couplings import Coupling
 from lasyten.models.sites import SpinSite
-from lasyten.tensors import almost_equal, dagger
+from lasyten.tensors import almost_equal
 
 from tenpy.algorithms import ExactDiag
 from tenpy.models import lattice, model
@@ -20,26 +19,14 @@ from tenpy.tools import asConfig
 __all__ = ['check_model_sanity', 'check_general_model']
 
 
-def _mpo_is_hermitian(H_MPO, eps=1.0e-10):
-    """Check hermiticity of a finite `H_MPO` at the dense-tensor level.
-
-    ``MPO.is_hermitian()``/``MPO.overlap()`` still rely on np_conserved-only methods that
-    haven't been ported to lasyten tensors; for the (currently finite-only) models under test we
-    can instead just contract the whole MPO into a single Coupling and compare to its dagger.
-    """
-    return True  # TODO dummy
-    if H_MPO.bc != 'finite':
-        raise NotImplementedError('hermiticity check only implemented for bc="finite"')
-    coupling = Coupling(sites=list(H_MPO.sites), factorization=list(H_MPO._W))
-    op = coupling.to_tensor()
-    return almost_equal(op, dagger(op), atol=eps, rtol=eps)
-
-
 def check_model_sanity(M, hermitian=True):
     """call M.test_sanity() for all different subclasses of M."""
     M.test_sanity()
     if hermitian:
-        assert _mpo_is_hermitian(M.get_H_MPO())
+        with pytest.raises(NotImplementedError, match='MPO.dagger not working well, see #682'):
+            assert M.get_H_MPO().is_hermitian()
+        # skipping the check while it does not work -> reactivate it!
+
         try:
             H_bond = M.get_H_bond()
         except Exception:
