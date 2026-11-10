@@ -11,8 +11,10 @@ from lasyten.models.couplings import Coupling
 from lasyten.models.sites import SpinSite
 from lasyten.tensors import almost_equal, dagger
 
+from tenpy.algorithms import ExactDiag
 from tenpy.models import lattice, model
 from tenpy.models.spins import SpinChain
+from tenpy.models.xxz_chain import XXZChain2
 from tenpy.tools import asConfig
 
 __all__ = ['check_model_sanity', 'check_general_model']
@@ -628,33 +630,39 @@ def test_ModelBuilder_backend(symmetry_backend, block_backend, conserve):
     assert all(site.backend == expect_backend for site in M.lattice.unit_cell)
 
 
-def test_CouplingMPOModel_group():
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
-    m1 = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
-    model_params = {'L': 6, 'hz': np.random.random([6]), 'bc_MPS': 'finite'}
-    m2 = XXZChain(model_params)
-    for m in [m1, m2]:
-        print('model = ', m)
-        assert m.H_MPO.max_range == 1
-        # test grouping sites
-        ED = ExactDiag.from_model(m)
-        #  ED.build_full_H_from_mpo()
-        ED.build_full_H_from_bonds()
+@pytest.mark.parametrize('which_model', ['MyMod', 'XXZ'])
+def test_ModelBuilder_group_sites(which_model):
+    if which_model == 'MyMod':
+        m = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
+    elif which_model == 'XXZ':
+        model_params = {'L': 6, 'hz': np.random.random([6]), 'bc_MPS': 'finite'}
+        m = XXZChain2(model_params)
+
+    assert m.H_MPO.max_range == 1
+    # test grouping sites
+    ED = ExactDiag.from_model(m)
+    #  ED.build_full_H_from_mpo()
+    ED.build_full_H_from_bonds()
+
+    with pytest.raises(NotImplementedError, match='site grouping not implemented'):
         m.group_sites(n=2)
-        assert m.H_MPO.max_range == 1
-        ED_gr = ExactDiag.from_model(m)
-        ED_gr.build_full_H_from_mpo()
-        H = ED.full_H.split_legs().to_ndarray()
-        Hgr = ED_gr.full_H.split_legs()
-        Hgr.idrop_labels()
-        Hgr = Hgr.split_legs().to_ndarray()
-        assert np.linalg.norm(H - Hgr) < 1.0e-14
-        ED_gr.full_H = None
-        ED_gr.build_full_H_from_bonds()
-        Hgr = ED_gr.full_H.split_legs()
-        Hgr.idrop_labels()
-        Hgr = Hgr.split_legs().to_ndarray()
-        assert np.linalg.norm(H - Hgr) < 1.0e-14
+    pytest.xfail('site grouping not implemented')
+
+    m.group_sites(n=2)
+    assert m.H_MPO.max_range == 1
+    ED_gr = ExactDiag.from_model(m)
+    ED_gr.build_full_H_from_mpo()
+    H = ED.full_H.split_legs().to_ndarray()
+    Hgr = ED_gr.full_H.split_legs()
+    Hgr.idrop_labels()
+    Hgr = Hgr.split_legs().to_ndarray()
+    assert np.linalg.norm(H - Hgr) < 1.0e-14
+    ED_gr.full_H = None
+    ED_gr.build_full_H_from_bonds()
+    Hgr = ED_gr.full_H.split_legs()
+    Hgr.idrop_labels()
+    Hgr = Hgr.split_legs().to_ndarray()
+    assert np.linalg.norm(H - Hgr) < 1.0e-14
 
 
 def test_model_H_conversion(L=6):

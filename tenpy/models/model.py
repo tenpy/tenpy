@@ -102,6 +102,10 @@ class EvolutionModel(metaclass=ABCMeta):
         """A time step as an MPO, possibly up to approximations from discretization."""
         ...
 
+    def group_sites(self, n=2, grouped_sites=None):
+        """TODO"""
+        raise NotImplementedError('site grouping not implemented')
+
 
 class RandomUnitaryEvolution(EvolutionModel):
     """TODO write docs
