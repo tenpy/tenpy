@@ -846,9 +846,8 @@ def test_model_plus_hc(which_site, which_ops, L=6):
 
 class DisorderedLatticeModel(model.ModelBuilder):
     def init_sites(self, model_params):
-        raise NotImplementedError  # TODO adapt
         conserve = model_params.get('conserve', 'parity')
-        return lasyten.sites.SpinSite(conserve, backend=self.backend)
+        return lasy.sites.SpinSite(conserve=conserve, backend=self.backend)
 
     def init_lattice(self, model_params):
         lat = super().init_lattice(model_params)
@@ -857,19 +856,31 @@ class DisorderedLatticeModel(model.ModelBuilder):
         lat.position_disorder = np.random.normal(scale=sigma, size=shape)
         return lat
 
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jz=1, name='Sz.Sz'),
+            hc='Sz.Sz',
+            permute='invariant',
+        )
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jx=1, name='Sx.Sx'),
+            hc='Sx.Sx',
+            permute='invariant',
+        )
+
     def init_terms(self, model_params):
         J = model_params.get('J', 1.0)
         for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             dist = self.lattice.distance(u1, u2, dx)
-            self.add_twosite_coupling(J / dist, u1, 'Sz', u2, 'Sz', dx)
+            self.add_two_site_coupling(J / dist, 'Sz.Sz', dx, u1, u2)
         for u1, u2, dx in self.lattice.pairs['next_nearest_neighbors']:
             dist = self.lattice.distance(u1, u2, dx)
-            self.add_twosite_coupling(J / dist, u1, 'Sx', u2, 'Sx', dx)
+            self.add_two_site_coupling(J / dist, 'Sx.Sx', dx, u1, u2)
 
 
 @pytest.mark.parametrize('bc', ['open', 'periodic'])
 def test_disordered_lattice_model(bc, J=2.0):
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     model_params = {
         'lattice': 'Kagome',
         'Lx': 2,
@@ -881,7 +892,6 @@ def test_disordered_lattice_model(bc, J=2.0):
         'J': J,
     }
     M = DisorderedLatticeModel(model_params)
-    terms = M.all_coupling_terms().to_TermList()
     for i, j, op, need_pbc in [
         ([0, 0, 0], [0, 0, 1], 'Sz', False),
         ([1, 0, 0], [0, 0, 1], 'Sz', False),
@@ -898,15 +908,15 @@ def test_disordered_lattice_model(bc, J=2.0):
             continue
         ij = np.array([i, j])
         mps_i, mps_j = M.lattice.lat2mps_idx(ij)
+        try:
+            strength = M.coupling_terms.coupling_terms[mps_i][f'{op}.{op}'][mps_j]
+        except KeyError:
+            strength = M.coupling_terms.coupling_terms[mps_j][f'{op}.{op}'][mps_i]
         pos_i, pos_j = M.lattice.position(ij)
         dist = np.linalg.norm(pos_i - pos_j)
         if need_pbc:
             dist = min(dist, np.linalg.norm(pos_i - pos_j + M.lattice.basis[1] * M.lattice.Ls[1]))
-        try:
-            idx = terms.terms.index([(op, mps_i), (op, mps_j)])
-        except ValueError:
-            idx = terms.terms.index([(op, mps_j), (op, mps_i)])
-        assert abs(terms.strength[idx] - J / dist) < 1.0e-14
+        assert abs(strength - J / dist) < 1.0e-14
 
 
 def test_fixes_511(L=6, t=1.234, tp=2.54):
