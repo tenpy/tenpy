@@ -919,19 +919,22 @@ def test_disordered_lattice_model(bc, J=2.0):
         assert abs(strength - J / dist) < 1.0e-14
 
 
-def test_fixes_511(L=6, t=1.234, tp=2.54):
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
+def test_fixes_511(L=5, t=1.234, tp=2.54):
     # https://github.com/tenpy/tenpy/issues/511
 
     class TTprimeSpinfulChain(model.ModelBuilder):
         """Spin-1/2 fermions on a 1D chain with NN hopping t and NNN hopping t'."""
 
         def init_sites(self, p):
-            raise NotImplementedError
-            # conserve total N and Sz; degenerate spin DOF
-            return lasyten.sites.SpinHalfFermionSite(cons_N=None, cons_Sz=None, backend=self.backend)
+            return lasy.sites.SpinHalfFermionSite(backend=self.backend)
 
-        # CouplingMPOModel already defaults to a Chain lattice with length p['L'].
+        def init_couplings(self, model_params):
+            site, *_ = self.lattice.unit_cell
+            self.define_coupling(
+                lasy.models.hopping([site, site], t_left=1, t_right=0, species=None, name='sum_Cd.C'),
+                hc='sum_C.Cd',
+                permute='swap_hc',
+            )  # summed over all species, i.e. Cud.Cu + Cdd.Cd
 
         def init_terms(self, p):
             t = float(p.get('t', 1.0))  # NN hopping
@@ -940,29 +943,25 @@ def test_fixes_511(L=6, t=1.234, tp=2.54):
             U = float(p.get('U', 0.0))  # onsite Hubbard U (optional)
 
             # onsite: -mu * (n_up + n_down) + U * n_up n_down
-            self.add_onsite(-mu, 0, 'Ntot')
-            if abs(U) > 0:
-                self.add_onsite(U, 0, 'NuNd')
+            self.add_onsite_operator(-mu, 'Ntot')
+            self.add_onsite_operator(U, 'NuNd')
 
             # NN hopping: -t * (c†_{iσ} c_{i+1,σ} + h.c.)
             for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
-                self.add_twosite_coupling(-t, u1, 'Cdu', u2, 'Cu', dx, plus_hc=True)  # spin ↑
-                self.add_twosite_coupling(-t, u1, 'Cdd', u2, 'Cd', dx, plus_hc=True)  # spin ↓
+                self.add_two_site_coupling(-t, 'sum_C.Cd', dx, u1, u2, plus_hc=True)
 
             # NNN hopping: -t' * (c†_{iσ} c_{i+2,σ} + h.c.)
             for u1, u2, dx in self.lattice.pairs['next_nearest_neighbors']:
-                self.add_twosite_coupling(-tp, u1, 'Cdu', u2, 'Cu', dx, plus_hc=True)
-                self.add_twosite_coupling(-tp, u1, 'Cdd', u2, 'Cd', dx, plus_hc=True)
+                self.add_two_site_coupling(-tp, 'sum_C.Cd', dx, u1, u2, plus_hc=True)
 
-    m_NN = TTprimeSpinfulChain(dict(L=L, t=t, tp=0, mu=0, bc_MPS='finite'))
-    m_NNN = TTprimeSpinfulChain(dict(L=L, t=0, tp=tp, mu=0, bc_MPS='finite'))
-    m_full = TTprimeSpinfulChain(dict(L=L, t=t, tp=tp, mu=0, bc_MPS='finite'))
+    H_full = {}
+    for key, _t, _tp in zip(['full', 'NN', 'NNN'], [t, t, 0], [tp, 0, tp]):
+        m = TTprimeSpinfulChain(dict(L=L, t=_t, tp=_tp, mu=0, bc_MPS='finite'))
+        ED = ExactDiag.from_model(m, max_size=2e7)
+        ED.build_full_H_from_mpo()
+        H_full[key] = ED.full_H
 
-    H_NN = get_numpy_Hamiltonian(m_NN)
-    H_NNN = get_numpy_Hamiltonian(m_NNN)
-    H_full = get_numpy_Hamiltonian(m_full)
-
-    assert np.allclose(H_full, H_NN + H_NNN)
+    assert lasy.almost_equal(H_full['full'], H_full['NN'] + H_full['NNN'])
 
 
 def _dense_Heisenberg(site, L, J):
