@@ -214,9 +214,25 @@ class DipolarSpinChain(ModelBuilder):
         bc_MPS = model_params.get('bc_MPS', 'finite')
         bc = 'periodic' if bc_MPS in ['infinite', 'segment'] else 'open'
         bc = model_params.get('bc', bc)
-        site = SpinSite(S=S, conserve=conserve)
+        site = lasy.sites.SpinSite(S=S, conserve=conserve)
         lattice = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
         return lattice
+
+    def init_couplings(self, model_params):
+        s, *_ = self.lattice.unit_cell
+        Sx, Sy, Sz = (s.spin_vector[:, :, k] for k in range(3))
+        Sp = Sx + 1.0j * Sy
+        Sm = Sx - 1.0j * Sy
+        self.define_coupling(
+            Coupling_from_numpy_onsite([Sp, Sm @ Sm, Sp], [s, s, s], name='Sp.SmSm.Sp'),
+            hc='Sm.SpSp.Sm',
+            permute=None,  # should not need permutations on the chain
+        )
+        self.define_coupling(
+            Coupling_from_numpy_onsite([Sp, Sm, Sm, Sp], [s, s, s, s], name='Sp.Sm.Sm.Sp'),
+            hc='Sm.Sp.Sp.Sm',
+            permute=None,
+        )
 
     def init_terms(self, model_params):
         """Add the onsite and coupling terms to the model"""
@@ -225,3 +241,14 @@ class DipolarSpinChain(ModelBuilder):
 
         self.add_multi_site_coupling(-J3, 'Sp.SmSm.Sp', dx=[[0], [1], [2]], plus_hc=True)
         self.add_multi_site_coupling(-J4, 'Sp.Sm.Sm.Sp', dx=[[0], [1], [2], [3]], plus_hc=True)
+
+
+def Coupling_from_numpy_onsite(ops: list[np.ndarray], sites: list[lasy.Site], name: str = None):
+    N = len(ops)
+    assert N == len(sites)
+    res, *more = ops
+    # build in order [p0, p0*, p1, p1*, ...], permute at the end
+    for o in more:
+        res = res[..., None, None] * o
+    res = np.transpose(res, [*range(0, 2 * N, 2), *reversed(range(1, 2 * N, 2))])
+    return lasy.Coupling.from_dense_block(res, sites, name=name)

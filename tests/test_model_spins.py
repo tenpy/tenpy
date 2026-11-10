@@ -1,4 +1,6 @@
 # Copyright (C) TeNPy Developers, Apache license
+import lasyten as lasy
+import numpy as np
 import pytest
 from test_model import check_general_model
 
@@ -24,27 +26,28 @@ def test_SpinChain():
     )
 
 
-@pytest.mark.skip('dipole conservation is not (yet) supported by the lasyten symmetry framework')
-def test_DipolarSpinChain():
-    # imports kept local (rather than module-level as in the original) since
-    # tenpy.algorithms.exact_diag still transitively imports the gutted np_conserved module;
-    # a module-level import would break collection of this whole test file even though this
-    # test itself is skipped.
-    import numpy as np
+@pytest.mark.parametrize('conserve', ['dipole', 'Sz', 'parity', None])
+def test_DipolarSpinChain(conserve):
 
-    from tenpy.algorithms.exact_diag import ExactDiag
+    if conserve == 'dipole':
+        with pytest.raises(ValueError, match='Invalid `conserve`'):
+            _ = lasy.sites.SpinSite(conserve='dipole')
+        pytest.xfail('Dipole symmetry not ported yet')
 
     # check dipolar charges on Chain for one specific case
     L = 6  # use size small enough for ED
-    model = spins.DipolarSpinChain(dict(S=1, J4=1, conserve='dipole', L=L))
-    expect_2Sz = np.array([-2, 0, 2])
-    for i, s in enumerate(model.lattice.mps_sites()):
-        expect_dipole = i * expect_2Sz
-        expect_charges = np.array([expect_2Sz, expect_dipole]).T
-        assert np.all(s.leg.charges == expect_charges)
-    ED = ExactDiag.from_model(model)
-    ED.build_full_H_from_mpo()
-    full_H_qtotal = ED.full_H.qtotal
-    assert np.allclose(full_H_qtotal, [0, 0])
-    # check general properties for many cases
-    check_general_model(spins.DipolarSpinChain, {}, {'J4': [0, 1], 'conserve': ['dipole', 'Sz', None]})
+    S_tot = 1
+    model = spins.DipolarSpinChain(dict(S=S_tot, J4=1, conserve=conserve, L=L))
+    Sz = np.array([-1, 0, 1])
+    for x, s in enumerate(model.lattice.mps_sites()):
+        if conserve == 'dipole':
+            expect_sectors = np.array([2 * Sz, x * 2 * Sz])
+        elif conserve == 'Sz':
+            expect_sectors = 2 * Sz[:, None]
+        elif conserve == 'parity':
+            expect_sectors = (Sz + S_tot)[:, None] % 2
+        elif conserve is None:
+            expect_sectors = np.zeros((3, 1))
+        assert np.array_equal(s.leg.sectors_of_basis, expect_sectors)
+
+    check_general_model(spins.DipolarSpinChain, {'conserve': conserve}, {'J4': [0, 1]})
