@@ -1,0 +1,3 @@
+- :class:`~tenpy.models.pxp.PXPChain` no longer allows ``conserve='parity'`` (or ``'Sz'``).
+  The PXP Hamiltonian is charge-odd under :math:`\prod_i Z_i` and does not conserve Sz parity;
+  ``conserve='best'`` now maps to ``None``. See :issue:`749`.

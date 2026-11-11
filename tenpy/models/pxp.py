@@ -27,13 +27,21 @@ class PXPChain(CouplingMPOModel):
     experiment of :doi:`10.1038/nature24622`, which found long oscillations now attributed to
     quantum many-body scars in the PXP model.
 
+    .. note ::
+
+        This Hamiltonian does **not** conserve :math:`S^z` or its parity: each bulk term
+        contains a single :math:`X` and thus flips one spin.  In particular,
+        :math:`C=\prod_i Z_i` *anticommutes* with :math:`H` (spectral mirroring
+        :math:`E\leftrightarrow -E`), so ``conserve='parity'`` must not be used.
+
     Options
     -------
     .. cfg:config :: PXPChain
         :include: CouplingMPOModel
 
-        conserve : 'best' | 'parity' | None
-            What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
+        conserve : 'best' | None
+            No charge conservation is possible for this model; ``'best'`` maps to ``None``.
+            ``'parity'`` and ``'Sz'`` raise :exc:`ValueError`.
         J, J_boundary : float | array
             Couplings as defined for the Hamiltonian above.
     """
@@ -45,8 +53,15 @@ class PXPChain(CouplingMPOModel):
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'best', None)
         if conserve == 'best':
-            conserve = 'parity'
-        assert conserve != 'Sz'
+            conserve = None
+            self.logger.info('%s: set conserve to %s', self.name, conserve)
+        if conserve not in [None, 'None']:
+            model_params.unused.clear()  # aborting init; avoid unused-option warnings
+            raise ValueError(
+                'PXPChain does not conserve Sz or Sz-parity '
+                '(each PXP term flips one spin; prod_i Z_i anticommutes with H). '
+                'Use conserve=None.'
+            )
         s = SpinHalfSite(conserve=conserve)
         s.add_op('X', s.get_op('Sigmax'), hc='X')  # X is already defined under other name
         # but P is not, so we add it (as projector onto the state 0, i.e. the up spin).
