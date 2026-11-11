@@ -58,9 +58,9 @@ class PXPChain(CouplingMPOModel):
         if conserve not in [None, 'None']:
             model_params.unused.clear()  # aborting init; avoid unused-option warnings
             raise ValueError(
-                "PXPChain does not conserve Sz or Sz-parity "
-                "(each PXP term flips one spin; prod_i Z_i anticommutes with H). "
-                "Use conserve=None."
+                'PXPChain does not conserve Sz or Sz-parity '
+                '(each PXP term flips one spin; prod_i Z_i anticommutes with H). '
+                'Use conserve=None.'
             )
         s = SpinHalfSite(conserve=conserve)
         s.add_op('X', s.get_op('Sigmax'), hc='X')  # X is already defined under other name
