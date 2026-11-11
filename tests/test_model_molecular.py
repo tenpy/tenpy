@@ -7,7 +7,7 @@ import scipy as sp
 from test_model import check_general_model
 
 from tenpy.models.molecular import MolecularModel
-from tenpy.tools.params import Config
+from tenpy.tools.params import Config, asConfig
 
 
 class MolecularModelTest(MolecularModel):
@@ -106,10 +106,8 @@ def test_MolecularModel(conserve_N, conserve_S, norb):
     }
 
     with pytest.raises(NotImplementedError):
-        from tenpy.tools import asConfig
-
         model_params = asConfig(model_params, 'MolecularModel')
-        model_params.touch(*model_params.keys())
+        model_params.touch_all()
         _ = MolecularModel(model_params)
     pytest.xfail()
 

@@ -372,6 +372,32 @@ class Config(MutableMapping):
         for key in keys:
             self.unused.discard(key)  # (does nothing if key not in set)
 
+    def touch_all(
+        self, subconfigs: Sequence[str] | dict[str, Sequence[str]] | dict[str, dict[str, Sequence[str]]] = None
+    ):
+        """Mark all keys as read out to suppress warnings about those keys being unused.
+
+        Parameters
+        ----------
+        subconfigs : str | nested dicts of str
+            Specifies which subconfigs to recurse into.
+            If ``None`` (default), dont look at any subconfigs.
+            If a non-dict sequence (e.g. list), recurively :meth:`touch_all` for all named subconfigs.
+            If a dict, do multi-level recursion, i.e. do ``self.subconfig(k).touch_all(v)``
+            for ``k, v in subconfigs.items()``
+
+        """
+        for key in self.keys():
+            self.unused.discard(key)
+        if subconfigs is None:
+            pass
+        elif isinstance(subconfigs, dict):
+            for key, value in subconfigs.items():
+                self.subconfig(key).touch_all(value)
+        else:
+            for key in subconfigs:
+                self.subconfig(key).touch_all()
+
     def log(self, option, action='Option', use_default=False):
         """Print out `option` if verbosity and other conditions are met.
 
@@ -479,7 +505,7 @@ class Config(MutableMapping):
         return key in self.keys() and self.options[key] is not None and np.any(np.array(self.options[key])) != 0
 
 
-def asConfig(config, name):
+def asConfig(config, name, touch_all: bool = False):
     """Convert a dict-like `config` to a :class:`Config`.
 
     Parameters
@@ -489,6 +515,9 @@ def asConfig(config, name):
         Otherwise, create a :class:`Config` from it and return that.
     name : str
         Name to be used for the :class:`Config`.
+    touch_all : bool
+        Optionally, all options are touched, avoiding unused warnings on cleanup.
+        Recurses into subconfigs. If `config` already was a :class:`Config`, create a copy first
 
     Returns
     -------
@@ -496,9 +525,15 @@ def asConfig(config, name):
         Either directly `config` or ``Config(config, name)``.
 
     """
-    if isinstance(config, Config):
-        return config
-    return Config(config, name)
+    if not isinstance(config, Config):
+        config = Config(config, name)
+    elif touch_all:
+        config = config.copy(share_unused=False)
+
+    if touch_all:
+        config.touch_all(recursive=True)
+
+    return config
 
 
 def _yaml_eval_constructor(loader, node):

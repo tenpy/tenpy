@@ -9,6 +9,7 @@ from tenpy.models.fermions_spinless import FermionModel
 from tenpy.models.hubbard import FermiHubbardModel
 from tenpy.models.mixed_xk import HubbardMixedXKSquare, SpinlessMixedXKSquare
 from tenpy.networks.mps import MPS
+from tenpy.tools import asConfig
 
 
 @pytest.mark.parametrize('model_class', [SpinlessMixedXKSquare, HubbardMixedXKSquare])
@@ -42,11 +43,8 @@ def test_mixed_spinless():
     psi = MPS.from_lat_product_state(M.lattice, product_state)
 
     with pytest.raises(lasy.SymmetryError, match='Legs can not be permuted automatically'):
-        from tenpy.tools import asConfig
-
-        dmrg_params = asConfig(dmrg_params, 'TwoSiteDMRGEngine')
-        dmrg_params.touch(*dmrg_params.keys())  # to avoid warnings...
-        dmrg_params.subconfig('trunc_params').touch('chi_max', 'svd_min')
+        dmrg_params = asConfig(dmrg_params, 'DMRG')
+        dmrg_params.touch_all(subconfigs='trunc_params')
         info = dmrg.run(psi, M, dmrg_params, resume_data={'init_env_data': dict(start_env_sites=0)})
     pytest.xfail('fermionic DMRG')
 

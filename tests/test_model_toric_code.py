@@ -6,6 +6,7 @@ from test_model import check_general_model
 from tenpy.algorithms import dmrg
 from tenpy.models.toric_code import ToricCode
 from tenpy.networks.mps import MPS
+from tenpy.tools import asConfig
 
 
 @pytest.mark.slow
@@ -35,11 +36,8 @@ def test_ToricCode(Lx=1, Ly=2):
     }
 
     with pytest.raises(NotImplementedError, match='Mixer is not ported yet.'):
-        from tenpy.tools import asConfig
-
         dmrg_params = asConfig(dmrg_params, 'DMRG')
-        dmrg_params.touch(*dmrg_params.keys())
-        dmrg_params.subconfig('trunc_params').touch('chi_max', 'svd_min')
+        dmrg_params.touch_all(subconfigs='trunc_params')
         result = dmrg.run(psi, M, dmrg_params, resume_data={'init_env_data': dict(start_env_sites=0)})
     pytest.xfail('Mixer not ported yet')
 

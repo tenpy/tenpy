@@ -611,7 +611,7 @@ def test_ModelBuilder_backend(symmetry_backend, block_backend, conserve):
 
     if not expect_backend.supports_symmetry(conserve_symmetry):
         model_params = asConfig(model_params, 'SpinChain')
-        model_params.touch(*model_params.keys())  # to suppress warnings on __del__
+        model_params.touch_all()  # to suppress warnings on __del__
         with pytest.raises(ValueError, match='backend does not support this symmetry'):
             M = SpinChain(model_params)
         return  # error is expected behavior
