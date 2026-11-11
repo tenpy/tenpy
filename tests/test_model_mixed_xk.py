@@ -44,7 +44,7 @@ def test_mixed_spinless():
 
     with pytest.raises(lasy.SymmetryError, match='Legs can not be permuted automatically'):
         dmrg_params = asConfig(dmrg_params, 'DMRG')
-        dmrg_params.touch_all(subconfigs='trunc_params')
+        dmrg_params.touch_all(subconfigs=['trunc_params'])
         info = dmrg.run(psi, M, dmrg_params, resume_data={'init_env_data': dict(start_env_sites=0)})
     pytest.xfail('fermionic DMRG')
 

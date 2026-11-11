@@ -9,7 +9,7 @@ import numbers
 import os
 import pprint
 import warnings
-from collections.abc import MutableMapping
+from collections.abc import MutableMapping, Sequence
 
 import numpy
 import numpy as np

@@ -37,7 +37,7 @@ def test_ToricCode(Lx=1, Ly=2):
 
     with pytest.raises(NotImplementedError, match='Mixer is not ported yet.'):
         dmrg_params = asConfig(dmrg_params, 'DMRG')
-        dmrg_params.touch_all(subconfigs='trunc_params')
+        dmrg_params.touch_all(subconfigs=['trunc_params'])
         result = dmrg.run(psi, M, dmrg_params, resume_data={'init_env_data': dict(start_env_sites=0)})
     pytest.xfail('Mixer not ported yet')
 
