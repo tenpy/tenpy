@@ -244,7 +244,7 @@ def test_dmrg_heisenberg_vs_exact(combine, n, conserve, tensor_backend, L=8):
 
     # verify we initialized with the right symmetry
     if conserve == 'SU2':
-        assert repr(site.symmetry) == 'Symmetry([SUNSymmetry(N=2)])'
+        assert isinstance(site.symmetry.factors[0], lasy.SUN) and site.symmetry.factors[0].N == 2
     elif conserve == 'Sz':
         assert site.symmetry.is_equivalent_to(lasy.U1())
     elif conserve is None:
