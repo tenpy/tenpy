@@ -7517,7 +7517,7 @@ class MPS(BaseMPSExpectationValue):
             # project into non-degenerate subspace, reducing the bond dimensions!
             if chi < chi_old * 0.9:
                 logger.warning('canonical_form_infinite: project to significantly smaller chi')
-            Y = _apply_mask_to_domain_leg(Y, mask, 'vR')
+            Y = lasy.planar_contract_mask(Y, mask.hc.T, 'vR', 'vR*', relabel2={'vL*': 'vR'})
             W = lasy.tensors.apply_mask_DiagonalTensor(W, mask)
         norm = chi / lasy.trace(W).to_numpy()
         W = W * norm
@@ -7567,7 +7567,7 @@ class MPS(BaseMPSExpectationValue):
             # project into non-degenerate subspace, reducing the bond dimensions!
             if chi < chi_old * 0.9:
                 logger.warning('canonical_form_infinite: project to significantly smaller chi')
-            Y = _apply_mask_to_domain_leg(Y, mask, 'vR')
+            Y = lasy.planar_contract_mask(Y, mask.hc.T, 'vR', 'vR*', relabel2={'vL*': 'vR'})
             S2 = lasy.tensors.apply_mask_DiagonalTensor(S2, mask)
             s_norm = np.sqrt(lasy.trace(S2).to_numpy())
         S = lasy.sqrt(S2) / s_norm
@@ -9458,17 +9458,6 @@ def _normalize_sector(charge_sector, symmetry: lasy.Symmetry) -> lasy.Sector:
     if not valid:
         raise ValueError(f'invalid charge_sector {charge_sector!r}')
     return symmetry.trivial_sector
-
-
-def _apply_mask_to_domain_leg(T: lasy.SymmetricTensor, mask: lasy.Mask, leg: str) -> lasy.SymmetricTensor:
-    """Project the leg `leg` of `T`, which is in the *domain*, with the `mask` of the (larger) space of that leg.
-
-    :func:`~lasyten.apply_mask` does not accept this combination of legs: the domain leg of `T` is the dual
-    of the ``mask.large_leg``. Contracting with the adjoint mask does the job and keeps the label `leg`.
-    """
-    mask = mask.copy()
-    mask.set_labels([leg + '*', '_'])  # codomain label contracts with the domain leg `leg` of `T`
-    return lasy.compose(T, mask.hc)
 
 
 def _project_onto_single_summand(B: lasy.SymmetricTensor, leg: str) -> lasy.SymmetricTensor:
