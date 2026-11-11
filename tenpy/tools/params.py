@@ -391,6 +391,8 @@ class Config(MutableMapping):
             self.unused.discard(key)
         if subconfigs is None:
             pass
+        elif isinstance(subconfigs, str):
+            self.subconfig(subconfigs).touch_all()
         elif isinstance(subconfigs, dict):
             for key, value in subconfigs.items():
                 self.subconfig(key).touch_all(value)
