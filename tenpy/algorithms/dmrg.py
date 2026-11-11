@@ -40,7 +40,7 @@ import warnings
 import lasyten as lasy
 import numpy as np
 
-from ..networks.mps import MPS_TOTAL_CHARGE_LABEL
+from ..networks.mps import MPS_TOTAL_CHARGE_LABEL, _public_labels_are
 from ..tools import TruncationError, asConfig, memory_usage
 from . import mps_common
 from .mps_common import EffectiveH, IterativeSweeps, OneSiteH, TwoSiteH
@@ -741,7 +741,7 @@ class DMRGEngine(IterativeSweeps):
             expect_labels = ['(vL.p0)', 'vR']
         else:
             expect_labels = ['vL', '(p0.vR)']
-        assert theta_guess.labels_are(*expect_labels, planar=True)
+        assert _public_labels_are(theta_guess, expect_labels, planar=True)
 
         diag_method = self.diag_method
 
