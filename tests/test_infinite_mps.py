@@ -90,6 +90,26 @@ def test_canonical_form_infinite(kind, seed, monkeypatch):
         npt.assert_allclose(S0, S1, atol=1e-7)
 
 
+@pytest.mark.parametrize('kind', ['none', 'Sz', 'SU2'])
+@pytest.mark.parametrize('L', [3, 4])
+def test_canonical_form_infinite_unit_cell_width(kind, L):
+    # regression test: the sweep over the bonds of the unit cell failed for more than two sites
+    np.random.seed(L)
+    site = _spin_sites(kind)
+    sym = site.leg.symmetry
+    if kind == 'SU2':
+        V = _virtual_space(sym, [(1, 2), (3, 1)])
+        psi = mps.MPS.from_desired_virtual_spaces(
+            [site] * L, [V] * L, bc='infinite', total_charge=sym.trivial_sector, unit_cell_width=L
+        )
+    else:
+        psi = mps.MPS.from_desired_bond_dimension(
+            [site] * L, 8, bc='infinite', total_charge=sym.trivial_sector, unit_cell_width=L
+        )
+    psi.test_sanity()
+    assert np.max(np.abs(psi.norm_test())) < 1e-12
+
+
 def test_canonical_form_infinite_singular_values_normalized():
     psi = _random_mps('SU2', 3)
     for i in range(psi.L):

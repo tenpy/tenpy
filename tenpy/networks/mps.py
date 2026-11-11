@@ -6151,8 +6151,11 @@ class MPS(BaseMPSExpectationValue):
         # phase 2: sweep from right to left; find other right eigenvectors and make them diagonal
         for j1 in range(i1 - 1, i1 - L, -1):
             B1 = self.get_B(j1, 'B')
-            # (transpose: the diagonal `Wr` has its leg in the codomain, while the RP's `vL` is in the domain)
-            RP = Wr.T.copy().set_labels(['vL*', 'vL']).as_SymmetricTensor()
+            # The diagonal `Wr` has its legs in the codomain and domain. Depending on whether the bond space is
+            # dual or not, we need `Wr` or its transpose, such that the RP's `vL` can be contracted with B1's `vR`.
+            RP = Wr.copy().set_labels(['vL*', 'vL']).as_SymmetricTensor()
+            if RP.get_leg('vL') != B1.get_leg('vR').dual:
+                RP = Wr.T.copy().set_labels(['vL*', 'vL']).as_SymmetricTensor()
             Gr = mps_contraction_diagram_operations['TM @ RP2'].evaluate(dict(RP=RP, ket=B1, bra=B1.hc))
             Wr, Kl, Kr = self._canonical_form_correct_right(j1, Gr)
             Wr_list[j1 % L] = Wr
