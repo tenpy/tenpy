@@ -143,10 +143,10 @@ class FermiHubbardModel(ModelBuilder):
     .. cfg:config :: FermiHubbardModel
         :include: ModelBuilder
 
-        cons_N : {'N' | 'parity' | None}
+        conserve_N : {'N' | 'parity' | None}
             Whether particle number is conserved,
             see :class:`~lasyten.sites.SpinHalfFermionSite` for details.
-        cons_Sz : {'SU2' | 'Sz' | 'parity' | None}
+        conserve_S : {'SU2' | 'Sz' | 'parity' | None}
             Whether spin is conserved,
             see :class:`~lasyten.sites.SpinHalfFermionSite` for details.
         t, U, mu : float | array
@@ -160,13 +160,14 @@ class FermiHubbardModel(ModelBuilder):
 
     """
 
-    cons_N: Literal['N', 'parity', None]
-    cons_S: Literal['SU2', 'Sz', 'parity', None]
+    conserve_N: Literal['N', 'parity', None]
+    conserve_S: Literal['SU2', 'Sz', 'parity', None]
 
     def init_sites(self, model_params):
-        self.cons_N = cons_N = model_params.get('cons_N', 'N', str)
-        self.cons_S = cons_S = model_params.get('cons_S', 'SU2', str)
-        return lasy.sites.SpinHalfFermionSite(conserve_N=cons_N, conserve_S=cons_S, backend=self.backend)
+        self.conserve_N = conserve_N = model_params.get('conserve_N', 'N', str)
+        self.conserve_S = conserve_S = model_params.get('conserve_S', 'SU2', str)
+        model_params.deprecated_ignore('cons_N', 'cons_Sz')
+        return lasy.sites.SpinHalfFermionSite(conserve_N=conserve_N, conserve_S=conserve_S, backend=self.backend)
 
     def init_couplings(self, model_params):
         site, *_ = self.lattice.unit_cell
@@ -237,9 +238,9 @@ class FermiHubbardModel2(ModelBuilder):
 
     def init_sites(self, model_params):
         raise NotImplementedError('spin_half_species not ported')
-        cons_N = model_params.get('cons_N', 'N', str)
-        cons_Sz = model_params.get('cons_Sz', 'Sz', str)
-        return spin_half_species(FermionSite, cons_N=cons_N, cons_Sz=cons_Sz)
+        conserve_N = model_params.get('conserve_N', 'N', str)
+        conserve_S = model_params.get('conserve_S', 'Sz', str)
+        return spin_half_species(FermionSite, conserve_N=conserve_N, conserve_S=conserve_S)
         # special syntax: returns tuple (sites, species_names) to cause
         # CouplingMPOModel.init_lattice to initialize a MultiSpeciesLattice
         # based on the lattice specified in the model parameters

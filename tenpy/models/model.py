@@ -25,7 +25,7 @@ from numpy.typing import ArrayLike
 from ..networks import MPO, MPOGraph
 from ..networks.mpo import partition_W
 from ..networks.terms import CouplingTerms, ExponentiallyDecayingTerms, MultiCouplingTerms, OnsiteTerms, Terms
-from ..tools import asConfig, perm_sign, to_array
+from ..tools import Config, asConfig, perm_sign, to_array
 from .lattice import HelicalLattice, IrregularLattice, Lattice, MultiSpeciesLattice, get_lattice
 
 __all__ = [
@@ -1049,7 +1049,7 @@ class ModelBuilder(CouplingModel):
             warnings.warn(msg, UserWarning, 2)
         super().invalidate_caches()
 
-    def init_backend(self, model_params) -> lasy.TensorBackend:
+    def init_backend(self, model_params: Config) -> lasy.TensorBackend:
         symmetry_backend = model_params.get('symmetry_backend', None)
         block_backend = model_params.get('block_backend', 'numpy')
         if symmetry_backend is None:
@@ -1060,7 +1060,7 @@ class ModelBuilder(CouplingModel):
             symmetry_backend = _lat.symmetry
         return lasy.get_backend(symmetry_backend, block_backend)
 
-    def init_couplings(self, model_params):
+    def init_couplings(self, model_params: Config):
         """Initialize all couplings for the given model.
 
         This function should define the couplings to be used in the model using :meth:`define_coupling`.
@@ -1071,7 +1071,7 @@ class ModelBuilder(CouplingModel):
         """
         pass  # by default, do not define any couplings
 
-    def init_lattice(self, model_params):
+    def init_lattice(self, model_params: Config):
         """Initialize a lattice for the given model parameters.
 
         This function reads out the model parameter `lattice`.
@@ -1188,7 +1188,7 @@ class ModelBuilder(CouplingModel):
             assert isinstance(check_lat, DefaultLattice), 'model sets force_default_lattice'
         return lat
 
-    def init_sites(self, model_params) -> lasy.Site | Sequence[lasy.Site]:
+    def init_sites(self, model_params: Config) -> lasy.Site | Sequence[lasy.Site]:
         """Define the local Hilbert space and operators; needs to be implemented in subclasses.
 
         This function gets called by :meth:`init_lattice` to get the
@@ -1223,7 +1223,7 @@ class ModelBuilder(CouplingModel):
         """
         raise NotImplementedError('Subclasses should implement `init_sites`')
 
-    def init_terms(self, model_params):
+    def init_terms(self, model_params: Config):
         """Add the onsite and coupling terms to the model; subclasses should implement this."""
         pass  # Do nothing. This allows to super().init_terms(model_params) in subclasses.
 

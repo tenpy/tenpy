@@ -66,10 +66,10 @@ class MolecularModelTest(MolecularModel):
             )
 
 
-@pytest.mark.parametrize('cons_N', ['N', 'parity'])
-@pytest.mark.parametrize('cons_Sz', ['Sz', 'parity', None])
+@pytest.mark.parametrize('conserve_N', ['N', 'parity'])
+@pytest.mark.parametrize('conserve_S', ['Sz', 'parity', None])
 @pytest.mark.parametrize('norb', [3, 4])
-def test_MolecularModel(cons_N, cons_Sz, norb):
+def test_MolecularModel(conserve_N, conserve_S, norb):
     rng = np.random.default_rng()
 
     # generate a random one-body tensor
@@ -98,8 +98,8 @@ def test_MolecularModel(cons_N, cons_Sz, norb):
 
     # check the model sanity
     model_params = {
-        'cons_N': cons_N,
-        'cons_Sz': cons_Sz,
+        'conserve_N': conserve_N,
+        'conserve_S': conserve_S,
         'one_body_tensor': one_body_tensor,
         'two_body_tensor': two_body_tensor,
         'constant': constant,

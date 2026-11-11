@@ -39,10 +39,10 @@ class tJModel(ModelBuilder):
     .. cfg:config :: tJModel
         :include: ModelBuilder
 
-        cons_N : {'N' | 'parity' | None}
+        conserve_N : {'N' | 'parity' | None}
             Whether particle number is conserved,
             see :class:`lasyten.sites.SpinHalfHoleSite` for details.
-        cons_Sz : {'Sz' | 'parity' | None}
+        conserve_S : {'Sz' | 'parity' | None}
             Whether spin is conserved,
             see :class:`lasyten.sites.SpinHalfHoleSite` for details.
         t, J: float | array
@@ -56,9 +56,10 @@ class tJModel(ModelBuilder):
         raise NotImplementedError('Need to implement SpinHalfHoleSite in lasy')
 
     def init_sites(self, model_params):
-        cons_N = model_params.get('cons_N', 'N', str)
-        cons_Sz = model_params.get('cons_Sz', 'Sz', str)
-        site = SpinHalfHoleSite(cons_N=cons_N, cons_Sz=cons_Sz, backend=self.backend)
+        conserve_N = model_params.get('conserve_N', 'N', str)
+        conserve_S = model_params.get('conserve_S', 'Sz', str)
+        model_params.deprecated_ignore('cons_N', 'cons_Sz')
+        site = SpinHalfHoleSite(conserve_N=conserve_N, conserve_S=conserve_S, backend=self.backend)
         return site
 
     def init_terms(self, model_params):

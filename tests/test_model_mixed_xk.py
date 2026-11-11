@@ -85,8 +85,8 @@ def test_mixed_spinless():
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize('cons_S', ['SU2', 'Sz'])
-def test_mixed_hubbard(cons_S):
+@pytest.mark.parametrize('conserve_S', ['SU2', 'Sz'])
+def test_mixed_hubbard(conserve_S):
     """
     compare the Hubbard model on a small square lattice in in real and mixed space
     """
@@ -95,7 +95,7 @@ def test_mixed_hubbard(cons_S):
     chimax = 100
     # real space
     model_params = dict(
-        t=t, U=U, lattice='Square', Lx=Lx, Ly=Ly, bc_x='open', bc_y='cylinder', bc_MPS='finite', cons_S=cons_S
+        t=t, U=U, lattice='Square', Lx=Lx, Ly=Ly, bc_x='open', bc_y='cylinder', bc_MPS='finite', conserve_S=conserve_S
     )
     M = FermiHubbardModel(model_params)
 
@@ -106,7 +106,7 @@ def test_mixed_hubbard(cons_S):
         'trunc_params': {'chi_max': chimax, 'svd_min': 1.0e-10},
     }
 
-    if cons_S == 'SU2':
+    if conserve_S == 'SU2':
         site, *_ = M.lattice.unit_cell
         with pytest.raises(AssertionError, match='can only construct product states for Abelian symmetries'):
             psi = MPS.from_singlets(site, L=Lx * Ly, pairs=[(0, 1), (2, 3), (4, 5)])

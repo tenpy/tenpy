@@ -43,10 +43,10 @@ class MolecularModel(ModelBuilder):
     .. cfg:config :: MolecularModel
         :include: ModelBuilder
 
-        cons_N : {'N' | 'parity'}
+        conserve_N : {'N' | 'parity'}
             Whether particle number is conserved,
             see :class:`~lasyten.sites.SpinHalfFermionSite` for details.
-        cons_S : {'SU2' | 'Sz' | 'parity' | None}
+        conserve_S : {'SU2' | 'Sz' | 'parity' | None}
             Whether spin is conserved,
             see :class:`~lasyten.sites.SpinHalfFermionSite` for details.
         one_body_tensor : array
@@ -68,10 +68,11 @@ class MolecularModel(ModelBuilder):
 
     def init_sites(self, params: Config):
         """Initialize sites."""
-        cons_N = params.get('cons_N', 'N')
-        cons_Sz = params.get('cons_Sz', 'Sz')
-        self._check_fermion_conserve(cons_N)
-        return lasy.sites.SpinHalfFermionSite(conserve_N=cons_N, conserve_S=cons_Sz, backend=self.backend)
+        conserve_N = params.get('conserve_N', 'N')
+        conserve_S = params.get('conserve_S', 'Sz')
+        params.deprecated_ignore('cons_N', 'cons_Sz')
+        self._check_fermion_conserve(conserve_N)
+        return lasy.sites.SpinHalfFermionSite(conserve_N=conserve_N, conserve_S=conserve_S, backend=self.backend)
 
     def init_lattice(self, params: Config) -> Lattice:
         """Initialize lattice."""
