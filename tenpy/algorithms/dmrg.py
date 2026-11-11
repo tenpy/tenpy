@@ -619,7 +619,7 @@ class DMRGEngine(IterativeSweeps):
             j = 0
             A = psi.get_B(j, form='A')
             th = psi.get_B(j, form='Th')
-            th = lasy.permute_legs(th, codomain=['vL'])
+            th = lasy.planar_permute_legs(th, codomain=['vL'])
             U, S, V = lasy.svd(th, new_labels=['vL', 'vR'])
             S = S / lasy.norm(S)
             psi.set_SL(j, S)
@@ -642,7 +642,7 @@ class DMRGEngine(IterativeSweeps):
             j = psi.L - 1
             B = psi.get_B(j, form='B')
             th = psi.get_B(j, form='Th')
-            th = lasy.permute_legs(th, domain=['vR'])
+            th = lasy.planar_permute_legs(th, domain=['vR'])
             U, S, V = lasy.svd(th, new_labels=['vL', 'vR'])
             S = S / lasy.norm(S)
             psi.set_SR(j, S)
@@ -1083,11 +1083,11 @@ class SingleSiteDMRGEngine(DMRGEngine):
             S_a = S
             # absorb VH/U into S
             if move_right:
-                S = lasy.tdot(S, VH, 'vR', 'vL')
+                S = lasy.planar_contraction(S, VH, 'vR', 'vL')
                 VH = next_B
                 U.ireplace_label('(vL.p0)', '(vL.p)')
             else:
-                S = lasy.tensordot(U, S, 'vR', 'vL')
+                S = lasy.planar_contraction(U, S, 'vR', 'vL')
                 U = next_A
                 VH.ireplace_label('(p0.vR)', '(p.vR)')
         else:
@@ -1095,12 +1095,12 @@ class SingleSiteDMRGEngine(DMRGEngine):
             # just use two-site theta
             if self.move_right:
                 next_B.ireplace_label('(p.vR)', '(p1.vR)')
-                theta = lasy.tdot(theta, next_B, 'vR', 'vL')
+                theta = lasy.planar_contraction(theta, next_B, 'vR', 'vL')
                 i0 = self.i0
             else:
                 next_A.ireplace_label('(vL.p)', '(vL.p0)')
                 theta.ireplace_label('(p0.vR)', '(p1.vR)')
-                theta = lasy.tensordot(next_A, theta, 'vR', 'vL')
+                theta = lasy.planar_contraction(next_A, theta, 'vR', 'vL')
                 i0 = self.i0 - 1
             qtotal_LR = [self.psi.get_B(i0, form=None).qtotal, self.psi.get_B(i0 + 1, form=None).qtotal]
             U, S, VH, err, S_a = mixer.mixed_svd_2site(

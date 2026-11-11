@@ -1424,7 +1424,7 @@ class TwoSiteH(EffectiveH):
         """
         if self.combine:
             theta = lasy.combine_legs(theta, ['vL', 'p0'], ['p1', 'vR'], pipes=[self.pipeL, self.pipeR])
-        return lasy.permute_legs(theta, codomain=self.acts_on, domain=[])
+        return lasy.planar_permute_legs(theta, codomain=self.acts_on, domain=[])
 
     def adjoint(self):
         """Return the hermitian conjugate of `self`."""

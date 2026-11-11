@@ -258,7 +258,7 @@ class MPO(MPSGeometry):
 
                 # Rearrange to (wL, wR, p, p*)
                 # Transpose so  op[jL,jR,:,:] is in (p, p*) order.
-                tensor_rearranged = lasy.permute_legs(tensor, codomain=['wL', 'wR'], domain=['p', 'p*'])
+                tensor_rearranged = lasy.planar_permute_legs(tensor, codomain=['wL', 'wR'], domain=['p', 'p*'])
                 arr = tensor_rearranged.to_numpy(understood_braiding=True)
 
                 arr = arr.transpose(0, 1, 3, 2)  # → (chiL, chiR, d, d) axes (wL, wR, p, p*)
@@ -1163,8 +1163,8 @@ class MPO(MPSGeometry):
                 proj = W.get_leg('wL').projection_onto_summands(
                     keep, backend=W.backend, labels=['wL', 'wR'], device=W.device
                 )
-                W = lasy.planar_contraction(W, proj, 'wL', 'wR')
-                LP = lasy.planar_contraction(LP, proj.hc, 'wR', 'wR*', relabel2={'wL*': 'wR'})
+                W = lasy.planar_contract_mask(W, proj, 'wL', 'wR')
+                LP = lasy.planar_contract_mask(LP, proj.hc, 'wR', 'wR*', relabel2={'wL*': 'wR'})
             B = psi.get_B(i, 'B')
             LP = env.LP_contraction.evaluate(dict(LP=LP, Bk=B, W=W, Bb=B.hc))
 
@@ -1177,7 +1177,7 @@ class MPO(MPSGeometry):
                 proj = LP.get_leg('wR').projection_onto_summands(
                     keep, backend=LP.backend, labels=['wR', 'wL'], device=LP.device
                 )
-                LP_converged = lasy.planar_contraction(LP, proj, 'wR', 'wL')
+                LP_converged = lasy.planar_contract_mask(LP, proj, 'wR', 'wL')
                 if lasy.norm(LP_converged) < tol:
                     break  # no more terms left
         else:  # no break
@@ -2750,7 +2750,7 @@ class MPOEnvironment(BaseEnvironment):
             labels=['wL', 'wR'],
             device=init_LP.device,
         )
-        init_LP = lasy.tdot(init_LP, mask, 'wR', 'wL')  # TODO this should be some apply method, no??
+        init_LP = lasy.planar_contract_mask(init_LP, mask, 'wR', 'wL')
         # TODO do we care about the leg arrangement or not?
         for j in range(i0, i):
             init_LP = self._contract_LP(j, init_LP)
@@ -2781,7 +2781,7 @@ class MPOEnvironment(BaseEnvironment):
         mask = mpo_wR.projection_onto_summand(
             'IdR', backend=init_RP.backend, labels=['wR', 'wL'], device=init_RP.device
         )
-        init_RP = lasy.tdot(init_RP, mask, 'wL', 'wR')
+        init_RP = lasy.planar_contract_mask(init_RP, mask, 'wL', 'wR')
         for j in range(i0, i, -1):
             init_RP = self._contract_RP(j, init_RP)
         return init_RP
