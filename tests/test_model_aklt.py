@@ -63,7 +63,7 @@ def test_AKLT_infinite(conserve):
                 bc_MPS,
                 conserve,
                 marks=pytest.mark.xfail(
-                    reason='psi_AKLT is only ported for conserve="SU2" and bc_MPS="infinite"',
+                    reason='psi_AKLT is only ported for conserve="SU2" and bc_MPS="infinite" (#764)',
                     raises=NotImplementedError,
                     strict=True,
                 ),

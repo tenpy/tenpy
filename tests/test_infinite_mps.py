@@ -300,7 +300,7 @@ def test_canonical_form_infinite_degenerate_spectrum():
 
 
 @pytest.mark.xfail(
-    reason='canonical_form_infinite1 does not support a non-trivial total charge yet.',
+    reason='canonical_form_infinite1 does not support a non-trivial total charge yet. (#765)',
     raises=NotImplementedError,
     strict=True,
 )
