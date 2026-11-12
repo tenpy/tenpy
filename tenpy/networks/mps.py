@@ -4571,124 +4571,132 @@ class MPS(BaseMPSExpectationValue):
                 C = lasy.planar_contraction(C, B_ket, ['vR'] + self._get_p_label('*'), ['vL'] + self._get_p_label(''))
         return C.real_if_close()
 
-    def enlarge_chi(self, extra_legs, random_fct=np.random.normal):
-        """Artificially enlarge the bond dimension by the specified extra legs/charges. In place.
+    def enlarge_chi(self, extra_legs):
+        """Artificially enlarge the bond dimension by the specified extra bond spaces. In place.
 
         First converts the MPS in B form.
-        This function then fills up the 'vR' leg with zeros, and then groups physical and vR legs
-        to fill up the 'vL' leg with orthogonal rows. In than way, we get an MPS with larger bond
-        dimension, still in right-canonical form (assuming no "overcomplete" charge block),
-        representing the *same* state, with the additional singular values being exactly zero.
+        This function then fills up the ``'vR'`` leg of the `B` tensors with zeros, and adds extra
+        rows on the ``'vL'`` leg, which are random, but orthonormal to each other and to the
+        existing rows. In that way, we get an MPS with larger bond dimension, still in
+        right-canonical form, representing the *same* state, with the additional
+        singular values being exactly zero.
 
         .. note ::
-            You should probably **choose** the extra charges to be sensible,
+            You should probably **choose** the extra sectors to be sensible,
             to expand into the space you are interested in, and not just into a random direction!
+
+        .. note ::
+            The random numbers are drawn from the random number generator of the backend of the
+            tensors (for the numpy backend, the global state of ``np.random``).
 
         Parameters
         ----------
-        extra_legs : list of {None, :class:`~tenpy.linalg.charges.LegCharge`, int}
-            The extra charges to be added on the virtual legs, with qconj=+1.
-            Length `L` +1 for finite, length `L` for infinite, with entry `i` left of site `i`.
-            If an `int` is given, fill up with a single block of charges like the Schmidt state
-            with highest weight. Note that this might force the resulting state to not be in
-            strict "right-canonical" B form if that charge block becomes overcomplete.
-        random_fct :
-            Function generating random entries to choose extra orthogonal rows in the B tensors.
-            Should accept a `size` keyword for the shape, and return numpy arrays.
+        extra_legs : list of {None, :class:`~lasyten.ElementarySpace`, int}
+            The extra states to be added on the virtual bonds.
+            Length `L` + 1 for finite, length `L` for infinite, with entry `i` left of site `i`.
+            ``None`` (or ``0``) means no extra states on that bond.
+            An :class:`~lasyten.ElementarySpace` has to have the same symmetry and the same
+            duality (``is_dual``) as the virtual space of the corresponding bond, i.e., as the
+            ``'vL'`` leg of the `B` tensor right of the bond. It is *added* to the existing bond space.
+            If an `int` is given, fill up with that many states in a single sector, namely the
+            sector of the Schmidt state with the largest singular value.
 
-        Returns
-        -------
-        permutations: list of 1D array | None
-            Permutation performed on each virtual leg, such that
-            ``new_S = concatenate(old_S, zeros)[perm]``.
+        Raises
+        ------
+        ValueError
+            If the new rows do not fit into the space of the ``(p, vR)`` legs, i.e., if there is
+            no room left in the sector to add orthogonal rows (the extra block is "overcomplete").
 
         """
-        # TODO
-        self.convert_form('B')
         if len(extra_legs) != self.L + (1 if self.finite else 0):
             raise ValueError('wrong len of extra_legs.')
-        perms_L = [None] * (self.L + 1)
-        perms_R = [None] * (self.L + 1)
-        extra_legs = list(extra_legs)
-        for i, add_chi in enumerate(extra_legs):
-            if not isinstance(add_chi, int):
-                continue
-            # convert chi to extra LegCharge
-            if add_chi == 0:
-                extra_legs[i] = None
-            elif self.chinfo.qnumber == 0:
-                extra_legs[i] = npc.LegCharge.from_trivial(add_chi, self.chinfo)
-            else:
-                max_weight = np.argmax(self._S[i])
-                if i < self.L:
-                    leg = self._B[i].get_leg('vL')
-                else:
-                    leg = self._B[-1].get_leg('vR')
-                extra_charge = leg.get_charge(leg.get_qindex(max_weight)[0])[np.newaxis, :]
-                extra_legs[i] = npc.LegCharge.from_qind(self.chinfo, [0, add_chi], extra_charge)
-        if not self.finite:
-            extra_legs.append(extra_legs[0])  # ensure length L+1
-        for i, B in enumerate(self._B):
-            extra_leg_L = extra_legs[i]
-            extra_leg_R = extra_legs[i + 1]
-            B.itranspose(self._B_labels)
-            if extra_leg_R is not None:
-                # add extra zero columns on the vR leg and sort by charges
-                extra_leg_R = extra_leg_R.conj()
-                B2 = B.extend('vR', extra_leg_R)
-                sort = [False] * (len(self._B_labels) - 1) + [True]
-                (_, _, perm_R), B2 = B2.sort_legcharge(sort, sort)
-                perms_R[i + 1] = perm_R
-            else:
-                B2 = B
-            B2 = B2.combine_legs(self._p_label + ['vR'], qconj=-1, new_axes=1)
-            if extra_leg_L is not None:
-                p_vR = B2.legs[1]
-                # get a new extra block of random entries for the vL leg
-                extra_B = npc.Array.from_func(
-                    random_fct, [extra_leg_L, p_vR], dtype=B2.dtype, qtotal=B2.qtotal, shape_kw='size'
+        if any(isinstance(B, lasy.HiddenLegTensor) for B in self._B):
+            raise NotImplementedError('enlarge_chi is not implemented for a hidden leg (non-trivial total charge)')
+        self.convert_form('B')
+        num_bonds = len(extra_legs)
+        extra_spaces = []
+        for j, extra in enumerate(extra_legs):
+            V = self._B[j].get_leg('vL') if j < self.L else self._B[-1].get_leg('vR').dual
+            if extra is None or (isinstance(extra, int) and extra == 0):
+                extra_spaces.append(None)
+            elif isinstance(extra, int):
+                # sector of the largest singular value
+                sector = V.sectors_of_basis[np.argmax(self._S[j].diagonal_as_numpy())]
+                extra_spaces.append(
+                    lasy.ElementarySpace.from_sector_decomposition(
+                        V.symmetry, sector[None, :], multiplicities=[extra], is_dual=V.is_dual
+                    )
                 )
-                # orthogonalize rows of extra_B against rows of B2
-                extra_B = extra_B - npc.tensordot(npc.tensordot(extra_B, B2.conj(), [1, 1]), B2, [1, 0])
-                if npc.norm(extra_B) < 1e-12:
-                    logger.warning(f'Failed to orthogonalize extra_B against B2. norm(extra_B) = {npc.norm(extra_B)}.')
-                # orthogonalize rows within extra_B by QR
-                extra_B, extra_R = npc.qr(extra_B.itranspose([1, 0]), inner_qconj=-1, qtotal_Q=extra_B.qtotal)
-                try:
-                    extra_B.legs[1].test_equal(extra_R.legs[1])
-                except ValueError as e:
-                    print(extra_R)
-                    raise ValueError('QR for Gram-Schmidt messed up charges. Incompatible charges?') from e
-                extra_B.itranspose([1, 0])
-                # append extra block in vL leg of B2 and sort by charges
-                new_B = npc.concatenate([B2, extra_B], axis='vL')
-                (perm_L, _), new_B = new_B.sort_legcharge([True, False], [True, False])
-                perms_L[i] = perm_L
             else:
-                new_B = B2
-            new_B = new_B.split_legs().itranspose(self._B_labels)
-            self._B[i] = new_B
-        if self.finite:
-            # fix undefined permutations at boundaries
-            perms_R[0] = perms_L[0]
-            perms_L[-1] = perms_R[-1]
-        else:
-            perms_L[-1] = perms_L[0]
-            perms_R[0] = perms_R[-1]
-        for perm_L, perm_R in zip(perms_L, perms_R):
-            assert (perm_L is not None) == (perm_R is not None)
-            if perm_L is not None:
-                assert np.all(perm_L == perm_R)
-        # append zeros to singular values
-        for i, S in enumerate(self._S):
-            leg = extra_legs[i]
-            if leg is not None:
-                new_S = np.concatenate([S, np.zeros(leg.ind_len)])
-                assert perms_L[i] is not None
-                new_S = new_S[perms_L[i]]
-                self._S[i] = new_S
+                if extra.symmetry != V.symmetry or extra.is_dual != V.is_dual:
+                    raise ValueError(f'extra_legs[{j}] needs the same symmetry and duality as the bond space.')
+                extra_spaces.append(extra)
+        # the new bond spaces, as direct sum (old, extra).
+        new_spaces = [
+            None
+            if X is None
+            else lasy.DirectSumSpace(
+                [self._B[j].get_leg('vL') if j < self.L else self._B[-1].get_leg('vR').dual, X],
+                is_dual=X.is_dual,
+                summand_labels=['old', 'extra'],
+            )
+            for j, X in enumerate(extra_spaces)
+        ]
+        if not self.finite:
+            extra_spaces.append(extra_spaces[0])  # ensure length L + 1
+            new_spaces.append(new_spaces[0])
+        # note: `set_labels` acts in place, so only apply it to new tensors.
+        for i, B in enumerate(self._B):
+            X_L, X_R = extra_spaces[i], extra_spaces[i + 1]
+            backend, device, dtype = B.backend, B.device, B.dtype
+            if X_R is not None:
+                # fill up the vR leg with zeros: compose with the projection onto the old subspace.
+                proj = new_spaces[i + 1].projection_onto_summand('old', backend=backend, device=device)
+                proj = proj.as_SymmetricTensor(dtype=dtype).set_labels(['s', 'l'])
+                B = lasy.planar_contraction(B, proj, 'vR', 's', relabel2={'l': 'vR'})
+            if X_L is not None:
+                # B with the legs arranged as a matrix (vL) x (p, vR) with orthonormal rows
+                T = lasy.planar_permute_legs(B, codomain=['vL'], domain=['vR'] + self._p_label[::-1])
+                T_labels = list(T.labels)
+                labels = ['xL'] + T_labels[1:]
+                E = lasy.SymmetricTensor.from_random_normal(
+                    lasy.TensorProduct([X_L], T.symmetry),
+                    T.domain,
+                    backend=backend,
+                    labels=labels,
+                    dtype=dtype,
+                    device=device,
+                )
+                # orthogonalize rows of E against the rows of T, then rows of E among each other by QR
+                E = E - lasy.compose(lasy.compose(E, T.hc), T)
+                Q, _ = lasy.qr(E.hc, new_labels=['xL*', 'xL'])
+                E = Q.hc.set_labels(labels)
+                if E.get_leg('xL') != X_L or lasy.norm(lasy.compose(E, T.hc)) > 1e-8:
+                    raise ValueError(
+                        'Failed to add orthogonal rows on the vL leg: not enough room, i.e. the '
+                        f'extra states on bond {i} are overcomplete.'
+                    )
+                incl_old = new_spaces[i].inclusion_of_summand('old', backend=backend, device=device)
+                incl_old = incl_old.as_SymmetricTensor(dtype=dtype).set_labels(['vL', 'x'])
+                incl_extra = new_spaces[i].inclusion_of_summand('extra', backend=backend, device=device)
+                incl_extra = incl_extra.as_SymmetricTensor(dtype=dtype).set_labels(['vL', 'x'])
+                B_old = lasy.compose(incl_old, T.copy().set_labels(['x'] + T_labels[1:]))
+                B_extra = lasy.compose(incl_extra, E.copy().set_labels(['x'] + T_labels[1:]))
+                B = B_old.set_labels(T_labels) + B_extra.set_labels(T_labels)
+                B = lasy.planar_permute_legs(B, codomain=['vL'] + self._p_label, domain=['vR'])
+            self._B[i] = B.set_labels(self._B_labels) if B.labels != self._B_labels else B
+        # append zeros to the singular values
+        for j, S in enumerate(self._S[:num_bonds]):
+            if extra_spaces[j] is None:
+                continue
+            incl_old = new_spaces[j].inclusion_of_summand('old', backend=S.backend, device=S.device)
+            incl_old = incl_old.as_SymmetricTensor(dtype=S.dtype)
+            S_new = lasy.compose(
+                lasy.compose(incl_old.set_labels(['vL', 'x']), S.copy().set_labels(['x', 'y'])),
+                incl_old.hc.set_labels(['y', 'vR']),
+            )
+            self._S[j] = lasy.DiagonalTensor.from_tensor(S_new.set_labels(['vL', 'vR'])).as_dtype(S.dtype)
         self.test_sanity()
-        return perms_L
 
     def spatial_inversion(self):
         """Perform a spatial inversion along the MPS.

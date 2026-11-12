@@ -567,31 +567,18 @@ def test_roll_mps_unit_cell():
     assert abs(ov - 1.0) < 1.0e-14
 
 
-def test_mps_enlarge_chi(eps=1.0e-14):
-    pytest.skip(_LEGACY)
-    s = site.SpinHalfSite(conserve='Sz')
-    # infinite
-    psi = mps.MPS.from_product_state([s] * 2, ['up', 'down'], bc='infinite', unit_cell_width=2)
-    psi.perturb({'trunc_params': {'chi_max': 10}, 'N_steps': 10}, close_1=False)
-
-    extra_qflat = [np.zeros([4, 1]) + (i % 2) for i in range(psi.L)]
-    extra_legs = [npc.LegCharge.from_qflat(psi.chinfo, qflat).bunch()[1] for qflat in extra_qflat]
-
+@pytest.mark.parametrize('conserve', [None, 'Sz'])
+@pytest.mark.parametrize('extra_legs', [[0, 0, 0, 1, 2, 0, 0, 0, 0], [None, None, None, 1, 2, None, None, None, None]])
+def test_mps_enlarge_chi_finite(conserve, extra_legs):
+    np.random.seed(0)
+    s = lasy.sites.SpinSite(S=0.5, conserve=conserve)
+    psi = mps.MPS.from_desired_bond_dimension([s] * 8, 6, bc='finite', unit_cell_width=8)
     psi_enl = psi.copy()
     psi_enl.enlarge_chi(extra_legs)
-    assert np.max(psi_enl.norm_test()) < eps
-    assert abs(psi_enl.overlap(psi, understood_infinite=True) - 1.0) < eps
-
-    # finite
-    psi = mps.MPS.from_product_state([s] * 8, ['up', 'down'] * 4, bc='finite', unit_cell_width=8)
-    psi.perturb({'trunc_params': {'chi_max': 3}, 'N_steps': 3}, close_1=False)
-
-    extra_legs = [None, None, 1, 2, None, 2, 1, None, None]
-
-    psi_enl = psi.copy()
-    psi_enl.enlarge_chi(extra_legs)
-    assert np.max(psi_enl.norm_test()) < eps
-    assert abs(psi_enl.overlap(psi, understood_infinite=True) - 1.0) < eps
+    psi_enl.test_sanity()
+    assert [B.get_leg('vL').dim for B in psi_enl._B][3:5] > [B.get_leg('vL').dim for B in psi._B][3:5]
+    assert np.max(np.abs(psi_enl.norm_test())) < 1e-12
+    npt.assert_allclose(psi_enl.overlap(psi), 1.0, atol=1e-12)
 
 
 def test_group():

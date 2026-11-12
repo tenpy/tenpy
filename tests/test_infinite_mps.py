@@ -73,6 +73,13 @@ def _tm_spectrum(psi, num=3):
     return np.abs(eta)
 
 
+def _extra_space(psi, conserve, mult):
+    """Extra bond space with a single sector (trivial / ``Sz=0`` / spin 1/2) with `mult` states."""
+    sym = psi.sites[0].leg.symmetry
+    sector = {None: [0], 'Sz': [0], 'SU2': [1, 0]}[conserve]
+    return lasy.ElementarySpace.from_defining_sectors(sym, np.array([sector]), multiplicities=[mult])
+
+
 @pytest.mark.parametrize('conserve', [None, 'Sz', 'SU2'])
 @pytest.mark.parametrize('seed', [0, 1])
 def test_canonical_form_infinite(conserve, seed):
@@ -208,43 +215,18 @@ def test_canonical_form_infinite_complex(conserve):
     assert 0.0 < xi < np.inf
 
 
-@pytest.mark.parametrize('pad_mode', ['zero', 'tiny'])
-def test_canonical_form_infinite_reduces_bond_dimension(pad_mode):
-    # The bond states that are (almost) decoupled are projected out, i.e., the bond dimension is reduced.
-    # We pad the tensors of a canonical MPS with a decoupled block. For ``pad_mode='zero'``, the additional bond states
-    # are exactly decoupled (zero blocks), for ``pad_mode='tiny'`` they carry a tiny, decoupled block.
-    # TODO: use MPS.enlarge_chi once it is ported to lasyten.
-    pad = 2
-    np.random.seed(7)
-    site = sites.SpinSite(1, conserve=None)
-    sym = site.leg.symmetry
-    psi_ref = mps.MPS.from_desired_bond_dimension(
-        [site] * 2, 4, bc='infinite', total_charge=sym.trivial_sector, unit_cell_width=2
-    )
-    Bs = []
-    for i in range(psi_ref.L):
-        B = lasy.planar_permute_legs(psi_ref.get_B(i, 'B'), codomain=['vL', 'p'], domain=['vR']).to_numpy()
-        a, d, b = B.shape
-        B_pad = np.zeros((a + pad, d, b + pad))
-        B_pad[:a, :, :b] = B
-        if pad_mode == 'tiny':
-            B_pad[a:, :, b:] = 1e-3 * np.random.rand(pad, d, pad)
-        Bs.append(B_pad)
-    V = lasy.ElementarySpace.from_trivial_sector(dim=4 + pad, symmetry=sym)
-    Bs = [
-        lasy.SymmetricTensor.from_dense_block(
-            B, [V, site.leg], [V], psi_ref.backend, labels=['vL', 'p', 'vR'], dtype=lasy.Dtype.float64
-        )
-        for B in Bs
-    ]
-    SVs = [lasy.DiagonalTensor.from_eye(V, psi_ref.backend, ['vL', 'vR'], lasy.Dtype.float64) for _ in range(3)]
-    psi = mps.MPS([site] * 2, Bs, SVs, bc='infinite', form='B', unit_cell_width=2)
+@pytest.mark.parametrize('conserve', [None, 'Sz', 'SU2'])
+def test_canonical_form_infinite_reduces_bond_dimension(conserve):
+    # The extra bond states added by `enlarge_chi` are decoupled (zero singular values), so they are projected out.
+    psi_ref = _random_mps(conserve, 7)
+    psi = psi_ref.copy()
+    psi.enlarge_chi([_extra_space(psi, conserve, 2), _extra_space(psi, conserve, 1)])
     psi.form = [None] * psi.L
-
-    assert [B.get_leg('vL').dim for B in psi._B] == [6, 6]
+    chi_ref = [B.get_leg('vL').dim for B in psi_ref._B]
+    assert all(B.get_leg('vL').dim > chi for B, chi in zip(psi._B, chi_ref))
     psi.canonical_form_infinite1()
     psi.test_sanity()
-    assert [B.get_leg('vL').dim for B in psi._B] == [4, 4]
+    assert [B.get_leg('vL').dim for B in psi._B] == chi_ref
     assert np.max(np.abs(psi.norm_test())) < 1e-12
     npt.assert_allclose(psi.get_SL(0).diagonal_as_numpy(), psi_ref.get_SL(0).diagonal_as_numpy(), atol=1e-8)
     assert 0.0 < psi.correlation_length2() < np.inf
@@ -339,3 +321,31 @@ def test_overlap_infinite_different_states(conserve):
     assert abs(ov_ab) < 1.0
     # (for real tensors, the dominant eigenvalue can be one of a complex conjugate pair: only the modulus is fixed)
     npt.assert_allclose(abs(ov_ba), abs(ov_ab), atol=1e-10)
+
+
+@pytest.mark.parametrize('conserve', [None, 'Sz', 'SU2'])
+def test_enlarge_chi_infinite(conserve):
+    psi = _random_mps(conserve, 0)
+    chi = [B.get_leg('vL').dim for B in psi._B]
+    S_old = [S.diagonal_as_numpy() for S in psi._S]
+    psi_enl = psi.copy()
+    psi_enl.enlarge_chi([_extra_space(psi, conserve, 2), 1])
+    psi_enl.test_sanity()
+    assert all(B.get_leg('vL').dim > c for B, c in zip(psi_enl._B, chi))
+    assert np.max(np.abs(psi_enl.norm_test())) < 1e-12
+    npt.assert_allclose(psi_enl.overlap(psi, understood_infinite=True), 1.0, atol=1e-12)
+    # the new singular values are zero
+    for S_new, S in zip(psi_enl._S, S_old):
+        S_new = np.sort(S_new.diagonal_as_numpy())
+        npt.assert_allclose(S_new[S_new.size - S.size :], np.sort(S), atol=1e-12)
+        npt.assert_allclose(S_new[: S_new.size - S.size], 0.0, atol=1e-12)
+    assert psi_enl.get_SL(0).dtype == psi.get_SL(0).dtype  # real singular values stay real
+
+
+def test_enlarge_chi_errors():
+    psi = _random_mps(None, 0)
+    with pytest.raises(ValueError, match='wrong len of extra_legs'):
+        psi.enlarge_chi([1])
+    with pytest.raises(ValueError, match='overcomplete'):
+        # a trivial site with chi=12 and d=3: there is only room for 3 * 12 - 12 = 24 extra rows
+        psi.enlarge_chi([100, 0])
