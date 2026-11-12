@@ -567,18 +567,46 @@ def test_roll_mps_unit_cell():
     assert abs(ov - 1.0) < 1.0e-14
 
 
-@pytest.mark.parametrize('conserve', [None, 'Sz'])
-@pytest.mark.parametrize('extra_legs', [[0, 0, 0, 1, 2, 0, 0, 0, 0], [None, None, None, 1, 2, None, None, None, None]])
+@pytest.mark.parametrize('conserve', [None, 'Sz', 'SU2'])
+@pytest.mark.parametrize('extra_legs', [[0] * 5 + [1] + [0] * 5, [None] * 4 + [1, 1] + [None] * 5])
 def test_mps_enlarge_chi_finite(conserve, extra_legs):
     np.random.seed(0)
     s = lasy.sites.SpinSite(S=0.5, conserve=conserve)
-    psi = mps.MPS.from_desired_bond_dimension([s] * 8, 6, bc='finite', unit_cell_width=8)
+    psi = mps.MPS.from_desired_bond_dimension(
+        [s] * 10, 6, bc='finite', total_charge=s.leg.symmetry.trivial_sector, unit_cell_width=10
+    )
     psi_enl = psi.copy()
     psi_enl.enlarge_chi(extra_legs)
     psi_enl.test_sanity()
-    assert [B.get_leg('vL').dim for B in psi_enl._B][3:5] > [B.get_leg('vL').dim for B in psi._B][3:5]
+    for B_enl, B, extra in zip(psi_enl._B, psi._B, extra_legs):
+        assert (B_enl.get_leg('vL').dim > B.get_leg('vL').dim) == bool(extra)
     assert np.max(np.abs(psi_enl.norm_test())) < 1e-12
     npt.assert_allclose(psi_enl.overlap(psi), 1.0, atol=1e-12)
+
+
+def test_mps_enlarge_chi_repeated_and_numpy_int():
+    np.random.seed(0)
+    s = lasy.sites.SpinSite(S=0.5, conserve='Sz')
+    psi = mps.MPS.from_desired_bond_dimension([s] * 10, 6, bc='finite', unit_cell_width=10)
+    psi_enl = psi.copy()
+    psi_enl.enlarge_chi([0] * 5 + [np.int64(1)] + [0] * 5)
+    psi_enl.enlarge_chi([0] * 5 + [1] + [0] * 5)  # the bond space is a nested direct sum now
+    psi_enl.test_sanity()
+    assert not any(isinstance(B.get_leg('vL'), lasy.DirectSumSpace) for B in psi_enl._B)  # plain bond spaces
+    assert np.max(np.abs(psi_enl.norm_test())) < 1e-12
+    npt.assert_allclose(psi_enl.overlap(psi), 1.0, atol=1e-12)
+
+
+def test_mps_enlarge_chi_errors_leave_mps_unchanged():
+    s = lasy.sites.SpinSite(S=0.5, conserve=None)
+    psi = mps.MPS.from_desired_bond_dimension([s] * 6, 2, bc='finite', unit_cell_width=6)
+    chi = [B.get_leg('vL').dim for B in psi._B]
+    with pytest.raises(ValueError, match='boundary bonds'):
+        psi.enlarge_chi([1, 0, 0, 0, 0, 0, 0])
+    with pytest.raises(ValueError, match='overcomplete'):  # the last site has no room for more rows
+        psi.enlarge_chi([0, 0, 0, 0, 0, 5, 0])
+    psi.test_sanity()  # (the MPS is still intact)
+    assert [B.get_leg('vL').dim for B in psi._B] == chi
 
 
 def test_group():

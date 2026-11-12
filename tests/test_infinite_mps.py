@@ -232,6 +232,42 @@ def test_canonical_form_infinite_reduces_bond_dimension(conserve):
     assert 0.0 < psi.correlation_length2() < np.inf
 
 
+def test_canonical_form_infinite_reduces_bond_dimension_decoupled_right():
+    # For no symmetry and Sz, the extra states added by `enlarge_chi` are only removed by the projection on the left
+    # (``_canonical_form_correct_left``). (With SU(2), they also trigger the projection of the right Gram matrix.)
+    # Here, the tensors are padded with *zero blocks*, such that the extra states are decoupled in both directions,
+    # which tests the projection of the right Gram matrix without symmetry. `enlarge_chi` can not be used for this,
+    # since it gives a right-canonical state.
+    pad = 2
+    site = sites.SpinSite(1, conserve=None)
+    sym = site.leg.symmetry
+    psi_ref = mps.MPS.from_desired_bond_dimension(
+        [site] * 2, 4, bc='infinite', total_charge=sym.trivial_sector, unit_cell_width=2
+    )
+    Bs = []
+    for i in range(psi_ref.L):
+        B = lasy.planar_permute_legs(psi_ref.get_B(i, 'B'), codomain=['vL', 'p'], domain=['vR']).to_numpy()
+        a, d, b = B.shape
+        B_pad = np.zeros((a + pad, d, b + pad), dtype=B.dtype)
+        B_pad[:a, :, :b] = B
+        Bs.append(B_pad)
+    V = lasy.ElementarySpace.from_trivial_sector(dim=4 + pad, symmetry=sym)
+    Bs = [
+        lasy.SymmetricTensor.from_dense_block(
+            B, [V, site.leg], [V], psi_ref.backend, labels=['vL', 'p', 'vR'], dtype=lasy.Dtype.float64
+        )
+        for B in Bs
+    ]
+    SVs = [lasy.DiagonalTensor.from_eye(V, psi_ref.backend, ['vL', 'vR'], lasy.Dtype.float64) for _ in range(3)]
+    psi = mps.MPS([site] * 2, Bs, SVs, bc='infinite', form='B', unit_cell_width=2)
+    psi.form = [None] * psi.L
+    psi.canonical_form_infinite1()
+    psi.test_sanity()
+    assert [B.get_leg('vL').dim for B in psi._B] == [4, 4]
+    assert np.max(np.abs(psi.norm_test())) < 1e-12
+    npt.assert_allclose(psi.get_SL(0).diagonal_as_numpy(), psi_ref.get_SL(0).diagonal_as_numpy(), atol=1e-8)
+
+
 @pytest.mark.parametrize('renormalize', [True, False])
 def test_canonical_form_infinite_renormalize(renormalize):
     psi = _random_mps(None, 0)

@@ -4598,18 +4598,23 @@ class MPS(BaseMPSExpectationValue):
             An :class:`~lasyten.ElementarySpace` has to have the same symmetry and the same
             duality (``is_dual``) as the virtual space of the corresponding bond, i.e., as the
             ``'vL'`` leg of the `B` tensor right of the bond. It is *added* to the existing bond space.
-            If an `int` is given, fill up with that many states in a single sector, namely the
-            sector of the Schmidt state with the largest singular value.
+            If an `int` `n` is given, add `n` times the sector of the Schmidt state with the largest
+            singular value, i.e., `n` is a *multiplicity* and not a dimension: e.g., for SU(2), ``1``
+            adds a multiplet of that spin, which is more than one state.
+            For a finite MPS, the first and last entry (the trivial boundary bonds) must be ``None``.
 
         Raises
         ------
         ValueError
+            If `extra_legs` has the wrong length or has entries on the boundary bonds of a finite MPS.
             If the new rows do not fit into the space of the ``(p, vR)`` legs, i.e., if there is
             no room left in the sector to add orthogonal rows (the extra block is "overcomplete").
 
         """
         if len(extra_legs) != self.L + (1 if self.finite else 0):
             raise ValueError('wrong len of extra_legs.')
+        if self.finite and (extra_legs[0] not in (None, 0) or extra_legs[-1] not in (None, 0)):
+            raise ValueError('extra_legs must be None on the boundary bonds of a finite MPS.')
         if any(isinstance(B, lasy.HiddenLegTensor) for B in self._B):
             raise NotImplementedError('enlarge_chi is not implemented for a hidden leg (non-trivial total charge)')
         self.convert_form('B')
@@ -4617,9 +4622,9 @@ class MPS(BaseMPSExpectationValue):
         extra_spaces = []
         for j, extra in enumerate(extra_legs):
             V = self._B[j].get_leg('vL') if j < self.L else self._B[-1].get_leg('vR').dual
-            if extra is None or (isinstance(extra, int) and extra == 0):
+            if extra is None or (isinstance(extra, (int, np.integer)) and extra == 0):
                 extra_spaces.append(None)
-            elif isinstance(extra, int):
+            elif isinstance(extra, (int, np.integer)):
                 # sector of the largest singular value
                 sector = V.sectors_of_basis[np.argmax(self._S[j].diagonal_as_numpy())]
                 extra_spaces.append(
@@ -4638,7 +4643,6 @@ class MPS(BaseMPSExpectationValue):
             else lasy.DirectSumSpace(
                 [self._B[j].get_leg('vL') if j < self.L else self._B[-1].get_leg('vR').dual, X],
                 is_dual=X.is_dual,
-                summand_labels=['old', 'extra'],
             )
             for j, X in enumerate(extra_spaces)
         ]
@@ -4646,12 +4650,21 @@ class MPS(BaseMPSExpectationValue):
             extra_spaces.append(extra_spaces[0])  # ensure length L + 1
             new_spaces.append(new_spaces[0])
         # note: `set_labels` acts in place, so only apply it to new tensors.
+        # We only assign to `self._B` and `self._S` at the end, such that `self` is unchanged if we raise.
+        new_Bs, new_Ss = [], list(self._S)
+
+        def to_plain(j, dtype, backend, device):
+            # identification of the bond space `new_spaces[j]` with a plain ElementarySpace, such that we do not
+            # leave the (nested) direct sum spaces on the legs of the MPS. Legs ``'s'`` (plain) and ``'l'``.
+            P = new_spaces[j].projection_onto_summands([0, 1], backend=backend, device=device)
+            return P.as_SymmetricTensor(dtype=dtype).set_labels(['s', 'l'])
+
         for i, B in enumerate(self._B):
             X_L, X_R = extra_spaces[i], extra_spaces[i + 1]
             backend, device, dtype = B.backend, B.device, B.dtype
             if X_R is not None:
                 # fill up the vR leg with zeros: compose with the projection onto the old subspace.
-                proj = new_spaces[i + 1].projection_onto_summand('old', backend=backend, device=device)
+                proj = new_spaces[i + 1].projection_onto_summand(0, backend=backend, device=device)
                 proj = proj.as_SymmetricTensor(dtype=dtype).set_labels(['s', 'l'])
                 B = lasy.planar_contraction(B, proj, 'vR', 's', relabel2={'l': 'vR'})
             if X_L is not None:
@@ -4676,26 +4689,40 @@ class MPS(BaseMPSExpectationValue):
                         'Failed to add orthogonal rows on the vL leg: not enough room, i.e. the '
                         f'extra states on bond {i} are overcomplete.'
                     )
-                incl_old = new_spaces[i].inclusion_of_summand('old', backend=backend, device=device)
+                incl_old = new_spaces[i].inclusion_of_summand(0, backend=backend, device=device)
                 incl_old = incl_old.as_SymmetricTensor(dtype=dtype).set_labels(['vL', 'x'])
-                incl_extra = new_spaces[i].inclusion_of_summand('extra', backend=backend, device=device)
+                incl_extra = new_spaces[i].inclusion_of_summand(1, backend=backend, device=device)
                 incl_extra = incl_extra.as_SymmetricTensor(dtype=dtype).set_labels(['vL', 'x'])
                 B_old = lasy.compose(incl_old, T.copy().set_labels(['x'] + T_labels[1:]))
                 B_extra = lasy.compose(incl_extra, E.copy().set_labels(['x'] + T_labels[1:]))
                 B = B_old.set_labels(T_labels) + B_extra.set_labels(T_labels)
                 B = lasy.planar_permute_legs(B, codomain=['vL'] + self._p_label, domain=['vR'])
-            self._B[i] = B.set_labels(self._B_labels) if B.labels != self._B_labels else B
+                P = to_plain(i, dtype, backend, device)
+                B = lasy.planar_contraction(P, B, 'l', 'vL', relabel1={'s': 'vL'})
+            if X_R is not None:
+                P = to_plain(i + 1, dtype, backend, device)
+                B = lasy.planar_contraction(B, P.hc.set_labels(['l', 's']), 'vR', 'l', relabel2={'s': 'vR'})
+            if X_L is not None or X_R is not None:
+                B = lasy.planar_permute_legs(B, codomain=['vL'] + self._p_label, domain=['vR'])
+            new_Bs.append(B.set_labels(self._B_labels) if B.labels != self._B_labels else B)
         # append zeros to the singular values
         for j, S in enumerate(self._S[:num_bonds]):
             if extra_spaces[j] is None:
                 continue
-            incl_old = new_spaces[j].inclusion_of_summand('old', backend=S.backend, device=S.device)
+            incl_old = new_spaces[j].inclusion_of_summand(0, backend=S.backend, device=S.device)
             incl_old = incl_old.as_SymmetricTensor(dtype=S.dtype)
             S_new = lasy.compose(
                 lasy.compose(incl_old.set_labels(['vL', 'x']), S.copy().set_labels(['x', 'y'])),
                 incl_old.hc.set_labels(['y', 'vR']),
             )
-            self._S[j] = lasy.DiagonalTensor.from_tensor(S_new.set_labels(['vL', 'vR'])).as_dtype(S.dtype)
+            P = to_plain(j, S.dtype, S.backend, S.device)
+            S_new = lasy.compose(
+                lasy.compose(P.copy().set_labels(['vL', 'x']), S_new.set_labels(['x', 'y'])),
+                P.hc.set_labels(['y', 'vR']),
+            )
+            new_Ss[j] = lasy.DiagonalTensor.from_tensor(S_new.set_labels(['vL', 'vR'])).as_dtype(S.dtype)
+        self._B = new_Bs
+        self._S = new_Ss
         self.test_sanity()
 
     def spatial_inversion(self):
