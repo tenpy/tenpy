@@ -31,8 +31,7 @@ class AnisotropicSpin1Chain(CouplingMPOModel, NearestNeighborModel):
         if conserve == 'best':
             conserve = 'Sz' if not model_params.any_nonzero(['B']) else None
             self.logger.info('%s: set conserve to %s', self.name, conserve)
-        sort_charge = model_params.get('sort_charge', True)
-        return SpinSite(S=1.0, conserve=None, sort_charge=sort_charge)
+        return SpinSite(S=1.0, conserve=None)
 
     def init_terms(self, model_params):
         J = model_params.get('J', 1.0)

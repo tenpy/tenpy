@@ -17,7 +17,7 @@ from tenpy.models.xxz_chain import XXZChain
 from tenpy.networks import purification_mps, site
 from tenpy.networks.mps import MPS
 
-spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
+spin_half = site.SpinHalfSite(conserve='Sz')
 ferm = site.FermionSite(conserve='N')
 
 
@@ -76,8 +76,7 @@ def test_canonical_purification(conserve_ancilla, L=6, charge_sector=0, eps=1.0e
             assert abs(entry) < eps
 
     # and one quick test of TEBD
-    xxz_pars = dict(L=L, Jxx=1.0, Jz=3.0, hz=0.0, bc_MPS='finite', sort_charge=False)
-    # sort_charge should be same as for global `spin_half`.
+    xxz_pars = dict(L=L, Jxx=1.0, Jz=3.0, hz=0.0, bc_MPS='finite')
     M = XXZChain(xxz_pars)
     TEBD_params = {
         'trunc_params': {'chi_max': 16, 'svd_min': 1.0e-8},
@@ -96,7 +95,7 @@ def test_canonical_purification(conserve_ancilla, L=6, charge_sector=0, eps=1.0e
 
 @pytest.mark.slow
 def test_purification_TEBD(L=3):
-    xxz_pars = dict(L=L, Jxx=1.0, Jz=3.0, hz=0.0, bc_MPS='finite', sort_charge=True)
+    xxz_pars = dict(L=L, Jxx=1.0, Jz=3.0, hz=0.0, bc_MPS='finite')
     M = XXZChain(xxz_pars)
     for disent in [None, 'backwards', 'min(None,last)-renyi', 'noise-norm', 'renyi-min(None,noise-renyi)']:
         psi = purification_mps.PurificationMPS.from_infiniteT(
@@ -121,7 +120,7 @@ def test_purification_TEBD(L=3):
 
 
 def test_purification_MPO(L=6):
-    xxz_pars = dict(L=L, Jxx=1.0, Jz=2.0, hz=0.0, bc_MPS='finite', sort_charge=True)
+    xxz_pars = dict(L=L, Jxx=1.0, Jz=2.0, hz=0.0, bc_MPS='finite')
     M = XXZChain(xxz_pars)
     psi = purification_mps.PurificationMPS.from_infiniteT(
         M.lattice.mps_sites(), bc='finite', unit_cell_width=M.lattice.mps_unit_cell_width
@@ -134,7 +133,7 @@ def test_purification_MPO(L=6):
 
 
 def test_renyi_disentangler(L=4, eps=1.0e-15):
-    xxz_pars = dict(L=L, Jxx=1.0, Jz=3.0, hz=0.0, bc_MPS='finite', sort_charge=True)
+    xxz_pars = dict(L=L, Jxx=1.0, Jz=3.0, hz=0.0, bc_MPS='finite')
     M = XXZChain(xxz_pars)
     psi = purification_mps.PurificationMPS.from_infiniteT(
         M.lattice.mps_sites(), bc='finite', unit_cell_width=M.lattice.mps_unit_cell_width
@@ -229,7 +228,7 @@ def gen_disentangler_psi_singlet_test(site_P=spin_half, L=6, max_range=4):
     print('PQ:', np.round(mutinf_pq / np.log(2), 3))
     print('P: ', np.round(psi0.mutinf_two_site(legs='p')[1] / np.log(2), 3))
     print('Q: ', np.round(psi0.mutinf_two_site(legs='q')[1] / np.log(2), 3))
-    M = XXZChain(dict(L=L, sort_charge=True))
+    M = XXZChain(dict(L=L))
     tebd_pars = dict(trunc_params={'trunc_cut': 1.0e-10}, disentangle='diag')
     eng = PurificationTEBD(psi0, M, tebd_pars)
     for i in range(L):

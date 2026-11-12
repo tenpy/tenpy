@@ -569,7 +569,7 @@ def test_roll_mps_unit_cell():
 
 def test_mps_enlarge_chi(eps=1.0e-14):
     pytest.skip(_LEGACY)
-    s = site.SpinHalfSite(conserve='Sz', sort_charge=True)
+    s = site.SpinHalfSite(conserve='Sz')
     # infinite
     psi = mps.MPS.from_product_state([s] * 2, ['up', 'down'], bc='infinite', unit_cell_width=2)
     psi.perturb({'trunc_params': {'chi_max': 10}, 'N_steps': 10}, close_1=False)
@@ -596,7 +596,7 @@ def test_mps_enlarge_chi(eps=1.0e-14):
 
 def test_group():
     pytest.skip(_LEGACY)
-    s = site.SpinHalfSite(conserve='parity', sort_charge=True)
+    s = site.SpinHalfSite(conserve='parity')
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='finite', unit_cell_width=6)
     psi2 = psi1.copy()
     print('group n=2')
@@ -633,7 +633,7 @@ def test_fixes_issue_197():
     conserve = None
 
     L = sites_to_group * num_groups
-    s = site.SpinHalfSite(conserve=conserve, sort_charge=True)
+    s = site.SpinHalfSite(conserve=conserve)
     psi = mps.MPS.from_product_state(sites=[s] * L, p_state=misc.to_array(['up', 'down'], (L,)), unit_cell_width=L)
     tebd.RandomUnitaryEvolution(psi, options=dict(N_steps=4)).run()
     chi_init = max(psi.chi)
@@ -792,7 +792,7 @@ def test_expectation_value_multisite():
 
 def test_correlation_length():
     pytest.skip(_LEGACY)
-    spin_half = site.SpinHalfSite(conserve=None, sort_charge=True)
+    spin_half = site.SpinHalfSite(conserve=None)
     up_state = ['up'] * 4
     psi_product = mps.MPS.from_product_state([spin_half] * 4, up_state, bc='infinite', unit_cell_width=4)
     assert psi_product.correlation_length2() == 0.0  # trivial
@@ -870,7 +870,7 @@ def test_MPSEnvironment_expectation_values():
 
 def test_sample_measurements(eps=1.0e-14, seed=5):
     pytest.skip(_LEGACY)
-    spin_half = site.SpinHalfSite('Sz', sort_charge=True)
+    spin_half = site.SpinHalfSite('Sz')
     u, d = spin_half.state_indices(['up', 'down'])
     spin_half.add_op('Pup', spin_half.Sz + 0.5 * spin_half.Id)
     psi = mps.MPS.from_singlets(spin_half, 6, [(0, 1), (2, 5)], lonely=[3, 4], bc='finite', unit_cell_width=6)
@@ -1028,7 +1028,7 @@ def test_InitialStateBuilder():
 def test_fixes_181():
     pytest.skip(_LEGACY)
     # See https://github.com/tenpy/tenpy/issues/181
-    s0 = site.SpinHalfSite('Sz', sort_charge=True)
+    s0 = site.SpinHalfSite('Sz')
     lat = Chain(10, s0, bc_MPS='finite')
     psi1 = mps.InitialStateBuilder(
         lat,

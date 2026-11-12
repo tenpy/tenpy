@@ -26,7 +26,6 @@ from lasyten.tensors import eigh as lasyten_eigh
 
 from ..models.model import CouplingModel
 from ..networks.mps import MPS
-from ..tools import inverse_permutation
 
 __all__ = ['ExactDiag', 'get_full_wavefunction', 'get_numpy_Hamiltonian', 'get_scipy_sparse_Hamiltonian']
 
@@ -478,22 +477,19 @@ class ExactDiag:
         return False
 
 
-def get_full_wavefunction(psi: MPS, undo_sort_charge: bool = True):
+def get_full_wavefunction(psi: MPS):
     """Get the full wavefunction of a finite MPS as a 1D numpy array.
 
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
         The input MPS. Must have ``psi.bc == 'finite'``.
-    undo_sort_charge : bool
-        If we should undo the basis permutation induced by
-        :meth:`~tenpy.networks.site.Site.sort_charge`.
 
     Returns
     -------
     theta : 1D array
-        The wavefunction. Basis order is like for a Kronecker product :func:`numpy.kron` of the
-        local basis order, see `undo_sort_charge`.
+        The wavefunction.
+        TODO: describe basis order!
 
     """
     if psi.bc != 'finite':
@@ -507,13 +503,10 @@ def get_full_wavefunction(psi: MPS, undo_sort_charge: bool = True):
     assert theta.labels == ['vL'] + [f'{p}{n}' for n in range(psi.L)] + ['vR']
     theta = theta.to_numpy()
     theta = np.squeeze(theta, (0, -1))  # squeeze vL, vR
-    if undo_sort_charge:
-        perms = [inverse_permutation(site.leg.basis_perm) for site in psi.sites]
-        theta = theta[np.ix_(*perms)]
     return np.reshape(theta, -1)
 
 
-def get_numpy_Hamiltonian(model, from_mpo: bool = True, undo_sort_charge: bool = True):
+def get_numpy_Hamiltonian(model, from_mpo: bool = True):
     """Get the Hamiltonian as a matrix (2D numpy array).
 
     Parameters
@@ -522,52 +515,46 @@ def get_numpy_Hamiltonian(model, from_mpo: bool = True, undo_sort_charge: bool =
         The model that defines the Hamiltonian. The lattice should be finite.
     from_mpo : bool
         If we should prioritize using the MPO over ``H_bond`` to build the Hamiltonian.
-    undo_sort_charge : bool
-        If we should undo the basis permutation induced by
-        :meth:`~tenpy.networks.site.Site.sort_charge`.
 
     Returns
     -------
     H : 2D array
-        The Hamiltonian as a matrix. Basis order is like for a Kronecker product :func:`numpy.kron`
-        of the local basis order, see `undo_sort_charge`.
+        The Hamiltonian as a matrix.
+        TODO describe basis order
 
     """
     if model.lattice.bc_MPS != 'finite':
         raise ValueError('Model must be defined on a finite lattice.')
     if isinstance(model, CouplingModel):
-        return _get_Hamiltonian_from_couplings(model, sparse=False, undo_sort_charge=undo_sort_charge)
-    return _get_numpy_Hamiltonian_ExactDiag_full_H(model, from_mpo=from_mpo, undo_sort_charge=undo_sort_charge)
+        return _get_Hamiltonian_from_couplings(model, sparse=False)
+    return _get_numpy_Hamiltonian_ExactDiag_full_H(model, from_mpo=from_mpo)
 
 
-def get_scipy_sparse_Hamiltonian(model, undo_sort_charge: bool = True):
+def get_scipy_sparse_Hamiltonian(model):
     """Get the Hamiltonian as a sparse scipy matrix.
 
     Parameters
     ----------
     model
         The model that defines the Hamiltonian. The lattice should be finite.
-    undo_sort_charge : bool
-        If we should undo the basis permutation induced by
-        :meth:`~tenpy.networks.site.Site.sort_charge`.
 
     Returns
     -------
     H : CSR matrix
-        The Hamiltonian as a scipy CSR sparse matrix. Basis order is like for a Kronecker product
-        :func:`numpy.kron` of the local basis order, see `undo_sort_charge`.
+        The Hamiltonian as a scipy CSR sparse matrix.
+        TODO describe basis order
 
     """
     if model.lattice.bc_MPS != 'finite':
         raise ValueError('Model must be defined on a finite lattice.')
 
     if isinstance(model, CouplingModel):
-        return _get_Hamiltonian_from_couplings(model=model, sparse=True, undo_sort_charge=undo_sort_charge)
+        return _get_Hamiltonian_from_couplings(model=model, sparse=True)
     else:
         raise NotImplementedError
 
 
-def _get_numpy_Hamiltonian_ExactDiag_full_H(model, from_mpo: bool, undo_sort_charge: bool):
+def _get_numpy_Hamiltonian_ExactDiag_full_H(model, from_mpo: bool):
     ed = ExactDiag.from_model(model)
     if from_mpo and hasattr(model, 'H_MPO'):
         ed.build_full_H_from_mpo()
@@ -579,14 +566,11 @@ def _get_numpy_Hamiltonian_ExactDiag_full_H(model, from_mpo: bool, undo_sort_cha
     # [p0, p1, ..., p0*, p1*, ...]
     res = res.itranspose([f'p{n}{star}' for star in ['', '*'] for n in range(n_sites)])
     res = res.to_ndarray()
-    if undo_sort_charge:
-        perms = [inverse_permutation(site.perm) for site in model.lattice.mps_sites()] * 2
-        res = res[np.ix_(*perms)]
     dim = np.prod(res.shape[:n_sites])
     return np.reshape(res, (dim, dim))
 
 
-def _get_Hamiltonian_from_couplings(model, sparse: bool, undo_sort_charge: bool):
+def _get_Hamiltonian_from_couplings(model, sparse: bool):
     """Helper to get either dense numpy or sparse scipy matrix of the Hamiltonian."""
     raise NotImplementedError(
         'requires the lasyten MPO/models layer, which is not ported yet - use `ExactDiag.from_hamiltonian`.'
@@ -622,9 +606,6 @@ def _get_Hamiltonian_from_couplings(model, sparse: bool, undo_sort_charge: bool)
             if len(sites_since_last_op) > 0:
                 t = kron(t, np.eye(np.prod([dims[n] for n in sites_since_last_op])))
             op = sites[i].get_op(op).to_ndarray()
-            if undo_sort_charge:
-                perm = inverse_permutation(sites[i].perm)
-                op = op[np.ix_(perm, perm)]
             t = kron(t, op)
             last_site = i
         sites_since_last_op = range(last_site + 1, len(sites))

@@ -69,15 +69,15 @@ def test_lattice():
 
 
 def test_TrivialLattice():
-    s1 = site.SpinHalfSite('Sz', sort_charge=True)
-    s2 = site.SpinSite(0.5, 'Sz', sort_charge=True)
-    s3 = site.SpinSite(1.0, 'Sz', sort_charge=True)
+    s1 = site.SpinHalfSite('Sz')
+    s2 = site.SpinSite(0.5, 'Sz')
+    s3 = site.SpinSite(1.0, 'Sz')
     lat = lattice.TrivialLattice([s1, s2, s3, s2, s1])
     lat.test_sanity()
 
 
 def test_MultiSpeciesLattice():
-    s1 = site.SpinHalfSite('Sz', sort_charge=True)
+    s1 = site.SpinHalfSite('Sz')
     f1 = site.FermionSite('N')
     site.set_common_charges([s1, f1], 'independent')
     simple_lat = lattice.Honeycomb(3, 4, None)
@@ -86,7 +86,7 @@ def test_MultiSpeciesLattice():
 
 
 def test_IrregularLattice():
-    s1 = site.SpinHalfSite('Sz', sort_charge=False)
+    s1 = site.SpinHalfSite('Sz')
     s2 = site.SpinSite(0.5, 'Sz')
     reg = lattice.Honeycomb(3, 3, [s1, s2], bc=['open', 'periodic'])
     ir = lattice.IrregularLattice(
@@ -113,7 +113,7 @@ def test_IrregularLattice():
 
 
 def test_HelicalLattice():
-    s = site.SpinHalfSite('Sz', sort_charge=False)
+    s = site.SpinHalfSite('Sz')
     honey = lattice.Honeycomb(2, 3, s, bc=['periodic', -1], bc_MPS='infinite', order='Cstyle')
     hel = lattice.HelicalLattice(honey, 2)
     strength = np.array([[1.5, 2.5, 1.5], [2.5, 1.5, 2.5]])
@@ -224,7 +224,7 @@ def test_pairs():
 
 
 def test_lattice_order():
-    s = site.SpinHalfSite('Sz', sort_charge=True)
+    s = site.SpinHalfSite('Sz')
     # fmt: off
     chain = lattice.Chain(4, s)
     order_default = np.array([[0, 0], [1, 0], [2, 0], [3, 0]])
@@ -297,7 +297,7 @@ def test_possible_couplings():
 def test_index_conversion():
     from tenpy.networks.mps import MPS
 
-    s = site.SpinHalfSite(conserve=None, sort_charge=True)
+    s = site.SpinHalfSite(conserve=None)
     state1 = [[[0, 1]]]  # 0=up, 1=down
     for order in ['snake', 'default']:
         lat = lattice.Honeycomb(2, 3, [s, s], order=order, bc_MPS='finite')

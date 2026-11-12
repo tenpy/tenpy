@@ -376,9 +376,8 @@ def get_tfi_Hamiltonian(L, J, g, up_down_basis=True):
     return H_expect
 
 
-@pytest.mark.parametrize('undo_sort_charge', [True, False])
 @pytest.mark.parametrize('conserve', ['best', 'None'])
-def test_get_full_wavefunction(undo_sort_charge, conserve, L=10):
+def test_get_full_wavefunction(conserve, L=10):
     pytest.skip(_LEGACY)
     from tenpy.networks import MPS, SpinHalfSite
 
@@ -388,8 +387,7 @@ def test_get_full_wavefunction(undo_sort_charge, conserve, L=10):
     assert L % 4 == 2  # only for an odd number of singlets do we detect mixing up the basis order
 
     # build wavefunction exactly
-    up_down_basis = undo_sort_charge or conserve == 'None'
-    singlet = np.zeros((2, 2))
+    up_down_basis = False
     if up_down_basis:
         singlet[0, 1] = +1
         singlet[1, 0] = -1
@@ -402,41 +400,37 @@ def test_get_full_wavefunction(undo_sort_charge, conserve, L=10):
     # use get_full_wavefunction
     site = SpinHalfSite(conserve='Sz' if conserve == 'best' else conserve)
     psi = MPS.from_singlets(site=site, L=L, pairs=[[i, i + 1] for i in range(0, L, 2)], unit_cell_width=L)
-    res = exact_diag.get_full_wavefunction(psi, undo_sort_charge=undo_sort_charge)
+    res = exact_diag.get_full_wavefunction(psi)
 
     # compare
     assert np.allclose(res, expect)
 
 
-@pytest.mark.parametrize('undo_sort_charge', [True, False])
 @pytest.mark.parametrize('conserve', ['best', 'None'])
-def test_get_scipy_sparse_Hamiltonian(undo_sort_charge, conserve, L=10, J=1, g=4.3291):
+def test_get_scipy_sparse_Hamiltonian(conserve, L=10, J=1, g=4.3291):
     pytest.skip(_LEGACY)
     from tenpy.models import TFIChain
 
     model = TFIChain(dict(L=L, conserve=conserve, J=J, g=g))
-    H_expect = get_tfi_Hamiltonian(L=L, J=J, g=g, up_down_basis=undo_sort_charge or conserve == 'None')
-    H_res = exact_diag.get_scipy_sparse_Hamiltonian(model, undo_sort_charge=undo_sort_charge)
+    H_expect = get_tfi_Hamiltonian(L=L, J=J, g=g, up_down_basis=False)
+    H_res = exact_diag.get_scipy_sparse_Hamiltonian(model)
     assert np.allclose(H_res.toarray(), H_expect)
 
 
-@pytest.mark.parametrize('undo_sort_charge', [True, False])
 @pytest.mark.parametrize('conserve', ['best', 'None'])
 @pytest.mark.parametrize('use_ED', [True, False])
-def test_get_numpy_Hamiltonian(undo_sort_charge, conserve, use_ED, J=1, g=4.3291):
+def test_get_numpy_Hamiltonian(conserve, use_ED, J=1, g=4.3291):
     pytest.skip(_LEGACY)
     from tenpy.models import TFIChain
 
     L = 6 if use_ED else 10  # using ED is a bit slow (overhead from combine? or is np.ix_ slow?)
     model = TFIChain(dict(L=L, conserve=conserve, J=J, g=g))
-    H_expect = get_tfi_Hamiltonian(L=L, J=J, g=g, up_down_basis=undo_sort_charge or conserve == 'None')
+    H_expect = get_tfi_Hamiltonian(L=L, J=J, g=g, up_down_basis=False)
     if use_ED:
         # default behavior for this model is from couplings. test from full_H explicitly.
-        H_res = exact_diag._get_numpy_Hamiltonian_ExactDiag_full_H(
-            model, from_mpo=True, undo_sort_charge=undo_sort_charge
-        )
+        H_res = exact_diag._get_numpy_Hamiltonian_ExactDiag_full_H(model, from_mpo=True)
     else:
-        H_res = exact_diag.get_numpy_Hamiltonian(model, undo_sort_charge=undo_sort_charge)
+        H_res = exact_diag.get_numpy_Hamiltonian(model)
     assert np.allclose(H_res, H_expect)
 
 

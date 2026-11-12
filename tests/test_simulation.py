@@ -90,7 +90,6 @@ simulation_params = {
     'model_params': {
         'bc_MPS': 'infinite',  # defaults to finite
         'L': 4,
-        'sort_charge': True,
     },
     'algorithm_class': 'DummyAlgorithm',
     'algorithm_params': {

@@ -45,8 +45,6 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
         MPS boundary conditions.
     conserve : 'Sz' | 'parity' | None
         What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
-    sort_charge : bool
-        Whether to sort by charges of physical legs. `True` by default.
 
     """
 
@@ -59,7 +57,6 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
         Jz = model_params.get('Jz', 1.5)
         hz = model_params.get('hz', 0.0)
         conserve = model_params.get('conserve', 'Sz')
-        sort_charge = model_params.get('sort_charge', True)
         if xi == 0.0:
             g = 0.0
         elif xi == np.inf:
@@ -69,7 +66,7 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
 
         # Define the sites and the lattice, which in this case is a simple uniform chain
         # of spin 1/2 sites
-        site = SpinHalfSite(conserve=conserve, sort_charge=sort_charge)
+        site = SpinHalfSite(conserve=conserve)
         lat = Chain(L, site, bc_MPS='infinite', bc='periodic')
 
         # The operators that appear in the Hamiltonian. Standard spin operators are

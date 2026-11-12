@@ -13,7 +13,7 @@ from tenpy.networks.mps import MPS
 
 
 def example_exact_diagonalization(L, Jz):
-    xxz_pars = dict(L=L, Jxx=1.0, Jz=Jz, hz=0.0, bc_MPS='finite', sort_charge=True)
+    xxz_pars = dict(L=L, Jxx=1.0, Jz=Jz, hz=0.0, bc_MPS='finite')
     M = XXZChain(xxz_pars)
 
     product_state = ['up', 'down'] * (xxz_pars['L'] // 2)  # this selects a charge sector!

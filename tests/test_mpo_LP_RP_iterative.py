@@ -267,7 +267,7 @@ def setup(test_case: int):
 def test_init_LP_RP_iterative(test_case):
     H, psi, E, name, N_cycles, cycle_indices, square_of_H, square_of_psi = setup(test_case)
     # check with and without sorted legcharges
-    for sort_charges in [0, 1, 2]:
+    for sort_charges in [0, 1, 2]:  # TODO sort_charges (concept of sites) got purged. not sure if this should stay?
         if sort_charges == 1:
             pytest.skip('sort_legcharges() no longer exists')
             # tperms = H.sort_legcharges()

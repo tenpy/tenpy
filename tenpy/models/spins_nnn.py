@@ -84,7 +84,7 @@ class SpinChainNNN(ModelBuilder):
             else:
                 conserve = None
             self.logger.info('%s: set conserve to %s', self.name, conserve)
-        spinsite = SpinSite(S, conserve, sort_charge=False)  # GroupedSite does sort charges
+        spinsite = SpinSite(S, conserve)
         site = GroupedSite([spinsite, spinsite], charges='same')
         return site
 

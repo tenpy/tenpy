@@ -126,7 +126,7 @@ def test_tebd(bc_MPS, which_engine, compute_err, use_eig_based_svd, g=0.5):
 
 def test_RandomUnitaryEvolution():
     L = 8
-    spin_half = SpinHalfSite(conserve='Sz', sort_charge=True)
+    spin_half = SpinHalfSite(conserve='Sz')
     psi = MPS.from_product_state([spin_half] * L, [0, 1] * (L // 2), bc='finite', unit_cell_width=L)  # Neel state
     assert tuple(psi.chi) == (1, 1, 1, 1, 1, 1, 1)
     TEBD_params = dict(N_steps=2, trunc_params={'chi_max': 10})
@@ -152,7 +152,7 @@ def test_RandomUnitaryEvolution():
 def test_fixes_issue_220(S):
     L = 20
 
-    model = SpinChain(dict(S=S, conserve=None, sort_charge=True, Jx=1.0, Jy=1.0, Jz=1.0, L=L))
+    model = SpinChain(dict(S=S, conserve=None, Jx=1.0, Jy=1.0, Jz=1.0, L=L))
     neel = ['up', 'up'] * (L // 2) + ['up'] * (L % 2)
     psi_init = MPS.from_product_state(
         sites=model.lattice.unit_cell * L, p_state=neel, unit_cell_width=model.lattice.mps_unit_cell_width
