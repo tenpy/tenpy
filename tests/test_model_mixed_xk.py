@@ -1,5 +1,4 @@
 # Copyright (C) TeNPy Developers, Apache license
-import lasyten as lasy
 import numpy as np
 import pytest
 from test_model import check_general_model
@@ -123,11 +122,22 @@ def test_mixed_hubbard(conserve_S):
                         [['full'], ['empty'], ['empty']]]  # fmt: skip
         psi = MPS.from_lat_product_state(M.lattice, product_state)
 
-    with pytest.raises(lasy.SymmetryError, match='Legs can not be permuted automatically'):
-        dmrg.run(psi, M, {})
-    pytest.xfail('fermionic DMRG')
+    # Planar DMRG no longer raises SymmetryError on fermions; the old
+    # ``dmrg.run(psi, M, {})`` probe would run unbounded sweeps (default
+    # max_sweeps=1000, no chi_max) and hang CI. Expect the mixer gap instead,
+    # then xfail: full Hubbard DMRG is still too expensive / incomplete here
+    # (spinless covers the working real-space fermionic path).
+    with pytest.raises(NotImplementedError, match='Mixer is not ported yet'):
+        _params = asConfig(dmrg_params, 'DMRG')
+        _params.touch_all(['trunc_params'])
+        dmrg.run(psi, M, _params, resume_data={'init_env_data': dict(start_env_sites=0)})
+    pytest.xfail('fermionic Hubbard DMRG')
 
-    info = dmrg.run(psi, M, dmrg_params)
+    # doing without mixer for now. Once implemented remove the xfail and run with mixer again
+    dmrg_params['mixer'] = False
+    dmrg_params['max_sweeps'] = 5  # without mixer, convergence is super slow otherwise
+
+    info = dmrg.run(psi, M, dmrg_params, resume_data={'init_env_data': dict(start_env_sites=0)})
     E_real = info['E']
 
     # measure Sz onsite and SpSm correlators
@@ -137,7 +147,9 @@ def test_mixed_hubbard(conserve_S):
     # mixed space
     # implemented with two spinless fermion sites for up/down !
     model_params = dict(t=t, U=U, Lx=Lx, Ly=Ly, bc_MPS='finite', conserve_k=True)
-    M2 = HubbardMixedXKSquare(model_params)
+    with pytest.raises(NotImplementedError):
+        M2 = HubbardMixedXKSquare(model_params)
+    pytest.xfail('mixed_xk not adapted')
 
     # initial product state with momentum 0
     product_xk = [
