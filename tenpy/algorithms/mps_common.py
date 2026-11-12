@@ -502,7 +502,7 @@ class Sweep(Algorithm):
 
         Returns
         -------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Current best guess for the ground state, which is to be optimized.
             Labels are ``'vL', 'p0', 'p1', 'vR'``, or combined versions of it (if `self.combine`).
             For single-site DMRG, the ``'p1'`` label is missing.
@@ -555,7 +555,7 @@ class Sweep(Algorithm):
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Local single- or two-site wave function, as returned by :meth:`prepare_update_local`.
 
         Returns
@@ -601,7 +601,15 @@ class Sweep(Algorithm):
             i_L = self.i0
             i_R = self.i0 + 1
         else:  # n == 1 and left moving
-            # TODO is this also correct if move_right is None?
+            # `move_right is None` (only the last entry of the TDVP schedules, with
+            # `update_LP_RP == [False, False]`) also ends up here, giving i_L = -1 for i0 = 0.
+            # This index is never used: `SingleSiteTDVPEngine.update_local` skips the base
+            # `update_env` for i0 == 0 (`left_moving_update`), and `free_no_longer_needed_envs`
+            # deletes nothing for `None`. Otherwise `del_RP(-1)` would not raise, but wrap around
+            # (with a FutureWarning) and delete the right-most RP. `TwoSiteTDVPEngine` has n == 2,
+            # so it never gets here; it calls the base `update_env` even for the `None` update, which
+            # only deletes LP[1], RP[0] (both outdated after the update, not recomputed).
+            # NOTE: this path is untested (tests/test_tdvp.py is skipped).
             i_L = self.i0 - 1
             i_R = self.i0
         return i_L, i_R
@@ -991,12 +999,12 @@ class EffectiveH(PlanarLinearOperator):
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Wave function to apply the effective Hamiltonian to, with uncombined legs.
 
         Returns
         -------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Wave function with labels as given by `self.acts_on`.
 
         """
@@ -1018,7 +1026,7 @@ class EffectiveH(PlanarLinearOperator):
         i : int
             We update the part left of site `i`.
             Can optimize if `i` == :attr:`i0` and :attr:`combine` is True.
-        U : None | :class:`~tenpy.linalg.np_conserved.Array`
+        U : None | :class:`~lasyten.tensors.SymmetricTensor`
             The tensor on the left-most site `self` acts on, with combined legs after SVD.
             Only used if trying to optimize.
 
@@ -1036,7 +1044,7 @@ class EffectiveH(PlanarLinearOperator):
         i : int
             We update the part right of site `i`.
             Can optimize if `i` == :attr:`i0` + 2 - :attr:`length` and :attr:`combine` is True.
-        U : None | :class:`~tenpy.linalg.np_conserved.Array`
+        U : None | :class:`~lasyten.tensors.SymmetricTensor`
             The tensor on the right-most site `self` acts on, with combined legs after SVD.
             Only used if trying to optimize.
 
@@ -1084,11 +1092,11 @@ class OneSiteH(EffectiveH):
         Overwritten by normal attribute, if `combine`.
     combine, move_right : bool
         See above.
-    LHeff, RHeff : :class:`~tenpy.linalg.np_conserved.Array`
+    LHeff, RHeff : :class:`~lasyten.tensors.SymmetricTensor`
         Only set if :attr:`combine`, and only one of them depending on :attr:`move_right`.
         If `move_right` was True, `LHeff` is set with labels ``'(vR*.p0)', 'wR', '(vR.p0*)'``
         for bra, MPO, ket; otherwise `RHeff` is set with labels ``'(p0*.vL)', 'wL', '(p0, vL*)'``
-    LP, W0, RP : :class:`~tenpy.linalg.np_conserved.Array`
+    LP, W0, RP : :class:`~lasyten.tensors.SymmetricTensor`
         Tensors making up the network of `self`.
 
     """
@@ -1157,13 +1165,13 @@ class OneSiteH(EffectiveH):
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Labels: ``vL, p0, vR`` if combine=False, ``(vL.p0), vR`` or ``vL, (p0.vR)`` if True
             (depending on the direction of movement)
 
         Returns
         -------
-        theta :class:`~tenpy.linalg.np_conserved.Array`
+        theta :class:`~lasyten.tensors.SymmetricTensor`
             Product of `theta` and the effective Hamiltonian.
 
         """
@@ -1205,12 +1213,12 @@ class OneSiteH(EffectiveH):
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Wave function with labels ``'vL', 'p0', 'vR'``
 
         Returns
         -------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Wave function with labels ``'(vL.p0)', 'vR'``
 
         """
@@ -1299,13 +1307,13 @@ class TwoSiteH(EffectiveH):
     acts_on : list of str
         Labels of the state on which `self` acts. NB: class attribute.
         Overwritten by normal attribute, if `combine`.
-    LHeff : :class:`~tenpy.linalg.np_conserved.Array`
+    LHeff : :class:`~lasyten.tensors.SymmetricTensor`
         Left part of the effective Hamiltonian.
         Labels ``'(vR*.p0)', 'wR', '(vR.p0*)'`` for bra, MPO, ket.
-    RHeff : :class:`~tenpy.linalg.np_conserved.Array`
+    RHeff : :class:`~lasyten.tensors.SymmetricTensor`
         Right part of the effective Hamiltonian.
         Labels ``'(p1*.vL)', 'wL', '(p1.vL*)'`` for ket, MPO, bra.
-    LP, W0, W1, RP : :class:`~tenpy.linalg.np_conserved.Array`
+    LP, W0, W1, RP : :class:`~lasyten.tensors.SymmetricTensor`
         Tensors making up the network of `self`.
 
     """
@@ -1357,12 +1365,12 @@ class TwoSiteH(EffectiveH):
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Labels: ``vL, p0, p1, vR`` if combine=False, ``(vL.p0), (p1.vR)`` if True
 
         Returns
         -------
-        theta :class:`~tenpy.linalg.np_conserved.Array`
+        theta :class:`~lasyten.tensors.SymmetricTensor`
             Product of `theta` and the effective Hamiltonian.
 
         """
@@ -1405,12 +1413,12 @@ class TwoSiteH(EffectiveH):
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Wave function with labels ``'vL', 'p0', 'p1', 'vR'``
 
         Returns
         -------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Wave function with labels ``'vL', 'p0', 'p1', 'vR'``
 
         """
@@ -1482,11 +1490,11 @@ class ZeroSiteH(EffectiveH):
     acts_on : list of str
         Labels of the state on which `self` acts. NB: class attribute.
         Overwritten by normal attribute, if `combine`.
-    LHeff, RHeff : :class:`~tenpy.linalg.np_conserved.Array`
+    LHeff, RHeff : :class:`~lasyten.tensors.SymmetricTensor`
         Only set if :attr:`combine`, and only one of them depending on :attr:`move_right`.
         If `move_right` was True, `LHeff` is set with labels ``'(vR*.p0)', 'wR', '(vR.p0*)'``
         for bra, MPO, ket; otherwise `RHeff` is set with labels ``'(p0*.vL)', 'wL', '(p0, vL*)'``
-    LP, W0, RP : :class:`~tenpy.linalg.np_conserved.Array`
+    LP, W0, RP : :class:`~lasyten.tensors.SymmetricTensor`
         Tensors making up the network of `self`.
 
     """
@@ -1541,12 +1549,12 @@ class ZeroSiteH(EffectiveH):
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Labels: ``vL, vR``.
 
         Returns
         -------
-        theta :class:`~tenpy.linalg.np_conserved.Array`
+        theta :class:`~lasyten.tensors.SymmetricTensor`
             Product of `theta` and the effective Hamiltonian.
 
         """
