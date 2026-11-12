@@ -21,28 +21,38 @@ def _seed_numpy_rng():
     np.random.seed(12345)
 
 
-def _virtual_space(symmetry, weights_mults):
-    """Virtual space with the given SU(2) sectors, given as ``(2 * spin, multiplicity)`` pairs."""
-    return lasy.ElementarySpace.from_defining_sectors(
-        symmetry,
-        np.array([[w, 0] for w, _ in weights_mults]),
-        multiplicities=[m for _, m in weights_mults],
-    )
+# Site kind and symmetry of the random MPS: spin-1 sites with all their symmetries, spinless fermions with parity.
+# (Fermions with ``conserve='N'`` can not be used here: with a trivial total charge, only the vacuum is possible, and a
+# non-trivial total charge is not supported by `canonical_form_infinite1` yet, see
+# `test_canonical_form_infinite_nontrivial_total_charge`.)
+SITE_CONSERVE = [
+    pytest.param('spin', None, id='None'),
+    pytest.param('spin', 'Sz', id='Sz'),
+    pytest.param('spin', 'SU2', id='SU2'),
+    pytest.param('fermion', 'parity', id='fermion-parity'),
+]
 
 
-def _random_mps(conserve, seed=0, L=2, canonicalize=True):
-    """Random infinite MPS (unit cell of `L` spin-1 sites) with the given symmetry.
+def _random_mps(conserve, seed=0, L=2, canonicalize=True, site_kind='spin'):
+    """Random infinite MPS (unit cell of `L` sites) with the given symmetry.
 
+    The sites are spin-1 sites (``site_kind='spin'``) or spinless fermions (``site_kind='fermion'``).
     If not `canonicalize`, the random tensors are used as they are, i.e. *without* calling ``canonical_form``.
     """
     np.random.seed(seed)
-    site = sites.SpinSite(1, conserve=conserve)
+    if site_kind == 'fermion':
+        site = sites.SpinlessFermionSite(conserve=conserve)
+    else:
+        site = sites.SpinSite(1, conserve=conserve)
     sym = site.leg.symmetry
     if conserve == 'SU2':
-        # bonds with spin 1/2 and 3/2
-        V = _virtual_space(sym, [(1, 3), (3, 2)])
+        # bonds with spin 1/2 and 3/2 (SU(2) sectors are given as ``[2 * spin, 0]``)
+        V = lasy.ElementarySpace.from_defining_sectors(sym, np.array([[1, 0], [3, 0]]), multiplicities=[3, 2])
     elif conserve == 'Sz':
         V = lasy.ElementarySpace.from_defining_sectors(sym, np.array([[-2], [0], [2]]), multiplicities=[3, 6, 3])
+    elif conserve == 'parity':
+        # even and odd fermion parity; same bond dimension as the other cases
+        V = lasy.ElementarySpace.from_defining_sectors(sym, np.array([[0], [1]]), multiplicities=[6, 6])
     else:
         V = lasy.ElementarySpace.from_trivial_sector(dim=12, symmetry=sym)
     if canonicalize:
@@ -74,16 +84,16 @@ def _tm_spectrum(psi, num=3):
 
 
 def _extra_space(psi, conserve, mult):
-    """Extra bond space with a single sector (trivial / ``Sz=0`` / spin 1/2) with `mult` states."""
+    """Extra bond space with a single sector (trivial / ``Sz=0`` / even parity / spin 1/2) with `mult` states."""
     sym = psi.sites[0].leg.symmetry
-    sector = {None: [0], 'Sz': [0], 'SU2': [1, 0]}[conserve]
+    sector = {None: [0], 'Sz': [0], 'parity': [0], 'SU2': [1, 0]}[conserve]
     return lasy.ElementarySpace.from_defining_sectors(sym, np.array([sector]), multiplicities=[mult])
 
 
-@pytest.mark.parametrize('conserve', [None, 'Sz', 'SU2'])
+@pytest.mark.parametrize('site_kind, conserve', SITE_CONSERVE)
 @pytest.mark.parametrize('seed', [0, 1])
-def test_canonical_form_infinite(conserve, seed):
-    psi = _random_mps(conserve, seed, canonicalize=False)
+def test_canonical_form_infinite(site_kind, conserve, seed):
+    psi = _random_mps(conserve, seed, canonicalize=False, site_kind=site_kind)
     spectrum_random = _tm_spectrum(psi)
     psi.canonical_form()
     psi.test_sanity()
@@ -102,11 +112,11 @@ def test_canonical_form_infinite(conserve, seed):
         npt.assert_allclose(S0, S1, atol=1e-7)
 
 
-@pytest.mark.parametrize('conserve', [None, 'Sz', 'SU2'])
+@pytest.mark.parametrize('site_kind, conserve', SITE_CONSERVE)
 @pytest.mark.parametrize('L', [3, 4])
-def test_canonical_form_infinite_unit_cell_width(conserve, L):
+def test_canonical_form_infinite_unit_cell_width(site_kind, conserve, L):
     # regression test: the sweep over the bonds of the unit cell failed for more than two sites
-    psi = _random_mps(conserve, L, L=L, canonicalize=False)
+    psi = _random_mps(conserve, L, L=L, canonicalize=False, site_kind=site_kind)
     psi.canonical_form()
     psi.test_sanity()
     assert np.max(np.abs(psi.norm_test())) < 1e-12
@@ -140,9 +150,9 @@ def test_aklt_state():
         psi.correlation_length2(charge_sector=0)
 
 
-@pytest.mark.parametrize('conserve', [None, 'Sz', 'SU2'])
-def test_correlation_length_transfer_matrix(conserve):
-    psi = _random_mps(conserve, 2)
+@pytest.mark.parametrize('site_kind, conserve', SITE_CONSERVE)
+def test_correlation_length_transfer_matrix(site_kind, conserve):
+    psi = _random_mps(conserve, 2, site_kind=site_kind)
     eta = _tm_spectrum(psi, 2)
     expected = -psi.L / np.log(eta[1] / eta[0])
     xi, charge = psi.correlation_length2(return_charges=True)
@@ -193,14 +203,17 @@ def test_from_desired_bond_dimension_infinite_Sz():
     assert np.max(np.abs(psi.norm_test())) < 1e-12
 
 
-@pytest.mark.parametrize('conserve', [None, 'Sz', 'SU2'])
-def test_canonical_form_infinite_complex(conserve):
+@pytest.mark.parametrize('site_kind, conserve', SITE_CONSERVE)
+def test_canonical_form_infinite_complex(site_kind, conserve):
     np.random.seed(5)
-    site = sites.SpinSite(1, conserve=conserve)
+    if site_kind == 'fermion':
+        site = sites.SpinlessFermionSite(conserve=conserve)
+    else:
+        site = sites.SpinSite(1, conserve=conserve)
     sym = site.leg.symmetry
     dtype = lasy.Dtype.complex128
     if conserve == 'SU2':
-        V = _virtual_space(sym, [(1, 2), (3, 1)])
+        V = lasy.ElementarySpace.from_defining_sectors(sym, np.array([[1, 0], [3, 0]]), multiplicities=[2, 1])
         psi = mps.MPS.from_desired_virtual_spaces(
             [site] * 2, [V] * 2, bc='infinite', total_charge=sym.trivial_sector, unit_cell_width=2, dtype=dtype
         )
@@ -215,10 +228,10 @@ def test_canonical_form_infinite_complex(conserve):
     assert 0.0 < xi < np.inf
 
 
-@pytest.mark.parametrize('conserve', [None, 'Sz', 'SU2'])
-def test_canonical_form_infinite_reduces_bond_dimension(conserve):
+@pytest.mark.parametrize('site_kind, conserve', SITE_CONSERVE)
+def test_canonical_form_infinite_reduces_bond_dimension(site_kind, conserve):
     # The extra bond states added by `enlarge_chi` are decoupled (zero singular values), so they are projected out.
-    psi_ref = _random_mps(conserve, 7)
+    psi_ref = _random_mps(conserve, 7, site_kind=site_kind)
     psi = psi_ref.copy()
     psi.enlarge_chi([_extra_space(psi, conserve, 2), _extra_space(psi, conserve, 1)])
     psi.form = [None] * psi.L
@@ -291,10 +304,18 @@ def test_canonical_form_infinite_degenerate_spectrum():
     raises=NotImplementedError,
     strict=True,
 )
-def test_canonical_form_infinite_nontrivial_total_charge():
+@pytest.mark.parametrize(
+    'site, state',
+    [
+        pytest.param(sites.SpinSite(0.5, conserve='Sz'), ['up', 'up'], id='spin-Sz'),
+        # for fermions with ``conserve='N'``, this is the only way to get a non-trivial state (e.g. at half filling)
+        pytest.param(sites.SpinlessFermionSite(conserve='N'), ['empty', 'full'], id='fermion-N'),
+        pytest.param(sites.SpinlessFermionSite(conserve='parity'), ['empty', 'full'], id='fermion-parity'),
+    ],
+)
+def test_canonical_form_infinite_nontrivial_total_charge(site, state):
     # a non-trivial total charge is carried by a hidden leg
-    site = sites.SpinSite(0.5, conserve='Sz')
-    psi = mps.MPS.from_product_state([site] * 2, ['up', 'up'], bc='infinite', unit_cell_width=2)
+    psi = mps.MPS.from_product_state([site] * 2, state, bc='infinite', unit_cell_width=2)
     assert isinstance(psi._B[-1], lasy.HiddenLegTensor)
     psi.canonical_form_infinite1()
     assert np.max(np.abs(psi.norm_test())) < 1e-12
@@ -329,13 +350,21 @@ def test_correlation_length_charge_sector_arguments():
         psi.correlation_length2(charge_sector=[0, 'other'])
 
 
-def test_correlation_length_dense_reference():
-    # without symmetry, compare with the eigenvalues of the dense transfer matrix of the unit cell
-    psi = _random_mps(None, 0)
+@pytest.mark.parametrize(
+    'site_kind, conserve',
+    [pytest.param('spin', None, id='None'), pytest.param('fermion', 'parity', id='fermion-parity')],
+)
+def test_correlation_length_dense_reference(site_kind, conserve):
+    # compare with the eigenvalues of the dense transfer matrix of the unit cell: without symmetry, and for fermions
+    # with parity. For the latter, the dense transfer matrix is block diagonal in the parity of the two bond indices
+    # (the sectors of the symmetric transfer matrix are its blocks). This only uses the dense blocks of B, no braiding
+    # is involved in contracting B with its conjugate, hence ``understood_braiding=True``.
+    psi = _random_mps(conserve, 0, site_kind=site_kind)
     L = psi.L
     T = None
     for i in range(L):
-        B = lasy.planar_permute_legs(psi.get_B(i, 'B'), codomain=['vL', 'p'], domain=['vR']).to_numpy()
+        B = lasy.planar_permute_legs(psi.get_B(i, 'B'), codomain=['vL', 'p'], domain=['vR'])
+        B = B.to_numpy(understood_braiding=True)
         T_i = np.einsum('apb,cpd->acbd', B.conj(), B)
         T_i = T_i.reshape(B.shape[0] ** 2, B.shape[2] ** 2)
         T = T_i if T is None else T @ T_i
@@ -348,9 +377,10 @@ def test_correlation_length_dense_reference():
         assert np.min(np.abs(xi_dense - xi)) < 1e-6 * xi
 
 
-@pytest.mark.parametrize('conserve', [None, 'Sz'])
-def test_overlap_infinite_different_states(conserve):
-    psi_a, psi_b = _random_mps(conserve, 0), _random_mps(conserve, 1)
+@pytest.mark.parametrize('site_kind, conserve', SITE_CONSERVE)
+def test_overlap_infinite_different_states(site_kind, conserve):
+    psi_a = _random_mps(conserve, 0, site_kind=site_kind)
+    psi_b = _random_mps(conserve, 1, site_kind=site_kind)
     npt.assert_allclose(psi_a.overlap(psi_a, understood_infinite=True), 1.0, atol=1e-10)
     ov_ab = psi_a.overlap(psi_b, understood_infinite=True)
     ov_ba = psi_b.overlap(psi_a, understood_infinite=True)
@@ -359,9 +389,9 @@ def test_overlap_infinite_different_states(conserve):
     npt.assert_allclose(abs(ov_ba), abs(ov_ab), atol=1e-10)
 
 
-@pytest.mark.parametrize('conserve', [None, 'Sz', 'SU2'])
-def test_enlarge_chi_infinite(conserve):
-    psi = _random_mps(conserve, 0)
+@pytest.mark.parametrize('site_kind, conserve', SITE_CONSERVE)
+def test_enlarge_chi_infinite(site_kind, conserve):
+    psi = _random_mps(conserve, 0, site_kind=site_kind)
     chi = [B.get_leg('vL').dim for B in psi._B]
     S_old = [S.diagonal_as_numpy() for S in psi._S]
     psi_enl = psi.copy()
