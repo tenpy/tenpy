@@ -1,4 +1,4 @@
-"""Tests for infinite two-site DMRG with uniform spin chains.
+"""Tests for infinite two-site DMRG with uniform spin chains (and free fermions, currently xfail).
 
 All tests use plain two-site DMRG without mixer.
 For the iDMRG with SU(2) symmetry, we only test cases where the bond stays small (AKLT), since the
@@ -8,20 +8,28 @@ The Sz iDMRG tests are marked slow, since they take many sweeps (with the Debug 
 """
 
 # Copyright (C) TeNPy Developers, Apache license
+import lasyten as lasy
 import numpy as np
 import numpy.testing as npt
 import pytest
 
 from tenpy.algorithms import dmrg
 from tenpy.models.aklt import AKLTChain
+from tenpy.models.fermions_spinless import FermionChain
 from tenpy.models.spins import SpinChain
 from tenpy.networks import mps
+from tenpy.tools import asConfig
 
 E_HEISENBERG_S12 = 0.25 - np.log(2)  # exact energy per site of the spin-1/2 Heisenberg chain
 E_HEISENBERG_S1 = -1.401484038971  # energy per site of the spin-1 Heisenberg chain, White & Huse (1993)
 
 
-def _run_idmrg(M, psi, chi_max, max_sweeps=30, N_sweeps_check=4):
+def _run_idmrg(M, psi, chi_max, max_sweeps=30, N_sweeps_check=4, touch_all=False):
+    """Run two-site iDMRG without mixer.
+
+    With `touch_all`, all options are marked as used: use it if `dmrg.run` is expected to fail early, otherwise the
+    warning about unused options is only raised when the options are garbage collected, in a later test.
+    """
     dmrg_pars = {
         'combine': False,
         'mixer': False,
@@ -33,6 +41,9 @@ def _run_idmrg(M, psi, chi_max, max_sweeps=30, N_sweeps_check=4):
         'active_sites': 2,
         'start_env': 1,
     }
+    if touch_all:
+        dmrg_pars = asConfig(dmrg_pars, 'DMRG')
+        dmrg_pars.touch_all(['trunc_params'])
     return dmrg.run(psi, M, dmrg_pars, resume_data={'init_env_data': dict(start_env_sites=0)})
 
 
@@ -77,6 +88,26 @@ def test_heisenberg_Sz_matches_tenpy_v1():
     npt.assert_allclose(psi.entanglement_entropy(), 0.8416008768252741, atol=1e-8)
     npt.assert_allclose(psi.correlation_length2(charge_sector=0), 3.33846832350632, atol=1e-7)
     assert [int(S.get_leg('vL').dim) for S in psi._S] == [8, 8]
+
+
+@pytest.mark.xfail(
+    reason='iDMRG with fermions does not work yet: #738 (fixed by #761), charged unit cell #763, Lanczos #762',
+    raises=(lasy.SymmetryError, ValueError),
+    strict=True,
+)
+@pytest.mark.parametrize('conserve', ['N', 'parity'])
+def test_free_fermions_infinite_dmrg(conserve):
+    # Free fermions at half filling have the energy per site -2 J / pi (exact, from the dispersion -2 J cos(k)).
+    # The start state has a single fermion per unit cell, i.e. a non-trivial charge of the unit cell.
+    # NOTE: the tolerance and chi_max (as for the spin-1/2 Heisenberg chain) are not checked yet, since the
+    # test can not run to the end before the issues in the reason are fixed.
+    E_exact = -2.0 / np.pi
+    M = FermionChain(dict(L=2, J=1.0, V=0.0, mu=0.0, bc_MPS='infinite', conserve=conserve))
+    psi = mps.MPS.from_product_state(M.lattice.mps_sites(), ['empty', 'full'], bc='infinite', unit_cell_width=2)
+    res = _run_idmrg(M, psi, 16, max_sweeps=12, touch_all=True)
+    assert E_exact - 1e-8 <= res['E'] <= E_exact + 5e-4  # variational (up to the truncation error), and close
+    assert np.max(np.abs(psi.norm_test())) < 1e-10
+    npt.assert_allclose(M.get_H_MPO().expectation_value(psi), res['E'], atol=1e-6)
 
 
 def test_aklt_idmrg_su2():
