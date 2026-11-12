@@ -1190,6 +1190,7 @@ def full_diag_effH(
 
     """
     fullH: lasy.SymmetricTensor = effH.to_tensor()
+    symmetry = fullH.symmetry
     if isinstance(effH, TwoSiteH) and not effH.combine:
         assert fullH.labels_are('vL', 'p0', 'p1', 'vR', 'vR*', 'p1*', 'p0*', 'vL*', planar=True)
         # TODO workaround. See https://github.com/tenpy/tenpy/issues/693
@@ -1200,14 +1201,21 @@ def full_diag_effH(
         # let e.g. the dummy in the tests through
         pass
 
-    E, V = lasy.eigh(fullH, new_labels='eig*', new_leg_dual=False)
-    # V: lasy.SymmetricTensor
-
     if keep_sector:
         if isinstance(theta_guess, lasy.HiddenLegTensor):
-            sector = theta_guess.as_SymmetricTensor().get_leg(charge_label).sector_decomposition[0]
+            charge_leg = theta_guess.as_SymmetricTensor().get_leg(charge_label)
+
+            # we will construct with charge leg in the *domain* and .get_leg() gives us the
+            # leg as if it were in the codomain.
+            charge_leg = charge_leg.dual
+
+            sector = charge_leg.sector_decomposition[0]
+            # need to match, since the eig leg on V becomes the charge leg after projection
+            new_leg_dual = charge_leg.is_dual
         else:
-            sector = fullH.symmetry.trivial_sector
+            sector = symmetry.trivial_sector
+            new_leg_dual = False  # arbitrary choice
+
         # OPTIMIZE this does not exploit that we project onto a *sector*
         #          knowing this, we could get away by diagonalizing only in a restricted space,
         #          i.e. project first, than diagonalize.
@@ -1218,11 +1226,14 @@ def full_diag_effH(
     else:
         # do not restrict the sector
         sector = None
+        new_leg_dual = False  # arbitrary choice
+
+    E, V = lasy.eigh(fullH, new_labels='eig*', new_leg_dual=new_leg_dual)
 
     gs_projector, E0 = E.sector_argmin(sector)
     theta: lasy.Tensor = lasy.compose(V, gs_projector.hc)
 
-    if gs_projector.small_leg.sector_decomposition[0] == fullH.symmetry.trivial_sector:
+    if gs_projector.small_leg.sector_decomposition[0] == symmetry.trivial_sector:
         theta = lasy.squeeze_legs(theta, 'eig*')
     else:
         theta = lasy.HiddenLegTensor.from_tensor(theta.relabel({'eig*': charge_label}), [charge_label])

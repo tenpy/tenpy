@@ -42,12 +42,19 @@ class _DummyEffH:
 
 
 @pytest.mark.parametrize(
-    'site_kind, conserve', [('spin', None), ('spin', 'parity'), ('spin', 'Sz'), ('spin', 'SU2'), ('golden', None)]
+    'site_kind, conserve',
+    [('spin', None), ('spin', 'parity'), ('spin', 'Sz'), ('spin', 'SU2'), ('fermion', 'N'), ('golden', None)],
 )
-@pytest.mark.parametrize('keep_sector', [False, 'trivial', 'random_nontrivial'])
-def test_full_diag_effH(site_kind, conserve, keep_sector, L=6):
+@pytest.mark.parametrize(
+    'keep_sector, charged_guess, charge_leg_dual',
+    [(False, False, None), (True, False, None), (True, True, False), (True, True, True)],
+    ids=['NoKeep', 'Keep_Uncharged', 'Keep_Charged_nondual', 'Keep_Charged_dual'],
+)
+def test_full_diag_effH(site_kind, conserve, keep_sector, charged_guess, charge_leg_dual, L=6, charge_label='CHARGE'):
     if site_kind == 'spin':
         site = sites.SpinSite(0.5, conserve=conserve)
+    elif site_kind == 'fermion':
+        site = sites.SpinlessFermionSite(conserve=conserve)
     else:
         site = sites.GoldenSite()
     legs = [site.leg] * L
@@ -55,42 +62,72 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, L=6):
     full_H = lasy.SymmetricTensor.from_random_normal(legs, legs, labels=labels)
     full_H += full_H.hc
 
-    E, V = lasy.eigh(full_H, new_labels='eig', new_leg_dual=False)
-    target_sector = None
-    if keep_sector == 'random_nontrivial':
-        sectors = [
-            sector for sector in E.get_leg('eig').sector_decomposition if sector != full_H.symmetry.trivial_sector
-        ]
-        if not sectors:
-            return  # No nontrivial sector without an explicit symmetry.
-        target_sector = sectors[np.random.default_rng(1234).integers(len(sectors))]
-        theta_guess = V.slice_leg('eig', full_H.symmetry.dual_sector(target_sector), multiplicity=0)
-        # note: theta_guess is already an eigenstate now, but since the function never uses its
-        #       values, that is not a problem
-        # verify the construction worked:
-        assert theta_guess.as_SymmetricTensor().get_leg('slice').sector_decomposition[0] == target_sector
-    else:
-        theta_guess = lasy.SymmetricTensor.from_random_normal(legs, labels=[f'p{i}' for i in range(L)])
+    # prepare theta_guess
+    if charged_guess:
+        if full_H.symmetry.is_equivalent_to(lasy.NoSymmetry()):
+            return  # can not prepare a charged theta_guess if there are no charges -> nothing left to do
 
-    E0, theta = dmrg.full_diag_effH(
-        _DummyEffH(full_H), theta_guess, keep_sector=keep_sector is not False, charge_label='slice'
-    )
+        sectors = [s for s in full_H.codomain.sector_decomposition if s != full_H.symmetry.trivial_sector]
+        assert sectors
+        theta_sector = sectors[np.random.default_rng(1234).integers(len(sectors))]
+        charge_leg = lasy.ElementarySpace(full_H.symmetry, [theta_sector])
+        if charge_leg_dual:
+            charge_leg = charge_leg.as_bra_space()
+        theta_guess = lasy.SymmetricTensor.from_random_normal(
+            legs, [charge_leg], backend=full_H.backend, labels=[*full_H.codomain_labels, charge_label]
+        )
+
+        # make sure we built a theta_guess where H is not 0...
+        H_v = lasy.compose(full_H, theta_guess)
+        assert lasy.norm(H_v) > 1e-8
+
+        theta_guess = lasy.HiddenLegTensor(theta_guess, [charge_label])
+    else:
+        theta_sector = full_H.symmetry.trivial_sector
+        theta_guess = lasy.SymmetricTensor.from_random_normal(legs, labels=full_H.codomain_labels)
+
+    E0, theta = dmrg.full_diag_effH(_DummyEffH(full_H), theta_guess, keep_sector=keep_sector, charge_label=charge_label)
 
     # expected labels
     if keep_sector:
         assert theta.labels == theta_guess.labels
     elif isinstance(theta, lasy.HiddenLegTensor):
-        # TODO this is a bit confusing...
-        assert theta.labels == [*theta_guess.labels, '!slice']
+        # if keep_sector=False, we may end up with a charged eigenstate even if theta_guess was not charged
+        assert theta.labels == [*theta_guess.labels, f'!{charge_label}']
     else:
         assert theta.labels == theta_guess.labels
 
-    if keep_sector is False:
-        _, expected_E0 = E.sector_argmin()
-    elif keep_sector == 'trivial':
-        _, expected_E0 = E.sector_argmin(full_H.symmetry.trivial_sector)
+    # expected legs (& charge if keep_sector)
+    assert theta.codomain == theta_guess.codomain
+    if keep_sector:
+        if charged_guess:
+            # expect same charge leg as theta_guess
+            charge_got = theta.as_SymmetricTensor().get_leg(charge_label)
+            charge_expect = theta_guess.as_SymmetricTensor().get_leg(charge_label)
+            assert charge_got == charge_expect
+        else:
+            assert not isinstance(theta, lasy.HiddenLegTensor)
+
+    # expect eigenstate
+    H_th = lasy.compose(full_H, theta)
+    E_th = E0 * theta
+    assert lasy.almost_equal(H_th, E_th)
+
+    # expect groundstate (within sector)
+    E = lasy.eigvalsh(full_H, 'eig')
+    if keep_sector:
+        _, expected_E0 = E.sector_argmin(theta_sector)
+
+        # second way to get expected energy: build projection of H onto the single sector
+        with pytest.raises(AttributeError):
+            # Mask.from_sectors not implemented yet https://github.com/tenpy/lasyten/issues/322
+            mask = lasy.Mask.from_sectors(E.leg, keep=[theta_sector])
+            E_proj = lasy.apply_mask_DiagonalTensor(E, mask)
+            assert E_proj.domain.sector_decomposition[0] == theta_sector
+            expected2_E0 = E_proj.min()
+            assert expected_E0 == pytest.approx(expected_E0)
     else:
-        _, expected_E0 = E.sector_argmin(target_sector)
+        expected_E0 = E.min()
     assert E0 == pytest.approx(expected_E0)
 
     if full_H.symmetry.can_be_dropped and keep_sector is False:
