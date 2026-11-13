@@ -27,6 +27,8 @@ __all__ = [
     'm_bond_energies',
     'm_simulation_parameter',
     'm_energy_MPO',
+    'm_two_site_variance',
+    'm_n_site_variance',
     'm_entropy',
     'm_onsite_expectation_value',
     'm_correlation_length',
@@ -167,6 +169,58 @@ def m_energy_MPO(results, psi, model, simulation, results_key='energy_MPO'):
         results[results_key] = E - simulation.results['ground_state_energy']
     else:
         results[results_key] = simulation.model.H_MPO.expectation_value(psi)
+
+
+def m_two_site_variance(results, psi, model, simulation, results_key='two_site_variance', return_terms=False):
+    """Measure the two-site variance of the MPS, see :meth:`~tenpy.networks.mpo.MPO.two_site_variance`.
+
+    Parameters
+    ----------
+    results, psi, model, simulation, results_key :
+        See :func:`~tenpy.simulation.measurement.measurement_index`.
+    return_terms : bool
+        If True, also store the individual one- and two-site contributions under `results_key`
+        followed by ``'_one_site_terms'`` and ``'_two_site_terms'``.
+
+    """
+    psi = simulation.psi  # take original psi, possibly grouped, but compatible with simulation.model
+    H = simulation.model.H_MPO
+    if not return_terms:
+        results[results_key] = H.two_site_variance(psi)
+        return
+    total, one_site, two_site = H.two_site_variance(psi, return_terms=True)
+    results[results_key] = total
+    results[results_key + '_one_site_terms'] = one_site
+    results[results_key + '_two_site_terms'] = two_site
+
+
+def m_n_site_variance(results, psi, model, simulation, n_sites=2, results_key=None, return_terms=False):
+    """Measure the n-site variance of an MPS, see :meth:`~tenpy.networks.mpo.MPO.n_site_variance`.
+
+    Parameters
+    ----------
+    results, psi, model, simulation :
+        See :func:`~tenpy.simulation.measurement.measurement_index`.
+    n_sites : int
+        The maximal number of neighboring sites for the variations.
+    results_key : str
+        Key for the results; by default ``f'{n_sites:d}_site_variance'``.
+    return_terms : bool
+        If True, also store the contributions of the blocks of ``n`` sites under `results_key`
+        followed by ``f'_{n:d}_site_terms'``, for each ``n`` up to `n_sites`.
+
+    """
+    psi = simulation.psi  # take original psi, possibly grouped, but compatible with simulation.model
+    H = simulation.model.H_MPO
+    if results_key is None:
+        results_key = f'{n_sites:d}_site_variance'
+    if not return_terms:
+        results[results_key] = H.n_site_variance(psi, n_sites)
+        return
+    total, terms = H.n_site_variance(psi, n_sites, return_terms=True)
+    results[results_key] = total
+    for n, term in enumerate(terms, start=1):
+        results[results_key + f'_{n:d}_site_terms'] = term
 
 
 def m_entropy(results, psi, model, simulation, results_key='entropy'):

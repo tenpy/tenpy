@@ -1298,10 +1298,9 @@ class MPO(MPSGeometry):
 
         Works only for finite systems. Ignores the :attr:`~tenpy.networks.mps.MPS.norm` of `psi`.
 
-        .. todo ::
-            This is a naive, expensive implementation contracting the full network.
-            Try to follow :arXiv:`1711.01104` for a better estimate; would that even work in
-            the infinite limit?
+        This is a naive, expensive implementation contracting the full network.
+        See :meth:`two_site_variance` for the cheaper and numerically more precise estimate
+        of :arxiv:`1711.01104`.
 
         Parameters
         ----------
@@ -1320,7 +1319,10 @@ class MPO(MPSGeometry):
         if psi._p_label != ['p']:
             raise NotImplementedError('not adjusted for non-standard MPS.')
         if self.explicit_plus_hc:
-            raise NotImplementedError('not implemented for explicit_plus_hc flag')
+            # expand into an MPO holding all terms explicitly, then contract as usual
+            explicit = self.copy()
+            explicit.explicit_plus_hc = False
+            return (explicit + explicit.dagger()).variance(psi, exp_val)
         assert self.L >= 1
         if exp_val is None:
             exp_val = self.expectation_value(psi)
@@ -1340,6 +1342,160 @@ class MPO(MPSGeometry):
         contr = contr.take_slice([self.get_IdR(self.L - 1)] * 2, ['wR1', 'wR2'])
         contr = npc.trace(contr, 'vR', 'vR*')
         return np.real_if_close(contr - exp_val**2)
+
+    def two_site_variance(self, psi, return_terms=False):
+        r"""Calculate the two-site variance of :arxiv:`1711.01104`.
+
+        The two-site variance is an approximation to the full variance
+        ``<psi|self^2|psi> - <psi|self|psi>^2``, which is much cheaper to evaluate than
+        :meth:`variance` and numerically more precise, since it never involves quantities of
+        the order of the squared energy.
+        Following :arxiv:`1711.01104`, the Hilbert space is decomposed into mutually orthogonal
+        subspaces of one-site and two-site variations of the (mixed canonical) MPS, and only the
+        projections of ``self|psi>`` onto these subspaces are kept.
+        It is exact whenever ``self|psi>`` lies within these subspaces, in particular for
+        nearest-neighbor Hamiltonians (or for ``L=2``), and vanishes for eigenstates.
+        This is just :meth:`n_site_variance` with ``n_sites=2``.
+
+        For infinite MPS, the two-site variance *density* per site is returned.
+        Ignores the :attr:`~tenpy.networks.mps.MPS.norm` of `psi`.
+
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            State for which the two-site variance should be taken. Not modified.
+        return_terms : bool
+            Whether to return the individual contributions as well.
+
+        Returns
+        -------
+        two_site_variance : float
+            The two-site variance, i.e., the sum of all `one_site_terms` and `two_site_terms`,
+            divided by `L` for infinite MPS.
+        one_site_terms : 1D ndarray
+            Only returned if `return_terms`.
+            The `L` contributions from the one-site variations orthogonal to `psi`.
+        two_site_terms : 1D ndarray
+            Only returned if `return_terms`.
+            The contributions from the two-site variations orthogonal to `psi` and to the
+            one-site variations, one for each bond: ``L-1`` for finite MPS, and one for each
+            bond of the common period of the MPS and MPO unit cells for infinite MPS.
+
+        """
+        if not return_terms:
+            return self.n_site_variance(psi, 2, False)
+        result, terms = self.n_site_variance(psi, 2, True)
+        return result, terms[0], terms[1]
+
+    def n_site_variance(self, psi, n_sites=2, return_terms=False):
+        r"""Generalization of the :meth:`two_site_variance` to `n_sites` sites.
+
+        Keeps the projections of ``self|psi>`` onto the mutually orthogonal spaces of
+        ``n``-site variations of `psi` for ``n = 1, ..., n_sites``, see :arxiv:`1711.01104`.
+        Equals the full variance for Hamiltonians with terms acting on at most `n_sites`
+        neighboring sites, e.g. for next-nearest neighbor Hamiltonians with ``n_sites=3``.
+        For infinite MPS, the variance *density* per site is returned.
+        Ignores the :attr:`~tenpy.networks.mps.MPS.norm` of `psi`.
+
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            State for which the variance should be estimated. Not modified.
+        n_sites : int
+            The maximal number of neighboring sites for the variations.
+        return_terms : bool
+            Whether to return the individual contributions as well.
+
+        Returns
+        -------
+        n_site_variance : float
+            The `n_sites`-site variance (density).
+        terms : list of 1D ndarray
+            Only returned if `return_terms`.
+            ``terms[n-1]`` are the contributions of the ``n``-site variations for
+            ``n = 1, ..., n_sites``, one for each block of ``n`` neighboring sites:
+            ``L - n + 1`` for finite, `L` for infinite MPS.
+
+        """
+        if psi.bc == 'segment' or self.bc != psi.bc:
+            raise ValueError('boundary conditions must match and must not be segment')
+        if psi.finite and self.L != psi.L:
+            raise ValueError('expect same L')
+        if psi._p_label != ['p']:
+            raise NotImplementedError('not adjusted for non-standard MPS.')
+        n_sites = int(n_sites)
+        if n_sites < 1 or (psi.finite and n_sites > psi.L):
+            raise ValueError(f'invalid n_sites={n_sites!r}')
+        psi = psi.copy()
+        psi.norm = 1.0
+        if psi.finite and psi.L == 1:
+            # canonical_form_finite() does not support a single site; just normalize
+            B = psi.get_B(0, form=None)
+            psi.set_B(0, B / npc.norm(B), form='B')
+            psi.set_SL(0, np.ones(1))
+            psi.set_SR(0, np.ones(1))
+        elif any(f is None for f in psi.form) or np.linalg.norm(psi.norm_test()) > 1.0e-10:
+            psi.canonical_form()
+        H = self
+        if psi.finite:
+            L = psi.L
+        else:
+            # blocks run over the common period of the two unit cells
+            L = lcm(psi.L, self.L)
+            if psi.L < L:
+                psi.enlarge_mps_unit_cell(L // psi.L)
+            if H.L < L:
+                H = H.copy()
+                H.enlarge_mps_unit_cell(L // H.L)
+        env = MPOEnvironment(psi, H, psi)
+        terms = []
+        for n in range(1, n_sites + 1):
+            N_blocks = L - n + 1 if psi.finite else L
+            terms_n = np.zeros(N_blocks, dtype=np.float64)
+            for i in range(N_blocks):
+                theta = psi.get_theta(i, n=n)
+                H_theta = self._apply_n_site_Heff(env, i, n, theta)
+                A = psi.get_B(i, form='A').replace_label('p', 'p0')
+                H_theta = H_theta - npc.tensordot(
+                    A, npc.tensordot(A.conj(), H_theta, axes=[['vL*', 'p0*'], ['vL', 'p0']]), axes=['vR', 'vR*']
+                )
+                if n > 1:
+                    pn = f'p{n - 1:d}'
+                    B = psi.get_B(i + n - 1, form='B').replace_label('p', pn)
+                    H_theta = H_theta - npc.tensordot(
+                        npc.tensordot(H_theta, B.conj(), axes=[[pn, 'vR'], [pn + '*', 'vR*']]), B, axes=['vL*', 'vL']
+                    )
+                terms_n[i] = npc.norm(H_theta) ** 2
+            terms.append(terms_n)
+        result = sum(np.sum(terms_n) for terms_n in terms)
+        if not psi.finite:
+            result = result / L
+        if return_terms:
+            return result, terms
+        return result
+
+    def _apply_n_site_Heff(self, env, i0, n, theta):
+        """Apply the effective Hamiltonian for the sites ``i0, ..., i0+n-1`` to `theta`."""
+        labels = theta.get_leg_labels()
+        LP = env.get_LP(i0)
+        RP = env.get_RP(i0 + n - 1)
+        Ws = [env.H.get_W(i0 + k) for k in range(n)]
+        result = self._contract_n_site_Heff(LP, Ws, RP, theta)
+        if env.H.explicit_plus_hc:
+            LP = LP.conj().ireplace_label('wR*', 'wR')
+            RP = RP.conj().ireplace_label('wL*', 'wL')
+            Ws = [W.conj().ireplace_labels(['wL*', 'wR*'], ['wL', 'wR']) for W in Ws]
+            result = result + self._contract_n_site_Heff(LP, Ws, RP, theta)
+        return result.itranspose(labels)
+
+    @staticmethod
+    def _contract_n_site_Heff(LP, Ws, RP, theta):
+        res = npc.tensordot(LP, theta, axes=['vR', 'vL'])
+        for k, W in enumerate(Ws):
+            res = npc.tensordot(res, W, axes=[['wR', f'p{k:d}'], ['wL', 'p*']])
+            res.ireplace_label('p', f'p{k:d}')
+        res = npc.tensordot(res, RP, axes=[['wR', 'vR'], ['wL', 'vL']])
+        return res.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
 
     def prefactor(self, i, ops):
         """Get prefactor for a given string of operators in self.
