@@ -6431,12 +6431,13 @@ class MPS(BaseMPSExpectationValue):
         .. deprecated ::
             Renamed to :meth:`correlation_length`. Both now return the same value (in units of the
             horizontal lattice spacing). In older versions, :meth:`correlation_length` used different
-            (MPS-site) units.
+            (MPS-site) units. See https://github.com/tenpy/tenpy/pull/766.
 
         """
         warnings.warn(
             'correlation_length2 was renamed to correlation_length; both return the same value now. '
-            'In older versions, correlation_length used different (MPS-site) units.',
+            'In older versions, correlation_length used different (MPS-site) units. '
+            'See https://github.com/tenpy/tenpy/pull/766.',
             DeprecationWarning,
             2,
         )
