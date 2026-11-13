@@ -410,8 +410,10 @@ def test_enlarge_chi_infinite(site_kind, conserve):
 
 def test_enlarge_chi_errors():
     psi = _random_mps(None, 0)
+    # expected behavior: one extra leg is needed per bond of the unit cell
     with pytest.raises(ValueError, match='wrong len of extra_legs'):
         psi.enlarge_chi([1])
+    # expected behavior: more extra states than fit into the bond (the new states must be orthogonal to the old ones)
     with pytest.raises(ValueError, match='overcomplete'):
         # a trivial site with chi=12 and d=3: there is only room for 3 * 12 - 12 = 24 extra rows
         psi.enlarge_chi([100, 0])
