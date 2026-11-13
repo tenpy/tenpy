@@ -137,7 +137,7 @@ class Lattice:
         This is the same as :attr:`N_rings` in most cases, except that it is unchanged by grouping
         sites. It always provides the horizontal distance traversed by an MPS unit cell,
         e.g. for the purpose of :ref:`shift_symmetry` or
-        :meth:`~tenpy.networks.mps.MPS.correlation_length2`.
+        :meth:`~tenpy.networks.mps.MPS.correlation_length`.
     unit_cell : list of :class:`lasyten.Site`
         the sites making up a unit cell of the lattice.
     symmetry : :class:`lasyten.Symmetry`

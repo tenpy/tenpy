@@ -67,7 +67,7 @@ def test_heisenberg_Sz(S, state, E_exact, tol, chi_max):
     assert np.max(np.abs(psi.norm_test())) < 1e-10
     npt.assert_allclose(M.get_H_MPO().expectation_value(psi), E, atol=1e-6)
     # correlation length: the (triplet) sector dominates; finite chi gives a finite value
-    xi = psi.correlation_length2(charge_sector=None)
+    xi = psi.correlation_length(charge_sector=None)
     assert 1.0 < xi < 100.0
     if S == 1:
         # the Haldane chain has a correlation length of ~6.03 in the limit of large chi, we get a smaller value
@@ -86,7 +86,7 @@ def test_heisenberg_Sz_matches_tenpy_v1():
     res = _run_idmrg(M, psi, chi_max=8, max_sweeps=60)
     npt.assert_allclose(res['E'], -1.4010933106673065, atol=1e-9)
     npt.assert_allclose(psi.entanglement_entropy(), 0.8416008768252741, atol=1e-8)
-    npt.assert_allclose(psi.correlation_length2(charge_sector=0), 3.33846832350632, atol=1e-7)
+    npt.assert_allclose(psi.correlation_length(charge_sector=0), 3.33846832350632, atol=1e-7)
     assert [int(S.get_leg('vL').dim) for S in psi._S] == [8, 8]
 
 
@@ -149,7 +149,7 @@ def test_aklt_idmrg_su2():
     npt.assert_allclose(res['E'], E_exact, atol=1e-10)
     assert [int(S.get_leg('vL').dim) for S in psi._S] == [2, 2]  # truncation removed everything but the spin-1/2
     npt.assert_allclose(psi.entanglement_entropy(), np.log(2), atol=1e-8)
-    npt.assert_allclose(psi.correlation_length2(charge_sector=None), 1 / np.log(3), atol=1e-8)
+    npt.assert_allclose(psi.correlation_length(charge_sector=None), 1 / np.log(3), atol=1e-8)
 
 
 def test_heisenberg_on_aklt_state_su2():

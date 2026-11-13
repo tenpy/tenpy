@@ -326,7 +326,7 @@ class MPSGeometry:
         The width (i.e. length along the first dimension) of an MPS unit cell, in units of the
         lattice spacing. It is given by :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
         For a :class:`~tenpy.models.lattice.Chain`, this is just the length of the chain.
-        Is used for :ref:`shift_symmetry` or :meth:`MPS.correlation_length2`.
+        Is used for :ref:`shift_symmetry` or :meth:`MPS.correlation_length`.
 
     """
 
@@ -6349,7 +6349,7 @@ class MPS(BaseMPSExpectationValue):
             Qs[i] = Q.split_legs()
         return Qs, R
 
-    def correlation_length2(
+    def correlation_length(
         self, target: int = 1, tol_ev0: float | None = 1.0e-8, charge_sector=0, return_charges: bool = False
     ) -> float | np.ndarray | tuple[float | np.ndarray, lasy.Sector | list[lasy.Sector]]:
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
@@ -6369,8 +6369,11 @@ class MPS(BaseMPSExpectationValue):
         More general for a `L`-site unit cell we get :math:`\lambda_2 = \exp(-\frac{L}{\xi})`,
         where the `xi` is given in units of the horizontal lattice spacing.
 
-        Unlike the old :meth:`correlation_length`, this method returns the correlation length in
-        correct units, even for higher-dimensional lattices.
+        .. note ::
+            In older TeNPy versions, :meth:`correlation_length` returned values in MPS-site units
+            (without dividing by :attr:`N_sites_per_hor_spacing`), while :meth:`correlation_length2`
+            returned the correctly scaled result. :meth:`correlation_length2` is now only a
+            deprecated alias for this method; both return the same value.
 
         Parameters
         ----------
@@ -6420,47 +6423,31 @@ class MPS(BaseMPSExpectationValue):
             return xi, charges
         return xi
 
-    def correlation_length(
+    def correlation_length2(
         self, target: int = 1, tol_ev0: float | None = 1.0e-8, charge_sector=0, return_charges: bool = False
     ) -> float | np.ndarray | tuple[float | np.ndarray, lasy.Sector | list[lasy.Sector]]:
-        r"""Calculate the correlation length by diagonalizing the transfer matrix.
+        """Deprecated alias for :meth:`correlation_length`.
 
         .. deprecated ::
-            This is an old implementation, from before MPS had access to ``N_sites_per_hor_spacing``.
-            It is only kept for backwards compatibility. Use :meth:`correlation_length2` instead.
-
-        .. warning ::
-            For higher-dimensional lattices, this function does not return the correlation length
-            in correct units. Use :meth:`correlation_length2` or read the documentation of the
-            return value carefully.
-
-        Parameters
-        ----------
-        target, tol_ev0, charge_sector, return_charges
-            same as for :meth:`correlation_length2`.
-
-        Returns
-        -------
-        xi : float | 1D array
-            The correlation length(s) in units of "lattice spacing per MPS site", i.e.
-            ``self.correlation_length(*a) == self.correlation_length2(*a) * self.N_sites_per_hor_spacing``.
-        charge_sectors :  list of charge sectors, optional
-            For each entry in `xi` the charge sector, i.e., qtotal of the dominant eigenvalue.
-            Only returned if `return_charges`.
+            Renamed to :meth:`correlation_length`. Both now return the same value (in units of the
+            horizontal lattice spacing). In older versions, :meth:`correlation_length` used different
+            (MPS-site) units. See https://github.com/tenpy/tenpy/pull/766.
 
         """
-        msg = (
-            'The method `correlation_length` is deprecated. Use `correlation_length2` instead. '
-            'Note the different units of the output for higher-dimensional lattices!'
+        warnings.warn(
+            'correlation_length2 was renamed to correlation_length; both return the same value now. '
+            'In older versions, correlation_length used different (MPS-site) units. '
+            'See https://github.com/tenpy/tenpy/pull/766.',
+            DeprecationWarning,
+            2,
         )
-        warnings.warn(msg, DeprecationWarning, 2)
-        return self._correlation_length(target, tol_ev0, charge_sector, return_charges)
+        return self.correlation_length(target, tol_ev0, charge_sector, return_charges)
 
     def _correlation_length(self, target, tol_ev0, charge_sector, return_charges):
-        """Internal implementation of :meth:`correlation_length2` and :meth:`correlation_length`.
+        """Internal implementation of :meth:`correlation_length`.
 
-        Returns like :meth:`correlation_length`, in particular *without* accounting for
-        lattice geometry.
+        Returns the correlation length in MPS-site units, i.e. *without* dividing by
+        :attr:`N_sites_per_hor_spacing`.
 
         For non-abelian symmetries, note that each eigenvalue in a sector (e.g. spin ``S``) belongs to a
         whole multiplet. In particular, the correlation length of the spin-spin correlations
