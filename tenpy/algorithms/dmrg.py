@@ -40,7 +40,7 @@ import warnings
 import lasyten as lasy
 import numpy as np
 
-from ..networks.mps import MPS_TOTAL_CHARGE_LABEL
+from ..networks.mps import MPS_TOTAL_CHARGE_LABEL, _public_labels_are
 from ..tools import TruncationError, asConfig, memory_usage
 from . import mps_common
 from .mps_common import EffectiveH, IterativeSweeps, OneSiteH, TwoSiteH
@@ -619,7 +619,7 @@ class DMRGEngine(IterativeSweeps):
             j = 0
             A = psi.get_B(j, form='A')
             th = psi.get_B(j, form='Th')
-            th = lasy.permute_legs(th, codomain=['vL'])
+            th = lasy.planar_permute_legs(th, codomain=['vL'])
             U, S, V = lasy.svd(th, new_labels=['vL', 'vR'])
             S = S / lasy.norm(S)
             psi.set_SL(j, S)
@@ -642,7 +642,7 @@ class DMRGEngine(IterativeSweeps):
             j = psi.L - 1
             B = psi.get_B(j, form='B')
             th = psi.get_B(j, form='Th')
-            th = lasy.permute_legs(th, domain=['vR'])
+            th = lasy.planar_permute_legs(th, domain=['vR'])
             U, S, V = lasy.svd(th, new_labels=['vL', 'vR'])
             S = S / lasy.norm(S)
             psi.set_SR(j, S)
@@ -741,7 +741,7 @@ class DMRGEngine(IterativeSweeps):
             expect_labels = ['(vL.p0)', 'vR']
         else:
             expect_labels = ['vL', '(p0.vR)']
-        assert theta_guess.labels_are(*expect_labels, planar=True)
+        assert _public_labels_are(theta_guess, expect_labels, planar=True)
 
         diag_method = self.diag_method
 
@@ -1083,11 +1083,11 @@ class SingleSiteDMRGEngine(DMRGEngine):
             S_a = S
             # absorb VH/U into S
             if move_right:
-                S = lasy.tdot(S, VH, 'vR', 'vL')
+                S = lasy.planar_contraction(S, VH, 'vR', 'vL')
                 VH = next_B
                 U.ireplace_label('(vL.p0)', '(vL.p)')
             else:
-                S = lasy.tensordot(U, S, 'vR', 'vL')
+                S = lasy.planar_contraction(U, S, 'vR', 'vL')
                 U = next_A
                 VH.ireplace_label('(p0.vR)', '(p.vR)')
         else:
@@ -1095,12 +1095,12 @@ class SingleSiteDMRGEngine(DMRGEngine):
             # just use two-site theta
             if self.move_right:
                 next_B.ireplace_label('(p.vR)', '(p1.vR)')
-                theta = lasy.tdot(theta, next_B, 'vR', 'vL')
+                theta = lasy.planar_contraction(theta, next_B, 'vR', 'vL')
                 i0 = self.i0
             else:
                 next_A.ireplace_label('(vL.p)', '(vL.p0)')
                 theta.ireplace_label('(p0.vR)', '(p1.vR)')
-                theta = lasy.tensordot(next_A, theta, 'vR', 'vL')
+                theta = lasy.planar_contraction(next_A, theta, 'vR', 'vL')
                 i0 = self.i0 - 1
             qtotal_LR = [self.psi.get_B(i0, form=None).qtotal, self.psi.get_B(i0 + 1, form=None).qtotal]
             U, S, VH, err, S_a = mixer.mixed_svd_2site(
@@ -1190,6 +1190,7 @@ def full_diag_effH(
 
     """
     fullH: lasy.SymmetricTensor = effH.to_tensor()
+    symmetry = fullH.symmetry
     if isinstance(effH, TwoSiteH) and not effH.combine:
         assert fullH.labels_are('vL', 'p0', 'p1', 'vR', 'vR*', 'p1*', 'p0*', 'vL*', planar=True)
         # TODO workaround. See https://github.com/tenpy/tenpy/issues/693
@@ -1200,14 +1201,21 @@ def full_diag_effH(
         # let e.g. the dummy in the tests through
         pass
 
-    E, V = lasy.eigh(fullH, new_labels='eig*', new_leg_dual=False)
-    # V: lasy.SymmetricTensor
-
     if keep_sector:
         if isinstance(theta_guess, lasy.HiddenLegTensor):
-            sector = theta_guess.as_SymmetricTensor().get_leg(charge_label).sector_decomposition[0]
+            charge_leg = theta_guess.as_SymmetricTensor().get_leg(charge_label)
+
+            # we will construct with charge leg in the *domain* and .get_leg() gives us the
+            # leg as if it were in the codomain.
+            charge_leg = charge_leg.dual
+
+            sector = charge_leg.sector_decomposition[0]
+            # need to match, since the eig leg on V becomes the charge leg after projection
+            new_leg_dual = charge_leg.is_dual
         else:
-            sector = fullH.symmetry.trivial_sector
+            sector = symmetry.trivial_sector
+            new_leg_dual = False  # arbitrary choice
+
         # OPTIMIZE this does not exploit that we project onto a *sector*
         #          knowing this, we could get away by diagonalizing only in a restricted space,
         #          i.e. project first, than diagonalize.
@@ -1218,11 +1226,14 @@ def full_diag_effH(
     else:
         # do not restrict the sector
         sector = None
+        new_leg_dual = False  # arbitrary choice
+
+    E, V = lasy.eigh(fullH, new_labels='eig*', new_leg_dual=new_leg_dual)
 
     gs_projector, E0 = E.sector_argmin(sector)
     theta: lasy.Tensor = lasy.compose(V, gs_projector.hc)
 
-    if gs_projector.small_leg.sector_decomposition[0] == fullH.symmetry.trivial_sector:
+    if gs_projector.small_leg.sector_decomposition[0] == symmetry.trivial_sector:
         theta = lasy.squeeze_legs(theta, 'eig*')
     else:
         theta = lasy.HiddenLegTensor.from_tensor(theta.relabel({'eig*': charge_label}), [charge_label])
