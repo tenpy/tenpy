@@ -90,21 +90,49 @@ def test_heisenberg_Sz_matches_tenpy_v1():
     assert [int(S.get_leg('vL').dim) for S in psi._S] == [8, 8]
 
 
-@pytest.mark.xfail(
-    reason='iDMRG with fermions does not work yet: #738 (fixed by #761), charged unit cell #763, Lanczos #762',
-    raises=(lasy.SymmetryError, ValueError),
-    strict=True,
+@pytest.mark.parametrize(
+    'conserve, L, state',
+    [
+        # An even number of fermions per unit cell has a trivial total charge with parity conservation. The (exact)
+        # diagonalization of the effective Hamiltonian works, but Lanczos fails for fermions, which is used for larger chi.
+        # slow: many iDMRG sweeps; with the exact diagonalization, it takes 35 s (Release), much longer than the Sz tests.
+        pytest.param(
+            'parity',
+            4,
+            ['empty', 'full'] * 2,
+            marks=[
+                pytest.mark.slow,
+                pytest.mark.xfail(
+                    reason='fermionic DMRG: plain permute_legs in the effective Hamiltonians fails with Lanczos, #762',
+                    raises=lasy.SymmetryError,
+                    strict=True,
+                ),
+            ],
+            id='parity',
+        ),
+        # With N conservation, any non-zero number of fermions per unit cell is a non-trivial charge (hidden leg).
+        # This fails in `dmrg.diag` (#763), and then in the final `canonical_form` (#765).
+        # (The tolerance below was checked for parity only.)
+        pytest.param(
+            'N',
+            2,
+            ['empty', 'full'],
+            marks=pytest.mark.xfail(
+                reason='iDMRG with a charged unit cell: hidden leg in dmrg.diag #763, canonical_form_infinite1 #765',
+                raises=(lasy.SymmetryError, ValueError, NotImplementedError),
+                strict=True,
+            ),
+            id='N',
+        ),
+    ],
 )
-@pytest.mark.parametrize('conserve', ['N', 'parity'])
-def test_free_fermions_infinite_dmrg(conserve):
+def test_free_fermions_infinite_dmrg(conserve, L, state):
     # Free fermions at half filling have the energy per site -2 J / pi (exact, from the dispersion -2 J cos(k)).
-    # The start state has a single fermion per unit cell, i.e. a non-trivial charge of the unit cell.
-    # NOTE: the tolerance and chi_max (as for the spin-1/2 Heisenberg chain) are not checked yet, since the
-    # test can not run to the end before the issues in the reason are fixed.
+    # (Before #761 is merged, the first error is the one in MPOEnvironment.init_LP, #738, also a SymmetryError.)
     E_exact = -2.0 / np.pi
-    M = FermionChain(dict(L=2, J=1.0, V=0.0, mu=0.0, bc_MPS='infinite', conserve=conserve))
-    psi = mps.MPS.from_product_state(M.lattice.mps_sites(), ['empty', 'full'], bc='infinite', unit_cell_width=2)
-    res = _run_idmrg(M, psi, 16, max_sweeps=12, touch_all=True)
+    M = FermionChain(dict(L=L, J=1.0, V=0.0, mu=0.0, bc_MPS='infinite', conserve=conserve))
+    psi = mps.MPS.from_product_state(M.lattice.mps_sites(), state, bc='infinite', unit_cell_width=L)
+    res = _run_idmrg(M, psi, 16, touch_all=True)
     assert E_exact - 1e-8 <= res['E'] <= E_exact + 5e-4  # variational (up to the truncation error), and close
     assert np.max(np.abs(psi.norm_test())) < 1e-10
     npt.assert_allclose(M.get_H_MPO().expectation_value(psi), res['E'], atol=1e-6)
