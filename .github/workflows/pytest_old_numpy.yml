@@ -19,7 +19,7 @@ jobs:
       matrix:
         include:
           - numpy-version: "1.23"
-            python-version: "3.11"
+            python-version: "3.10"
           - numpy-version: "1.24"
             python-version: "3.11"
           - numpy-version: "1.25"
