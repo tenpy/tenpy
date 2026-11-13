@@ -3212,7 +3212,7 @@ class MPS(BaseMPSExpectationValue):
                     'of the desired bond dimension or a converged charge distribution.'
                 )
             for i in range(L):
-                virtual_spaces[i] = _truncate_virtual_space(virtual_spaces[i], chi=chis[i])
+                virtual_spaces[i] = _truncate_virtual_space(virtual_spaces[i], None, chi=chis[i])
 
         res = cls.from_desired_virtual_spaces(
             sites, virtual_spaces, bc, dtype, total_charge, norm, unit_cell_width, device, understood_shift_symmetry
@@ -4571,124 +4571,159 @@ class MPS(BaseMPSExpectationValue):
                 C = lasy.planar_contraction(C, B_ket, ['vR'] + self._get_p_label('*'), ['vL'] + self._get_p_label(''))
         return C.real_if_close()
 
-    def enlarge_chi(self, extra_legs, random_fct=np.random.normal):
-        """Artificially enlarge the bond dimension by the specified extra legs/charges. In place.
+    def enlarge_chi(self, extra_legs):
+        """Artificially enlarge the bond dimension by the specified extra bond spaces. In place.
 
         First converts the MPS in B form.
-        This function then fills up the 'vR' leg with zeros, and then groups physical and vR legs
-        to fill up the 'vL' leg with orthogonal rows. In than way, we get an MPS with larger bond
-        dimension, still in right-canonical form (assuming no "overcomplete" charge block),
-        representing the *same* state, with the additional singular values being exactly zero.
+        This function then fills up the ``'vR'`` leg of the `B` tensors with zeros, and adds extra
+        rows on the ``'vL'`` leg, which are random, but orthonormal to each other and to the
+        existing rows. In that way, we get an MPS with larger bond dimension, still in
+        right-canonical form, representing the *same* state, with the additional
+        singular values being exactly zero.
 
         .. note ::
-            You should probably **choose** the extra charges to be sensible,
+            You should probably **choose** the extra sectors to be sensible,
             to expand into the space you are interested in, and not just into a random direction!
+
+        .. note ::
+            The random numbers are drawn from the random number generator of the backend of the
+            tensors (for the numpy backend, the global state of ``np.random``).
 
         Parameters
         ----------
-        extra_legs : list of {None, :class:`~tenpy.linalg.charges.LegCharge`, int}
-            The extra charges to be added on the virtual legs, with qconj=+1.
-            Length `L` +1 for finite, length `L` for infinite, with entry `i` left of site `i`.
-            If an `int` is given, fill up with a single block of charges like the Schmidt state
-            with highest weight. Note that this might force the resulting state to not be in
-            strict "right-canonical" B form if that charge block becomes overcomplete.
-        random_fct :
-            Function generating random entries to choose extra orthogonal rows in the B tensors.
-            Should accept a `size` keyword for the shape, and return numpy arrays.
+        extra_legs : list of {None, :class:`~lasyten.ElementarySpace`, int}
+            The extra states to be added on the virtual bonds.
+            Length `L` + 1 for finite, length `L` for infinite, with entry `i` left of site `i`.
+            ``None`` (or ``0``) means no extra states on that bond.
+            An :class:`~lasyten.ElementarySpace` has to have the same symmetry and the same
+            duality (``is_dual``) as the virtual space of the corresponding bond, i.e., as the
+            ``'vL'`` leg of the `B` tensor right of the bond. It is *added* to the existing bond space.
+            If an `int` `n` is given, add `n` times the sector of the Schmidt state with the largest
+            singular value, i.e., `n` is a *multiplicity* and not a dimension: e.g., for SU(2), ``1``
+            adds a multiplet of that spin, which is more than one state.
+            For a finite MPS, the first and last entry (the trivial boundary bonds) must be ``None``.
 
-        Returns
-        -------
-        permutations: list of 1D array | None
-            Permutation performed on each virtual leg, such that
-            ``new_S = concatenate(old_S, zeros)[perm]``.
+        Raises
+        ------
+        ValueError
+            If `extra_legs` has the wrong length or has entries on the boundary bonds of a finite MPS.
+            If the new rows do not fit into the space of the ``(p, vR)`` legs, i.e., if there is
+            no room left in the sector to add orthogonal rows (the extra block is "overcomplete").
 
         """
-        # TODO
-        self.convert_form('B')
         if len(extra_legs) != self.L + (1 if self.finite else 0):
             raise ValueError('wrong len of extra_legs.')
-        perms_L = [None] * (self.L + 1)
-        perms_R = [None] * (self.L + 1)
-        extra_legs = list(extra_legs)
-        for i, add_chi in enumerate(extra_legs):
-            if not isinstance(add_chi, int):
-                continue
-            # convert chi to extra LegCharge
-            if add_chi == 0:
-                extra_legs[i] = None
-            elif self.chinfo.qnumber == 0:
-                extra_legs[i] = npc.LegCharge.from_trivial(add_chi, self.chinfo)
-            else:
-                max_weight = np.argmax(self._S[i])
-                if i < self.L:
-                    leg = self._B[i].get_leg('vL')
-                else:
-                    leg = self._B[-1].get_leg('vR')
-                extra_charge = leg.get_charge(leg.get_qindex(max_weight)[0])[np.newaxis, :]
-                extra_legs[i] = npc.LegCharge.from_qind(self.chinfo, [0, add_chi], extra_charge)
-        if not self.finite:
-            extra_legs.append(extra_legs[0])  # ensure length L+1
-        for i, B in enumerate(self._B):
-            extra_leg_L = extra_legs[i]
-            extra_leg_R = extra_legs[i + 1]
-            B.itranspose(self._B_labels)
-            if extra_leg_R is not None:
-                # add extra zero columns on the vR leg and sort by charges
-                extra_leg_R = extra_leg_R.conj()
-                B2 = B.extend('vR', extra_leg_R)
-                sort = [False] * (len(self._B_labels) - 1) + [True]
-                (_, _, perm_R), B2 = B2.sort_legcharge(sort, sort)
-                perms_R[i + 1] = perm_R
-            else:
-                B2 = B
-            B2 = B2.combine_legs(self._p_label + ['vR'], qconj=-1, new_axes=1)
-            if extra_leg_L is not None:
-                p_vR = B2.legs[1]
-                # get a new extra block of random entries for the vL leg
-                extra_B = npc.Array.from_func(
-                    random_fct, [extra_leg_L, p_vR], dtype=B2.dtype, qtotal=B2.qtotal, shape_kw='size'
+        if self.finite and (extra_legs[0] not in (None, 0) or extra_legs[-1] not in (None, 0)):
+            raise ValueError('extra_legs must be None on the boundary bonds of a finite MPS.')
+        if any(isinstance(B, lasy.HiddenLegTensor) for B in self._B):
+            raise NotImplementedError('enlarge_chi is not implemented for a hidden leg (non-trivial total charge)')
+        self.convert_form('B')
+        num_bonds = len(extra_legs)
+        extra_spaces = []
+        for j, extra in enumerate(extra_legs):
+            V = self._B[j].get_leg('vL') if j < self.L else self._B[-1].get_leg('vR').dual
+            if extra is None or (isinstance(extra, (int, np.integer)) and extra == 0):
+                extra_spaces.append(None)
+            elif isinstance(extra, (int, np.integer)):
+                # sector of the largest singular value
+                sector = V.sectors_of_basis[np.argmax(self._S[j].diagonal_as_numpy())]
+                extra_spaces.append(
+                    lasy.ElementarySpace.from_sector_decomposition(
+                        V.symmetry, sector[None, :], multiplicities=[extra], is_dual=V.is_dual
+                    )
                 )
-                # orthogonalize rows of extra_B against rows of B2
-                extra_B = extra_B - npc.tensordot(npc.tensordot(extra_B, B2.conj(), [1, 1]), B2, [1, 0])
-                if npc.norm(extra_B) < 1e-12:
-                    logger.warning(f'Failed to orthogonalize extra_B against B2. norm(extra_B) = {npc.norm(extra_B)}.')
-                # orthogonalize rows within extra_B by QR
-                extra_B, extra_R = npc.qr(extra_B.itranspose([1, 0]), inner_qconj=-1, qtotal_Q=extra_B.qtotal)
-                try:
-                    extra_B.legs[1].test_equal(extra_R.legs[1])
-                except ValueError as e:
-                    print(extra_R)
-                    raise ValueError('QR for Gram-Schmidt messed up charges. Incompatible charges?') from e
-                extra_B.itranspose([1, 0])
-                # append extra block in vL leg of B2 and sort by charges
-                new_B = npc.concatenate([B2, extra_B], axis='vL')
-                (perm_L, _), new_B = new_B.sort_legcharge([True, False], [True, False])
-                perms_L[i] = perm_L
             else:
-                new_B = B2
-            new_B = new_B.split_legs().itranspose(self._B_labels)
-            self._B[i] = new_B
-        if self.finite:
-            # fix undefined permutations at boundaries
-            perms_R[0] = perms_L[0]
-            perms_L[-1] = perms_R[-1]
-        else:
-            perms_L[-1] = perms_L[0]
-            perms_R[0] = perms_R[-1]
-        for perm_L, perm_R in zip(perms_L, perms_R):
-            assert (perm_L is not None) == (perm_R is not None)
-            if perm_L is not None:
-                assert np.all(perm_L == perm_R)
-        # append zeros to singular values
-        for i, S in enumerate(self._S):
-            leg = extra_legs[i]
-            if leg is not None:
-                new_S = np.concatenate([S, np.zeros(leg.ind_len)])
-                assert perms_L[i] is not None
-                new_S = new_S[perms_L[i]]
-                self._S[i] = new_S
+                if extra.symmetry != V.symmetry or extra.is_dual != V.is_dual:
+                    raise ValueError(f'extra_legs[{j}] needs the same symmetry and duality as the bond space.')
+                extra_spaces.append(extra)
+        # the new bond spaces, as direct sum (old, extra).
+        new_spaces = [
+            None
+            if X is None
+            else lasy.DirectSumSpace(
+                [self._B[j].get_leg('vL') if j < self.L else self._B[-1].get_leg('vR').dual, X],
+                is_dual=X.is_dual,
+            )
+            for j, X in enumerate(extra_spaces)
+        ]
+        if not self.finite:
+            extra_spaces.append(extra_spaces[0])  # ensure length L + 1
+            new_spaces.append(new_spaces[0])
+        # note: `set_labels` acts in place, so only apply it to new tensors.
+        # We only assign to `self._B` and `self._S` at the end, such that `self` is unchanged if we raise.
+        new_Bs, new_Ss = [], list(self._S)
+
+        def to_plain(j, dtype, backend, device):
+            # identification of the bond space `new_spaces[j]` with a plain ElementarySpace, such that we do not
+            # leave the (nested) direct sum spaces on the legs of the MPS. Legs ``'s'`` (plain) and ``'l'``.
+            P = new_spaces[j].projection_onto_summands([0, 1], backend=backend, device=device)
+            return P.as_SymmetricTensor(dtype=dtype).set_labels(['s', 'l'])
+
+        for i, B in enumerate(self._B):
+            X_L, X_R = extra_spaces[i], extra_spaces[i + 1]
+            backend, device, dtype = B.backend, B.device, B.dtype
+            if X_R is not None:
+                # fill up the vR leg with zeros: compose with the projection onto the old subspace.
+                proj = new_spaces[i + 1].projection_onto_summand(0, backend=backend, device=device)
+                proj = proj.as_SymmetricTensor(dtype=dtype).set_labels(['s', 'l'])
+                B = lasy.planar_contraction(B, proj, 'vR', 's', relabel2={'l': 'vR'})
+            if X_L is not None:
+                # B with the legs arranged as a matrix (vL) x (p, vR) with orthonormal rows
+                T = lasy.planar_permute_legs(B, codomain=['vL'], domain=['vR'] + self._p_label[::-1])
+                T_labels = list(T.labels)
+                labels = ['xL'] + T_labels[1:]
+                E = lasy.SymmetricTensor.from_random_normal(
+                    lasy.TensorProduct([X_L], T.symmetry),
+                    T.domain,
+                    backend=backend,
+                    labels=labels,
+                    dtype=dtype,
+                    device=device,
+                )
+                # orthogonalize rows of E against the rows of T, then rows of E among each other by QR
+                E = E - lasy.compose(lasy.compose(E, T.hc), T)
+                Q, _ = lasy.qr(E.hc, new_labels=['xL*', 'xL'])
+                E = Q.hc.set_labels(labels)
+                if E.get_leg('xL') != X_L or lasy.norm(lasy.compose(E, T.hc)) > 1e-8:
+                    raise ValueError(
+                        'Failed to add orthogonal rows on the vL leg: not enough room, i.e. the '
+                        f'extra states on bond {i} are overcomplete.'
+                    )
+                incl_old = new_spaces[i].inclusion_of_summand(0, backend=backend, device=device)
+                incl_old = incl_old.as_SymmetricTensor(dtype=dtype).set_labels(['vL', 'x'])
+                incl_extra = new_spaces[i].inclusion_of_summand(1, backend=backend, device=device)
+                incl_extra = incl_extra.as_SymmetricTensor(dtype=dtype).set_labels(['vL', 'x'])
+                B_old = lasy.compose(incl_old, T.copy().set_labels(['x'] + T_labels[1:]))
+                B_extra = lasy.compose(incl_extra, E.copy().set_labels(['x'] + T_labels[1:]))
+                B = B_old.set_labels(T_labels) + B_extra.set_labels(T_labels)
+                B = lasy.planar_permute_legs(B, codomain=['vL'] + self._p_label, domain=['vR'])
+                P = to_plain(i, dtype, backend, device)
+                B = lasy.planar_contraction(P, B, 'l', 'vL', relabel1={'s': 'vL'})
+            if X_R is not None:
+                P = to_plain(i + 1, dtype, backend, device)
+                B = lasy.planar_contraction(B, P.hc.set_labels(['l', 's']), 'vR', 'l', relabel2={'s': 'vR'})
+            if X_L is not None or X_R is not None:
+                B = lasy.planar_permute_legs(B, codomain=['vL'] + self._p_label, domain=['vR'])
+            new_Bs.append(B.set_labels(self._B_labels) if B.labels != self._B_labels else B)
+        # append zeros to the singular values
+        for j, S in enumerate(self._S[:num_bonds]):
+            if extra_spaces[j] is None:
+                continue
+            incl_old = new_spaces[j].inclusion_of_summand(0, backend=S.backend, device=S.device)
+            incl_old = incl_old.as_SymmetricTensor(dtype=S.dtype)
+            S_new = lasy.compose(
+                lasy.compose(incl_old.set_labels(['vL', 'x']), S.copy().set_labels(['x', 'y'])),
+                incl_old.hc.set_labels(['y', 'vR']),
+            )
+            P = to_plain(j, S.dtype, S.backend, S.device)
+            S_new = lasy.compose(
+                lasy.compose(P.copy().set_labels(['vL', 'x']), S_new.set_labels(['x', 'y'])),
+                P.hc.set_labels(['y', 'vR']),
+            )
+            new_Ss[j] = lasy.DiagonalTensor.from_tensor(S_new.set_labels(['vL', 'vR'])).as_dtype(S.dtype)
+        self._B = new_Bs
+        self._S = new_Ss
         self.test_sanity()
-        return perms_L
 
     def spatial_inversion(self):
         """Perform a spatial inversion along the MPS.
@@ -5675,10 +5710,8 @@ class MPS(BaseMPSExpectationValue):
             raise ValueError("can't take overlap between MPS with different bc")
         if self.finite:
             if ignore_form:
-                # Use TransferMatrix with option to ignore the form
-                TM = TransferMatrix(self, other, charge_sector=charge_sector, form=None)
-                res = TM.matvec(TM.initial_guess(1.0))  # apply transfer matrix to identity
-                return npc.trace(res, 0, 1) * self.norm * other.norm
+                # TODO: Use TransferMatrix with option to ignore the form (still uses np_conserved)
+                raise NotImplementedError('overlap with ignore_form=True is not ported to lasyten yet')
             else:
                 bra = self
                 if other is not self:
@@ -5755,11 +5788,11 @@ class MPS(BaseMPSExpectationValue):
             if copy is not None:
                 term_list = copy
         # conversion
-        ot, lasy = term_list.to_OnsiteTerms_CouplingTerms(self.sites)
+        ot, ct = term_list.to_OnsiteTerms_CouplingTerms(self.sites)
         bc = 'finite' if self.finite else 'infinite'
-        mpo_graph = mpo.MPOGraph.from_terms((ot, lasy), self.sites, bc, unit_cell_width=self.unit_cell_width)
+        mpo_graph = mpo.MPOGraph.from_terms((ot, ct), self.sites, bc, unit_cell_width=self.unit_cell_width)
         mpo_ = mpo_graph.build_MPO()
-        terms_sum = mpo_.expectation_value(self, max_range=lasy.max_range())
+        terms_sum = mpo_.expectation_value(self, max_range=ct.max_range())
         if not self.finite:
             terms_sum = terms_sum * self.L
         return terms_sum, mpo_
@@ -6101,14 +6134,19 @@ class MPS(BaseMPSExpectationValue):
             (which indicates a degenerate "cat" state, e.g., for spontaneous symmetry breaking).
 
         """
-        # TODO
         assert not self.finite
+        if any(isinstance(B, lasy.HiddenLegTensor) for B in self._B):
+            raise NotImplementedError('canonical_form_infinite1 does not support a non-trivial total charge yet.')
         L = self.L
-        i1 = np.argmin(self.chi) % L  # start at this bond
+        # start at the bond with the smallest dimension (note: ``MPS.chi`` counts multiplets, not dimensions)
+        i1 = int(np.argmin([B.get_leg('vL').dim for B in self._B])) % L
         if any([(f is None) for f in self.form]):
             # ignore any 'S' and canonical form, just state that we are in 'B' form
             self.form = self._parse_form('B')
-            self._S[i1] = np.ones(self.chi[i1], dtype=np.float64)  # (later used for guess of Gl)
+            # trivial S[i1] (later used for the guess of Gl)
+            self._S[i1] = lasy.DiagonalTensor.from_eye(
+                self._B[i1].get_leg('vL'), self.backend, ['vL', 'vR'], self.dtype.to_real, self.device
+            )
         else:
             # was in canonical form before; bring back into canonical form
             # -> make sure we don't use multiple S on one bond in our definition of the MPS
@@ -6124,9 +6162,9 @@ class MPS(BaseMPSExpectationValue):
             self.norm *= np.sqrt(norm)
         # make Gr diagonal to Wr
         Wr, Kl, Kr = self._canonical_form_correct_right(i1, Gr)
-        # guess for Gl
-        Gl = npc.tensordot(Kr.scale_axis(self.get_SL(i1) ** 2, 1), Kl, axes=['vR', 'vL'])
-        Gl.iset_leg_labels(['vR*', 'vR'])
+        # guess for Gl = Kr S^2 Kl, i.e. S^2 expressed in the new basis
+        S2 = self.get_SL(i1) ** 2
+        Gl = lasy.compose(Kr, lasy.scale_axis(Kl, S2, 'vL')).set_labels(['vR*', 'vR'])
         # find dominant left eigenvector
         norm, Gl = self._canonical_form_dominant_gram_matrix(i1, True, tol_xi, Gl)
         if abs(1.0 - norm) > 1.0e-13:
@@ -6139,15 +6177,21 @@ class MPS(BaseMPSExpectationValue):
         # bring bond to canonical form
         Gl, Yl, Yr = self._canonical_form_correct_left(i1, Gl, Wr)
         Gl = self.shift_Tensor_unit_cells(Gl, -1)
-        Wr = np.ones(Yr.legs[0].ind_len, np.float64)
-        # now the bond (i1-1,i1) is in canonical form
+        # now the bond (i1-1,i1) is in canonical form; the right eigenvector is the identity
+        Wr = lasy.DiagonalTensor.from_eye(
+            self.get_SL(i1).get_leg('vL'), self.backend, ['vL', 'vR'], self.dtype.to_real, self.device
+        )
         Wr_list[i1] = Wr  # diag(Wr) is right eigenvector on bond (i1-1, i1)
 
         # phase 2: sweep from right to left; find other right eigenvectors and make them diagonal
         for j1 in range(i1 - 1, i1 - L, -1):
             B1 = self.get_B(j1, 'B')
-            axes = [self._p_label + ['vR'], self._get_p_label('*') + ['vR*']]
-            Gr = npc.tensordot(B1.scale_axis(Wr, 'vR'), B1.conj(), axes=axes)
+            # The diagonal `Wr` has its legs in the codomain and domain. Depending on whether the bond space is
+            # dual or not, we need `Wr` or its transpose, such that the RP's `vL` can be contracted with B1's `vR`.
+            RP = Wr.copy().set_labels(['vL*', 'vL']).as_SymmetricTensor()
+            if RP.get_leg('vL') != B1.get_leg('vR').dual:
+                RP = Wr.T.copy().set_labels(['vL*', 'vL']).as_SymmetricTensor()
+            Gr = mps_contraction_diagram_operations['TM @ RP2'].evaluate(dict(RP=RP, ket=B1, bra=B1.hc))
             Wr, Kl, Kr = self._canonical_form_correct_right(j1, Gr)
             Wr_list[j1 % L] = Wr
 
@@ -6156,12 +6200,7 @@ class MPS(BaseMPSExpectationValue):
         for j1 in range(i1 - L + 1, i1, +1):
             # find Gl on bond j1-1, j1
             B1 = self.get_B(j1 - 1, 'B')
-            Gl = npc.tensordot(
-                B1.conj(),  # old B1; now on site j1-1
-                npc.tensordot(Gl, B1, axes=['vR', 'vL']),
-                axes=[self._get_p_label('*') + ['vL*'], self._p_label + ['vR*']],
-            )
-            # axes=[['p*', 'vL*'], ['p', 'vR*']])
+            Gl = mps_contraction_diagram_operations['LP2 @ TM'].evaluate(dict(LP=Gl, ket=B1, bra=B1.hc))
             Gl, Yl, Yr = self._canonical_form_correct_left(j1, Gl, Wr_list[j1 % L])
         # done
 
@@ -6312,7 +6351,7 @@ class MPS(BaseMPSExpectationValue):
 
     def correlation_length2(
         self, target: int = 1, tol_ev0: float | None = 1.0e-8, charge_sector=0, return_charges: bool = False
-    ) -> float | np.ndarray | tuple[float | np.ndarray, lasy.SectorArray]:
+    ) -> float | np.ndarray | tuple[float | np.ndarray, lasy.Sector | list[lasy.Sector]]:
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
         Assumes that `self` is in canonical form.
@@ -6336,7 +6375,10 @@ class MPS(BaseMPSExpectationValue):
         Parameters
         ----------
         target : int
-            We look for the `target` + 1 largest eigenvalues.
+            We look for the `target` + 1 largest eigenvalues (in absolute value, over all `charge_sector`\ s).
+            Fewer than `target` correlation lengths are returned if fewer eigenvalues are found, e.g. if the
+            sectors contain less eigenvectors, or if eigenvalues are exactly degenerate (e.g. for SU(2) multiplets
+            or complex conjugate pairs), which a single Krylov run does not resolve.
         tol_ev0 : float | None
             Print warning if largest eigenvalue deviates from 1 by more than `tol_ev0`.
             If `None`, **assume** dominant eigenvector in 0-charge-sector to be 1 for
@@ -6346,8 +6388,10 @@ class MPS(BaseMPSExpectationValue):
             of the TransferMatrix.
             ``None`` stands for *all* sectors, ``0`` stands for the trivial charge sector.
             Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in trivial sector.
-            If you pass a sector array, this function returns `target` dominant eigenvalues in
-            each of those sectors.
+            If you pass several sectors (a sector array or a list), the eigenvalues of all of them are
+            pooled and this function returns the overall `target` dominant ones.
+            For ``None``, we only look in one of each pair of sectors ``q, -q``, see
+            :meth:`correlation_length_charge_sectors`, since they have identical eigenvalues.
         return_charges : bool
             If True, return the charge sectors along with the eigenvalues.
 
@@ -6357,7 +6401,7 @@ class MPS(BaseMPSExpectationValue):
             If `target` = 1, return just the correlation length,
             otherwise an array of the `target` largest correlation lengths.
             It is measured in units of the horizontal spacing of the lattice.
-        charge_sectors :  :class:`~lasyten.SectorArray`, optional
+        charge_sectors :  :class:`~lasyten.Sector` | list of :class:`~lasyten.Sector`, optional
             For each entry in `xi` the charge sector, i.e., the sector of the dominant eigenvalue.
             Only returned if `return_charges`.
 
@@ -6378,7 +6422,7 @@ class MPS(BaseMPSExpectationValue):
 
     def correlation_length(
         self, target: int = 1, tol_ev0: float | None = 1.0e-8, charge_sector=0, return_charges: bool = False
-    ) -> float | np.ndarray | tuple[float | np.ndarray, lasy.SectorArray]:
+    ) -> float | np.ndarray | tuple[float | np.ndarray, lasy.Sector | list[lasy.Sector]]:
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
         .. deprecated ::
@@ -6394,8 +6438,6 @@ class MPS(BaseMPSExpectationValue):
         ----------
         target, tol_ev0, charge_sector, return_charges
             same as for :meth:`correlation_length2`.
-        _ignore_warning : bool
-            Flag to suppress the ``DeprecationWarning``.
 
         Returns
         -------
@@ -6419,60 +6461,64 @@ class MPS(BaseMPSExpectationValue):
 
         Returns like :meth:`correlation_length`, in particular *without* accounting for
         lattice geometry.
+
+        For non-abelian symmetries, note that each eigenvalue in a sector (e.g. spin ``S``) belongs to a
+        whole multiplet. In particular, the correlation length of the spin-spin correlations
+        (e.g. in the spin-1 Heisenberg chain) is found in the spin-1 sector, not in the trivial sector.
+        Use ``charge_sector=None`` to look in all sectors.
         """
-        # TODO
         assert not self.finite
-        zero_charge = self.chinfo.make_valid()
-        if any(chi == 1 for chi in self.chi):
+        zero_charge = self.symmetry.trivial_sector
+        # (note: ``MPS.chi`` counts multiplets, we need the dimension of the bond)
+        if any(S.get_leg('vL').dim == 1 for S in self._S):
             # product states have zero correlation length
             if return_charges:
                 if target == 1:
                     return 0, zero_charge
                 return [0] * target, [zero_charge] * target
             return 0.0 if target == 1 else [0] * target
-        if charge_sector is not None and isinstance(charge_sector, Iterable):
-            # iterable check excludes charge_sector=0 (c.f. issue 289)
-            charge_sector = self.chinfo.make_valid(charge_sector)
-        elif charge_sector is None:
-            pass
+        # normalize the `charge_sector` to a list of sectors
+        if charge_sector is None:
+            # bra and ket are identical: the sectors `q` and `-q` have the same eigenvalues, only look in one of them
+            sectors = list(self.correlation_length_charge_sectors())
+        elif isinstance(charge_sector, (lasy.Sector, int, np.integer, str)):
+            sectors = [_normalize_sector(charge_sector, self.symmetry)]
         else:
-            assert charge_sector == 0
-            charge_sector = zero_charge
-        num = max(target + 1, self._transfermatrix_keep)
-        # now charge_sector is None or 1D or 2D ndarray (but not 0)
-        if charge_sector is None or charge_sector.ndim == 1:
-            # a single charge sector or charge_sector=None -> (only dominant eigvals for all charge_sectors)
-            T = TransferMatrix(self, self, charge_sector=charge_sector, form='B')
-            E, V = T.eigenvectors(num, which='LM')
-            # note: LM implies E is sorted largest magnitude first
-            if return_charges:
-                V_charges = [vec.qtotal for vec in V]
-            looked_in_zero_charge_sector = charge_sector is None or np.all(charge_sector == 0)
-        else:
-            assert charge_sector.ndim == 2
-            # loop over different charge sectors
-            charge_sector_list = charge_sector
-            T = TransferMatrix(self, self, form='B')
-            E = []
-            V_charges = []
-            for charge_sector in charge_sector_list:
-                T.charge_sector = charge_sector
+            sectors = []  # e.g. a SectorArray; we need every sector only once
+            for sector in charge_sector:
+                sector = _normalize_sector(sector, self.symmetry)
+                if sector not in sectors:
+                    sectors.append(sector)
+        # one more than needed: for real tensors, eigenvalues come in complex conjugate pairs,
+        # which a Krylov method does not resolve (slow or no convergence) if it only looks for one of them.
+        num = max(target + 2, self._transfermatrix_keep)
+        T = TransferMatrix(self, self, charge_sector=0, form='B')
+        E = []
+        V_charges = []
+        for sector in sectors:
+            # the trivial sector is special-cased (no charge leg) in the TransferMatrix
+            T.charge_sector = 0 if sector == zero_charge else sector
+            with warnings.catch_warnings():
+                # a sector can have less than `num` vectors (e.g. just one for the trivial sector of an AKLT state)
+                warnings.filterwarnings('ignore', 'TransferMatrix.eigenvectors: reduce num_ev')
                 E_s, V_s = T.eigenvectors(num, which='LM')
-                E.extend(E_s)
-                if return_charges:
-                    V_charges.extend([vec.qtotal for vec in V_s])
-            sort = argsort(E, 'LM')
-            E = np.array(E)[sort]
+            E.extend(E_s)
             if return_charges:
-                V_charges = [V_charges[i] for i in sort]
-            looked_in_zero_charge_sector = np.any(np.all(charge_sector_list == 0, axis=1))
+                V_charges.extend([T.eigenvector_charge(vec) for vec in V_s])
+        sort = argsort(E, 'LM')
+        E = np.array(E)[sort]
+        if return_charges:
+            V_charges = [V_charges[i] for i in sort]
+        looked_in_zero_charge_sector = any(sector == zero_charge for sector in sectors)
 
         if not looked_in_zero_charge_sector:
             # need to add the eigval 1 from the 0 charge sector
             if tol_ev0 is not None:
                 # diagonalize zero_charge sector
-                T.charge_sector = zero_charge
-                E0, _ = T.eigenvectors(num, which='LM')
+                T.charge_sector = 0
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', 'TransferMatrix.eigenvectors: reduce num_ev')
+                    E0, _ = T.eigenvectors(1, which='LM')
                 E0 = E0[0]
             else:
                 E0 = 1.0  # explicitly set it by hand
@@ -6487,22 +6533,27 @@ class MPS(BaseMPSExpectationValue):
                 if prec is not None:
                     logger.warning(
                         'correlation_length: other charge sector has eigenvalue '
-                        ' bigger than the eigenvalue 1. in the zero charge sector, '
-                        'but still within precision {prec:.1e}'
+                        'bigger than the eigenvalue 1. in the zero charge sector, '
+                        f'but still within precision {prec:.1e}'
                     )
                     E0 = E[0] + prec
                 else:
                     raise ValueError('dominant eigenvalue is not in zero charge sector???')
             E = [E0] + list(E)
             if return_charges:
-                V_charges = [None] + V_charges
+                V_charges = [zero_charge] + V_charges
         if tol_ev0 is not None and abs(E[0] - 1.0) > tol_ev0:
             logger.warning(
                 f'Correlation length: largest eigenvalue not one, but {E[0]:.12f}. Not in canonical form/normalized?'
             )
-        assert len(E) >= 2
+        if len(E) < 2:
+            raise ValueError(
+                'Found only a single eigenvalue of the TransferMatrix in the given `charge_sector`. '
+                'Use `charge_sector=None` to look in all sectors.'
+            )
         E = np.array(E)
-        xis = -1.0 / np.log(np.abs(E[1 : target + 1] / E[0])) * self.L
+        with np.errstate(divide='ignore'):  # an eigenvalue can be exactly zero, which means xi = 0
+            xis = -1.0 / np.log(np.abs(E[1 : target + 1] / E[0])) * self.L
         # finally return
         if return_charges:
             if target == 1:
@@ -7211,6 +7262,7 @@ class MPS(BaseMPSExpectationValue):
             performing the truncation.
 
         """
+        raise NotImplementedError('compute_K is not ported to lasyten yet')
         # TODO
         from ..models.lattice import Lattice  # dynamical import to avoid import loops
 
@@ -7426,14 +7478,21 @@ class MPS(BaseMPSExpectationValue):
         """Find dominant eigenvector of the transfer matrix starting between sites (bond0-1,bond0).
 
         Find right (transpose=False) or left (transpose=True) eigenvector of the transfermatrix.
+
+        Returns
+        -------
+        eta : float | complex
+            The dominant eigenvalue.
+        G : :class:`~lasyten.SymmetricTensor`
+            The dominant eigenvector, with legs ``'vL*', 'vL'`` (right eigenvector)
+            or ``'vR*', 'vR'`` (left eigenvector).
+
         """
-        # TODO
         TM = TransferMatrix(self, self, bond0, bond0, transpose=transpose, charge_sector=0)
         if guess is None:
             diag = self.get_SL(bond0) ** 2 if transpose else 1.0
             guess = TM.initial_guess(diag)
-        guess = guess.combine_legs([0, 1], pipes=TM.pipe)
-        eta, V = TM.eigenvectors(self._transfermatrix_keep, v0_npc=guess, which='LM')
+        eta, V = TM.eigenvectors(self._transfermatrix_keep, v0=guess, which='LM')
         self._transfermatrix_keep = len(eta)
         if len(eta) > 1:
             if np.abs(eta[0]) > np.abs(eta[1]):
@@ -7443,17 +7502,17 @@ class MPS(BaseMPSExpectationValue):
             if xi > tol_xi:
                 raise ValueError(f'Degenerate spectrum of TransferMatrix (corr length xi={xi:.3e})')
         eta, G = eta[0], V[0]
-        G = G.split_legs()
         # note: the dominant eigenvector should be hermitian and positive
         # removes phase (arbitrary for eigenvectors!) and normalize
         # right eigenvectors should have trace chi, left ones trace 1
         # (since we expect something close to eye(chi) for right and diag(S**2) for left G)
-        norm = 1.0 if transpose else G.shape[0]
-        G *= norm / npc.trace(G, 0, 1)
-        if self.dtype.kind != 'c':  # psi is real -> G should be real
+        # (note that chi is the dimension of the virtual space, not the number of multiplets)
+        chi = G.get_leg('vR' if transpose else 'vL').dim
+        norm = 1.0 if transpose else chi
+        G = G * (norm / lasy.trace(G).to_numpy())
+        if self.dtype.is_real:  # psi is real -> G should be real
             eta = np.abs(eta)
-            G.iunary_blockwise(np.real)
-        return eta, G  # G has legs vL, vL* or vR, vR*
+        return eta, G  # G has legs vL*, vL or vR*, vR
 
     def _canonical_form_correct_right(self, i1, Gr, eps=2.0 * np.finfo(np.double).eps):
         """Given the right gram matrix Gr, updated the bond (i0, i1), where i0 = i1 - 1.
@@ -7464,28 +7523,46 @@ class MPS(BaseMPSExpectationValue):
         If `Wr` has (almost) zero entries, reduce the bond dimension at the given bond.
         Then ``Gr -> Wr``.
         Return Wr normalized to ``sum(Wr) = chi``.
+
+        Parameters
+        ----------
+        i1 : int
+            The site to the right of the bond.
+        Gr : :class:`~lasyten.SymmetricTensor`
+            The right gram matrix with legs ``'vL*', 'vL'``.
+
+        Returns
+        -------
+        Wr : :class:`~lasyten.DiagonalTensor`
+            The eigenvalues of `Gr` (labels ``'vL', 'vR'``), normalized to ``trace(Wr) = chi``.
+        Kl, Kr : :class:`~lasyten.SymmetricTensor`
+            The gauge transformations that were applied to ``B[i0]`` (``compose(B, Kl)``)
+            and ``B[i1]`` (``partial_compose(B, Kr, 'vL')``), with labels ``'vL', 'vR'``.
+
         """
-        # TODO
-        Gr.itranspose(['vL', 'vL*'])
-        W, XH = npc.eigh(Gr)  # -> XH has legs vL vL* = vL vR
-        if np.sign(W[np.argmax(np.abs(W))]) == -1:  # fix sign
-            W = -W  # should actually never happen:  we initially normalize tr(Gr) = chi > 0
+        Gr = lasy.planar_permute_legs(Gr, codomain=['vL*'], domain=['vL'])
+        Gr = 0.5 * (Gr + Gr.hc)  # (should be hermitian already, up to numerical noise)
+        W, Y = lasy.eigh(Gr, new_labels=['vR', 'vL'], sort='>')  # Gr = Y W Y^dagger
+        if abs(W.min().to_numpy()) > abs(W.max().to_numpy()):  # fix sign
+            W = W * -1.0  # should actually never happen:  we initially normalize tr(Gr) = chi > 0
         # discard small values on order of machine precision
-        proj = W > eps
-        if np.count_nonzero(proj) < len(W):
+        mask = lasy.Mask.from_DiagonalTensor(W > eps)
+        chi_old, chi = mask.large_leg.dim, mask.small_leg.dim
+        if chi < chi_old:
             # project into non-degenerate subspace, reducing the bond dimensions!
-            if np.count_nonzero(proj) < len(W) * 0.9:
+            if chi < chi_old * 0.9:
                 logger.warning('canonical_form_infinite: project to significantly smaller chi')
-            XH.iproject(proj, axes=1)
-            W = W[proj]
-        norm = len(W) / np.sum(W)
-        W *= norm
+            Y = lasy.planar_contract_mask(Y, mask.hc.T, 'vR', 'vR*', relabel2={'vL*': 'vR'})
+            W = lasy.tensors.apply_mask_DiagonalTensor(W, mask)
+        norm = chi / lasy.trace(W).to_numpy()
+        W = W * norm
         norm = np.sqrt(norm)  # (norm doesn't change eigenvalue of TM)
-        Kl = XH.iset_leg_labels(['vL', 'vR']) * (1.0 / norm)
-        Kr = XH.transpose().iconj().iset_leg_labels(['vL', 'vR']) * norm
+        # the right gram matrix of the new tensors is diag(W): Kr = Y^T and Kl = conj(Y), see `Y` convention above
+        Kl = (Y.hc.T / norm).set_labels(['vL', 'vR'])
+        Kr = (Y.T * norm).set_labels(['vL', 'vR'])
         i0 = i1 - 1
-        self.set_B(i0, npc.tensordot(self.get_B(i0), Kl, axes=['vR', 'vL']))
-        self.set_B(i1, npc.tensordot(Kr, self.get_B(i1), axes=['vR', 'vL']))
+        self.set_B(i0, lasy.compose(self.get_B(i0), Kl))
+        self.set_B(i1, lasy.tensors.partial_compose(self.get_B(i1), Kr, 'vL'))
         return W, Kl, Kr
 
     def _canonical_form_correct_left(self, i1, Gl, Wr, eps=2.0 * np.finfo(np.double).eps):
@@ -7502,34 +7579,43 @@ class MPS(BaseMPSExpectationValue):
         and dominant right eigenvector is
         diag(Wr) -> Y 1/sqrt(Wr) diag(Wr) 1/sqrt(W) Y^H = diag(1)
         i.e., we brought the bond to canonical form and `S` is the Schmidt spectrum.
+
+        Returns
+        -------
+        Gl : :class:`~lasyten.SymmetricTensor`
+            The new left gram matrix ``S^2`` with legs ``'vR*', 'vR'``.
+        Yl, Yr : :class:`~lasyten.SymmetricTensor`
+            The unitary parts of the gauge transformations applied to ``B[i0]`` and ``B[i1]``.
+
         """
-        # TODO
-        sqrt_Wr = np.sqrt(Wr)
-        Gl.itranspose(['vR*', 'vR'])
-        rhor = Gl.scale_axis(sqrt_Wr, 0).iscale_axis(sqrt_Wr, 1)
-        S2, YH = npc.eigh(rhor, sort='>')  # YH has legs 'vR*', 'vR'
-        S2 /= np.sum(S2)  # equivalent to normalizing tr(rhor)=1
+        sqrt_Wr = lasy.sqrt(Wr)
+        Gl = lasy.planar_permute_legs(Gl, codomain=['vR*'], domain=['vR'])
+        rhor = lasy.scale_axis(lasy.scale_axis(Gl, sqrt_Wr, 'vR*'), sqrt_Wr, 'vR')
+        rhor = 0.5 * (rhor + rhor.hc)  # (should be hermitian already, up to numerical noise)
+        S2, Y = lasy.eigh(rhor, new_labels=['vR', 'vL'], sort='>')  # rhor = Y S2 Y^dagger
+        S2 = S2 / lasy.trace(S2)  # equivalent to normalizing tr(rhor)=1
         s_norm = 1.0
         # discard small values on order of machine precision
-        proj = S2 > eps
-        if np.count_nonzero(proj) < len(S2):
+        mask = lasy.Mask.from_DiagonalTensor(S2 > eps)
+        chi_old, chi = mask.large_leg.dim, mask.small_leg.dim
+        if chi < chi_old:
             # project into non-degenerate subspace, reducing the bond dimensions!
-            if np.count_nonzero(proj) < len(S2) * 0.9:
+            if chi < chi_old * 0.9:
                 logger.warning('canonical_form_infinite: project to significantly smaller chi')
-            YH.iproject(proj, axes=1)
-            S2 = S2[proj]
-            s_norm = np.sqrt(np.sum(S2))
-        S = np.sqrt(S2) / s_norm
+            Y = lasy.planar_contract_mask(Y, mask.hc.T, 'vR', 'vR*', relabel2={'vL*': 'vR'})
+            S2 = lasy.tensors.apply_mask_DiagonalTensor(S2, mask)
+            s_norm = np.sqrt(lasy.trace(S2).to_numpy())
+        S = lasy.sqrt(S2) / s_norm
         self.set_SL(i1, S)
-        Yl = YH.scale_axis(sqrt_Wr / s_norm, 0).iset_leg_labels(['vL', 'vR'])
-        Yr = YH.transpose().iconj().scale_axis(1.0 / sqrt_Wr, 1).iset_leg_labels(['vL', 'vR'])
+        Yl = (Y / s_norm).set_labels(['vL', 'vR'])
+        Yr = Y.hc.copy().set_labels(['vL', 'vR'])
         i0 = i1 - 1
-        self.set_B(i0, npc.tensordot(self.get_B(i0), Yl, axes=['vR', 'vL']))
-        self.set_B(i1, npc.tensordot(Yr, self.get_B(i1), axes=['vR', 'vL']))
-        Gl = npc.tensordot(Gl, Yl, axes=['vR', 'vL'])
-        Gl = npc.tensordot(Yl.conj(), Gl, axes=['vL*', 'vR*'])  # labels 'vR*', 'vR'
-        Gl /= npc.trace(Gl)
-        # Gl is diag(S**2) up to numerical errors...
+        B0 = lasy.scale_axis(self.get_B(i0), sqrt_Wr, 'vR')
+        self.set_B(i0, lasy.compose(B0, Yl))
+        B1 = lasy.scale_axis(self.get_B(i1), 1.0 / sqrt_Wr, 'vL')
+        self.set_B(i1, lasy.tensors.partial_compose(B1, Yr, 'vL'))
+        # the new Gl is diag(S**2), up to numerical errors
+        Gl = (S**2).set_labels(['vR*', 'vR']).as_SymmetricTensor()
         return Gl, Yl, Yr
 
     def outer_virtual_legs(self) -> tuple[lasy.ElementarySpace, lasy.ElementarySpace]:
@@ -8480,7 +8566,6 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
 
         bra_N and ket_M are *not* reversed for transpose=False, i.e. ordered left to right.
         """
-        raise NotImplementedError('MPS transfermatrix not ported')
         self.L = L = len(bra_N)
         if unit_cell_width is None:
             # TODO: deprecate the default value.
@@ -8655,8 +8740,8 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
         num_ev: int = 1,
         which: str = 'LM',
         v0: lasy.SymmetricTensor | None = None,
-        tol: float = 1.0e-13,
-        N_max: int = 40,
+        tol: float | None = None,
+        N_max: int = 80,
         max_restarts: int = 50,
     ) -> tuple[np.ndarray, list[lasy.SymmetricTensor]]:
         """Find (dominant) eigenvector(s) of self with the :class:`~lasyten.tensors.krylov_based.Arnoldi` method.
@@ -8677,9 +8762,11 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
         v0 : :class:`~lasyten.SymmetricTensor` | None
             Initial guess, with legs as for :meth:`matvec`. Defaults to :meth:`initial_guess`.
             Ignored for ``charge_sector=None``.
-        tol : float
+        tol : float | None
             Tolerance for the residuals ``norm(self.matvec(v) - eta * v)`` of the normalized eigenvectors
             `v`, relative to the largest magnitude of the eigenvalues `eta`.
+            Defaults to ``1e-13`` for a single eigenvector. If we look for several, the transfer matrix is not
+            normal and subdominant eigenvalues (e.g. complex conjugate pairs) do not converge that far: ``1e-10``.
         N_max : int
             Maximum dimension of the Krylov space in each Arnoldi run.
         max_restarts : int
@@ -8696,8 +8783,10 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
         if self.charge_sector is None:
             eta, w = [], []
             try:
+                trivial_sector = self.charge_leg.symmetry.trivial_sector
                 for sector in self.charge_leg.defining_sectors:
-                    self.charge_sector = sector
+                    # the trivial sector is special-cased (no charge leg, identity as initial guess)
+                    self.charge_sector = 0 if sector == trivial_sector else sector
                     with warnings.catch_warnings():
                         warnings.filterwarnings('ignore', 'TransferMatrix.eigenvectors: reduce num_ev')
                         eta_s, w_s = self.eigenvectors(num_ev, which, None, tol, N_max, max_restarts)
@@ -8722,11 +8811,13 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
         if dim == 1:
             # the only vector is an eigenvector (and Arnoldi needs at least 2 steps)
             v = v0 / lasy.norm(v0)
-            eta = np.real_if_close(lasy.inner(v, self.matvec(v)).to_numpy())
+            eta = np.atleast_1d(np.real_if_close(lasy.inner(v, self.matvec(v)).to_numpy()))
             return eta, [v]
+        if tol is None:
+            tol = 1.0e-13 if num_ev == 1 else 1.0e-10
         N = int(min(N_max, dim))
         options = dict(num_ev=num_ev, which=which, N_min=min(N, num_ev + 2), N_max=N, N_cache=N, E_tol=0.1 * tol)
-        for _ in range(max_restarts + 1):
+        for restart in range(max_restarts + 1):
             eta, w, _ = lasy.tensors.Arnoldi(self, v0, options).run()
             # Arnoldi might stop early (if v0 is in an invariant subspace) with less than `num_ev` vectors
             eta = np.asarray(eta)[: len(w)]
@@ -8737,6 +8828,11 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
             scale = max(np.max(np.abs(eta)), np.finfo(float).tiny)
             residuals = [lasy.norm(self.matvec(v) - complex(e) * v).to_numpy() for e, v in zip(eta, w)]
             if len(w) == num_ev and max(residuals) <= tol * scale:
+                break
+            if restart > 0 and 0 < len(w) < num_ev and max(residuals) <= tol * scale:
+                # Even after restarting with the full Krylov space (and some noise), we find less than `num_ev`
+                # vectors, all of them converged: there are no further eigenvectors reachable by the
+                # Krylov method (e.g. an exactly invariant subspace of smaller dimension than `dim`).
                 break
             # restart from the sum of the eigenvector estimates, with some noise to leave invariant subspaces
             noise = lasy.SymmetricTensor.from_random_normal(
@@ -8753,7 +8849,7 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
                 'restarts',
                 stacklevel=2,
             )
-        eta = np.real_if_close(eta)
+        eta = np.atleast_1d(np.real_if_close(eta))
         return eta, w
 
     def eigenvector_charge(self, vec: lasy.SymmetricTensor) -> lasy.Sector:
@@ -9382,6 +9478,21 @@ def _permute_theta_for_svd(theta: lasy.Tensor, charge_leg_right: bool) -> lasy.T
     if charge_leg_right:
         return lasy.planar_permute_legs(theta, codomain=['vL', 'p0'], domain=hidden[::-1] + ['vR', 'p1'])
     return lasy.planar_permute_legs(theta, codomain=hidden + ['vL', 'p0'], domain=['vR', 'p1'])
+
+
+def _normalize_sector(charge_sector, symmetry: lasy.Symmetry) -> lasy.Sector:
+    """Convert one entry of a `charge_sector` argument (a sector, ``0`` or ``'trivial'``) to a Sector."""
+    if isinstance(charge_sector, lasy.Sector):
+        return charge_sector
+    if isinstance(charge_sector, str):
+        valid = charge_sector == 'trivial'
+    elif isinstance(charge_sector, (int, np.integer)):
+        valid = charge_sector == 0
+    else:
+        return lasy.Sector(charge_sector)
+    if not valid:
+        raise ValueError(f'invalid charge_sector {charge_sector!r}')
+    return symmetry.trivial_sector
 
 
 def _project_onto_single_summand(B: lasy.SymmetricTensor, leg: str) -> lasy.SymmetricTensor:
