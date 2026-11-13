@@ -1397,11 +1397,11 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
     L : int
         Number of sites.
     exp_decaying_terms : list of tuples
-        Each tuple ``(strength, opname_i, opname_j, lambda, subsites, subsites_start, opname_string)`` represents
+        Each tuple ``(strength, lambda_, opname_i, opname_j, subsites, subsites_start, opname_string)`` represents
         one of the terms as described above; see :meth:`add_exponentially_decaying_coupling` for
         more details.
     centered_terms : list of tuples
-        Each tuple ``(strength, opname_i, opname_j, lambda_, subsites, opname_string)`` represents
+        Each tuple ``(strength, lambda_, opname_i, opname_j, i, subsites, opname_string)`` represents
         one of the centered terms as described in :meth:`add_centered_exponentially_decaying_term`.
 
     """
