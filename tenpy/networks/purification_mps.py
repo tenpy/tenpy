@@ -123,6 +123,7 @@ import copy
 import numpy as np
 
 from ..linalg import np_conserved as npc
+from ..linalg.truncation import svd_theta
 from ..tools.math import entropy
 from .mps import MPS
 
@@ -494,8 +495,84 @@ class PurificationMPS(MPS):
                     rho = npc.tensordot(rho, B.conj(), axes=contr_rho)
         return np.array(coord), np.array(mutinf)
 
-    def swap_sites(self, i, swapOP='auto', trunc_par={}):
-        raise NotImplementedError()
+    def swap_sites(self, i, swap_op='auto', trunc_par=None):
+        """
+        For fermion modes c^\dag_{i,p} c^\dag_{i,q} c^\dag_{i+1,p} c^\dag_{i+1,q}, we want
+        to swap sites i and i+1. Symbolically, first we swap (i+1,p) left two sites and
+        then (i+1,q) left two sites.
+        We define a d^4 x d^4 matrix that does the swapping, where d is the local Hilbert
+        space dimension.
+        """
+        if not self.chinfo.trivial_shift:
+            # See reasoning in MPS function.
+            raise RuntimeError('Can not swap sites if conserved charge has non-trivial shift.')
+
+        if trunc_par is None:
+            trunc_par = {}
+        siteL, siteR = self.get_site(i), self.get_site(i + 1)
+        if isinstance(swap_op, str):
+            dL, dR = siteL.dim, siteR.dim
+            # site.JW_exponent is just the `n_i` in the equations of the note above.
+            
+            # [0, 1] for spinless fermion site; exponentiates to [1, -1] with 1.j*np.pi
+            # [0, 0, 1, 1]
+            n_ip = np.outer(siteL.JW_exponent, np.ones(dL)).reshape(dL * dL)
+            # [0, 1, 0, 1]
+            n_iq = np.outer(np.ones(dL), siteL.JW_exponent).reshape(dL * dL)
+            # [0, 0, 1, 1]
+            n_jp = np.outer(siteR.JW_exponent, np.ones(dR)).reshape(dR * dR)
+            # [0, 1, 0, 1]
+            n_jq = np.outer(np.ones(dR), siteR.JW_exponent).reshape(dR * dR)
+            
+            n_ip = np.outer(n_ip, np.ones(dR*dR)).reshape(dL * dL * dR * dR)
+            n_iq = np.outer(n_iq, np.ones(dR*dR)).reshape(dL * dL * dR * dR)
+            n_jp = np.outer(np.ones(dL*dL), n_jp).reshape(dL * dL * dR * dR)
+            n_jq = np.outer(np.ones(dL*dL), n_jq).reshape(dL * dL * dR * dR)
+
+            # In TeNPy purifications, fermion modes are organized as p1, p2, ..., pL, q1, q2, ..., qL.
+            # Thus, JW strings on the physical legs do not act on the ancilla legs.
+            # So, we get a sign if both physical sites are occupied; same for ancilla.
+            # There is no cross physical-ancilla sign.
+            n_p = n_ip * n_jp
+            n_q = n_iq * n_jq
+            sign = np.logical_xor(n_p, n_q)
+            
+            if np.any(sign):
+                if swap_op == 'auto':
+                    swap_op_diag = (-1.0) ** (sign)
+                else:
+                    raise ValueError("don't understand swap_op = " + repr(swap_op))
+                # p1, q1, p2, q2, p1*, q1*, p2*, q2*
+                legs = [siteL.leg, siteL.leg.conj(), siteR.leg, siteR.leg.conj(), siteL.leg.conj(), siteL.leg, siteR.leg.conj(), siteR.leg]
+                swap_op = npc.Array.from_ndarray(
+                    np.diag(swap_op_diag).reshape([dL, dL, dR, dR, dL, dL, dR, dR]), legs, labels=['p1', 'q1', 'p0', 'q0', 'p0*', 'q0*', 'p1*', 'q1*']
+                )
+            else:  # no net fermionic sign; relabeling suffices
+                swap_op = None  # continue with transposition as for Bosons
+        theta = self.get_theta(i, n=2)
+        C = self.get_theta(i, n=2, formL=0.0)  # inversion free, see also TEBDEngine.update_bond()
+        if swap_op is None:
+            # just replace the labels, effectively this is a transposition.
+            theta.ireplace_labels(['p0', 'q0', 'p1', 'q1'], ['p1', 'q1', 'p0', 'q0'])
+            C.ireplace_labels(['p0', 'q0', 'p1', 'q1'], ['p1', 'q1', 'p0', 'q0'])
+        elif isinstance(swap_op, npc.Array):
+            theta = npc.tensordot(swap_op, theta, axes=[['p0*', 'q0*', 'p1*', 'q1*'], ['p0', 'q0', 'p1', 'q1']])
+            C = npc.tensordot(swap_op, C, axes=(['p0*', 'q0*', 'p1*', 'q1*'], ['p0', 'q0', 'p1', 'q1']))
+        else:
+            raise ValueError('Invalid swap_op: got ' + repr(swap_op))
+        theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
+        U, S, V, err, renormalize = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
+        B_R = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['p', 'q'])
+        B_L = npc.tensordot(C.combine_legs(('vR', 'p1', 'q1'), pipes=theta.legs[1]), V.conj(), axes=['(vR.p1.q1)', '(vR*.p1*.q1*)'])
+        B_L.ireplace_labels(['vL*', 'p0', 'q0'], ['vR', 'p', 'q'])
+        B_L /= renormalize  # re-normalize to <psi|psi> = 1
+        self.set_SR(i, S)
+        self.set_B(i, B_L, 'B')
+        self.set_B(i + 1, B_R, 'B')
+        self.sites[self._to_valid_site_index(i)] = siteR  # swap 'sites' as well
+        self.sites[self._to_valid_site_index(i + 1)] = siteL
+        return err
+
 
     def sample_measurements(
         self, sample_q, first_site=0, last_site=None, ops=None, rng=None, norm_tol=1.0e-12, complex_amplitude=True
