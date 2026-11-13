@@ -54,13 +54,14 @@ def test_mixed_spinless():
     E_real = info['E']
 
     # measure particle number and Cd C correlators
-    N_real = M.lattice.mps2lat_values(psi.expectation_value('N'))
-
-    with pytest.raises(ValueError, match="doesn't have the operator 'Cd'"):
-        CdC_real = M.lattice.mps2lat_values(psi.correlation_function('Cd', 'C')[0, :])
-    pytest.xfail('Need to design correlation_function to take a single coupling for both sites. Issue #760.')
-
-    CdC_real = M.lattice.mps2lat_values(psi.correlation_function('Cd', 'C')[0, :])
+    N_real = psi.expectation_value('N')
+    CdC_real = psi.correlation_function_split_right(
+        M.couplings['Cd.C'], sites_L=[0], distances=[*range(psi.L - 1)], offsets_R=[0]
+    )
+    CdC_real = np.append(N_real[0], CdC_real)
+    # mps idx -> lat idcs
+    N_real = M.lattice.mps2lat_values(N_real)
+    CdC_real = M.lattice.mps2lat_values(CdC_real)
 
     # mixed space
     model_params = dict(t=J, V=V, Lx=Lx, Ly=Ly, bc_MPS='finite', conserve_k=True)
@@ -131,7 +132,7 @@ def test_mixed_hubbard(conserve_S):
         _params = asConfig(dmrg_params, 'DMRG')
         _params.touch_all(['trunc_params'])
         dmrg.run(psi, M, _params, resume_data={'init_env_data': dict(start_env_sites=0)})
-    pytest.xfail('fermionic Hubbard DMRG')
+    pytest.xfail('Mixer is not ported yet')
 
     # doing without mixer for now. Once implemented remove the xfail and run with mixer again
     dmrg_params['mixer'] = False
@@ -142,6 +143,8 @@ def test_mixed_hubbard(conserve_S):
 
     # measure Sz onsite and SpSm correlators
     Sz_real = M.lattice.mps2lat_values(psi.expectation_value('Sz'))
+
+    # TODO will need to use updated correlation_function methods, see test_mixed_spinless above
     SpSm_real = M.lattice.mps2lat_values(psi.correlation_function('Sp', 'Sm')[0, :])
 
     # mixed space
