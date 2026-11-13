@@ -194,8 +194,7 @@ def single_run(g: float, Ly: int, conserve, chi_max: int, psi=None):
     mag_z = np.average(psi.expectation_value('Sigmaz'))
     mag_x = np.average(psi.expectation_value('Sigmax'))
     corr_xx = psi.correlation_function('Sigmax', 'Sigmax', [0], [10 * model.lattice.N_sites]).item()
-    # See note in MPS.correlation_length for the units and why we need to divide
-    correlation_length = psi.correlation_length() / model.lattice.N_sites_per_ring
+    correlation_length = psi.correlation_length()
     entropy = psi.entanglement_entropy()[0]
 
     return psi, energy, entropy, mag_z, mag_x, corr_xx, correlation_length
