@@ -48,6 +48,12 @@ class Terms(Hdf5Exportable, metaclass=ABCMeta):
         """
         ...
 
+    @property
+    @abstractmethod
+    def is_empty(self) -> bool:
+        """If the terms are empty, i.e. if the zero operator is represented."""
+        ...
+
     @abstractmethod
     def add_to_graph(self, graph: MPOGraph, model: CouplingModel):
         """Add the represented terms to an MPOGraph.
@@ -75,7 +81,7 @@ class Terms(Hdf5Exportable, metaclass=ABCMeta):
 
     @abstractmethod
     def to_TermList(self) -> TermList:
-        """TODO: review termlist first"""
+        """TODO: review TermList first"""
         ...
 
     @abstractmethod
@@ -409,6 +415,10 @@ class OnsiteTerms(Terms):
     def max_range(self):
         return 0
 
+    @property
+    def is_empty(self):
+        return len(self.onsite_terms) == 0
+
     def add_onsite_term(self, strength: float | complex, i: int, op: str):
         """Add an onsite term on a given MPS site.
 
@@ -440,7 +450,7 @@ class OnsiteTerms(Terms):
             graph.max_range = max(graph.max_range, 1)
 
     def to_tensors(self, sites: list[lasy.Site]) -> lasy.SymmetricTensor | None:
-        """Convert the represneted onsite terms into a list of tensors.
+        """Convert the represented onsite terms into a list of tensors.
 
         Parameters
         ----------
@@ -477,7 +487,7 @@ class OnsiteTerms(Terms):
 
     def add_to_nn_bond_tensors(
         self,
-        H_bond: list[lasy.SymmetricTensor],
+        H_bond: list[lasy.SymmetricTensor | None],
         sites: list[lasy.Site],
         finite: bool,
         distribute: tuple[float, float] = (0.5, 0.5),
@@ -547,7 +557,7 @@ class OnsiteTerms(Terms):
             Representation of the terms as a list of terms.
 
         """
-        raise NotImplementedError  # TODO review Termlist first!
+        raise NotImplementedError  # TODO review TermList first!
         terms = []
         strength = []
         for i, terms_i in enumerate(self.onsite_terms):
@@ -608,6 +618,10 @@ class CouplingTerms(Terms):
                 j_max = max(d2.keys())
                 max_range = max(max_range, j_max - i)
         return max_range
+
+    @property
+    def is_empty(self):
+        return len(self.coupling_terms) == 0
 
     def add_coupling_term(self, strength: float | complex, i: int, j: int, coupling_name: str):
         """Add a two-site coupling term on given MPS sites.
@@ -741,7 +755,7 @@ class CouplingTerms(Terms):
                 for j, strength in terms_i_n.items():
                     yield i, coupling_name, j, strength
 
-    def to_nn_bond_tensors(self, sites: list[lasy.Site], model: CouplingModel) -> list[lasy.SymmetricTensor]:
+    def to_nn_bond_tensors(self, sites: list[lasy.Site], model: CouplingModel) -> list[lasy.SymmetricTensor | None]:
         """Convert the :attr:`coupling_terms` into tensors on nearest neighbor bonds.
 
         Parameters
@@ -851,7 +865,7 @@ class MultiCouplingTerms(Terms):
         Number of sites
     coupling_terms : nested dict
         Filled by :meth:`add_multi_coupling_term`
-        Nested dicstionaries such that ``coupling_terms[i0][coupling_name, n_sites][i1]...[iN] = strength``
+        Nested dictionaries such that ``coupling_terms[i0][coupling_name, n_sites][i1]...[iN] = strength``
         describes a coupling with a string name ``coupling_name`` acting on ``N + 1`` sites
         ``i0 < i1 < ... < iN``.
         We must have ``0 <= i0 < L``, but the other site indices may extend beyond ``L`` for infinite
@@ -868,6 +882,10 @@ class MultiCouplingTerms(Terms):
 
     def max_range(self):
         return self._max_range
+
+    @property
+    def is_empty(self):
+        return len(self.coupling_terms) == 0
 
     def add_multi_coupling_term(self, strength, ijkl, coupling_name: str):
         """Add a multi-site coupling term on given MPS sites.

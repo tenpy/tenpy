@@ -24,7 +24,7 @@ from numpy.typing import ArrayLike
 
 from ..networks import MPO, MPOGraph
 from ..networks.mpo import partition_W
-from ..networks.terms import CouplingTerms, ExponentiallyDecayingTerms, MultiCouplingTerms, OnsiteTerms, Terms
+from ..networks.terms import CouplingTerms, ExponentiallyDecayingTerms, MultiCouplingTerms, OnsiteTerms
 from ..tools import Config, asConfig, perm_sign, to_array
 from .lattice import HelicalLattice, IrregularLattice, Lattice, MultiSpeciesLattice, get_lattice
 
@@ -139,7 +139,7 @@ class HamiltonianModel(EvolutionModel, metaclass=ABCMeta):
 
         Returns
         -------
-        H_bond: list of :class:`lasyten.Tensor`
+        H_bond: list of {:class:`lasyten.Tensor` | None}
             The two-site bond terms such that ``H = sum_i H_bond[i]``.
             ``H_bond[i]`` acts in sites ``(i - 1, i)``.
             For finite systems, we have ``H_bond[0] = None``.
@@ -258,7 +258,7 @@ class CouplingModel(HamiltonianModel):
         explicit_plus_hc: bool = False,
     ):
         self._H_MPO: MPO | None = None
-        self._H_bond: list[lasy.Tensor] | None = None
+        self._H_bond: list[lasy.SymmetricTensor | None] | None = None
         self._L_mps = L = len(lattice.mps_sites())
         self.onsite_terms = OnsiteTerms(L)
         self.coupling_terms = CouplingTerms(L)
@@ -375,13 +375,13 @@ class CouplingModel(HamiltonianModel):
         self._H_bond = None
         super().invalidate_caches()
 
-    def get_nonzero_terms(self) -> list[Terms]:
-        return [
+    def get_nonzero_terms(self) -> tuple[OnsiteTerms, CouplingTerms, MultiCouplingTerms]:
+        return (
             self.onsite_terms.remove_zeros(self.tol_zero_strength),
             self.coupling_terms.remove_zeros(self.tol_zero_strength),
             self.multi_coupling_terms.remove_zeros(self.tol_zero_strength),
             # self.exp_decaying_terms.remove_zeros(self.tol_zero_strength),  # TODO reactivate
-        ]
+        )
 
     def get_H_MPO(self):
         if self._H_MPO is None:
@@ -398,15 +398,12 @@ class CouplingModel(HamiltonianModel):
     def get_H_bond(self):
         if self._H_bond is None:
             sites = self.lattice.mps_sites()
-            ot, ct, *others = self.get_nonzero_terms()
+            ot, ct, mct = self.get_nonzero_terms()
             H_bond = ct.to_nn_bond_tensors(sites, self)
             ot.add_to_nn_bond_tensors(H_bond, sites, finite=self.finite)
-            for t in others:
-                assert t.max_range() == 0
-            self._H_bond = [
-                None if h is None else lasy.Coupling.from_tensor(h, [sites[(j - 1) % len(sites)], sites[j]])
-                for j, h in enumerate(H_bond)
-            ]
+            if not mct.is_empty:
+                raise ValueError('multi_coupling_terms must be empty')
+            self._H_bond = H_bond
         return self._H_bond
 
     def add_onsite_operator(
@@ -1228,7 +1225,7 @@ class ModelBuilder(CouplingModel):
         pass  # Do nothing. This allows to super().init_terms(model_params) in subclasses.
 
 
-def calc_H_bond_from_MPO(H_MPO: MPO, tol_zero: float = 1e-15) -> list[lasy.Tensor]:
+def calc_H_bond_from_MPO(H_MPO: MPO, tol_zero: float = 1e-15) -> list[lasy.SymmetricTensor | None]:
     """Calculate the bond Hamiltonian from the MPO Hamiltonian.
 
     Parameters
@@ -1240,7 +1237,7 @@ def calc_H_bond_from_MPO(H_MPO: MPO, tol_zero: float = 1e-15) -> list[lasy.Tenso
 
     Returns
     -------
-    H_bond : list of :class:`lasyten.Tensor`
+    H_bond : list of {:class:`lasyten.SymmetricTensor` | None}
         The two-site bond terms such that ``H = sum_i H_bond[i]``.
         ``H_bond[i]`` acts in sites ``(i - 1, i)``.
         For finite systems, we have ``H_bond[0] = None``.
