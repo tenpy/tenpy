@@ -757,11 +757,10 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         _, ket = self._get_bra_ket()
         if axes is not None:
             # None means we already have the expected labels
-            op = op.copy(deep=False, device=op.device).relabel(
-                {l_old: l_new for l_old, l_new in zip(axes[0] + axes[1], new_axes[0] + new_axes[1])}
-            )
+            op = op.copy(deep=False, device=op.device)
+            op.labels.update({l_old: l_new for l_old, l_new in zip(axes[0] + axes[1], new_axes[0] + new_axes[1])})
         else:
-            assert op.labels_are(*new_axes[0], *new_axes[1])
+            assert op.labels.are(*new_axes[0], *new_axes[1])
         return self.expectation_value(
             op=lasy.Coupling.from_tensor(op, sites=[ket.get_site(i) for i in site_list]),
             sites=sites,
@@ -1145,10 +1144,10 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         leg_err = 'specified tensor must be on-site with two legs `p` and `p*`'
         if isinstance(op1, lasy.Tensor):
             assert op1.num_legs == 2, leg_err
-            assert op1.labels_are('p', 'p*'), leg_err
+            assert op1.labels.are('p', 'p*'), leg_err
         if isinstance(op2, lasy.Tensor):
             assert op2.num_legs == 2, leg_err
-            assert op2.labels_are('p', 'p*'), leg_err
+            assert op2.labels.are('p', 'p*'), leg_err
 
         # the updated sites1 and sites2 also include the information of offsets1 and offsets2 and are sorted
         sites1, sites2 = self._correlation_function_args(
@@ -1900,11 +1899,15 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             The site on which the operator acts.
 
         """
+        ket_th = ket.get_theta(site, n=1)
+        ket_th.labels.update({'p0': 'p'})
+        bra_th = bra.get_theta(site, n=1)
+        bra_th.labels.update({'p0': 'p'})
         res = mps_contraction_diagram_operations['LP2 @ bra-W-ket2'].evaluate(
             dict(
                 LP=self.get_LP(site),
-                ket=ket.get_theta(site, n=1).relabel({'p0': 'p'}),
-                bra=bra.get_theta(site, n=1).relabel({'p0': 'p'}).hc,
+                ket=ket_th,
+                bra=bra_th.hc,
                 W=op,
             )
         )
@@ -2191,18 +2194,18 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 pipes = []
                 pipes_relabel = {}
                 pipe_dualities = []
-                if W1.has_label('wR'):
-                    codom_pos = 2 if W1.has_label('wL') else 1
+                if W1.labels.has('wR'):
+                    codom_pos = 2 if W1.labels.has('wL') else 1
                     W1 = lasy.move_leg(W1, 'wR', codomain_pos=codom_pos, bend_right=True)
-                    if W2.has_label('wR'):
+                    if W2.labels.has('wR'):
                         relabel1['wR'] = 'wR1'
                         relabel2['wR'] = 'wR2'
                         pipes.append(['wR2', 'wR1'])
                         pipes_relabel['(wR1.wR2)'] = 'wR'
                         pipe_dualities.append(True)
-                if W2.has_label('wL'):
+                if W2.labels.has('wL'):
                     W2 = lasy.move_leg(W2, 'wL', domain_pos=0, bend_right=False)
-                    if W1.has_label('wL'):
+                    if W1.labels.has('wL'):
                         relabel1['wL'] = 'wL1'
                         relabel2['wL'] = 'wL2'
                         pipes.append(['wL1', 'wL2'])
@@ -2212,7 +2215,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 if len(pipes) > 0:
                     # order in the pipes chosen such that the legs end up in the correct positions
                     W = lasy.planar.planar_combine_legs(W, *pipes, pipe_dualities=pipe_dualities)
-                    W.relabel(pipes_relabel)
+                    W.labels.update(pipes_relabel)
                 if '(wL2.wL1)' not in pipes_relabel:
                     # a single wL has been there (no piping) -> move to correct position
                     W = lasy.move_leg(W, 'wL', codomain_pos=0, bend_right=False)
@@ -2277,7 +2280,9 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         this function, the re-implementation of various functions (like get_theta) in derived
         classes with multiple legs per site can be avoided.
         """
-        return A.copy(deep=False).relabel({old: new for old, new in zip(self._p_label, self._get_p_label(s))})
+        A = A.copy(deep=False)
+        A.labels.update({old: new for old, new in zip(self._p_label, self._get_p_label(s))})
+        return A
 
     def _get_p_label(self, s: str) -> list[str]:
         """Return  self._p_label with additional string `s`."""
@@ -2353,7 +2358,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 op = lasy.add_trivial_leg(op, codomain_pos=0, label='wL')
             if 'wR' not in op.labels:
                 op = lasy.add_trivial_leg(op, domain_pos=1, label='wR')
-            assert op.labels_are('wL', 'wR', 'p', 'p*')
+            assert op.labels.are('wL', 'wR', 'p', 'p*')
         return op
 
     @abstractmethod
@@ -2515,10 +2520,10 @@ class MPS(BaseMPSExpectationValue):
             B_final = self._B[-1]
             if not B_final.get_leg('vR').is_trivial:
                 vR_charge_label = MPS_TOTAL_CHARGE_LABEL + '_vR'
-                B_final.relabel({'vR': vR_charge_label})
+                B_final.labels.update({'vR': vR_charge_label})
                 B_final = lasy.add_trivial_leg(B_final, domain_pos=B_final.num_domain_legs, label='vR', is_dual=False)
                 if isinstance(B_final, lasy.HiddenLegTensor):
-                    B_final.relabel({vR_charge_label: '!' + vR_charge_label})
+                    B_final.labels.update({vR_charge_label: '!' + vR_charge_label})
                 else:
                     B_final = lasy.HiddenLegTensor(B_final, [vR_charge_label])
                 self._B[-1] = _merge_charge_legs(B_final, _charge_leg_labels(B_final), '!' + MPS_TOTAL_CHARGE_LABEL)
@@ -2610,7 +2615,7 @@ class MPS(BaseMPSExpectationValue):
             raise ValueError('MPS is not gauged, call `gauge_total_charge` first')
         label = '!' + MPS_TOTAL_CHARGE_LABEL
         B = self._B[-1]
-        return B.get_leg(label) if B.has_label(label) else None
+        return B.get_leg(label) if B.labels.has(label) else None
 
     def copy(self) -> MPS:
         """Returns a copy of `self`.
@@ -3299,7 +3304,7 @@ class MPS(BaseMPSExpectationValue):
             domain = lasy.TensorProduct([virtual_spaces[i + 1]], sym)
             B = lasy.SymmetricTensor.from_random_uniform(codomain, domain, backend, labels, dtype=dtype, device=device)
             B, _ = lasy.qr(B, new_labels=['vR', 'vL'])
-            if B.has_label(MPS_TOTAL_CHARGE_LABEL):
+            if B.labels.has(MPS_TOTAL_CHARGE_LABEL):
                 B = lasy.move_leg(B, MPS_TOTAL_CHARGE_LABEL, domain_pos=0, bend_right=False)
                 B = lasy.HiddenLegTensor(B, [MPS_TOTAL_CHARGE_LABEL])
             Bs.append(B)
@@ -3574,7 +3579,7 @@ class MPS(BaseMPSExpectationValue):
                 device=device,
                 understood_braiding=True,
             )
-            if B.has_label(MPS_TOTAL_CHARGE_LABEL):
+            if B.labels.has(MPS_TOTAL_CHARGE_LABEL):
                 B = lasy.HiddenLegTensor(B, [MPS_TOTAL_CHARGE_LABEL])
             Bs.append(B)
         if SVs is None:
@@ -3676,17 +3681,17 @@ class MPS(BaseMPSExpectationValue):
         norm = 1.0 if normalize else lasy.norm(psi)
 
         new_domain = [f'{p}{L - 1}' for p in reversed(cls._p_label)]
-        if psi.has_label('vR'):
+        if psi.labels.has('vR'):
             new_domain = ['vR'] + new_domain
         psi = lasy.planar_permute_legs(psi, domain=new_domain)
 
-        if not psi.has_label('vL'):
+        if not psi.labels.has('vL'):
             if bc == 'segment':
                 raise ValueError("left leg must be specified for 'segment' boundary conditions")
             psi = lasy.add_trivial_leg(psi, codomain_pos=0, label='vL')
         elif bc == 'finite' and not psi.get_leg('vL').is_trivial:
             raise ValueError("non-trivial left leg for 'finite' bc!")
-        if not psi.has_label('vR'):
+        if not psi.labels.has('vR'):
             if bc == 'segment':
                 raise ValueError("right leg must be specified for 'segment' boundary conditions")
             psi = lasy.add_trivial_leg(psi, domain_pos=0, label='vR')
@@ -3700,7 +3705,7 @@ class MPS(BaseMPSExpectationValue):
             # bring S and B to default form
             S /= lasy.norm(S)
             B = lasy.planar_permute_legs(B, domain=['vR'])
-            B.relabel({f'{p}{i}': f'{p}' for p in cls._p_label})
+            B.labels.update({f'{p}{i}': f'{p}' for p in cls._p_label})
             B_list[i] = B
             S_list[i] = S
             if i > 1:
@@ -3709,7 +3714,7 @@ class MPS(BaseMPSExpectationValue):
                 new_domain = ['vR'] + [f'{p}{i - 1}' for p in reversed(cls._p_label)]
                 psi = lasy.planar_permute_legs(psi, domain=new_domain)
         # psi is now the first `B` in 'A' form
-        psi.relabel({f'{p}0': f'{p}' for p in cls._p_label})
+        psi.labels.update({f'{p}0': f'{p}' for p in cls._p_label})
         B_list[0] = psi
         B_form = ['A'] + ['B'] * (L - 1)
 
@@ -3949,9 +3954,9 @@ class MPS(BaseMPSExpectationValue):
             local_psi.gauge_total_charge()  # only charge leg on the last tensor, trivial outer bonds
             for j, i in enumerate(ind_map):
                 B = local_psi.get_B(j, 'B')
-                if B.has_label(charge_label):
+                if B.labels.has(charge_label):
                     # unique label for each local MPS; still recognized by `_charge_leg_labels`
-                    B.relabel({charge_label: f'{charge_label}_{k:d}'})
+                    B.labels.update({charge_label: f'{charge_label}_{k:d}'})
                 B_parts[i % L].append(B)
                 if j + 1 < len(ind_map):
                     SR = local_psi.get_SR(j).as_SymmetricTensor()
@@ -4294,8 +4299,10 @@ class MPS(BaseMPSExpectationValue):
             if update_norm:
                 self.norm *= renormalize
         Vh = lasy.planar_permute_legs(Vh, codomain=['vL', 'p1'])
-        self.set_B(i, U.relabel({'p0': 'p'}), form='A')
-        self.set_B(i + 1, Vh.relabel({'p1': 'p'}), form='B')
+        U.labels.update({'p0': 'p'})
+        Vh.labels.update({'p1': 'p'})
+        self.set_B(i, U, form='A')
+        self.set_B(i + 1, Vh, form='B')
         self.set_SR(i, S)
         return err
 
@@ -4429,7 +4436,7 @@ class MPS(BaseMPSExpectationValue):
             for i in range(factor):
                 # TODO do we want to keep the condition MPS_TOTAL_CHARGE_LABEL in l?
                 # We would not want to relabel the (hidden) q leg for purification MPS
-                self._B[i * self.L + idx].relabel({l: l + str(i) for l in labels if MPS_TOTAL_CHARGE_LABEL in l})
+                self._B[i * self.L + idx].labels.update({l: l + str(i) for l in labels if MPS_TOTAL_CHARGE_LABEL in l})
         self._S = [self.get_SL(j) for j in range(0, factor * self.L)]
         if self.finite:
             self._S.append(self.get_SR(factor * self.L - 1))
@@ -4549,7 +4556,7 @@ class MPS(BaseMPSExpectationValue):
                 # wR is braided with the pipe; hidden legs (total charge) get levels automatically
                 levels = {'wR': 1, '(vR.vL)': 0} if overbraid else {'wR': 0, '(vR.vL)': 1}
                 C = lasy.move_leg(C, 'wR', domain_pos=0, levels=levels)
-                C.relabel({'(vR.vL)': 'wR', 'wR': 'vR'})
+                C.labels.update({'(vR.vL)': 'wR', 'wR': 'vR'})
                 braid_leg = C.get_leg('wR').dual
                 overbraid = not overbraid
 
@@ -4558,7 +4565,7 @@ class MPS(BaseMPSExpectationValue):
             B_ket = psi.get_B(j, forms[j])
             W = self.sites[i].identity_tensor(w=braid_leg, overbraid=overbraid)
             if i == L - 1:
-                W.relabel({'wR': '(vRp.vLp)'})
+                W.labels.update({'wR': '(vRp.vLp)'})
                 W = lasy.split_legs(W, '(vRp.vLp)')
                 C = lasy.planar_contraction(C, B_bra.hc, ['vR*'], ['vL*'])
                 C = lasy.planar_contraction(C, W, ['wR', 'p*', 'vR*'], ['wL', 'p', 'vRp'])
@@ -4649,7 +4656,7 @@ class MPS(BaseMPSExpectationValue):
         if not self.finite:
             extra_spaces.append(extra_spaces[0])  # ensure length L + 1
             new_spaces.append(new_spaces[0])
-        # note: `set_labels` acts in place, so only apply it to new tensors.
+        # note: setting `labels` acts in place, so only apply it to new tensors.
         # We only assign to `self._B` and `self._S` at the end, such that `self` is unchanged if we raise.
         new_Bs, new_Ss = [], list(self._S)
 
@@ -4657,7 +4664,9 @@ class MPS(BaseMPSExpectationValue):
             # identification of the bond space `new_spaces[j]` with a plain ElementarySpace, such that we do not
             # leave the (nested) direct sum spaces on the legs of the MPS. Legs ``'s'`` (plain) and ``'l'``.
             P = new_spaces[j].projection_onto_summands([0, 1], backend=backend, device=device)
-            return P.as_SymmetricTensor(dtype=dtype).set_labels(['s', 'l'])
+            P = P.as_SymmetricTensor(dtype=dtype)
+            P.labels = ['s', 'l']
+            return P
 
         for i, B in enumerate(self._B):
             X_L, X_R = extra_spaces[i], extra_spaces[i + 1]
@@ -4665,12 +4674,13 @@ class MPS(BaseMPSExpectationValue):
             if X_R is not None:
                 # fill up the vR leg with zeros: compose with the projection onto the old subspace.
                 proj = new_spaces[i + 1].projection_onto_summand(0, backend=backend, device=device)
-                proj = proj.as_SymmetricTensor(dtype=dtype).set_labels(['s', 'l'])
+                proj = proj.as_SymmetricTensor(dtype=dtype)
+                proj.labels = ['s', 'l']
                 B = lasy.planar_contraction(B, proj, 'vR', 's', relabel2={'l': 'vR'})
             if X_L is not None:
                 # B with the legs arranged as a matrix (vL) x (p, vR) with orthonormal rows
                 T = lasy.planar_permute_legs(B, codomain=['vL'], domain=['vR'] + self._p_label[::-1])
-                T_labels = list(T.labels)
+                T_labels = T.labels.as_list()
                 labels = ['xL'] + T_labels[1:]
                 E = lasy.SymmetricTensor.from_random_normal(
                     lasy.TensorProduct([X_L], T.symmetry),
@@ -4683,44 +4693,64 @@ class MPS(BaseMPSExpectationValue):
                 # orthogonalize rows of E against the rows of T, then rows of E among each other by QR
                 E = E - lasy.compose(lasy.compose(E, T.hc), T)
                 Q, _ = lasy.qr(E.hc, new_labels=['xL*', 'xL'])
-                E = Q.hc.set_labels(labels)
+                E = Q.hc
+                E.labels = labels
                 if E.get_leg('xL') != X_L or lasy.norm(lasy.compose(E, T.hc)) > 1e-8:
                     raise ValueError(
                         'Failed to add orthogonal rows on the vL leg: not enough room, i.e. the '
                         f'extra states on bond {i} are overcomplete.'
                     )
                 incl_old = new_spaces[i].inclusion_of_summand(0, backend=backend, device=device)
-                incl_old = incl_old.as_SymmetricTensor(dtype=dtype).set_labels(['vL', 'x'])
+                incl_old = incl_old.as_SymmetricTensor(dtype=dtype)
+                incl_old.labels = ['vL', 'x']
                 incl_extra = new_spaces[i].inclusion_of_summand(1, backend=backend, device=device)
-                incl_extra = incl_extra.as_SymmetricTensor(dtype=dtype).set_labels(['vL', 'x'])
-                B_old = lasy.compose(incl_old, T.copy().set_labels(['x'] + T_labels[1:]))
-                B_extra = lasy.compose(incl_extra, E.copy().set_labels(['x'] + T_labels[1:]))
-                B = B_old.set_labels(T_labels) + B_extra.set_labels(T_labels)
+                incl_extra = incl_extra.as_SymmetricTensor(dtype=dtype)
+                incl_extra.labels = ['vL', 'x']
+                T_x = T.copy()
+                T_x.labels = ['x'] + T_labels[1:]
+                E_x = E.copy()
+                E_x.labels = ['x'] + T_labels[1:]
+                B_old = lasy.compose(incl_old, T_x)
+                B_extra = lasy.compose(incl_extra, E_x)
+                B_old.labels = T_labels
+                B_extra.labels = T_labels
+                B = B_old + B_extra
                 B = lasy.planar_permute_legs(B, codomain=['vL'] + self._p_label, domain=['vR'])
                 P = to_plain(i, dtype, backend, device)
                 B = lasy.planar_contraction(P, B, 'l', 'vL', relabel1={'s': 'vL'})
             if X_R is not None:
                 P = to_plain(i + 1, dtype, backend, device)
-                B = lasy.planar_contraction(B, P.hc.set_labels(['l', 's']), 'vR', 'l', relabel2={'s': 'vR'})
+                P_hc = P.hc
+                P_hc.labels = ['l', 's']
+                B = lasy.planar_contraction(B, P_hc, 'vR', 'l', relabel2={'s': 'vR'})
             if X_L is not None or X_R is not None:
                 B = lasy.planar_permute_legs(B, codomain=['vL'] + self._p_label, domain=['vR'])
-            new_Bs.append(B.set_labels(self._B_labels) if B.labels != self._B_labels else B)
+            if B.labels != self._B_labels:
+                B.labels = self._B_labels
+            new_Bs.append(B)
         # append zeros to the singular values
         for j, S in enumerate(self._S[:num_bonds]):
             if extra_spaces[j] is None:
                 continue
             incl_old = new_spaces[j].inclusion_of_summand(0, backend=S.backend, device=S.device)
             incl_old = incl_old.as_SymmetricTensor(dtype=S.dtype)
-            S_new = lasy.compose(
-                lasy.compose(incl_old.set_labels(['vL', 'x']), S.copy().set_labels(['x', 'y'])),
-                incl_old.hc.set_labels(['y', 'vR']),
-            )
+            incl_old_l = incl_old
+            incl_old_l.labels = ['vL', 'x']
+            S_xy = S.copy()
+            S_xy.labels = ['x', 'y']
+            incl_old_r = incl_old.hc
+            incl_old_r.labels = ['y', 'vR']
+            S_new = lasy.compose(lasy.compose(incl_old_l, S_xy), incl_old_r)
             P = to_plain(j, S.dtype, S.backend, S.device)
-            S_new = lasy.compose(
-                lasy.compose(P.copy().set_labels(['vL', 'x']), S_new.set_labels(['x', 'y'])),
-                P.hc.set_labels(['y', 'vR']),
-            )
-            new_Ss[j] = lasy.DiagonalTensor.from_tensor(S_new.set_labels(['vL', 'vR'])).as_dtype(S.dtype)
+            P_l = P.copy()
+            P_l.labels = ['vL', 'x']
+            S_xy = S_new
+            S_xy.labels = ['x', 'y']
+            P_r = P.hc
+            P_r.labels = ['y', 'vR']
+            S_new = lasy.compose(lasy.compose(P_l, S_xy), P_r)
+            S_new.labels = ['vL', 'vR']
+            new_Ss[j] = lasy.DiagonalTensor.from_tensor(S_new).as_dtype(S.dtype)
         self._B = new_Bs
         self._S = new_Ss
         self.test_sanity()
@@ -5924,7 +5954,8 @@ class MPS(BaseMPSExpectationValue):
         """
         err = np.empty((self.L, 2), dtype=float)
         for i in range(self.L):
-            th = self.get_theta(i, 1).relabel({'p0': 'p'})
+            th = self.get_theta(i, 1)
+            th.labels.update({'p0': 'p'})
             # use the planar diagrams to account for charged tensors
             rho_L = mps_contraction_diagram_operations['TM @ RP2'].evaluate(dict(RP=self.get_RP(i), ket=th, bra=th.hc))
             # same leg arrangement as obtained for S (diagonal tensor): vL in domain and vL* in codomain
@@ -5932,7 +5963,9 @@ class MPS(BaseMPSExpectationValue):
             S = self.get_SL(i)
             if isinstance(S, lasy.DiagonalTensor):
                 # transpose to get vR = vL* to the codomain
-                rho_L2 = S.T.relabel({'vR': 'vL*'}) ** 2
+                rho_L2 = S.T
+                rho_L2.labels.update({'vR': 'vL*'})
+                rho_L2 = rho_L2**2
                 if self.symmetry.has_complex_topological_data:
                     # real rho_L2 might not be allowed as SymmetricTensor
                     rho_L2 = rho_L2.as_dtype(rho_L2.dtype.to_complex)
@@ -5946,7 +5979,8 @@ class MPS(BaseMPSExpectationValue):
             rho_R = lasy.planar_permute_legs(rho_R, codomain='vR*')
             S = self.get_SR(i)
             if isinstance(S, lasy.DiagonalTensor):
-                rho_R2 = (S**2).relabel({'vL': 'vR*'})
+                rho_R2 = S**2
+                rho_R2.labels.update({'vL': 'vR*'})
                 if self.symmetry.has_complex_topological_data:
                     rho_R2 = rho_R2.as_dtype(rho_R2.dtype.to_complex)
             else:
@@ -6164,7 +6198,8 @@ class MPS(BaseMPSExpectationValue):
         Wr, Kl, Kr = self._canonical_form_correct_right(i1, Gr)
         # guess for Gl = Kr S^2 Kl, i.e. S^2 expressed in the new basis
         S2 = self.get_SL(i1) ** 2
-        Gl = lasy.compose(Kr, lasy.scale_axis(Kl, S2, 'vL')).set_labels(['vR*', 'vR'])
+        Gl = lasy.compose(Kr, lasy.scale_axis(Kl, S2, 'vL'))
+        Gl.labels = ['vR*', 'vR']
         # find dominant left eigenvector
         norm, Gl = self._canonical_form_dominant_gram_matrix(i1, True, tol_xi, Gl)
         if abs(1.0 - norm) > 1.0e-13:
@@ -6188,9 +6223,13 @@ class MPS(BaseMPSExpectationValue):
             B1 = self.get_B(j1, 'B')
             # The diagonal `Wr` has its legs in the codomain and domain. Depending on whether the bond space is
             # dual or not, we need `Wr` or its transpose, such that the RP's `vL` can be contracted with B1's `vR`.
-            RP = Wr.copy().set_labels(['vL*', 'vL']).as_SymmetricTensor()
+            RP = Wr.copy()
+            RP.labels = ['vL*', 'vL']
+            RP = RP.as_SymmetricTensor()
             if RP.get_leg('vL') != B1.get_leg('vR').dual:
-                RP = Wr.T.copy().set_labels(['vL*', 'vL']).as_SymmetricTensor()
+                RP = Wr.T.copy()
+                RP.labels = ['vL*', 'vL']
+                RP = RP.as_SymmetricTensor()
             Gr = mps_contraction_diagram_operations['TM @ RP2'].evaluate(dict(RP=RP, ket=B1, bra=B1.hc))
             Wr, Kl, Kr = self._canonical_form_correct_right(j1, Gr)
             Wr_list[j1 % L] = Wr
@@ -6868,10 +6907,11 @@ class MPS(BaseMPSExpectationValue):
             opname = op
             need_JW = False
 
-        # Infer n_sites and the labels to contract from op._labels
-        p = [l for l in op._labels if not l.endswith('*')]
+        # Infer n_sites and the labels to contract from op.labels
+        op_labels = op.labels.as_list()
+        p = [l for l in op_labels if not l.endswith('*')]
         pstar = [f'{l}*' for l in p]
-        if set(op._labels) != set(p + pstar):
+        if set(op_labels) != set(p + pstar):
             raise ValueError('The labels of `op` must come in pairs ``l, l + "*"``.')
         if p[0][-1].isdigit():
             # need to consider edge case n_sites > 10, where multiple characters give the site index
@@ -7131,7 +7171,7 @@ class MPS(BaseMPSExpectationValue):
             else:
                 raise ValueError(f'invalid swap_op: {swap_op!r}')
             swap_op = siteL.identity_tensor(siteR.leg, overbraid=overbraid)
-            swap_op.relabel({'wL': 'p0', 'p': 'p1', 'p*': 'p0*', 'wR': 'p1*'})
+            swap_op.labels.update({'wL': 'p0', 'p': 'p1', 'p*': 'p0*', 'wR': 'p1*'})
 
         C = self.get_theta(i, n=2, formL=0.0)  # inversion free, see also TEBDEngine.update_bond()
         C = lasy.planar_contraction(C, swap_op, ['p0', 'p1'], ['p0*', 'p1*'])
@@ -7141,7 +7181,7 @@ class MPS(BaseMPSExpectationValue):
         B_L = lasy.compose(C, V.hc, relabel1={'p0': 'p'}, relabel2={'vL*': 'vR'})
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         B_R = lasy.planar_permute_legs(V, codomain=['vL', 'p1'])
-        B_R.relabel({'p1': 'p'})
+        B_R.labels.update({'p1': 'p'})
         self.set_SR(i, S)
         self.set_B(i, B_L, 'B')
         self.set_B(i + 1, B_R, 'B')
@@ -7545,8 +7585,10 @@ class MPS(BaseMPSExpectationValue):
         W = W * norm
         norm = np.sqrt(norm)  # (norm doesn't change eigenvalue of TM)
         # the right gram matrix of the new tensors is diag(W): Kr = Y^T and Kl = conj(Y), see `Y` convention above
-        Kl = (Y.hc.T / norm).set_labels(['vL', 'vR'])
-        Kr = (Y.T * norm).set_labels(['vL', 'vR'])
+        Kl = Y.hc.T / norm
+        Kl.labels = ['vL', 'vR']
+        Kr = Y.T * norm
+        Kr.labels = ['vL', 'vR']
         i0 = i1 - 1
         self.set_B(i0, lasy.compose(self.get_B(i0), Kl))
         self.set_B(i1, lasy.tensors.partial_compose(self.get_B(i1), Kr, 'vL'))
@@ -7594,15 +7636,19 @@ class MPS(BaseMPSExpectationValue):
             s_norm = np.sqrt(lasy.trace(S2).to_numpy())
         S = lasy.sqrt(S2) / s_norm
         self.set_SL(i1, S)
-        Yl = (Y / s_norm).set_labels(['vL', 'vR'])
-        Yr = Y.hc.copy().set_labels(['vL', 'vR'])
+        Yl = Y / s_norm
+        Yl.labels = ['vL', 'vR']
+        Yr = Y.hc.copy()
+        Yr.labels = ['vL', 'vR']
         i0 = i1 - 1
         B0 = lasy.scale_axis(self.get_B(i0), sqrt_Wr, 'vR')
         self.set_B(i0, lasy.compose(B0, Yl))
         B1 = lasy.scale_axis(self.get_B(i1), 1.0 / sqrt_Wr, 'vL')
         self.set_B(i1, lasy.tensors.partial_compose(B1, Yr, 'vL'))
         # the new Gl is diag(S**2), up to numerical errors
-        Gl = (S**2).set_labels(['vR*', 'vR']).as_SymmetricTensor()
+        Gl = S**2
+        Gl.labels = ['vR*', 'vR']
+        Gl = Gl.as_SymmetricTensor()
         return Gl, Yl, Yr
 
     def outer_virtual_legs(self) -> tuple[lasy.ElementarySpace, lasy.ElementarySpace]:
@@ -7870,9 +7916,11 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
                 if U_bra is not None and U_ket is not None:
                     init_LP = lasy.compose(U_bra.hc, U_ket)
                 elif U_bra is not None:
-                    init_LP = U_bra.hc.relabel({'vL*': 'vR'})
+                    init_LP = U_bra.hc
+                    init_LP.labels.update({'vL*': 'vR'})
                 else:
-                    init_LP = U_ket.relabel({'vL': 'vR*'})
+                    init_LP = U_ket
+                    init_LP.labels.update({'vL': 'vR*'})
                 return init_LP
         leg_ket = self.ket.get_B(i - start_env_sites, None).get_leg('vL')
         leg_bra = self.bra.get_B(i - start_env_sites, None).get_leg('vL')
@@ -7915,9 +7963,11 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
                 if V_bra is not None and V_ket is not None:
                     init_RP = lasy.compose(V_ket, V_bra.hc).T
                 elif V_bra is not None:
-                    init_RP = V_bra.T.hc.relabel({'vR*': 'vL'})
+                    init_RP = V_bra.T.hc
+                    init_RP.labels.update({'vR*': 'vL'})
                 else:
-                    init_RP = V_ket.T.relabel({'vR': 'vL*'})
+                    init_RP = V_ket.T
+                    init_RP.labels.update({'vR': 'vL*'})
                 return init_RP
         leg_ket = self.ket.get_B(i + start_env_sites, None).get_leg('vR')
         leg_bra = self.bra.get_B(i + start_env_sites, None).get_leg('vR')
@@ -8165,18 +8215,18 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         if first == 0:
             if ket_U is not None:
                 LP = lasy.planar_contraction(LP, ket_U.hc, ['vR'], ['vR*'])
-                LP.relabel({'vL*': 'vR'})
+                LP.labels.update({'vL*': 'vR'})
             if bra_U is not None:
                 LP = lasy.planar_contraction(LP, bra_U, ['vR*'], ['vR'])
-                LP.relabel({'vL': 'vR*'})
+                LP.labels.update({'vL': 'vR*'})
         if last == self.ket.L - 1:
             if ket_V is not None:
                 RP = lasy.planar_contraction(RP, ket_V.hc, ['vL'], ['vL*'])
-                RP.relabel({'vR*': 'vL'})
+                RP.labels.update({'vR*': 'vL'})
         if last == self.bra.L - 1:
             if bra_V is not None:
                 RP = lasy.planar_contraction(RP, bra_V, ['vL*'], ['vL'])
-                RP.relabel({'vR': 'vL*'})
+                RP.labels.update({'vR': 'vL*'})
         data = {
             'init_LP': LP,
             'age_LP': self.get_LP_age(first),
@@ -8671,7 +8721,7 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
 
         """
         codomain, domain = vec.codomain_labels, vec.domain_labels
-        charged = vec.has_label('c')
+        charged = vec.labels.has('c')
         if not self.transpose:  # right to left
             diagram = mps_contraction_diagram_operations['TM @ RP2c' if charged else 'TM @ RP2']
             for N, M in zip(reversed(self._bra_N), reversed(self._ket_M)):
@@ -8704,7 +8754,7 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
         if self.charge_leg is None and leg_bra == leg_ket.dual:
             if isinstance(diag, lasy.DiagonalTensor):
                 guess = diag.copy().as_dtype(lasy.Dtype.common(diag.dtype, self.dtype))
-                guess.set_labels(self._trivial_labels)
+                guess.labels.set(self._trivial_labels)
             else:
                 guess = lasy.DiagonalTensor.from_eye(
                     leg_bra, backend=self.backend, labels=self._trivial_labels, dtype=self.dtype, device=self.device
@@ -8841,7 +8891,7 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):
 
     def eigenvector_charge(self, vec: lasy.SymmetricTensor) -> lasy.Sector:
         """The charge sector of an eigenvector `vec`."""
-        if not vec.has_label('c'):
+        if not vec.labels.has('c'):
             return self._ket_M[0].symmetry.trivial_sector
         charge_leg = vec.get_leg('c').dual
         sectors = charge_leg.defining_sectors
@@ -9359,14 +9409,14 @@ def _combine_virtual_legs(parts: list[lasy.SymmetricTensor]) -> lasy.SymmetricTe
         # the physical leg would need to be braided past the virtual legs of the following parts
         raise NotImplementedError('Crossing bonds require a symmetry with symmetric braids.')
     T = parts[0].copy(deep=False)
-    T.relabel({'vL': 'vL0', 'vR': 'vR0'})
+    T.labels.update({'vL': 'vL0', 'vR': 'vR0'})
     for k in range(1, n):
         T = lasy.outer(T, parts[k], relabel2={'vL': f'vL{k:d}', 'vR': f'vR{k:d}'})
     vLs = [f'vL{k:d}' for k in range(n)]
     vRs = [f'vR{k:d}' for k in reversed(range(n))]  # reversed, such that vR pipe is dual to vL pipe
     T = lasy.combine_legs(T, vLs, vRs, pipe_dualities=[False, True])
     combine_labels = lasy.tensors._tensors._combine_leg_labels
-    T.relabel({combine_labels(vLs): 'vL', combine_labels(vRs): 'vR'})
+    T.labels.update({combine_labels(vLs): 'vL', combine_labels(vRs): 'vR'})
     return lasy.flatten_pipe_leg(lasy.flatten_pipe_leg(T, 'vL'), 'vR')
 
 
@@ -9404,7 +9454,7 @@ def _flatten_domain_pipe(B: lasy.SymmetricTensor, domain_pos: int) -> lasy.Symme
     if not isinstance(B, lasy.HiddenLegTensor):
         return lasy.SymmetricTensor(B.data, B.codomain, domain, B.backend, B.labels)
     hidden_idcs = B.hidden_leg_idcs()
-    labels = [l[1:] if i in hidden_idcs else l for i, l in enumerate(B.labels)]  # strip '!'
+    labels = [l[1:] if i in hidden_idcs else l for i, l in enumerate(B.labels.as_list())]  # strip '!'
     T = lasy.SymmetricTensor(B.data, B.codomain, domain, B.backend, labels)
     return lasy.HiddenLegTensor(T, [labels[i] for i in hidden_idcs])
 
@@ -9419,8 +9469,9 @@ def _hidden_legs_to_codomain(T: lasy.Tensor) -> lasy.Tensor:
     """
     if T.num_domain_legs == 1:
         return T
-    k = T.labels.index('vR')
-    return lasy.planar_permute_legs(T, codomain=T.labels[k + 1 :] + T.labels[:k], domain=['vR'])
+    labels = T.labels.as_list()
+    k = labels.index('vR')
+    return lasy.planar_permute_legs(T, codomain=labels[k + 1 :] + labels[:k], domain=['vR'])
 
 
 def _merge_charge_legs(B: lasy.HiddenLegTensor, labels: list[str], new_label: str) -> lasy.HiddenLegTensor:
@@ -9436,9 +9487,9 @@ def _merge_charge_legs(B: lasy.HiddenLegTensor, labels: list[str], new_label: st
     labels = [l[1:] for l in labels]
     if len(labels) > 1:
         B = lasy.combine_legs(B, labels, pipe_dualities=True)
-        B.relabel({lasy.tensors._tensors._combine_leg_labels(labels): new_label[1:]})
+        B.labels.update({lasy.tensors._tensors._combine_leg_labels(labels): new_label[1:]})
     else:
-        B.relabel({labels[0]: new_label[1:]})
+        B.labels.update({labels[0]: new_label[1:]})
     B = lasy.move_leg(B, new_label[1:], domain_pos=0, bend_right=False)
     if len(labels) > 1 and B.get_leg(new_label[1:]).dim == 1:
         B = _flatten_domain_pipe(B, 0)  # such that equal charges give equal legs
@@ -9496,7 +9547,7 @@ def _project_onto_single_summand(B: lasy.SymmetricTensor, leg: str) -> lasy.Symm
 
 
 def _public_labels_are(B: lasy.Tensor, labels: list[str], planar: bool = False) -> bool:
-    """Like ``B.labels_are(*labels, planar=planar)``, but ignoring hidden legs.
+    """Like ``B.labels.are(*labels, planar=planar)``, but ignoring hidden legs.
 
     If B is a :class:`~lasyten.HiddenLegTensor`, it's hidden legs are ignored.
 
@@ -9504,7 +9555,7 @@ def _public_labels_are(B: lasy.Tensor, labels: list[str], planar: bool = False) 
     """
     # TODO should this be a method of the tensors instead?
     if not isinstance(B, lasy.HiddenLegTensor):
-        return B.labels_are(*labels, planar=planar)
+        return B.labels.are(*labels, planar=planar)
     public = [B.labels[i] for i in B.public_leg_idcs()]
     if len(public) != len(labels) or set(public) != set(labels):
         return False
@@ -9526,7 +9577,7 @@ def _split_off_vL(T: lasy.Tensor) -> lasy.Tensor:
 
     The cyclic order of the legs is kept, i.e., only the legs switching between codomain and domain are bent.
     """
-    labels = T.labels
+    labels = T.labels.as_list()
     k = labels.index('vL')
     return lasy.planar_permute_legs(T, codomain=['vL'], domain=(labels[k + 1 :] + labels[:k])[::-1])
 

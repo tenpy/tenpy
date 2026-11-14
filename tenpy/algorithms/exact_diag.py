@@ -451,7 +451,8 @@ class ExactDiag:
     def _embed_bond(self, Hb, i):
         """Extend ``H_bond[i]`` (acting on sites ``i-1, i``) by identities to all sites."""
         L = len(self._sites)
-        T = Hb.relabel({'p0': f'p{i - 1}', 'p1': f'p{i}', 'p0*': f'p{i - 1}*', 'p1*': f'p{i}*'})
+        T = Hb
+        T.labels.update({'p0': f'p{i - 1}', 'p1': f'p{i}', 'p0*': f'p{i - 1}*', 'p1*': f'p{i}*'})
         for j in range(L):
             if j not in (i - 1, i):
                 Id = self._sites[j].get_op('Id').as_SymmetricTensor()

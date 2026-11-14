@@ -934,13 +934,13 @@ class TwoSiteDMRGEngine(DMRGEngine):
                 theta = lasy.planar_permute_legs(theta, codomain=['vL', 'p0'], domain=['vR', 'p1'])
             U, S, VH, err, _ = self.svd_theta(theta)
             if self.combine:
-                U.relabel({'(vL.p0)': '(vL.p)'})
-                VH.relabel({'(p1.vR)': '(p.vR)'})
+                U.labels.update({'(vL.p0)': '(vL.p)'})
+                VH.labels.update({'(p1.vR)': '(p.vR)'})
                 A = lasy.split_legs(U, ['(vL.p)'])
                 B = lasy.split_legs(VH, ['(p.vR)'])
             else:
-                U.relabel({'p0': 'p'})
-                VH.relabel({'p1': 'p'})
+                U.labels.update({'p0': 'p'})
+                VH.labels.update({'p1': 'p'})
                 A = U
                 B = VH
             S_a = S  # have exact singular values
@@ -1063,19 +1063,19 @@ class SingleSiteDMRGEngine(DMRGEngine):
                 # theta @ B = U @ S @ VH @ B = U @ S @ (VH B)
                 B = lasy.planar_contraction(VH, self.psi.get_B(i_R, form='B'), ['vR'], ['vL'])
                 if self.combine:
-                    U.relabel({'(vL.p0)': '(vL.p)'})
+                    U.labels.update({'(vL.p0)': '(vL.p)'})
                     A = lasy.split_legs(U, '(vL.p)')
                 else:
-                    U.relabel({'p0': 'p'})
+                    U.labels.update({'p0': 'p'})
                     A = U
             else:
                 # A @ theta = A @ U @ S @ VH = (A @ U) @ S @ VH
                 A = lasy.planar_contraction(self.psi.get_B(i_L, form='A'), U, ['vR'], ['vL'])
                 if self.combine:
-                    VH.relabel({'(p0.vR)': '(p.vR)'})
+                    VH.labels.update({'(p0.vR)': '(p.vR)'})
                     B = lasy.split_legs(VH, '(p.vR)')
                 else:
-                    VH.relabel({'p0': 'p'})
+                    VH.labels.update({'p0': 'p'})
                     B = VH
         elif mixer.can_decompose_1site:
             raise NotImplementedError('Mixer is not ported yet. Note that outputs need to have split legs now!!')
@@ -1192,7 +1192,7 @@ def full_diag_effH(
     fullH: lasy.SymmetricTensor = effH.to_tensor()
     symmetry = fullH.symmetry
     if isinstance(effH, TwoSiteH) and not effH.combine:
-        assert fullH.labels_are('vL', 'p0', 'p1', 'vR', 'vR*', 'p1*', 'p0*', 'vL*', planar=True)
+        assert fullH.labels.are('vL', 'p0', 'p1', 'vR', 'vR*', 'p1*', 'p0*', 'vL*', planar=True)
         # TODO workaround. See https://github.com/tenpy/tenpy/issues/693
         fullH = lasy.planar_permute_legs(fullH, codomain=effH.acts_on)
     elif isinstance(effH, EffectiveH):
@@ -1236,6 +1236,7 @@ def full_diag_effH(
     if gs_projector.small_leg.sector_decomposition[0] == symmetry.trivial_sector:
         theta = lasy.squeeze_legs(theta, 'eig*')
     else:
-        theta = lasy.HiddenLegTensor.from_tensor(theta.relabel({'eig*': charge_label}), [charge_label])
+        theta.labels.update({'eig*': charge_label})
+        theta = lasy.HiddenLegTensor.from_tensor(theta, [charge_label])
 
     return E0, theta

@@ -346,12 +346,10 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc):
         relabel1={'p': 'p0', 'p*': 'p0*'},
         relabel2={'p0': 'p1', 'p0*': 'p1*', 'p1': 'p2', 'p1*': 'p2*'},
     )
-    Cd_N_C = -1 * lasy.permute_legs(N_Cd_C, codomain=['p1', 'p0', 'p2'], domain=['p1*', 'p0*', 'p2*']).relabel(
-        {'p0': 'p1', 'p0*': 'p1*', 'p1': 'p0', 'p1*': 'p0*'}
-    )
-    Cd_C_N = -1 * lasy.permute_legs(N_Cd_C, codomain=['p0', 'p2', 'p1'], domain=['p0*', 'p2*', 'p1*']).relabel(
-        {'p2': 'p1', 'p2*': 'p1*', 'p1': 'p2', 'p1*': 'p2*'}
-    )
+    Cd_N_C = -1 * lasy.permute_legs(N_Cd_C, codomain=['p1', 'p0', 'p2'], domain=['p1*', 'p0*', 'p2*'])
+    Cd_N_C.labels.update({'p0': 'p1', 'p0*': 'p1*', 'p1': 'p0', 'p1*': 'p0*'})
+    Cd_C_N = -1 * lasy.permute_legs(N_Cd_C, codomain=['p0', 'p2', 'p1'], domain=['p0*', 'p2*', 'p1*'])
+    Cd_C_N.labels.update({'p2': 'p1', 'p2*': 'p1*', 'p1': 'p2', 'p1*': 'p2*'})
 
     def N_Cd_C_permute(perm):
         if np.array_equal(perm, [0, 1, 2]):

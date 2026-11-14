@@ -534,7 +534,8 @@ class Sweep(Algorithm):
             RP = o_env.get_RP(i0 + self.eff_H.length - 1, store=True)
             theta = lasy.tdot(LP, theta, ['vR'], ['vL'])
             theta = lasy.tdot(theta, RP, ['vR'], ['vL'])
-            theta = theta.relabel({'vR*': 'vL', 'vL*': 'vR'})
+            theta = theta
+            theta.labels.update({'vR*': 'vL', 'vL*': 'vR'})
             if self.eff_H.combine:
                 theta = self.eff_H.combine_theta(theta)
             theta = lasy.permute_legs(theta, codomain=self.eff_H.acts_on, domain=[])
@@ -1013,8 +1014,9 @@ class EffectiveH(PlanarLinearOperator):
     def to_matrix(self):
         """Contract `self` to a matrix."""
         tensor = self.to_tensor()
-        n = len(tensor.labels) // 2
-        return lasy.combine_legs(tensor, tensor.labels[:n], tensor.labels[n:])
+        labels = tensor.labels.as_list()
+        n = len(labels) // 2
+        return lasy.combine_legs(tensor, labels[:n], labels[n:])
 
     def update_LP(self, env, i, U=None):
         """Equivalent to ``env.get_LP(i, store=True)``; optimized for `combine`.
@@ -2406,7 +2408,8 @@ class VariationalCompression(IterativeSweeps):
         RP = self.env.get_RP(i0 + 1)
         th = lasy.tdot(LP, th, ['vR'], ['vL'])
         th = lasy.tdot(th, RP, ['vR'], ['vL'])
-        th = th.relabel({'vR*': 'vL', 'vL*': 'vR'})
+        th = th
+        th.labels.update({'vR*': 'vL', 'vL*': 'vR'})
         th = lasy.permute_legs(th, codomain=['vL', 'p0'], domain=['p1', 'vR'])
         th = lasy.combine_legs(th, ['vL', 'p0'], ['p1', 'vR'])
         return self.update_new_psi(th)
@@ -2430,8 +2433,10 @@ class VariationalCompression(IterativeSweeps):
             theta_diff = 1.0 - abs(ov)
             self._theta_diff.append(theta_diff)
         # now set the new tensors to the MPS
-        A0 = U.relabel({'p0': 'p'})
-        B1 = VH.relabel({'p1': 'p'})
+        A0 = U
+        A0.labels.update({'p0': 'p'})
+        B1 = VH
+        B1.labels.update({'p1': 'p'})
         new_psi.set_B(i0, A0, form='A')  # left-canonical
         new_psi.set_B(i0 + 1, B1, form='B')  # right-canonical
         new_psi.set_SR(i0, S)
