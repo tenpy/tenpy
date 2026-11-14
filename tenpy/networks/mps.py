@@ -2567,7 +2567,7 @@ class MPS(BaseMPSExpectationValue):
                 assert len(f) == 2
         for i, B in enumerate(self._B):
             assert isinstance(B, lasy.SymmetricTensor)
-            if not _public_labels_are(B, self._B_labels, planar=True):
+            if not B.labels.are(*self._B_labels, planar=True):
                 raise ValueError(f'B has wrong labels {B.labels!r}, expected {self._B_labels!r}')
             i2 = (i + 1) if self.finite else (i + 1) % self.L
             if isinstance(self._S[i2], lasy.DiagonalTensor):
@@ -4233,7 +4233,7 @@ class MPS(BaseMPSExpectationValue):
             ``None`` stands for non-canonical form.
 
         """
-        assert _public_labels_are(B, ['vL', 'p', 'vR'], planar=True)
+        assert B.labels.are('vL', 'p', 'vR', planar=True)
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         B = self.shift_Tensor_unit_cells(B, -num_unit_cells)
         self.form[i_in_unit_cell] = self._to_valid_form(form)
@@ -9544,25 +9544,6 @@ def _project_onto_single_summand(B: lasy.SymmetricTensor, leg: str) -> lasy.Symm
         return B
     assert len(space.spaces) == 1, 'expected a single summand'
     return lasy.apply_mask(B, space.projection_onto_summand(0, backend=B.backend, device=B.device), leg)
-
-
-def _public_labels_are(B: lasy.Tensor, labels: list[str], planar: bool = False) -> bool:
-    """Like ``B.labels.are(*labels, planar=planar)``, but ignoring hidden legs.
-
-    If B is a :class:`~lasyten.HiddenLegTensor`, it's hidden legs are ignored.
-
-    For ``planar=True``, the public legs need to have the `labels` up to a cyclic permutation.
-    """
-    # TODO should this be a method of the tensors instead?
-    if not isinstance(B, lasy.HiddenLegTensor):
-        return B.labels.are(*labels, planar=planar)
-    public = [B.labels[i] for i in B.public_leg_idcs()]
-    if len(public) != len(labels) or set(public) != set(labels):
-        return False
-    if not planar:
-        return True
-    k = public.index(labels[0])
-    return public[k:] + public[:k] == list(labels)
 
 
 def _real_if_close_nested(value, factor: float = 1.0):
