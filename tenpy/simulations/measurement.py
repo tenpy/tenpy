@@ -229,9 +229,10 @@ def m_correlation_length(results, psi, model, simulation, results_key='correlati
     ----------
     results, psi, model, simulation, results_key:
         See :func:`~tenpy.simulation.measurement.measurement_index`.
-    unit : ``'MPS_sites' | 'MPS_sites_ungrouped' | 'lattice_rings'``
-        The unit in which the correlation length is returned, see the warning in
-        :meth:`~tenpy.networks.mps.MPS.correlation_length`.
+    unit : ``'MPS_sites' | 'MPS_sites_ungrouped' | 'lattice_rings' | 'lattice_spacing'``
+        The unit in which the correlation length is returned.
+        :meth:`~tenpy.networks.mps.MPS.correlation_length` itself returns values in units of the
+        horizontal lattice spacing; this converts to the requested unit.
 
         MPS_sites :
             Units of the current MPS site
@@ -259,19 +260,25 @@ def m_correlation_length(results, psi, model, simulation, results_key='correlati
         )
         unit = 'MPS_sites'
     if unit == 'MPS_sites':
-        pass
+        corr = corr * psi.N_sites_per_hor_spacing
     elif unit == 'MPS_sites_ungrouped':
-        corr = corr * psi.grouped
+        corr = corr * psi.N_sites_per_hor_spacing * psi.grouped
     elif unit == 'lattice_rings':
         lat = model.lattice
         if lat.N_sites_per_ring is None:
             raise ValueError("lattice doesn't define N_sites_per_ring")
-        corr = corr * psi.grouped / lat.N_sites_per_ring
+        corr = corr * psi.N_sites_per_hor_spacing * psi.grouped / lat.N_sites_per_ring
     elif unit == 'lattice_spacing':
         lat = model.lattice
         if lat.N_sites_per_ring is None:
             raise ValueError("lattice doesn't define N_sites_per_ring")
-        corr = corr * psi.grouped / lat.N_sites_per_ring / np.inner(lat.basis[0], lat.cylinder_axis)
+        corr = (
+            corr
+            * psi.N_sites_per_hor_spacing
+            * psi.grouped
+            / lat.N_sites_per_ring
+            / np.inner(lat.basis[0], lat.cylinder_axis)
+        )
     else:
         raise ValueError("can't understand unit=" + repr(unit))
     results[results_key] = corr

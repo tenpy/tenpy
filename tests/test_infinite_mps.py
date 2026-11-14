@@ -137,41 +137,44 @@ def test_aklt_state():
     # entanglement entropy of the AKLT state is ln(2): a singlet between two spin-1/2 (one per bond)
     npt.assert_allclose(psi.entanglement_entropy(), np.log(2), atol=1e-12)
     # <S_i . S_{i+1}> = -4/3 and correlation length xi = 1 / ln(3), from the spin-1 sector of the transfer matrix
-    xi, charge = psi.correlation_length2(charge_sector=None, return_charges=True)
+    xi, charge = psi.correlation_length(charge_sector=None, return_charges=True)
     npt.assert_allclose(xi, 1 / np.log(3), atol=1e-12)
     spin_one = lasy.Sector([2, 0])  # TODO: use named sectors once https://github.com/tenpy/lasyten/issues/314 is done
     assert charge == spin_one
-    xis, charges = psi.correlation_length2(target=2, charge_sector=None, return_charges=True)
+    xis, charges = psi.correlation_length(target=2, charge_sector=None, return_charges=True)
     npt.assert_allclose(xis, [1 / np.log(3)], atol=1e-12)  # only a single sector with a second eigenvalue
     # in each sector, the dominant eigenvalue is the one of the transfer matrix
-    npt.assert_allclose(psi.correlation_length2(charge_sector=spin_one), 1 / np.log(3), atol=1e-12)
+    npt.assert_allclose(psi.correlation_length(charge_sector=spin_one), 1 / np.log(3), atol=1e-12)
     # expected behavior: the trivial sector only has the dominant eigenvalue, there is no second one
     with pytest.raises(ValueError, match='only a single eigenvalue'):
-        psi.correlation_length2(charge_sector=0)
+        psi.correlation_length(charge_sector=0)
 
 
 @pytest.mark.parametrize('site_kind, conserve', SITE_CONSERVE)
 def test_correlation_length_transfer_matrix(site_kind, conserve):
     psi = _random_mps(conserve, 2, site_kind=site_kind)
     eta = _tm_spectrum(psi, 2)
-    expected = -psi.L / np.log(eta[1] / eta[0])
-    xi, charge = psi.correlation_length2(return_charges=True)
-    npt.assert_allclose(xi, expected / psi.N_sites_per_hor_spacing, atol=1e-10)
+    expected = -psi.L / np.log(eta[1] / eta[0]) / psi.N_sites_per_hor_spacing
+    xi, charge = psi.correlation_length(return_charges=True)
+    npt.assert_allclose(xi, expected, atol=1e-10)
     assert charge == psi.symmetry.trivial_sector
+    with pytest.warns(DeprecationWarning, match='correlation_length2 was renamed'):
+        xi_alias = psi.correlation_length2()
+    npt.assert_allclose(xi_alias, xi, atol=1e-10)
     # looking in all sectors can only give a longer correlation length
-    xi_all, charge = psi.correlation_length2(charge_sector=None, return_charges=True)
+    xi_all, charge = psi.correlation_length(charge_sector=None, return_charges=True)
     assert xi_all >= xi - 1e-10
     # all possible sectors
     sectors = psi.correlation_length_charge_sectors()
-    xis = [psi.correlation_length2(charge_sector=sector) for sector in sectors]
+    xis = [psi.correlation_length(charge_sector=sector) for sector in sectors]
     npt.assert_allclose(max(xis), xi_all, atol=1e-9)
 
 
 def test_correlation_length_product_state():
     site = sites.SpinSite(1, conserve='Sz')
     psi = mps.MPS.from_product_state([site] * 2, [0, 2], bc='infinite', unit_cell_width=2)
-    assert psi.correlation_length2() == 0.0
-    xi, charge = psi.correlation_length2(return_charges=True)
+    assert psi.correlation_length() == 0.0
+    xi, charge = psi.correlation_length(return_charges=True)
     assert xi == 0.0
     assert charge == psi.symmetry.trivial_sector
 
@@ -221,7 +224,7 @@ def test_canonical_form_infinite_complex(site_kind, conserve):
         psi = mps.MPS.from_desired_bond_dimension(
             [site] * 2, 10, bc='infinite', total_charge=sym.trivial_sector, unit_cell_width=2, dtype=dtype
         )
-    xi = psi.correlation_length2(charge_sector=None)
+    xi = psi.correlation_length(charge_sector=None)
     assert psi.dtype == dtype
     assert np.max(np.abs(psi.norm_test())) < 1e-12
     assert psi.get_SL(0).dtype == dtype.to_real  # the singular values stay real
@@ -242,7 +245,7 @@ def test_canonical_form_infinite_reduces_bond_dimension(site_kind, conserve):
     assert [B.get_leg('vL').dim for B in psi._B] == chi_ref
     assert np.max(np.abs(psi.norm_test())) < 1e-12
     npt.assert_allclose(psi.get_SL(0).diagonal_as_numpy(), psi_ref.get_SL(0).diagonal_as_numpy(), atol=1e-8)
-    assert 0.0 < psi.correlation_length2() < np.inf
+    assert 0.0 < psi.correlation_length() < np.inf
 
 
 def test_canonical_form_infinite_reduces_bond_dimension_decoupled_right():
@@ -329,25 +332,25 @@ def test_canonical_form_infinite_nontrivial_total_charge(site, state):
 def test_correlation_length_charge_sector_trivial(charge_sector):
     # all of these select the trivial sector
     psi = _random_mps('Sz', 0)
-    xi = psi.correlation_length2(charge_sector=0)
-    npt.assert_allclose(psi.correlation_length2(charge_sector=charge_sector), xi, rtol=1e-8)
+    xi = psi.correlation_length(charge_sector=0)
+    npt.assert_allclose(psi.correlation_length(charge_sector=charge_sector), xi, rtol=1e-8)
 
 
 def test_correlation_length_charge_sector_arguments():
     psi = _random_mps('Sz', 0)
-    xi = psi.correlation_length2(charge_sector=0)
+    xi = psi.correlation_length(charge_sector=0)
     zero = lasy.Sector([0])
     # looking in all sectors can only give a larger correlation length
-    assert psi.correlation_length2(charge_sector=None) >= xi - 1e-8
+    assert psi.correlation_length(charge_sector=None) >= xi - 1e-8
     # a sector given explicitly (and the dominant eigenvalue 1 from the trivial sector)
     for sector in psi.correlation_length_charge_sectors():
-        xi_q, q = psi.correlation_length2(charge_sector=sector, return_charges=True)
+        xi_q, q = psi.correlation_length(charge_sector=sector, return_charges=True)
         assert q == sector or sector == zero
     # expected behavior: only the trivial sector can be given as an integer or string
     with pytest.raises(ValueError, match='invalid charge_sector'):
-        psi.correlation_length2(charge_sector=1)
+        psi.correlation_length(charge_sector=1)
     with pytest.raises(ValueError, match='invalid charge_sector'):
-        psi.correlation_length2(charge_sector=[0, 'other'])
+        psi.correlation_length(charge_sector=[0, 'other'])
 
 
 @pytest.mark.parametrize(
@@ -371,8 +374,8 @@ def test_correlation_length_dense_reference(site_kind, conserve):
     eta = np.sort(np.abs(np.linalg.eigvals(T)))[::-1]
     npt.assert_allclose(eta[0], 1.0, atol=1e-10)
     xi_dense = -L / np.log(eta[1:] / eta[0])
-    npt.assert_allclose(psi.correlation_length2(charge_sector=None), xi_dense[0], rtol=1e-8)
-    xis = psi.correlation_length2(target=3, charge_sector=None)
+    npt.assert_allclose(psi.correlation_length(charge_sector=None), xi_dense[0], rtol=1e-8)
+    xis = psi.correlation_length(target=3, charge_sector=None)
     for xi in xis:  # (exactly degenerate eigenvalues, e.g. complex conjugate pairs, can be missing)
         assert np.min(np.abs(xi_dense - xi)) < 1e-6 * xi
 
