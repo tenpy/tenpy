@@ -479,10 +479,6 @@ def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc,
     a = 3.0 + 0.42j
     l = 0.2
 
-    with pytest.raises(NotImplementedError, match='exp_decaying not ported'):
-        m_exp.add_exponentially_decaying_coupling(a, l, coupling, plus_hc=(add_hc == 'flag'))
-    pytest.xfail('exp_decaying not ported')
-
     m_exp.add_exponentially_decaying_coupling(a, l, coupling, plus_hc=(add_hc == 'flag'))
     if add_hc == 'manually':
         m_exp.add_exponentially_decaying_coupling(np.conj(a), np.conj(l), hc_coupling)
@@ -634,12 +630,10 @@ def test_post_init_add_warnings():
         m.add_multi_site_coupling(2, 'Sx.Sx', dx=[[0, 1]])
 
     with pytest.warns(UserWarning, match=expect_msg):
-        with pytest.raises(NotImplementedError):
-            m.add_exponentially_decaying_coupling(1, 2, 'Sx.Sx')
+        m.add_exponentially_decaying_coupling(1, 2, 'Sx.Sx')
 
     with pytest.warns(UserWarning, match=expect_msg):
-        with pytest.raises(NotImplementedError):
-            m.add_exponentially_decaying_centered_terms(1, 2, 'Sx.Sx', 1)
+        m.add_exponentially_decaying_centered_terms(1, 2, 'Sx.Sx', 1)
 
 
 @pytest.mark.parametrize('which_model', ['MyMod', 'XXZ'])
@@ -839,10 +833,6 @@ def test_model_plus_hc(which_site, which_ops, L=6):
     m_explicit.add_multi_site_coupling(t3, op3, dx=[0, 1, 2], plus_hc=True)
     compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
-    with pytest.raises(NotImplementedError, match='exp_decaying not ported'):
-        m_manual.add_exponentially_decaying_coupling(0.25, 0.2, Sp_Sm)
-    return  # once the NotImplementedError goes away, just remove these three lines.
-
     print('exponentially decaying coupling')
     d = 0.25
     l = 0.2
@@ -864,15 +854,11 @@ def test_model_plus_hc(which_site, which_ops, L=6):
     print('exponentially decaying centered terms')
     subsites = [1, 3, 5]
     f = 0.42j
-    if which_ops == 'Cd-C':
-        with pytest.raises(NotImplementedError):
-            m_manual.add_exponentially_decaying_centered_terms(f, l, Sp_Sm, 3, subsites=subsites)
-    else:
-        m_manual.add_exponentially_decaying_centered_terms(f, l, Sp_Sm, 3, subsites=subsites)
-        m_manual.add_exponentially_decaying_centered_terms(np.conj(f), np.conj(l), Sm_Sp, 3, subsites=subsites)
-        m_plus_hc.add_exponentially_decaying_centered_terms(f, l, Sp_Sm, 3, subsites=subsites, plus_hc=True)
-        m_explicit.add_exponentially_decaying_centered_terms(f, l, Sp_Sm, 3, subsites=subsites, plus_hc=True)
-        compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
+    m_manual.add_exponentially_decaying_centered_terms(f, l, Sp_Sm, 3, subsites=subsites)
+    m_manual.add_exponentially_decaying_centered_terms(np.conj(f), np.conj(l), Sm_Sp, 3, subsites=subsites)
+    m_plus_hc.add_exponentially_decaying_centered_terms(f, l, Sp_Sm, 3, subsites=subsites, plus_hc=True)
+    m_explicit.add_exponentially_decaying_centered_terms(f, l, Sp_Sm, 3, subsites=subsites, plus_hc=True)
+    compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
 
 class DisorderedLatticeModel(model.ModelBuilder):
