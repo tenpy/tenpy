@@ -9395,7 +9395,7 @@ def _flatten_domain_pipe(B: lasy.SymmetricTensor, domain_pos: int) -> lasy.Symme
     A :class:`~lasyten.HiddenLegTensor` `B` gives a :class:`~lasyten.HiddenLegTensor` with the same hidden legs.
     """
     pipe = B.domain.factors[domain_pos]
-    assert isinstance(pipe, lasy.LegPipe) and pipe.dim == 1
+    assert lasy.is_leg_pipe(pipe) and pipe.dim == 1
     leg = pipe.as_ElementarySpace(pipe.is_dual)
     leg = lasy.ElementarySpace(B.symmetry, leg.defining_sectors, leg.multiplicities, leg.is_dual)
     factors = list(B.domain.factors)
