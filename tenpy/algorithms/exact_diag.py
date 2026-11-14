@@ -323,7 +323,7 @@ class ExactDiag:
         if self.E is None or self.V is None:
             raise ValueError('You need to call `full_diagonalization` first!')
         D = lasy.DiagonalTensor.from_diag_block(
-            np.exp(-1.0j * dt * self.E), leg=self.V.get_leg('eig'), labels=['eig', 'eig*']
+            np.exp(-1.0j * dt * self.E), leg=self.V.get_leg('eig'), labels=['eig', 'eig*'], backend=self.V.backend
         )
         return lasy.tdot(lasy.scale_axis(self.V, D, 'eig'), self.V.hc, 'eig', 'eig*')
 
@@ -445,6 +445,7 @@ class ExactDiag:
             block,
             codomain=legs,
             domain=legs,
+            backend=lasy.backends.get_same_backend(*self._sites),
             labels=[self._labels_p, self._labels_pconj],
             understood_braiding=True,
         )
