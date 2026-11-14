@@ -2368,9 +2368,9 @@ class MPOGraph(MPSGeometry):
         op = self.sites[i].get_onsite_W_block(opname, w, overbraid=overbraid)
         self.add(i, keyL, keyR, op, strength, exist_ok=exist_ok)
 
-    def add_identity(self, i: int, keyL: Hashable, keyR: Hashable, overbraid: bool, exist_ok: bool = False):
+    def add_identity(self, i: int, keyL: Hashable, keyR: Hashable, overbraid: bool, exist_ok: bool = False, strength=1):
         """Insert an edge with the identity onsite operator crossing over/under the virtual leg."""
-        self.add_onsite(i, keyL, keyR, opname='Id', strength=1, overbraid=overbraid, exist_ok=exist_ok)
+        self.add_onsite(i, keyL, keyR, opname='Id', strength=strength, overbraid=overbraid, exist_ok=exist_ok)
 
     def add_elementary_two_site_coupling(self, i: int, j: int, coupling: lasy.Coupling, strength, label: str):
         """Add an elementary two-site coupling on ordered sites ``i < j``.
