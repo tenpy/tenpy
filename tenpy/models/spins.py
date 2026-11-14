@@ -24,7 +24,7 @@ def _onsite_matrix(site, hx, hy, hz, D, E):
     combine into an overall-symmetric operator (e.g. when hx=hy=E=0, only diagonal Sz terms
     remain).
     """
-    Sx, Sy, Sz = (site.spin_vector[:, :, k] for k in range(3))
+    Sx, Sy, Sz = (site.spin.spin_vector[:, :, k] for k in range(3))
     return -hx * Sx - hy * Sy - hz * Sz + D * (Sz @ Sz) + E * (Sx @ Sx - Sy @ Sy)
 
 
@@ -34,7 +34,7 @@ def _coupling_matrix(site1, site2, Jx, Jy, Jz, muJ):
     Legs are ``[p0, p0*, p1, p1*]``; built as a single matrix for the same reason as
     :func:`_onsite_matrix`.
     """
-    s1, s2 = site1.spin_vector, site2.spin_vector
+    s1, s2 = site1.spin.spin_vector, site2.spin.spin_vector
     h = Jx * np.tensordot(s1[:, :, 0], s2[:, :, 0], axes=0)
     h = h + Jy * np.tensordot(s1[:, :, 1], s2[:, :, 1], axes=0)
     h = h + Jz * np.tensordot(s1[:, :, 2], s2[:, :, 2], axes=0)
@@ -220,7 +220,7 @@ class DipolarSpinChain(ModelBuilder):
 
     def init_couplings(self, model_params):
         s, *_ = self.lattice.unit_cell
-        Sx, Sy, Sz = (s.spin_vector[:, :, k] for k in range(3))
+        Sx, Sy, Sz = (s.spin.spin_vector[:, :, k] for k in range(3))
         Sp = Sx + 1.0j * Sy
         Sm = Sx - 1.0j * Sy
         self.define_coupling(

@@ -778,7 +778,7 @@ class MPO(MPSGeometry):
 
     def set_W(self, i: int, W: lasy.Tensor):
         """Set `W` at site `i`. Note that ``W`` may be modified in-place."""
-        assert W.labels_are('wL', 'p', 'wR', 'p*', planar=True)
+        assert W.labels.are('wL', 'p', 'wR', 'p*', planar=True)
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         self._W[i_in_unit_cell] = self.shift_Tensor_unit_cells(W, -num_unit_cells)
         self._reset_graph()
@@ -1246,12 +1246,14 @@ class MPO(MPSGeometry):
 
         env = MPOEnvironment(psi, self, psi)
         # start with LP[vR*, wR1, vR] projected on IdL and add a second MPO leg, also projected on IdL
-        LP = env.init_LP(0).relabel({'wR': 'wR1'})
+        LP = env.init_LP(0)
+        LP.labels.update({'wR': 'wR1'})
         W = self.get_W(0)
         wL = W.get_leg('wL')
         LP = lasy.add_trivial_leg(LP, 1, label='wR2', is_dual=not wL.is_dual)
         mask = wL.projection_onto_summand('IdL', backend=LP.backend, labels=['wL', 'wR'], device=LP.device)
-        LP = lasy.tdot(LP, mask, 'wR2', 'wL').relabel({'wR': 'wR2'})
+        LP = lasy.tdot(LP, mask, 'wR2', 'wL')
+        LP.labels.update({'wR': 'wR2'})
         LP = lasy.permute_legs(LP, codomain=['wR2', 'wR1', 'vR', 'vR*'])
         for i in range(self.L):
             B = psi.get_B(i, form='Th' if i == 0 else 'B')
@@ -1263,7 +1265,8 @@ class MPO(MPSGeometry):
                 .get_leg('wR')
                 .projection_onto_summand('IdR', backend=LP.backend, labels=['new', 'wL'], device=LP.device)
             )
-            LP = lasy.tdot(LP, mask, label, 'wL').relabel({'new': label})
+            LP = lasy.tdot(LP, mask, label, 'wL')
+            LP.labels.update({'new': label})
         LP = lasy.squeeze_legs(LP, ['wR1', 'wR2'])
         H2 = lasy.trace(lasy.permute_legs(LP, codomain=['vR*'], domain=['vR']))
         return np.real_if_close(H2 - exp_val**2)
@@ -2928,7 +2931,7 @@ class MPOEnvironment(BaseEnvironment):
         LP = self.get_LP(i)
         p, ps = label_p, label_p + '*'
         LHeff = lasy.planar_contraction(LP, self.H.get_W(i), 'wR', 'wL', relabel2={'p': p, 'p*': ps})
-        assert LHeff.labels_are('vR', 'vR*', p, 'wR', ps, planar=True)
+        assert LHeff.labels.are('vR', 'vR*', p, 'wR', ps, planar=True)
         return lasy.combine_legs(LHeff, ['vR*', p], ['vR', ps])
 
     def _contract_RHeff(self, i: int, label_p: str = 'p1') -> lasy.Tensor:
@@ -2939,7 +2942,7 @@ class MPOEnvironment(BaseEnvironment):
         RP = self.get_RP(i)
         p, ps = label_p, label_p + '*'
         RHeff = lasy.planar_contraction(self.H.get_W(i), RP, 'wR', 'wL', relabel1={'p': p, 'p*': ps})
-        assert RHeff.labels_are('vL', ps, 'wL', p, 'vL*', planar=True)
+        assert RHeff.labels.are('vL', ps, 'wL', p, 'vL*', planar=True)
         return lasy.combine_legs(RHeff, [ps, 'vL'], [p, 'vL*'])
 
 
@@ -3681,13 +3684,13 @@ class MPOTransferMatrix(lasy.sparse.LinearOperator):
 
         """
         if not self.transpose:  # right to left
-            assert vec.labels_are('vL', 'wL', 'vL*', planar=True)
+            assert vec.labels.are('vL', 'wL', 'vL*', planar=True)
             vec.itranspose(['vL', 'wL', 'vL*'])  # shouldn't do anything
             for Bc, W, B in zip(self._M_conj, self._W, self._M):
                 vec = MPOEnvironment.RP_contraction.evaluate(dict(RP=vec, Bk=B, W=W, Bb=Bc))
             vec = vec.shift_charges_horizontal(dx_0=self.unit_cell_width)
         else:
-            assert vec.labels_are('vR*', 'wR', 'vR', planar=True)
+            assert vec.labels.are('vR*', 'wR', 'vR', planar=True)
             for Ac, W, A in zip(self._M_conj, self._W, self._M):
                 vec = MPOEnvironment.LP_contraction.evaluate(dict(LP=vec, Bk=A, W=W, Bb=Ac))
             vec = vec.shift_charges_horizontal(dx_0=-self.unit_cell_width)

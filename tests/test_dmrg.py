@@ -93,7 +93,7 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, charged_guess, charge_
         assert theta.labels == theta_guess.labels
     elif isinstance(theta, lasy.HiddenLegTensor):
         # if keep_sector=False, we may end up with a charged eigenstate even if theta_guess was not charged
-        assert theta.labels == [*theta_guess.labels, f'!{charge_label}']
+        assert theta.labels == [*theta_guess.labels.as_list(), f'!{charge_label}']
     else:
         assert theta.labels == theta_guess.labels
 

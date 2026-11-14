@@ -254,7 +254,7 @@ def test_CouplingModel_explicit():
     W1_new = H_mpo.get_W(1)
 
     w_triv = lasy.ElementarySpace.from_trivial_sector(symmetry=M.symmetry)
-    w_odd = lasy.ElementarySpace(M.symmetry, M.symmetry.factors[0].odd)
+    w_odd = lasy.ElementarySpace(M.symmetry, M.symmetry.get_sector('odd'))
     Id_0 = s.get_onsite_W_block('Id', w=w_triv)
     Id_1 = s.get_onsite_W_block('Id', w=w_odd)
     N_block = s.get_onsite_W_block('N', w=w_triv)
@@ -346,12 +346,10 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc):
         relabel1={'p': 'p0', 'p*': 'p0*'},
         relabel2={'p0': 'p1', 'p0*': 'p1*', 'p1': 'p2', 'p1*': 'p2*'},
     )
-    Cd_N_C = -1 * lasy.permute_legs(N_Cd_C, codomain=['p1', 'p0', 'p2'], domain=['p1*', 'p0*', 'p2*']).relabel(
-        {'p0': 'p1', 'p0*': 'p1*', 'p1': 'p0', 'p1*': 'p0*'}
-    )
-    Cd_C_N = -1 * lasy.permute_legs(N_Cd_C, codomain=['p0', 'p2', 'p1'], domain=['p0*', 'p2*', 'p1*']).relabel(
-        {'p2': 'p1', 'p2*': 'p1*', 'p1': 'p2', 'p1*': 'p2*'}
-    )
+    Cd_N_C = -1 * lasy.permute_legs(N_Cd_C, codomain=['p1', 'p0', 'p2'], domain=['p1*', 'p0*', 'p2*'])
+    Cd_N_C.labels.update({'p0': 'p1', 'p0*': 'p1*', 'p1': 'p0', 'p1*': 'p0*'})
+    Cd_C_N = -1 * lasy.permute_legs(N_Cd_C, codomain=['p0', 'p2', 'p1'], domain=['p0*', 'p2*', 'p1*'])
+    Cd_C_N.labels.update({'p2': 'p1', 'p2*': 'p1*', 'p1': 'p2', 'p1*': 'p2*'})
 
     def N_Cd_C_permute(perm):
         if np.array_equal(perm, [0, 1, 2]):
@@ -387,7 +385,7 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc):
     W1_new = H_mpo.get_W(1)
 
     w_triv = lasy.ElementarySpace.from_trivial_sector(symmetry=M.symmetry)
-    w_odd = lasy.ElementarySpace(M.symmetry, M.symmetry.factors[0].odd)
+    w_odd = lasy.ElementarySpace(M.symmetry, M.symmetry.get_sector('odd'))
     Id_0 = s.get_onsite_W_block('Id', w=w_triv)
     Id_1 = s.get_onsite_W_block('Id', w=w_odd)
     N_0 = s.get_onsite_W_block('N', w=w_triv)
@@ -760,9 +758,9 @@ def test_model_plus_hc(which_site, which_ops, L=6):
     def init_model(explicit_plus_hc=False):
         m = model.CouplingModel(lat, explicit_plus_hc=explicit_plus_hc)
         if which_site in ['spin', 'spin-fermion']:
-            Sx = s.spin_vector[:, :, 0]
-            Sy = s.spin_vector[:, :, 1]
-            Sz = s.spin_vector[:, :, 2]
+            Sx = s.spin.spin_vector[:, :, 0]
+            Sy = s.spin.spin_vector[:, :, 1]
+            Sz = s.spin.spin_vector[:, :, 2]
             Sp = Sx + 1j * Sy
             Sm = Sx - 1j * Sy
             m.define_coupling(
@@ -772,7 +770,7 @@ def test_model_plus_hc(which_site, which_ops, L=6):
                 Coupling_from_numpy_onsite([Sp, Sz, Sm], [s, s, s], name='Sp.Sz.Sm'), hc='Sm.Sz.Sp', permute=None
             )
         if which_site in ['fermion', 'spin-fermion']:
-            Cd, C = s.creation_annihilation_ops(s.num_species)
+            Cd, C = lasy.models.FermionicDOF.creation_annihilation_ops(s.occupation.num_species)
             Cd, C = Cd[:, :, 0], C[:, :, 0]
             N = Cd @ C
             m.define_coupling(lasy.models.hopping([s, s], t_right=0, name='Cd.C'), hc='C.Cd', permute='swap_hc')

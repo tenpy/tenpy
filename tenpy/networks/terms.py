@@ -517,7 +517,7 @@ class OnsiteTerms(Terms):
         dist_L, dist_R = distribute
         if dist_L + dist_R != 1.0:
             raise ValueError('sum of `distribute` not 1!')
-        assert all(H is None or H.labels_are('p0', 'p1', 'p1*', 'p0*', planar=True) for H in H_bond)
+        assert all(H is None or H.labels.are('p0', 'p1', 'p1*', 'p0*', planar=True) for H in H_bond)
 
         for j, H_j in enumerate(self.to_tensors(sites)):
             if H_j is None:
@@ -546,7 +546,7 @@ class OnsiteTerms(Terms):
                     relabel2={'p': 'p1', 'p*': 'p1*'},
                 )
                 H_bond[k] = add_with_None_0(H_bond[k], dist_R * h)
-        assert all(H is None or H.labels_are('p0', 'p1', 'p1*', 'p0*', planar=True) for H in H_bond)
+        assert all(H is None or H.labels.are('p0', 'p1', 'p1*', 'p0*', planar=True) for H in H_bond)
 
     def to_TermList(self):
         """Convert :attr:`onsite_terms` into a :class:`TermList`.
@@ -785,7 +785,7 @@ class CouplingTerms(Terms):
                 raise NotImplementedError
             h = model.couplings[coupling_name].to_tensor()
             H_bond[j % self.L] = add_with_None_0(H_bond[j % self.L], strength * h)
-        assert all(h is None or h.labels_are('p0', 'p1', 'p1*', 'p0*', planar=True) for h in H_bond)
+        assert all(h is None or h.labels.are('p0', 'p1', 'p1*', 'p0*', planar=True) for h in H_bond)
         return H_bond
 
     def remove_zeros(self, tol_zero: float = 1e-15, inplace: bool = True) -> CouplingTerms:

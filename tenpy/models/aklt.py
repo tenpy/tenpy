@@ -9,7 +9,6 @@ This class thus serves as an example how this can be done.
 from typing import Literal
 
 import lasyten as lasy
-import numpy as np
 
 from ..networks.mps import MPS
 from .lattice import Chain
@@ -81,8 +80,7 @@ class AKLTChain(ModelBuilder):
             raise NotImplementedError('psi_AKLT is only ported for conserve="SU2" and bc_MPS="infinite"')
         sites = self.lattice.mps_sites()
         sym = sites[0].symmetry
-        # the spin-1/2 sector. TODO: use named sectors once https://github.com/tenpy/lasyten/issues/314 is done
-        spin_half = lasy.ElementarySpace.from_defining_sectors(sym, np.array([[1, 0]]), multiplicities=[1])
+        spin_half = lasy.ElementarySpace(sym, sym.get_sector('[1 0]'))
         return MPS.from_desired_virtual_spaces(
             sites,
             [spin_half] * len(sites),
