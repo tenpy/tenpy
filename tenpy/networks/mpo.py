@@ -2255,6 +2255,14 @@ class MPOGraph(MPSGeometry):
                         raise ValueError('IdR may only connect to IdR to the right')
         return
 
+    def get_unused_key(self, prefix: str, sep: str = '_', n_min: int = 0, n_max: int = 1000):
+        """Generate a key from a prefix and running counter that is not used in any :attr:`states`."""
+        for n in range(n_min, n_max):
+            key = prefix + sep + str(n)
+            if all(key not in s for s in self.states):
+                return key
+        raise ValueError('All keys already taken')
+
     def add(
         self,
         i: int,
