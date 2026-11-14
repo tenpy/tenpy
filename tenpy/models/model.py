@@ -375,12 +375,12 @@ class CouplingModel(HamiltonianModel):
         self._H_bond = None
         super().invalidate_caches()
 
-    def get_nonzero_terms(self) -> tuple[OnsiteTerms, CouplingTerms, MultiCouplingTerms]:
+    def get_nonzero_terms(self) -> tuple[OnsiteTerms, CouplingTerms, MultiCouplingTerms, ExponentiallyDecayingTerms]:
         return (
             self.onsite_terms.remove_zeros(self.tol_zero_strength),
             self.coupling_terms.remove_zeros(self.tol_zero_strength),
             self.multi_coupling_terms.remove_zeros(self.tol_zero_strength),
-            # self.exp_decaying_terms.remove_zeros(self.tol_zero_strength),  # TODO reactivate
+            self.exp_decaying_terms.remove_zeros(self.tol_zero_strength),
         )
 
     def get_H_MPO(self):
@@ -398,11 +398,13 @@ class CouplingModel(HamiltonianModel):
     def get_H_bond(self):
         if self._H_bond is None:
             sites = self.lattice.mps_sites()
-            ot, ct, mct = self.get_nonzero_terms()
+            ot, ct, mct, edt = self.get_nonzero_terms()
             H_bond = ct.to_nn_bond_tensors(sites, self)
             ot.add_to_nn_bond_tensors(H_bond, sites, finite=self.finite)
             if not mct.is_empty:
                 raise ValueError('multi_coupling_terms must be empty')
+            if not edt.is_empty:
+                raise ValueError('exp_decaying_terms must be empty')
             self._H_bond = H_bond
         return self._H_bond
 
@@ -919,10 +921,10 @@ class CouplingModel(HamiltonianModel):
             else:
                 strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
 
-        if self.lat.bc_MPS != 'finite':
+        if self.lattice.bc_MPS != 'finite':
             raise ValueError('Single exponentially decaying term requires a finite system.')
 
-        L = self.lat.N_sites
+        L = self.lattice.N_sites
         if not -L <= i < L:
             raise ValueError(f'Site index {i=} out of bounds for length {L}')
         if i < 0:

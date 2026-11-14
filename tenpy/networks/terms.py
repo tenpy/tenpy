@@ -1097,13 +1097,13 @@ class ExponentiallyDecayingTerms(Terms):
     following form with a single extra index of the virtual bonds:
 
     .. math ::
-        sum_{i < j} lambda^{|i-j|} A_i B_j
+        sum_{i < j} lambda^{|i-j|} h_{i,j}
 
     For 2D cylinders (or ladders), we need a slight generalization of this, where the operators
     act only on a subset of the sites in each unit cell, given by a 1D array `subsites`:
 
     .. math ::
-        strength sum_{i < j} lambda^{|i-j|} A_{subsites[i]} B_{subsites[j]}
+        strength sum_{i < j} lambda^{|i-j|} h_{subsites[i], subsites[j]}
 
     Note that we still have ``|i-j|``, such that this will give uniformly decaying interactions,
     independent of the way the MPS winds through the 2D lattice, as long as `subsites` is sorted.
@@ -1119,7 +1119,7 @@ class ExponentiallyDecayingTerms(Terms):
 
     .. math ::
         strength sum_{subsites_start[i] < subsites[j]} \
-            lambda^{|j-argmin(subsites>subsites_start[i])|} A_{subsites_start[i]} B_{subsites[j]}
+            lambda^{|j-argmin(subsites>subsites_start[i])|} h_{subsites_start[i], subsites[j]}
 
     Parameters
     ----------
@@ -1131,11 +1131,11 @@ class ExponentiallyDecayingTerms(Terms):
     L : int
         Number of sites.
     exp_decaying_terms : list of tuples
-        Each tuple ``(strength, opname_i, opname_j, lambda, subsites, subsites_start, opname_string)`` represents
+        Each tuple ``(strength, lambda_, coupling_name, subsites, subsites_start)`` represents
         one of the terms as described above; see :meth:`add_exponentially_decaying_coupling` for
         more details.
     centered_terms : list of tuples
-        Each tuple ``(strength, opname_i, opname_j, lambda_, subsites, opname_string)`` represents
+        Each tuple ``(strength, lambda_, coupling_name, i, subsites)`` represents
         one of the centered terms as described in :meth:`add_centered_exponentially_decaying_term`.
 
     """
@@ -1150,15 +1150,13 @@ class ExponentiallyDecayingTerms(Terms):
     def is_empty(self):
         return len(self.exp_decaying_terms) == 0 and len(self.centered_terms) == 0
 
-    def add_exponentially_decaying_coupling(
-        self, strength, lambda_, op_i, op_j, subsites=None, subsites_start=None, op_string='Id'
-    ):
+    def add_exponentially_decaying_coupling(self, strength, lambda_, coupling_name, subsites=None, subsites_start=None):
         r"""Add an exponentially decaying long-range coupling.
 
         .. math ::
-            strength \sum_{i} \sum_{j > i} \lambda^{|i-j|} A_i B_j
+            strength \sum_{i} \sum_{j > i} \lambda^{|i-j|} h_{i,j}
 
-        Where the operator `A` is given by `op_i`, and `B` is given by `op_j`.
+        Where the two-site operator ``h`` is given by `coupling_name`.
         Note that the sum over i,j is long-range, for infinite systems beyond the MPS unit cell.
 
         They can be generalized in several ways, see `lambda_`, `subsites`, `subsites_start`, as
@@ -1170,16 +1168,13 @@ class ExponentiallyDecayingTerms(Terms):
             Overall prefactor.
         lambda_ : float | 1D array
             Decay-rate. Either a single number, applied uniformly or a sequence of length :attr:`L`.
-        op_i, op_j : string
-            Names for the operators.
+        coupling_name : str
+            Names of the coupling.
         subsites, subsites_start : 1D array, optional
             Selects a subset of sites within the MPS unit cell on which the operators act. See docs
             in :class:`~tenpy.models.model.CouplingModel.add_exponentially_decaying_coupling`.
-        op_string : string
-            The operator to be inserted between `A` and `B`; for Fermions this should be ``"JW"``.
 
         """
-        raise NotImplementedError('Not ported yet')
         assert np.isscalar(lambda_) or len(lambda_) == self.L
         if subsites is None:
             subsites = np.arange(self.L)
@@ -1199,15 +1194,14 @@ class ExponentiallyDecayingTerms(Terms):
             assert subsites_start[0] >= 0
             assert subsites_start[-1] < self.L
 
-        self.exp_decaying_terms.append((strength, lambda_, op_i, op_j, subsites, subsites_start, op_string))
+        self.exp_decaying_terms.append((strength, lambda_, coupling_name, subsites, subsites_start))
 
-    def add_centered_exponentially_decaying_term(self, strength, lambda_, op_i, op_j, i, subsites=None, op_string='Id'):
+    def add_centered_exponentially_decaying_term(self, strength, lambda_, coupling_name, i, subsites=None):
         """Add exponentially decaying terms centered around a single site.
 
         See :meth:`~tenpy.models.model.CouplingModel.add_centered_exponentially_decaying_term` for
         details.
         """
-        raise NotImplementedError('Not ported yet')
         assert -self.L <= i < self.L
         if i < 0:
             i = i + self.L
@@ -1222,33 +1216,20 @@ class ExponentiallyDecayingTerms(Terms):
             assert subsites[-1] < self.L
             assert i in subsites
 
-        self.centered_terms.append((strength, lambda_, op_i, op_j, i, subsites, op_string))
+        self.centered_terms.append((strength, lambda_, coupling_name, i, subsites))
 
     def add_to_graph(self, graph: MPOGraph, model: CouplingModel):
-        # TODO this was a param before, but signatures got unified.
-        #      is it ever used? maybe it can be a (class) attr?
-        key = 'exp-decay'
+        if model.symmetry.has_symmetric_braid:
+            overbraid = True  # it doesnt matter
+        else:
+            raise NotImplementedError  # TODO how do we specify??
 
         assert self.L == graph.L
-        # get set of states with `key` to find unique `key_nr` for each of the terms
-        all_states = set()
-        for states in graph.states:
-            for label in states:
-                try:
-                    if label[1] == key:
-                        all_states += label
-                except Exception:  # not a tuple / wrong types
-                    pass
-        key_nr = 1000  # start with high value such that they get added in the end of the MPO
         finite = graph.bc == 'finite'
 
-        for strength, lambda_, op_i, op_j, subsites, subsites_start, op_string in self.exp_decaying_terms:
+        for strength, lambda_, coupling_name, subsites, subsites_start in self.exp_decaying_terms:
             if np.isscalar(lambda_):
                 lambda_ = np.full(self.L, lambda_)
-            while (key_nr, key) in all_states:
-                key_nr += 1
-            label = (key_nr, key)
-            all_states.add(label)
             in_subsites = np.zeros(self.L, dtype=np.bool_)
             in_subsites[subsites] = True
             in_subsites_start = np.zeros(self.L, dtype=np.bool_)
@@ -1257,46 +1238,48 @@ class ExponentiallyDecayingTerms(Terms):
             last_subsite = subsites[-1]
             assert first_subsite >= 0
             assert last_subsite < self.L
-            if not finite:
-                for i in range(self.L):
-                    if in_subsites[i]:
-                        graph.add(i, label, label, op_string, lambda_[i])
-                        graph.add(i, label, 'IdR', op_j, strength)
-                    if in_subsites_start[i]:
-                        graph.add(i, 'IdL', label, op_i, lambda_[i])
-                    if not in_subsites[i]:
-                        graph.add(i, label, label, op_string, 1.0)
-            else:
-                if last_subsite > first_subsite:  # If not, there is no coupling to add.
-                    # If lambda_ is not uniform and subsites_start != subsites, one needs to be very careful.
-                    # Let jj be the index of the first subsite such that subsites > subsites>subsites_start[i].
-                    # The interaction will be pref * lambda[subsites_start[i]] * lambda[jj:jj+r]
-                    # up to desired interaction range r. So the first term is just pref * lambda[subsites_start[i]]
-                    # since we only pick up a lambda on op_i and op_string. When we close a term,
-                    # there is no lambda decay.
 
-                    # first subsite
-                    graph.add(first_subsite, 'IdL', label, op_i, lambda_[first_subsite])
-                    for i in range(first_subsite + 1, last_subsite):
+            for c in model.couplings[coupling_name].elementary_decomposition():
+                W1, W2 = c.factorization
+                fsm_state = W2.get_leg_co_domain('wL')
+                label = graph.get_unused_key('exp_decay')
+                if not finite:
+                    for i in range(self.L):
+                        graph.states[i][label] = fsm_state
                         if in_subsites[i]:
-                            graph.add(i, label, label, op_string, lambda_[i])
-                            graph.add(i, label, 'IdR', op_j, strength)
+                            graph.add_identity(i, label, label, overbraid=overbraid, strength=lambda_[i])
+                            graph.add(i, label, 'IdR', W2, strength)
                         if in_subsites_start[i]:
-                            graph.add(i, 'IdL', label, op_i, lambda_[i])
-                        # If not in subsites, we need to continue on with op_string.
-                        # This is true even if we opened a site.
+                            graph.add(i, 'IdL', label, W1, lambda_[i])
                         if not in_subsites[i]:
-                            graph.add(i, label, label, op_string, 1.0)
-                    graph.add(last_subsite, label, 'IdR', op_j, strength)
+                            graph.add_identity(i, label, label, overbraid=overbraid)
+                else:
+                    if last_subsite > first_subsite:  # If not, there is no coupling to add.
+                        # If lambda_ is not uniform and subsites_start != subsites, one needs to be very careful.
+                        # Let jj be the index of the first subsite such that subsites > subsites>subsites_start[i].
+                        # The interaction will be pref * lambda[subsites_start[i]] * lambda[jj:jj+r]
+                        # up to desired interaction range r. So the first term is just pref * lambda[subsites_start[i]]
+                        # since we only pick up a lambda on wL and Id. When we close a term,
+                        # there is no lambda decay.
 
-        for strength, lambda_, op_i, op_j, i, subsites, op_string in self.centered_terms:
+                        # first subsite
+                        graph.add(first_subsite, 'IdL', label, W1, lambda_[first_subsite])
+                        for i in range(first_subsite + 1, last_subsite):
+                            if in_subsites[i]:
+                                graph.add_identity(i, label, label, overbraid=overbraid, strength=lambda_[i])
+                                graph.add(i, label, 'IdR', W2, strength)
+                            if in_subsites_start[i]:
+                                graph.add(i, 'IdL', label, W1, lambda_[i])
+                            # If not in subsites, we need to continue on with identities.
+                            # This is true even if we opened a site.
+                            if not in_subsites[i]:
+                                graph.add_identity(i, label, label, overbraid=overbraid)
+                        graph.add(last_subsite, label, 'IdR', W2, strength)
+
+        for strength, lambda_, coupling_name, i, subsites in self.centered_terms:
             assert finite
             if np.isscalar(lambda_):
                 lambda_ = np.full(self.L, lambda_)
-            while (key_nr, key) in all_states:
-                key_nr += 1
-            label = (key_nr, key)
-            all_states.add(label)
             in_subsites = np.zeros(self.L, dtype=np.bool_)
             in_subsites[subsites] = True
             first_subsite = subsites[0]
@@ -1305,29 +1288,113 @@ class ExponentiallyDecayingTerms(Terms):
             assert last_subsite < self.L
 
             # terms with j < i
-            if i != first_subsite:  # otherwise there are no j < i
-                graph.add(first_subsite, 'IdL', label, op_j, strength)  # open op_j
-                for j in range(first_subsite + 1, i):
-                    if in_subsites[j]:
-                        graph.add(j, 'IdL', label, op_j, strength)  # open op_j
-                        graph.add(j, label, label, op_string, lambda_[j])  # continue op_j with lambda * op_string
-                    else:
-                        graph.add(j, label, label, op_string, 1.0)
-                graph.add(i, label, 'IdR', op_i, lambda_[i])
+            for _c, pref in model.permute_coupling(coupling_name, [1, 0]).items():
+                if i == first_subsite:
+                    break  # There are no j < i
+                for c in model.couplings[_c].elementary_decomposition():
+                    W1, W2 = c.factorization
+                    label = graph.get_unused_key('exp_decay')
+                    graph.add(first_subsite, 'IdL', label, W1, pref * strength)
+                    for j in range(first_subsite + 1, i):
+                        if in_subsites[j]:
+                            graph.add(j, 'IdL', label, W1, pref * strength)
+                            graph.add_identity(j, label, label, overbraid=overbraid, strength=lambda_[j])
+                        else:
+                            graph.add_identity(j, label, label, overbraid=overbraid)
+                    graph.add(i, label, 'IdR', W2, lambda_[i])
 
             # terms with j > i
-            if i != last_subsite:  # otherwise there are no j > i
-                graph.add(i, 'IdL', label, op_i, lambda_[i])  # open op_i
+            for c in model.couplings[coupling_name].elementary_decomposition():
+                if i == last_subsite:
+                    break  # There are no j > i
+                W1, W2 = c.factorization
+                label = graph.get_unused_key('exp_decay')
+                graph.add(i, 'IdL', label, W1, lambda_[i])  # open wL
                 for j in range(i + 1, last_subsite):
                     if in_subsites[j]:
-                        graph.add(j, label, label, op_string, lambda_[j])  # continue op_i with lambda * op_string
-                        graph.add(j, label, 'IdR', op_j, strength)  # close op_i with op_j
+                        graph.add_identity(
+                            j, label, label, overbraid=overbraid, strength=lambda_[j]
+                        )  # continue wL with lambda * Id
+                        graph.add(j, label, 'IdR', W2, strength)  # close wL with op_j
                     else:
-                        graph.add(j, label, label, op_string, 1.0)  # continue op_i with op_string
-                graph.add(last_subsite, label, 'IdR', op_j, strength)  # close op_i with op_j
+                        graph.add_identity(j, label, label, overbraid=overbraid)
+                graph.add(last_subsite, label, 'IdR', W2, strength)  # close wL with op_j
 
         if graph.max_range is not None:
-            graph.max_range = np.inf
+            graph.max_range = max(graph.max_range, self.max_range())
+
+    def to_CouplingTerms(self, model: CouplingModel, cutoff=0.01, bc='finite'):
+        """Convert to :class:`CouplingTerms`.
+
+        This is intended for testing / debugging. The resulting :class:`CouplingTerms` are
+        much less efficient in an MPOGraph.
+        """
+        ct = CouplingTerms(self.L)
+        for strength, lambda_, op, subsites, subsites_start in self.exp_decaying_terms:
+            if np.isscalar(lambda_):
+                lambda_ = np.full(self.L, lambda_)
+            N1 = len(subsites)
+            if bc == 'finite':
+                for i2, i in enumerate(subsites_start):
+                    # Find index of first term in subsites larger than subsites_start[i2]
+                    i3 = np.where(subsites > i)[0]
+                    if len(i3):  # There is a site we couple to on the right
+                        i3 = i3[0]  # Get index of first subsite > subsites_start[i2]
+                        for d, j in enumerate(subsites[i3:]):
+                            # First decay term is from subsites_start[i2].
+                            # Then we go to subsites[i3]
+                            pref = strength * np.prod(
+                                [lambda_[subsites_start[i2]]] + list(lambda_[subsites[i3 : i3 + d]])
+                            )
+                            if abs(pref) < cutoff:
+                                break
+                            ct.add_coupling_term(pref, i, j, op)
+            elif bc == 'infinite':
+                for i2, i in enumerate(subsites_start):
+                    # Get index of first subsite to the right of the start, inside the MPS unit cell
+                    i3 = np.where(subsites > i)[0]
+                    if len(i3) == 0:  # No subsites in the first unit MPS cell are to the right of i
+                        i3 = N1  # Shift one unit cell over
+                    else:
+                        i3 = i3[0]
+                    for d in range(0, 1000):  # run over subsites INDICES
+                        j2 = i3 + d
+                        j = subsites[j2 % N1] + (j2 // N1) * self.L
+                        # See finite case for reasoning about decay constants
+                        pref = strength * np.prod(
+                            [lambda_[subsites_start[i2]]] + list(lambda_[subsites[np.arange(i3, j2) % N1]])
+                        )
+                        if abs(pref) < cutoff:
+                            break
+                        ct.add_coupling_term(pref, i, j, op)
+                    else:
+                        raise ValueError('distance of 1000 not enough to reach precision cutoff')
+
+            else:
+                raise ValueError('unknown boundary conditions: ' + repr(bc))
+
+        for strength, lambda_, op, i, subsites in self.centered_terms:
+            if np.isscalar(lambda_):
+                lambda_ = np.full(self.L, lambda_)
+            assert bc == 'finite'
+            for j in subsites:
+                if j == i:
+                    continue
+                if j < i:
+                    prefactor_sites = subsites[(subsites > j) & (subsites <= i)]
+                    pref = strength * np.prod(lambda_[prefactor_sites])
+                    if abs(pref) < cutoff:
+                        continue
+                    for c, a in model.permute_coupling(op, [1, 0]).items():
+                        ct.add_coupling_term(a * pref, j, i, c)
+                else:
+                    prefactor_sites = subsites[(subsites >= i) & (subsites < j)]
+                    pref = strength * np.prod(lambda_[prefactor_sites])
+                    if abs(pref) < cutoff:
+                        continue
+                    ct.add_coupling_term(pref, i, j, op)
+
+        return ct
 
     def to_TermList(self, cutoff=0.01, bc='finite'):
         """Convert self into a :class:`TermList`.
@@ -1346,6 +1413,9 @@ class ExponentiallyDecayingTerms(Terms):
             For "infinite" `bc`, only terms starting in the first MPS unit cell are included.
 
         """
+        # TODO probably this is not needed, can always use to_CouplingTerms instead i think
+        # and CouplingTerms.__iter__ is essentially the same data as the resulting TermList was in v1
+        raise NotImplementedError  # TODO adapt TermList first
         terms = []
         strengths = []
         L = self.L
@@ -1427,33 +1497,34 @@ class ExponentiallyDecayingTerms(Terms):
         raise NotImplementedError
 
     def max_range(self):
+        if self.is_empty:
+            return 0
         return np.inf
 
     def test_terms(self, sites: list[lasy.Site], model: CouplingModel):
         """Check the format of self.exp_decaying_terms."""
-        for term in self.exp_decaying_terms:
-            strength, lambda_, op_i, op_j, subsites, subsites_start, op_string = term
+        for _, _, coupling_name, subsites, subsites_start in self.exp_decaying_terms:
             for i in subsites_start:
-                if not sites[i].valid_opname(op_i):
-                    raise ValueError(f'Operator {op_i!r} not in site {i:d}')
+                for j in subsites:
+                    model.test_coupling(coupling_name, [i, j])
 
-            for j in subsites:
-                if not sites[j].valid_opname(op_j):
-                    raise ValueError(f'Operator {op_j!r} not in site {j:d}')
-
-        for strength, lambda_, op_i, op_j, i, subsites, op_string in self.centered_terms:
-            if not sites[i].valid_opname(op_i):
-                raise ValueError(f'Operator {op_i=} not in site {i}')
+        for _, _, coupling_name, i, subsites in self.centered_terms:
             for j in subsites:
                 if j == i:
                     continue
-                if not sites[j].valid_opname(op_j):
-                    raise ValueError(f'Operator {op_j=} not in site {j}')
-                if not sites[j].valid_opname(op_string):
-                    raise ValueError(f'Operator {op_string=} not in site {j}')
-        # done
+                model.test_coupling(coupling_name, [i, j])
+        return
 
     def remove_zeros(self, tol_zero=1e-15, inplace=True):
-        if len(self.exp_decaying_terms) + len(self.centered_terms) > 0:
-            raise NotImplementedError
+        if not inplace:
+            return deepcopy(self).remove_zeros(tol_zero)
+        # going backwards so popping does not change the indices we have not checked yet
+        for i in reversed(range(len(self.exp_decaying_terms))):
+            strength, *_ = self.exp_decaying_terms[i]
+            if abs(strength) < tol_zero:
+                self.exp_decaying_terms.pop(i)
+        for i in reversed(range(len(self.centered_terms))):
+            strength, *_ = self.centered_terms[i]
+            if abs(strength) < tol_zero:
+                self.centered_terms.pop(i)
         return self
