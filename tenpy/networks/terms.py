@@ -102,6 +102,20 @@ class Terms(Hdf5Exportable, metaclass=ABCMeta):
         """
         ...
 
+    @abstractmethod
+    def is_equal(self, other: Terms, rtol: float = 1e-5, atol: float = 1e-8) -> bool:
+        """Check if two representations of terms are equal (up to tolerance).
+
+        We check exact equality of operator names and sites acted on, and compare the strength prefactor
+        up to tolerance, in the sense of ``abs(a - b) <= atol + rtol * abs(b)``
+        """
+        ...
+
+    def __eq__(self, other):
+        if type(self) is not type(other):
+            return NotImplemented
+        return self.is_equal(other, rtol=0, atol=1e-16)
+
 
 class TermList(Hdf5Exportable):
     r"""A list of terms (=operator names and sites they act on) and associated strengths.
@@ -576,6 +590,19 @@ class OnsiteTerms(Terms):
                 self_t[key] = self_t.get(key, 0.0) + value
         return self
 
+    def is_equal(self, other: OnsiteTerms, rtol: float = 1e-5, atol: float = 1e-8) -> bool:
+        if not isinstance(other, OnsiteTerms):
+            raise TypeError('Can only compare to other OnsiteTerms')
+        if self.L != other.L:
+            raise ValueError('Incompatible L')
+        for self_i, other_i in zip(self.onsite_terms, other.onsite_terms):
+            for op in itertools.chain(self_i, other_i):
+                strength_self = self_i.get(op, 0)
+                strength_other = other_i.get(op, 0)
+                if abs(strength_self - strength_other) > atol + rtol * abs(strength_other):
+                    return False
+        return True
+
     def test_terms(self, sites: list[lasy.Site], model: CouplingModel):
         """Check that all given operators exist in the `sites`."""
         for site, terms in zip(sites, self.onsite_terms):
@@ -842,6 +869,25 @@ class CouplingTerms(Terms):
                     self_i_n[j] = self_i_n.get(j, 0.0) + other_strength
         return self
 
+    def is_equal(self, other: CouplingTerms, rtol: float = 1e-5, atol: float = 1e-8) -> bool:
+        if not isinstance(other, CouplingTerms):
+            raise TypeError('Can only compare to other CouplingTerms')
+        if self.L != other.L:
+            raise ValueError('Incompatible L')
+
+        for i in itertools.chain(self.coupling_terms, other.coupling_terms):
+            self_i = self.coupling_terms.get(i, {})
+            other_i = other.coupling_terms.get(i, {})
+            for op in itertools.chain(self_i, other_i):
+                self_i_op = self_i.get(op, {})
+                other_i_op = other_i.get(op, {})
+                for j in itertools.chain(self_i_op, other_i_op):
+                    strength_self = self_i_op.get(j, 0)
+                    strength_other = other_i_op.get(j, 0)
+                    if abs(strength_self - strength_other) > atol + rtol * abs(strength_other):
+                        return False
+        return True
+
     def test_terms(self, sites: list[lasy.Site], model: CouplingModel):
         L = self.L
         for i, name, j, _ in self:
@@ -963,6 +1009,13 @@ class MultiCouplingTerms(Terms):
                 for ijkl, strength in _iter_dicts_recursive([i], self_i_n):
                     yield ijkl, n, strength
 
+    def is_equal(self, other: CouplingTerms, rtol: float = 1e-5, atol: float = 1e-8) -> bool:
+        if not isinstance(other, CouplingTerms):
+            raise TypeError('Can only compare to other CouplingTerms')
+        if self.L != other.L:
+            raise ValueError('Incompatible L')
+        return _compare_dicts_recursive(self.coupling_terms, other.coupling_terms, rtol=rtol, atol=atol)
+
     def test_terms(self, sites: list[lasy.Site], model: CouplingModel):
         L = self.L
         for ijkl, name, strength in self:
@@ -1008,6 +1061,33 @@ def _iter_dicts_recursive(keys: list[int], dict_or_val: dict[int, complex] | com
             yield from _iter_dicts_recursive([*keys, key], val)
     else:
         yield keys, dict_or_val
+
+
+def _compare_dicts_recursive(d1, d2, rtol: float, atol: float) -> bool:
+    """Recursion for :meth:`MultiCouplingTerms.is_equal`."""
+    # deal with None values. During recursion, None stands for "other does not have this entry"
+    if d1 is None and d2 is None:
+        raise ValueError('Cant both be None')
+    elif d1 is None:
+        if isinstance(d2, dict):
+            d1 = {}
+        else:
+            d1 = 0
+    elif d2 is None:
+        if isinstance(d1, dict):
+            d2 = {}
+        else:
+            d2 = 0
+
+    if isinstance(d1, dict) and isinstance(d2, dict):
+        for key in itertools.chain(d1, d2):
+            if not _compare_dicts_recursive(d1.get(key, None), d2.get(key, None), rtol=rtol, atol=atol):
+                return False
+        return True
+    elif isinstance(d1, dict) or isinstance(d2, dict):
+        return False
+    else:
+        return abs(d1 - d2) <= atol + rtol * abs(d2)
 
 
 class ExponentiallyDecayingTerms(Terms):
@@ -1342,6 +1422,9 @@ class ExponentiallyDecayingTerms(Terms):
         self.exp_decaying_terms += other.exp_decaying_terms
         self.centered_terms += other.centered_terms
         return self
+
+    def is_equal(self, other, rtol=1e-5, atol=1e-8):
+        raise NotImplementedError
 
     def max_range(self):
         return np.inf
