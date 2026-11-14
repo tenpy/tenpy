@@ -72,4 +72,4 @@ jobs:
 
     - name: Run pytest
       working-directory: tests
-      run: pytest
+      run: pytest --durations=0
