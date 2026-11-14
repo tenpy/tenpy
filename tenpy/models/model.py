@@ -139,7 +139,7 @@ class HamiltonianModel(EvolutionModel, metaclass=ABCMeta):
 
         Returns
         -------
-        H_bond: list of :class:`lasyten.Tensor`
+        H_bond: list of {:class:`lasyten.Tensor` | None}
             The two-site bond terms such that ``H = sum_i H_bond[i]``.
             ``H_bond[i]`` acts in sites ``(i - 1, i)``.
             For finite systems, we have ``H_bond[0] = None``.
@@ -403,10 +403,7 @@ class CouplingModel(HamiltonianModel):
             ot.add_to_nn_bond_tensors(H_bond, sites, finite=self.finite)
             for t in others:
                 assert t.max_range() == 0
-            self._H_bond = [
-                None if h is None else lasy.Coupling.from_tensor(h, [sites[(j - 1) % len(sites)], sites[j]])
-                for j, h in enumerate(H_bond)
-            ]
+            self._H_bond = H_bond
         return self._H_bond
 
     def add_onsite_operator(
