@@ -604,7 +604,7 @@ class CouplingModel(HamiltonianModel):
             return self.coupling_terms.add_coupling_term(pref, i, j, coupling_name)
 
         for c, a in self.permute_coupling(coupling_name, [1, 0]).items():
-            return self.coupling_terms.add_coupling_term(a * pref, j, i, c)
+            self.coupling_terms.add_coupling_term(a * pref, j, i, c)
         return
 
     def add_multi_site_coupling(

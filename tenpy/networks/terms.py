@@ -596,7 +596,7 @@ class CouplingTerms(Terms):
     ----------
     L : int
         Number of sites.
-    coupling_terms : {int: {}}
+    coupling_terms : {int: {str: {int: scalar}}}
         Filled by :meth:`add_coupling_term`.
         Nested dictionaries such that ``coupling_terms[i][coupling_name][j] = strength`` describes
         a coupling with a string name ``coupling_name`` acting on sites ``i < j``.
@@ -897,7 +897,7 @@ class MultiCouplingTerms(Terms):
         ijkl : 1D array-like of int
             The MPS indices of the sites on which the operator acts.
             We require the first site within the unit cell ``0 <= ijkl[0] < L``, and that
-            sites are sorted ``ijkl[1:] > ijkl[:-1]`` and ``i < j``, i.e., `op_i` acts "left" of `op_j`.
+            sites are sorted ``ijkl[1:] > ijkl[:-1]``.
             For infinite bc, ``any(ijkl[1:] >= L)`` is allowed and indicates couplings between different
             unit cells.
         coupling_name : str
