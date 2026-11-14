@@ -237,8 +237,6 @@ class ExactDiag:
         """
         model = self._require_model()
         H_bond = model.get_H_bond()
-        assert all(h is None or isinstance(h, lasy.Coupling) for h in H_bond)
-        H_bond = [None if h is None else h.to_tensor() for h in H_bond]
 
         if self._exceeds_max_size():
             return

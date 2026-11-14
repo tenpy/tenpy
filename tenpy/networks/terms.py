@@ -487,7 +487,7 @@ class OnsiteTerms(Terms):
 
     def add_to_nn_bond_tensors(
         self,
-        H_bond: list[lasy.SymmetricTensor],
+        H_bond: list[lasy.SymmetricTensor | None],
         sites: list[lasy.Site],
         finite: bool,
         distribute: tuple[float, float] = (0.5, 0.5),
@@ -755,7 +755,7 @@ class CouplingTerms(Terms):
                 for j, strength in terms_i_n.items():
                     yield i, coupling_name, j, strength
 
-    def to_nn_bond_tensors(self, sites: list[lasy.Site], model: CouplingModel) -> list[lasy.SymmetricTensor]:
+    def to_nn_bond_tensors(self, sites: list[lasy.Site], model: CouplingModel) -> list[lasy.SymmetricTensor | None]:
         """Convert the :attr:`coupling_terms` into tensors on nearest neighbor bonds.
 
         Parameters
