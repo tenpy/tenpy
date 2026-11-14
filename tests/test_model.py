@@ -254,7 +254,7 @@ def test_CouplingModel_explicit():
     W1_new = H_mpo.get_W(1)
 
     w_triv = lasy.ElementarySpace.from_trivial_sector(symmetry=M.symmetry)
-    w_odd = lasy.ElementarySpace(M.symmetry, M.symmetry.factors[0].odd)
+    w_odd = lasy.ElementarySpace(M.symmetry, M.symmetry.get_sector('odd'))
     Id_0 = s.get_onsite_W_block('Id', w=w_triv)
     Id_1 = s.get_onsite_W_block('Id', w=w_odd)
     N_block = s.get_onsite_W_block('N', w=w_triv)
@@ -385,7 +385,7 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc):
     W1_new = H_mpo.get_W(1)
 
     w_triv = lasy.ElementarySpace.from_trivial_sector(symmetry=M.symmetry)
-    w_odd = lasy.ElementarySpace(M.symmetry, M.symmetry.factors[0].odd)
+    w_odd = lasy.ElementarySpace(M.symmetry, M.symmetry.get_sector('odd'))
     Id_0 = s.get_onsite_W_block('Id', w=w_triv)
     Id_1 = s.get_onsite_W_block('Id', w=w_odd)
     N_0 = s.get_onsite_W_block('N', w=w_triv)

@@ -139,7 +139,7 @@ def test_aklt_state():
     # <S_i . S_{i+1}> = -4/3 and correlation length xi = 1 / ln(3), from the spin-1 sector of the transfer matrix
     xi, charge = psi.correlation_length(charge_sector=None, return_charges=True)
     npt.assert_allclose(xi, 1 / np.log(3), atol=1e-12)
-    spin_one = lasy.Sector([2, 0])  # TODO: use named sectors once https://github.com/tenpy/lasyten/issues/314 is done
+    spin_one = psi.symmetry.get_sector('[2 0]')
     assert charge == spin_one
     xis, charges = psi.correlation_length(target=2, charge_sector=None, return_charges=True)
     npt.assert_allclose(xis, [1 / np.log(3)], atol=1e-12)  # only a single sector with a second eigenvalue
