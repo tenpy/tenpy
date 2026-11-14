@@ -36,7 +36,6 @@ def check_model_sanity(M, hermitian=True):
             for H in H_bond:
                 if H is None:
                     continue
-                H = H.to_tensor()
                 assert almost_equal(H, H.hc)
 
 
@@ -136,17 +135,17 @@ def test_CouplingModel_basic(bc, bc_MPS, tensor_backend, conserve):
         # error is expected behavior
     else:
         H_bond = M.get_H_bond()
-
         H_bond_from_MPO = model.calc_H_bond_from_MPO(H_MPO)
+
         for h1, h2 in zip(H_bond, H_bond_from_MPO):
             if h1 is None and h2 is None:
                 pass
             elif h1 is None:
                 assert lasy.norm(h2) < 1e-14
             elif h2 is None:
-                assert lasy.norm(h1.to_tensor()) < 1e-14
+                assert lasy.norm(h1) < 1e-14
             else:
-                assert lasy.almost_equal(h1.to_tensor(), h2)
+                assert lasy.almost_equal(h1, h2)
 
 
 def test_ext_flux():

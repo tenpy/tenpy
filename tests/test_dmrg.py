@@ -231,7 +231,7 @@ def test_dmrg_vs_exact(bc_MPS, combine, mixer, n, g=1.2):
         assert abs((Edmrg - Eexact) / Eexact) < 1.0e-10
 
         # Compare the energy via H_bond
-        bond_energies = [psi.expectation_value(H, i) for i, H in enumerate(M.get_H_bond())]
+        bond_energies = [psi.expectation_value_tensor(H, [i, i + 1]) for i, H in enumerate(M.get_H_bond())]
         Edmrg2 = np.mean(bond_energies)
         assert abs((Edmrg - Edmrg2) / Edmrg2) < max(1.0e-10, np.max(psi.norm_test()))
 
