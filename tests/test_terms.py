@@ -245,17 +245,15 @@ def test_coupling_terms_handle_JW():
 
 
 def test_exp_decaying_terms():
-    pytest.skip('exp decaying terms not adapted, and neither this test')
-    ## subsites == subsites_start
+    ## subsites == subsites_start  # FIXME clean up headers
     # check finite version
     L = 8
-    spin = site.Site(spin_half.leg)
-    spin.add_op('X', 2.0 * np.eye(2))
-    spin.add_op('Y', 3.0 * np.eye(2))
+    spin = lasy.sites.SpinSite()
     sites = [spin] * L
     edt = ExponentiallyDecayingTerms(L)
     p, l = 3.0, 0.5
-    edt.add_exponentially_decaying_coupling(p, l, 'X', 'Y', subsites=[0, 2, 4, 6])
+    edt.add_exponentially_decaying_coupling(p, l, 'Sp.Sm', subsites=[0, 2, 4, 6])
+    # FIXME stopped redesign here
     edt._test_terms(sites)
     ts = edt.to_TermList(bc='finite', cutoff=0.01)
     ts_desired = [

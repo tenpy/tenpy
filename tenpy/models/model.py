@@ -607,7 +607,7 @@ class CouplingModel(HamiltonianModel):
             return self.coupling_terms.add_coupling_term(pref, i, j, coupling_name)
 
         for c, a in self.permute_coupling(coupling_name, [1, 0]).items():
-            return self.coupling_terms.add_coupling_term(a * pref, j, i, c)
+            self.coupling_terms.add_coupling_term(a * pref, j, i, c)
         return
 
     def add_multi_site_coupling(
@@ -826,8 +826,25 @@ class CouplingModel(HamiltonianModel):
             Similar terms, but with fixed :math:`i` instead over summing over :math:`i`.
 
         """
-        self.invalidate_caches()  # TODO possibly move this elsewhere?
-        raise NotImplementedError('exp_decaying not ported')  # TODO skipped for now
+        self.invalidate_caches()
+
+        if self.explicit_plus_hc:
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
+
+        # If subsites_start is not set, we use the same set to begin and end exponentially decaying terms
+        if subsites_start is None:
+            subsites_start = subsites
+
+        self.exp_decaying_terms.add_exponentially_decaying_coupling(
+            strength, lambda_, coupling_name, subsites, subsites_start
+        )
+        if plus_hc:
+            self.exp_decaying_terms.add_exponentially_decaying_coupling(
+                np.conj(strength), np.conj(lambda_), self.coupling_hc_map[coupling_name], subsites, subsites_start
+            )
 
     def add_exponentially_decaying_centered_terms(
         self,
@@ -893,8 +910,28 @@ class CouplingModel(HamiltonianModel):
             Similar couplings, including a sum over :math:`i`.
 
         """
-        self.invalidate_caches()  # TODO possibly move this elsewhere?
-        raise NotImplementedError('exp_decaying not ported')  # TODO skipped for now
+        self.invalidate_caches()
+
+        if self.explicit_plus_hc:
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
+
+        if self.lat.bc_MPS != 'finite':
+            raise ValueError('Single exponentially decaying term requires a finite system.')
+
+        L = self.lat.N_sites
+        if not -L <= i < L:
+            raise ValueError(f'Site index {i=} out of bounds for length {L}')
+        if i < 0:
+            i = i + L
+
+        self.exp_decaying_terms.add_centered_exponentially_decaying_term(strength, lambda_, coupling_name, i, subsites)
+        if plus_hc:
+            self.exp_decaying_terms.add_centered_exponentially_decaying_term(
+                np.conj(strength), np.conj(lambda_), self.coupling_hc_map[coupling_name], i, subsites
+            )
 
     def coupling_strength_add_ext_flux(self, strength, dx, phase):
         """Add an external flux to the coupling strength.
