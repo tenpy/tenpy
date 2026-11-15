@@ -260,8 +260,12 @@ def test_CouplingModel_explicit():
     # The model defines the coupling 'C.Cd' as the `dagger` of 'Cd.C'. The factorization of `dagger` agrees with the
     # natural factorization ``hopping([s, s], t_left=0).factorization`` only up to a gauge on the virtual leg
     # (signs on the odd sector, from the isomorphism that flips the duality of the virtual leg), so we do not
-    # compare against the latter.
+    # compare the *cells* against the latter (the operators are compared below).
     C_L, Cd_R = lasy.models.hopping([s, s], t_right=0).dagger().factorization
+    # independent check, the factorization above is gauge dependent but the operator is not
+    assert lasy.almost_equal(
+        lasy.models.hopping([s, s], t_right=0).dagger().to_tensor(), lasy.models.hopping([s, s], t_left=0).to_tensor()
+    )
     N_L, N_R = lasy.models.density_density_interaction([s, s]).factorization
 
     print()
@@ -396,6 +400,10 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc):
     Cd_L, C_R = lasy.models.hopping([s, s], t_right=0).factorization
     # 'C.Cd' is the `dagger` of 'Cd.C', see test_CouplingModel_explicit regarding the gauge
     C_L, Cd_R = lasy.models.hopping([s, s], t_right=0).dagger().factorization
+    # independent check, the factorization above is gauge dependent but the operator is not
+    assert lasy.almost_equal(
+        lasy.models.hopping([s, s], t_right=0).dagger().to_tensor(), lasy.models.hopping([s, s], t_left=0).to_tensor()
+    )
 
     print()
     print(H_mpo.show_W_grid(0))
