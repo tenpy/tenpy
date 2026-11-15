@@ -10,6 +10,7 @@ prefactor when specifying e.g. a Hamiltonian.
 import itertools
 import warnings
 from abc import ABCMeta, abstractmethod
+from collections.abc import Iterator
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
@@ -115,6 +116,11 @@ class Terms(Hdf5Exportable, metaclass=ABCMeta):
         if type(self) is not type(other):
             return NotImplemented
         return self.is_equal(other, rtol=0, atol=1e-16)
+
+    @abstractmethod
+    def __iter__(self) -> Iterator[tuple[float | complex, list[int], str]]:
+        # strength, ijkl, coupling_name
+        ...
 
 
 class TermList(Hdf5Exportable):
@@ -453,11 +459,11 @@ class OnsiteTerms(Terms):
     def __iter__(self):
         for i, terms in enumerate(self.onsite_terms):
             for opname, strength in terms.items():
-                yield i, opname, strength
+                yield strength, [i], opname
 
     def add_to_graph(self, graph: MPOGraph, model: CouplingModel):
         assert self.L == graph.L
-        for i, opname, strength in self:
+        for strength, (i,), opname in self:
             # note: over/under does not matter since the virtual leg is trivial
             graph.add_onsite(i, 'IdL', 'IdR', opname, strength, overbraid=True, exist_ok=True)
         if graph.max_range is not None:
@@ -768,7 +774,7 @@ class CouplingTerms(Terms):
     def add_to_graph(self, graph: MPOGraph, model: CouplingModel):
         assert self.L == graph.L
         # structure of coupling terms:
-        for i, coupling_name, j, strength in self:
+        for strength, (i, j), coupling_name in self:
             elementary_couplings = model.couplings[coupling_name].elementary_decomposition()
             for n, c in enumerate(elementary_couplings):
                 label = f'{coupling_name}#{n}#{int(i)}_{int(j)}'  # some (probably) unique label
@@ -780,7 +786,7 @@ class CouplingTerms(Terms):
         for i, terms_i in self.coupling_terms.items():
             for coupling_name, terms_i_n in terms_i.items():
                 for j, strength in terms_i_n.items():
-                    yield i, coupling_name, j, strength
+                    yield strength, [i, j], coupling_name
 
     def to_nn_bond_tensors(self, sites: list[lasy.Site], model: CouplingModel) -> list[lasy.SymmetricTensor | None]:
         """Convert the :attr:`coupling_terms` into tensors on nearest neighbor bonds.
@@ -805,7 +811,7 @@ class CouplingTerms(Terms):
         if len(sites) != L:
             raise ValueError('incompatible length')
         H_bond = [None] * L
-        for i, coupling_name, j, strength in self:
+        for strength, (i, j), coupling_name in self:
             if j != i + 1:
                 raise ValueError('not nearest neighbor')
             if not sites[i].symmetry.trivial_shift:
@@ -890,7 +896,7 @@ class CouplingTerms(Terms):
 
     def test_terms(self, sites: list[lasy.Site], model: CouplingModel):
         L = self.L
-        for i, name, j, _ in self:
+        for _, (i, j), name in self:
             assert 0 <= i < L
             if not i < j:
                 raise ValueError('wrong order of indices in coupling terms')
@@ -970,7 +976,7 @@ class MultiCouplingTerms(Terms):
         self.add_multi_coupling_term(strength, [i, j], coupling_name)
 
     def add_to_graph(self, graph: MPOGraph, model: CouplingModel):
-        for ijkl, name, strength in self:
+        for strength, ijkl, name in self:
             elementary_couplings = model.couplings[name].elementary_decomposition()
             for n, c in enumerate(elementary_couplings):
                 label = f'{name}#{n}#{"_".join(map(str, ijkl))}'  # some (probably) unique label
@@ -1007,7 +1013,7 @@ class MultiCouplingTerms(Terms):
         for i, self_i in self.coupling_terms.items():
             for n, self_i_n in self_i.items():
                 for ijkl, strength in _iter_dicts_recursive([i], self_i_n):
-                    yield ijkl, n, strength
+                    yield strength, ijkl, n
 
     def is_equal(self, other: CouplingTerms, rtol: float = 1e-5, atol: float = 1e-8) -> bool:
         if not isinstance(other, CouplingTerms):
@@ -1018,7 +1024,7 @@ class MultiCouplingTerms(Terms):
 
     def test_terms(self, sites: list[lasy.Site], model: CouplingModel):
         L = self.L
-        for ijkl, name, strength in self:
+        for strength, ijkl, name in self:
             assert 0 <= ijkl[0] < L
             assert all(i < j for i, j in zip(ijkl, ijkl[1:]))
             model.test_coupling(name, ijkl)
@@ -1528,3 +1534,7 @@ class ExponentiallyDecayingTerms(Terms):
             if abs(strength) < tol_zero:
                 self.centered_terms.pop(i)
         return self
+
+    def __iter__(self):
+        msg = 'Can not iterate exponentially decaying terms (infinitely many terms). Use to_CouplingTerms?'
+        raise ValueError(msg)
