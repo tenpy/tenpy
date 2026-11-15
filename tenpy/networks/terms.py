@@ -1599,7 +1599,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
                 graph.add(last_subsite, label, 'IdR', op_j, strength)  # close op_i with op_j
 
         if graph.max_range is not None:
-            graph.max_range = np.inf
+            graph.max_range = max(graph.max_range, self.max_range())
 
     def to_TermList(self, cutoff=0.01, bc='finite'):
         """Convert self into a :class:`TermList`.
@@ -1700,6 +1700,8 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
 
         In this case ``np.inf``.
         """
+        if self.is_empty:
+            return 0
         return np.inf
 
     def _test_terms(self, sites):

@@ -1,0 +1,8 @@
+- Fixed a bug in models, where the :attr:`tenpy.MPO.max_range` of the generated Hamiltonian MPO
+  did not take the exponentially decaying terms into account (which should lead to an infinite
+  max range, if they are non-empty).
+  This does *not* affect DMRG or other algorithms using these models.
+  Before the fix, this affects the :meth:`tenpy.MPO.expectation_value` of these specific MPOs,
+  built from a model with exponentially decaying couplings. There, it may have caused the
+  :meth:`tenpy.MPO.expectation_value` to evaluate using the power method rather than the transfer
+  matrix method, which would have been more accurate for infinite range MPOs.

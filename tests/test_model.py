@@ -831,3 +831,13 @@ def test_fixes_511(L=6, t=1.234, tp=2.54):
     H_full = get_numpy_Hamiltonian(m_full)
 
     assert np.allclose(H_full, H_NN + H_NNN)
+
+
+def test_calc_H_MPO_max_range():
+    lat = lattice.Chain(L=2, site=spin_half_site, bc='periodic', bc_MPS='infinite')
+    M = model.CouplingModel(lat)
+    M.add_coupling(1.2, 0, 'Sp', 0, 'Sm', dx=7)
+    assert M.calc_H_MPO().max_range == 7
+
+    M.add_exponentially_decaying_coupling(42, 0.5, 'Sz', 'Sz')
+    assert M.calc_H_MPO().max_range == float('inf')
