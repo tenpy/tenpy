@@ -1852,7 +1852,6 @@ class CouplingModel(Model):
             (ot, ct, edt), self.lat.mps_sites(), self.lat.bc_MPS, unit_cell_width=self.lat.mps_unit_cell_width
         )
         H_MPO = H_MPO_graph.build_MPO()
-        H_MPO.max_range = ct.max_range()
         H_MPO.explicit_plus_hc = self.explicit_plus_hc
         return H_MPO
 
