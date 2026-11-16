@@ -3421,6 +3421,7 @@ class MPS(BaseMPSExpectationValue):
             # TODO is it necessary to cast to np array here? Or do we have the necessary methods in the block_backends?
             # TODO here we use `not isinstance(B, np.ndarray)`, should be converted to `isinstance(B, lasy.Block)`?
             if not isinstance(B, np.ndarray):
+                # Owning copy with dtype conversion (to_ndarray is a zero-copy view).
                 B = backend.block_backend.to_numpy(B, lasy.Dtype.to_numpy_dtype(B.dtype))
             new_charges = []
             for i in range(B.shape[2]):
@@ -3546,7 +3547,7 @@ class MPS(BaseMPSExpectationValue):
         Bs = []
         for i, B in enumerate(Bflat):
             if isinstance(B, np.ndarray):
-                B = backend.block_backend.block_from_numpy(B, dtype=dtype, device=device)
+                B = backend.block_backend.block_from_ndarray(B, dtype=dtype, device=device)
             # convert to vL, p, vR
             # we allow the user to specify all 4 legs in case for a nontrivial total charge (iMPS)
             B_shape = backend.block_backend.get_shape(B)
@@ -3595,7 +3596,7 @@ class MPS(BaseMPSExpectationValue):
                 if isinstance(S, np.ndarray):
                     if S.ndim == 1:
                         S = np.diag(S)
-                    S = backend.block_backend.block_from_numpy(S, dtype=dtype.to_real, device=device)
+                    S = backend.block_backend.block_from_ndarray(S, dtype=dtype.to_real, device=device)
                 new_SVs.append(
                     lasy.DiagonalTensor.from_dense_block(
                         S, virtual_spaces[i % n_bonds], backend, ['vL', 'vR'], dtype=dtype.to_real, device=device
@@ -4533,7 +4534,7 @@ class MPS(BaseMPSExpectationValue):
         assert 0 < shift < self.L
         if _different_total_charges(self, psi):
             # the hidden total charge legs would not be contracted
-            zero = self.backend.block_backend.block_from_numpy(
+            zero = self.backend.block_backend.block_from_ndarray(
                 np.asarray(0.0), dtype=lasy.Dtype.common(self.dtype, psi.dtype), device=self.device
             )
             return lasy.block_backends.Scalar(zero)
@@ -5749,7 +5750,7 @@ class MPS(BaseMPSExpectationValue):
                     other.gauge_total_charge()
                     bra = self._gauged()
                     if _different_total_charges(bra, other):
-                        zero = self.backend.block_backend.block_from_numpy(
+                        zero = self.backend.block_backend.block_from_ndarray(
                             np.asarray(0.0), dtype=lasy.Dtype.common(self.dtype, other.dtype), device=self.device
                         )
                         return lasy.block_backends.Scalar(zero)
