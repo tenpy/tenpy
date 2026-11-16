@@ -2842,7 +2842,7 @@ class MPOCompact(MPOBuilder):
         return W
 
     def _calc_A(self, n, PLl, PLr):
-        # TODO: Change the innermost iterator, there should technically be only one 
+        # TODO: Change the innermost iterator, there should technically be only one
         # operator per site, though I am unsure how exactly that would work out.
         p_dim, q_dim = len(PLl), len(PLr)
         # A = np.zeros([p_dim, q_dim])
