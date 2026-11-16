@@ -2641,7 +2641,7 @@ class MPOCompact(MPOBuilder):
         self._pauli_strings = set()
         self._opstr_to_ops: dict[str, lasy.Tensor] = {}
         self._coeff_V_map = {}
-        self._opstr_per_site = [set()] * self.L  # <-- List of lists, one list per site
+        self._opstr_per_site = [set() for _ in range(self.L)]
         self._op_basis = set()
 
     @classmethod
@@ -2655,7 +2655,9 @@ class MPOCompact(MPOBuilder):
         sites = model.lattice.mps_sites()
         res = cls(sites, bc, 0, unit_cell_width=unit_cell_width)
         for term in terms:
-            if isinstance(term, OnsiteTerms):
+            if term.is_empty:
+                continue
+            elif isinstance(term, OnsiteTerms):
                 for i, opname, strength in term:
                     res.add_onsite(opname, i, strength)
             elif isinstance(term, CouplingTerms):
@@ -2663,7 +2665,7 @@ class MPOCompact(MPOBuilder):
                     res.add_coupling(model.couplings[name], [i, j], strength)
             elif isinstance(term, MultiCouplingTerms):
                 for ijkl, name, strength in term:
-                    res.add_multicoupling(model.couplings[name], list(ijkl), strength)
+                    res.add_multi_coupling(model.couplings[name], list(ijkl), strength)
             else:
                 raise NotImplementedError(type(term))
         return res
@@ -2724,10 +2726,11 @@ class MPOCompact(MPOBuilder):
         coupling_degree = int(len(coupling.factorization))
         for i, (pos, op) in enumerate(zip(positions, coupling.factorization)):
             opstr = (
-                coupling.name + str(i) + '/' + coupling_degree
+                coupling.name + str(i) + '/' + str(coupling_degree)
             )  # <--- TODO: Might be overkill... Temp. fix for possible ambiguity
             self._opstr_to_ops[opstr] = op
-            pauli_string = pauli_string.add((pos, opstr))
+            pauli_string = pauli_string + [(pos, opstr)]  # TODO: Make PauliString API more consistent.
+            # Old Code: pauli_string = pauli_string.add((pos, opstr))
             self._opstr_per_site[pos].add(opstr)
             self._op_basis.add(opstr)
 
@@ -2821,8 +2824,8 @@ class MPOCompact(MPOBuilder):
         grid = [[IdL, c, d], [None, A, b], [None, None, IdR]]
 
         # TODO: Only use wR, discard wL entirely.
-        _, PLl_wR = self.string_as_SumSpace(PLl)
-        _, PLr_wR = self.string_as_SumSpace(PLr)
+        _, PLl_wR = self.strings_as_SumSpace(PLl)
+        _, PLr_wR = self.strings_as_SumSpace(PLr)
 
         if not any(isinstance(x, lasy.Tensor) for y in grid for x in y):
             return None
@@ -2845,16 +2848,25 @@ class MPOCompact(MPOBuilder):
         # TODO: Change the innermost iterator, there should technically be only one
         # operator per site, though I am unsure how exactly that would work out.
         p_dim, q_dim = len(PLl), len(PLr)
-        # A = np.zeros([p_dim, q_dim])
-        A = [[None] * p_dim] * q_dim
+        row_spaces = list(self.strings_as_SumSpace(PLl)[1].spaces) if PLl else []
+        col_spaces = list(self.strings_as_SumSpace(PLr)[1].spaces) if PLr else []
+        A = [[None] * q_dim for _ in range(p_dim)]  # NOTE: Why does that not work: A = [[None] * p_dim] * q_dim
         for i, p in enumerate(PLl):
             for j, q in enumerate(PLr):
-                for mu in self._op_basis:
-                    if p + [(n, mu)] == q:
-                        A[i, j] = self._opstr_to_ops[mu]
+                if p == q:  # string continues through site n: identity
+                    A[i][j] = self.sites[n].get_onsite_W_block('Id', row_spaces[i], overbraid=True)
+                else:
+                    for mu in self._op_basis:
+                        if p + [(n, mu)] == q:
+                            A[i][j] = self._opstr_to_ops[mu]
         if not any(isinstance(x, lasy.Tensor) for y in A for x in y):
             return None
-        return lasy.tensor_from_grid(grid=A, labels=['wL', 'p', 'wR', 'p*'])
+        return lasy.tensor_from_grid(
+            grid=A,
+            labels=['wL', 'p', 'wR', 'p*'],
+            row_summands=row_spaces,
+            col_summands=col_spaces,
+        )
 
     def _calc_b(self, n, PLl):
         p_dim = len(PLl)
@@ -2867,11 +2879,19 @@ class MPOCompact(MPOBuilder):
                     b[i] = self._coeff_V_map[p + [(n, mu)]] * self._opstr_to_ops[mu]
         if not any(isinstance(x, lasy.Tensor) for x in b):
             return None
-        return lasy.tensor_from_grid(grid=[[x] for x in b], labels=['wL', 'p', 'wR', 'p*'])
+
+        row_spaces = list(self.strings_as_SumSpace(PLl)[1].spaces)
+        col_space = next(x for x in b if x is not None).get_leg_co_domain('wR')
+
+        return lasy.tensor_from_grid(
+            grid=[[x] for x in b],
+            labels=['wL', 'p', 'wR', 'p*'],
+            row_summands=row_spaces,
+            col_summands=[col_space],
+        )
 
     def _calc_c(self, n, PLr):
         q_dim = len(PLr)
-        # A = np.zeros([p_dim, q_dim])
         c = [None] * q_dim
         for i, q in enumerate(PLr):
             for mu in self._op_basis:
@@ -2879,36 +2899,54 @@ class MPOCompact(MPOBuilder):
                     c[i] = self._opstr_to_ops[mu]
         if not any(isinstance(x, lasy.Tensor) for x in c):
             return None
-        return lasy.tensor_from_grid(grid=[c], labels=['wL', 'p', 'wR', 'p*'])
+
+        row_space = next(x for x in c if x is not None).get_leg_co_domain('wL')
+        col_spaces = list(self.strings_as_SumSpace(PLr)[1].spaces)  # one summand per column
+
+        return lasy.tensor_from_grid(
+            grid=[c],
+            labels=['wL', 'p', 'wR', 'p*'],
+            row_summands=[row_space],
+            col_summands=col_spaces,
+        )
 
     def _calc_d(self, n):
-        for mu in self._op_basis:
-            if mu is not None:
-                V = self._coeff_V_map.get(mu, None)
-                if V is not None:
-                    return V * self._opstr_to_ops[mu]
-                return None
-        return None
+        triv = lasy.ElementarySpace.from_trivial_sector(symmetry=self.symmetry)
+        w = triv.direct_sum(summand_labels=['IdL'])
+        d = None
+        for mu in self._opstr_per_site[n]:
+            V = self._coeff_V_map.get(PauliString([(n, mu)]), None)
+            if V is None:
+                continue
+            op = V * self.sites[n].get_onsite_W_block(mu, w, overbraid=True)
+            d = op if d is None else d + op
+        return d
+
+    # def _calc_d(self, n):
+    #     for mu in self._op_basis:
+    #         if mu is not None:
+    #             V = self._coeff_V_map.get(mu, None)
+    #             if V is not None:
+    #                 return V * self._opstr_to_ops[mu]
+    #             return None
+    #     return None
 
     def build_MPO():
         pass
 
-    def string_as_SumSpace(self, pauli_string: PauliString):
-
-        if not pauli_string:
+    def strings_as_SumSpace(self, strings: Sequence[PauliString]):
+        if not strings:
             uhh = lasy.ElementarySpace.from_defining_sectors(
                 self.symmetry, np.zeros((0, len(self.symmetry.trivial_sector)), dtype=int)
             )
             return uhh, uhh
 
         domain, codomain = [], []
-        for letter in pauli_string:
-            for opdata in letter:
-                op = self._opstr_to_ops[opdata.opname]
-                domain.append(op.get_leg_co_domain('wL').as_ElementarySpace())
-                codomain.append(op.get_leg_co_domain('wR').as_ElementarySpace())
-
-        # return domain[0].direct_sum(*domain[1:]), codomain[0].direct_sum(*codomain[1:])
+        for s in strings:  # one space per STRING
+            first = self._opstr_to_ops[s[0].opname]
+            last = self._opstr_to_ops[s[-1].opname]
+            domain.append(first.get_leg_co_domain('wL').as_ElementarySpace())
+            codomain.append(last.get_leg_co_domain('wR').as_ElementarySpace())
         return lasy.DirectSumSpace.from_spaces(domain), lasy.DirectSumSpace.from_spaces(codomain)
 
 
