@@ -1,7 +1,8 @@
-- Prefer lasyten ``block_from_ndarray`` over ``block_from_numpy`` when importing
-  NumPy arrays into block backends (MPS ``from_Bflat`` / overlap zeros).
-  Dense ``Tensor.to_numpy`` returns are treated as read-only under Eigen.
+- Dense ``Tensor.to_numpy`` returns are treated as read-only under Eigen
+  (do not mutate those buffers in place).
 - Set ``EffectiveH`` / ``OneSiteH`` / ``TwoSiteH`` / ``ZeroSiteH`` ``dtype`` only
   after ``PlanarLinearOperator.__init__`` (nanobind property on an uninitialized
   trampoline instance raised ``TypeError``); assign ``env.H.dtype`` directly
   (already a lasyten ``Dtype``).
+  MPS array imports keep ``block_from_numpy`` for now (Numpy-backend
+  ``block_from_ndarray`` still crashes in some MPS paths).
