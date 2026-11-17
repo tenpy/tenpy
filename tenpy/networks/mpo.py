@@ -2561,6 +2561,8 @@ class PauliString(tuple):
     NOTE: Expect changes
     """
 
+    ID = 'Id'  # "Netural" element of PauliString, i.e. p + 'Id' = p
+    # TODO: Check whether it is really needed.
     __slots__ = ()
 
     # Helper Struct
@@ -2570,7 +2572,7 @@ class PauliString(tuple):
         # charge: int   ' TODO: remove?
 
     def __new__(cls, letters=()):
-        letters = sorted((cls._OpData(*l) for l in letters), key=lambda l: l.site)
+        letters = sorted((cls._OpData(*l) for l in letters if l[1] != cls.ID), key=lambda l: l.site)
         sites = [l.site for l in letters]
         if any(a == b for a, b in zip(sites, sites[1:])):  # sorted, so equal sites are neighbours
             raise ValueError(f'two letters act on the same site: {sites}')
@@ -2584,7 +2586,7 @@ class PauliString(tuple):
     def __add__(self, other: PauliString | tuple[int, str] | Sequence[tuple[int, str]]) -> PauliString:
         if not isinstance(other, (tuple, list)):
             raise ValueError()
-        letters = tuple(self) + tuple(PauliString._OpData(*l) for l in other)
+        letters = tuple(self) + tuple(PauliString._OpData(*l) for l in other if l[1] != PauliString.ID)
         sites = [l.site for l in letters]
         if any(a >= b for a, b in zip(sites, sites[1:])):
             raise ValueError(f'letters need strictly ascending sites, got {sites}')
@@ -2738,9 +2740,9 @@ class MPOCompact(MPOBuilder):
         self._coeff_V_map[pauli_string] = strength
 
     def _gen_left_pauli_strings(self):  # index 0 corresp. to cut 1:2
-        assert self._pauli_strings is not None  # ensure that _set_pauli_strings has been called before
+        assert self._pauli_strings is not None  # ensure that pauli strings have been set
         result = [set() for _ in range(self.L + 1)]
-        for s in self._pauli_strings:  # s = ((site, letter), ...), non-identity letters only
+        for s in self._pauli_strings:
             for r in range(1, len(s)):  # cut between letter r-1 and letter r
                 for n in range(s[r - 1].site + 1, s[r].site + 1):  # every bond inside that gap
                     result[n].add(s[:r])
@@ -2749,36 +2751,94 @@ class MPOCompact(MPOBuilder):
     def _gen_right_pauli_strings(self):
         assert self._pauli_strings is not None
         result = [set() for _ in range(self.L + 1)]
-        for s in self._pauli_strings:  # s = ((site, letter), ...), non-identity letters only
+        for s in self._pauli_strings:
             for r in range(1, len(s)):  # cut between letter r-1 and letter r
                 for n in range(s[r - 1].site + 1, s[r].site + 1):  # every bond inside that gap
                     result[n].add(s[r:])
         return [sorted(S) for S in result]
 
-    def pauli_string_MPO(self, trunc_params):
-        W_canonical = []
-        SVs = []
+    def pauli_string_MPO(self, svd_min=1e-12):
 
+        L = self.L
         PL = self._gen_left_pauli_strings()
         PR = self._gen_right_pauli_strings()
-        # Done up to here
+        Ws = [self._sparse_MPO(n, PL[n], PL[n + 1]) for n in range(L)]
 
-        W1 = self._sparse_MPO(0, PL[0], PL[1])  # 1:2 <=> 0,    2:3 <=> 1,  n+1:n+2 <=> n
-        H = self._calc_H(PL[0], PR[1])
-        U, SVs[0], V = None  # TODO: svd...
-        W_canonical[0] = self._to_canonical_form(W1, H, None, None, V)
+        # one SVD per inner bond b = 1 ... L-1
+        T, T_inv, SVs = [None] * (L + 1), [None] * (L + 1), [None] * (L + 1)
+        for b in range(1, L):
+            H = self._calc_H(PL[b], PR[b])
+            if H is None:
+                continue
+            U, S, V, err, _ = lasy.truncated_svd(H, new_labels=['wR', 'wL'], svd_min=svd_min)
+            SVs[b] = S
+            T[b] = lasy.compose(U, S)  # U*S
+            T_inv[b] = lasy.compose(1 / S, U.hc, relabel2={'wL*': 'wR'})  # S^-1*U.hc
 
-        for n in range(2, self.N):
-            WL = self._sparse_MPO(n - 1, PL[n - 2], PL[n - 1])
-            H = self._calc_H(PL[n - 1], PR[n - 1])
-            U, SVs[n], V = None  # TODO: svd...
-            W_canonical[n] = self._to_canonical_form(WL, H, SVs[n], U, V)
+        # site n: left bond n gets T^-1, right bond n+1 gets T, both embedded
+        W_canonical = []
+        for n, W in enumerate(Ws):
+            if T_inv[n] is not None:
+                W = lasy.planar_contraction(self._embed(W.get_leg_co_domain('wL'), T_inv[n]), W, 'wR', 'wL')
+            if T[n + 1] is not None:
+                W = lasy.planar_contraction(W, self._embed(W.get_leg_co_domain('wR'), T[n + 1]), 'wR', 'wL')
+            W_canonical.append(W)
 
-        WR = self._sparse_MPO(self.N, PL[self.N - 2], PL[self.N - 1])
-        W_canonical[-1] = self._to_canonical_form(WR)
+        return W_canonical, SVs
 
-        H = MPO(self.sites, W_canonical, bc=self.bc, max_range=self.max_range, mps_unit_cell_width=self.unit_cell_width)
-        return H, SVs
+    # def pauli_string_MPO(self, trunc_params=0):
+    #     W_canonical = [None] * self.L
+    #     SVs = [None] * self.L
+
+    #     PL = self._gen_left_pauli_strings()
+    #     PR = self._gen_right_pauli_strings()
+    #     # Done up to here
+
+    #     W1 = self._sparse_MPO(0, PL[0], PL[1])  # 1:2 <=> 0,    2:3 <=> 1,  n+1:n+2 <=> n
+    #     H = self._calc_H(PL[1], PR[1])
+    #     U, SVs[0], V, err, renormalise = lasy.truncated_svd(H, trunc_cut=0, new_labels=['wR', 'wL'])
+
+    #     print(W1.shape)
+
+    #     US = lasy.compose(U, SVs[0])                      # legs [wL, wR]
+    #     W_canonical[0] = lasy.planar_contraction(W1,
+    # self._embed(W1.get_leg_co_domain('wR'), US), 'wR', 'wL')
+    # # NOTE: WUS == WHV.hc
+
+    #     # SV = lasy.compose(SVs[0], V.hc) # NOTE: ehhh
+    #     # WH   = lasy.planar_contraction(W1, self._embed(W1.get_leg_co_domain('wR'), H), 'wR', 'wL')
+    #     # W_canonical[0] = lasy.planar_contraction(WH, self._embed(WH.get_leg_co_domain('wR'), V.hc), 'wR', 'wL*')
+    #     # W_np1 = lasy.planar_contraction(self._embed(W_np1.get_leg_co_domain('wL'), SV), W_np1, 'wR', 'wL')
+    #     # W_canonical[0] = lasy.planar_contraction(lasy.planar_contraction(W1, H, 'wR', 'wL'), V.hc, 'wR', 'wL')
+    # # W_1 @ H @ V
+    #     # W_canonical[0] = lasy.planar_contraction(lasy.planar_contraction(W1, U, 'wR', 'wL'), SVs[0], 'wR', 'wL')
+
+    #     print(W_canonical[0].shape)
+
+    #     for n in range(1, self.L):
+    #         WL = self._sparse_MPO(n, PL[n], PL[n + 1])
+    #         H = self._calc_H(PL[n], PR[n])
+    #         if H is None:
+    #             continue    # TODO: Verify
+
+    #         U, SVs[n], V, err, renormalise = lasy.truncated_svd(H, trunc_cut=0, new_labels=['wR', 'wL'])
+
+    #         S_inv = 1 / SVs[n-1]
+
+    #         S_invU = lasy.compose(S_inv, U.hc, relabel2={'wL*': 'wR'})
+    #         US = lasy.compose(U, SVs[n])
+
+    #         W_canonical[n] = lasy.planar_contraction(lasy.planar_contraction(S_invU, WL, 'wR', 'wL'), US, 'wR', 'wL')
+
+    #         # U, SVs[n], V = None  # TODO: svd...
+    #         # W_canonical[n] = self._to_canonical_form(WL, H, SVs[n], U, V)
+
+    #     WR = self._sparse_MPO(self.L, PL[self.L - 2], PL[self.L - 1])
+    #     # W_canonical[-1] = self._to_canonical_form(WR)
+
+    #     H = MPO(self.sites, W_canonical, bc=self.bc, max_range=self.max_range,
+    # mps_unit_cell_width=self.unit_cell_width)
+    #     return H, SVs
 
     def _sparse_MPO(self, n, PLl, PLr):
         A = self._calc_A(n, PLl, PLr)
@@ -2931,6 +2991,29 @@ class MPOCompact(MPOBuilder):
     #             return None
     #     return None
 
+    def _calc_H(self, PLl, PLr):
+        # NOTE: Essentially copied the shell of _calc_A, cf. _calc_A
+        # TODO: Change the innermost iterator, there should technically be only one
+        # operator per site, though I am unsure how exactly that would work out.
+        p_dim, q_dim = len(PLl), len(PLr)
+        row_spaces = list(self.strings_as_SumSpace(PLl)[1].spaces) if PLl else []
+        col_spaces = list(self.strings_as_SumSpace(PLr)[0].spaces) if PLr else []
+        H = [[None] * q_dim for _ in range(p_dim)]  # NOTE: Why does that not work: A = [[None] * p_dim] * q_dim
+        for i, p in enumerate(PLl):
+            for j, q in enumerate(PLr):
+                V = self._coeff_V_map.get(p + q, None)
+                if V is not None:
+                    H[i][j] = V * lasy.SymmetricTensor.from_eye([row_spaces[i]], labels=['wL', 'wR'])
+                    # NOTE: Not a scalar, since factorisation of S.S can have a 3-dimensional bond.
+        if not any(x is not None for y in H for x in y):
+            return None
+        return lasy.tensor_from_grid(
+            grid=H,
+            labels=['wL', 'wR'],
+            row_summands=row_spaces,
+            col_summands=col_spaces,
+        )
+
     def build_MPO():
         pass
 
@@ -2945,9 +3028,21 @@ class MPOCompact(MPOBuilder):
         for s in strings:  # one space per STRING
             first = self._opstr_to_ops[s[0].opname]
             last = self._opstr_to_ops[s[-1].opname]
-            domain.append(first.get_leg_co_domain('wL').as_ElementarySpace())
+            domain.append(first.get_leg_co_domain('wL').as_ElementarySpace())  # TODO: Remove wL
             codomain.append(last.get_leg_co_domain('wR').as_ElementarySpace())
         return lasy.DirectSumSpace.from_spaces(domain), lasy.DirectSumSpace.from_spaces(codomain)
+
+    def _embed(self, bond_leg, X):
+
+        IdL_sp, IdR_sp = bond_leg.spaces[0], bond_leg.spaces[-1]
+        IdL = lasy.SymmetricTensor.from_eye([IdL_sp], labels=['wL', 'wR'], dtype=X.dtype)
+        IdR = lasy.SymmetricTensor.from_eye([IdR_sp], labels=['wL', 'wR'], dtype=X.dtype)
+        return lasy.tensor_from_grid(
+            grid=[[IdL, None, None], [None, X, None], [None, None, IdR]],
+            labels=['wL', 'wR'],
+            row_summands=[IdL_sp, X.get_leg_co_domain('wL'), IdR_sp],
+            col_summands=[IdL_sp, X.get_leg_co_domain('wR'), IdR_sp],
+        )
 
 
 class MPOEnvironment(BaseEnvironment):
