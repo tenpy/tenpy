@@ -204,6 +204,11 @@ class CouplingModel(HamiltonianModel):
     TODO elaborate
     - statefulness, point to methods
 
+    .. versionchanged :: v2.0
+        Couplings are no longer assigned to a category / categories. See :issue:`724`.
+        The main use case was to evaluate expectation values of a subset of terms in the Hamiltonian.
+        To accomplish this in ``tenpy>=2``, create a new model instance with only those terms.
+
     Parameters
     ----------
     lattice
