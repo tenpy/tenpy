@@ -49,13 +49,13 @@ jobs:
         cache-environment: true
 
     - name: Build and install hdf5_io
-      # build deps (pybind11, scikit-build-core, cmake, pytorch, ...) come from environment.yml
+      # build deps (nanobind, scikit-build-core, cmake, pytorch, ...) come from environment.yml
       run: |
         pip install --no-build-isolation -e ".[test]"
       working-directory: ./lasyten_repo/external/hdf5_io
 
     - name: Build and install lasyten
-      # build deps (pybind11, scikit-build-core, cmake, pytorch, ...) come from environment.yml
+      # build deps (nanobind, scikit-build-core, cmake, pytorch, ...) come from environment.yml
       # --no-build-isolation avoids pip pulling a CUDA torch wheel that needs the CUDA toolkit
       run: |
         pip install --no-build-isolation -e ".[test]"

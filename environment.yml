@@ -5,7 +5,8 @@ dependencies:
   - python>=3.14
   - pip
   - setuptools>=68.0.0
-  - pybind11>=3.0
+  - nanobind>=3.0
+  - eigen  # Eigen/LAPACK BlockBackend (required by lasyten)
   - scikit-build-core
   - setuptools-scm
   - numpy>=2.0
