@@ -118,14 +118,10 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, charged_guess, charge_
     if keep_sector:
         _, expected_E0 = E.sector_argmin(theta_sector)
 
-        # second way to get expected energy: build projection of H onto the single sector
-        with pytest.raises(AttributeError):
-            # Mask.from_sectors not implemented yet https://github.com/tenpy/lasyten/issues/322
-            mask = lasy.Mask.from_sectors(E.leg, keep=[theta_sector])
-            E_proj = lasy.apply_mask_DiagonalTensor(E, mask)
-            assert E_proj.domain.sector_decomposition[0] == theta_sector
-            expected2_E0 = E_proj.min()
-            assert expected_E0 == pytest.approx(expected_E0)
+        mask = lasy.Mask.from_sectors(E.leg, keep=[theta_sector])
+        E_proj = lasy.apply_mask_DiagonalTensor(E, mask)
+        assert E_proj.domain.sector_decomposition[0] == theta_sector
+        assert expected_E0 == pytest.approx(E_proj.min())
     else:
         expected_E0 = E.min()
     assert E0 == pytest.approx(expected_E0)
