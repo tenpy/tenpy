@@ -11,7 +11,8 @@ from scipy import linalg as spla
 
 from tenpy.algorithms import ExactDiag
 from tenpy.models import lattice, model
-from tenpy.models.spins import SpinChain
+from tenpy.models.fermions_spinless import FermionChain
+from tenpy.models.spins import DipolarSpinChain, SpinChain
 from tenpy.networks import mpo, mps
 from tenpy.networks.terms import CouplingTerms, OnsiteTerms
 from tenpy.tools import asConfig
@@ -249,6 +250,560 @@ def test_MPO_addition(bc, explicit_plus_hc):
     H12 = graph_from_model(M12).build_MPO()
     H12_sum = H1 + H2
     assert H12.is_equal(H12_sum)
+
+
+def _dense_H(H):
+    ED = ExactDiag.from_H_mpo(H)
+    ED.build_full_H_from_mpo()
+    # `understood_braiding=True` is needed for fermions. Since we only compare matrices obtained in the
+    # same way, the (basis) convention of the dense representation does not matter.
+    return ED.full_H.to_numpy(understood_braiding=True)
+
+
+@pytest.mark.parametrize('L', [2, 3, 4, 5])
+def test_MPO_addition_spin_chain(L):
+    """Adding two MPOs gives the sum of the dense operators and keeps the IdL / IdR labels."""
+    M1 = SpinChain(dict(L=L, Jx=1.0, Jy=1.0, Jz=1.1, hz=0.2, bc_MPS='finite', conserve=None))
+    M2 = SpinChain(dict(L=L, Jx=0.3, Jy=0.0, Jz=-0.7, hz=0.5, bc_MPS='finite', conserve=None))
+    H1, H2 = M1.get_H_MPO(), M2.get_H_MPO()
+    H12 = H1 + H2
+    H12.test_sanity()
+    assert H12.L == L
+    assert H12.bc == 'finite'
+
+    # IdL / IdR are available as grid labels on the bonds
+    for i, W in enumerate(H12._W):
+        if i > 0:
+            assert 'IdL' in W.get_leg('wL').summand_labels
+            assert 'IdR' in W.get_leg('wL').summand_labels
+        if i < L - 1:
+            assert 'IdL' in W.get_leg('wR').summand_labels
+            assert 'IdR' in W.get_leg('wR').summand_labels
+    assert H12._W[0].get_leg('wL').summand_labels == ['IdL']
+    assert H12._W[-1].get_leg('wR').summand_labels == ['IdR']
+
+    npt.assert_allclose(_dense_H(H12), _dense_H(H1) + _dense_H(H2), atol=1e-12)
+    npt.assert_allclose(_dense_H(H12), _dense_H(H2 + H1), atol=1e-12)
+    # environments (which use IdL / IdR) work and give the sum of the energies
+    sites = M1.lattice.mps_sites()
+    psi = mps.MPS.from_product_state(sites, (['up', 'down'] * L)[:L], bc='finite', unit_cell_width=L)
+    E = [mpo.MPOEnvironment(psi, H, psi).full_contraction(0) for H in (H1, H2, H12)]
+    npt.assert_allclose(E[2], E[0] + E[1], atol=1e-12)
+
+    # the sum can be added again, i.e. it is again in standard form
+    npt.assert_allclose(_dense_H(H12 + H1), 2 * _dense_H(H1) + _dense_H(H2), atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    'conserve, backend, couplings',
+    [
+        (None, 'no_symmetry', 'XXZ'),
+        (None, 'abelian', 'XXZ'),
+        (None, 'fusion_tree', 'XXZ'),
+        ('parity', 'abelian', 'XXZ'),
+        ('parity', 'fusion_tree', 'XXZ'),
+        ('Sz', 'abelian', 'XXZ'),
+        ('Sz', 'fusion_tree', 'XXZ'),
+        ('SU2', 'fusion_tree', 'Heisenberg'),
+    ],
+)
+def test_MPO_addition_symmetric(conserve, backend, couplings, L=4):
+    """Adding MPOs with symmetries gives the sum of the dense operators and takes the fast path."""
+    if couplings == 'XXZ':
+        # Jx = Jy, such that Sz is conserved
+        couplings1 = dict(Jx=1.0, Jy=1.0, Jz=1.1, hz=0.2)
+        couplings2 = dict(Jx=0.4, Jy=0.4, Jz=-0.7, hz=0.5)
+    else:
+        # SU(2) symmetric, i.e. isotropic couplings and no field
+        couplings1 = dict(Jx=1.0, Jy=1.0, Jz=1.0, hz=0.0)
+        couplings2 = dict(Jx=0.4, Jy=0.4, Jz=0.4, hz=0.0)
+    pars = dict(L=L, bc_MPS='finite', conserve=conserve, symmetry_backend=backend)
+    H1 = SpinChain(dict(**couplings1, **pars)).get_H_MPO()
+    assert H1._W[0].backend == lasy.get_backend(backend)
+    H2 = SpinChain(dict(**couplings2, **pars)).get_H_MPO()
+    H12 = H1 + H2
+    H12.test_sanity()
+    npt.assert_allclose(_dense_H(H12), _dense_H(H1) + _dense_H(H2), atol=1e-12)
+    # fast path: the IdL / IdR entries are shared, the bond dimension is smaller than for the block diagonal sum
+    assert H12.has_IdL_IdR_labels()
+    assert all(c12 < c1 + c2 for c12, c1, c2 in zip(H12.chi[1:-1], H1.chi[1:-1], H2.chi[1:-1]))
+
+
+def test_MPO_addition_long_range(L=5):
+    """Adding MPOs with three- and four-site (i.e. longer range) terms."""
+    pars = dict(L=L, bc_MPS='finite', conserve=None)
+    H1 = DipolarSpinChain(dict(J3=1.0, J4=0.3, **pars)).get_H_MPO()
+    H2 = DipolarSpinChain(dict(J3=-0.4, J4=0.8, **pars)).get_H_MPO()
+    H12 = H1 + H2
+    H12.test_sanity()
+    assert H12.has_IdL_IdR_labels()
+    assert all(c12 < c1 + c2 for c12, c1, c2 in zip(H12.chi[1:-1], H1.chi[1:-1], H2.chi[1:-1]))  # fast path
+    npt.assert_allclose(_dense_H(H12), _dense_H(H1) + _dense_H(H2), atol=1e-12)
+    # also mixed with a nearest-neighbor chain
+    H3 = SpinChain(dict(Jx=1.0, Jy=0.5, Jz=0.2, hz=0.3, S=1, **pars)).get_H_MPO()
+    npt.assert_allclose(_dense_H(H1 + H3), _dense_H(H1) + _dense_H(H3), atol=1e-12)
+
+
+def test_MPO_addition_errors():
+    pars = dict(Jx=1.0, Jy=1.0, Jz=1.0, bc_MPS='finite', conserve=None)
+    H4 = SpinChain(dict(L=4, hz=0.2, **pars)).get_H_MPO()
+    H3 = SpinChain(dict(L=3, hz=0.2, **pars)).get_H_MPO()
+    with pytest.raises(ValueError, match='different length'):
+        _ = H4 + H3
+    H4_inf = H4.copy()
+    H4_inf.bc = 'infinite'
+    with pytest.raises(ValueError, match='different bc'):
+        _ = H4 + H4_inf
+    H4_hc = H4.copy()
+    H4_hc.explicit_plus_hc = True
+    with pytest.raises(ValueError, match='explicit_plus_hc'):
+        _ = H4 + H4_hc
+    H4_seg = H4.copy()
+    H4_seg.bc = 'segment'
+    # 'segment' bc is not supported: documented limitation of MPO.__add__ (#676), the error is the intended behavior
+    with pytest.raises(NotImplementedError, match='segment'):
+        _ = H4_seg + H4_seg
+    assert H4.__add__(1.0) is NotImplemented
+
+
+def _unlabelled_MPO(H):
+    """Copy of the MPO `H` without any summand labels (not in the standard form)."""
+    Ws = [lasy.tensor_from_grid(mpo._grid_cells(W), labels=['wL', 'p', 'wR', 'p*']) for W in H._W]
+    return mpo.MPO(H.sites, Ws, H.bc, H.max_range, mps_unit_cell_width=H.unit_cell_width)
+
+
+def test_MPO_has_IdL_IdR_labels():
+    pars = dict(L=4, bc_MPS='finite', conserve=None, Jx=1.0, Jy=1.0, Jz=1.0)
+    H = SpinChain(dict(hz=0.2, **pars)).get_H_MPO()
+    assert H.has_IdL_IdR_labels()
+    assert (H + H).has_IdL_IdR_labels()  # the sum in standard form is again in standard form
+    # MPOGraph puts 'IdL' and 'IdR' on all bulk bonds, also without a field
+    assert SpinChain(dict(hz=0.0, **pars)).get_H_MPO().has_IdL_IdR_labels()
+    # without summand labels
+    H_unlabelled = _unlabelled_MPO(H)
+    assert not H_unlabelled.has_IdL_IdR_labels()
+    assert not (H + H_unlabelled).has_IdL_IdR_labels()  # the generic sum has no inner labels
+    # only on-site terms: the labels are there
+    assert SpinChain(dict(**{**pars, 'Jx': 0, 'Jy': 0, 'Jz': 0}, hz=0.2)).get_H_MPO().has_IdL_IdR_labels()
+    # at the outer legs of a finite MPO, only the respective single summand is allowed
+    H_infinite = SpinChain(dict(L=1, bc_MPS='infinite', conserve=None, Jx=0, Jy=0, Jz=0, hz=0.2)).get_H_MPO()
+    assert H_infinite.has_IdL_IdR_labels()
+    H_wrong_bc = H_infinite.copy()
+    H_wrong_bc.bc = 'finite'
+    assert not H_wrong_bc.has_IdL_IdR_labels()
+    # for 'segment' bc, the outer legs are not restricted to single summands: both labels are fine
+    H_segment = mpo.MPO(H.sites[1:3], H._W[1:3], 'segment', mps_unit_cell_width=2)
+    assert H_segment.has_IdL_IdR_labels()
+
+
+_BLOCK_DIAGONAL_CASES = {
+    # name: ((kwargs, unlabelled) of the first, (kwargs, unlabelled) of the second MPO)
+    'labels_and_unlabelled': ((dict(Jx=1.0, Jy=1.0, Jz=1.1, hz=0.2), False), (dict(Jx=0.4, Jy=0.4, Jz=-0.7), True)),
+    'unlabelled_and_labels': ((dict(Jx=0.4, Jy=0.4, Jz=-0.7), True), (dict(Jx=1.0, Jy=1.0, Jz=1.1, hz=0.2), False)),
+    'unlabelled_and_unlabelled': ((dict(Jx=1.0, Jy=1.0, Jz=1.1), True), (dict(Jx=0.4, Jy=0.4, Jz=-0.7), True)),
+}
+# these have the IdL / IdR labels, but on-site MPOs do not have summands besides them
+_STANDARD_FORM_CASES = {
+    'onsite_and_labels': (dict(Jx=0, Jy=0, Jz=0, hz=0.4), dict(Jx=1.0, Jy=1.0, Jz=1.1, hz=0.2)),
+    'labels_and_onsite': (dict(Jx=1.0, Jy=1.0, Jz=1.1, hz=0.2), dict(Jx=0, Jy=0, Jz=0, hz=0.4)),
+    'onsite_and_onsite': (dict(Jx=0, Jy=0, Jz=0, hz=0.4), dict(Jx=0, Jy=0, Jz=0, hz=-0.1)),
+}
+
+
+@pytest.mark.parametrize('conserve', [None, 'Sz'])
+@pytest.mark.parametrize('case', list(_BLOCK_DIAGONAL_CASES))
+@pytest.mark.parametrize('L', [2, 3, 4])
+def test_MPO_addition_block_diagonal(L, case, conserve):
+    """MPOs without the standard IdL / IdR labels are added as a block diagonal MPO."""
+    (kwargs1, unlabelled1), (kwargs2, unlabelled2) = _BLOCK_DIAGONAL_CASES[case]
+    pars = dict(L=L, bc_MPS='finite', conserve=conserve)
+    H1 = SpinChain(dict(**kwargs1, **pars)).get_H_MPO()
+    H2 = SpinChain(dict(**kwargs2, **pars)).get_H_MPO()
+    if unlabelled1:
+        H1 = _unlabelled_MPO(H1)
+    if unlabelled2:
+        H2 = _unlabelled_MPO(H2)
+    H12 = H1 + H2
+    H12.test_sanity()
+    assert H12.L == L
+    assert H12.bc == 'finite'
+    assert not H12.has_IdL_IdR_labels()  # the inner bonds are not labelled
+    # the outer legs have the labels, such that the sum can be used in environments
+    assert H12._W[0].get_leg('wL').summand_labels == ['IdL']
+    assert H12._W[-1].get_leg('wR').summand_labels == ['IdR']
+    npt.assert_allclose(_dense_H(H12), _dense_H(H1) + _dense_H(H2), atol=1e-12)
+    npt.assert_allclose(_dense_H(H2 + H1), _dense_H(H1) + _dense_H(H2), atol=1e-12)
+    # block diagonal: the bond dimensions add up
+    chi1, chi2 = H1.chi, H2.chi
+    assert H12.chi[0] == H12.chi[-1] == 1
+    assert all(c12 == c1 + c2 for c12, c1, c2 in zip(H12.chi[1:-1], chi1[1:-1], chi2[1:-1]))
+    # the sum can be added again
+    npt.assert_allclose(_dense_H(H12 + H1), 2 * _dense_H(H1) + _dense_H(H2), atol=1e-12)
+    npt.assert_allclose(_dense_H(H1 + H12), 2 * _dense_H(H1) + _dense_H(H2), atol=1e-12)
+
+
+def test_MPO_addition_block_diagonal_environment():
+    """The block diagonal sum can be used in environments (the outer legs have IdL / IdR)."""
+    L = 4
+    pars = dict(L=L, bc_MPS='finite', conserve='Sz')
+    H1 = SpinChain(dict(Jx=1.0, Jy=1.0, Jz=1.1, hz=0.2, **pars)).get_H_MPO()
+    H2_labelled = SpinChain(dict(Jx=0.4, Jy=0.4, Jz=-0.7, hz=0.0, **pars)).get_H_MPO()
+    H2 = _unlabelled_MPO(H2_labelled)
+    assert not H2.has_IdL_IdR_labels()
+    H12 = H1 + H2
+    psi = mps.MPS.from_product_state(H1.sites, ['up', 'down'] * (L // 2), bc='finite', unit_cell_width=L)
+    # H2 itself can not be used in an environment (no outer IdL / IdR), so take its labelled original
+    E1, E2, E12 = [mpo.MPOEnvironment(psi, H, psi).full_contraction(0) for H in (H1, H2_labelled, H12)]
+    npt.assert_allclose(E12, E1 + E2, atol=1e-12)
+    npt.assert_allclose(H12.expectation_value(psi), E1 + E2, atol=1e-12)
+
+
+@pytest.mark.parametrize('scaled_first', [True, False], ids=['scaled+H', 'H+scaled'])
+@pytest.mark.parametrize('factor', [2.0, -1.0, 0.0])
+def test_MPO_addition_rescaled(factor, scaled_first):
+    """MPOs with the labels, but without the upper triangular structure are added block diagonally."""
+    H = SpinChain(dict(L=4, bc_MPS='finite', conserve=None, Jx=1.0, Jy=1.0, Jz=1.1, hz=0.2)).get_H_MPO()
+    # MPO for ``factor * H`` obtained by rescaling the first tensor: keeps the labels, but breaks the structure
+    H_scaled = _MPO_with_replaced_W(H, 0, factor * H._W[0])
+    assert H_scaled.has_IdL_IdR_labels()
+    assert not H_scaled._has_upper_triangular_structure()
+    assert H._has_upper_triangular_structure()
+    npt.assert_allclose(_dense_H(H_scaled), factor * _dense_H(H), atol=1e-12)
+    H12 = H_scaled + H if scaled_first else H + H_scaled
+    assert not H12.has_IdL_IdR_labels()
+    npt.assert_allclose(_dense_H(H12), (factor + 1) * _dense_H(H), atol=1e-12)
+
+
+@pytest.mark.parametrize('L', [2, 3, 4])
+@pytest.mark.parametrize('case', list(_STANDARD_FORM_CASES))
+@pytest.mark.parametrize('conserve', [None, 'Sz'])
+def test_MPO_addition_standard_form_onsite(L, case, conserve):
+    """MPOs with on-site terms only still have the shared IdL / IdR entries when added."""
+    kwargs1, kwargs2 = _STANDARD_FORM_CASES[case]
+    pars = dict(L=L, bc_MPS='finite', conserve=conserve)
+    H1 = SpinChain(dict(**kwargs1, **pars)).get_H_MPO()
+    H2 = SpinChain(dict(**kwargs2, **pars)).get_H_MPO()
+    assert H1.has_IdL_IdR_labels() and H2.has_IdL_IdR_labels()
+    H12 = H1 + H2
+    H12.test_sanity()
+    assert H12.has_IdL_IdR_labels()
+    npt.assert_allclose(_dense_H(H12), _dense_H(H1) + _dense_H(H2), atol=1e-12)
+    npt.assert_allclose(_dense_H(H2 + H1), _dense_H(H1) + _dense_H(H2), atol=1e-12)
+    npt.assert_allclose(_dense_H(H12 + H1), 2 * _dense_H(H1) + _dense_H(H2), atol=1e-12)
+    # the shared IdL / IdR entries make the bond dimension smaller than block diagonal
+    assert all(c12 < c1 + c2 for c12, c1, c2 in zip(H12.chi[1:-1], H1.chi[1:-1], H2.chi[1:-1]))
+    if case == 'onsite_and_onsite':
+        assert list(H12.chi) == [1] + [2] * (L - 1) + [1]  # only IdL and IdR on the bonds
+    else:
+        assert list(H12.chi) == list(max([H1, H2], key=lambda H: sum(H.chi)).chi)
+
+
+def test_MPO_addition_standard_form_onsite_infinite():
+    """On-site only infinite MPOs share IdL / IdR as well."""
+    pars = dict(L=1, bc_MPS='infinite', conserve=None, Jx=0, Jy=0, Jz=0)
+    H12 = SpinChain(dict(hz=0.2, **pars)).get_H_MPO() + SpinChain(dict(hz=-0.5, **pars)).get_H_MPO()
+    H12.test_sanity()
+    assert H12.has_IdL_IdR_labels()
+    assert list(H12.chi) == [2, 2]  # only IdL and IdR
+
+
+@pytest.mark.parametrize('order', ['12', '21', '22'])
+def test_MPO_addition_block_diagonal_infinite(order):
+    """For infinite bc, the generic sum is block diagonal on all tensors and has no labels."""
+    pars = dict(L=1, bc_MPS='infinite', conserve=None, Jx=0, Jy=0, Jz=0)
+    H1 = SpinChain(dict(hz=0.2, **pars)).get_H_MPO()
+    H2 = _unlabelled_MPO(SpinChain(dict(hz=-0.5, **pars)).get_H_MPO())
+    assert H1.has_IdL_IdR_labels()
+    assert not H2.has_IdL_IdR_labels()
+    A, B = [{'1': H1, '2': H2}[key] for key in order]
+    H12 = A + B
+    H12.test_sanity()
+    assert H12.bc == 'infinite'
+    assert not H12.has_IdL_IdR_labels()
+    assert list(H12.chi) == [cA + cB for cA, cB in zip(A.chi, B.chi)]
+
+
+@pytest.mark.parametrize(
+    'conserve, backend',
+    [
+        (None, 'no_symmetry'),
+        (None, 'abelian'),
+        (None, 'fusion_tree'),
+        ('parity', 'abelian'),
+        ('parity', 'fusion_tree'),
+        ('Sz', 'abelian'),
+        ('Sz', 'fusion_tree'),
+    ],
+)
+@pytest.mark.parametrize('L', [1, 2, 3])
+def test_MPO_addition_spin_chain_infinite(L, conserve, backend):
+    """Adding infinite MPOs of models gives the MPO of the model with the summed couplings (fast path)."""
+    pars = dict(L=L, S=0.5, conserve=conserve, bc_MPS='infinite', symmetry_backend=backend)
+    # Jx = Jy, such that Sz is conserved
+    H1 = SpinChain(dict(Jx=1.0, Jy=1.0, Jz=0.3, hz=0.2, **pars)).get_H_MPO()
+    H2 = SpinChain(dict(Jx=0.5, Jy=0.5, Jz=-1.0, hz=0.1, **pars)).get_H_MPO()
+    H12_expected = SpinChain(dict(Jx=1.5, Jy=1.5, Jz=-0.7, hz=0.3, **pars)).get_H_MPO()
+    H12 = H1 + H2
+    H12.test_sanity()
+    assert H12.bc == 'infinite'
+    assert H12.L == L
+    assert H12.has_IdL_IdR_labels()
+    # fast path: the IdL / IdR entries are shared, the bond dimension is smaller than for the block diagonal sum
+    assert all(c12 < c1 + c2 for c12, c1, c2 in zip(H12.chi, H1.chi, H2.chi))
+    # is_equal returns a lasyten Scalar, which is converted to bool by the assert
+    assert bool(H12.is_equal(H12_expected))
+    assert bool((H2 + H1).is_equal(H12_expected))
+    # negative controls: the sum differs from each of the summands
+    assert not bool(H12.is_equal(H1))
+    assert not bool(H12.is_equal(H2))
+    assert not bool(H1.is_equal(H12_expected))
+
+
+@pytest.mark.parametrize('conserve', ['N', 'parity'])
+@pytest.mark.parametrize('L', [2, 3, 4])
+def test_MPO_addition_fermions(L, conserve):
+    """Adding MPOs of fermionic models gives the dense Hamiltonian of the model with the summed couplings."""
+    # conserve=None is not supported for fermions
+    pars = dict(L=L, conserve=conserve, bc_MPS='finite', symmetry_backend='fusion_tree')
+    H1 = FermionChain(dict(J=1.0, V=0.5, mu=0.2, **pars)).get_H_MPO()
+    H2 = FermionChain(dict(J=0.3, V=-1.0, mu=0.7, **pars)).get_H_MPO()
+    H12_expected = FermionChain(dict(J=1.3, V=-0.5, mu=0.9, **pars)).get_H_MPO()
+    H_wrong = FermionChain(dict(J=1.3, V=0.5, mu=0.9, **pars)).get_H_MPO()  # V is not summed
+    H12 = H1 + H2
+    H12.test_sanity()
+    assert H12.has_IdL_IdR_labels()
+    assert all(c12 < c1 + c2 for c12, c1, c2 in zip(H12.chi[1:-1], H1.chi[1:-1], H2.chi[1:-1]))
+    dense_H12 = _dense_H(H12)
+    npt.assert_allclose(dense_H12, _dense_H(H12_expected), atol=1e-12)
+    npt.assert_allclose(dense_H12, _dense_H(H1) + _dense_H(H2), atol=1e-12)
+    npt.assert_allclose(_dense_H(H2 + H1), dense_H12, atol=1e-12)
+    # negative controls
+    assert not np.allclose(dense_H12, _dense_H(H_wrong), atol=1e-8)
+    assert not np.allclose(dense_H12, _dense_H(H1), atol=1e-8)
+
+
+@pytest.mark.parametrize('conserve', ['N', 'parity'])
+@pytest.mark.parametrize('L', [1, 2, 3])
+def test_MPO_addition_fermions_infinite(L, conserve):
+    """Adding infinite MPOs of fermionic models gives the MPO of the model with the summed couplings."""
+    pars = dict(L=L, conserve=conserve, bc_MPS='infinite', symmetry_backend='fusion_tree')
+    H1 = FermionChain(dict(J=1.0, V=0.5, mu=0.2, **pars)).get_H_MPO()
+    H2 = FermionChain(dict(J=0.3, V=-1.0, mu=0.7, **pars)).get_H_MPO()
+    H12_expected = FermionChain(dict(J=1.3, V=-0.5, mu=0.9, **pars)).get_H_MPO()
+    H_wrong = FermionChain(dict(J=1.3, V=0.5, mu=0.9, **pars)).get_H_MPO()  # V is not summed
+    H12 = H1 + H2
+    H12.test_sanity()
+    assert H12.has_IdL_IdR_labels()
+    assert all(c12 < c1 + c2 for c12, c1, c2 in zip(H12.chi, H1.chi, H2.chi))
+    assert bool(H12.is_equal(H12_expected))
+    assert not bool(H12.is_equal(H_wrong))
+    assert not bool(H12.is_equal(H1))
+
+
+@pytest.mark.parametrize('dual_first', [True, False], ids=['dual+H', 'H+dual'])
+def test_MPO_addition_mismatching_duality(dual_first):
+    """Virtual legs with different ``is_dual`` flags can not be added."""
+    H = SpinChain(dict(L=4, bc_MPS='finite', conserve=None, Jx=1.0, Jy=1.0, Jz=1.1, hz=0.2)).get_H_MPO()
+    Ws = []
+    for W in H._W:
+        # like the hermitian conjugate, which dualizes the virtual legs
+        W_dag = lasy.planar_permute_legs(lasy.dagger(W), codomain=['wL*', 'p'], domain=['p*', 'wR*'])
+        W_dag.labels.update({'wL*': 'wL', 'wR*': 'wR'})
+        Ws.append(W_dag)
+    H_dual = mpo.MPO(H.sites, Ws, 'finite', H.max_range, mps_unit_cell_width=H.unit_cell_width)
+    A, B = (H_dual, H) if dual_first else (H, H_dual)
+    with pytest.raises(ValueError, match='duality'):
+        _ = A + B
+    H_dual_sum = H_dual + H_dual  # same duality is fine
+    H_dual_sum.test_sanity()
+    assert H_dual_sum.has_IdL_IdR_labels()
+    # numerically, compare the contracted MPOs as tensors
+    tensors = [Coupling(list(M.sites), factorization=list(M._W)).to_tensor() for M in (H_dual, H_dual_sum)]
+    assert lasy.almost_equal(tensors[1], 2 * tensors[0])
+
+
+def test_MPO_make_U_I_needs_labels():
+    H = SpinChain(dict(L=4, bc_MPS='finite', conserve=None, Jx=1.0, Jy=1.0, Jz=1.1, hz=0.2)).get_H_MPO()
+    H = _unlabelled_MPO(H)
+    with pytest.raises(ValueError, match='IdL'):
+        H.make_U_I(0.1)
+
+
+def test_MPO_make_U_I_needs_structure():
+    """``make_U_I`` raises a clear ValueError (not an assert) for a wrong structure."""
+    pars = dict(L=4, bc_MPS='finite', conserve=None, Jx=1.0, Jy=1.0, Jz=1.1)
+    H = SpinChain(dict(hz=0.2, **pars)).get_H_MPO()
+    H.make_U_I(0.1)  # fine
+    # rescaled first tensor: has the labels, but the IdL-IdL cell is not the identity
+    H_scaled = _MPO_with_replaced_W(H, 0, 2.0 * H._W[0])
+    assert H_scaled.has_IdL_IdR_labels()
+    with pytest.raises(ValueError, match='IdL.*not the identity'):
+        H_scaled.make_U_I(0.1)
+    # nonzero block below the diagonal
+    H_lower = _MPO_with_replaced_W(H, 1, _W_with_cell(H._W[1], 'IdR', 'IdL', 0.3))
+    assert H_lower.has_IdL_IdR_labels()
+    with pytest.raises(ValueError, match='IdR.*IdL.*nonzero'):
+        H_lower.make_U_I(0.1)
+    # only on-site terms: no summands besides IdL, IdR, the blocks A, B, C are None
+    H_onsite = SpinChain(dict(**{**pars, 'Jx': 0, 'Jy': 0, 'Jz': 0}, hz=0.2)).get_H_MPO()
+    assert H_onsite.has_IdL_IdR_labels()
+    A, B, C, D, Id = mpo.partition_W(H_onsite._W[1])
+    assert A is None and B is None and C is None and D is not None
+
+
+def _MPO_with_replaced_W(H, i, W):
+    return mpo.MPO(
+        H.sites, H._W[:i] + [W] + H._W[i + 1 :], 'finite', H.max_range, mps_unit_cell_width=H.unit_cell_width
+    )
+
+
+def _W_with_cell(W, row_label, col_label, factor):
+    """Copy of `W` where the cell (row_label, col_label) is replaced by `factor` times the identity."""
+    row_labels, col_labels = W.get_leg('wL').summand_labels, W.get_leg('wR').summand_labels
+    cells = mpo._grid_cells(W)
+    cells[row_labels.index(row_label)][col_labels.index(col_label)] = factor * mpo._identity_cell(W)
+    return lasy.tensor_from_grid(cells, labels=['wL', 'p', 'wR', 'p*'], row_labels=row_labels, col_labels=col_labels)
+
+
+# modifications of an MPO of a spin chain, which do / do not keep the upper triangular structure
+_STRUCTURE_VARIANTS = {
+    'ok': lambda H: H,
+    'rescaled first W': lambda H: _MPO_with_replaced_W(H, 0, 2 * H._W[0]),
+    'rescaled bulk W': lambda H: _MPO_with_replaced_W(H, 1, 2 * H._W[1]),
+    'rescaled last W': lambda H: _MPO_with_replaced_W(H, 3, 3 * H._W[3]),
+    'lower-left IdR-IdL': lambda H: _MPO_with_replaced_W(H, 1, _W_with_cell(H._W[1], 'IdR', 'IdL', 0.3)),
+    'lower-left other-IdL': lambda H: _MPO_with_replaced_W(
+        H, 2, _W_with_cell(H._W[2], H._W[2].get_leg('wL').summand_labels[1], 'IdL', 0.3)
+    ),
+    'wrong identity IdL': lambda H: _MPO_with_replaced_W(H, 1, _W_with_cell(H._W[1], 'IdL', 'IdL', 0.5)),
+    'wrong identity IdR': lambda H: _MPO_with_replaced_W(H, 2, _W_with_cell(H._W[2], 'IdR', 'IdR', -1.0)),
+    # boundary tensors
+    'left boundary wrong identity': lambda H: _MPO_with_replaced_W(H, 0, _W_with_cell(H._W[0], 'IdL', 'IdL', 2.0)),
+    'right boundary wrong identity': lambda H: _MPO_with_replaced_W(H, 3, _W_with_cell(H._W[3], 'IdR', 'IdR', 2.0)),
+    'no labels': _unlabelled_MPO,
+}
+
+
+@pytest.mark.parametrize('variant', list(_STRUCTURE_VARIANTS))
+def test_MPO_upper_triangular_structure_consistent_with_partition_W(variant):
+    """``_has_upper_triangular_structure`` is True exactly if ``partition_W`` accepts all tensors."""
+    H = SpinChain(dict(L=4, bc_MPS='finite', conserve=None, Jx=1.0, Jy=1.0, Jz=1.1, hz=0.2)).get_H_MPO()
+    H = _STRUCTURE_VARIANTS[variant](H)
+    accepted = True
+    try:
+        for i, W in enumerate(H._W):
+            mpo.partition_W(W, left_boundary=i == 0, right_boundary=i == H.L - 1)
+    except ValueError:
+        accepted = False
+    assert H._has_upper_triangular_structure() == accepted
+    # only the unmodified MPO has the structure
+    assert accepted == (variant == 'ok')
+
+
+# labels of the non-Id summands, different / equal for the two operands
+_SUMMAND_LABELS = {
+    'equal': ('a', 'a'),
+    'different': ('a', 'c'),
+    'none': (None, None),
+}
+
+
+def _with_summand_labels(H, prefix):
+    """Copy of `H` where the non-Id summand labels are ``prefix0, prefix1, ...`` (or ``''``, i.e. unlabelled)."""
+    Ws = []
+    for W in H._W:
+        new_labels = []
+        for leg in ('wL', 'wR'):
+            labels = W.get_leg(leg).summand_labels
+            new_labels.append(
+                [l if l in ['IdL', 'IdR'] else ('' if prefix is None else f'{prefix}{k}') for k, l in enumerate(labels)]
+            )
+        Ws.append(
+            lasy.tensor_from_grid(
+                mpo._grid_cells(W),
+                labels=['wL', 'p', 'wR', 'p*'],
+                row_labels=new_labels[0],
+                col_labels=new_labels[1],
+            )
+        )
+    return mpo.MPO(H.sites, Ws, 'finite', H.max_range, mps_unit_cell_width=H.unit_cell_width)
+
+
+@pytest.mark.parametrize('operands', ['12', '11', '22'])
+@pytest.mark.parametrize('case', list(_SUMMAND_LABELS))
+@pytest.mark.parametrize('L', [2, 4])
+def test_MPO_addition_duplicate_summand_labels(case, L, operands):
+    """Operands may use equal (or no) labels for their non-Id summands; they are dropped in the sum."""
+    prefix1, prefix2 = _SUMMAND_LABELS[case]
+    pars = dict(L=L, bc_MPS='finite', conserve=None)
+    H1 = SpinChain(dict(Jx=1.0, Jy=1.0, Jz=1.1, hz=0.2, **pars)).get_H_MPO()
+    H2 = SpinChain(dict(Jx=0.4, Jy=0.3, Jz=-0.7, hz=-0.5, **pars)).get_H_MPO()
+    H1l, H2l = _with_summand_labels(H1, prefix1), _with_summand_labels(H2, prefix2)
+    assert H1l.has_IdL_IdR_labels() and H2l.has_IdL_IdR_labels()
+    if prefix1 is not None:
+        assert any(str(l).startswith(prefix1) for l in H1l._W[0].get_leg('wR').summand_labels)
+    A, B = [{'1': H1l, '2': H2l}[key] for key in operands]
+    S = A + B
+    S.test_sanity()
+    assert S.has_IdL_IdR_labels()
+    npt.assert_allclose(_dense_H(S), _dense_H(A) + _dense_H(B), atol=1e-12)
+    assert all(c < ca + cb for c, ca, cb in zip(S.chi[1:-1], A.chi[1:-1], B.chi[1:-1]))  # fast path
+    npt.assert_allclose(_dense_H(H1l + H2l + H1l), 2 * _dense_H(H1) + _dense_H(H2), atol=1e-12)
+
+
+@pytest.mark.parametrize('operands', ['12', '21', '11'])
+@pytest.mark.parametrize('case', list(_SUMMAND_LABELS))
+def test_MPO_addition_duplicate_summand_labels_infinite(case, operands):
+    """Same as above for a one-site infinite MPO from a hand-built grid."""
+    site = SpinSite(S=0.5, conserve=None)
+
+    def cell(name, pref=1.0):
+        op = (site.get_op(name) * pref).as_SymmetricTensor()
+        op = lasy.add_trivial_leg(op, codomain_pos=0, label='wL', is_dual=False)
+        return lasy.add_trivial_leg(op, domain_pos=-1, label='wR', is_dual=False)
+
+    Id = cell('Id')
+
+    def imp(prefix, factor):
+        labels = ['IdL'] + ['' if prefix is None else f'{prefix}{k}' for k in range(2)] + ['IdR']
+        grid = [
+            [Id, cell('Sp'), cell('Sz', 0.7j), cell('Sz', 0.3 * factor)],
+            [None, None, None, cell('Sm')],
+            [None, None, None, cell('Sz', factor)],
+            [None, None, None, Id],
+        ]
+        W = lasy.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*'], row_labels=labels, col_labels=labels)
+        return mpo.MPO([site], [W], 'infinite', mps_unit_cell_width=1)
+
+    prefix1, prefix2 = _SUMMAND_LABELS[case]
+    H1, H2 = imp(prefix1, 1.0), imp(prefix2, -2.0)
+    A, B = [{'1': H1, '2': H2}[key] for key in operands]
+    S = A + B
+    S.test_sanity()
+    assert S.has_IdL_IdR_labels()
+    assert list(S.chi) == [6, 6]  # IdL, IdR shared, and two non-Id summands from each operand
+    assert S._W[0].get_leg('wL').summand_labels == ['IdL', '', '', '', '', 'IdR']
+    # check the numbers: all cells of the sum. Rows / columns of the sum: IdL, the two non-Id summands of A,
+    # those of B, IdR; rows / columns of A and B: IdL, their two non-Id summands, IdR.
+    W_sum, W_A, W_B = S._W[0], A._W[0], B._W[0]
+
+    def grid_cell(W, row, col):
+        return lasy.tensor_grid_cell(W, row, col, 'wL', 'wR')
+
+    expected = {
+        (0, 0): grid_cell(W_A, 0, 0),
+        (5, 5): grid_cell(W_A, 3, 3),
+        (0, 5): grid_cell(W_A, 0, 3) + grid_cell(W_B, 0, 3),
+    }
+    for k in (1, 2):
+        expected[0, k], expected[0, k + 2] = grid_cell(W_A, 0, k), grid_cell(W_B, 0, k)
+        expected[k, 5], expected[k + 2, 5] = grid_cell(W_A, k, 3), grid_cell(W_B, k, 3)
+    for row in range(6):
+        for col in range(6):
+            if (row, col) in expected:
+                assert lasy.almost_equal(grid_cell(W_sum, row, col), expected[row, col])
+            else:
+                assert lasy.norm(grid_cell(W_sum, row, col)) == pytest.approx(0)
 
 
 @pytest.mark.parametrize('j', [3, 4, 7])
