@@ -248,6 +248,7 @@ class ExactDiag:
                 if H_bond[i] is None:
                     continue
                 # H_bond[i] has labels p0, p1, p1*, p0* and lives on sites (i-1, i)
+                # Read-only dense view under Eigen; transpose/reshape are views, not in-place writes.
                 Hb = H_bond[i].to_numpy(understood_braiding=True)
                 Hb = Hb.transpose(0, 1, 3, 2).reshape(dims[i - 1] * dims[i], dims[i - 1] * dims[i])
                 left = np.eye(int(np.prod(dims[: i - 1])))
@@ -421,7 +422,7 @@ class ExactDiag:
         """Contract the finite `mpo` to a dense matrix in the Kronecker basis (site 0 most significant)."""
         T = None
         for i in range(mpo.L):
-            W = mpo.get_W(i).to_numpy(understood_braiding=True)  # axes wL, p, wR, p*
+            W = mpo.get_W(i).to_numpy(understood_braiding=True)  # axes wL, p, wR, p*; read-only view
             if T is None:
                 T = W
                 continue

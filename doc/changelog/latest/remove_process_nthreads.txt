@@ -1,0 +1,9 @@
+- Removed ``tenpy.tools.process`` helpers
+  ``load_omp_library``, ``omp_get_nthreads``, ``omp_set_nthreads``,
+  ``mkl_get_nthreads``, and ``mkl_set_nthreads`` (and their tests).
+  They used ctypes against OpenMP/MKL and were unreliable once PyTorch owns
+  MKL via ``mkl_set_num_threads_local``. Prefer setting ``OMP_NUM_THREADS``
+  and/or ``MKL_NUM_THREADS`` in the environment *before* starting Python
+  (see :doc:`/troubleshooting` and :doc:`/intro/simulations`). For a runtime
+  change when PyTorch is loaded, use ``torch.set_num_threads(n)``.
+  ``memory_usage`` in the same module is unchanged.

@@ -259,6 +259,7 @@ class MPO(MPSGeometry):
                 # Rearrange to (wL, wR, p, p*)
                 # Transpose so  op[jL,jR,:,:] is in (p, p*) order.
                 tensor_rearranged = lasy.planar_permute_legs(tensor, codomain=['wL', 'wR'], domain=['p', 'p*'])
+                # Read-only dense view under Eigen (do not mutate in place).
                 arr = tensor_rearranged.to_numpy(understood_braiding=True)
 
                 arr = arr.transpose(0, 1, 3, 2)  # → (chiL, chiR, d, d) axes (wL, wR, p, p*)
