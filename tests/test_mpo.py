@@ -246,6 +246,23 @@ def _nonhermitian_mpo(name, conserve, bc, L=4, dxs=(1, 2)):
     return model_.get_H_MPO()
 
 
+def _hermitian_mpo(name, conserve, bc, L=4):
+    """The MPO of a hermitian model with the same `name` and `conserve` as in :func:`_nonhermitian_mpo`."""
+    if name == 'spin':
+        # couplings that respect the symmetry
+        couplings = {
+            None: dict(Jx=1.0, Jy=0.5, Jz=1.0, hz=0.2),
+            'Sz': dict(Jx=1.0, Jy=1.0, Jz=1.5, hz=0.2),
+            'SU2': dict(Jx=1.0, Jy=1.0, Jz=1.0),
+        }
+        return SpinChain(dict(L=L, bc_MPS=bc, conserve=conserve, **couplings[conserve])).get_H_MPO()
+    if name == 'fermion':
+        pars = dict(L=L, J=1.0, V=0.5, mu=0.2, conserve=conserve, bc_MPS=bc, symmetry_backend='fusion_tree')
+        return FermionChain(pars).get_H_MPO()
+    pars = dict(L=L, t=1.0, U=2.0, mu=0.3, bc_MPS=bc, conserve_N='N', conserve_S=conserve)
+    return FermiHubbardModel(pars).get_H_MPO()
+
+
 def test_MPO_dagger():
     """MPO.dagger agrees with the dense hermitian conjugate and keeps the IdL / IdR structure."""
     L = 4
@@ -355,20 +372,17 @@ def test_MPO_dagger_environment(conserve, L=4):
 @pytest.mark.parametrize('bc', ['finite', 'infinite'])
 @pytest.mark.parametrize(
     'name, conserve, L',
-    [('spin', None, 4), ('spin', 'Sz', 4), ('spin', 'SU2', 4), ('hubbard', 'SU2', 3)],
+    [
+        ('spin', None, 4),
+        ('spin', 'Sz', 4),
+        ('spin', 'SU2', 4),
+        ('fermion', 'N', 4),
+        ('fermion', 'parity', 4),
+        ('hubbard', 'SU2', 3),
+    ],
 )
 def test_MPO_is_hermitian(bc, name, conserve, L):
-    if name == 'spin':
-        # couplings that respect the symmetry
-        couplings = {
-            None: dict(Jx=1.0, Jy=0.5, Jz=1.0, hz=0.2),
-            'Sz': dict(Jx=1.0, Jy=1.0, Jz=1.5, hz=0.2),
-            'SU2': dict(Jx=1.0, Jy=1.0, Jz=1.0),
-        }
-        hermitian = SpinChain(dict(L=L, bc_MPS=bc, conserve=conserve, **couplings[conserve])).get_H_MPO()
-    else:
-        pars = dict(L=L, t=1.0, U=2.0, mu=0.3, bc_MPS=bc, conserve_N='N', conserve_S=conserve)
-        hermitian = FermiHubbardModel(pars).get_H_MPO()
+    hermitian = _hermitian_mpo(name, conserve, bc, L)
     assert hermitian.is_hermitian()
     assert hermitian.is_equal(hermitian.dagger())
     non_hermitian = _nonhermitian_mpo(name, conserve, bc, L)
@@ -401,9 +415,12 @@ def test_MPO_dagger_fermions(conserve, dxs):
     _check_dagger_tensor(_nonhermitian_mpo('fermion', conserve, 'finite', 4, dxs=dxs))
 
 
-@pytest.mark.parametrize('name, L', [('Fibonacci', 3), ('SU2_2', 2), ('Ising', 2)])
-def test_MPO_dagger_anyons(name, L):
-    """MPO.dagger for anyons, with random complex W tensors containing all sectors on the virtual legs."""
+def _random_anyonic_mpo(name, L, bc='finite'):
+    """An MPO of anyons with random complex `W` tensors that contain all sectors on the virtual legs.
+
+    `name` is one of ``'Fibonacci'``, ``'SU2_2'``, ``'Ising'``. The `W` do not have summand labels.
+    The virtual legs at the boundary of a finite MPO are trivial.
+    """
     if name == 'Fibonacci':
         site = FibonacciAnyonSite()
     elif name == 'SU2_2':
@@ -412,9 +429,10 @@ def test_MPO_dagger_anyons(name, L):
         site = AnyonSite(lasy.Symmetry([lasy.IsingAnyonCategory(3)]))
     sym = site.symmetry
     sectors = [np.array(s) for s in site.leg.sector_decomposition]
-    trivial = ElementarySpace.from_trivial_sector(1, symmetry=sym)
     virtual = ElementarySpace.from_defining_sectors(sym, sectors, [1] * len(sectors))
-    spaces = [trivial] + [virtual] * (L - 1) + [trivial]
+    spaces = [virtual] * (L + 1)
+    if bc == 'finite':
+        spaces[0] = spaces[-1] = ElementarySpace.from_trivial_sector(1, symmetry=sym)
     Ws = [
         lasy.SymmetricTensor.from_random_normal(
             [spaces[i], site.leg],
@@ -424,8 +442,76 @@ def test_MPO_dagger_anyons(name, L):
         )
         for i in range(L)
     ]
-    M = mpo.MPO([site] * L, Ws, 'finite', mps_unit_cell_width=L)
-    _check_dagger_tensor(M)
+    return mpo.MPO([site] * L, Ws, bc, mps_unit_cell_width=L)
+
+
+@pytest.mark.parametrize(
+    'name, L', [('Fibonacci', 3), ('Fibonacci', 4), ('SU2_2', 2), ('SU2_2', 3), ('Ising', 2), ('Ising', 3)]
+)
+def test_MPO_dagger_anyons(name, L):
+    """MPO.dagger for anyons, with random complex W tensors containing all sectors on the virtual legs."""
+    _check_dagger_tensor(_random_anyonic_mpo(name, L))
+
+
+@pytest.mark.parametrize('bc', ['finite', 'infinite'])
+def test_MPO_dagger_golden_chain(bc, L=4):
+    """The dagger of the MPO of a non-hermitian golden chain keeps the `IdL` / `IdR` structure; ``H + H.dagger()``.
+
+    The MPO is built by hand, since `CouplingModel` / `MPOGraph` do not support anyons yet, see #730.
+    ``H = J sum_i h_{i,i+1}`` with the golden chain coupling ``h = -P^vac`` (`gold_coupling`) and a complex `J`.
+    """
+    site = FibonacciAnyonSite()
+    gold = lasy.models.gold_coupling([site, site], name='gold')
+    Id = Coupling.from_tensor(lasy.SymmetricTensor.from_eye([site.leg], labels=['p0']), [site]).factorization[0]
+    J = 1.0 + 0.5j
+    grid = [[Id, J * gold.factorization[0], None], [None, None, gold.factorization[1]], [None, None, Id]]
+    labels = ['IdL', 'gold', 'IdR']
+    W = lasy.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*'], row_labels=labels, col_labels=labels)
+    H = mpo.MPO([site] * 2, [W, W], 'infinite', mps_unit_cell_width=2)
+    if bc == 'finite':
+        H = _finite_from_infinite(H, L)
+    H.test_sanity()
+    assert not H.is_hermitian()
+    H_dag = H.dagger()
+    H_dag.test_sanity()
+    for i, (W, W_dag) in enumerate(zip(H._W, H_dag._W)):
+        for leg in ['wL', 'wR']:
+            assert W_dag.get_leg(leg).summand_labels == W.get_leg(leg).summand_labels
+        mpo.partition_W(W_dag, left_boundary=H.finite and i == 0, right_boundary=H.finite and i == H.L - 1)
+    S = H + H_dag
+    S.test_sanity()
+    assert S.has_IdL_IdR_labels()
+    assert S.is_hermitian()
+    if bc == 'infinite':
+        # no dense operator of an infinite MPO: compare the projections to a finite chain
+        H, S = _finite_from_infinite(H, L), _finite_from_infinite(S, L)
+    # no dense matrix for anyons: compare the contracted tensors
+    T = Coupling(list(H.sites), factorization=list(H._W)).to_tensor()
+    T_sum = Coupling(list(S.sites), factorization=list(S._W)).to_tensor()
+    assert not lasy.almost_equal(T, lasy.dagger(T))  # the test case is not hermitian
+    assert lasy.almost_equal(T_sum, T + lasy.dagger(T))
+
+
+@pytest.mark.parametrize('bc', ['finite', 'infinite'])
+@pytest.mark.parametrize(
+    'name, L', [('Fibonacci', 3), ('Fibonacci', 4), ('SU2_2', 2), ('SU2_2', 3), ('Ising', 2), ('Ising', 3)]
+)
+def test_MPO_add_dagger_anyons(bc, name, L):
+    """``H + H.dagger()`` for anyons, with random `W` without summand labels (the block-diagonal sum)."""
+    H = _random_anyonic_mpo(name, L, bc)
+    H_dag = H.dagger()
+    S = H + H_dag
+    S.test_sanity()
+    # the block-diagonal sum has the virtual legs of both operands (the boundary legs of a finite MPO are trivial)
+    for i, (chi, chi_dag, chi_sum) in enumerate(zip(H.chi, H_dag.chi, S.chi)):
+        trivial = bc == 'finite' and i in [0, L]
+        assert chi_sum == pytest.approx(chi if trivial else chi + chi_dag)
+    if bc == 'finite':
+        # no dense matrix for anyons: compare the contracted tensors
+        T = Coupling(list(H.sites), factorization=list(H._W)).to_tensor()
+        T_sum = Coupling(list(S.sites), factorization=list(S._W)).to_tensor()
+        assert not lasy.almost_equal(T, lasy.dagger(T))  # the test case is not hermitian
+        assert lasy.almost_equal(T_sum, T + lasy.dagger(T))
 
 
 def test_MPO_dagger_explicit_plus_hc():
@@ -440,6 +526,17 @@ def test_MPO_dagger_explicit_plus_hc():
     M_dag._W.pop()
     assert len(M._W) == len(W_orig)
     assert all(a is b for a, b in zip(M._W, W_orig))
+
+
+def _finite_from_infinite(M, L):
+    """Project the infinite MPO `M` to a finite chain of length `L` (a multiple of ``M.L``).
+
+    The first / last tensor are the ``IdL`` row / ``IdR`` column of the repeated unit cell.
+    """
+    Ws = [M._W[i % M.L] for i in range(L)]
+    first = lasy.tensor_subgrid(Ws[0], ['IdL'], list(range(len(Ws[0].get_leg('wR').summand_labels))), 'wL', 'wR')
+    last = lasy.tensor_subgrid(Ws[-1], list(range(len(Ws[-1].get_leg('wL').summand_labels))), ['IdR'], 'wL', 'wR')
+    return mpo.MPO([M.sites[i % M.L] for i in range(L)], [first] + Ws[1:-1] + [last], 'finite', mps_unit_cell_width=L)
 
 
 def test_MPO_dagger_infinite(L=4):
@@ -466,16 +563,53 @@ def test_MPO_dagger_infinite(L=4):
     M_dag.test_sanity()
     assert M_dag.bc == 'infinite'
 
-    def finite_dense(W):
-        n = len(W.get_leg('wL').summand_labels)
-        first = lasy.tensor_subgrid(W, ['IdL'], list(range(n)), 'wL', 'wR')
-        last = lasy.tensor_subgrid(W, list(range(n)), ['IdR'], 'wL', 'wR')
-        H = mpo.MPO([site] * L, [first] + [W] * (L - 2) + [last], 'finite', mps_unit_cell_width=L)
-        return _mpo_to_dense(H, L)
-
-    D, D_dag = finite_dense(M._W[0]), finite_dense(M_dag._W[0])
+    D, D_dag = (_mpo_to_dense(_finite_from_infinite(X, L), L) for X in [M, M_dag])
     assert not np.allclose(D, D.conj().T)  # the test case is not hermitian
     npt.assert_allclose(D_dag, D.conj().T, atol=1e-14)
+
+
+@pytest.mark.parametrize('bc', ['finite', 'infinite'])
+@pytest.mark.parametrize('hermitian', [True, False], ids=['hermitian', 'non_hermitian'])
+@pytest.mark.parametrize(
+    'name, conserve, L, L_cell',
+    [
+        ('spin', None, 4, 2),
+        ('spin', None, 6, 3),
+        ('spin', 'Sz', 4, 2),
+        ('spin', 'SU2', 4, 2),
+        ('spin', 'SU2', 6, 3),
+        ('fermion', 'N', 4, 2),
+        ('fermion', 'parity', 3, 3),
+        ('hubbard', 'SU2', 3, 1),
+    ],
+)
+def test_MPO_add_dagger(bc, hermitian, name, conserve, L, L_cell):
+    """``H + H.dagger()`` is the dense ``M + M^dagger``, also for an infinite `H`, which is projected to length `L`.
+
+    `L_cell` is the unit cell of the infinite MPO. This needs `MPO.__add__` to deal with the summand labels
+    that `H` and ``H.dagger()`` share.
+    """
+    make = _hermitian_mpo if hermitian else _nonhermitian_mpo
+    H = make(name, conserve, bc, L if bc == 'finite' else L_cell)
+    H_dag = H.dagger()
+    S = H + H_dag
+    S.test_sanity()
+    assert S.has_IdL_IdR_labels()
+    assert S.is_equal(H_dag + H)
+    assert S.is_hermitian()
+    if bc == 'infinite':
+        # IdL and IdR are shared, all other summands of the two MPOs are kept
+        assert list(S.chi) == [chi + chi_dag - 2 for chi, chi_dag in zip(H.chi, H_dag.chi)]
+        # no dense matrix of an infinite MPO: compare the projections to a finite chain
+        H, S = _finite_from_infinite(H, L), _finite_from_infinite(S, L)
+    M, S_dense = _dense_H(H), _dense_H(S)
+    npt.assert_allclose(S_dense, M + M.conj().T, atol=1e-12)
+    if hermitian:
+        npt.assert_allclose(M, M.conj().T, atol=1e-12)
+        npt.assert_allclose(S_dense, 2 * M, atol=1e-12)
+    else:
+        assert not np.allclose(M, M.conj().T, atol=1e-8)  # the test is not vacuous
+        assert not np.allclose(S_dense, 2 * M, atol=1e-8)
 
 
 @pytest.mark.parametrize('bc', ['infinite', 'finite'])
