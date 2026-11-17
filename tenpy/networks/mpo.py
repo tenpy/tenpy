@@ -2292,8 +2292,8 @@ class MPOGraph(MPSGeometry):
             If `op` should be explicitly normalized, absorbing the factor into `strength`.
             If not, it is assumed to be normalized without checking.
         exist_ok: bool
-            If ``False`` (default), an exisiting edge at that position causes a ``ValueError``.
-            If ``True``, an existing edge is modified inplace, by adding the new opertor.
+            If ``False`` (default), an existing edge at that position causes a ``ValueError``.
+            If ``True``, an existing edge is modified inplace, by adding the new operator.
 
         """
         assert isinstance(op, lasy.Tensor)
@@ -2332,6 +2332,48 @@ class MPOGraph(MPSGeometry):
 
         G_L[keyR] = (op, strength)
         return
+
+    def identify_edge(self, i: int, op: lasy.Tensor, keyL: str | None = None, keyR: str | None = None
+                      ) -> None | tuple[str, float | complex]:
+        """FIXME"""
+        assert isinstance(op, lasy.Tensor)
+        assert op.codomain_labels == ['wL', 'p']
+        assert op.domain_labels == ['p*', 'wR']
+
+        # normalize w.r.t. <A|B> = Tr(A.hc @ B) / dim   -->  |A| = norm(A) / sqrt(dim)
+        dim = op.get_leg('p').dim
+        N = lasy.norm(op) / lasy.sqrt(dim)
+        op = op / N
+
+        if keyL is None:
+            assert keyR is not None
+            assert self.states[i + 1][keyR] == op.get_leg_co_domain('wR')
+            op_state_L = op.get_leg_co_domain('wL')
+            for keyL, stateL in self.states[i].items():
+                if stateL != op_state_L:
+                    continue
+                A, strength = self.graph[i][keyL][keyR]
+                ov = lasy.inner(op, A) / dim
+                if abs(abs(ov) - 1) < 1e-16:  # FIXME tol??
+                    # |op> = |A><A|op>
+                    return keyL, N * ov  # FIXME double check factors!
+            return None, 1
+
+        if keyR is None:
+            assert keyL is not None
+            assert self.states[i][keyL] == op.get_leg_co_domain('wL')
+            op_state_R = op.get_leg_co_domain('wR')
+            for keyR, stateR in self.states[i + 1].items():
+                if stateR != op_state_R:
+                    continue
+                A, strength = self.graph[i][keyL][keyR]
+                ov = lasy.inner(op, A) / dim
+                if abs(abs(ov) - 1) < 1e-16:  # FIXME tol??
+                    # |op> = |A><A|op>
+                    return keyL, N * ov  # FIXME double check factors!
+            return None, 1
+
+        raise ValueError('Must specify either exactly one of keyL, keyR')
 
     def add_onsite(
         self,
@@ -2392,16 +2434,24 @@ class MPOGraph(MPSGeometry):
             raise NotImplementedError  # TODO how do we specify??
 
         WL, WR = coupling.factorization
-        self.add(i, 'IdL', label, WL)
-        key = label
+
+        # try re-using an existing edge for WL
+        key, a = self.identify_edge(i, WL, keyL='IdL')
+
+        if key is None:
+            key = label
+            self.add(i, 'IdL', key, WL)
+            a = 1
+
         for k in range(i + 1, j):
             if not self.finite and k % self.L == 0:
-                next_key = f'{label}#{k // self.L}'
+                # FIXME this should prbly use the key, not label!
+                next_key = f'{label}#{k // self.L}'  # FIXME should we have structured labels?
             else:
                 next_key = key
-            self.add_identity(k, key, next_key, overbraid=overbraid)
+            self.ensure_identity(k, key, next_key, overbraid=overbraid)  # FIXME impl
             key = next_key
-        self.add(j, key, 'IdR', WR, strength)
+        self.add(j, key, 'IdR', WR, a * strength, exist_ok=True)
 
     def add_elementary_multi_coupling(self, ijkl: Sequence[int], coupling: lasy.Coupling, strength, label: str):
         """Add an elementary multi-site coupling on ordered sites (``ijkl`` strictly ascending).
