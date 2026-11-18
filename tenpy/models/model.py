@@ -107,6 +107,33 @@ class EvolutionModel(metaclass=ABCMeta):
         """TODO"""
         raise NotImplementedError('site grouping not implemented')
 
+    @property
+    def rng(self):
+        """Reproducible numpy pseudo random number generator.
+
+        If you want to add randomness/disorder to your model,
+        it is recommended use this random number generator for reproducibility of the model::
+
+            self.rng.random(size=[3, 5])
+
+        Especially for models with time-dependence, you can/will otherwise end up generating a new
+        disordered at each time-step!
+
+        Options
+        -------
+        .. cfg:configoptions :: ModelBuilder
+
+            random_seed :: None | int
+                Defaults to 123456789. Seed for numpy pseudo random number generator which can
+                be used as e.g. ``self.rng.random(...)``.
+
+        """
+        rng = getattr(self, '_rng', None)
+        if rng is None:
+            seed = getattr(self, 'options', {}).get('random_seed', 123456789)
+            self._rng = rng = np.random.default_rng(seed=seed)
+        return rng
+
 
 class RandomUnitaryEvolution(EvolutionModel):
     """TODO write docs
