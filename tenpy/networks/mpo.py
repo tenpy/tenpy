@@ -941,12 +941,24 @@ class MPO(MPSGeometry):
         UI : :class:`~tenpy.networks.mpo.MPO`
             The propagator, i.e. approximation :math:`U_I ~= exp(H*dt)`
 
+        Raises
+        ------
+        ValueError
+            If the MPO does not have the ``'IdL'`` / ``'IdR'`` labels, see :meth:`has_IdL_IdR_labels`,
+            or not the structure described in :func:`partition_W` (e.g. rescaled tensors or entries
+            below the diagonal blocks).
+
         """
         if self.explicit_plus_hc:
             raise NotImplementedError(
                 "MPO.make_U_I() assumes hermitian H, you can't use "
                 'the `explicit_plus_hc=True` flag!\n'
                 'See also https://github.com/tenpy/tenpy/issues/265'
+            )
+        if not self.has_IdL_IdR_labels():
+            raise ValueError(
+                "MPO.make_U_I() needs an MPO in the standard form with the summand labels 'IdL' and 'IdR' "
+                'on its virtual legs, see MPO.has_IdL_IdR_labels().'
             )
         U_list = []
 
@@ -1952,63 +1964,132 @@ class MPO(MPSGeometry):
             raise KeyError(f'i = {i:d} out of bounds for finite MPO')
         return i
 
+    def has_IdL_IdR_labels(self) -> bool:
+        """Whether the virtual legs of `self` carry the summand labels ``'IdL'`` and ``'IdR'``.
+
+        This is the standard upper-block-triangular sum form (see :func:`partition_W`), as generated
+        e.g. by :class:`MPOGraph` / the models, which is required by various algorithms.
+        Every virtual bond needs to have both ``'IdL'`` and ``'IdR'`` as summand labels.
+        At the boundaries of a finite MPO (``bc == 'finite'``) only the respective existing one,
+        i.e. the left leg of the first tensor has the single summand ``'IdL'`` and the right leg of
+        the last tensor has the single summand ``'IdR'``. For other boundary conditions, all
+        virtual legs need both labels.
+
+        Returns
+        -------
+        bool
+            ``True`` if all virtual legs have these labels, ``False`` otherwise, e.g. for MPOs with
+            vanishing ``IdL`` or ``IdR`` columns or if the virtual legs have no summand labels.
+
+        """
+        for i, W in enumerate(self._W):
+            for leg_name, boundary_label in [
+                ('wL', 'IdL' if i == 0 else None),
+                ('wR', 'IdR' if i == self.L - 1 else None),
+            ]:
+                labels = getattr(W.get_leg(leg_name), 'summand_labels', None)
+                if labels is None:
+                    return False
+                if self.bc == 'finite' and boundary_label is not None:
+                    if labels != [boundary_label]:
+                        return False
+                elif 'IdL' not in labels or 'IdR' not in labels:
+                    return False
+        return True
+
     def __add__(self, other):
         """Return an MPO representing `self + other`.
 
-        Requires both `self` and `other` to be in standard sum form with `IdL` and `IdR` being set.
-
         This is a naive, block-wise addition without any compression!
+
+        If both `self` and `other` are in the standard upper-block-triangular sum form, i.e. if
+        :meth:`has_IdL_IdR_labels` is ``True`` and they actually have that structure (the
+        ``IdL-IdL`` and ``IdR-IdR`` cells are the identity, and there are no entries below the
+        diagonal blocks, see :func:`partition_W`), the ``IdL`` / ``IdR`` entries are shared:
+        The virtual bond dimension of the result is the sum of those of `self` and `other`, minus
+        the shared entries, and the result is again in this form and has the ``'IdL'`` and
+        ``'IdR'`` labels, such that it can be added again, used in :class:`MPOEnvironment`,
+        :meth:`make_U_I` etc. The labels of the other summands of the operands are *not* kept
+        (they become ``''``, i.e. unlabelled), since they could clash between the operands.
+        This also holds if one or both of them have no terms besides on-site terms on some bonds.
+        Note that e.g. a rescaled first tensor ``2 * W[0]`` breaks the structure.
+
+        Otherwise, we use the generic block-diagonal structure, i.e. the virtual bond dimension of
+        the result is the sum of those of `self` and `other`.
+        For finite bc, the outer virtual legs are trivial and the first / last tensor are
+        stacked horizontally / vertically instead::
+
+            |   W_left  =  [[W_self  W_other]]
+            |
+            |   W       =  [[W_self     0   ]
+            |               [  0     W_other]]
+            |
+            |   W_right =  [[W_self ]
+            |               [W_other]]
+
+        The result of this fallback for finite bc keeps only the outer ``'IdL'`` (left leg of the
+        first tensor) and ``'IdR'`` (right leg of the last tensor) summand labels, such that it can
+        be used e.g. in :class:`MPOEnvironment` and for :meth:`expectation_value`.
+        However, it is *not* in the standard form, i.e. :meth:`has_IdL_IdR_labels` is ``False`` and
+        e.g. :meth:`make_U_I` is not available for it (it needs the labels *and* the structure
+        described in :func:`partition_W`, and raises a ``ValueError`` otherwise).
+        For ``'infinite'`` bc, the result of the fallback has no summand labels at all.
+
+        Limitations (see also https://github.com/tenpy/tenpy/issues/676):
+
+        - Finite MPOs need ``L > 1`` (same restriction as :meth:`make_U_I`).
+        - ``'segment'`` boundary conditions are not supported.
 
         Parameters
         ----------
         other : :class:`MPO`
-            MPO to be added to `self`.
+            MPO to be added to `self`. Needs the same boundary conditions, length and
+            ``unit_cell_width``, as well as the same ``explicit_plus_hc`` flag as `self`.
 
         Returns
         -------
         sum_mpo : :class:`MPO`
             The sum `self + other`.
 
+        Raises
+        ------
+        ValueError
+            If the MPOs have different ``explicit_plus_hc``, ``bc``, ``L`` or ``unit_cell_width``,
+            if the ``is_dual`` flags of their virtual legs ``wL`` or ``wR`` do not match, or if
+            `self` is a finite MPO with ``L == 1``.
+        NotImplementedError
+            For ``'segment'`` bc.
+
         """
+        if not isinstance(other, MPO):
+            return NotImplemented
         if self.explicit_plus_hc != other.explicit_plus_hc:
             raise ValueError('Can not add MPOs with different explicit_plus_hc flags')
-
+        if self.bc != other.bc:
+            raise ValueError(f'Can not add MPOs with different bc: {self.bc!r} and {other.bc!r}')
+        if self.bc == 'segment':
+            raise NotImplementedError("Adding MPOs with 'segment' bc is not supported.")
+        if other.L != self.L:
+            raise ValueError(f'Can not add MPOs with different length L: {self.L} and {other.L}')
+        if self.unit_cell_width != other.unit_cell_width:
+            raise ValueError(
+                f'Can not add MPOs with different unit_cell_width: {self.unit_cell_width} and {other.unit_cell_width}'
+            )
         L = self.L
-        assert self.bc == other.bc
-        assert self.unit_cell_width == other.unit_cell_width
-        assert other.L == L
-
-        Ws = []
-        for i in range(L):
-            left = self.finite and i == 0
-            right = self.finite and i == L - 1
-            A1, B1, C1, D1, Id = partition_W(self._W[i], left_boundary=left, right_boundary=right)
-            A2, B2, C2, D2, _ = partition_W(other._W[i], left_boundary=left, right_boundary=right)
-            Id_L_L = lasy.tensor_from_grid([[Id]], labels=Id.labels, col_labels=['IdL'], row_labels=['IdL'])
-            Id_R_R = lasy.tensor_from_grid([[Id]], labels=Id.labels, col_labels=['IdR'], row_labels=['IdR'])
-
-            if left:
-                grid = [[Id_L_L, C1, C2, D1 + D2]]
-            elif right:
-                grid = [[D1 + D2], [B1], [B2], [Id_R_R]]
-            else:
-                grid = [
-                    [Id_L_L, C1, C2, D1 + D2],
-                    [None, A1, None, B1],
-                    [None, None, A2, B2],
-                    [None, None, None, Id_R_R],
-                ]
-
-            # remove all-None rows and all-None cols (can happen for "sparse" MPOs)
-            sparse_rows = [i for i, row in enumerate(grid) if all(x is None for x in row)]
-            sparse_cols = [j for j in range(len(grid[0])) if all(row[j] is None for row in grid)]
-            grid = [
-                [x for j, x in enumerate(row) if j not in sparse_cols]
-                for i, row in enumerate(grid)
-                if i not in sparse_rows
-            ]
-
-            Ws.append(lasy.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*']))
+        if self.finite and L < 2:
+            raise ValueError('Adding finite MPOs is only implemented for L > 1.')
+        for i, (W1, W2) in enumerate(zip(self._W, other._W)):
+            for leg_name in ['wL', 'wR']:
+                if W1.get_leg(leg_name).is_dual != W2.get_leg(leg_name).is_dual:
+                    raise ValueError(
+                        f'Can not add MPOs with mismatching duality of the virtual leg {leg_name!r} '
+                        f'of the tensor W[{i}]: is_dual={W1.get_leg(leg_name).is_dual} and '
+                        f'is_dual={W2.get_leg(leg_name).is_dual}.'
+                    )
+        if all(mpo.has_IdL_IdR_labels() and mpo._has_upper_triangular_structure() for mpo in [self, other]):
+            Ws = self._add_Ws_with_IdL_IdR(other)
+        else:
+            Ws = self._add_Ws_block_diagonal(other)
 
         if self.max_range is None or other.max_range is None:
             max_range = None
@@ -2021,7 +2102,125 @@ class MPO(MPSGeometry):
             max_range=max_range,
             explicit_plus_hc=self.explicit_plus_hc,
             mps_unit_cell_width=self.unit_cell_width,
-        )  # no graph
+        )
+
+    def _has_upper_triangular_structure(self) -> bool:
+        """Whether all tensors have the upper-block-triangular structure described in :func:`partition_W`.
+
+        Unlike :func:`partition_W`, this does not raise (and does not rely on ``assert``, which can
+        be disabled), but returns ``False`` if :meth:`has_IdL_IdR_labels` is ``False`` or if the
+        identity cells or the zero blocks are violated, e.g. for rescaled tensors.
+        """
+        if not self.has_IdL_IdR_labels():
+            return False
+        for i, W in enumerate(self._W):
+            left = self.bc == 'finite' and i == 0
+            right = self.bc == 'finite' and i == self.L - 1
+            if not _W_has_upper_triangular_structure(W, left_boundary=left, right_boundary=right):
+                return False
+        return True
+
+    def _add_Ws_with_IdL_IdR(self, other: MPO) -> list[lasy.Tensor]:
+        """Tensors for ``self + other``, assuming that both are in the standard form, see :meth:`__add__`.
+
+        The grid is built from cells with unlabelled legs (see :func:`_grid_cells`), such that equal
+        summand labels of `self` and `other` can not collide; only ``'IdL'`` and ``'IdR'`` are set
+        as labels of the rows / columns of the result.
+        """
+        labels = ['wL', 'p', 'wR', 'p*']
+        Ws = []
+        for W1, W2 in zip(self._W, other._W):
+            Id = _identity_cell(W1)
+            ops = []  # per operand: cells and the indices of the IdL, IdR and other summands
+            for W in (W1, W2):
+                lab_L, lab_R = W.get_leg('wL').summand_labels, W.get_leg('wR').summand_labels
+                ops.append(
+                    dict(
+                        cells=_grid_cells(W),
+                        L=[
+                            lab_L.index('IdL') if 'IdL' in lab_L else None,
+                            lab_L.index('IdR') if 'IdR' in lab_L else None,
+                        ],
+                        R=[
+                            lab_R.index('IdL') if 'IdL' in lab_R else None,
+                            lab_R.index('IdR') if 'IdR' in lab_R else None,
+                        ],
+                        others_L=[i for i, l in enumerate(lab_L) if l not in ['IdL', 'IdR']],
+                        others_R=[i for i, l in enumerate(lab_R) if l not in ['IdL', 'IdR']],
+                    )
+                )
+            # rows / columns: ('IdL',), then ('o', operand, index) for the others, then ('IdR',)
+            rows = [('IdL',)] + [('o', k, i) for k, op in enumerate(ops) for i in op['others_L']] + [('IdR',)]
+            cols = [('IdL',)] + [('o', k, i) for k, op in enumerate(ops) for i in op['others_R']] + [('IdR',)]
+
+            def cell(row, col):
+                if row[0] == 'o' and col[0] == 'o':
+                    if row[1] != col[1]:
+                        return None
+                    return ops[row[1]]['cells'][row[2]][col[2]]
+                if row[0] == 'o':  # other row, Id column: only IdR is nonzero
+                    return ops[row[1]]['cells'][row[2]][ops[row[1]]['R'][1]] if col[0] == 'IdR' else None
+                if col[0] == 'o':  # Id row, other column
+                    if row[0] != 'IdL':
+                        return None
+                    return ops[col[1]]['cells'][ops[col[1]]['L'][0]][col[2]]
+                if row[0] == col[0]:
+                    present = all(
+                        op['L'][row[0] == 'IdR'] is not None and op['R'][row[0] == 'IdR'] is not None for op in ops
+                    )
+                    return Id if present else None
+                if row[0] == 'IdL':  # IdL row, IdR column
+                    summands = [
+                        op['cells'][op['L'][0]][op['R'][1]]
+                        for op in ops
+                        if op['L'][0] is not None and op['R'][1] is not None
+                    ]
+                    return sum(summands[1:], summands[0]) if summands else None
+                return None  # IdR row, IdL column
+
+            full_grid = [[cell(r, c) for c in cols] for r in rows]
+            # Rows / columns without any entry (no summands besides IdL, IdR or at a boundary) are dropped.
+            keep_rows = [r for r, row in enumerate(full_grid) if any(c is not None for c in row)]
+            keep_cols = [c for c in range(len(cols)) if any(row[c] is not None for row in full_grid)]
+            grid = [[full_grid[r][c] for c in keep_cols] for r in keep_rows]
+            row_labels = [rows[r][0] if rows[r][0] != 'o' else '' for r in keep_rows]  # '' = no label
+            col_labels = [cols[c][0] if cols[c][0] != 'o' else '' for c in keep_cols]
+            Ws.append(lasy.tensor_from_grid(grid, labels=labels, row_labels=row_labels, col_labels=col_labels))
+        return Ws
+
+    def _add_Ws_block_diagonal(self, other: MPO) -> list[lasy.Tensor]:
+        """Tensors for ``self + other`` with the generic block-diagonal structure, see :meth:`__add__`."""
+        L = self.L
+        Ws = []
+        labels = ['wL', 'p', 'wR', 'p*']
+        for i in range(L):
+            cells1, cells2 = _grid_cells(self._W[i]), _grid_cells(other._W[i])
+            if self.finite and i == 0:
+                grid = [cells1[0] + cells2[0]]
+                W = lasy.tensor_from_grid(grid, labels=labels, row_labels=['IdL'])
+            elif self.finite and i == L - 1:
+                grid = [[row[0]] for row in cells1] + [[row[0]] for row in cells2]
+                W = lasy.tensor_from_grid(grid, labels=labels, col_labels=['IdR'])
+            else:
+                grid = [row + [None] * len(cells2[0]) for row in cells1]
+                grid += [[None] * len(cells1[0]) + row for row in cells2]
+                W = lasy.tensor_from_grid(grid, labels=labels)
+            Ws.append(W)
+        return Ws
+
+
+def _grid_cells(W: lasy.Tensor) -> list[list[lasy.Tensor]]:
+    """Split `W` along the virtual legs ``wL, wR`` into a grid of cells with unlabelled legs.
+
+    Without the summand labels (which can be duplicate between different MPOs), the cells of
+    different `W` can be stacked together again with :func:`lasyten.tensor_from_grid`.
+    A leg without summand labels (not a direct sum) is considered a single summand.
+    """
+    num_rows = len(getattr(W.get_leg('wL'), 'summand_labels', [None]))
+    num_cols = len(getattr(W.get_leg('wR'), 'summand_labels', [None]))
+    if num_rows == 1 and num_cols == 1 and not hasattr(W.get_leg('wL'), 'summand_labels'):
+        return [[W]]
+    return [[lasy.tensor_grid_cell(W, r, c, 'wL', 'wR') for c in range(num_cols)] for r in range(num_rows)]
 
 
 class MPOGraph(MPSGeometry):
@@ -4007,6 +4206,87 @@ def _mpo_check_for_iter_LP_RP_infinite(mpo):
     return mpo._outer_permutation
 
 
+def _identity_cell(W: lasy.Tensor) -> lasy.Tensor:
+    """The identity cell of `W` as a 4-leg tensor, with trivial virtual legs matching those of `W`."""
+    Id = lasy.SymmetricTensor.from_eye([W.get_leg('p')], W.backend, labels=['p', 'p*'])
+    Id = lasy.add_trivial_leg(Id, codomain_pos=0, label='wL', is_dual=W.get_leg('wL').is_dual)
+    Id = lasy.add_trivial_leg(Id, domain_pos=-1, label='wR', is_dual=not W.get_leg('wR').is_dual)
+    return Id
+
+
+def _upper_triangular_violation(
+    W: lasy.Tensor,
+    IdL='IdL',
+    IdR='IdR',
+    left_boundary: bool = False,
+    right_boundary: bool = False,
+) -> str | None:
+    """The first violated condition of the structure described in :func:`partition_W`, or ``None``.
+
+    Single source of truth for :func:`partition_W` (which raises a ``ValueError`` with this message)
+    and :func:`_W_has_upper_triangular_structure` (which returns a bool). Does not use ``assert``.
+    """
+    if left_boundary and right_boundary:
+        return 'Can not be left and right boundary at the same time'
+    for leg_name in ('wL', 'wR'):
+        if getattr(W.get_leg(leg_name), 'summand_labels', None) is None:
+            return f'The virtual leg {leg_name!r} has no summand labels'
+    labels_L = W.get_leg('wL').summand_labels
+    labels_R = W.get_leg('wR').summand_labels
+    Id = _identity_cell(W)
+    others_wL = [i for i, l in enumerate(labels_L) if l not in [IdL, IdR]]
+    others_wR = [i for i, l in enumerate(labels_R) if l not in [IdL, IdR]]
+
+    def vanishes(rows, cols):
+        if len(rows) == 0 or len(cols) == 0:
+            return True  # nothing to check
+        return lasy.norm(lasy.tensor_subgrid(W, rows, cols, 'wL', 'wR')).to_numpy() == 0
+
+    def is_identity(label):
+        return lasy.almost_equal(lasy.tensor_grid_cell(W, label, label, 'wL', 'wR'), Id)
+
+    if left_boundary:
+        if labels_L != [IdL]:
+            return f'The left leg of a left boundary tensor needs the single summand label {IdL!r}'
+        if not all(l in labels_R for l in (IdL, IdR)):
+            return f'The right leg needs the summand labels {IdL!r} and {IdR!r}'
+        if not is_identity(IdL):
+            return f'The {IdL!r}-{IdL!r} cell is not the identity'
+        return None
+    if right_boundary:
+        if not all(l in labels_L for l in (IdL, IdR)):
+            return f'The left leg needs the summand labels {IdL!r} and {IdR!r}'
+        if labels_R != [IdR]:
+            return f'The right leg of a right boundary tensor needs the single summand label {IdR!r}'
+        if not is_identity(IdR):
+            return f'The {IdR!r}-{IdR!r} cell is not the identity'
+        return None
+    if not all(l in labels for l in (IdL, IdR) for labels in (labels_L, labels_R)):
+        return f'Both virtual legs need the summand labels {IdL!r} and {IdR!r}'
+    if not is_identity(IdL):
+        return f'The {IdL!r}-{IdL!r} cell is not the identity'
+    if not vanishes(others_wL, [IdL]):
+        return f'There are nonzero entries below the {IdL!r}-{IdL!r} cell (in the column {IdL!r})'
+    if not vanishes([IdR], [IdL]):
+        return f'The {IdR!r}-{IdL!r} cell is nonzero'
+    if not vanishes([IdR], others_wR):
+        return f'There are nonzero entries left of the {IdR!r}-{IdR!r} cell (in the row {IdR!r})'
+    if not is_identity(IdR):
+        return f'The {IdR!r}-{IdR!r} cell is not the identity'
+    return None
+
+
+def _W_has_upper_triangular_structure(
+    W: lasy.Tensor,
+    IdL='IdL',
+    IdR='IdR',
+    left_boundary: bool = False,
+    right_boundary: bool = False,
+) -> bool:
+    """Whether `W` has the structure described in :func:`partition_W`; same conditions, but no raise."""
+    return _upper_triangular_violation(W, IdL, IdR, left_boundary, right_boundary) is None
+
+
 def partition_W(
     W: lasy.Tensor,
     IdL='IdL',
@@ -4032,64 +4312,59 @@ def partition_W(
 
     We verify that structure and extract the grid cells ``A, B, C, D``.
 
+    Parameters
+    ----------
+    W : :class:`lasyten.Tensor`
+        The MPO tensor with legs ``wL, p, wR, p*`` and summand labels on ``wL, wR``.
+    IdL, IdR : str
+        The summand labels of the first and last row/column.
+    Id_summand_label : str
+        Unused.
+    left_boundary, right_boundary : bool
+        Whether `W` is the first / last tensor of a finite MPO.
+
     Returns
     -------
     A, B, C, D: :class:`lasyten.Tensor` | None
-        The subgrids of W. Non-exsiting blocks (e.g. at a boundary or if bond-dim is 2) can be ``None``.
+        The subgrids of W. Blocks without entries (at a boundary, or if there are no summands
+        besides `IdL` and `IdR` on the relevant virtual leg, e.g. for only on-site terms) are ``None``.
     Id: :class:`lasyten.Tensor`
         The identity cell, as a 4-leg Tensor
 
+    Raises
+    ------
+    ValueError
+        If `W` does not have the structure above (e.g. a rescaled first tensor, nonzero entries
+        below the diagonal blocks or missing summand labels).
+
     """
-    Id = lasy.SymmetricTensor.from_eye([W.get_leg('p')], W.backend, labels=['p', 'p*'])
-    Id = lasy.add_trivial_leg(Id, codomain_pos=0, label='wL', is_dual=W.get_leg('wL').is_dual)
-    Id = lasy.add_trivial_leg(Id, domain_pos=-1, label='wR', is_dual=not W.get_leg('wR').is_dual)
+    violation = _upper_triangular_violation(W, IdL, IdR, left_boundary, right_boundary)
+    if violation is not None:
+        raise ValueError(f'partition_W: the tensor does not have the upper-block-triangular structure: {violation}.')
+    Id = _identity_cell(W)
     others_wL = [i for i, l in enumerate(W.get_leg('wL').summand_labels) if l not in [IdL, IdR]]
     others_wR = [i for i, l in enumerate(W.get_leg('wR').summand_labels) if l not in [IdL, IdR]]
 
-    if left_boundary and right_boundary:
-        raise ValueError('Can not be left and right boundary at the same time')
+    def subgrid(rows, cols):
+        if len(rows) == 0 or len(cols) == 0:
+            return None
+        return lasy.tensor_subgrid(W, rows, cols, 'wL', 'wR')
 
     if left_boundary:
-        assert W.get_leg('wL').summand_labels == [IdL]
-        assert all(l in W.get_leg('wR').summand_labels for l in (IdL, IdR))
-        assert lasy.almost_equal(lasy.tensor_grid_cell(W, IdL, IdL, 'wL', 'wR'), Id)
-        C = None if not others_wR else lasy.tensor_subgrid(W, [IdL], others_wR, 'wL', 'wR')
-        D = lasy.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
+        C = subgrid([IdL], others_wR)
+        D = subgrid([IdL], [IdR])
         return None, None, C, D, Id
 
     if right_boundary:
-        assert all(l in W.get_leg('wL').summand_labels for l in (IdL, IdR))
-        assert W.get_leg('wR').summand_labels == [IdR]
-        D = lasy.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
-        B = None if not others_wL else lasy.tensor_subgrid(W, others_wL, [IdR], 'wL', 'wR')
-        assert lasy.almost_equal(lasy.tensor_grid_cell(W, IdR, IdR, 'wL', 'wR'), Id)
+        D = subgrid([IdL], [IdR])
+        B = subgrid(others_wL, [IdR])
         return None, B, None, D, Id
 
     # remaining case: bulk tensor
-    assert all(l in W.get_leg(leg).summand_labels for l in (IdL, IdR) for leg in ('wL', 'wR'))
-    # first row
-    assert lasy.almost_equal(lasy.tensor_grid_cell(W, IdL, IdL, 'wL', 'wR'), Id)
-    if others_wR:
-        C = lasy.tensor_subgrid(W, [IdL], others_wR, 'wL', 'wR')
-    else:
-        C = None
-    D = lasy.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
-    # middle rows
-    if others_wL:
-        assert lasy.norm(lasy.tensor_subgrid(W, others_wL, [IdL], 'wL', 'wR')).to_numpy() == 0
-        B = lasy.tensor_subgrid(W, others_wL, [IdR], 'wL', 'wR')
-    else:
-        B = None
-    if others_wL and others_wR:
-        A = lasy.tensor_subgrid(W, others_wL, others_wR, 'wL', 'wR')
-    else:
-        A = None
-    # bottom row
-    assert lasy.norm(lasy.tensor_grid_cell(W, IdR, IdL, 'wL', 'wR')).to_numpy() == 0
-    if others_wR:
-        assert lasy.norm(lasy.tensor_subgrid(W, [IdR], others_wR, 'wL', 'wR')).to_numpy() == 0
-    assert lasy.almost_equal(lasy.tensor_grid_cell(W, IdR, IdR, 'wL', 'wR'), Id)
-
+    C = subgrid([IdL], others_wR)
+    D = subgrid([IdL], [IdR])
+    A = subgrid(others_wL, others_wR)
+    B = subgrid(others_wL, [IdR])
     return A, B, C, D, Id
 
 
