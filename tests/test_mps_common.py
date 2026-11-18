@@ -103,48 +103,6 @@ def test_variational_compression_overlap():
     npt.assert_allclose(got, expected, atol=1e-10)
 
 
-def _boundary_LP_RP(H_MPO, psi):
-    """Build the LP/RP environment tensors for a 2-site system.
-
-    For an ``L=2`` system, the environment `TwoSiteH` needs at ``i0=0`` (``LP`` left of site 0,
-    ``RP`` right of site 1) is just the trivial chain boundary decorated with the MPO bond leg
-    projected onto the ``'IdL'``/``'IdR'`` summand, which is exactly what
-    :meth:`MPOEnvironment.init_LP`/:meth:`MPOEnvironment.init_RP` build.
-    """
-    env = MPOEnvironment(psi, H_MPO, psi)
-    LP = env.init_LP(0, 0)
-    RP = env.init_RP(psi.L - 1, 0)
-    LP = lasy.permute_legs(LP, codomain=['vR*', 'wR'], domain=['vR'])
-    RP = lasy.permute_legs(RP, codomain=['vL*', 'vL'], domain=['wL'])
-    return LP, RP
-
-
-class _BoundaryMPOEnv:
-    """Minimal stand-in for :class:`~tenpy.networks.mpo.MPOEnvironment`, exposing only what
-    :class:`~tenpy.algorithms.mps_common.TwoSiteH` needs (``get_LP``, ``get_RP``, ``H``), backed
-    by the hand-built boundary tensors from :func:`_boundary_LP_RP`. Only valid at the outer
-    boundary of the chain -- see :func:`_boundary_LP_RP`.
-    """
-
-    class _H:
-        def __init__(self, H_MPO):
-            self._H_MPO = H_MPO
-            self.dtype = H_MPO.dtype
-
-        def get_W(self, i):
-            return self._H_MPO.get_W(i)
-
-    def __init__(self, H_MPO, psi):
-        self.LP, self.RP = _boundary_LP_RP(H_MPO, psi)
-        self.H = self._H(H_MPO)
-
-    def get_LP(self, i):
-        return self.LP
-
-    def get_RP(self, i):
-        return self.RP
-
-
 def test_two_site_h_matvec(J=1.5, g=0.9):
     """Check `TwoSiteH.matvec` against a hand-coded dense Hamiltonian, on a 2-site Ising model.
 
@@ -166,7 +124,7 @@ def test_two_site_h_matvec(J=1.5, g=0.9):
     )
     psi = MPS.from_full([site, site], psi_tensor, form=None, unit_cell_width=2)
 
-    env = _BoundaryMPOEnv(H_MPO, psi)
+    env = MPOEnvironment(psi, H_MPO, psi)
     eff_H = TwoSiteH(env, i0=0)
     theta = psi.get_theta(0, n=2)
     got = eff_H.matvec(theta)
