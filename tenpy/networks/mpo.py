@@ -2567,7 +2567,7 @@ class PauliString(tuple):
     NOTE: Expect changes
     """
 
-    ID = 'Id'  # "Netural" element of PauliString, i.e. p + 'Id' = p
+    ID = 'Id'  # "Neutral" element of PauliString, i.e. p + 'Id' = p
     # TODO: Check whether it is really needed.
     __slots__ = ()
 
@@ -2636,8 +2636,15 @@ class PauliString(tuple):
         return result + ')'
 
 
-class MPOCompactFinite(MPOBuilder):
-    _valid_bc = ['finite']
+class MPOCompact(MPOBuilder):
+    _valid_bc = ['finite', 'infinite']
+
+    def __new__(cls, sites, bc='finite', *args, **kwargs):
+        if cls is MPOCompact:
+            if bc not in cls._valid_bc:
+                raise NotImplementedError(bc)
+            cls = {'finite': MPOCompactFinite, 'infinite': MPOCompactInfinite}[bc]
+        return super().__new__(cls)
 
     def __init__(
         self,
@@ -2649,7 +2656,7 @@ class MPOCompactFinite(MPOBuilder):
         if bc not in self._valid_bc:
             raise NotImplementedError(bc)
         super().__init__(sites=sites, bc=bc, unit_cell_width=unit_cell_width)
-        self.max_range = max_range
+        self.max_range: int = max_range
         self._pauli_strings: set[PauliString] = set()
         self._op_basis: dict[str, lasy.Tensor] = {}  # keys() contain the local operator basis
         self._string_to_V: dict[PauliString, float] = {}  # V(p), where p is a Pauli string
@@ -2733,6 +2740,8 @@ class MPOCompactFinite(MPOBuilder):
         self._pauli_strings.add(pauli_string)
         self._string_to_V[pauli_string] = strength
 
+
+class MPOCompactFinite(MPOCompact):
     def build_MPO(self, svd_min=1e-12):
 
         PL, PR = self._gen_PL_PR()
@@ -2762,7 +2771,7 @@ class MPOCompactFinite(MPOBuilder):
 
         return MPO(
             self.sites,
-            Ws,
+            W_canonical,
             bc=self.bc,
             max_range=None,
             explicit_plus_hc=False,
@@ -2941,6 +2950,11 @@ class MPOCompactFinite(MPOBuilder):
             row_summands=[IdL_sp, X.get_leg_co_domain('wL'), IdR_sp],
             col_summands=[IdL_sp, X.get_leg_co_domain('wR'), IdR_sp],
         )
+
+
+class MPOCompactInfinite(MPOCompact):
+    def build_MPO(self):
+        pass
 
 
 class MPOEnvironment(BaseEnvironment):

@@ -11,6 +11,7 @@ to show intermediate results
 import lasyten as lasy
 import pytest
 
+# from long_range_model import LongRangeSpinChain
 from tenpy.models.aklt import AKLTChain
 from tenpy.models.clock import ClockChain
 from tenpy.models.fermions_spinless import FermionChain, FermionModel
@@ -61,6 +62,9 @@ CASES = [
     (FermionicHaldaneModel, dict(Lx=2, Ly=2)),
     (HofstadterBosons, dict(Lx=3, Ly=3, phi=(1, 3), conserve='N', Nmax=1)),
     (HofstadterFermions, dict(Lx=3, Ly=3, phi=(1, 3), conserve='N')),
+    # (LongRangeSpinChain, dict(L=L, decay='exp', lam=0.5)),
+    # (LongRangeSpinChain, dict(L=L, decay='power', alpha=2.0)),
+    # (LongRangeSpinChain, dict(L=L, coupling='heisenberg', decay='exp', lam=0.7)),
 ]
 
 
@@ -89,6 +93,7 @@ def _test_pauli_strings_left_right_spin(length):
 
 @pytest.mark.parametrize('Model, params', CASES, ids=[f'{M.__name__}-{i}' for i, (M, _) in enumerate(CASES)])
 def test_compare_sparse_MPO_and_MPOGraph(Model: CouplingModel, params, test_equal=True):
+    print('test_compare_sparse_MPO_and_MPOGraph')
     print(Model.__name__)
     # model_params = {
     #     'L': length,
@@ -155,6 +160,7 @@ def test_compare_sparse_MPO_and_MPOGraph(Model: CouplingModel, params, test_equa
 
 @pytest.mark.parametrize('Model, params', CASES, ids=[f'{M.__name__}-{i}' for i, (M, _) in enumerate(CASES)])
 def test_pauli_string_MPO(Model, params, test_equal=True):
+    print('test_pauli_string_MPO')
     print(Model.__name__)
     model_params = params
     model_params['bc_MPS'] = 'finite'
