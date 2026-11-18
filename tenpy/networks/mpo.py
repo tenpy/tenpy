@@ -2025,6 +2025,13 @@ class MPO(MPSGeometry):
 
 
 class MPOBuilder(MPSGeometry, metaclass=ABCMeta):  # Enforce same structure accross all MPOBuilders
+    """Abstract class for generic MPO builders.
+
+    Derived classes take a sequence of terms or couplings and return an MPO. For the implementation details see
+    docstrings of `MPOGraph`, `MPOCompact` and `MPOCompactInfinite`.
+    """
+
+    @abstractmethod
     def __init__(
         self,
         sites: list[lasy.Site],
@@ -2033,7 +2040,6 @@ class MPOBuilder(MPSGeometry, metaclass=ABCMeta):  # Enforce same structure accr
         unit_cell_width: int | None = None,
     ):
         super().__init__(sites, bc, unit_cell_width=unit_cell_width)
-        # self.max_range = max_range
 
     @classmethod
     @abstractmethod
@@ -2630,7 +2636,9 @@ class PauliString(tuple):
         return result + ')'
 
 
-class MPOCompact(MPOBuilder):
+class MPOCompactFinite(MPOBuilder):
+    _valid_bc = ['finite']
+
     def __init__(
         self,
         sites: list[lasy.Site],
@@ -2638,13 +2646,13 @@ class MPOCompact(MPOBuilder):
         max_range: int | float | None = None,
         unit_cell_width: int | None = None,
     ):
+        if bc not in self._valid_bc:
+            raise NotImplementedError(bc)
         super().__init__(sites=sites, bc=bc, unit_cell_width=unit_cell_width)
         self.max_range = max_range
-        self._pauli_strings = set()
-        self._opstr_to_ops: dict[str, lasy.Tensor] = {}
-        self._coeff_V_map = {}
-        self._opstr_per_site = [set() for _ in range(self.L)]
-        self._op_basis = set()
+        self._pauli_strings: set[PauliString] = set()
+        self._op_basis: dict[str, lasy.Tensor] = {}  # keys() contain the local operator basis
+        self._string_to_V: dict[PauliString, float] = {}  # V(p), where p is a Pauli string
 
     @classmethod
     def from_terms(
@@ -2685,16 +2693,14 @@ class MPOCompact(MPOBuilder):
 
     def add_onsite(
         self,
-        opname: str,  # NOTE: opname is a string...
+        opname: str,
         position: int,
         strength: int | float,
     ) -> None:
         pauli_string = PauliString([(position, opname)])
         self._pauli_strings.add(pauli_string)
-        self._opstr_to_ops[opname] = self.sites[position].get_op(opname)
-        self._coeff_V_map[pauli_string] = strength
-        self._opstr_per_site[position].add(opname)
-        self._op_basis.add(opname)
+        self._op_basis[opname] = self.sites[position].get_op(opname)
+        self._string_to_V[pauli_string] = strength
 
     def add_coupling(
         self,
@@ -2702,21 +2708,15 @@ class MPOCompact(MPOBuilder):
         positions: Sequence[int],
         strength: float | complex = 1.0,
     ) -> None:
-        op1, op2 = coupling.factorization
-        pos1, pos2 = positions
-        opstr1 = coupling.name + '1/2'
-        opstr2 = coupling.name + '2/2'
-        # opcharge = coupling.
-        self._opstr_to_ops[opstr1] = op1  # NOTE: Careful, overwrites old entry!
-        self._opstr_to_ops[opstr2] = op2
-
-        pauli_string = PauliString([(pos1, opstr1), (pos2, opstr2)])
+        op_left, op_right = coupling.factorization
+        pos_left, pos_right = positions
+        opname_left = coupling.name + '1'
+        opname_right = coupling.name + '2'
+        self._op_basis[opname_left] = op_left  # Overwrites old entry!
+        self._op_basis[opname_right] = op_right
+        pauli_string = PauliString([(pos_left, opname_left), (pos_right, opname_right)])
         self._pauli_strings.add(pauli_string)
-        self._coeff_V_map[pauli_string] = strength
-        self._opstr_per_site[pos1].add(opstr1)
-        self._opstr_per_site[pos2].add(opstr2)
-        self._op_basis.add(opstr1)
-        self._op_basis.add(opstr2)
+        self._string_to_V[pauli_string] = strength
 
     def add_multi_coupling(
         self,
@@ -2725,54 +2725,30 @@ class MPOCompact(MPOBuilder):
         strength: float | complex = 1.0,
     ) -> None:
         pauli_string = PauliString()
-        coupling_degree = int(len(coupling.factorization))
+        # coupling_degree = int(len(coupling.factorization))
         for i, (pos, op) in enumerate(zip(positions, coupling.factorization)):
-            opstr = (
-                coupling.name + str(i) + '/' + str(coupling_degree)
-            )  # <--- TODO: Might be overkill... Temp. fix for possible ambiguity
-            self._opstr_to_ops[opstr] = op
-            pauli_string = pauli_string + [(pos, opstr)]  # TODO: Make PauliString API more consistent.
-            # Old Code: pauli_string = pauli_string.add((pos, opstr))
-            self._opstr_per_site[pos].add(opstr)
-            self._op_basis.add(opstr)
-
+            opname = coupling.name + str(i)  # Might be overkill: + '/' + str(coupling_degree)
+            self._op_basis[opname] = op
+            pauli_string = pauli_string + [(pos, opname)]  # TODO: Make PauliString API more consistent.
         self._pauli_strings.add(pauli_string)
-        self._coeff_V_map[pauli_string] = strength
+        self._string_to_V[pauli_string] = strength
 
-    def _gen_left_pauli_strings(self):  # index 0 corresp. to cut 1:2
-        assert self._pauli_strings is not None  # ensure that pauli strings have been set
-        result = [set() for _ in range(self.L + 1)]
-        for s in self._pauli_strings:
-            for r in range(1, len(s)):  # cut between letter r-1 and letter r
-                for n in range(s[r - 1].site + 1, s[r].site + 1):  # every bond inside that gap
-                    result[n].add(s[:r])
-        return [sorted(S) for S in result]
+    def build_MPO(self, svd_min=1e-12):
 
-    def _gen_right_pauli_strings(self):
-        assert self._pauli_strings is not None
-        result = [set() for _ in range(self.L + 1)]
-        for s in self._pauli_strings:
-            for r in range(1, len(s)):  # cut between letter r-1 and letter r
-                for n in range(s[r - 1].site + 1, s[r].site + 1):  # every bond inside that gap
-                    result[n].add(s[r:])
-        return [sorted(S) for S in result]
-
-    def pauli_string_MPO(self, svd_min=1e-12):
-
-        L = self.L
-        PL = self._gen_left_pauli_strings()
-        PR = self._gen_right_pauli_strings()
-        Ws = [self._sparse_MPO(n, PL[n], PL[n + 1]) for n in range(L)]
+        PL, PR = self._gen_PL_PR()
+        Ws = [self._sparse_MPO(n, PL[n], PL[n + 1]) for n in range(self.L)]
 
         # one SVD per inner bond b = 1 ... L-1
-        T, T_inv, SVs = [None] * (L + 1), [None] * (L + 1), [None] * (L + 1)
-        for b in range(1, L):
+        T = [None] * (self.L + 1)
+        T_inv = [None] * (self.L + 1)
+        SVs = [None] * (self.L + 1)
+        for b in range(1, self.L):
             H = self._calc_H(PL[b], PR[b])
             if H is None:
                 continue
             U, S, V, err, _ = lasy.truncated_svd(H, new_labels=['wR', 'wL'], svd_min=svd_min)
             SVs[b] = S
-            T[b] = lasy.compose(U, S)  # U*S
+            T[b] = lasy.compose(U, S)  # U*S == H*V.hc ; equivalent, but numerically more accessible
             T_inv[b] = lasy.compose(1 / S, U.hc, relabel2={'wL*': 'wR'})  # S^-1*U.hc
 
         # site n: left bond n gets T^-1, right bond n+1 gets T, both embedded
@@ -2784,141 +2760,68 @@ class MPOCompact(MPOBuilder):
                 W = lasy.planar_contraction(W, self._embed(W.get_leg_co_domain('wR'), T[n + 1]), 'wR', 'wL')
             W_canonical.append(W)
 
-        return W_canonical, SVs
+        return MPO(
+            self.sites,
+            Ws,
+            bc=self.bc,
+            max_range=None,
+            explicit_plus_hc=False,
+            mps_unit_cell_width=self.unit_cell_width,
+        )
 
-    # def pauli_string_MPO(self, trunc_params=0):
-    #     W_canonical = [None] * self.L
-    #     SVs = [None] * self.L
-
-    #     PL = self._gen_left_pauli_strings()
-    #     PR = self._gen_right_pauli_strings()
-    #     # Done up to here
-
-    #     W1 = self._sparse_MPO(0, PL[0], PL[1])  # 1:2 <=> 0,    2:3 <=> 1,  n+1:n+2 <=> n
-    #     H = self._calc_H(PL[1], PR[1])
-    #     U, SVs[0], V, err, renormalise = lasy.truncated_svd(H, trunc_cut=0, new_labels=['wR', 'wL'])
-
-    #     print(W1.shape)
-
-    #     US = lasy.compose(U, SVs[0])                      # legs [wL, wR]
-    #     W_canonical[0] = lasy.planar_contraction(W1,
-    # self._embed(W1.get_leg_co_domain('wR'), US), 'wR', 'wL')
-    # # NOTE: WUS == WHV.hc
-
-    #     # SV = lasy.compose(SVs[0], V.hc) # NOTE: ehhh
-    #     # WH   = lasy.planar_contraction(W1, self._embed(W1.get_leg_co_domain('wR'), H), 'wR', 'wL')
-    #     # W_canonical[0] = lasy.planar_contraction(WH, self._embed(WH.get_leg_co_domain('wR'), V.hc), 'wR', 'wL*')
-    #     # W_np1 = lasy.planar_contraction(self._embed(W_np1.get_leg_co_domain('wL'), SV), W_np1, 'wR', 'wL')
-    #     # W_canonical[0] = lasy.planar_contraction(lasy.planar_contraction(W1, H, 'wR', 'wL'), V.hc, 'wR', 'wL')
-    # # W_1 @ H @ V
-    #     # W_canonical[0] = lasy.planar_contraction(lasy.planar_contraction(W1, U, 'wR', 'wL'), SVs[0], 'wR', 'wL')
-
-    #     print(W_canonical[0].shape)
-
-    #     for n in range(1, self.L):
-    #         WL = self._sparse_MPO(n, PL[n], PL[n + 1])
-    #         H = self._calc_H(PL[n], PR[n])
-    #         if H is None:
-    #             continue    # TODO: Verify
-
-    #         U, SVs[n], V, err, renormalise = lasy.truncated_svd(H, trunc_cut=0, new_labels=['wR', 'wL'])
-
-    #         S_inv = 1 / SVs[n-1]
-
-    #         S_invU = lasy.compose(S_inv, U.hc, relabel2={'wL*': 'wR'})
-    #         US = lasy.compose(U, SVs[n])
-
-    #         W_canonical[n] = lasy.planar_contraction(lasy.planar_contraction(S_invU, WL, 'wR', 'wL'), US, 'wR', 'wL')
-
-    #         # U, SVs[n], V = None  # TODO: svd...
-    #         # W_canonical[n] = self._to_canonical_form(WL, H, SVs[n], U, V)
-
-    #     WR = self._sparse_MPO(self.L, PL[self.L - 2], PL[self.L - 1])
-    #     # W_canonical[-1] = self._to_canonical_form(WR)
-
-    #     H = MPO(self.sites, W_canonical, bc=self.bc, max_range=self.max_range,
-    # mps_unit_cell_width=self.unit_cell_width)
-    #     return H, SVs
+    def _gen_PL_PR(self):
+        assert self._pauli_strings is not None  # Ensure Pauli strings have been generated first
+        PL = [set() for _ in range(self.L + 1)]
+        PR = [set() for _ in range(self.L + 1)]
+        for s in self._pauli_strings:  # non-identity letters only
+            for r in range(1, len(s)):  # cut between letter r-1 and letter r
+                for n in range(s[r - 1].site + 1, s[r].site + 1):  # every bond inside that gap
+                    PL[n].add(s[:r])
+                    PR[n].add(s[r:])
+        return [sorted(S) for S in PL], [sorted(S) for S in PR]  # index 0 corresponds to cut 1:2
 
     def _sparse_MPO(self, n, PLl, PLr):
+
         A = self._calc_A(n, PLl, PLr)
         b = self._calc_b(n, PLl)
         c = self._calc_c(n, PLr)
         d = self._calc_d(n)
 
-        # Id = lasy.eye(self.sites[n].leg, labels=['p', 'p*'])
-        # Id = lasy.add_trivial_leg(lasy.add_trivial_leg(Id, codomain_pos=0, label='wL'), domain_pos=-1, label='wR')
-        # Id = lasy.
-
-        # IdL sits in row 0 with c, so it copies c's wL; IdR sits in column 2 with b, so it copies b's wR
-        # w_L = (
-        #     c.get_leg_co_domain('wL')
-        #     if c is not None
-        #     else lasy.ElementarySpace.from_trivial_sector(symmetry=self.symmetry).direct_sum()
-        # )
-        # w_R = (
-        #     b.get_leg_co_domain('wR')
-        #     if b is not None
-        #     else lasy.ElementarySpace.from_trivial_sector(symmetry=self.symmetry).direct_sum()
-        # )
-        # IdL = self.sites[n].get_onsite_W_block('Id', w_L, overbraid=True)
-        # IdR = self.sites[n].get_onsite_W_block('Id', w_R, overbraid=True)
-
         triv = lasy.ElementarySpace.from_trivial_sector(symmetry=self.symmetry)
         IdL = self.sites[n].get_onsite_W_block('Id', triv.direct_sum(summand_labels=['IdL']), overbraid=True)
         IdR = self.sites[n].get_onsite_W_block('Id', triv.direct_sum(summand_labels=['IdR']), overbraid=True)
 
-        # elementary_spaces1 = []
-        # elementary_spaces2 = []
-        # for opstr in self._op_basis:
-        #     op = self._opstr_to_ops[opstr]
-        #     espace1 = op.get_leg('wL').as_ElementarySpace()
-        #     espace2 = op.get_leg('wR').as_ElementarySpace()
-        #     elementary_spaces1.append(espace1)
-        #     elementary_spaces2.append(espace2)
-
-        # trivial_space = lasy.ElementarySpace.from_trivial_sector(symmetry=self.symmetry).direct_sum()
-        # Id = lasy.tensor_from_grid([[Id]], labels=['wL', 'p', 'wR', 'p*'])
-        # lasy.DirectSumSpace.from_defining_sectors(self.symmetry, [self.symmetry.trivial_sector])
-
         grid = [[IdL, c, d], [None, A, b], [None, None, IdR]]
 
-        # TODO: Only use wR, discard wL entirely.
-        _, PLl_wR = self.strings_as_SumSpace(PLl)
-        _, PLr_wR = self.strings_as_SumSpace(PLr)
+        row_summands = [IdL.get_leg_co_domain('wL'), self._strings_to_SumSpace(PLl), IdR.get_leg_co_domain('wL')]
+        col_summands = [IdL.get_leg_co_domain('wR'), self._strings_to_SumSpace(PLr), IdR.get_leg_co_domain('wR')]
+
+        rows = [0] if n == 0 else [0, 1, 2]
+        cols = [2] if n == self.L - 1 else [0, 1, 2]
 
         if not any(isinstance(x, lasy.Tensor) for y in grid for x in y):
             return None
 
-        W = lasy.tensor_from_grid(
-            grid=grid,  # <-- TODO:  Needs to be of type `list[list[SymmetricTensor | None]]`
+        return lasy.tensor_from_grid(
+            grid=[[grid[r][k] for k in cols] for r in rows],
             labels=['wL', 'p', 'wR', 'p*'],
-            # row_labels=['IdL', None, 'IdR'],
-            # col_labels=['IdL', None, 'IdR'],
-            row_summands=[IdL.get_leg_co_domain('wL'), PLl_wR, IdR.get_leg_co_domain('wL')],
-            col_summands=[IdL.get_leg_co_domain('wR'), PLr_wR, IdR.get_leg_co_domain('wR')],
-            # row_summands=[trivial_space, PLl_wR, trivial_space],  # unsure why not domain_PLr working
-            # col_summands=[trivial_space, PLr_wR, trivial_space]
+            row_summands=[row_summands[r] for r in rows],
+            col_summands=[col_summands[k] for k in cols],
         )
 
-        # W = lasy.SymmetricTensor.from_block_func()
-        return W
-
     def _calc_A(self, n, PLl, PLr):
-        # TODO: Change the innermost iterator, there should technically be only one
-        # operator per site, though I am unsure how exactly that would work out.
         p_dim, q_dim = len(PLl), len(PLr)
-        row_spaces = list(self.strings_as_SumSpace(PLl)[1].spaces) if PLl else []
-        col_spaces = list(self.strings_as_SumSpace(PLr)[1].spaces) if PLr else []
-        A = [[None] * q_dim for _ in range(p_dim)]  # NOTE: Why does that not work: A = [[None] * p_dim] * q_dim
+        row_spaces = list(self._strings_to_SumSpace(PLl).spaces) if PLl else []
+        col_spaces = list(self._strings_to_SumSpace(PLr).spaces) if PLr else []
+        A = [[None] * q_dim for _ in range(p_dim)]
         for i, p in enumerate(PLl):
             for j, q in enumerate(PLr):
                 if p == q:  # string continues through site n: identity
                     A[i][j] = self.sites[n].get_onsite_W_block('Id', row_spaces[i], overbraid=True)
                 else:
-                    for mu in self._op_basis:
+                    for mu in self._op_basis.keys():
                         if p + [(n, mu)] == q:
-                            A[i][j] = self._opstr_to_ops[mu]
+                            A[i][j] = self._op_basis[mu]
         if not any(isinstance(x, lasy.Tensor) for y in A for x in y):
             return None
         return lasy.tensor_from_grid(
@@ -2930,17 +2833,16 @@ class MPOCompact(MPOBuilder):
 
     def _calc_b(self, n, PLl):
         p_dim = len(PLl)
-        # A = np.zeros([p_dim, q_dim])
         b = [None] * p_dim
         for i, p in enumerate(PLl):
-            for mu in self._op_basis:
-                V = self._coeff_V_map.get(p + [(n, mu)], None)
+            for mu in self._op_basis.keys():
+                V = self._string_to_V.get(p + [(n, mu)], None)
                 if V is not None:
-                    b[i] = self._coeff_V_map[p + [(n, mu)]] * self._opstr_to_ops[mu]
+                    b[i] = self._string_to_V[p + [(n, mu)]] * self._op_basis[mu]
         if not any(isinstance(x, lasy.Tensor) for x in b):
             return None
 
-        row_spaces = list(self.strings_as_SumSpace(PLl)[1].spaces)
+        row_spaces = list(self._strings_to_SumSpace(PLl).spaces)
         col_space = next(x for x in b if x is not None).get_leg_co_domain('wR')
 
         return lasy.tensor_from_grid(
@@ -2954,14 +2856,14 @@ class MPOCompact(MPOBuilder):
         q_dim = len(PLr)
         c = [None] * q_dim
         for i, q in enumerate(PLr):
-            for mu in self._op_basis:
+            for mu in self._op_basis.keys():
                 if q == PauliString([(n, mu)]):
-                    c[i] = self._opstr_to_ops[mu]
+                    c[i] = self._op_basis[mu]
         if not any(isinstance(x, lasy.Tensor) for x in c):
             return None
 
         row_space = next(x for x in c if x is not None).get_leg_co_domain('wL')
-        col_spaces = list(self.strings_as_SumSpace(PLr)[1].spaces)  # one summand per column
+        col_spaces = list(self._strings_to_SumSpace(PLr).spaces)  # one summand per column
 
         return lasy.tensor_from_grid(
             grid=[c],
@@ -2974,37 +2876,25 @@ class MPOCompact(MPOBuilder):
         triv = lasy.ElementarySpace.from_trivial_sector(symmetry=self.symmetry)
         w = triv.direct_sum(summand_labels=['IdL'])
         d = None
-        for mu in self._opstr_per_site[n]:
-            V = self._coeff_V_map.get(PauliString([(n, mu)]), None)
+        for mu in self._op_basis.keys():
+            V = self._string_to_V.get(PauliString([(n, mu)]), None)
             if V is None:
                 continue
             op = V * self.sites[n].get_onsite_W_block(mu, w, overbraid=True)
             d = op if d is None else d + op
         return d
 
-    # def _calc_d(self, n):
-    #     for mu in self._op_basis:
-    #         if mu is not None:
-    #             V = self._coeff_V_map.get(mu, None)
-    #             if V is not None:
-    #                 return V * self._opstr_to_ops[mu]
-    #             return None
-    #     return None
-
     def _calc_H(self, PLl, PLr):
-        # NOTE: Essentially copied the shell of _calc_A, cf. _calc_A
-        # TODO: Change the innermost iterator, there should technically be only one
-        # operator per site, though I am unsure how exactly that would work out.
         p_dim, q_dim = len(PLl), len(PLr)
-        row_spaces = list(self.strings_as_SumSpace(PLl)[1].spaces) if PLl else []
-        col_spaces = list(self.strings_as_SumSpace(PLr)[0].spaces) if PLr else []
+        row_spaces = list(self._strings_to_SumSpace(PLl).spaces) if PLl else []
+        col_spaces = list(self._strings_to_SumSpace(PLr, 'wL').spaces) if PLr else []
         H = [[None] * q_dim for _ in range(p_dim)]  # NOTE: Why does that not work: A = [[None] * p_dim] * q_dim
         for i, p in enumerate(PLl):
             for j, q in enumerate(PLr):
-                V = self._coeff_V_map.get(p + q, None)
+                V = self._string_to_V.get(p + q, None)
                 if V is not None:
                     H[i][j] = V * lasy.SymmetricTensor.from_eye([row_spaces[i]], labels=['wL', 'wR'])
-                    # NOTE: Not a scalar, since factorisation of S.S can have a 3-dimensional bond.
+                    # NOTE: Not just a scalar, since factorisation of S.S can have a 3-dimensional bond.
         if not any(x is not None for y in H for x in y):
             return None
         return lasy.tensor_from_grid(
@@ -3014,31 +2904,39 @@ class MPOCompact(MPOBuilder):
             col_summands=col_spaces,
         )
 
-    def build_MPO():
-        pass
-
-    def strings_as_SumSpace(self, strings: Sequence[PauliString]):
+    def _strings_to_SumSpace(self, strings: Sequence[PauliString], leg: Literal['wL', 'wR'] = 'wR'):
         if not strings:
-            uhh = lasy.ElementarySpace.from_defining_sectors(
+            return lasy.ElementarySpace.from_defining_sectors(
                 self.symmetry, np.zeros((0, len(self.symmetry.trivial_sector)), dtype=int)
             )
-            return uhh, uhh
-
-        domain, codomain = [], []
-        for s in strings:  # one space per STRING
-            first = self._opstr_to_ops[s[0].opname]
-            last = self._opstr_to_ops[s[-1].opname]
-            domain.append(first.get_leg_co_domain('wL').as_ElementarySpace())  # TODO: Remove wL
-            codomain.append(last.get_leg_co_domain('wR').as_ElementarySpace())
-        return lasy.DirectSumSpace.from_spaces(domain), lasy.DirectSumSpace.from_spaces(codomain)
+        spaces = []
+        for s in strings:  # one space per Pauli string
+            if leg == 'wR':  # cut is right of the string: bond = wR of its last letter
+                op = self._op_basis[s[-1].opname]
+                spaces.append(op.get_leg_co_domain('wR').as_ElementarySpace())
+            else:  # cut is left of the string: bond = wL of its first letter
+                op = self._op_basis[s[0].opname]
+                spaces.append(op.get_leg_co_domain('wL').as_ElementarySpace())
+        return lasy.DirectSumSpace.from_spaces(spaces)
 
     def _embed(self, bond_leg, X):
+        """Embeds a tensor X into
 
+        >>> grid = [
+        ...     [ IdL , None, None ],
+        ...     [ None, X   , None ],
+        ...     [ None, None, IdR  ]
+        >>> ]
+
+        """
         IdL_sp, IdR_sp = bond_leg.spaces[0], bond_leg.spaces[-1]
         IdL = lasy.SymmetricTensor.from_eye([IdL_sp], labels=['wL', 'wR'], dtype=X.dtype)
         IdR = lasy.SymmetricTensor.from_eye([IdR_sp], labels=['wL', 'wR'], dtype=X.dtype)
+
+        grid = [[IdL, None, None], [None, X, None], [None, None, IdR]]
+
         return lasy.tensor_from_grid(
-            grid=[[IdL, None, None], [None, X, None], [None, None, IdR]],
+            grid=grid,
             labels=['wL', 'wR'],
             row_summands=[IdL_sp, X.get_leg_co_domain('wL'), IdR_sp],
             col_summands=[IdL_sp, X.get_leg_co_domain('wR'), IdR_sp],

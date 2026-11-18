@@ -17,13 +17,19 @@ from tenpy.models.fermions_spinless import FermionChain, FermionModel
 from tenpy.models.haldane import BosonicHaldaneModel, FermionicHaldaneModel
 from tenpy.models.hofstadter import HofstadterBosons, HofstadterFermions
 from tenpy.models.hubbard import BoseHubbardChain, BoseHubbardModel, FermiHubbardChain, FermiHubbardModel
+from tenpy.models.model import CouplingModel
 from tenpy.models.pxp import PXPChain
 from tenpy.models.spins import *
 from tenpy.models.spins_nnn import SpinChainNNN2
 from tenpy.models.tf_ising import TFIChain
 from tenpy.models.toric_code import ToricCode
 from tenpy.models.xxz_chain import XXZChain2
-from tenpy.networks.mpo import MPO, MPOCompact, MPOGraph
+from tenpy.networks.mpo import MPO, MPOCompactFinite, MPOGraph
+
+RED = '\033[31m'
+GREEN = '\033[32m'
+YELLOW = '\033[33m'
+RESET = '\033[0m'
 
 L = 6
 CASES = [
@@ -63,14 +69,13 @@ def _test_pauli_strings_left_right_spin(length):
     model_params = {'L': length, 'bc_MPS': 'finite', 'conserve': 'SU2'}
     model = SpinChain(model_params)
 
-    mpo_builder = MPOCompact.from_terms([model.coupling_terms], model, bc='finite')
+    mpo_builder = MPOCompactFinite.from_terms([model.coupling_terms], model, bc='finite')
 
-    PL = mpo_builder._gen_left_pauli_strings()
-    PR = mpo_builder._gen_right_pauli_strings()
+    PL, PR = mpo_builder._gen_PL_PR()
 
     print(f'PL = {PL}')
     print(f'PR = {PR}')
-    print(f'V(puq) = {mpo_builder._coeff_V_map}')
+    print(f'V(puq) = {mpo_builder._string_to_V}')
     print(f'opstr_per_site = {mpo_builder._opstr_per_site}')
     print(f'op_basis = {mpo_builder._op_basis}')
 
@@ -83,7 +88,7 @@ def _test_pauli_strings_left_right_spin(length):
 
 
 @pytest.mark.parametrize('Model, params', CASES, ids=[f'{M.__name__}-{i}' for i, (M, _) in enumerate(CASES)])
-def test_compare_sparse_MPO_and_MPOGraph(Model, params, test_equal=True):
+def test_compare_sparse_MPO_and_MPOGraph(Model: CouplingModel, params, test_equal=True):
     print(Model.__name__)
     # model_params = {
     #     'L': length,
@@ -97,7 +102,7 @@ def test_compare_sparse_MPO_and_MPOGraph(Model, params, test_equal=True):
 
     length = model.lattice.N_sites  # model_params['L']
 
-    mpo_compact = MPOCompact.from_terms(
+    mpo_compact = MPOCompactFinite.from_terms(
         model.get_nonzero_terms(),  # model.get_nonzero_terms(),
         model,
         bc='finite',
@@ -106,8 +111,7 @@ def test_compare_sparse_MPO_and_MPOGraph(Model, params, test_equal=True):
     # for positions, name, strength in model.iter_terms():
     #     mpo_compact.add_multi_coupling(model.couplings[name], positions, strength)
 
-    PL = mpo_compact._gen_left_pauli_strings()
-    PR = mpo_compact._gen_right_pauli_strings()
+    PL, PR = mpo_compact._gen_PL_PR()
 
     Ws: list[lasy.Tensor] = []
     for n in range(0, length):
@@ -137,8 +141,8 @@ def test_compare_sparse_MPO_and_MPOGraph(Model, params, test_equal=True):
 
     mpo2 = mpo_graph.build_MPO(explicit_plus_hc=False)
 
-    print(f'mpo1.chi = {mpo1.chi}')
-    print(f'mpo2.chi = {mpo2.chi}')
+    print(f'mpo_compact.chi = {mpo1.chi}')
+    print(f'mpo_graph.chi = {mpo2.chi}')
     if test_equal:
         dist = mpo_distance(mpo1, mpo2)
         print(f'relative distance = {dist:.2e}')
@@ -146,7 +150,7 @@ def test_compare_sparse_MPO_and_MPOGraph(Model, params, test_equal=True):
         assert all(c1 <= c2 for c1, c2 in zip(mpo1.chi, mpo2.chi)), (
             f'compressed MPO is larger: {mpo1.chi} vs {mpo2.chi}'
         )
-        print('Passed equivalence check!')
+        print(f'{GREEN}Passed equivalence check!{RESET}')
 
 
 @pytest.mark.parametrize('Model, params', CASES, ids=[f'{M.__name__}-{i}' for i, (M, _) in enumerate(CASES)])
@@ -159,37 +163,14 @@ def test_pauli_string_MPO(Model, params, test_equal=True):
 
     length = model.lattice.N_sites  # model_params['L']
 
-    mpo_compact = MPOCompact.from_terms(
+    mpo_compact = MPOCompactFinite.from_terms(
         model.get_nonzero_terms(),  # model.get_nonzero_terms(),
         model,
         bc='finite',
         unit_cell_width=model.lattice.mps_unit_cell_width,
     )
 
-    PL = mpo_compact._gen_left_pauli_strings()
-    PR = mpo_compact._gen_right_pauli_strings()
-
-    Ws: list[lasy.Tensor] = []
-    Wsc: list[lasy.Tensor] = []
-    # for n in range(0, length):
-    #     Ws.append(mpo_compact._sparse_MPO(n, PL[n], PL[n+1]))
-
-    Ws, SVs = mpo_compact.pauli_string_MPO()
-
-    def keep(W, leg, name):
-        return lasy.apply_mask(W, W.get_leg(leg).projection_onto_summand(name), leg)
-
-    Ws[0] = lasy.apply_mask(Ws[0], Ws[0].get_leg('wL').projection_onto_summand('IdL'), 'wL')
-    Ws[-1] = lasy.apply_mask(Ws[-1], Ws[-1].get_leg('wR').projection_onto_summand('IdR'), 'wR')
-
-    mpo1 = MPO(
-        mpo_compact.sites,
-        Ws,
-        bc=mpo_compact.bc,
-        max_range=None,
-        explicit_plus_hc=False,
-        mps_unit_cell_width=mpo_compact.unit_cell_width,
-    )
+    mpo1 = mpo_compact.build_MPO()
 
     mpo_graph = MPOGraph.from_terms(
         model.get_nonzero_terms(),
@@ -200,14 +181,8 @@ def test_pauli_string_MPO(Model, params, test_equal=True):
 
     mpo2 = mpo_graph.build_MPO()
 
-    print(f'mpo1.chi = {mpo1.chi}')
-    print(f'mpo2.chi = {mpo2.chi}')
-    # if test_equal:
-    #     tensor1 = mpo_to_tensor(mpo1)
-    #     tensor2 = mpo_to_tensor(mpo2)
-    #     assert lasy.almost_equal(tensor1, tensor2)
-    #     print('Passed equivalence check!')
-
+    print(f'mpo_compact.chi = {mpo1.chi}')
+    print(f'mpo_graph.chi = {mpo2.chi}')
     if test_equal:
         dist = mpo_distance(mpo1, mpo2)
         print(f'relative distance = {dist:.2e}')
@@ -215,7 +190,7 @@ def test_pauli_string_MPO(Model, params, test_equal=True):
         assert all(c1 <= c2 for c1, c2 in zip(mpo1.chi, mpo2.chi)), (
             f'compressed MPO is larger: {mpo1.chi} vs {mpo2.chi}'
         )
-        print('Passed equivalence check!')
+        print(f'{GREEN}Passed equivalence check!{RESET}')
 
 
 def mpo_to_tensor(mpo):
@@ -242,61 +217,3 @@ def mpo_distance(A, B):
     aa, bb, ab = mpo_inner(A, A), mpo_inner(B, B), mpo_inner(A, B)
     d2 = (aa + bb - 2 * ab.real).real
     return max(d2, 0) ** 0.5 / bb.real**0.5
-
-
-# if __name__ == '__main__':
-
-#     # for n in range(2, 10):
-#     #     print(n)
-#     #     test_pauli_strings_left_right_spin(n)
-
-
-#     params = (5, SpinChain)
-
-#     L = 8
-
-#     # CASES = [
-#     #     (L, SpinChain, dict(conserve='Sz', Jx=1.0, Jy=1.0, Jz=0.5)),   # abelian, three strings per bond
-#     #     (L, SpinChain, dict(conserve='parity', Jx=1.0, Jy=0.5, Jz=0.7)),  # Z2, anisotropic
-#     #     (3, SpinChain, dict(conserve='SU2', S=1)),                      # non-abelian, spin 1
-#     #     (L, TFIChain, dict(conserve='parity')),
-#     #     (L, FourSiteChain, dict(conserve='Sz')),
-#     #     (L, SharedPrefixChain, dict(conserve='parity'))
-#     # ]
-
-#     L = 6
-#     CASES = [
-#         # --- 1D spin chains (nearest neighbour; the ones you verified already) ---
-#         (TFIChain,          dict(L=L, conserve='parity')),
-#         (XXZChain2,         dict(L=L, conserve='Sz')),
-#         (SpinChain,         dict(L=L, conserve='Sz')),
-#         (SpinChain,         dict(L=L, conserve='parity')),
-#         (SpinChain,         dict(L=4, conserve='SU2')),              # SU(2) data limit: keep L <= 6
-#         (AKLTChain,         dict(L=L, conserve='Sz')),
-#         (ClockChain,        dict(L=L, q=3)),
-#         # --- longer range / multi-site (shared prefixes) ---
-#         (SpinChainNNN2,     dict(L=L, conserve='Sz')),               # next-nearest neighbour
-#         (DipolarSpinChain,  dict(L=L, conserve='Sz')),               # 4-site dipolar term
-#         (DipolarSpinChain,  dict(L=L, conserve=None, J4=1.0)),
-#         (PXPChain,          dict(L=L)),                              # 3-site
-#         (ToricCode,         dict(Lx=2, Ly=2, conserve='parity')),    # 4-site, 2D, 8 sites
-#         (ToricCode,         dict(Lx=2, Ly=2, conserve=None)),
-#         # --- bosons / fermions (fermions need Jordan-Wigner handling) ---
-#         (BoseHubbardChain,  dict(L=L, conserve='N')),
-#         (FermionChain,      dict(L=L, conserve='N')),
-#         (FermiHubbardChain, dict(L=L)),
-#         # --- 2D models mapped onto an MPS ---
-#         (SpinModel,             dict(lattice='Square', Lx=3, Ly=3)),
-#         (FermionModel,          dict(lattice='Square', Lx=2, Ly=3)),
-#         (BoseHubbardModel,      dict(lattice='Square', Lx=2, Ly=3)),
-#         (FermiHubbardModel,     dict(lattice='Square', Lx=2, Ly=3)),
-#         (BosonicHaldaneModel,   dict(Lx=2, Ly=2)),
-#         (FermionicHaldaneModel, dict(Lx=2, Ly=2)),
-#         (HofstadterBosons,      dict(Lx=3, Ly=3, phi=(1, 3), conserve='N', Nmax=1)),
-#         (HofstadterFermions,    dict(Lx=3, Ly=3, phi=(1, 3), conserve='N')),
-#     ]
-
-#     test_func = test_pauli_string_MPO
-
-# for case in CASES:
-#     test_pauli_string_MPO(*case, test_equal=True)
