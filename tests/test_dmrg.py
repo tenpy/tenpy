@@ -118,7 +118,7 @@ def test_full_diag_effH(site_kind, conserve, keep_sector, charged_guess, charge_
     if keep_sector:
         _, expected_E0 = E.sector_argmin(theta_sector)
 
-        mask = lasy.Mask.from_sectors(E.leg, keep=[theta_sector])
+        mask = lasy.Mask.from_sectors_kept(E.leg, [theta_sector])
         E_proj = lasy.apply_mask_DiagonalTensor(E, mask)
         assert E_proj.domain.sector_decomposition[0] == theta_sector
         assert expected_E0 == pytest.approx(E_proj.min())
