@@ -2319,6 +2319,9 @@ class MPOGraph(MPSGeometry):
         for term in terms:
             term.add_to_graph(graph)
             # add_to_graph increases `max_range` as necessary
+        if not any(graph.graph):
+            # Keep a path to IdR for charge inference, with zero operator weight.
+            graph.add(0, 'IdL', 'IdR', 'Id', 0.0)
         graph.add_missing_IdL_IdR(insert_all_id)
         return graph
 

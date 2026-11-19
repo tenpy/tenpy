@@ -1,0 +1,1 @@
+- Allow :class:`~tenpy.networks.mpo.MPOGraph` to build a zero Hamiltonian from an empty set of terms.
