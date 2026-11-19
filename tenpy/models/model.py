@@ -1096,7 +1096,7 @@ class ModelBuilder(CouplingModel):
 
     def init_backend(self, model_params: Config) -> lasy.TensorBackend:
         symmetry_backend = model_params.get('symmetry_backend', None)
-        block_backend = model_params.get('block_backend', 'numpy')
+        block_backend = model_params.get('block_backend', None)  # let lasy.get_backend handle what the default is
         if symmetry_backend is None:
             # temporarily run to figure out the symmetry
             self.backend = lasy.get_backend('fusion_tree', block_backend)
