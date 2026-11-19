@@ -2635,6 +2635,12 @@ class PauliString(tuple):
             result += ', ' + opstring.__repr__()
         return result + ')'
 
+    def __rshift__(self, k: int) -> PauliString:
+        return type(self)((letter.site + k, letter.opname) for letter in self)
+
+    def __lshift__(self, k: int) -> PauliString:
+        return self >> -k
+
 
 class MPOCompact(MPOBuilder):
     _valid_bc = ['finite', 'infinite']
@@ -2954,6 +2960,48 @@ class MPOCompactFinite(MPOCompact):
 
 class MPOCompactInfinite(MPOCompact):
     def build_MPO(self):
+        pass
+
+    def _gen_PL_PR(self):
+        assert self._pauli_strings is not None  # Ensure Pauli strings have been generated first
+        PL = [set() for _ in range(self.L)]
+        PR = [set() for _ in range(self.L)]
+        for s in self._pauli_strings:  # first letter normalised to [0, N), later ones may exceed N
+            for r in range(1, len(s)):  # cut between letter r-1 and letter r
+                for cut in range(s[r - 1].site + 1, s[r].site + 1):
+                    b = cut % self.L
+                    PL[b].add(s[:r] << cut)  # offsets -1, -2, ...
+                    PR[b].add(s[r:] << cut)  # offsets 0, 1, ...
+        return [sorted(S) for S in PL], [sorted(S) for S in PR]
+
+    def _prune_PL(self, PL):
+        N = len(PL)
+        result = []
+        for n in range(N):
+            parents = set()
+            for q in PL[(n + 1) % N]:  # strings at the next bond (cyclic)
+                if q[-1].site == -1:  # q has a letter on site n (offset -1 relative to cut n+1)
+                    parent = q[:-1] >> 1
+                else:  # identity on site n: q only moved one cut further
+                    parent = q >> 1
+                if parent:  # empty parent = the IdL state, not a string
+                    parents.add(parent)
+            result.append([p for p in PL[n] if p in parents])  # keeps the sorted order of PL[n]
+        return result
+
+    def _calc_A(self, PLl, PLr):
+        pass
+
+    def _calc_b(self, PLl):
+        pass
+
+    def _calc_c(self, PLr):
+        pass
+
+    def _calc_d(self):
+        pass
+
+    def _calc_H(self, PL, PR):
         pass
 
 
