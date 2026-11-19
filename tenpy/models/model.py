@@ -1031,6 +1031,16 @@ class CouplingModel(HamiltonianModel):
             raise lasy.SymmetryError(msg)
         return
 
+    def repr_all_terms(self):
+        ot, ct, mct, edt = self.get_nonzero_terms()
+        terms = []
+        for strength, ijkl, name in itertools.chain(ot, ct, mct, edt.to_CouplingTerms(self, bc=self.bc_MPS)):
+            sub = '{' + ', '.join([str(int(i)) for i in ijkl]) + '}'
+            terms.append(f'{strength:.5f} * {name}_{sub}')
+        if not edt.is_empty:
+            terms.append('[some of the exponentially decaying terms may be omitted]')
+        return ' +\n'.join(terms)
+
 
 class ModelBuilder(CouplingModel):
     """Plays the role of the old CouplingMPOModel, where you just have to override some methods
