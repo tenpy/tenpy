@@ -11,8 +11,9 @@ import tenpy.linalg.np_conserved as npc
 import tenpy.networks.site
 from tenpy.algorithms.exact_diag import ExactDiag, get_numpy_Hamiltonian
 from tenpy.models import lattice, model
-from tenpy.models.spins import DipolarSpinChain
+from tenpy.models.spins import DipolarSpinChain, SpinModel
 from tenpy.models.xxz_chain import XXZChain
+from tenpy.networks.mps import MPS
 
 spin_half_site = tenpy.networks.site.SpinHalfSite('Sz', sort_charge=False)
 
@@ -447,6 +448,20 @@ class MyMod(model.CouplingMPOModel, model.NearestNeighborModel):
         self.add_coupling_term(x, 0, 1, 'Sx', 'Sx')
         self.add_coupling_term(2.0 * x, 1, 2, 'Sy', 'Sy')
         self.add_local_term(3.0 * x, [('Sy', [3, 0]), ('Sy', [4, 0])])
+
+
+@pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
+def test_zero_coupling_spin_model(bc_MPS):
+    """A spin chain at the zero-coupling endpoint has a zero Hamiltonian."""
+    M = SpinModel(dict(L=4, Jx=0.0, Jy=0.0, Jz=0.0, bc_MPS=bc_MPS))
+    psi = MPS.from_product_state(
+        M.lat.mps_sites(), ['up', 'down'] * 2, bc=bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+    )
+    assert M.H_MPO.expectation_value(psi) == 0.0
+    if bc_MPS == 'finite':
+        ed = ExactDiag(M)
+        ed.build_full_H_from_mpo()
+        npt.assert_array_equal(ed.full_H.to_ndarray(), np.zeros((16, 16)))
 
 
 def test_CouplingMPOModel_group():
