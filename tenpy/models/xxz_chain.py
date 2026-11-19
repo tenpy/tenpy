@@ -12,12 +12,12 @@ import numpy as np
 
 from ..tools import asConfig, to_array
 from .lattice import Chain
-from .model import ModelBuilder
+from .model import CouplingModel, ModelBuilder
 
 __all__ = ['XXZChain', 'XXZChain2']
 
 
-class XXZChain(ModelBuilder):
+class XXZChain(CouplingModel):
     r"""Spin-1/2 XXZ chain with Sz conservation.
 
     The Hamiltonian reads:
@@ -54,8 +54,7 @@ class XXZChain(ModelBuilder):
     """
 
     def __init__(self, model_params):
-        raise NotImplementedError('port models')
-        # 0) read out/set default parameters
+        # 0) Read out model parameters
         model_params = asConfig(model_params, 'XXZChain')
         L = model_params.get('L', 2, int)
         Jxx = model_params.get('Jxx', 1.0, 'real_or_array')
@@ -63,33 +62,54 @@ class XXZChain(ModelBuilder):
         hz = to_array(model_params.get('hz', 0.0, 'real_or_array'), [L])
         bc_MPS = model_params.get('bc_MPS', 'finite', str)
         conserve = model_params.get('conserve', 'best', str)
+
+        # 1) Determine the symmetry / what should be conserved
         if conserve == 'best':
             conserve = 'Sz'
-        # 1-3) local physical site
-        site = SpinSite(S=0.5, conserve=conserve)
-        # 4) lattice
+
+        # 2) Initialize backend  (FIXME replaces local op definition)
+        default_backend = 'no_symmetry' if conserve in ['None', None] else 'abelian'
+        symmetry_backend = model_params.get('symmetry_backend', default_backend)
+        block_backend = model_params.get('block_backend', None)
+        backend = lasy.get_backend(symmetry_backend, block_backend)
+
+        # 3) Initialize site(s)
+        site = lasy.sites.SpinSite(S=0.5, conserve=conserve, backend=backend)
+
+        # 4) Initialize lattice
         bc = 'open' if bc_MPS == 'finite' else 'periodic'
-        lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
-        # 5) initialize CouplingModel
-        CouplingModel.__init__(self, lat)
-        # 6) add terms of the Hamiltonian
-        # (u is always 0 as we have only one site in the unit cell)
-        field = spin_field_coupling([site], hz=1.0)
-        for i in range(L):
-            self.add_coupling(field, [i], strength=-hz[i])
-        # Jxx/2 (Sp_i Sm_j + Sm_i Sp_j) = Jxx (Sx_i Sx_j + Sy_i Sy_j)
-        coupling_xy = spin_spin_coupling([site, site], Jx=1.0, Jy=1.0)
-        coupling_z = spin_spin_coupling([site, site], Jz=1.0)
-        mps_i, mps_j, Jxx_vals = self.lattice.possible_couplings_strengths(0, 0, [1], Jxx)
-        for i, j, strength in zip(mps_i, mps_j, Jxx_vals):
-            self.add_coupling(coupling_xy, [int(i), int(j)], strength=strength)
-        mps_i, mps_j, Jz_vals = self.lattice.possible_couplings_strengths(0, 0, [1], Jz)
-        for i, j, strength in zip(mps_i, mps_j, Jz_vals):
-            self.add_coupling(coupling_z, [int(i), int(j)], strength=strength)
-        # 7) initialize H_MPO
-        MPOModel.__init__(self, lat, self.calc_H_MPO())
-        # 8) initialize H_bond (the order of 7/8 doesn't matter)
-        NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
+        lattice = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
+
+        # 5) Initialize CouplingModel
+        CouplingModel.__init__(self, lattice)
+
+        # 6) Define necessary couplings  FIXME new
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jx=1, Jy=1, Jz=1, name='S.S'),
+            hc='S.S',
+            permute='invariant',
+        )
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jpm=1, name='Sp.Sm'),
+            hc='Sm.Sp',
+            permute='swap_hc',
+        )
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jz=1, name='Sz.Sz'),
+            hc='Sz.Sz',
+            permute='invariant',
+        )
+
+        # 7) Add terms of the Hamiltonian
+        self.add_onsite_operator(-hz, 'Sz')
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
+            if np.all(Jz == Jxx):
+                self.add_two_site_coupling(Jz, 'S.S', dx, u1=u1, u2=u2)
+            else:
+                self.add_two_site_coupling(0.5 * Jxx, 'Sp.Sm', dx, u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling(Jz, 'Sz.Sz', dx, u1=u1, u2=u2)
+
+        return
 
 
 class XXZChain2(ModelBuilder):

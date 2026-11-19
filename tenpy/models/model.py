@@ -1110,14 +1110,18 @@ class ModelBuilder(CouplingModel):
         self.options = model_params = asConfig(model_params, self.name)
         self.manually_call_init_H = getattr(self, 'manually_call_init_H', False)
         explicit_plus_hc = model_params.get('explicit_plus_hc', False, bool)
-        # 1-4) initialize lattice
+        # 2) Initialize backend
+        #    Note that 1) "Determine the symmetry" is not done yet.
+        #    If needed, init_backend will do a dummy_call to init_lattice
         self.backend = backend = self.init_backend(model_params)
+        # 1),3),4) Determine symmetry, Initialize site(s), Initialize lattice
         lattice = self.init_lattice(model_params)
         assert lattice.backend == backend
         # 5) initialize CouplingModel
         CouplingModel.__init__(self, lattice, explicit_plus_hc=explicit_plus_hc)
-        # 6) add terms of the Hamiltonian
+        # 6) Define necessary couplings
         self.init_couplings(model_params)
+        # 7) Add terms of the Hamiltonian
         self.init_terms(model_params)
         # finally checks for misspelled parameter names
         model_params.warn_unused()
