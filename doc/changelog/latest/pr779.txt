@@ -1,0 +1,1 @@
+- Preserve supplied environment data in :meth:`tenpy.MPO.expectation_value`.
