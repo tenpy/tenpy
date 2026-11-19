@@ -75,6 +75,19 @@ def test_site():
     # done
 
 
+def test_grouped_site_drop_heterogeneous_charges():
+    """Dropping charges preserves each local space in a fermion-boson group."""
+    fermion = site.FermionSite('N')
+    boson = site.BosonSite(2, conserve='N')
+    grouped = site.GroupedSite([fermion, boson], charges='drop')
+
+    assert grouped.dim == 6
+    assert grouped.leg.chinfo.qnumber == 0
+    npt.assert_array_equal(grouped.N0.to_ndarray(), np.kron(fermion.N.to_ndarray(), np.eye(3)))
+    npt.assert_array_equal(grouped.N1.to_ndarray(), np.kron(np.eye(2), boson.N.to_ndarray()))
+    grouped.test_sanity()
+
+
 def test_double_site():
     for site0, site1 in [[site.SpinHalfSite(None)] * 2, [site.SpinHalfSite('Sz', sort_charge=False)] * 2]:
         for charges in ['same', 'drop', 'independent']:
