@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
+from ..algorithms.dmrg import _collect_extrapolation
 from ..algorithms.mps_common import ZeroSiteH
 from ..linalg import krylov_based
 from ..linalg import np_conserved as npc
@@ -20,6 +21,7 @@ from .simulation import *  # noqa F403
 
 __all__ = simulation.__all__ + [
     'GroundStateSearch',
+    'VarianceExtrapolation',
     'PlaneWaveExcitations',
     'OrthogonalExcitations',
     'TopologicalExcitations',
@@ -75,6 +77,73 @@ class GroundStateSearch(Simulation):
         """
         E, psi = self.engine.resume_run()
         self.results['energy'] = E
+
+
+class VarianceExtrapolation(GroundStateSearch):
+    """Ground state search repeated for a series of bond dimensions, extrapolated in the variance.
+
+    The algorithm is run once for each bond dimension of :cfg:option:`VarianceExtrapolation.
+    extrapolation_chi_list`, continuing from the state reached so far. After each run, the energy
+    and the :meth:`~tenpy.networks.mpo.MPO.two_site_variance` of the state are recorded, and a
+    measurement is performed. The recorded energies are finally extrapolated linearly in the
+    variance to the vanishing variance of an exact eigenstate, following :arxiv:`1711.01104`.
+    The results are stored under ``'variance_extrapolation'``, and the energy of the last run
+    under ``'energy'`` as usual.
+
+    Options
+    -------
+    .. cfg:config :: VarianceExtrapolation
+        :include: GroundStateSearch
+
+        extrapolation_chi_list : list of int
+            The maximal bond dimensions to be used, in the order in which they are run.
+            At least two are needed for the extrapolation.
+
+    """
+
+    def init_algorithm(self, **kwargs):
+        """Initialize the engine, without the bond dimension schedule of the algorithm.
+
+        The bond dimensions are taken from :cfg:option:`VarianceExtrapolation.
+        extrapolation_chi_list`. A :cfg:option:`Sweep.chi_list` schedule would not only override
+        :cfg:option:`truncation.chi_max` during a run, but also raise the default
+        :cfg:option:`IterativeSweeps.min_sweeps` of the engine, so it is cleared before the
+        engine is created.
+        """
+        self.options.subconfig('algorithm_params')['chi_list'] = None
+        super().init_algorithm(**kwargs)
+
+    def run_algorithm(self):
+        """Run the algorithm for each bond dimension and extrapolate.
+
+        The engine initialized by :meth:`init_algorithm` is run once per bond dimension, so that
+        the usual checkpoint, cache and statistics handling applies to each of the runs.
+        The records are stored under the key ``'variance_extrapolation'``, in the same form as
+        :func:`~tenpy.algorithms.dmrg.extrapolate_in_variance` returns them; the energy of the
+        last run is stored under ``'energy'`` as usual.
+        """
+        chi_list = [int(chi) for chi in self.options['extrapolation_chi_list']]
+        if len(chi_list) < 2:
+            raise ValueError('need at least two bond dimensions to extrapolate')
+        energies = []
+        variances = []
+        chi_reached = []
+        for i, chi in enumerate(chi_list):
+            self.engine.trunc_params['chi_max'] = chi
+            if max(self.psi.chi) > chi:
+                # a state that is already larger would exceed `chi` until the first truncation
+                self.psi.compress_svd(self.engine.trunc_params)
+            if i > 0:
+                # the environment has to be rebuilt for the state reached so far
+                self.engine.init_env(self.model)
+            E, psi = self.engine.run()
+            energies.append(E)
+            variances.append(self.model.H_MPO.two_site_variance(psi))
+            chi_reached.append(max(psi.chi))
+            self.make_measurements()
+        results = _collect_extrapolation(chi_list, energies, variances, chi_reached, {})
+        self.results['variance_extrapolation'] = results
+        self.results['energy'] = results['E'][-1]
 
 
 class PlaneWaveExcitations(GroundStateSearch):
