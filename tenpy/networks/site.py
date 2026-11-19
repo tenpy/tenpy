@@ -723,6 +723,8 @@ class GroupedSite(Site):
                 legs.append(leg)
         else:
             raise ValueError('Unknown option for `charges`: ' + repr(charges))
+        # Site.change_charge clears the parity map, so read it from the original sites.
+        charge_to_JW_parities = [getattr(s, 'charge_to_JW_parity', None) for s in sites]
         if charges != 'same':
             sites = [copy.copy(s) for s in sites]  # avoid modifying the existing sites.
             # sort legs
@@ -769,15 +771,13 @@ class GroupedSite(Site):
                 JW_Ids[i] = site.JW
 
         # propagate `charge_to_JW_parity` if safe/clear what it should be
-        # read it into c2JWps for each site before calling Site.change_charge() deleting it
-        c2JWps = [getattr(s, 'charge_to_JW_parity', None) for s in sites]
         if charges == 'same':
             # already same charges, so could/should have same `charge_to_JW_parity`
-            if all(p is not None and np.array_equal(p, c2JWps[0]) for p in c2JWps):
-                self.charge_to_JW_parity = c2JWps[0]
+            if all(p is not None and np.array_equal(p, charge_to_JW_parities[0]) for p in charge_to_JW_parities):
+                self.charge_to_JW_parity = charge_to_JW_parities[0]
         elif charges == 'independent':
-            if all(p is not None for p in c2JWps):
-                self.charge_to_JW_parity = np.concatenate(c2JWps)
+            if all(p is not None for p in charge_to_JW_parities):
+                self.charge_to_JW_parity = np.concatenate(charge_to_JW_parities)
         # other cases: not immediately clear what charge_to_JW_parity should be / is still valid
 
     def kroneckerproduct(self, ops):

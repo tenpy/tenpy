@@ -1,0 +1,1 @@
+- Preserve Jordan-Wigner parity for :class:`~tenpy.networks.site.GroupedSite` with independent charges.
