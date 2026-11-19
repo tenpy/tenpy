@@ -10,6 +10,7 @@ from random_test import gen_random_legcharge
 
 import tenpy.linalg.np_conserved as npc
 from tenpy.networks import site
+from tenpy.networks.mps import MPS
 from tenpy.tools.misc import inverse_permutation
 
 
@@ -86,6 +87,23 @@ def test_double_site():
         [op + 'a' for op in fs.need_JW_string] + [op + 'b' for op in fs.need_JW_string] + ['JW']
     )
     ss = site.GroupedSite([fs])
+
+
+def test_grouped_site_independent_jw_parity():
+    """A grouped fermion-boson site's parity depends only on the fermion charge."""
+    fermion = site.FermionSite('N')
+    boson = site.BosonSite(2, conserve='N')
+    grouped = site.GroupedSite([fermion, boson], charges='independent')
+    charges = grouped.leg.to_qflat()
+    signs = (-1) ** charges[:, 0]
+    npt.assert_array_equal(np.diag(grouped.JW.to_ndarray()), signs)
+    psi = MPS.from_product_state([grouped] * 2, ['full_0 0_1', 'empty_0 1_1'], unit_cell_width=2)
+    expected = MPS.from_product_state([grouped] * 2, ['full_0 0_1', 'full_0 1_1'], unit_cell_width=2)
+    psi.apply_local_op(1, 'Cd0')
+    # The occupied fermion to the left contributes a minus sign.
+    npt.assert_allclose(expected.overlap(psi), -1.0, atol=1.0e-14, rtol=0.0)
+    npt.assert_array_equal(grouped.charge_to_JW_signs(charges), signs)
+    grouped.test_sanity()
 
 
 def check_spin_site(S, SpSmSz=['Sp', 'Sm', 'Sz'], SxSy=['Sx', 'Sy']):
