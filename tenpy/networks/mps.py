@@ -4436,9 +4436,8 @@ class MPS(BaseMPSExpectationValue):
                 assert theta.shape == (1, 1)
                 # already divided by norm, so only include the phase now
                 total_weight = total_weight * theta[0, 0] / weight
-            if not complex_amplitude:
-                # return probability
-                total_weight = np.abs(total_weight) ** 2
+        if not complex_amplitude:
+            total_weight = np.abs(total_weight) ** 2
         return sigmas, total_weight
 
     def norm_test(self):

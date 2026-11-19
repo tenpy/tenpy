@@ -1,0 +1,1 @@
+- Fix joint outcome probabilities returned by :meth:`tenpy.MPS.sample_measurements`.
