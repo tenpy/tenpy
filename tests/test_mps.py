@@ -828,6 +828,20 @@ def test_sample_measurements(eps=1.0e-14, seed=5):
         assert abs(abs(weight) - 1.0) < eps
 
 
+@pytest.mark.parametrize('last_site, expected', [(0, 0.5), (3, 0.25), (5, 0.25)])
+def test_sample_measurements_probability(last_site, expected):
+    """Square the joint Born amplitude once, including for partial measurements."""
+    spin = site.SpinHalfSite('Sz')
+    psi = mps.MPS.from_singlets(spin, 6, [(0, 1), (2, 5)], lonely=[3, 4], unit_cell_width=6)
+    sigmas, amplitude = psi.sample_measurements(last_site=last_site, rng=np.random.default_rng(42))
+    sigmas_prob, probability = psi.sample_measurements(
+        last_site=last_site, rng=np.random.default_rng(42), complex_amplitude=False
+    )
+    assert sigmas == sigmas_prob
+    npt.assert_allclose(abs(amplitude) ** 2, expected, atol=1.0e-15, rtol=0.0)
+    npt.assert_allclose(probability, expected, atol=1.0e-15, rtol=0.0)
+
+
 @pytest.mark.parametrize('method', ['SVD', 'variational'])
 def test_mps_compress(method, eps=1.0e-13):
     # Test VariationalCompression and MPS.compress_svd of a sum of a state with itself or
