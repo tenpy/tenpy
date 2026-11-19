@@ -709,7 +709,7 @@ class GroupedSite(Site):
             legs = [npc.LegCharge.from_drop_charge(sites[0].leg)]
             chinfo = legs[0].chinfo
             for site in sites[1:]:
-                legs.append(npc.LegCharge.from_drop_charge(sites[0].leg, chargeinfo=chinfo))
+                legs.append(npc.LegCharge.from_drop_charge(site.leg, chargeinfo=chinfo))
         elif charges == 'independent':
             # charges are separately conserved
             legs = []
