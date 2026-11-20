@@ -24,9 +24,7 @@ def check_model_sanity(M, hermitian=True):
     """call M.test_sanity() for all different subclasses of M."""
     M.test_sanity()
     if hermitian:
-        with pytest.raises(NotImplementedError, match='MPO.dagger not working well, see #682'):
-            assert M.get_H_MPO().is_hermitian()
-        # skipping the check while it does not work -> reactivate it!
+        assert M.get_H_MPO().is_hermitian()
 
         try:
             H_bond = M.get_H_bond()
@@ -259,7 +257,15 @@ def test_CouplingModel_explicit():
     Id_1 = s.get_onsite_W_block('Id', w=w_odd)
     N_block = s.get_onsite_W_block('N', w=w_triv)
     Cd_L, C_R = lasy.models.hopping([s, s], t_right=0).factorization
-    C_L, Cd_R = lasy.models.hopping([s, s], t_left=0).factorization
+    # The model defines the coupling 'C.Cd' as the `dagger` of 'Cd.C'. The factorization of `dagger` agrees with the
+    # natural factorization ``hopping([s, s], t_left=0).factorization`` only up to a gauge on the virtual leg
+    # (signs on the odd sector, from the isomorphism that flips the duality of the virtual leg), so we do not
+    # compare the *cells* against the latter (the operators are compared below).
+    C_L, Cd_R = lasy.models.hopping([s, s], t_right=0).dagger().factorization
+    # independent check, the factorization above is gauge dependent but the operator is not
+    assert lasy.almost_equal(
+        lasy.models.hopping([s, s], t_right=0).dagger().to_tensor(), lasy.models.hopping([s, s], t_left=0).to_tensor()
+    )
     N_L, N_R = lasy.models.density_density_interaction([s, s]).factorization
 
     print()
@@ -392,7 +398,12 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc):
     N_1 = s.get_onsite_W_block('N', w=w_odd)
     N_block = s.get_onsite_W_block('N', w=w_triv)
     Cd_L, C_R = lasy.models.hopping([s, s], t_right=0).factorization
-    C_L, Cd_R = lasy.models.hopping([s, s], t_left=0).factorization
+    # 'C.Cd' is the `dagger` of 'Cd.C', see test_CouplingModel_explicit regarding the gauge
+    C_L, Cd_R = lasy.models.hopping([s, s], t_right=0).dagger().factorization
+    # independent check, the factorization above is gauge dependent but the operator is not
+    assert lasy.almost_equal(
+        lasy.models.hopping([s, s], t_right=0).dagger().to_tensor(), lasy.models.hopping([s, s], t_left=0).to_tensor()
+    )
 
     print()
     print(H_mpo.show_W_grid(0))
@@ -706,19 +717,15 @@ def compare_models_plus_hc(
 ):
     """helper for test_model_plus_hc; check if the models are equivalent"""
 
-    with pytest.raises(NotImplementedError, match='MPO.dagger not working well, see #682'):
-        assert m_manual.get_H_MPO().is_hermitian(), 'm_manual not hermitian'
-        assert m_plus_hc.get_H_MPO().is_hermitian(), 'm_plus_hc not hermitian'
-        assert m_explicit.get_H_MPO().is_hermitian(), 'm_explicit not hermitian'
-    # skipping the checks while it does not work, once it does, simply remove the context manager
+    assert m_manual.get_H_MPO().is_hermitian(), 'm_manual not hermitian'
+    assert m_plus_hc.get_H_MPO().is_hermitian(), 'm_plus_hc not hermitian'
+    assert m_explicit.get_H_MPO().is_hermitian(), 'm_explicit not hermitian'
 
     # for m_explicit, look at the "bare" MPO, without its hc
     m_explicit_bare_MPO = m_explicit.get_H_MPO().copy()
     m_explicit_bare_MPO.explicit_plus_hc = False  # now this is an MPO without the +hc part
     if expect_non_hermitian_mpo:
-        with pytest.raises(NotImplementedError, match='MPO.dagger not working well, see #682'):
-            assert not m_explicit_bare_MPO.is_hermitian()
-        # skipping the checks while it does not work, once it does, simply remove the context manager
+        assert not m_explicit_bare_MPO.is_hermitian()
 
     if expect_non_hermitian_mpo and m_explicit.get_H_MPO().chi[3] > 2:
         # check for smaller MPO bond dimension

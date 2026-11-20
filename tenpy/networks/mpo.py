@@ -1443,23 +1443,29 @@ class MPO(MPSGeometry):
         return TermList(all_terms, all_prefs)
 
     def dagger(self):
-        """Return hermitian conjugate copy of self."""
+        """Return the hermitian conjugate of `self` as a new MPO, for any `bc`.
+
+        The hermitian conjugate is taken on each ``W`` separately (cost linear in :attr:`L`): the physical
+        legs are transposed and the entries are complex conjugated. The virtual legs keep their labels
+        ``'wL'`` and ``'wR'``, their order and their ``'IdL'`` / ``'IdR'`` summand labels, such that the
+        block upper triangular structure of the `W` (see :func:`partition_W`) is preserved.
+        Taking the conjugate dualizes the virtual legs; they are flipped back with a gauge transformation,
+        such that the virtual legs of the result have the same duality (``is_dual``) as those of `self`.
+        The virtual basis of the result is therefore gauge transformed relative to `self`, the operator
+        is not. The sectors of the physical legs are conjugated, e.g. a term ``S+ S-`` becomes ``S- S+``.
+        The result can be added to `self`, e.g. ``H + H.dagger()`` is twice the hermitian part of `H`.
+        For ``explicit_plus_hc=True`` a copy is returned.
+        """
         if self.explicit_plus_hc:
-            return self.copy()
-        if self.bc != 'finite':
-            raise NotImplementedError("MPO.dagger() for bc != 'finite' is not yet supported")
-        # for finite bc, the `_W` tensors have the same structure as a lasyten Coupling's
-        # `factorization` (trivial boundary legs), so we can round-trip through `Coupling` to
-        # get the hermitian conjugate at the tensor level.
-        coupling = Coupling(sites=list(self.sites), factorization=list(self._W))
-        hc_coupling = Coupling.from_tensor(lasy.dagger(coupling.to_tensor()), sites=list(self.sites))
-        return MPO(
-            self.sites,
-            hc_coupling.factorization,
-            self.bc,
-            self.max_range,
-            mps_unit_cell_width=self.unit_cell_width,
-        )
+            new = self.copy()
+            new._W = list(self._W)  # `copy` is shallow; do not share the list with `self`
+            return new
+        # The conjugate of each W is bent back to the standard leg order and its (dualized) virtual
+        # legs are flipped back: the bonds between sites as a gauge transformation, and the two outer
+        # legs (contracted with each other for an infinite MPO, dummy legs for a finite MPO) on
+        # their own, see `lasyten.models.dagger_factorization`.
+        Ws = lasy.models.dagger_factorization(list(self._W), flip_boundary_legs=True)
+        return MPO(self.sites, Ws, self.bc, self.max_range, mps_unit_cell_width=self.unit_cell_width)
 
     def is_hermitian(self, eps: float = 1.0e-10, max_range: int | None = None):
         """Check if `self` is a hermitian MPO.
@@ -1468,8 +1474,6 @@ class MPO(MPSGeometry):
         """
         if self.explicit_plus_hc:
             return True
-        raise NotImplementedError('MPO.dagger not working well, see #682')
-        # this is bc the current MPO.dagger does not return in the grid structure expected by MPO.is_equal
         return self.is_equal(self.dagger(), eps, max_range)
 
     def is_equal(self, other: MPO, eps: float = 1.0e-10, max_range: int | None = None) -> bool:
@@ -1507,7 +1511,7 @@ class MPO(MPSGeometry):
         s_norm = self.overlap(self, understood_infinite=True, num_sites=num_sites)
         o_norm = other.overlap(other, understood_infinite=True, num_sites=num_sites)
         dist = abs(s_norm - 2 * ov.real() + o_norm)
-        return dist < eps * abs(s_norm + o_norm)
+        return bool(dist < eps * abs(s_norm + o_norm))
 
     def apply(self, psi: MPS, options) -> MPO:
         """Apply `self` to an MPS `psi` and compress, updating `psi` with the result in-place.
