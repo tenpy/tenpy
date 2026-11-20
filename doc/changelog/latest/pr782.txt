@@ -1,0 +1,1 @@
+- Allow :class:`~tenpy.networks.mpo.MPOGraph` to build a zero Hamiltonian from an empty set of terms. Before, initializing such a model, e.g. a :class:`~tenpy.models.spins.SpinModel` with all couplings set to zero resulted in a ``ValueError``.
