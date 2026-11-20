@@ -1,1 +1,2 @@
-- Preserve supplied environment data in :meth:`tenpy.MPO.expectation_value`.
+- Fixed a bug in :meth:`tenpy.MPO.expectation_value`, where non-empty ``init_env_data`` led to ``TypeErrors`` due to unexpected kwargs.
+- In :meth:`tenpy.MPO.expectation_value`, if ``init_env_data`` is given, the expectation value is now evaluated using :meth:`tenpy.MPO.expectation_value_TM` rather than the power method. This is technically not a breaking change; this case was affected by the bug above and could not call the power method evaluation without errors anyway.
