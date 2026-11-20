@@ -1,0 +1,2 @@
+- Fix a bug in joint outcome probabilities returned by :meth:`tenpy.MPS.sample_measurements` if ``complex_amplitude=False``. Before, it silently returned nonsense values.
+  The unsquared ``complex_amplitude=True`` was correct.
