@@ -2674,6 +2674,27 @@ class PauliStringExpansion:
             s = PauliString(s)
         return s % self.L in self._data
 
+    def bipartitions(self):
+        """Generates the left and right bipartition per cut.
+
+        Assumes that in the finite case all Pauli strings are contained within the system size.
+
+        Returns
+        -------
+        PL, PR : :class:`set[PauliString]`, :class:`set[PauliString]`
+            Left and right Pauli string sets.
+
+        """
+        PL = [set() for _ in range(self.L + 1)]
+        PR = [set() for _ in range(self.L + 1)]
+        for s in self._data:  # non-identity letters only
+            for r in range(1, len(s)):  # cut between letter r-1 and letter r
+                for n in range(s[r - 1].site + 1, s[r].site + 1):  # every bond inside that gap
+                    b = n % self.L
+                    PL[b].add(s[:r] << (n - b))
+                    PR[b].add(s[r:] << (n - b))
+        return [sorted(S) for S in PL], [sorted(S) for S in PR]  # index 0 corresponds to cut 1:2
+
 
 class MPOCompact(MPOBuilder):
     _valid_bc = ['finite', 'infinite']
@@ -2779,7 +2800,7 @@ class MPOCompact(MPOBuilder):
 class MPOCompactFinite(MPOCompact):
     def build_MPO(self, svd_min=1e-12):
 
-        PL, PR = self._gen_PL_PR()
+        PL, PR = self._pauli_expansion.bipartitions()
         Ws = [self._sparse_MPO(n, PL[n], PL[n + 1]) for n in range(self.L)]
 
         # one SVD per inner bond b = 1 ... L-1
@@ -2812,17 +2833,6 @@ class MPOCompactFinite(MPOCompact):
             explicit_plus_hc=False,
             mps_unit_cell_width=self.unit_cell_width,
         )
-
-    def _gen_PL_PR(self):
-        assert self._pauli_expansion is not None  # Ensure Pauli strings have been generated first
-        PL = [set() for _ in range(self.L + 1)]
-        PR = [set() for _ in range(self.L + 1)]
-        for s in self._pauli_expansion:  # non-identity letters only
-            for r in range(1, len(s)):  # cut between letter r-1 and letter r
-                for n in range(s[r - 1].site + 1, s[r].site + 1):  # every bond inside that gap
-                    PL[n].add(s[:r])
-                    PR[n].add(s[r:])
-        return [sorted(S) for S in PL], [sorted(S) for S in PR]  # index 0 corresponds to cut 1:2
 
     def _sparse_MPO(self, n, PLl, PLr):
 
@@ -2990,18 +3000,6 @@ class MPOCompactFinite(MPOCompact):
 class MPOCompactInfinite(MPOCompact):
     def build_MPO(self):
         pass
-
-    def _gen_PL_PR(self):
-        assert self._pauli_expansion is not None  # Ensure Pauli strings have been generated first
-        PL = [set() for _ in range(self.L)]
-        PR = [set() for _ in range(self.L)]
-        for s in self._pauli_expansion:  # first letter normalised to [0, N), later ones may exceed N
-            for r in range(1, len(s)):  # cut between letter r-1 and letter r
-                for cut in range(s[r - 1].site + 1, s[r].site + 1):
-                    b = cut % self.L
-                    PL[b].add(s[:r] << cut)  # offsets -1, -2, ...
-                    PR[b].add(s[r:] << cut)  # offsets 0, 1, ...
-        return [sorted(S) for S in PL], [sorted(S) for S in PR]
 
     def _prune_PL(self, PL):
         N = len(PL)
