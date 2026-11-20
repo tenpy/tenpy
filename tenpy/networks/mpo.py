@@ -40,7 +40,8 @@ import copy
 import logging
 import warnings
 from abc import ABCMeta, abstractmethod
-from collections.abc import Hashable, Sequence
+from collections.abc import Hashable, Iterable, Sequence
+from numbers import Complex
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 import lasyten as lasy
@@ -2641,6 +2642,38 @@ class PauliString(tuple):
     def __lshift__(self, k: int) -> PauliString:
         return self >> -k
 
+    def __mod__(self, L: int | None) -> PauliString:
+        if L is None:
+            return self
+        return PauliString((site % L, op) for site, op in self)
+
+
+class PauliStringExpansion:
+    def __init__(self, terms: dict[PauliString, Complex] = None, L: int | None = None):
+        self.L = L
+        self._data: dict[PauliString, complex] = terms if terms else {}  # Never use {} as default argument
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def add_term(self, s: PauliString | Iterable[tuple[int, str]], strength: Complex) -> None:
+        if not isinstance(s, PauliString):
+            s = PauliString(s)
+        if strength == 0:
+            raise ValueError('Avoid assigning zero values.')
+        strength += self._data.get(s % self.L, 0)  # Adds on-top if term already exists
+        self._data[s % self.L] = strength
+
+    def strength(self, s: PauliString | Iterable[tuple[int, str]], default: Complex | None = None) -> Complex:
+        if not isinstance(s, PauliString):
+            s = PauliString(s)
+        return self._data.get(s % self.L, default)
+
+    def __contains__(self, s: PauliString | Iterable[tuple[int, str]]):
+        if not isinstance(s, PauliString):
+            s = PauliString(s)
+        return s % self.L in self._data
+
 
 class MPOCompact(MPOBuilder):
     _valid_bc = ['finite', 'infinite']
@@ -2663,9 +2696,8 @@ class MPOCompact(MPOBuilder):
             raise NotImplementedError(bc)
         super().__init__(sites=sites, bc=bc, unit_cell_width=unit_cell_width)
         self.max_range: int = max_range
-        self._pauli_strings: set[PauliString] = set()
+        self._pauli_expansion: PauliStringExpansion = PauliStringExpansion(L=self.L)
         self._op_basis: dict[str, lasy.Tensor] = {}  # keys() contain the local operator basis
-        self._string_to_V: dict[PauliString, float] = {}  # V(p), where p is a Pauli string
 
     @classmethod
     def from_terms(
@@ -2711,9 +2743,8 @@ class MPOCompact(MPOBuilder):
         strength: int | float,
     ) -> None:
         pauli_string = PauliString([(position, opname)])
-        self._pauli_strings.add(pauli_string)
+        self._pauli_expansion.add_term(pauli_string, strength)
         self._op_basis[opname] = self.sites[position].get_op(opname)
-        self._string_to_V[pauli_string] = strength
 
     def add_coupling(
         self,
@@ -2728,8 +2759,7 @@ class MPOCompact(MPOBuilder):
         self._op_basis[opname_left] = op_left  # Overwrites old entry!
         self._op_basis[opname_right] = op_right
         pauli_string = PauliString([(pos_left, opname_left), (pos_right, opname_right)])
-        self._pauli_strings.add(pauli_string)
-        self._string_to_V[pauli_string] = strength
+        self._pauli_expansion.add_term(pauli_string, strength)
 
     def add_multi_coupling(
         self,
@@ -2743,8 +2773,7 @@ class MPOCompact(MPOBuilder):
             opname = coupling.name + str(i)  # Might be overkill: + '/' + str(coupling_degree)
             self._op_basis[opname] = op
             pauli_string = pauli_string + [(pos, opname)]  # TODO: Make PauliString API more consistent.
-        self._pauli_strings.add(pauli_string)
-        self._string_to_V[pauli_string] = strength
+        self._pauli_expansion.add_term(pauli_string, strength)
 
 
 class MPOCompactFinite(MPOCompact):
@@ -2785,10 +2814,10 @@ class MPOCompactFinite(MPOCompact):
         )
 
     def _gen_PL_PR(self):
-        assert self._pauli_strings is not None  # Ensure Pauli strings have been generated first
+        assert self._pauli_expansion is not None  # Ensure Pauli strings have been generated first
         PL = [set() for _ in range(self.L + 1)]
         PR = [set() for _ in range(self.L + 1)]
-        for s in self._pauli_strings:  # non-identity letters only
+        for s in self._pauli_expansion:  # non-identity letters only
             for r in range(1, len(s)):  # cut between letter r-1 and letter r
                 for n in range(s[r - 1].site + 1, s[r].site + 1):  # every bond inside that gap
                     PL[n].add(s[:r])
@@ -2834,9 +2863,9 @@ class MPOCompactFinite(MPOCompact):
                 if p == q:  # string continues through site n: identity
                     A[i][j] = self.sites[n].get_onsite_W_block('Id', row_spaces[i], overbraid=True)
                 else:
-                    for mu in self._op_basis.keys():
+                    for mu, op in self._op_basis.items():
                         if p + [(n, mu)] == q:
-                            A[i][j] = self._op_basis[mu]
+                            A[i][j] = op
         if not any(isinstance(x, lasy.Tensor) for y in A for x in y):
             return None
         return lasy.tensor_from_grid(
@@ -2850,10 +2879,10 @@ class MPOCompactFinite(MPOCompact):
         p_dim = len(PLl)
         b = [None] * p_dim
         for i, p in enumerate(PLl):
-            for mu in self._op_basis.keys():
-                V = self._string_to_V.get(p + [(n, mu)], None)
+            for mu, op in self._op_basis.items():
+                V = self._pauli_expansion.strength(p + [(n, mu)], None)
                 if V is not None:
-                    b[i] = self._string_to_V[p + [(n, mu)]] * self._op_basis[mu]
+                    b[i] = self._pauli_expansion.strength(p + [(n, mu)]) * op
         if not any(isinstance(x, lasy.Tensor) for x in b):
             return None
 
@@ -2871,9 +2900,9 @@ class MPOCompactFinite(MPOCompact):
         q_dim = len(PLr)
         c = [None] * q_dim
         for i, q in enumerate(PLr):
-            for mu in self._op_basis.keys():
+            for mu, op in self._op_basis.items():
                 if q == PauliString([(n, mu)]):
-                    c[i] = self._op_basis[mu]
+                    c[i] = op
         if not any(isinstance(x, lasy.Tensor) for x in c):
             return None
 
@@ -2892,21 +2921,21 @@ class MPOCompactFinite(MPOCompact):
         w = triv.direct_sum(summand_labels=['IdL'])
         d = None
         for mu in self._op_basis.keys():
-            V = self._string_to_V.get(PauliString([(n, mu)]), None)
+            V = self._pauli_expansion.strength(PauliString([(n, mu)]))
             if V is None:
                 continue
             op = V * self.sites[n].get_onsite_W_block(mu, w, overbraid=True)
             d = op if d is None else d + op
         return d
 
-    def _calc_H(self, PLl, PLr):
-        p_dim, q_dim = len(PLl), len(PLr)
-        row_spaces = list(self._strings_to_SumSpace(PLl).spaces) if PLl else []
-        col_spaces = list(self._strings_to_SumSpace(PLr, 'wL').spaces) if PLr else []
-        H = [[None] * q_dim for _ in range(p_dim)]  # NOTE: Why does that not work: A = [[None] * p_dim] * q_dim
-        for i, p in enumerate(PLl):
-            for j, q in enumerate(PLr):
-                V = self._string_to_V.get(p + q, None)
+    def _calc_H(self, PL, PR):
+        p_dim, q_dim = len(PL), len(PR)
+        row_spaces = list(self._strings_to_SumSpace(PL).spaces) if PL else []
+        col_spaces = list(self._strings_to_SumSpace(PR, 'wL').spaces) if PR else []
+        H = [[None] * q_dim for _ in range(p_dim)]
+        for i, p in enumerate(PL):
+            for j, q in enumerate(PR):
+                V = self._pauli_expansion.strength(p + q)
                 if V is not None:
                     H[i][j] = V * lasy.SymmetricTensor.from_eye([row_spaces[i]], labels=['wL', 'wR'])
                     # NOTE: Not just a scalar, since factorisation of S.S can have a 3-dimensional bond.
@@ -2963,10 +2992,10 @@ class MPOCompactInfinite(MPOCompact):
         pass
 
     def _gen_PL_PR(self):
-        assert self._pauli_strings is not None  # Ensure Pauli strings have been generated first
+        assert self._pauli_expansion is not None  # Ensure Pauli strings have been generated first
         PL = [set() for _ in range(self.L)]
         PR = [set() for _ in range(self.L)]
-        for s in self._pauli_strings:  # first letter normalised to [0, N), later ones may exceed N
+        for s in self._pauli_expansion:  # first letter normalised to [0, N), later ones may exceed N
             for r in range(1, len(s)):  # cut between letter r-1 and letter r
                 for cut in range(s[r - 1].site + 1, s[r].site + 1):
                     b = cut % self.L
@@ -2989,11 +3018,57 @@ class MPOCompactInfinite(MPOCompact):
             result.append([p for p in PL[n] if p in parents])  # keeps the sorted order of PL[n]
         return result
 
-    def _calc_A(self, PLl, PLr):
-        pass
+    def _calc_A(self, n, PLl, PLr):
+        p_dim, q_dim = len(PLl), len(PLr)
+        row_spaces = list(self._strings_to_SumSpace(PLl).spaces) if PLl else []
+        col_spaces = list(self._strings_to_SumSpace(PLr).spaces) if PLr else []
+        row_of = {p: i for i, p in enumerate(PLl)}
 
-    def _calc_b(self, PLl):
-        pass
+        A = [[None] * q_dim for _ in range(p_dim)]
+        for j, q in enumerate(PLr):
+            if q[-1].site == -1:  # q has a letter mu on site n
+                parent = q[:-1] >> 1
+                mu = q[-1].opname
+            else:  # identity on site n
+                parent = q >> 1
+                mu = PauliString.ID
+            i = row_of.get(parent)
+            if i is None:  # empty parent (q starts on site n: that's c),
+                continue  # or parent was pruned / not in the input
+            if mu == PauliString.ID:
+                A[i][j] = self.sites[n].get_onsite_W_block('Id', row_spaces[i], overbraid=True)
+            else:
+                A[i][j] = self._op_basis[mu]
+
+        if not any(x is not None for row in A for x in row):
+            return None
+        return lasy.tensor_from_grid(
+            grid=A,
+            labels=['wL', 'p', 'wR', 'p*'],
+            row_summands=row_spaces,
+            col_summands=col_spaces,
+        )
+
+    def _calc_b(self, n, PLl):
+        p_dim = len(PLl)
+        b = [None] * p_dim
+        for i, p in enumerate(PLl):
+            for mu in self._op_basis.keys():  # letters available on site n
+                V = self._V(p + [(0, mu)], n)  # p u mu_n: the new letter sits at offset 0
+                if V == 0:
+                    continue
+                term = V * self._op_basis[mu]
+                b[i] = term if b[i] is None else b[i] + term  # several letters can close the same p
+        if not any(x is not None for x in b):
+            return None
+        row_spaces = list(self._strings_to_SumSpace(PLl).spaces)
+        col_space = next(x for x in b if x is not None).get_leg_co_domain('wR')
+        return lasy.tensor_from_grid(
+            grid=[[x] for x in b],
+            labels=['wL', 'p', 'wR', 'p*'],
+            row_summands=row_spaces,
+            col_summands=[col_space],
+        )
 
     def _calc_c(self, PLr):
         pass
