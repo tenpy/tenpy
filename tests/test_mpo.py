@@ -353,6 +353,46 @@ def test_MPO_expectation_value(tol=1.0e-15):
     assert abs(ev - desired_ev) < tol
 
 
+def test_MPO_expectation_value_segment_environments():
+    """Reuse the parent MPO environments when measuring an extracted segment."""
+    model = SpinChain(dict(L=6, Jx=0.0, Jy=0.0, Jz=1.0))
+    psi = mps.MPS.from_product_state(model.lat.mps_sites(), ['up'] * 6, unit_cell_width=6)
+    H = model.H_MPO
+    env = mpo.MPOEnvironment(psi, H, psi)
+    init_env_data = env.get_initialization_data(first=1, last=4)
+    H_segment = H.extract_segment(1, 4)
+    psi_segment = psi.extract_segment(1, 4)
+
+    # Five aligned Ising bonds contribute 1/4 each, including the environment bonds.
+    assert H.expectation_value(psi) == 1.25
+    assert H_segment.expectation_value_finite(psi_segment, init_env_data) == 1.25
+    assert H_segment.expectation_value(psi_segment, init_env_data=init_env_data) == 1.25
+
+    # A missing environment should never change the caller's dictionary.
+    empty_env_data = {}
+    for _ in range(2):
+        with (
+            pytest.warns(UserWarning, match='segment psi needs environments'),
+            pytest.raises(ValueError, match='need explicit environments'),
+        ):
+            H_segment.expectation_value(psi_segment, init_env_data=empty_env_data)
+        assert empty_env_data == {}
+
+
+@pytest.mark.parametrize('unknown_range', [False, True])
+def test_MPO_expectation_value_infinite_environments(unknown_range):
+    """Reuse an infinite MPO's right environment as a transfer-matrix guess."""
+    H = SpinChain(dict(L=4, Jx=0.0, Jy=0.0, Jz=1.0, bc_MPS='infinite')).H_MPO
+    psi = mps.MPS.from_product_state(H.sites, ['up'] * 4, bc='infinite', unit_cell_width=4)
+    if unknown_range:
+        # With unknown range the wrapper should use the transfer matrix without a guess as well.
+        H.max_range = None
+    init_env_data = mpo.MPOTransferMatrix.find_init_LP_RP(H, psi)
+
+    npt.assert_allclose(H.expectation_value(psi), 0.25, atol=1.0e-14, rtol=0.0)
+    npt.assert_allclose(H.expectation_value(psi, init_env_data=init_env_data), 0.25, atol=1.0e-14, rtol=0.0)
+
+
 def test_MPO_var(L=8, tol=1.0e-13):
     xxz_pars = dict(L=L, Jx=1.0, Jy=1.0, Jz=1.1, hz=0.1, bc_MPS='finite', conserve=None)
     M = SpinChain(xxz_pars)

@@ -1125,7 +1125,8 @@ class MPO(MPSGeometry):
         tol, max_range :
             See  :meth:`expectation_value_powermethod`.
         init_env_data : dict
-            Optional environment data, if known.
+            Optional environment data, if known. For infinite MPS, providing this
+            data selects the transfer-matrix method, which can reuse ``init_RP`` as a guess.
 
         Returns
         -------
@@ -1135,11 +1136,11 @@ class MPO(MPSGeometry):
 
         """
         if self.finite:
-            return self.expectation_value_finite(psi, **init_env_data)
-        elif self.max_range is None or self.max_range > 10 * self.L:
-            return self.expectation_value_TM(psi, tol=tol, **init_env_data)
+            return self.expectation_value_finite(psi, init_env_data=init_env_data)
+        elif init_env_data or self.max_range is None or self.max_range > 10 * self.L:
+            return self.expectation_value_TM(psi, tol=tol, init_env_data=init_env_data)
         else:
-            return self.expectation_value_power(psi, tol=tol, max_range=max_range, **init_env_data)
+            return self.expectation_value_power(psi, tol=tol, max_range=max_range)
 
     def expectation_value_finite(self, psi, init_env_data={}):
         """Calculate ``<psi|self|psi>/<psi|psi>`` for finite MPS.
@@ -1160,7 +1161,7 @@ class MPO(MPSGeometry):
         """
         if psi.bc == 'segment':
             if len(init_env_data) == 0:
-                init_env_data['start_env_sites'] = 0
+                init_env_data = {'start_env_sites': 0}
                 warnings.warn(
                     'MPO.expectation_value(psi) with segment psi needs environments! '
                     'Can only estimate value completely ignoring contributions '
