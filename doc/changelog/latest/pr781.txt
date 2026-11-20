@@ -1,1 +1,1 @@
-- Fix :class:`~tenpy.networks.site.GroupedSite` with dropped charges and different local dimensions.
+- Fix :class:`~tenpy.networks.site.GroupedSite` with dropped charges and different local dimensions. Before, creating such grouped sites resulted in a cryptic IndexError.
