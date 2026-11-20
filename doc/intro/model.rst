@@ -206,7 +206,7 @@ It is also common to have specialized classes for special lattices::
 
         def init_sites(self, model_params):
             # note: Kagome has three sites per unit-cell
-            site = self.init_sites(model_params)
+            site = MyModel.init_sites(model_params)
             return (site, site, site)
 
 
