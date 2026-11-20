@@ -2643,68 +2643,76 @@ class PauliString(tuple):
         return self >> -k
 
     def __mod__(self, L: int | None) -> PauliString:
-        if L is None:
+        if L is None or not self:
             return self
-        return PauliString((site % L, op) for site, op in self)
+        return self << (self[0].site // L) * L
+        # Shift entire Pauli string, not each individual one. (0 % 2, 2 % 2) for example
+        # shall not equal (0, 0), since (0, 2) are different sites!!
 
 
 class PauliStringExpansion:
-    def __init__(self, terms: dict[PauliString, Complex] = None, L: int | None = None):
+    def __init__(self, L: int, terms: dict[PauliString, Complex] = None):
         self.L = L
-        self._data: dict[PauliString, complex] = terms if terms else {}  # Never use {} as default argument
+        self._data: dict[PauliString, complex] = {}  # Never use {} as default argument
+        for s, strength in (terms or {}).items():
+            self.add_term(s, strength)
+        self._bipartitions: tuple[set[PauliString], set[PauliString]] = None
 
     def __iter__(self):
         return iter(self._data)
 
     def add_term(self, s: PauliString | Iterable[tuple[int, str]], strength: Complex) -> None:
-        if not isinstance(s, PauliString):
-            s = PauliString(s)
         if strength == 0:
             raise ValueError('Avoid assigning zero values.')
-        strength += self._data.get(s % self.L, 0)  # Adds on-top if term already exists
-        self._data[s % self.L] = strength
+        key = self._key(s)
+        strength += self._data.get(key, 0)  # Adds on-top if term already exists
+        self._data[key] = strength
+        self._bipartitions = None  # Old bipartitions are incomplete, so reset!
 
     def strength(self, s: PauliString | Iterable[tuple[int, str]], default: Complex | None = None) -> Complex:
-        if not isinstance(s, PauliString):
-            s = PauliString(s)
-        return self._data.get(s % self.L, default)
+        return self._data.get(self._key(s), default)
 
     def __contains__(self, s: PauliString | Iterable[tuple[int, str]]):
-        if not isinstance(s, PauliString):
-            s = PauliString(s)
-        return s % self.L in self._data
+        return self._key(s) in self._data
 
-    def bipartitions(self):
+    def _calc_bipartitions(self):
         """Generates the left and right bipartition per cut.
 
         Assumes that in the finite case all Pauli strings are contained within the system size.
 
         Returns
         -------
-        PL, PR : :class:`set[PauliString]`, :class:`set[PauliString]`
+        PL, PR : :class:`list[list[PauliString]]`, :class:`list[list[PauliString]]`
             Left and right Pauli string sets.
 
         """
         PL = [set() for _ in range(self.L + 1)]
         PR = [set() for _ in range(self.L + 1)]
-        for s in self._data:  # non-identity letters only
+        for s in self._data:
             for r in range(1, len(s)):  # cut between letter r-1 and letter r
                 for n in range(s[r - 1].site + 1, s[r].site + 1):  # every bond inside that gap
                     b = n % self.L
                     PL[b].add(s[:r] << (n - b))
                     PR[b].add(s[r:] << (n - b))
-        return [sorted(S) for S in PL], [sorted(S) for S in PR]  # index 0 corresponds to cut 1:2
+        return [sorted(S) for S in PL], [sorted(S) for S in PR]
+
+    def _key(self, s: PauliString | Iterable[tuple[int, str]]) -> PauliString:
+        if not isinstance(s, PauliString):
+            s = PauliString(s)
+        return s % self.L
+
+    def get_cut(self, bond: int, side: Literal['left', 'right']) -> list[PauliString]:
+        """Left/right strings at cut n (any integer), placed at that cut."""
+        if self._bipartitions is None:
+            self._bipartitions = self._calc_bipartitions()
+        per_bond = self._bipartitions[0] if side == 'left' else self._bipartitions[1]
+        b = bond % self.L
+        shift = bond - b
+        return per_bond[b] if shift == 0 else [s >> shift for s in per_bond[b]]
 
 
 class MPOCompact(MPOBuilder):
     _valid_bc = ['finite', 'infinite']
-
-    def __new__(cls, sites, bc='finite', *args, **kwargs):
-        if cls is MPOCompact:
-            if bc not in cls._valid_bc:
-                raise NotImplementedError(bc)
-            cls = {'finite': MPOCompactFinite, 'infinite': MPOCompactInfinite}[bc]
-        return super().__new__(cls)
 
     def __init__(
         self,
@@ -2796,40 +2804,39 @@ class MPOCompact(MPOBuilder):
             pauli_string = pauli_string + [(pos, opname)]  # TODO: Make PauliString API more consistent.
         self._pauli_expansion.add_term(pauli_string, strength)
 
+    def build_MPO(self, svd_min: float = 1e-12) -> MPO:
+        Ws = [
+            self._sparse_MPO(n, self._pauli_expansion.get_cut(n, 'left'), self._pauli_expansion.get_cut(n + 1, 'left'))
+            for n in range(self.L)
+        ]
 
-class MPOCompactFinite(MPOCompact):
-    def build_MPO(self, svd_min=1e-12):
-
-        PL, PR = self._pauli_expansion.bipartitions()
-        Ws = [self._sparse_MPO(n, PL[n], PL[n + 1]) for n in range(self.L)]
-
-        # one SVD per inner bond b = 1 ... L-1
-        T = [None] * (self.L + 1)
-        T_inv = [None] * (self.L + 1)
-        SVs = [None] * (self.L + 1)
-        for b in range(1, self.L):
-            H = self._calc_H(PL[b], PR[b])
+        T = [None] * self.L
+        T_inv = [None] * self.L
+        SVs = [None] * self.L
+        for b in range(self.L):  # finite: bond 0 is empty and skipped
+            H = self._calc_H(self._pauli_expansion.get_cut(b, 'left'), self._pauli_expansion.get_cut(b, 'right'))
             if H is None:
                 continue
             U, S, V, err, _ = lasy.truncated_svd(H, new_labels=['wR', 'wL'], svd_min=svd_min)
             SVs[b] = S
-            T[b] = lasy.compose(U, S)  # U*S == H*V.hc ; equivalent, but numerically more accessible
-            T_inv[b] = lasy.compose(1 / S, U.hc, relabel2={'wL*': 'wR'})  # S^-1*U.hc
+            T[b] = lasy.compose(U, S)
+            T_inv[b] = lasy.compose(1 / S, U.hc, relabel2={'wL*': 'wR'})
 
-        # site n: left bond n gets T^-1, right bond n+1 gets T, both embedded
         W_canonical = []
         for n, W in enumerate(Ws):
             if T_inv[n] is not None:
                 W = lasy.planar_contraction(self._embed(W.get_leg_co_domain('wL'), T_inv[n]), W, 'wR', 'wL')
-            if T[n + 1] is not None:
-                W = lasy.planar_contraction(W, self._embed(W.get_leg_co_domain('wR'), T[n + 1]), 'wR', 'wL')
+            right = (n + 1) % self.L  # finite: last site -> bond 0 -> nothing to do
+            if T[right] is not None:
+                W = lasy.planar_contraction(W, self._embed(W.get_leg_co_domain('wR'), T[right]), 'wR', 'wL')
             W_canonical.append(W)
 
+        # max_range = max((s[-1].site - s[0].site for s in self._pauli_expansion), default=0)
         return MPO(
-            self.sites,
-            W_canonical,
+            sites=self.sites,
+            Ws=W_canonical,
             bc=self.bc,
-            max_range=None,
+            max_range=None,  # TODO: max_range
             explicit_plus_hc=False,
             mps_unit_cell_width=self.unit_cell_width,
         )
@@ -2850,8 +2857,8 @@ class MPOCompactFinite(MPOCompact):
         row_summands = [IdL.get_leg_co_domain('wL'), self._strings_to_SumSpace(PLl), IdR.get_leg_co_domain('wL')]
         col_summands = [IdL.get_leg_co_domain('wR'), self._strings_to_SumSpace(PLr), IdR.get_leg_co_domain('wR')]
 
-        rows = [0] if n == 0 else [0, 1, 2]
-        cols = [2] if n == self.L - 1 else [0, 1, 2]
+        rows = [0] if self.bc == 'finite' and n == 0 else [0, 1, 2]
+        cols = [2] if self.bc == 'finite' and n == self.L - 1 else [0, 1, 2]
 
         if not any(isinstance(x, lasy.Tensor) for y in grid for x in y):
             return None
@@ -2983,99 +2990,17 @@ class MPOCompactFinite(MPOCompact):
         >>> ]
 
         """
-        IdL_sp, IdR_sp = bond_leg.spaces[0], bond_leg.spaces[-1]
+        triv = lasy.ElementarySpace.from_trivial_sector(symmetry=self.symmetry)
+        IdL_sp = triv.direct_sum(summand_labels=['IdL'])
+        IdR_sp = triv.direct_sum(summand_labels=['IdR'])
         IdL = lasy.SymmetricTensor.from_eye([IdL_sp], labels=['wL', 'wR'], dtype=X.dtype)
         IdR = lasy.SymmetricTensor.from_eye([IdR_sp], labels=['wL', 'wR'], dtype=X.dtype)
-
-        grid = [[IdL, None, None], [None, X, None], [None, None, IdR]]
-
         return lasy.tensor_from_grid(
-            grid=grid,
+            grid=[[IdL, None, None], [None, X, None], [None, None, IdR]],
             labels=['wL', 'wR'],
             row_summands=[IdL_sp, X.get_leg_co_domain('wL'), IdR_sp],
             col_summands=[IdL_sp, X.get_leg_co_domain('wR'), IdR_sp],
         )
-
-
-class MPOCompactInfinite(MPOCompact):
-    def build_MPO(self):
-        pass
-
-    def _prune_PL(self, PL):
-        N = len(PL)
-        result = []
-        for n in range(N):
-            parents = set()
-            for q in PL[(n + 1) % N]:  # strings at the next bond (cyclic)
-                if q[-1].site == -1:  # q has a letter on site n (offset -1 relative to cut n+1)
-                    parent = q[:-1] >> 1
-                else:  # identity on site n: q only moved one cut further
-                    parent = q >> 1
-                if parent:  # empty parent = the IdL state, not a string
-                    parents.add(parent)
-            result.append([p for p in PL[n] if p in parents])  # keeps the sorted order of PL[n]
-        return result
-
-    def _calc_A(self, n, PLl, PLr):
-        p_dim, q_dim = len(PLl), len(PLr)
-        row_spaces = list(self._strings_to_SumSpace(PLl).spaces) if PLl else []
-        col_spaces = list(self._strings_to_SumSpace(PLr).spaces) if PLr else []
-        row_of = {p: i for i, p in enumerate(PLl)}
-
-        A = [[None] * q_dim for _ in range(p_dim)]
-        for j, q in enumerate(PLr):
-            if q[-1].site == -1:  # q has a letter mu on site n
-                parent = q[:-1] >> 1
-                mu = q[-1].opname
-            else:  # identity on site n
-                parent = q >> 1
-                mu = PauliString.ID
-            i = row_of.get(parent)
-            if i is None:  # empty parent (q starts on site n: that's c),
-                continue  # or parent was pruned / not in the input
-            if mu == PauliString.ID:
-                A[i][j] = self.sites[n].get_onsite_W_block('Id', row_spaces[i], overbraid=True)
-            else:
-                A[i][j] = self._op_basis[mu]
-
-        if not any(x is not None for row in A for x in row):
-            return None
-        return lasy.tensor_from_grid(
-            grid=A,
-            labels=['wL', 'p', 'wR', 'p*'],
-            row_summands=row_spaces,
-            col_summands=col_spaces,
-        )
-
-    def _calc_b(self, n, PLl):
-        p_dim = len(PLl)
-        b = [None] * p_dim
-        for i, p in enumerate(PLl):
-            for mu in self._op_basis.keys():  # letters available on site n
-                V = self._V(p + [(0, mu)], n)  # p u mu_n: the new letter sits at offset 0
-                if V == 0:
-                    continue
-                term = V * self._op_basis[mu]
-                b[i] = term if b[i] is None else b[i] + term  # several letters can close the same p
-        if not any(x is not None for x in b):
-            return None
-        row_spaces = list(self._strings_to_SumSpace(PLl).spaces)
-        col_space = next(x for x in b if x is not None).get_leg_co_domain('wR')
-        return lasy.tensor_from_grid(
-            grid=[[x] for x in b],
-            labels=['wL', 'p', 'wR', 'p*'],
-            row_summands=row_spaces,
-            col_summands=[col_space],
-        )
-
-    def _calc_c(self, PLr):
-        pass
-
-    def _calc_d(self):
-        pass
-
-    def _calc_H(self, PL, PR):
-        pass
 
 
 class MPOEnvironment(BaseEnvironment):

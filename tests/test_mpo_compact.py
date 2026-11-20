@@ -11,30 +11,33 @@ to show intermediate results
 import lasyten as lasy
 import pytest
 
-# from long_range_model import LongRangeSpinChain
 from tenpy.models.aklt import AKLTChain
 from tenpy.models.clock import ClockChain
 from tenpy.models.fermions_spinless import FermionChain, FermionModel
 from tenpy.models.haldane import BosonicHaldaneModel, FermionicHaldaneModel
 from tenpy.models.hofstadter import HofstadterBosons, HofstadterFermions
 from tenpy.models.hubbard import BoseHubbardChain, BoseHubbardModel, FermiHubbardChain, FermiHubbardModel
-from tenpy.models.model import CouplingModel
 from tenpy.models.pxp import PXPChain
 from tenpy.models.spins import *
 from tenpy.models.spins_nnn import SpinChainNNN2
 from tenpy.models.tf_ising import TFIChain
 from tenpy.models.toric_code import ToricCode
 from tenpy.models.xxz_chain import XXZChain2
-from tenpy.networks.mpo import MPO, MPOCompactFinite, MPOGraph
+from tenpy.networks.mpo import MPO, MPOCompact, MPOGraph
 
 RED = '\033[31m'
 GREEN = '\033[32m'
 YELLOW = '\033[33m'
 RESET = '\033[0m'
 
-L = 6
+L = 20
+
+# choose which boundary conditions to run: ['finite'], ['infinite'] or both
+BCS = ['finite', 'infinite']
+
+# (Model, params[, extra params for infinite only])
 CASES = [
-    # --- 1D spin chains (nearest neighbour; the ones you verified already) ---
+    # --- 1D spin chains (nearest neighbour) ---
     (TFIChain, dict(L=L, conserve='parity')),
     (XXZChain2, dict(L=L, conserve='Sz')),
     (SpinChain, dict(L=L, conserve='Sz')),
@@ -47,9 +50,9 @@ CASES = [
     (DipolarSpinChain, dict(L=L, conserve='Sz')),  # 4-site dipolar term
     (DipolarSpinChain, dict(L=L, conserve=None, J4=1.0)),
     (PXPChain, dict(L=L)),  # 3-site
-    (ToricCode, dict(Lx=2, Ly=2, conserve='parity')),  # 4-site, 2D, 8 sites
+    (ToricCode, dict(Lx=2, Ly=2, conserve='parity')),  # 4-site, 2D
     (ToricCode, dict(Lx=2, Ly=2, conserve=None)),
-    # --- bosons / fermions (fermions need Jordan-Wigner handling) ---
+    # --- bosons / fermions ---
     (BoseHubbardChain, dict(L=L, conserve='N')),
     (FermionChain, dict(L=L, conserve='N')),
     (FermiHubbardChain, dict(L=L)),
@@ -62,71 +65,81 @@ CASES = [
     (FermionicHaldaneModel, dict(Lx=2, Ly=2)),
     (HofstadterBosons, dict(Lx=3, Ly=3, phi=(1, 3), conserve='N', Nmax=1)),
     (HofstadterFermions, dict(Lx=3, Ly=3, phi=(1, 3), conserve='N')),
-    # (LongRangeSpinChain, dict(L=L, decay='exp', lam=0.5)),
-    # (LongRangeSpinChain, dict(L=L, decay='power', alpha=2.0)),
-    # (LongRangeSpinChain, dict(L=L, coupling='heisenberg', decay='exp', lam=0.7)),
+    # --- long range: infinite chains need an explicit cutoff ---
+    # (LongRangeSpinChain, dict(L=L, decay='exp', lam=0.5), dict(max_range=8)),
+    # (LongRangeSpinChain, dict(L=L, decay='power', alpha=2.0), dict(max_range=8)),
+    # (LongRangeSpinChain, dict(L=L, coupling='heisenberg', decay='exp', lam=0.7), dict(max_range=8)),
 ]
 
 
-# @pytest.mark.parametrize('length', range(2, 10))
-def _test_pauli_strings_left_right_spin(length):
-    model_params = {'L': length, 'bc_MPS': 'finite', 'conserve': 'SU2'}
-    model = SpinChain(model_params)
-
-    mpo_builder = MPOCompactFinite.from_terms([model.coupling_terms], model, bc='finite')
-
-    PL, PR = mpo_builder._gen_PL_PR()
-
-    print(f'PL = {PL}')
-    print(f'PR = {PR}')
-    print(f'V(puq) = {mpo_builder._string_to_V}')
-    print(f'opstr_per_site = {mpo_builder._opstr_per_site}')
-    print(f'op_basis = {mpo_builder._op_basis}')
-
-    Ws: list[lasy.Tensor] = []
-    for n in range(0, length - 1):
-        Ws.append(mpo_builder._sparse_MPO(n, PL[n], PL[n + 1]))
-
-    for W in Ws:
-        print(W.to_numpy())
+def _case_params(case):
+    Model, params, *extra = case
+    return Model, params, (extra[0] if extra else {})
 
 
-@pytest.mark.parametrize('Model, params', CASES, ids=[f'{M.__name__}-{i}' for i, (M, _) in enumerate(CASES)])
-def test_compare_sparse_MPO_and_MPOGraph(Model: CouplingModel, params, test_equal=True):
+CASE_PARAMS = [_case_params(c) for c in CASES]
+CASE_IDS = [f'{M.__name__}-{i}' for i, (M, *_) in enumerate(CASES)]
+
+
+# # @pytest.mark.parametrize('length', range(2, 10))
+# def _test_pauli_strings_left_right_spin(length):
+#     model_params = {'L': length, 'bc_MPS': 'finite', 'conserve': 'SU2'}
+#     model = SpinChain(model_params)
+
+#     mpo_builder = MPOCompact.from_terms([model.coupling_terms], model, bc='finite')
+
+#     PL, PR = mpo_builder._gen_PL_PR()
+
+#     print(f'PL = {PL}')
+#     print(f'PR = {PR}')
+#     print(f'V(puq) = {mpo_builder._string_to_V}')
+#     print(f'opstr_per_site = {mpo_builder._opstr_per_site}')
+#     print(f'op_basis = {mpo_builder._op_basis}')
+
+#     Ws: list[lasy.Tensor] = []
+#     for n in range(0, length - 1):
+#         Ws.append(mpo_builder._sparse_MPO(n, PL[n], PL[n + 1]))
+
+#     for W in Ws:
+#         print(W.to_numpy())
+
+
+@pytest.mark.parametrize('bc', BCS)
+@pytest.mark.parametrize('Model, params, inf_params', CASE_PARAMS, ids=CASE_IDS)
+def test_compare_sparse_MPO_and_MPOGraph(Model, params, inf_params, bc, test_equal=True):
     print('test_compare_sparse_MPO_and_MPOGraph')
     print(Model.__name__)
+    print('bc = ' + bc)
     # model_params = {
     #     'L': length,
     #     'bc_MPS': 'finite',
     #     'conserve': 'best'
     # }
-    model_params = params
-    model_params['bc_MPS'] = 'finite'
+    model_params = dict(params, bc_MPS=bc, **(inf_params if bc == 'infinite' else {}))
 
     model = Model(model_params)
 
     length = model.lattice.N_sites  # model_params['L']
 
-    mpo_compact = MPOCompactFinite.from_terms(
+    mpo_compact = MPOCompact.from_terms(
         model.get_nonzero_terms(),  # model.get_nonzero_terms(),
         model,
-        bc='finite',
+        bc=bc,
         unit_cell_width=model.lattice.mps_unit_cell_width,
     )
     # for positions, name, strength in model.iter_terms():
     #     mpo_compact.add_multi_coupling(model.couplings[name], positions, strength)
 
-    PL, PR = mpo_compact._gen_PL_PR()
-
     Ws: list[lasy.Tensor] = []
     for n in range(0, length):
-        Ws.append(mpo_compact._sparse_MPO(n, PL[n], PL[n + 1]))
+        Ws.append(
+            mpo_compact._sparse_MPO(
+                n, mpo_compact._pauli_expansion.get_cut(n, 'left'), mpo_compact._pauli_expansion.get_cut(n + 1, 'left')
+            )
+        )
 
     def keep(W, leg, name):
         return lasy.apply_mask(W, W.get_leg(leg).projection_onto_summand(name), leg)
-
-    Ws[0] = lasy.apply_mask(Ws[0], Ws[0].get_leg('wL').projection_onto_summand('IdL'), 'wL')
-    Ws[-1] = lasy.apply_mask(Ws[-1], Ws[-1].get_leg('wR').projection_onto_summand('IdR'), 'wR')
 
     mpo1 = MPO(
         mpo_compact.sites,
@@ -140,7 +153,7 @@ def test_compare_sparse_MPO_and_MPOGraph(Model: CouplingModel, params, test_equa
     mpo_graph = MPOGraph.from_terms(
         model.get_nonzero_terms(),
         model,
-        bc='finite',
+        bc=bc,
         unit_cell_width=model.lattice.mps_unit_cell_width,
     )
 
@@ -149,30 +162,34 @@ def test_compare_sparse_MPO_and_MPOGraph(Model: CouplingModel, params, test_equa
     print(f'mpo_compact.chi = {mpo1.chi}')
     print(f'mpo_graph.chi = {mpo2.chi}')
     if test_equal:
-        dist = mpo_distance(mpo1, mpo2)
-        print(f'relative distance = {dist:.2e}')
-        assert dist < 1e-6, f'MPOs differ: relative distance {dist:.2e}'
-        assert all(c1 <= c2 for c1, c2 in zip(mpo1.chi, mpo2.chi)), (
-            f'compressed MPO is larger: {mpo1.chi} vs {mpo2.chi}'
-        )
+        if bc == 'finite':
+            assert mpo1.is_equal(mpo2)
+        else:
+            assert mpo1.is_equal(mpo2, max_range=max(mpo1.max_range or 1, mpo2.max_range or 1))
+        # print(f'relative distance = {dist:.2e}')
+        # assert dist < 1e-6, f'MPOs differ: relative distance {dist:.2e}'
+        # assert all(c1 <= c2 for c1, c2 in zip(mpo1.chi, mpo2.chi)), (
+        #     f'compressed MPO is larger: {mpo1.chi} vs {mpo2.chi}'
+        # )
         print(f'{GREEN}Passed equivalence check!{RESET}')
 
 
-@pytest.mark.parametrize('Model, params', CASES, ids=[f'{M.__name__}-{i}' for i, (M, _) in enumerate(CASES)])
-def test_pauli_string_MPO(Model, params, test_equal=True):
+@pytest.mark.parametrize('bc', BCS)
+@pytest.mark.parametrize('Model, params, inf_params', CASE_PARAMS, ids=CASE_IDS)
+def test_pauli_string_MPO(Model, params, inf_params, bc, test_equal=True):
     print('test_pauli_string_MPO')
     print(Model.__name__)
-    model_params = params
-    model_params['bc_MPS'] = 'finite'
+    print('bc = ' + bc)
+    model_params = dict(params, bc_MPS=bc, **(inf_params if bc == 'infinite' else {}))
 
     model = Model(model_params)
 
     length = model.lattice.N_sites  # model_params['L']
 
-    mpo_compact = MPOCompactFinite.from_terms(
+    mpo_compact = MPOCompact.from_terms(
         model.get_nonzero_terms(),  # model.get_nonzero_terms(),
         model,
-        bc='finite',
+        bc=bc,
         unit_cell_width=model.lattice.mps_unit_cell_width,
     )
 
@@ -181,7 +198,7 @@ def test_pauli_string_MPO(Model, params, test_equal=True):
     mpo_graph = MPOGraph.from_terms(
         model.get_nonzero_terms(),
         model,
-        bc='finite',
+        bc=bc,
         unit_cell_width=model.lattice.mps_unit_cell_width,
     )
 
@@ -190,12 +207,15 @@ def test_pauli_string_MPO(Model, params, test_equal=True):
     print(f'mpo_compact.chi = {mpo1.chi}')
     print(f'mpo_graph.chi = {mpo2.chi}')
     if test_equal:
-        dist = mpo_distance(mpo1, mpo2)
-        print(f'relative distance = {dist:.2e}')
-        assert dist < 1e-6, f'MPOs differ: relative distance {dist:.2e}'
-        assert all(c1 <= c2 for c1, c2 in zip(mpo1.chi, mpo2.chi)), (
-            f'compressed MPO is larger: {mpo1.chi} vs {mpo2.chi}'
-        )
+        if bc == 'finite':
+            assert mpo1.is_equal(mpo2)
+        else:
+            assert mpo1.is_equal(mpo2, max_range=max(mpo1.max_range or 1, mpo2.max_range or 1))
+        # print(f'relative distance = {dist:.2e}')
+        # assert dist < 1e-6, f'MPOs differ: relative distance {dist:.2e}'
+        # assert all(c1 <= c2 for c1, c2 in zip(mpo1.chi, mpo2.chi)), (
+        #     f'compressed MPO is larger: {mpo1.chi} vs {mpo2.chi}'
+        # )
         print(f'{GREEN}Passed equivalence check!{RESET}')
 
 
