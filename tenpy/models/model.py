@@ -107,6 +107,33 @@ class EvolutionModel(metaclass=ABCMeta):
         """TODO"""
         raise NotImplementedError('site grouping not implemented')
 
+    @property
+    def rng(self):
+        """Reproducible numpy pseudo random number generator.
+
+        If you want to add randomness/disorder to your model,
+        it is recommended use this random number generator for reproducibility of the model::
+
+            self.rng.random(size=[3, 5])
+
+        Especially for models with time-dependence, you can/will otherwise end up generating a new
+        disordered at each time-step!
+
+        Options
+        -------
+        .. cfg:configoptions :: ModelBuilder
+
+            random_seed :: None | int
+                Defaults to 123456789. Seed for numpy pseudo random number generator which can
+                be used as e.g. ``self.rng.random(...)``.
+
+        """
+        rng = getattr(self, '_rng', None)
+        if rng is None:
+            seed = getattr(self, 'options', {}).get('random_seed', 123456789)
+            self._rng = rng = np.random.default_rng(seed=seed)
+        return rng
+
 
 class RandomUnitaryEvolution(EvolutionModel):
     """TODO write docs
@@ -1031,6 +1058,16 @@ class CouplingModel(HamiltonianModel):
             raise lasy.SymmetryError(msg)
         return
 
+    def repr_all_terms(self):
+        ot, ct, mct, edt = self.get_nonzero_terms()
+        terms = []
+        for strength, ijkl, name in itertools.chain(ot, ct, mct, edt.to_CouplingTerms(self, bc=self.bc_MPS)):
+            sub = '{' + ', '.join([str(int(i)) for i in ijkl]) + '}'
+            terms.append(f'{strength:.5f} * {name}_{sub}')
+        if not edt.is_empty:
+            terms.append('[some of the exponentially decaying terms may be omitted]')
+        return ' +\n'.join(terms)
+
 
 class ModelBuilder(CouplingModel):
     """Plays the role of the old CouplingMPOModel, where you just have to override some methods
@@ -1073,14 +1110,18 @@ class ModelBuilder(CouplingModel):
         self.options = model_params = asConfig(model_params, self.name)
         self.manually_call_init_H = getattr(self, 'manually_call_init_H', False)
         explicit_plus_hc = model_params.get('explicit_plus_hc', False, bool)
-        # 1-4) initialize lattice
+        # 2) Initialize backend
+        #    Note that 1) "Determine the symmetry" is not done yet.
+        #    If needed, init_backend will do a dummy_call to init_lattice
         self.backend = backend = self.init_backend(model_params)
+        # 1),3),4) Determine symmetry, Initialize site(s), Initialize lattice
         lattice = self.init_lattice(model_params)
         assert lattice.backend == backend
         # 5) initialize CouplingModel
         CouplingModel.__init__(self, lattice, explicit_plus_hc=explicit_plus_hc)
-        # 6) add terms of the Hamiltonian
+        # 6) Define necessary couplings
         self.init_couplings(model_params)
+        # 7) Add terms of the Hamiltonian
         self.init_terms(model_params)
         # finally checks for misspelled parameter names
         model_params.warn_unused()
