@@ -1,1 +1,1 @@
-- Preserve Jordan-Wigner parity for :class:`~tenpy.networks.site.GroupedSite` with independent charges.
+- Preserve Jordan-Wigner parity for :class:`~tenpy.networks.site.GroupedSite` with independent charges. Before, grouping a sign that has fermions (and thus needs JW) with a site that does not resulted in a ``ValueError``.
