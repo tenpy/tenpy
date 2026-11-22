@@ -378,9 +378,6 @@ def get_tfi_Hamiltonian(L, J, g, up_down_basis=True):
 
 @pytest.mark.parametrize('conserve', ['best', 'None'])
 def test_get_full_wavefunction(conserve, L=10):
-    pytest.skip(_LEGACY)
-    from tenpy.networks import MPS, SpinHalfSite
-
     # check with a singlet covering
     # sign convention of singlet = (|up,down> - |down,up>) / sqrt(2)
     assert L % 2 == 0
@@ -388,6 +385,7 @@ def test_get_full_wavefunction(conserve, L=10):
 
     # build wavefunction exactly
     up_down_basis = False
+    singlet = np.zeros((2, 2))
     if up_down_basis:
         singlet[0, 1] = +1
         singlet[1, 0] = -1
@@ -398,7 +396,7 @@ def test_get_full_wavefunction(conserve, L=10):
     expect = reduce(np.kron, [singlet] * (L // 2))
 
     # use get_full_wavefunction
-    site = SpinHalfSite(conserve='Sz' if conserve == 'best' else conserve)
+    site = SpinSite(conserve='Sz' if conserve == 'best' else conserve)
     psi = MPS.from_singlets(site=site, L=L, pairs=[[i, i + 1] for i in range(0, L, 2)], unit_cell_width=L)
     res = exact_diag.get_full_wavefunction(psi)
 
