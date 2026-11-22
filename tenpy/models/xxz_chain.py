@@ -67,7 +67,7 @@ class XXZChain(CouplingModel):
         if conserve == 'best':
             conserve = 'Sz'
 
-        # 2) Initialize backend  (FIXME replaces local op definition)
+        # 2) Initialize backend
         default_backend = 'no_symmetry' if conserve in ['None', None] else 'abelian'
         symmetry_backend = model_params.get('symmetry_backend', default_backend)
         block_backend = model_params.get('block_backend', None)
@@ -83,7 +83,7 @@ class XXZChain(CouplingModel):
         # 5) Initialize CouplingModel
         CouplingModel.__init__(self, lattice)
 
-        # 6) Define necessary couplings  FIXME new
+        # 6) Define necessary couplings
         self.define_coupling(
             lasy.models.spin_spin_coupling([site, site], Jx=1, Jy=1, Jz=1, name='S.S'),
             hc='S.S',

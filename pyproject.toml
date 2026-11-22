@@ -126,7 +126,6 @@ select = [
     "LOG",  # logging
     "INP",  # no-pep420 (implicit namespace packages)
     "D",  # pydocstyle
-    "FIX001",  # Line contains "FIX" + "ME" (avoided full spelling here -> doesnt match full text search)
 ]
 ignore = [
     "F403", "F405",  # star imports
