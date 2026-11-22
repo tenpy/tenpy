@@ -15,16 +15,18 @@ This might be used to obtain the spectrum, the ground state or highly excited st
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import itertools as it
 import warnings
 
 import lasyten as lasy
 import numpy as np
+import scipy.sparse as spsp
 from lasyten.symmetries import SymmetryError
 from lasyten.symmetries.spaces import AbelianLegPipe, TensorProduct
 from lasyten.tensors import HermitianNumpyArrayLinearOperator, slice_leg
 from lasyten.tensors import eigh as lasyten_eigh
 
-from ..models.model import CouplingModel
+from ..models.model import CouplingModel, HamiltonianModel
 from ..networks.mps import MPS
 
 __all__ = ['ExactDiag', 'get_full_wavefunction', 'get_numpy_Hamiltonian', 'get_scipy_sparse_Hamiltonian']
@@ -555,62 +557,61 @@ def get_scipy_sparse_Hamiltonian(model):
         raise NotImplementedError
 
 
-def _get_numpy_Hamiltonian_ExactDiag_full_H(model, from_mpo: bool):
+def _get_numpy_Hamiltonian_ExactDiag_full_H(model: HamiltonianModel, from_mpo: bool, understood_braiding=False):
     ed = ExactDiag.from_model(model)
-    if from_mpo and hasattr(model, 'H_MPO'):
+    if from_mpo:
         ed.build_full_H_from_mpo()
     else:
         ed.build_full_H_from_bonds()
-    res = ed.full_H.split_legs()
-    n_sites = model.lattice.N_sites
-    assert res.rank == 2 * n_sites
-    # [p0, p1, ..., p0*, p1*, ...]
-    res = res.itranspose([f'p{n}{star}' for star in ['', '*'] for n in range(n_sites)])
-    res = res.to_ndarray()
-    dim = np.prod(res.shape[:n_sites])
+    N = model.lattice.N_sites
+    res = lasy.planar_permute_legs(ed.full_H, codomain=[f'p{n}' for n in range(N)], domain=[f'p{n}*' for n in range(N)])
+    res = res.to_numpy(understood_braiding=understood_braiding)
+    dim = np.prod(res.shape[:N])
+    res = np.transpose(res, [*range(N), *reversed(range(N, 2 * N))])
     return np.reshape(res, (dim, dim))
 
 
-def _get_Hamiltonian_from_couplings(model, sparse: bool):
+def _get_Hamiltonian_from_couplings(
+    model: CouplingModel, sparse: bool, understood_braiding=False, exp_decaying_cutoff=1e-14
+):
     """Helper to get either dense numpy or sparse scipy matrix of the Hamiltonian."""
-    raise NotImplementedError(
-        'requires the lasyten MPO/models layer, which is not ported yet - use `ExactDiag.from_hamiltonian`.'
-    )
     if not isinstance(model, CouplingModel):
         raise ValueError('Must be a coupling model.')
 
-    ot = model.all_onsite_terms()
-    ot.remove_zeros()
-    ct = model.all_coupling_terms()
-    ct.remove_zeros()
-    edt = model.exp_decaying_terms
-    term_list = ot.to_TermList() + ct.to_TermList() + edt.to_TermList()
+    ot, ct, mct, edt = model.get_nonzero_terms()
+    edt = edt.to_CouplingTerms(model, cutoff=exp_decaying_cutoff, bc=model.bc_MPS)
 
     sites = model.lattice.mps_sites()
-    dims = [s.leg.ind_len for s in sites]
+    dims = [s.leg.dim for s in sites]
     if sparse:
-        import scipy.sparse as spsp
-
         H = spsp.csr_matrix((np.prod(dims),) * 2, dtype=float)
         kron = spsp.kron
-        eye_0 = spsp.eye(1)  # identity on zero sites. starting point for doing kron.
+        eye_fun = spsp.eye
     else:
         H = np.zeros((np.prod(dims),) * 2, dtype=float)
         kron = np.kron
-        eye_0 = np.eye(1)  # identity on zero sites. starting point for doing kron.
+        eye_fun = np.eye
 
-    for s, terms in zip(term_list.strength, term_list.terms):
-        last_site = -1
-        t = eye_0
-        for op, i in terms:
-            sites_since_last_op = range(last_site + 1, i)
-            if len(sites_since_last_op) > 0:
-                t = kron(t, np.eye(np.prod([dims[n] for n in sites_since_last_op])))
-            op = sites[i].get_op(op).to_ndarray()
-            t = kron(t, op)
-            last_site = i
-        sites_since_last_op = range(last_site + 1, len(sites))
-        if len(sites_since_last_op) > 0:
-            t = kron(t, np.eye(np.prod([dims[n] for n in sites_since_last_op])))
-        H = H + s * t
+    for a, (i,), opname in ot:
+        op = sites[i].get_op(opname).to_numpy(understood_braiding=understood_braiding)
+        t = kron(eye_fun(np.prod(dims[:i], dtype=int)), op)
+        t = kron(t, eye_fun(np.prod(dims[i + 1 :], dtype=int)))
+        H = H + a * t
+
+    for a, ijkl, coupling_name in it.chain(ct, mct, edt):
+        iL = min(ijkl)
+        iR = max(ijkl)
+        ijkl = np.array(ijkl)
+        coupling = model.couplings[coupling_name].stretch_with_identities(
+            sites[iL : iR + 1], coupling_positions=ijkl - iL
+        )
+        op = coupling.to_numpy(understood_braiding=understood_braiding)
+        op = np.reshape(
+            np.transpose(op, [*range(op.ndim // 2), *reversed(range(op.ndim // 2, op.ndim))]),
+            (np.prod(op.shape[: op.ndim // 2]),) * 2,
+        )
+        t = kron(eye_fun(np.prod(dims[:iL], dtype=int)), op)
+        t = kron(t, eye_fun(np.prod(dims[iR + 1 :], dtype=int)))
+        H = H + a * t
+
     return H

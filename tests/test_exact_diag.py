@@ -11,10 +11,12 @@ from lasyten.models.sites import FibonacciAnyonSite, SpinSite
 from lasyten.symmetries import SymmetryError
 from lasyten.symmetries.spaces import AbelianLegPipe
 from lasyten.tensors import SymmetricTensor, compose, dagger, norm
+from scipy.linalg import expm
 
 from tenpy.algorithms import exact_diag
 from tenpy.models.spins import SpinChain
 from tenpy.models.tf_ising import TFIChain
+from tenpy.networks.mps import MPS
 
 _LEGACY = 'legacy np_conserved test, not migrated to lasyten yet'
 
@@ -188,7 +190,6 @@ def test_exact_diag_mps_roundtrip(conserve, L):
 @pytest.mark.parametrize('conserve', ['Sz', 'parity', 'None'])
 @pytest.mark.parametrize('L', [3, 4])
 def test_exact_diag_exp_H(conserve, L):
-    from scipy.linalg import expm
 
     site = SpinSite(0.5, conserve=conserve)
     H, H_ref = _heisenberg_tensor(site, L)
@@ -406,9 +407,6 @@ def test_get_full_wavefunction(conserve, L=10):
 
 @pytest.mark.parametrize('conserve', ['best', 'None'])
 def test_get_scipy_sparse_Hamiltonian(conserve, L=10, J=1, g=4.3291):
-    pytest.skip(_LEGACY)
-    from tenpy.models import TFIChain
-
     model = TFIChain(dict(L=L, conserve=conserve, J=J, g=g))
     H_expect = get_tfi_Hamiltonian(L=L, J=J, g=g, up_down_basis=False)
     H_res = exact_diag.get_scipy_sparse_Hamiltonian(model)
@@ -418,9 +416,6 @@ def test_get_scipy_sparse_Hamiltonian(conserve, L=10, J=1, g=4.3291):
 @pytest.mark.parametrize('conserve', ['best', 'None'])
 @pytest.mark.parametrize('use_ED', [True, False])
 def test_get_numpy_Hamiltonian(conserve, use_ED, J=1, g=4.3291):
-    pytest.skip(_LEGACY)
-    from tenpy.models import TFIChain
-
     L = 6 if use_ED else 10  # using ED is a bit slow (overhead from combine? or is np.ix_ slow?)
     model = TFIChain(dict(L=L, conserve=conserve, J=J, g=g))
     H_expect = get_tfi_Hamiltonian(L=L, J=J, g=g, up_down_basis=False)
