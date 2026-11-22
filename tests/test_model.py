@@ -238,7 +238,8 @@ def test_CouplingModel_explicit():
     fermion_lat_cyl = lattice.Square(1, 2, s, bc='periodic', bc_MPS='infinite')
 
     M = model.CouplingModel(fermion_lat_cyl)
-    M.define_coupling(lasy.models.hopping([s, s], t_right=0, name='Cd.C'), hc='C.Cd', permute='swap_hc')
+    Cd_C = lasy.models.hopping([s, s], t_right=0, name='Cd.C')
+    M.define_coupling(Cd_C, hc='C.Cd', permute='swap_hc')
     M.define_coupling(lasy.models.density_density_interaction([s, s], name='N.N'), hc='N.N', permute='invariant')
 
     M.add_onsite_operator(0.125, 'N')
@@ -258,8 +259,8 @@ def test_CouplingModel_explicit():
     Id_0 = s.get_onsite_W_block('Id', w=w_triv)
     Id_1 = s.get_onsite_W_block('Id', w=w_odd)
     N_block = s.get_onsite_W_block('N', w=w_triv)
-    Cd_L, C_R = lasy.models.hopping([s, s], t_right=0).factorization
-    C_L, Cd_R = lasy.models.hopping([s, s], t_left=0).factorization
+    Cd_L, C_R = Cd_C.factorization
+    C_L, Cd_R = Cd_C.dagger().factorization
     N_L, N_R = lasy.models.density_density_interaction([s, s]).factorization
 
     print()
@@ -338,7 +339,8 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc):
 
     # create a weird fermionic model with 3-body interactions
     M = model.CouplingModel(fermion_lat_cyl)
-    M.define_coupling(lasy.models.hopping([s, s], t_right=0, name='Cd.C'), hc='C.Cd', permute='swap_hc')
+    Cd_C = lasy.models.hopping([s, s], t_right=0, name='Cd.C')
+    M.define_coupling(Cd_C, hc='C.Cd', permute='swap_hc')
     M.define_coupling(lasy.models.density_density_interaction([s, s], name='N.N'), hc='N.N', permute='invariant')
     N_Cd_C = lasy.outer(
         s.get_op('N').as_SymmetricTensor(),
@@ -391,8 +393,8 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc):
     N_0 = s.get_onsite_W_block('N', w=w_triv)
     N_1 = s.get_onsite_W_block('N', w=w_odd)
     N_block = s.get_onsite_W_block('N', w=w_triv)
-    Cd_L, C_R = lasy.models.hopping([s, s], t_right=0).factorization
-    C_L, Cd_R = lasy.models.hopping([s, s], t_left=0).factorization
+    Cd_L, C_R = Cd_C.factorization
+    C_L, Cd_R = Cd_C.dagger().factorization
 
     print()
     print(H_mpo.show_W_grid(0))
