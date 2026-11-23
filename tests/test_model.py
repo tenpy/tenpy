@@ -236,7 +236,8 @@ def test_CouplingModel_explicit():
     fermion_lat_cyl = lattice.Square(1, 2, s, bc='periodic', bc_MPS='infinite')
 
     M = model.CouplingModel(fermion_lat_cyl)
-    M.define_coupling(lasy.models.hopping([s, s], t_right=0, name='Cd.C'), hc='C.Cd', permute='swap_hc')
+    Cd_C = lasy.models.hopping([s, s], t_right=0, name='Cd.C')
+    M.define_coupling(Cd_C, hc='C.Cd', permute='swap_hc')
     M.define_coupling(lasy.models.density_density_interaction([s, s], name='N.N'), hc='N.N', permute='invariant')
 
     M.add_onsite_operator(0.125, 'N')
@@ -256,15 +257,15 @@ def test_CouplingModel_explicit():
     Id_0 = s.get_onsite_W_block('Id', w=w_triv)
     Id_1 = s.get_onsite_W_block('Id', w=w_odd)
     N_block = s.get_onsite_W_block('N', w=w_triv)
-    Cd_L, C_R = lasy.models.hopping([s, s], t_right=0).factorization
+    Cd_L, C_R = Cd_C.factorization
     # The model defines the coupling 'C.Cd' as the `dagger` of 'Cd.C'. The factorization of `dagger` agrees with the
     # natural factorization ``hopping([s, s], t_left=0).factorization`` only up to a gauge on the virtual leg
     # (signs on the odd sector, from the isomorphism that flips the duality of the virtual leg), so we do not
     # compare the *cells* against the latter (the operators are compared below).
-    C_L, Cd_R = lasy.models.hopping([s, s], t_right=0).dagger().factorization
+    C_L, Cd_R = Cd_C.dagger().factorization
     # independent check, the factorization above is gauge dependent but the operator is not
     assert lasy.almost_equal(
-        lasy.models.hopping([s, s], t_right=0).dagger().to_tensor(), lasy.models.hopping([s, s], t_left=0).to_tensor()
+        Cd_C.dagger().to_tensor(), lasy.models.hopping([s, s], t_left=0).to_tensor()
     )
     N_L, N_R = lasy.models.density_density_interaction([s, s]).factorization
 
@@ -344,7 +345,8 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc):
 
     # create a weird fermionic model with 3-body interactions
     M = model.CouplingModel(fermion_lat_cyl)
-    M.define_coupling(lasy.models.hopping([s, s], t_right=0, name='Cd.C'), hc='C.Cd', permute='swap_hc')
+    Cd_C = lasy.models.hopping([s, s], t_right=0, name='Cd.C')
+    M.define_coupling(Cd_C, hc='C.Cd', permute='swap_hc')
     M.define_coupling(lasy.models.density_density_interaction([s, s], name='N.N'), hc='N.N', permute='invariant')
     N_Cd_C = lasy.outer(
         s.get_op('N').as_SymmetricTensor(),
@@ -397,12 +399,12 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc):
     N_0 = s.get_onsite_W_block('N', w=w_triv)
     N_1 = s.get_onsite_W_block('N', w=w_odd)
     N_block = s.get_onsite_W_block('N', w=w_triv)
-    Cd_L, C_R = lasy.models.hopping([s, s], t_right=0).factorization
+    Cd_L, C_R = Cd_C.factorization
     # 'C.Cd' is the `dagger` of 'Cd.C', see test_CouplingModel_explicit regarding the gauge
-    C_L, Cd_R = lasy.models.hopping([s, s], t_right=0).dagger().factorization
+    C_L, Cd_R = Cd_C.dagger().factorization
     # independent check, the factorization above is gauge dependent but the operator is not
     assert lasy.almost_equal(
-        lasy.models.hopping([s, s], t_right=0).dagger().to_tensor(), lasy.models.hopping([s, s], t_left=0).to_tensor()
+        Cd_C.dagger().to_tensor(), lasy.models.hopping([s, s], t_left=0).to_tensor()
     )
 
     print()
