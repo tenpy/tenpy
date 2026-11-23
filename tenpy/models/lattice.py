@@ -2337,7 +2337,7 @@ class HelicalLattice(Lattice):
 
     _REMOVED = IrregularLattice._REMOVED
 
-    def __init__(self, regular_lattice, N_unit_cells):
+    def __init__(self, regular_lattice: Lattice, N_unit_cells):
         assert not isinstance(regular_lattice, HelicalLattice)
         if isinstance(regular_lattice, IrregularLattice):
             raise ValueError("regular_lattice can't be irregular: we want translation invariance!")
@@ -2499,7 +2499,7 @@ class HelicalLattice(Lattice):
         return mps_i[keep], mps_j[keep], lat_ind[keep], coupl_sh
 
     def possible_couplings_strengths(self, u1, u2, dx, strength):
-        mps_i, mps_j, strength_vals = self.regular_lattice.possible_couplings(u1, u2, dx, strength)
+        mps_i, mps_j, strength_vals = self.regular_lattice.possible_couplings_strengths(u1, u2, dx, strength)
         # we can actually check that everything is translation invariant!
         self._check_transl_invar_strength(np.stack([mps_i, mps_j]).T, strength_vals)
         keep = np.min([mps_i, mps_j], axis=0) < self.N_sites
@@ -2511,7 +2511,7 @@ class HelicalLattice(Lattice):
         return mps_ijkl[keep, :], lat_inds[keep, :], coupl_shape
 
     def possible_multi_couplings_strengths(self, dx, u, strength):
-        mps_ijkl, strength_vals = self.regular_lattice.possible_multi_couplings(dx, u, strength)
+        mps_ijkl, strength_vals = self.regular_lattice.possible_multi_couplings_strengths(dx, u, strength)
         # we can actually check that everything is translation invariant!
         self._check_transl_invar_strength(mps_ijkl, strength_vals)
         keep = np.min(mps_ijkl, axis=1) < self.N_sites

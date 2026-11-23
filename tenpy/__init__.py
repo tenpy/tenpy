@@ -29,7 +29,6 @@ from . import (
 # from .algorithms.exact_diag import ExactDiag
 # from .algorithms.mpo_evolution import ExpMPOEvolution, TimeDependentExpMPOEvolution
 # from .algorithms.mps_common import QRBasedVariationalApplyMPO, VariationalApplyMPO, VariationalCompression
-# from .algorithms.network_contractor import contract, ncon
 # from .algorithms.purification import PurificationApplyMPO, PurificationTEBD, PurificationTEBD2
 # from .algorithms.tdvp import (
 #     SingleSiteTDVPEngine,
@@ -159,7 +158,6 @@ __all__ = [
     'VariationalCompression',
     'VariationalApplyMPO',
     'QRBasedVariationalApplyMPO',
-    'ncon',
     'contract',
     'PurificationApplyMPO',
     'PurificationTEBD',

@@ -15,7 +15,6 @@
     mpo_evolution
     vumps
     plane_wave_excitation
-    network_contractor
     exact_diag
     disentangler
 """
@@ -30,7 +29,6 @@ from . import (
     exact_diag,
     # mpo_evolution,
     # mps_common,
-    # network_contractor,
     # plane_wave_excitation,
     # purification,
     # tdvp,
@@ -45,7 +43,6 @@ from .exact_diag import *
 # from .dmrg_parallel import *
 # from .mpo_evolution import *
 # from .mps_common import *
-# from .network_contractor import *
 # from .plane_wave_excitation import *
 # from .purification import *
 # from .tdvp import *
@@ -62,7 +59,6 @@ __all__ = [
     # *tebd.__all__,
     # *tdvp.__all__,
     # *purification.__all__,
-    # *network_contractor.__all__,
     # *mpo_evolution.__all__,
     # *vumps.__all__,
     # *plane_wave_excitation.__all__,

@@ -7,7 +7,6 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 
-# from random_test import rand_permutation, random_MPS
 # from tenpy.algorithms import tebd
 # from tenpy.models.aklt import AKLTChain
 from tenpy.models.lattice import Chain, MultiSpeciesLattice, Square
@@ -427,8 +426,14 @@ def test_compute_K():
 )
 def test_canonical_form(bc, method):
     pytest.skip(_LEGACY)
+
+    # TODO random_MPS was removed.
+    #      (see old version: tests/random_test in v1)
+    #      iMPS has a helper _random_mps or similar, should probably unify these
+    #      maybe we should have tenpy.testing ? similar to lasyten and numpy
     psi = random_MPS(8, 2, 6, form=None, bc=bc)
     psi2 = psi.copy()
+
     norm = np.sqrt(psi2.overlap(psi2, ignore_form=True, understood_infinite=True))
     print('norm =', norm)
     psi2.norm /= norm  # normalize psi2
