@@ -33,6 +33,7 @@ A generic protocol for approaching a physics question using DMRG is given in
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import copy
 import logging
 import time
 import warnings
@@ -52,6 +53,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     'run',
+    'extrapolate_in_variance',
     'DMRGEngine',
     'SingleSiteDMRGEngine',
     'TwoSiteDMRGEngine',
@@ -107,6 +109,132 @@ def run(psi, model, options, **kwargs):
         'bond_statistics': engine.update_stats,
         'sweep_statistics': engine.sweep_stats,
     }
+
+
+def _extrapolate_to_zero(x, y):
+    """Least squares fit ``y = a * x + b``; return the value `b` at ``x=0`` and the residue.
+
+    Unlike :func:`~tenpy.tools.fit.linear_fit`, this also works for two data points, where the
+    fit is exact and :func:`numpy.linalg.lstsq` does not return any residue.
+    """
+    slope, offset = np.linalg.lstsq(np.vstack([x, np.ones(len(x))]).T, y, rcond=None)[0]
+    return float(offset), float(np.sum((y - (slope * x + offset)) ** 2))
+
+
+def _check_extrapolation_keys(observables):
+    """Raise if an observable name would overwrite a key of the extrapolation results."""
+    keys = ['chi', 'E', 'two_site_variance', 'E_extrapolated', 'fit_residuum', 'chi_reached']
+    for name in observables:
+        keys.extend([name, name + '_extrapolated'])
+    duplicates = {key for key in keys if keys.count(key) > 1}
+    if duplicates:
+        raise ValueError(f'observable names clash with keys of the results: {sorted(duplicates)}')
+
+
+def _collect_extrapolation(chi_list, energies, variances, chi_reached, measured):
+    """Assemble the results of the runs and extrapolate them to vanishing variance."""
+    energies = np.array(energies, dtype=np.float64)
+    variances = np.array(variances, dtype=np.float64)
+    E_extrapolated, fit_residuum = _extrapolate_to_zero(variances, energies)
+    results = {
+        'chi': np.array(chi_list, dtype=int),
+        'E': energies,
+        'two_site_variance': variances,
+        'E_extrapolated': E_extrapolated,
+        'fit_residuum': fit_residuum,
+        'chi_reached': np.array(chi_reached, dtype=int),
+    }
+    for name, values in measured.items():
+        values = np.array(values, dtype=np.float64)
+        results[name] = values
+        results[name + '_extrapolated'] = _extrapolate_to_zero(variances, values)[0]
+    return results
+
+
+def extrapolate_in_variance(psi, model, options, chi_list, observables=None, callback=None):
+    r"""Optimize `psi` with DMRG for a series of bond dimensions and extrapolate the energy.
+
+    For each bond dimension in `chi_list`, a :class:`TwoSiteDMRGEngine` is run with
+    :cfg:option:`truncation.chi_max` set to that value, continuing from the state reached so far.
+    After each run, the energy and the
+    :meth:`~tenpy.networks.mpo.MPO.two_site_variance` of the current state are recorded.
+    As suggested in :arxiv:`1711.01104`, the energies are then extrapolated linearly in the
+    variance to the vanishing variance of an exact eigenstate.
+
+    Parameters
+    ----------
+    psi : :class:`~tenpy.networks.mps.MPS`
+        Initial guess for the ground state, which is optimized in place.
+    model : :class:`~tenpy.models.model.MPOModel`
+        The model representing the Hamiltonian.
+    options : dict
+        Options for the :class:`TwoSiteDMRGEngine`, as described in :cfg:config:`DMRG`.
+        They are not modified. The maximal bond dimension is set for each run, so it may be
+        omitted, and a :cfg:option:`Sweep.chi_list` schedule is ignored.
+    chi_list : list of int
+        The maximal bond dimensions to be used, in the order in which they are run.
+        At least two are needed for the extrapolation. A state that is already larger than the
+        next entry is compressed to it before that run.
+    observables : dict of str to callable
+        Further quantities to be extrapolated in the same way.
+        Each of them is called as ``observable(psi, model)`` after every run and should return
+        a real number. The names may neither clash with the keys listed below nor with a key
+        that another of them produces.
+    callback : callable
+        If given, called as ``callback(psi, model)`` after every run and after the observables,
+        for side effects such as taking measurements. Its return value is ignored.
+
+    Returns
+    -------
+    results : dict
+        A dictionary with the following entries.
+
+        chi : 1D ndarray
+            The bond dimensions that were used, i.e. `chi_list`.
+        E : 1D ndarray
+            The energy after the run for each of them.
+        two_site_variance : 1D ndarray
+            The two-site variance of the state after the run for each of them.
+        E_extrapolated : float
+            The energy extrapolated to zero two-site variance.
+        fit_residuum : float
+            The squared residue of the linear fit used for the extrapolation.
+        chi_reached : 1D array of int
+            The largest bond dimension that the state actually had after each of the runs.
+
+        For each entry of `observables`, the recorded values are returned under its name and
+        their extrapolation to zero variance under that name followed by ``'_extrapolated'``.
+
+    """
+    chi_list = [int(chi) for chi in chi_list]
+    if len(chi_list) < 2:
+        raise ValueError('need at least two bond dimensions to extrapolate')
+    observables = dict(observables) if observables is not None else {}
+    _check_extrapolation_keys(observables)
+    energies = []
+    variances = []
+    chi_reached = []
+    measured = {name: [] for name in observables}
+    for chi in chi_list:
+        run_options = copy.deepcopy(dict(options))
+        trunc_params = dict(run_options.get('trunc_params', {}))
+        trunc_params['chi_max'] = chi
+        run_options['trunc_params'] = trunc_params
+        run_options['chi_list'] = None  # a schedule would override chi_max during the run
+        if max(psi.chi) > chi:
+            # a state that is already larger would exceed `chi` until the first truncation
+            psi.compress_svd(trunc_params)
+        engine = TwoSiteDMRGEngine(psi, model, run_options)
+        E, psi = engine.run()
+        energies.append(E)
+        variances.append(model.H_MPO.two_site_variance(psi))
+        chi_reached.append(max(psi.chi))
+        for name, observable in observables.items():
+            measured[name].append(observable(psi, model))
+        if callback is not None:
+            callback(psi, model)
+        logger.info('chi=%d: E=%.14f, two-site variance=%.4e', chi, E, variances[-1])
+    return _collect_extrapolation(chi_list, energies, variances, chi_reached, measured)
 
 
 class DMRGEngine(IterativeSweeps):
@@ -237,6 +365,12 @@ class DMRGEngine(IterativeSweeps):
                 See `E_tol_to_trunc`
             E_tol_min : float
                 See `E_tol_to_trunc`
+            compute_two_site_variance : bool
+                Whether to evaluate the :meth:`~tenpy.networks.mpo.MPO.two_site_variance` of
+                the current state at each check of convergence and record it in
+                ``sweep_stats['two_site_variance']``. Defaults to ``False``, but the
+                evaluation is always enabled if `max_two_site_variance` is set, see
+                :meth:`is_converged`.
             N_sweeps_check : int
                 Number of sweeps to perform between checking convergence
                 criteria and giving a status update.
@@ -344,6 +478,11 @@ class DMRGEngine(IterativeSweeps):
         self.sweep_stats['max_E_trunc'].append(max_E_trunc)
         self.sweep_stats['max_chi'].append(np.max(self.psi.chi))
         self.sweep_stats['norm_err'].append(norm_err)
+        max_var = options.get('max_two_site_variance', None, 'real')
+        if options.get('compute_two_site_variance', False, bool) or max_var is not None:
+            two_site_variance = self.env.H.two_site_variance(self.psi)
+            self.sweep_stats['two_site_variance'].append(two_site_variance)
+            logger.info('two-site variance = %.4e', two_site_variance)
 
         return E, self.psi
 
@@ -391,13 +530,21 @@ class DMRGEngine(IterativeSweeps):
             max_S_err : float
                 Convergence if the relative change of the entropy in each step
                 satisfies ``|Delta S|/S < max_S_err``
+            max_two_site_variance : float | None
+                If not ``None``, additionally require the
+                :meth:`~tenpy.networks.mpo.MPO.two_site_variance` of the current state to be
+                smaller than this value for convergence.
         """
         max_E_err = self.options.get('max_E_err', 1.0e-8, 'real')
         max_S_err = self.options.get('max_S_err', 1.0e-5, 'real')
+        max_var = self.options.get('max_two_site_variance', None, 'real')
         E = self.sweep_stats['E'][-1]
         Delta_E = self.sweep_stats['Delta_E'][-1]
         Delta_S = self.sweep_stats['Delta_S'][-1]
-        return abs(Delta_E / max(E, 1.0)) < max_E_err and abs(Delta_S) < max_S_err
+        converged = abs(Delta_E / max(E, 1.0)) < max_E_err and abs(Delta_S) < max_S_err
+        if max_var is not None:
+            converged = converged and self.sweep_stats['two_site_variance'][-1] < max_var
+        return converged
 
     def post_run_cleanup(self):
         """Perform any final steps or clean up after the main loop has terminated.
@@ -515,6 +662,7 @@ class DMRGEngine(IterativeSweeps):
             'max_E_trunc': [],
             'max_chi': [],
             'norm_err': [],
+            'two_site_variance': [],
         }
 
     def sweep(self, optimize=True, meas_E_trunc=False):
