@@ -1196,6 +1196,9 @@ class MPO(MPSGeometry):
 
                 # remove following identities
                 keep = [i for i, l in enumerate(LP.get_leg('wR').summand_labels) if l not in ['IdL', 'IdR']]
+                if len(keep) == 0:
+                    # no more terms left, and we need to break early, cant construct proj below
+                    break
                 proj = LP.get_leg('wR').projection_onto_summands(
                     keep, backend=LP.backend, labels=['wR', 'wL'], device=LP.device
                 )
@@ -2371,6 +2374,9 @@ class MPOGraph(MPSGeometry):
         graph = cls(sites, bc, 0, unit_cell_width=unit_cell_width)
         for term in terms:
             term.add_to_graph(graph, model)  # add_to_graph increases `max_range` as necessary
+        if not any(graph.graph):
+            # ensure an empty graph has at least one IdL -> IdR connection
+            graph.add_identity(0, 'IdL', 'IdR', overbraid=True, strength=0)
         return graph
 
     @classmethod

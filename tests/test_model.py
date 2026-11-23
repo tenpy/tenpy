@@ -11,6 +11,7 @@ from lasyten.models.sites import SpinSite
 from lasyten.tensors import almost_equal
 
 from tenpy.algorithms import ExactDiag, dmrg
+from tenpy.algorithms.exact_diag import get_numpy_Hamiltonian
 from tenpy.models import lattice, model
 from tenpy.models.spins import Coupling_from_numpy_onsite, DipolarSpinChain, SpinChain
 from tenpy.models.xxz_chain import XXZChain2
@@ -1021,3 +1022,14 @@ def _compare_grids(W, grid, name):
                 assert W_cell.get_leg('wL') == grid_cell.get_leg('wL'), f'{name}:  wL mismatch [{i}][{j}]'
                 assert W_cell.get_leg('wR') == grid_cell.get_leg('wR'), f'{name}:  wR mismatch [{i}][{j}]'
                 assert lasy.almost_equal(W_cell, grid_cell), f'{name}:  Tensor mismatch: [{i}][{j}]'
+
+
+@pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
+def test_zero_coupling_spin_model(bc_MPS):
+    """A spin chain at the zero-coupling endpoint has a zero Hamiltonian."""
+    M = SpinChain(dict(L=4, Jx=0.0, Jy=0.0, Jz=0.0, bc_MPS=bc_MPS, conserve='Sz'))
+    psi = MPS.from_lat_product_state(M.lattice, [['up'], ['down']] * 2)
+    assert M.get_H_MPO().expectation_value(psi) == 0
+    if bc_MPS == 'finite':
+        H_np = get_numpy_Hamiltonian(M)
+        npt.assert_array_equal(H_np, np.zeros((16, 16)))
