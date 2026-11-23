@@ -1598,6 +1598,7 @@ class DummyTwoSiteH(EffectiveH):
         backend = lasy.get_backend('no_symmetry', 'numpy')
         sym = lasy.NoSymmetry().as_Symmetry()
         leg = lasy.ElementarySpace.from_trivial_sector(1, symmetry=sym)
+        lasy.compose
         Id = lasy.SymmetricTensor.from_eye([leg], backend=backend, labels=['a'])
         PlanarLinearOperator.__init__(
             self,
@@ -1720,7 +1721,8 @@ class Mixer:
         return self
 
     def mixed_svd_2site(
-        self, engine: Sweep, theta: npc.Array, i0: int, mix_left: bool, mix_right: bool, qtotal_LR=[None, None]
+        self, engine: Sweep, theta: lasy.Tensor, i0: int, mix_left: bool, mix_right: bool,
+        new_labels=['vR', 'vL']
     ):
         """Mix and SVD-like decompose a two-site wavefunction.
 
@@ -1742,29 +1744,28 @@ class Mixer:
         ----------
         engine :  :class:`Sweep`
             The engine that is using this mixer.
-        theta : 2D :class:`~tenpy.linalg.np_conserved.Array`
+        theta : 2D :class:`lasyten.Tensor`
             Two-site wavefunction prepared for SVD. Labels ``'(vL.p0)', '(p1.vR)'``.
+            FIXME do we need/want combined??
         i0 : int
             The site index of the left site, i.e. such that `theta` lives on sites ``i0, i0 + 1``.
         mix_left : bool
             If the virtual index left of `S` should be expanded.
         mix_right : bool
             If the virtual index right of `S` should be expanded.
-        qtotal_LR : [{charges}, {charges}] | None
-            The desired `qtotal` for `U` and `VH`, respectively.
-            If ``None``, the `qtotal` are arbitrary.
 
         Returns
         -------
-        U : :class:`~tenpy.linalg.np_conserved.Array`
+        U : :class:`lasyten.Tensor`
             Left isometry as defined above. Labels ``'(vL.p)', 'vR'``.
-        S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
-            Singular values (1D ndarray) or general bond matrix (2D Array, labels ``'vL', 'vR'``).
-        VH : :class:`~tenpy.linalg.np_conserved.Array`
+        S : :class:`lasyten.Tensor`
+            Singular values (:class:`lasyten.DiagonalTensor`) or general bond matrix
+            (:class:`lasyten.SymmetricTensor`). labels ``'vL', 'vR'``.
+        VH : :class:`lasyten.Tensor`
             Right isometry as defined above. Labels ``'vL', '(p.vR)'``.
         err : :class:`~tenpy.TruncationError`
             The truncation error introduced.
-        S_approx : ndarray
+        S_approx : :class:`lasyten.DiagonalTensor`
             Approximation of the singular values of `theta`. Exact if available.
 
         See Also
@@ -1774,7 +1775,7 @@ class Mixer:
         """
         raise NotImplementedError(f'{self.__class__.__name__} does not implement mixed_svd_2site')
 
-    def mix_and_decompose_1site(self, engine: Sweep, theta: npc.Array, i0: int, move_right: bool):
+    def mix_and_decompose_1site(self, engine: Sweep, theta: lasy.Tensor, i0: int, move_right: bool):
         """Decompose single-site wavefunction and expand/mix an adjacent bond.
 
         For a right move, we decompose::
@@ -1802,7 +1803,7 @@ class Mixer:
         ----------
         engine :  :class:`Sweep`
             The engine that is using this mixer.
-        theta : 2D :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`lasyten.Tensor`
             Single-site wavefunction prepared for SVD. Labels either ``'(vL.p0)', 'vR'`` for a
             right move, or ``'vL', '(p0.vR)'`` for a left move.
         i0 : int
@@ -1813,12 +1814,12 @@ class Mixer:
 
         Returns
         -------
-        U : :class:`~tenpy.linalg.np_conserved.Array`
+        U : :class:`lasyten.Tensor`
             Left part as defined above. Isometric for a right move. Labels ``'(vL.p)', 'vR'``
             for a right move or ``'vL', '(p.vR)'`` for a left move.
-        S : 1D ndarray
+        S : :class:`lasyten.DiagonalTensor`
             Singular values on the new bond.
-        VH : :class:`~tenpy.linalg.np_conserved.Array`
+        VH : :class:`lasyten.Tensor`
             Right part as defined above. Isometric for a left move. Labels ``'vL', '(p.vR)'``
             for a right move or ``'(vL.p)', 'vR'`` for a left move.
         err : :class:`~tenpy.TruncationError`
@@ -1829,7 +1830,7 @@ class Mixer:
         raise NotImplementedError(msg)
 
     def mix_and_decompose_2site(
-        self, engine: Sweep, theta: npc.Array, i0: int, mix_left: bool, mix_right: bool, qtotal_LR=None
+        self, engine: Sweep, theta: lasy.Tensor, i0: int, mix_left: bool, mix_right: bool
     ):
         """Decompose two-site wavefunction and expand/mix enclosed bond(s).
 
@@ -1853,64 +1854,42 @@ class Mixer:
             pass  # fall back to using mix_and_decompose_1site
 
         if mix_left and mix_right:
-            qtotal_L, qtotal_R = self.determine_qtotal_L_R(theta.qtotal, qtotal_LR)
             # mix left site by treating p1 as part of vR leg
-            theta_L = theta.replace_label('(p1.vR)', 'vR')
+            theta_L = theta.copy(deep=False)
+            theta_L.labels.update({'(p1.vR)': 'vR'})
             U, _, _, err_L = self.mix_and_decompose_1site(engine, theta_L, i0, move_right=True)
-            U = U.gauge_total_charge(1, qtotal_L)
             # mix right site by treating p0 as part of vL leg
-            theta_R = theta.replace_labels(['(vL.p0)', '(p1.vR)'], ['vL', '(p0.vR)'])
+            theta_R = theta.copy(deep=False)
+            theta_R.labels.update({'(vL.p0)': 'vL', '(p1.vR)': '(p0.vR)'})
             _, S_approx, VH, err_R = self.mix_and_decompose_1site(engine, theta_R, i0 + 1, move_right=False)
-            VH = VH.gauge_total_charge(0, qtotal_R)
-            VH.ireplace_label('(p0.vR)', '(p1.vR)')
+            VH.labels.update({'(p0.vR)': '(p1.vR)'})
             # calculate S = U^H theta V
-            theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])
-            theta = npc.tensordot(theta, VH.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
-            theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-            theta /= np.linalg.norm(npc.svd(theta, compute_uv=False))
-            S = theta
-            assert np.all(S.qtotal == 0)
+            theta = lasy.planar_contraction(U.hc, theta, ['(vL*.p0*)'], ['(vL.p0)'])
+            theta = lasy.planar_contraction(theta, VH.hc, ['(p1.vR)'], ['(p1*.vR*)'])
+            theta.labels.update({'vR*': 'vL', 'vL*': 'vR'})
+            S = theta / lasy.norm(theta)
             err = err_L + err_R
         elif mix_left:
-            theta_L = theta.replace_label('(p1.vR)', 'vR')
+            theta_L = theta.copy(deep=False)
+            theta_L.labels.update({'(p1.vR)': 'vR'})
             U, S, VH, err = self.mix_and_decompose_1site(engine, theta_L, i0, move_right=True)
             # note: VH is not isometric
-            VH.ireplace_label('vR', '(p1.vR)')
+            VH.labels.update({'vR': '(p1.vR)'})
             S_approx = S
         elif mix_right:
-            theta_R = theta.replace_labels(['(vL.p0)', '(p1.vR)'], ['vL', '(p0.vR)'])
+            theta_R = theta.copy(deep=False)
+            theta_R.labels.update({'(vL.p0)': 'vL', '(p1.vR)': '(p0.vR)'})
             U, S, VH, err = self.mix_and_decompose_1site(engine, theta_R, i0 + 1, move_right=False)
             # note: U is not isometric
-            U.ireplace_label('vL', '(vL.p0)')
-            VH.ireplace_label('(p0.vR)', '(p1.vR)')
+            U.labels.update({'vL': '(vL.p0)'})
+            VH.labels.update({'(p0.vR)': '(p1.vR)'})
             S_approx = S
         else:
             raise ValueError('Expected mix_left=True and/or mix_right=True.')
         return U, S, VH, err, S_approx
 
-    @staticmethod
-    def determine_qtotal_L_R(theta_qtotal, qtotal_LR):
-        """Figure out ``qtotal_L, qtotal_R`` such that ``qtotal_L + qtotal_R == theta_qtotal``."""
-        if qtotal_LR is None:
-            qtotal_L = qtotal_R = None
-        else:
-            qtotal_L, qtotal_R = qtotal_LR
 
-        if qtotal_L is None and qtotal_R is None:
-            qtotal_L = 0
-            qtotal_R = theta_qtotal
-        elif qtotal_L is None:
-            qtotal_L = theta_qtotal - qtotal_R
-        elif qtotal_R is None:
-            qtotal_R = theta_qtotal - qtotal_L
-        if not np.all(qtotal_L + qtotal_R == theta_qtotal):
-            msg = f'qtotal_LR must add up to {theta_qtotal=}'
-            raise ValueError(msg)
-
-        return qtotal_L, qtotal_R
-
-
-def _mix_LR(H, i0, amplitude):
+def _mix_LR(H: MPO, i0: int, amplitude: float):
     """Helper function to compute the ``mix_L, mix_R`` matrices.
 
     These are used in :class:`DensityMatrixMixer` and :class:`SubspaceExpansion` and defined
@@ -1931,25 +1910,32 @@ def _mix_LR(H, i0, amplitude):
         Diagonal bond matrices as 1D numpy arrays.
     IdL, IdR : int
         MPO indices representing "only identities to the left (right)".
+        FIXME needed?
     explicit_plus_hc : bool
         :attr:`~tenpy.networks.mpo.MPO.explicit_plus_hc` attribute of the MPO.
 
     """
-    chi_MPO = H.get_W(i0).get_leg('wR').ind_len
-    IdL, IdR = H.get_IdL(i0 + 1), H.get_IdR(i0)
-    mix_L = np.full((chi_MPO,), amplitude)
-    mix_R = np.full((chi_MPO,), amplitude)
+    w = H.get_W(i0).get_leg('wR')
+    assert isinstance(w, lasy.DirectSumSpace)
+    mix_L = np.full((w.dim,), amplitude)
+    mix_R = np.full((w.dim,), amplitude)
     one = 1.0 if not H.explicit_plus_hc else 0.5
-    if IdL is not None:
+    if 'IdL' in w.summand_labels:
+        IdL = w.summand_labels.index('IdL')
         mix_L[IdL] = one
         mix_R[IdL] = 0.0
-    if IdR is not None:
+    else:
+        IdL = None
+    if 'IdR' in w.summand_labels:
+        IdR = w.summand_labels.index('IdR')
         mix_L[IdR] = 0.0
         mix_R[IdR] = one
+    else:
+        IdR = None
     return mix_L, mix_R, IdL, IdR, H.explicit_plus_hc
 
 
-def _get_LHeff(env, i, eff_H):
+def _get_LHeff(env: MPOEnvironment, i: int, eff_H: EffectiveH):
     # return LHeff with p0 labels on site `i`
     if i == eff_H.i0 and hasattr(eff_H, 'LHeff'):
         return eff_H.LHeff
@@ -1957,11 +1943,13 @@ def _get_LHeff(env, i, eff_H):
     return env._contract_LHeff(i)
 
 
-def _get_RHeff(env, i, eff_H):
+def _get_RHeff(env: MPOEnvironment, i: int, eff_H: EffectiveH):
     # return RHeff with 'p1' labels on site `i`
     if i == eff_H.i0 + eff_H.length - 1 and hasattr(eff_H, 'RHeff'):
         if eff_H.length == 1:
-            return eff_H.RHeff.replace_labels(['(p0.vL*)', '(p0*.vL)'], ['(p1.vL*)', '(p1*.vL)'])
+            RHeff = eff_H.RHeff.copy(deep=False)
+            RHeff.labels.update({'(p0.vL*)': '(p1.vL*)', '(p0*.vL)': '(p1*.vL)'})
+            return RHeff
         return eff_H.RHeff
     # else:
     return env._contract_RHeff(i)
@@ -2031,19 +2019,19 @@ class DensityMatrixMixer(Mixer):
         assert self.amplitude <= 1.0
 
     def mixed_svd_2site(
-        self, engine: Sweep, theta: npc.Array, i0: int, mix_left: bool, mix_right: bool, qtotal_LR=[None, None]
+        self, engine: Sweep, theta: lasy.Tensor, i0: int, mix_left: bool, mix_right: bool, qtotal_LR=[None, None]
     ):
         rho_L, rho_R = self.mix_rho(engine, theta, i0, mix_left, mix_right)
         return self.svd_from_rho(engine, rho_L, rho_R, theta, qtotal_LR)
 
-    def mix_rho(self, engine: Sweep, theta: npc.Array, i0: int, mix_left: bool, mix_right: bool):
+    def mix_rho(self, engine: Sweep, theta: lasy.Tensor, i0: int, mix_left: bool, mix_right: bool):
         """Calculate the (possibly mixed) reduced density matrices.
 
         Parameters
         ----------
         engine : :class:`Sweep`
             The engine that is using this mixer.
-        theta : 2D :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`lasyten.Tensor`
             Two-site wavefunction prepared for SVD. Labels ``'(vL.p0)', '(p1.vR)'``.
         i0 : int
             The site index of the left site, i.e. such that `theta` lives on sites ``i0, i0 + 1``.
@@ -2054,10 +2042,10 @@ class DensityMatrixMixer(Mixer):
 
         Returns
         -------
-        rho_L : :class:`~tenpy.linalg.np_conserved.Array`
+        rho_L : :class:`lasyten.Tensor`
             Reduced density matrix on the left site or a perturbation thereof.
             Hermitian square array with labels ``'(vL.p0)', '(vL*.p0*)'``.
-        rho_R : :class:`~tenpy.linalg.np_conserved.Array`
+        rho_R : :class:`lasyten.Tensor`
             Reduced density matrix on the right site or a perturbation thereof.
             Hermitian square array with labels ``'(p1.vR)', '(p1*.vR*)'``.
 
@@ -2066,6 +2054,7 @@ class DensityMatrixMixer(Mixer):
 
         if mix_left:
             LHeff = _get_LHeff(env=engine.env, i=i0, eff_H=engine.eff_H)
+            raise NotImplementedError  # FIXME contractions
             rho_L = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
             rho_L.ireplace_label('(vR*.p0)', '(vL.p0)')
             rho_c = rho_L.conj()
@@ -2076,10 +2065,11 @@ class DensityMatrixMixer(Mixer):
             if IdL is None:  # can't set mix_L[IdL] = 1.
                 rho_L = rho_L + npc.tensordot(theta, theta.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
         else:
-            rho_L = npc.tensordot(theta, theta.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
+            rho_L = lasy.planar_contraction(theta, theta.hc, ['(p1.vR)', '(p1*.vR*)'])
 
         if mix_right:
             RHeff = _get_RHeff(env=engine.env, i=i0 + 1, eff_H=engine.eff_H)
+            raise NotImplementedError  # FIXME contractions
             rho_R = npc.tensordot(theta, RHeff, axes=['(p1.vR)', '(p1*.vL)'])
             rho_R.ireplace_label('(p1.vL*)', '(p1.vR)')
             rho_c = rho_R.conj()
@@ -2090,10 +2080,10 @@ class DensityMatrixMixer(Mixer):
             if IdR is None:
                 rho_R = rho_R + npc.tensordot(theta.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])
         else:
-            rho_R = npc.tensordot(theta.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])
+            rho_R = lasy.planar_contraction(theta.hc, theta, ['(vL*.p0*)'], ['(vL.p0)'])
         return rho_L, rho_R
 
-    def svd_from_rho(self, engine: Sweep, rho_L: npc.Array, rho_R: npc.Array, theta: npc.Array, qtotal_LR):
+    def svd_from_rho(self, engine: Sweep, rho_L: lasy.Tensor, rho_R: lasy.Tensor, theta: lasy.Tensor):
         r"""Diagonalize ``rho_L, rho_R`` to rewrite `theta` as ``U S V`` with isometric U/V.
 
         If `rho_L` and `rho_R` were the actual density matrices of `theta`, this function
@@ -2108,41 +2098,37 @@ class DensityMatrixMixer(Mixer):
             As defined in :meth:`mixed_svd_2site`.
 
         """
-        qtotal_L, qtotal_R = self.determine_qtotal_L_R(theta.qtotal, qtotal_LR)
-
-        rho_L.itranspose(['(vL.p0)', '(vL*.p0*)'])  # just to be sure of the order
-        rho_R.itranspose(['(p1.vR)', '(p1*.vR*)'])  # just to be sure of the order
+        assert rho_L.labels.are('(vL.p0)', '(vL*.p0*)', planar=True)
+        assert rho_R.labels.are('(p1.vR)', '(p1*.vR*)', planar=True)
         # consider the SVD `theta = U S V^H` (with real, diagonal S>0)
         # rho_L ~=  theta theta^H = U S V^H V S U^H = U S S U^H  (for mixer -> 0)
         # Thus, rho_L U = U S S, i.e. columns of U are the eigenvectors of rho_L,
         # eigenvalues are S^2.
-        val_L, U = npc.eigh(rho_L)
-        U.iset_leg_labels(['(vL.p0)', 'vR'])
-        val_L[val_L < 0.0] = 0.0  # for stability reasons
-        val_L /= np.sum(val_L)
-        S_a = np.sqrt(val_L)
-        keep_L, _, err_L = npc.truncate(S_a, engine.trunc_params)
-        U.iproject(keep_L, axes='vR')  # in place
-        U = U.gauge_total_charge(1, qtotal_L)
+        val_L, U = lasy.eigh(rho_L, new_labels=['vL', 'vR'])  # FIXME carefully check new_labels throughout
+        U.labels.update({'(vL.p0)': 'vR'})
+
+        val_L = lasy.maximum(val_L, 0)  # for stable sqrt later 
+        val_L /= lasy.trace(val_L)
+        S_a = lasy.sqrt(val_L)
+        keep_L, err_L, _ = engine.truncate_singular_values(S_a, max_labels=['vL', 'vR'])  # FIXME labels?
+        U = lasy.planar_contract_mask(U, keep_L, 'vR', 'vL')
         # rho_R ~=  theta^T theta^* = V^* S U^T U* S V^T = V^* S S V^T  (for mixer -> 0)
         # Thus, rho_R V^* = V^* S S, i.e. columns of V^* are eigenvectors of rho_R
-        val_R, Vc = npc.eigh(rho_R)
-        Vc.iset_leg_labels(['(p1.vR)', 'vL'])
-        VH = Vc.itranspose(['vL', '(p1.vR)'])
-        val_R[val_R < 0.0] = 0.0  # for stability reasons
-        val_R /= np.sum(val_R)
-        keep_R, _, err_R = npc.truncate(np.sqrt(val_R), engine.trunc_params)
-        VH.iproject(keep_R, axes='vL')
-        VH = VH.gauge_total_charge(0, qtotal_R)
+        val_R, Vc = lasy.eigh(rho_R, new_labels=['vL', 'vR'])  # FIXME labels?
+        Vc.labels.update({'(p1.vR)': 'vL'})
+        # VH = Vc.itranspose(['vL', '(p1.vR)'])  # FIXME needed ??
+        val_R = lasy.maximum(val_R, 0)  # for stable sqrt
+        val_R /= lasy.trace(val_R)
+        keep_R, err_R, _ = engine.truncate_singular_values(lasy.sqrt(val_R), mask_labels=['vL', 'vR'])
+        VH = lasy.planar_contract_mask(VH, keep_R, 'vL', 'vR')
 
         # calculate S = U^H theta V
-        theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])  # axes 0, 0
-        theta = npc.tensordot(theta, VH.conj(), axes=['(p1.vR)', '(p1*.vR*)'])  # axes 1, 1
-        theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+        theta = lasy.planar_contraction(U.hc, theta, ['(vL*.p0*)'], ['(vL.p0)'])
+        theta = lasy.planar_contraction(theta, VH.hc, ['(p1.vR)'], ['(p1*.vR*)'])
+        theta.labels.update({'vR*': 'vL', 'vL*': 'vR'})
         # normalize `S` (as in svd_theta) to avoid blowing up numbers
-        theta /= theta.norm()  # norm(singular values) = norm(whole array)
-        S_a = S_a[keep_L]
-        assert np.all(theta.qtotal == 0)
+        theta /= lasy.norm(theta)
+        S_a = lasy.apply_mask_DiagonalTensor(S_a, keep_L)
         return U, theta, VH, err_L + err_R, S_a
 
 
@@ -2197,35 +2183,41 @@ class SubspaceExpansion(Mixer):
         super().__init__(options, sweep_activated)
         assert self.amplitude <= 1.0
 
-    def mix_and_decompose_1site(self, engine: Sweep, theta: npc.Array, i0: int, move_right: bool):
+    def mix_and_decompose_1site(self, engine: Sweep, theta: lasy.Tensor, i0: int, move_right: bool):
         bond = i0 if move_right else i0 - 1
         # the mix_L / mix_R bond matrix is the sqrt of the analogous matrix in DensityMatrixMixer
         # so by taking the sqrt here, we make amplitude mean the same thing for both mixers
-        amplitude = np.sqrt(self.amplitude)
+        amplitude = lasy.sqrt(self.amplitude)
         mix_L, mix_R, IdL, IdR, explicit_plus_hc = _mix_LR(engine.env.H, bond, amplitude)
 
         if move_right:
             LHeff = _get_LHeff(env=engine.env, i=i0, eff_H=engine.eff_H)
-            LHeff = LHeff.transpose(['(vR*.p0)', 'wR', '(vR.p0*)'])
+            assert LHeff.labels.are('(vR*.p0)', 'wR', '(vR.p0*)', planar=True)
             if not explicit_plus_hc and IdL is not None:
-                theta_expand = npc.tensordot(LHeff.iscale_axis(mix_L, 'wR'), theta, ['(vR.p0*)', '(vL.p0)'])
-                theta_expand.ireplace_label('(vR*.p0)', '(vL.p0)')
+                theta_expand = lasy.planar_contraction(
+                    lasy.scale_axis(LHeff, mix_L, 'wR'),
+                    theta, '(vR.p0*)', '(vL.p0)'
+                )
+                theta_expand.labels.update({'(vR*.p0)': '(vL.p0)'})
             else:
                 # need to stack different parts of the wR leg
                 wR = LHeff.get_leg('wR')
+                assert isinstance(wR, lasy.DirectSumSpace)
+                assert theta.labels.are('(vR.p0*)', 'vL')
+                stack = [lasy.add_trivial_leg(theta, 1, label='wR', is_dual=not wR.is_dual)]
                 stack = [theta.add_trivial_leg(1, 'wR', wR.qconj)]  # explicitly add the identity
-                proj = np.ones(wR.ind_len - (IdL is not None) - (IdR is not None), bool)
-                if IdL is not None:
-                    proj[IdL] = False
-                if IdR is not None:
-                    proj[IdR] = False
-                LHeff.iproject(proj, 'wR')
-                LHeff = LHeff * np.sqrt(self.amplitude)
-                stack.append(npc.tensordot(LHeff, theta, ['(vR.p0*)', '(vL.p0)']))
+                proj = lasy.Mask.from_eye(wR, backend=theta.backend)
+                proj = wR.projection_onto_summands(discard_indices=['IdL', 'IdR'], backend=theta.backend, labels=['wL', 'wR'])
+                LHeff = lasy.planar_contract_mask(LHeff, proj, 'wR', 'wL')
+                LHeff = LHeff * amplitude
+                stack.append(lasy.planar_contraction(LHeff, theta, '(vR.p0*)', '(vL.p0)'))
                 if explicit_plus_hc:
                     # apply (LHeff^dagger theta) = conj(dot(LHeff.T, theta.conj()))
-                    th = npc.tensordot(LHeff, theta.conj(), ['(vR*.p0)', '(vL*.p0*)'])
-                    stack.append(th.itranspose(['(vR.p0*)', 'wR', 'vR*']).iconj())
+                    th = lasy.planar_contraction(LHeff, theta.hc, '(vR*.p0)', '(vL*.p0*)')
+                    assert th.labels.are('(vR.p0*)', 'wR', 'vR*')
+                    stack.append(th.hc)
+                assert all(s.labels.are('(vR.p0*)', 'wR', 'vL') for s in stack)
+                # FIXME stopped here, will need a way to stack along a single leg
                 theta_expand = npc.concatenate(stack, axis='wR')
                 IdL = 0  # of the new, concatenated leg.
             theta_expand = theta_expand.combine_legs(['wR', 'vR'], qconj=-1)
@@ -2606,7 +2598,7 @@ class QRBasedVariationalApplyMPO(VariationalApplyMPO):
         chi = min(self.psi.get_SL(i).shape)
         return max(expand_0 - chi / chi_max * (expand_0 - expand), expand)
 
-    def update_new_psi(self, theta: npc.Array):
+    def update_new_psi(self, theta: lasy.Tensor):
         """Given a new two-site wave function `theta`, split it and save it in :attr:`psi`."""
         i0 = self.i0
         new_psi = self.psi
