@@ -264,9 +264,7 @@ def test_CouplingModel_explicit():
     # compare the *cells* against the latter (the operators are compared below).
     C_L, Cd_R = Cd_C.dagger().factorization
     # independent check, the factorization above is gauge dependent but the operator is not
-    assert lasy.almost_equal(
-        Cd_C.dagger().to_tensor(), lasy.models.hopping([s, s], t_left=0).to_tensor()
-    )
+    assert lasy.almost_equal(Cd_C.dagger().to_tensor(), lasy.models.hopping([s, s], t_left=0).to_tensor())
     N_L, N_R = lasy.models.density_density_interaction([s, s]).factorization
 
     print()
@@ -403,9 +401,7 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc):
     # 'C.Cd' is the `dagger` of 'Cd.C', see test_CouplingModel_explicit regarding the gauge
     C_L, Cd_R = Cd_C.dagger().factorization
     # independent check, the factorization above is gauge dependent but the operator is not
-    assert lasy.almost_equal(
-        Cd_C.dagger().to_tensor(), lasy.models.hopping([s, s], t_left=0).to_tensor()
-    )
+    assert lasy.almost_equal(Cd_C.dagger().to_tensor(), lasy.models.hopping([s, s], t_left=0).to_tensor())
 
     print()
     print(H_mpo.show_W_grid(0))
