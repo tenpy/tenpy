@@ -2723,11 +2723,7 @@ class MPOCompact(MPOBuilder):
     ):
         if bc not in self._valid_bc:
             raise NotImplementedError(bc)
-        if bc == 'infinite':
-            warnings.warn(
-                'MPOCompact works sub-optimally for infinite boundary conditions. '
-                'For best results use finite boundary conditions.'
-            )
+
         super().__init__(sites=sites, bc=bc, unit_cell_width=unit_cell_width)
         self.max_range: int = max_range
         self._pauli_expansion: PauliStringExpansion = PauliStringExpansion(L=self.L)
