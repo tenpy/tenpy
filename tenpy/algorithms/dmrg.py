@@ -1192,9 +1192,8 @@ def full_diag_effH(
     fullH: lasy.SymmetricTensor = effH.to_tensor()
     symmetry = fullH.symmetry
     if isinstance(effH, TwoSiteH) and not effH.combine:
-        assert fullH.labels.are('vL', 'p0', 'p1', 'vR', 'vR*', 'p1*', 'p0*', 'vL*', planar=True)
-        # TODO workaround. See https://github.com/tenpy/tenpy/issues/693
-        fullH = lasy.planar_permute_legs(fullH, codomain=effH.acts_on)
+        assert fullH.codomain_labels == ['vL', 'p0', 'p1', 'vR']
+        assert fullH.domain_labels == ['vL*', 'p0*', 'p1*', 'vR*']
     elif isinstance(effH, EffectiveH):
         raise NotImplementedError  # TODO implement similar label check!
     else:
