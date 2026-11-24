@@ -30,38 +30,42 @@ In other words, expectation values are sums over all possible states
 Saying that each ``:`` on top is to be connected with the corresponding ``:`` on the bottom,
 the trace is simply a contraction::
 
-    |         :   :   :   :   :   :
-    |         |   |   |   |   |   |
-    |         |-------------------|
-    |         |        O          |
-    |         |-------------------|
-    |         |   |   |   |   |   |
-    |         :   :   :   :   :   :
+    |      :        :        :        :        :        :
+    |      │        │        │        │        │        │
+    |   ┏━━┷━━━━━━━━┷━━━━━━━━┷━━━━━━━━┷━━━━━━━━┷━━━━━━━━┷━━━┓
+    |   ┃                         O                         ┃
+    |   ┗━━┯━━━━━━━━┯━━━━━━━━┯━━━━━━━━┯━━━━━━━━┯━━━━━━━━┯━━━┛
+    |      │        │        │        │        │        │
+    |      :        :        :        :        :        :
 
 Clearly, we get the same result, if we insert an identity operator, written as MPO, on the top
 and bottom::
 
-    |         :   :   :   :   :   :
-    |         |   |   |   |   |   |
-    |         B---B---B---B---B---B
-    |         |   |   |   |   |   |
-    |         |-------------------|
-    |         |        O          |
-    |         |-------------------|
-    |         |   |   |   |   |   |
-    |         B*--B*--B*--B*--B*--B*
-    |         |   |   |   |   |   |
-    |         :   :   :   :   :   :
+    |      :        :        :        :        :        :
+    |      │        │        │        │        │        │
+    |   ┏━━┷━━┓  ┏━━┷━━┓  ┏━━┷━━┓  ┏━━┷━━┓  ┏━━┷━━┓  ┏━━┷━━┓
+    |   ┃  B  ┠──┨  B  ┠──┨  B  ┠──┨  B  ┠──┨  B  ┠──┨  B  ┃
+    |   ┗━━┯━━┛  ┗━━┯━━┛  ┗━━┯━━┛  ┗━━┯━━┛  ┗━━┯━━┛  ┗━━┯━━┛
+    |      │        │        │        │        │        │
+    |   ┏━━┷━━━━━━━━┷━━━━━━━━┷━━━━━━━━┷━━━━━━━━┷━━━━━━━━┷━━━┓
+    |   ┃                         O                         ┃
+    |   ┗━━┯━━━━━━━━┯━━━━━━━━┯━━━━━━━━┯━━━━━━━━┯━━━━━━━━┯━━━┛
+    |      │        │        │        │        │        │
+    |   ┏━━┷━━┓  ┏━━┷━━┓  ┏━━┷━━┓  ┏━━┷━━┓  ┏━━┷━━┓  ┏━━┷━━┓
+    |   ┃ B*  ┠──┨ B*  ┠──┨ B*  ┠──┨ B*  ┠──┨ B*  ┠──┨ B*  ┃
+    |   ┗━━┯━━┛  ┗━━┯━━┛  ┗━━┯━━┛  ┗━━┯━━┛  ┗━━┯━━┛  ┗━━┯━━┛
+    |      │        │        │        │        │        │
+    |      :        :        :        :        :        :
 
-We  use the following label convention::
+We use the following label convention::
 
-    |         q
-    |         ^
-    |         |
-    |  vL ->- B ->- vR
-    |         |
-    |         ^
-    |         p
+    |           q
+    |           │
+    |       ┏━━━┷━━━┓
+    |   vL ─┨   B   ┠─ vR
+    |       ┗━━━┯━━━┛
+    |           │
+    |           p
 
 You can view the `MPO` as an MPS by combining the `p` and `q` leg and defining every physical
 operator to act trivial on the `q` leg. In expectation values, you would then sum over
@@ -112,7 +116,7 @@ see :cite:`hauschild2018`.
     to use a `singlet` as a maximally entangled state.
     Here, we use instead the identity :math:`\delta_{p,q}`, since it is easier to
     generalize for `p` running over more than two indices, and allows a simple use of charge
-    conservation with the above `qconj` convention.
+    conservation.
     Moreover, we don't split the physical and auxiliary space into separate sites, which makes
     TEBD as costly as :math:`O(d^6 \chi^3)`.
 """
@@ -174,7 +178,7 @@ class PurificationMPS(MPS):
 
         Parameters
         ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~lasyten.Site`
             The sites defining the physical local Hilbert spaces.
         rho : :class:`~tenpy.linalg.np_conserved.Array`
             The full density matrix.
@@ -224,9 +228,9 @@ class PurificationMPS(MPS):
 
         Parameters
         ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~lasyten.Site`
             The sites defining the local Hilbert space.
-            For usual :class:`tenpy.models.model.Model` given by `model.lat.mps_sites()`.
+            For usual :class:`tenpy.models.model.Model` given by `model.lattice.mps_sites()`.
         bc : {'finite', 'segment', 'infinite'}
             MPS boundary conditions as described in :class:`~tenpy.networks.mps.MPS`.
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
@@ -268,9 +272,9 @@ class PurificationMPS(MPS):
 
         Parameters
         ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~lasyten.Site`
             The sites defining the local Hilbert space (on the physical legs).
-            For usual :class:`tenpy.models.model.Model` given by `model.lat.mps_sites()`.
+            For usual :class:`tenpy.models.model.Model` given by `model.lattice.mps_sites()`.
         charge_sector : tuple of int
             The desired charge sector to be taken for the canonical ensemble.
         dtype : type or string
@@ -531,7 +535,7 @@ class PurificationMPS(MPS):
         -------
         sigmas : list of int | list of float
             On each site the index of the local basis that was measured for the PHYSICAL site only,
-            as specified in the corresponding :class:`~tenpy.networks.site.Site` in :attr:`sites`.
+            as specified in the corresponding :class:`~lasyten.Site` in :attr:`sites`.
             Note that this can change depending on whether/what charges you conserve!
             Explicitly specifying the measurement operator will avoid that issue.
             We DO NOT return any measurement outcomes/indices for the ancilla leg, even if they
@@ -709,7 +713,7 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
     """
     # cac := conserve_ancilla_charge
     model = model.copy()
-    chinfo = model.lat.unit_cell[0].leg.chinfo  # TODO use model.lattice.symmetry
+    chinfo = model.lattice.unit_cell[0].leg.chinfo  # TODO use model.lattice.symmetry
     chinfo_cac = npc.ChargeInfo(list(chinfo.mod) * 2, chinfo.names + [n + ' ancilla' for n in chinfo.names])
 
     converted_sites_cache = {}
@@ -727,8 +731,8 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
         converted_sites_cache[site] = s_new
         return s_new
 
-    model.lat = model.lat.copy()
-    model.lat.unit_cell = [_convert_site(s) for s in model.lat.unit_cell]
+    model.lattice = model.lattice.copy()
+    model.lattice.unit_cell = [_convert_site(s) for s in model.lattice.unit_cell]
 
     if hasattr(model, 'H_MPO'):
         model.H_MPO = H_MPO = model.H_MPO.copy()
@@ -752,7 +756,7 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
         H_MPO._W = new_W
 
     if hasattr(model, 'H_bond'):
-        sites = model.lat.mps_sites()  # already updated!
+        sites = model.lattice.mps_sites()  # already updated!
         model.H_bond = H_bond = model.H_bond[:]
         L = len(sites)
         assert len(sites) == len(H_bond)

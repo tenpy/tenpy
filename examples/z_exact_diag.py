@@ -13,11 +13,13 @@ from tenpy.networks.mps import MPS
 
 
 def example_exact_diagonalization(L, Jz):
-    xxz_pars = dict(L=L, Jxx=1.0, Jz=Jz, hz=0.0, bc_MPS='finite', sort_charge=True)
+    xxz_pars = dict(L=L, Jxx=1.0, Jz=Jz, hz=0.0, bc_MPS='finite')
     M = XXZChain(xxz_pars)
 
     product_state = ['up', 'down'] * (xxz_pars['L'] // 2)  # this selects a charge sector!
-    psi_DMRG = MPS.from_product_state(M.lat.mps_sites(), product_state, unit_cell_width=M.lat.mps_unit_cell_width)
+    psi_DMRG = MPS.from_product_state(
+        M.lattice.mps_sites(), product_state, unit_cell_width=M.lattice.mps_unit_cell_width
+    )
     charge_sector = psi_DMRG.get_total_charge(True)  # ED charge sector should match
 
     ED = ExactDiag.from_model(M, charge_sector=charge_sector, max_size=2.0e6)

@@ -1,14 +1,11 @@
-*.swp
 ./*.py
 *.pyc
 *.dat
 *.hdf5
 *.h5
-.DS_Store
 ._*
 .eggs
 *.egg-info
-.vscode
 __pycache__
 playground
 build
@@ -25,11 +22,25 @@ tests/benchmark/*.png
 hdf5_io/
 examples/yaml/results
 .ipynb_checkpoints
-.idea
 .coverage
 htmlcov
 coverage.*
 .ipynb_checkpoints
 *.ipynb
 *.pkl
+
+# OS / file system
+.DS_Store
+
+# IDE / editor files
+.vscode
+.idea
+*.swp
+
+# LLM context locations
 .claude/settings.local.json
+.github/instructions/*
+.github/agents/*
+.github/skills/*
+.github/prompts/*
+.github/copilot-instructions.md

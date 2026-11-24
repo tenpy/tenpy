@@ -97,26 +97,6 @@ def test_memory_usage():
     tools.process.memory_usage()
 
 
-@pytest.mark.filterwarnings('ignore')
-def test_omp(n=2):
-    if tools.process.omp_set_nthreads(n):
-        nthreads = tools.process.omp_get_nthreads()
-        print(nthreads)
-        assert nthreads == n
-    else:
-        print('test_omp failed to import the OpenMP libaray.')
-
-
-@pytest.mark.filterwarnings('ignore')
-def test_mkl(n=2):
-    if tools.process.mkl_set_nthreads(n):
-        nthreads = tools.process.mkl_get_nthreads()
-        print(nthreads)
-        assert nthreads == n
-    else:
-        print('test_mkl failed to import the shared MKL libaray.')
-
-
 def test_group_by_degeneracy():
     group_by_degeneracy = tools.misc.group_by_degeneracy
     # fmt: off
@@ -319,7 +299,7 @@ def test_fixes_consistency_check_IrregularLattice():
 
     class SpinModel_triangular_finite(tenpy.models.CouplingMPOModel):
         def init_sites(self, model_params):
-            return tenpy.SpinHalfSite(conserve=None, sort_charge=True)
+            return tenpy.SpinHalfSite(conserve=None, backend=self.backend)
 
         def init_terms(self, model_params):
             self.add_onsite(-1, 0, 'Sz')
@@ -332,9 +312,9 @@ def test_fixes_consistency_check_IrregularLattice():
 
     ad_hoc_fix = False
     if ad_hoc_fix:
-        model.lat.N_sites_per_ring = 1
+        model.lattice.N_sites_per_ring = 1
 
-    psi = tenpy.MPS.from_lat_product_state(model.lat, [[['up']]])
+    psi = tenpy.MPS.from_lat_product_state(model.lattice, [[['up']]])
     dmrg_params = dict(max_sweeps=2)
     _ = tenpy.algorithms.dmrg.run(psi, model, dmrg_params)
 
@@ -344,6 +324,28 @@ def test_failing_consistency_check():
     tools.misc.consistency_check(1.2 + 1.0j, {}, 'a', 1.0, '<')
     # this should raise a logger error and print the taceback there,
     # but the program should continue
+
+
+def test_svd_theta_truncation_error():
+    import lasyten as lasy
+    from lasyten.models.sites import SpinSite
+
+    rng = np.random.default_rng(3)
+    leg = SpinSite(S=1.5, conserve=None).leg
+    backend = lasy.get_backend('no_symmetry', 'numpy')
+    block = 3.0 * rng.normal(size=(4, 4, 4, 4))  # deliberately not normalized
+    theta = lasy.SymmetricTensor.from_dense_block(
+        block, codomain=[leg] * 2, domain=[leg] * 2, backend=backend, labels=['a', 'b', 'c', 'd']
+    )
+    chi = 5
+    trunc_params = {'chi_max': chi, 'svd_min': 0, 'trunc_cut': 0}
+    U, S, Vh, err, renormalize = tools.svd_theta(theta, trunc_params, new_labels=['vR', 'vL'])
+
+    sing_vals = np.linalg.svd(block.reshape(16, 16), compute_uv=False)
+    # eps is the *squared* relative Frobenius error, i.e. the discarded weight
+    eps_expected = np.sum(sing_vals[chi:] ** 2) / np.sum(sing_vals**2)
+    npt.assert_allclose(err.eps, eps_expected, rtol=1e-10)
+    npt.assert_allclose(renormalize, np.linalg.norm(sing_vals[:chi]), rtol=1e-10)
 
 
 if __name__ == '__main__':

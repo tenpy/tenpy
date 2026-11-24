@@ -1,18 +1,13 @@
 """A collection of tests for tenpy.models.lattice."""
 
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
-
-pytest.skip(allow_module_level=True)
-
+import lasyten as lasy
+import lasyten.testing as lasytest
 import numpy as np
 import numpy.testing as npt
 import pytest
-import tenpy.linalg.np_conserved as npc
-from random_test import gen_random_legcharge
 
 from tenpy.models import lattice
-from tenpy.networks import site
 from tenpy.networks.mps import MPS
 
 
@@ -21,14 +16,14 @@ def test_bc_choices():
     assert int(lattice.bc_choices['periodic']) == 0  # and this as well
 
 
-def test_lattice():
-    chinfo = npc.ChargeInfo([1, 3])
-    leg = gen_random_legcharge(chinfo, 8)
-    leg2 = gen_random_legcharge(chinfo, 2)
-    op1 = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
-    op2 = npc.Array.from_func(np.random.random, [leg2, leg2.conj()], shape_kw='size')
-    site1 = lattice.Site(leg, [('up', 0), ('down', -1)], op1=op1)
-    site2 = lattice.Site(leg2, [('down', 0), ('up', -1)], op2=op2)
+def test_lattice_overall():
+    symmetry = lasy.U1() * lasy.ZN(3)
+    leg1 = lasytest.random_ElementarySpace(symmetry, max_sectors=3, max_multiplicity=3)
+    leg2 = lasytest.random_ElementarySpace(symmetry, max_sectors=2, max_multiplicity=2)
+    op1 = lasy.SymmetricTensor.from_random_normal([leg1], [leg1])
+    op2 = lasy.SymmetricTensor.from_random_normal([leg2], [leg2])
+    site1 = lasy.Site(leg1, onsite_operators=dict(op1=op1))
+    site2 = lasy.Site(leg2, onsite_operators=dict(op2=op2))
     for order in ['default', 'Fstyle', 'snake', 'snakeFstyle']:
         print('order =', order)
         Ls = [5, 2]
@@ -74,25 +69,31 @@ def test_lattice():
 
 
 def test_TrivialLattice():
-    s1 = site.SpinHalfSite('Sz', sort_charge=True)
-    s2 = site.SpinSite(0.5, 'Sz', sort_charge=True)
-    s3 = site.SpinSite(1.0, 'Sz', sort_charge=True)
+    s1 = lasy.sites.SpinSite(0.5, 'Sz')
+    s2 = lasy.sites.SpinSite(0.5, 'Sz')
+    s3 = lasy.sites.SpinSite(1.0, 'Sz')
     lat = lattice.TrivialLattice([s1, s2, s3, s2, s1])
     lat.test_sanity()
 
 
 def test_MultiSpeciesLattice():
-    s1 = site.SpinHalfSite('Sz', sort_charge=True)
-    f1 = site.FermionSite('N')
-    site.set_common_charges([s1, f1], 'independent')
+    s1 = lasy.sites.SpinSite(0.5, 'Sz')
+    f1 = lasy.sites.SpinlessFermionSite(conserve='N')
+
+    with pytest.raises(AttributeError, match='set_common_charges'):
+        lasy.set_common_charges([s1, f1], 'independent')
+    # https://github.com/tenpy/tenpy/issues/733
+    pytest.xfail('MultiSpeciesLattice not ported #733')
+
+    lasy.set_common_charges([s1, f1], 'independent')
     simple_lat = lattice.Honeycomb(3, 4, None)
     ms_lat = lattice.MultiSpeciesLattice(simple_lat, [s1, f1])
     ms_lat.test_sanity()
 
 
 def test_IrregularLattice():
-    s1 = site.SpinHalfSite('Sz', sort_charge=False)
-    s2 = site.SpinSite(0.5, 'Sz')
+    s1 = lasy.sites.SpinSite(0.5, 'Sz')
+    s2 = lasy.sites.SpinSite(0.5, 'Sz')
     reg = lattice.Honeycomb(3, 3, [s1, s2], bc=['open', 'periodic'])
     ir = lattice.IrregularLattice(
         reg, [[1, 1, 0], [1, 1, 1], [0, 0, 0]], ([[1, 1, 2], [1, 1, 3]], [7, 10]), [s2, s2], [[-0.1, 0.0], [0.1, 0.0]]
@@ -118,7 +119,7 @@ def test_IrregularLattice():
 
 
 def test_HelicalLattice():
-    s = site.SpinHalfSite('Sz', sort_charge=False)
+    s = lasy.sites.SpinSite(0.5, 'Sz')
     honey = lattice.Honeycomb(2, 3, s, bc=['periodic', -1], bc_MPS='infinite', order='Cstyle')
     hel = lattice.HelicalLattice(honey, 2)
     strength = np.array([[1.5, 2.5, 1.5], [2.5, 1.5, 2.5]])
@@ -161,7 +162,7 @@ def test_HelicalLattice():
 
 
 def test_number_nn():
-    s = None
+    s = lasy.sites.SpinSite(0.5, 'Sz')
     chain = lattice.Chain(2, s)
     assert chain.count_neighbors() == 2
     assert chain.count_neighbors(key='next_nearest_neighbors') == 2
@@ -194,13 +195,14 @@ def pairs_with_reversed(coupling_pairs):
 
 
 def test_pairs():
+    s = lasy.sites.SpinSite(0.5, 'Sz')
     lattices = [
-        lattice.Chain(2, None),
-        lattice.Ladder(2, None),
-        lattice.Square(2, 2, None),
-        lattice.Triangular(2, 2, None),
-        lattice.Honeycomb(2, 2, None),
-        lattice.Kagome(2, 2, None),
+        lattice.Chain(2, s),
+        lattice.Ladder(2, s),
+        lattice.Square(2, 2, s),
+        lattice.Triangular(2, 2, s),
+        lattice.Honeycomb(2, 2, s),
+        lattice.Kagome(2, 2, s),
     ]
     for lat in lattices:
         print(lat.__class__.__name__)
@@ -229,7 +231,7 @@ def test_pairs():
 
 
 def test_lattice_order():
-    s = site.SpinHalfSite('Sz', sort_charge=True)
+    s = lasy.sites.SpinSite(0.5, 'Sz')
     # fmt: off
     chain = lattice.Chain(4, s)
     order_default = np.array([[0, 0], [1, 0], [2, 0], [3, 0]])
@@ -278,7 +280,8 @@ def test_lattice_order():
 
 
 def test_possible_couplings():
-    lat_reg = lattice.Honeycomb(2, 3, [None, None], order='snake', bc='periodic', bc_MPS='infinite')
+    s = lasy.sites.SpinSite()
+    lat_reg = lattice.Honeycomb(2, 3, [s, s], order='snake', bc='periodic', bc_MPS='infinite')
     lat_irreg = lattice.IrregularLattice(lat_reg, remove=[[0, 0, 0]])
     u0, u1 = 0, 1
     for lat in [lat_reg, lat_irreg]:
@@ -302,11 +305,16 @@ def test_possible_couplings():
 def test_index_conversion():
     from tenpy.networks.mps import MPS
 
-    s = site.SpinHalfSite(conserve=None, sort_charge=True)
-    state1 = [[[0, 1]]]  # 0=up, 1=down
+    s = lasy.sites.SpinSite(0.5, conserve=None)
+    spin_down = [[[s.state_labels['up'], s.state_labels['down']]]]  # 0=up, 1=down
+
+    sz_per_state = np.zeros(2)
+    sz_per_state[s.state_labels['up']] = +1
+    sz_per_state[s.state_labels['down']] = -1
+
     for order in ['snake', 'default']:
         lat = lattice.Honeycomb(2, 3, [s, s], order=order, bc_MPS='finite')
-        psi1 = MPS.from_lat_product_state(lat, state1)
+        psi1 = MPS.from_lat_product_state(lat, spin_down)
         sz1_mps = psi1.expectation_value('Sigmaz')
         sz1_lat = lat.mps2lat_values(sz1_mps)
         npt.assert_equal(sz1_lat[:, :, 0], +1.0)
@@ -316,18 +324,17 @@ def test_index_conversion():
         psi2 = MPS.from_lat_product_state(lat, state2)
         sz2_mps = psi2.expectation_value('Sigmaz')
         sz2_lat = lat.mps2lat_values(sz2_mps)
-        expect_sz2 = np.sum(state2**2 * np.array([1.0, -1]), axis=-1)
+        expect_sz2 = np.sum(state2**2 * sz_per_state, axis=-1)
         npt.assert_array_almost_equal_nulp(sz2_lat, expect_sz2, 100)
-    # doen
 
 
 @pytest.mark.parametrize('name', ['Chain', 'Ladder', 'Square', 'Triangular', 'Honeycomb', 'Kagome'])
 def test_reciprocal_basis_and_BZ(name):
     cls = getattr(lattice, name)
     if name in ['Chain', 'Ladder']:  # (quasi-) 1D
-        lat = cls(2, None)
+        lat = cls(2, lasy.sites.SpinSite(0.5, conserve=None))
     elif name in ['Square', 'Triangular', 'Honeycomb', 'Kagome']:  # 2D
-        lat = cls(2, 2, None)
+        lat = cls(2, 2, lasy.sites.SpinSite(0.5, conserve=None))
     else:
         raise NotImplementedError
 

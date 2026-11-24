@@ -15,18 +15,19 @@ This might be used to obtain the spectrum, the ground state or highly excited st
 """
 # Copyright (C) TeNPy Developers, Apache license
 
+import itertools as it
 import warnings
 
 import lasyten as lasy
 import numpy as np
+import scipy.sparse as spsp
 from lasyten.symmetries import SymmetryError
 from lasyten.symmetries.spaces import AbelianLegPipe, TensorProduct
 from lasyten.tensors import HermitianNumpyArrayLinearOperator, slice_leg
 from lasyten.tensors import eigh as lasyten_eigh
 
-from ..models.model import CouplingModel
+from ..models.model import CouplingModel, HamiltonianModel
 from ..networks.mps import MPS
-from ..tools import inverse_permutation
 
 __all__ = ['ExactDiag', 'get_full_wavefunction', 'get_numpy_Hamiltonian', 'get_scipy_sparse_Hamiltonian']
 
@@ -124,9 +125,9 @@ class ExactDiag:
     @classmethod
     def from_model(cls, model, charge_sector=None, max_size=2e6):
         """Initialize from a finite model."""
-        if model.lat.bc_MPS != 'finite':
+        if model.lattice.bc_MPS != 'finite':
             raise ValueError('Full diagonalization works only on finite systems')
-        res = cls(model.lat.mps_sites(), charge_sector, max_size)
+        res = cls(model.lattice.mps_sites(), charge_sector, max_size)
         res.model = model
         return res
 
@@ -176,7 +177,7 @@ class ExactDiag:
 
         """
         model_segment = model.extract_segment(first, last, enlarge)
-        model_segment.lat.bc_MPS = 'finite'
+        model_segment.lattice.bc_MPS = 'finite'
         model_segment.H_MPO.bc = 'finite'
         if hasattr(model_segment, 'H_bond'):
             del model_segment.H_bond  # invalid since it wouldn't terminate onsite terms correctly
@@ -197,10 +198,10 @@ class ExactDiag:
 
         """
         from ..models.lattice import TrivialLattice
-        from ..models.model import MPOModel
+        from ..models.model import HamiltonianMPOModel
 
         assert H_MPO.bc == 'finite'
-        M = MPOModel(TrivialLattice(H_MPO.sites), H_MPO)
+        M = HamiltonianMPOModel(TrivialLattice(H_MPO.sites), H_MPO)
         return cls.from_model(M, *args, **kwargs)
 
     def build_full_H_from_mpo(self):
@@ -213,7 +214,7 @@ class ExactDiag:
         model = self._require_model()
         if self._exceeds_max_size():
             return
-        mpo = model.H_MPO
+        mpo = model.get_H_MPO()
         if mpo.bc != 'finite':
             raise ValueError(f'ExactDiag needs a finite MPO, got bc={mpo.bc!r}.')
         if mpo.L != len(self._sites):
@@ -237,9 +238,8 @@ class ExactDiag:
         :meth:`build_full_H_from_mpo`.
         """
         model = self._require_model()
-        H_bond = getattr(model, 'H_bond', None)
-        if H_bond is None:
-            raise ValueError('The model has no `H_bond`; use `build_full_H_from_mpo` or a NearestNeighborModel.')
+        H_bond = model.get_H_bond()
+
         if self._exceeds_max_size():
             return
         L = len(self._sites)
@@ -250,6 +250,7 @@ class ExactDiag:
                 if H_bond[i] is None:
                     continue
                 # H_bond[i] has labels p0, p1, p1*, p0* and lives on sites (i-1, i)
+                # Read-only dense view under Eigen; transpose/reshape are views, not in-place writes.
                 Hb = H_bond[i].to_numpy(understood_braiding=True)
                 Hb = Hb.transpose(0, 1, 3, 2).reshape(dims[i - 1] * dims[i], dims[i - 1] * dims[i])
                 left = np.eye(int(np.prod(dims[: i - 1])))
@@ -323,7 +324,7 @@ class ExactDiag:
         if self.E is None or self.V is None:
             raise ValueError('You need to call `full_diagonalization` first!')
         D = lasy.DiagonalTensor.from_diag_block(
-            np.exp(-1.0j * dt * self.E), leg=self.V.get_leg('eig'), labels=['eig', 'eig*']
+            np.exp(-1.0j * dt * self.E), leg=self.V.get_leg('eig'), labels=['eig', 'eig*'], backend=self.V.backend
         )
         return lasy.tdot(lasy.scale_axis(self.V, D, 'eig'), self.V.hc, 'eig', 'eig*')
 
@@ -369,7 +370,7 @@ class ExactDiag:
         if not psi.has_pipes:  # plain state with legs p0..p{L-1}: combine into one pipe first
             psi = lasy.combine_legs(psi, list(range(len(self._sites))))
         psi = lasy.split_legs(psi, 0)  # split the combined leg into the physical legs of the sites
-        unit_cell_width = len(self._sites) if self.model is None else self.model.lat.mps_unit_cell_width
+        unit_cell_width = len(self._sites) if self.model is None else self.model.lattice.mps_unit_cell_width
         return MPS.from_full(self._sites, psi, form=canonical_form, unit_cell_width=unit_cell_width)
 
     def sparse_diag(self, k, *args, **kwargs):
@@ -423,7 +424,7 @@ class ExactDiag:
         """Contract the finite `mpo` to a dense matrix in the Kronecker basis (site 0 most significant)."""
         T = None
         for i in range(mpo.L):
-            W = mpo.get_W(i).to_numpy(understood_braiding=True)  # axes wL, p, wR, p*
+            W = mpo.get_W(i).to_numpy(understood_braiding=True)  # axes wL, p, wR, p*; read-only view
             if T is None:
                 T = W
                 continue
@@ -445,6 +446,7 @@ class ExactDiag:
             block,
             codomain=legs,
             domain=legs,
+            backend=lasy.backends.get_same_backend(*self._sites),
             labels=[self._labels_p, self._labels_pconj],
             understood_braiding=True,
         )
@@ -452,7 +454,8 @@ class ExactDiag:
     def _embed_bond(self, Hb, i):
         """Extend ``H_bond[i]`` (acting on sites ``i-1, i``) by identities to all sites."""
         L = len(self._sites)
-        T = Hb.relabel({'p0': f'p{i - 1}', 'p1': f'p{i}', 'p0*': f'p{i - 1}*', 'p1*': f'p{i}*'})
+        T = Hb
+        T.labels.update({'p0': f'p{i - 1}', 'p1': f'p{i}', 'p0*': f'p{i - 1}*', 'p1*': f'p{i}*'})
         for j in range(L):
             if j not in (i - 1, i):
                 Id = self._sites[j].get_op('Id').as_SymmetricTensor()
@@ -477,22 +480,19 @@ class ExactDiag:
         return False
 
 
-def get_full_wavefunction(psi: MPS, undo_sort_charge: bool = True):
+def get_full_wavefunction(psi: MPS):
     """Get the full wavefunction of a finite MPS as a 1D numpy array.
 
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
         The input MPS. Must have ``psi.bc == 'finite'``.
-    undo_sort_charge : bool
-        If we should undo the basis permutation induced by
-        :meth:`~tenpy.networks.site.Site.sort_charge`.
 
     Returns
     -------
     theta : 1D array
-        The wavefunction. Basis order is like for a Kronecker product :func:`numpy.kron` of the
-        local basis order, see `undo_sort_charge`.
+        The wavefunction.
+        TODO: describe basis order!
 
     """
     if psi.bc != 'finite':
@@ -506,13 +506,10 @@ def get_full_wavefunction(psi: MPS, undo_sort_charge: bool = True):
     assert theta.labels == ['vL'] + [f'{p}{n}' for n in range(psi.L)] + ['vR']
     theta = theta.to_numpy()
     theta = np.squeeze(theta, (0, -1))  # squeeze vL, vR
-    if undo_sort_charge:
-        perms = [inverse_permutation(site.leg.basis_perm) for site in psi.sites]
-        theta = theta[np.ix_(*perms)]
     return np.reshape(theta, -1)
 
 
-def get_numpy_Hamiltonian(model, from_mpo: bool = True, undo_sort_charge: bool = True):
+def get_numpy_Hamiltonian(model, from_mpo: bool = True):
     """Get the Hamiltonian as a matrix (2D numpy array).
 
     Parameters
@@ -521,113 +518,100 @@ def get_numpy_Hamiltonian(model, from_mpo: bool = True, undo_sort_charge: bool =
         The model that defines the Hamiltonian. The lattice should be finite.
     from_mpo : bool
         If we should prioritize using the MPO over ``H_bond`` to build the Hamiltonian.
-    undo_sort_charge : bool
-        If we should undo the basis permutation induced by
-        :meth:`~tenpy.networks.site.Site.sort_charge`.
 
     Returns
     -------
     H : 2D array
-        The Hamiltonian as a matrix. Basis order is like for a Kronecker product :func:`numpy.kron`
-        of the local basis order, see `undo_sort_charge`.
+        The Hamiltonian as a matrix.
+        TODO describe basis order
 
     """
-    if model.lat.bc_MPS != 'finite':
+    if model.lattice.bc_MPS != 'finite':
         raise ValueError('Model must be defined on a finite lattice.')
     if isinstance(model, CouplingModel):
-        return _get_Hamiltonian_from_couplings(model, sparse=False, undo_sort_charge=undo_sort_charge)
-    return _get_numpy_Hamiltonian_ExactDiag_full_H(model, from_mpo=from_mpo, undo_sort_charge=undo_sort_charge)
+        return _get_Hamiltonian_from_couplings(model, sparse=False)
+    return _get_numpy_Hamiltonian_ExactDiag_full_H(model, from_mpo=from_mpo)
 
 
-def get_scipy_sparse_Hamiltonian(model, undo_sort_charge: bool = True):
+def get_scipy_sparse_Hamiltonian(model):
     """Get the Hamiltonian as a sparse scipy matrix.
 
     Parameters
     ----------
     model
         The model that defines the Hamiltonian. The lattice should be finite.
-    undo_sort_charge : bool
-        If we should undo the basis permutation induced by
-        :meth:`~tenpy.networks.site.Site.sort_charge`.
 
     Returns
     -------
     H : CSR matrix
-        The Hamiltonian as a scipy CSR sparse matrix. Basis order is like for a Kronecker product
-        :func:`numpy.kron` of the local basis order, see `undo_sort_charge`.
+        The Hamiltonian as a scipy CSR sparse matrix.
+        TODO describe basis order
 
     """
-    if model.lat.bc_MPS != 'finite':
+    if model.lattice.bc_MPS != 'finite':
         raise ValueError('Model must be defined on a finite lattice.')
 
     if isinstance(model, CouplingModel):
-        return _get_Hamiltonian_from_couplings(model=model, sparse=True, undo_sort_charge=undo_sort_charge)
+        return _get_Hamiltonian_from_couplings(model=model, sparse=True)
     else:
         raise NotImplementedError
 
 
-def _get_numpy_Hamiltonian_ExactDiag_full_H(model, from_mpo: bool, undo_sort_charge: bool):
+def _get_numpy_Hamiltonian_ExactDiag_full_H(model: HamiltonianModel, from_mpo: bool, understood_braiding=False):
     ed = ExactDiag.from_model(model)
-    if from_mpo and hasattr(model, 'H_MPO'):
+    if from_mpo:
         ed.build_full_H_from_mpo()
     else:
         ed.build_full_H_from_bonds()
-    res = ed.full_H.split_legs()
-    n_sites = model.lat.N_sites
-    assert res.rank == 2 * n_sites
-    # [p0, p1, ..., p0*, p1*, ...]
-    res = res.itranspose([f'p{n}{star}' for star in ['', '*'] for n in range(n_sites)])
-    res = res.to_ndarray()
-    if undo_sort_charge:
-        perms = [inverse_permutation(site.perm) for site in model.lat.mps_sites()] * 2
-        res = res[np.ix_(*perms)]
-    dim = np.prod(res.shape[:n_sites])
+    N = model.lattice.N_sites
+    res = lasy.planar_permute_legs(ed.full_H, codomain=[f'p{n}' for n in range(N)], domain=[f'p{n}*' for n in range(N)])
+    res = res.to_numpy(understood_braiding=understood_braiding)
+    dim = np.prod(res.shape[:N])
+    res = np.transpose(res, [*range(N), *reversed(range(N, 2 * N))])
     return np.reshape(res, (dim, dim))
 
 
-def _get_Hamiltonian_from_couplings(model, sparse: bool, undo_sort_charge: bool):
+def _get_Hamiltonian_from_couplings(
+    model: CouplingModel, sparse: bool, understood_braiding=False, exp_decaying_cutoff=1e-14
+):
     """Helper to get either dense numpy or sparse scipy matrix of the Hamiltonian."""
-    raise NotImplementedError(
-        'requires the lasyten MPO/models layer, which is not ported yet - use `ExactDiag.from_hamiltonian`.'
-    )
     if not isinstance(model, CouplingModel):
         raise ValueError('Must be a coupling model.')
 
-    ot = model.all_onsite_terms()
-    ot.remove_zeros()
-    ct = model.all_coupling_terms()
-    ct.remove_zeros()
-    edt = model.exp_decaying_terms
-    term_list = ot.to_TermList() + ct.to_TermList() + edt.to_TermList()
+    ot, ct, mct, edt = model.get_nonzero_terms()
+    edt = edt.to_CouplingTerms(model, cutoff=exp_decaying_cutoff, bc=model.bc_MPS)
 
-    sites = model.lat.mps_sites()
-    dims = [s.leg.ind_len for s in sites]
+    sites = model.lattice.mps_sites()
+    dims = [s.leg.dim for s in sites]
     if sparse:
-        import scipy.sparse as spsp
-
         H = spsp.csr_matrix((np.prod(dims),) * 2, dtype=float)
         kron = spsp.kron
-        eye_0 = spsp.eye(1)  # identity on zero sites. starting point for doing kron.
+        eye_fun = spsp.eye
     else:
         H = np.zeros((np.prod(dims),) * 2, dtype=float)
         kron = np.kron
-        eye_0 = np.eye(1)  # identity on zero sites. starting point for doing kron.
+        eye_fun = np.eye
 
-    for s, terms in zip(term_list.strength, term_list.terms):
-        last_site = -1
-        t = eye_0
-        for op, i in terms:
-            sites_since_last_op = range(last_site + 1, i)
-            if len(sites_since_last_op) > 0:
-                t = kron(t, np.eye(np.prod([dims[n] for n in sites_since_last_op])))
-            op = sites[i].get_op(op).to_ndarray()
-            if undo_sort_charge:
-                perm = inverse_permutation(sites[i].perm)
-                op = op[np.ix_(perm, perm)]
-            t = kron(t, op)
-            last_site = i
-        sites_since_last_op = range(last_site + 1, len(sites))
-        if len(sites_since_last_op) > 0:
-            t = kron(t, np.eye(np.prod([dims[n] for n in sites_since_last_op])))
-        H = H + s * t
+    for a, (i,), opname in ot:
+        op = sites[i].get_op(opname).to_numpy(understood_braiding=understood_braiding)
+        t = kron(eye_fun(np.prod(dims[:i], dtype=int)), op)
+        t = kron(t, eye_fun(np.prod(dims[i + 1 :], dtype=int)))
+        H = H + a * t
+
+    for a, ijkl, coupling_name in it.chain(ct, mct, edt):
+        iL = min(ijkl)
+        iR = max(ijkl)
+        ijkl = np.array(ijkl)
+        coupling = model.couplings[coupling_name].stretch_with_identities(
+            sites[iL : iR + 1], coupling_positions=ijkl - iL
+        )
+        op = coupling.to_numpy(understood_braiding=understood_braiding)
+        op = np.reshape(
+            np.transpose(op, [*range(op.ndim // 2), *reversed(range(op.ndim // 2, op.ndim))]),
+            (np.prod(op.shape[: op.ndim // 2]),) * 2,
+        )
+        t = kron(eye_fun(np.prod(dims[:iL], dtype=int)), op)
+        t = kron(t, eye_fun(np.prod(dims[iR + 1 :], dtype=int)))
+        H = H + a * t
+
     return H

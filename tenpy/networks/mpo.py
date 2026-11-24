@@ -2,11 +2,11 @@
 
 An MPO is the generalization of an :class:`~tenpy.networks.mps.MPS` to operators. Graphically::
 
-    |      ^        ^        ^
-    |      |        |        |
-    |  ->- W[0] ->- W[1] ->- W[2] ->- ...
-    |      |        |        |
-    |      ^        ^        ^
+    |         │            │            │
+    |     ┏━━━┷━━━┓    ┏━━━┷━━━┓    ┏━━━┷━━━┓
+    |   ──┨ W[0]  ┠────┨ W[1]  ┠────┨ W[2]  ┠── ...
+    |     ┗━━━┯━━━┛    ┗━━━┯━━━┛    ┗━━━┯━━━┛
+    |         │            │            │
 
 So each 'matrix' has two physical legs ``p, p*`` instead of just one,
 i.e. the entries of the 'matrices' are local operators.
@@ -16,20 +16,22 @@ Valid boundary conditions of an MPO are the same as for an MPS
 canonical form. However, unlike for an MPS, this doesn't simplify calculations.
 Thus, an MPO has no `form`.)
 
-We use the following label convention for the `W` (where arrows indicate `qconj`)::
+We use the following label convention for the `W`::
 
-    |            p*
-    |            ^
-    |            |
-    |     wL ->- W ->- wR
-    |            |
-    |            ^
-    |            p
+    |           p*
+    |           │
+    |       ┏━━━┷━━━┓
+    |   wL ─┨   W   ┠─ wR
+    |       ┗━━━┯━━━┛
+    |           │
+    |           p
 
 
 If an MPO describes a sum of local terms (e.g. most Hamiltonians),
-some bond indices correspond to 'only identities to the left/right'.
-We store these indices in `IdL` and `IdR` (if there are such indices).
+some virtual bond states correspond to 'only identities to the left/right'.
+These are marked by the summand labels ``'IdL'`` and ``'IdR'`` on the (direct sum) virtual legs
+``wL``/``wR`` of the :attr:`_W` tensors, i.e. they are the labelled rows/columns of the grid of
+operators that makes up each `W` (if there are such states); see :func:`partition_W`.
 
 Similar as for the MPS, a bond index ``i`` is *left* of site `i`,
 i.e. between sites ``i-1`` and ``i``.
@@ -39,11 +41,12 @@ i.e. between sites ``i-1`` and ``i``.
 import copy
 import logging
 import warnings
-from typing import Any, Literal
+from collections.abc import Hashable, Sequence
+from typing import TYPE_CHECKING, Any, Literal
 
 import lasyten as lasy
 import numpy as np
-from lasyten import Coupling, ElementarySpace, SymmetricTensor
+from lasyten import Coupling
 from scipy.special import comb as sp_comb
 
 from ..tools import (
@@ -58,7 +61,10 @@ from ..tools import (
 from .mps import MPS, BaseEnvironment, MPSGeometry, TransferMatrix
 
 # from .site import group_sites
-from .terms import TermList
+from .terms import TermList, Terms
+
+if TYPE_CHECKING:
+    from ..models import CouplingModel
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +114,12 @@ class MPO(MPSGeometry):
         computed and added at runtime, i.e., `self` is not (necessarily) hermitian.
     _W : list of :class:`~lasyten.Tensor`
         The matrices of the MPO. Labels are ``wL, p, wR, p*`` (up to cyclic permutation).
+        For an MPO that is a sum of local terms, the virtual legs are direct sums whose summands are
+        labelled; the ``'IdL'`` / ``'IdR'`` summands mark the states with only identities to the
+        left / right. The usual upper block triangular structure
+        can be extracted with :func:`partition_W`, and
+        :meth:`MPOEnvironment.init_LP` / :meth:`MPOEnvironment.init_RP` project onto these summands
+        to build the trivial boundary environments.
     _valid_bc : tuple of str
         Class attribute. Valid boundary conditions; the same as for an MPS.
     _graph : None | list of {dict of {(int,int): :class:`~tenpy.linalg.np_conserved.Array`}}
@@ -118,7 +130,8 @@ class MPO(MPSGeometry):
         Relevant only for iMPOs and segment MPOs with contractible outer virtual legs:
         `self._W[0].get_leg("wL")`, `self._W[-1].get_leg("wR")`
         Ordering of the outer virtual legs such that `self` is upper triangular w.r.t. the whole unit cell.
-        Follows the constraint `_outer_permutation[0] = self.IdL[0]`, `_outer_permutation[-1] = self.IdR[-1]`
+        Follows the constraint that the first entry is the ``'IdL'`` and the last entry the ``'IdR'``
+        summand of the outer virtual legs.
         Defaults to `None` if the ordering has not yet been checked of False if ordering the MPO is not possible
         **Note:** This ordering is valid only with respect to the **whole unit cell**, not for
         internal `'wL'/'wR'` legs.
@@ -254,7 +267,8 @@ class MPO(MPSGeometry):
 
                 # Rearrange to (wL, wR, p, p*)
                 # Transpose so  op[jL,jR,:,:] is in (p, p*) order.
-                tensor_rearranged = lasy.permute_legs(tensor, codomain=['wL', 'wR'], domain=['p', 'p*'])
+                tensor_rearranged = lasy.planar_permute_legs(tensor, codomain=['wL', 'wR'], domain=['p', 'p*'])
+                # Read-only dense view under Eigen (do not mutate in place).
                 arr = tensor_rearranged.to_numpy(understood_braiding=True)
 
                 arr = arr.transpose(0, 1, 3, 2)  # → (chiL, chiR, d, d) axes (wL, wR, p, p*)
@@ -680,7 +694,7 @@ class MPO(MPSGeometry):
 
         .. testsetup :: from_wavepacket
 
-            from tenpy.networks.site import FermionSite
+            from lasyten.sites import SpinlessFermionSite
             from tenpy.networks.mpo import MPO
             from tenpy.networks.mps import MPS
             import numpy as np
@@ -696,7 +710,7 @@ class MPO(MPSGeometry):
             >>> x = np.arange(L)
             >>> coeff = np.exp(-1.0j * k0 * x) * np.exp(-0.5 * (x - x0) ** 2 / sigma**2)
             >>> coeff /= np.linalg.norm(coeff)
-            >>> site = FermionSite(conserve='N')
+            >>> site = SpinlessFermionSite(conserve='N')
             >>> wp = MPO.from_wavepacket([site] * L, coeff, 'Cd')
             >>> wp.chi == [1] + [2] * (L - 1) + [1]
             True
@@ -774,10 +788,23 @@ class MPO(MPSGeometry):
 
     def set_W(self, i: int, W: lasy.Tensor):
         """Set `W` at site `i`. Note that ``W`` may be modified in-place."""
-        assert W.labels_are('wL', 'p', 'wR', 'p*', planar=True)
+        assert W.labels.are('wL', 'p', 'wR', 'p*', planar=True)
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         self._W[i_in_unit_cell] = self.shift_Tensor_unit_cells(W, -num_unit_cells)
         self._reset_graph()
+
+    def show_W_grid(self, i: int) -> str:
+        """Visual representation of the block-structure of the W tensor on site `i`.
+
+        For a summarized display, the following cases are distinguished as cells::
+
+            - ``'  '`` i.e. an empty cell, if the cell is zero
+            - ``'Id'`` if the cell is an onsite-identity crossing a virtual wire
+            - ``'~I'`` if the cell is proportional to, but not equal to, the identity
+            - ``'**'`` for any other cell
+
+        """
+        return _show_W_grid(self.get_W(i))
 
     def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
@@ -923,12 +950,24 @@ class MPO(MPSGeometry):
         UI : :class:`~tenpy.networks.mpo.MPO`
             The propagator, i.e. approximation :math:`U_I ~= exp(H*dt)`
 
+        Raises
+        ------
+        ValueError
+            If the MPO does not have the ``'IdL'`` / ``'IdR'`` labels, see :meth:`has_IdL_IdR_labels`,
+            or not the structure described in :func:`partition_W` (e.g. rescaled tensors or entries
+            below the diagonal blocks).
+
         """
         if self.explicit_plus_hc:
             raise NotImplementedError(
                 "MPO.make_U_I() assumes hermitian H, you can't use "
                 'the `explicit_plus_hc=True` flag!\n'
                 'See also https://github.com/tenpy/tenpy/issues/265'
+            )
+        if not self.has_IdL_IdR_labels():
+            raise ValueError(
+                "MPO.make_U_I() needs an MPO in the standard form with the summand labels 'IdL' and 'IdR' "
+                'on its virtual legs, see MPO.has_IdL_IdR_labels().'
             )
         U_list = []
 
@@ -1146,8 +1185,8 @@ class MPO(MPSGeometry):
                 proj = W.get_leg('wL').projection_onto_summands(
                     keep, backend=W.backend, labels=['wL', 'wR'], device=W.device
                 )
-                W = lasy.planar_contraction(W, proj, 'wL', 'wR')
-                LP = lasy.planar_contraction(LP, proj.hc, 'wR', 'wR*', relabel2={'wL*': 'wR'})
+                W = lasy.planar_contract_mask(W, proj, 'wL', 'wR')
+                LP = lasy.planar_contract_mask(LP, proj.hc, 'wR', 'wR*', relabel2={'wL*': 'wR'})
             B = psi.get_B(i, 'B')
             LP = env.LP_contraction.evaluate(dict(LP=LP, Bk=B, W=W, Bb=B.hc))
 
@@ -1157,10 +1196,13 @@ class MPO(MPSGeometry):
 
                 # remove following identities
                 keep = [i for i, l in enumerate(LP.get_leg('wR').summand_labels) if l not in ['IdL', 'IdR']]
+                if len(keep) == 0:
+                    # no more terms left, and we need to break early, cant construct proj below
+                    break
                 proj = LP.get_leg('wR').projection_onto_summands(
                     keep, backend=LP.backend, labels=['wR', 'wL'], device=LP.device
                 )
-                LP_converged = lasy.planar_contraction(LP, proj, 'wR', 'wL')
+                LP_converged = lasy.planar_contract_mask(LP, proj, 'wR', 'wL')
                 if lasy.norm(LP_converged) < tol:
                     break  # no more terms left
         else:  # no break
@@ -1175,10 +1217,27 @@ class MPO(MPSGeometry):
         # TODO: Might be worth implementing?
         raise NotImplementedError('Could be implemented using MPOEnvironmentBuilder')
 
+    _variance_LP_contraction = lasy.PlanarDiagram(
+        tensors='LP[vR*, wR2, wR1, vR], Bk[vL, p, vR], W1[wL, p, wR, p*], W2[wL, p, wR, p*], Bb[vR*, p*, vL*]',
+        definition=(
+            'LP:vR* @ Bb:vL*, LP:wR2 @ W2:wL, LP:wR1 @ W1:wL, LP:vR @ Bk:vL, '
+            'Bk:p @ W1:p*, Bk:vR -> vR, '
+            'W1:p @ W2:p*, W1:wR -> wR1, '
+            'W2:p @ Bb:p*, W2:wR -> wR2, '
+            'Bb:vR* -> vR*'
+        ),
+        dims=dict(chi=['vR', 'vR*', 'vL', 'vL*'], w=['wL', 'wR', 'wR1', 'wR2'], d=['p', 'p*']),
+    )
+
     def variance(self, psi: MPS, exp_val: float | complex | None = None) -> float | complex:
         """Calculate ``<psi|self^2|psi> - <psi|self|psi>^2``.
 
-        Works only for finite systems. Ignores the :attr:`~tenpy.networks.mps.MPS.norm` of `psi`.
+        Works only for finite systems (``NotImplementedError`` otherwise). Ignores the
+        :attr:`~tenpy.networks.mps.MPS.norm` of `psi`. Not implemented for :attr:`explicit_plus_hc`.
+        ``<psi|self^2|psi>`` is obtained by contracting the network of `psi`, two copies of the
+        MPO (sharing the physical legs) and `psi.hc` from left to right with
+        :class:`lasyten.PlanarDiagram`, starting and ending in the ``'IdL'`` and ``'IdR'`` summands
+        of the MPO legs, respectively.
 
         .. todo ::
             This is a naive, expensive implementation contracting the full network.
@@ -1194,35 +1253,48 @@ class MPO(MPSGeometry):
             otherwise obtained from :meth:`expectation_value`.
             (Set this to 0 to obtain only the part ``<psi|self^2|psi>``.)
 
+        Returns
+        -------
+        variance : float | complex
+            The variance (extensive, not the density).
+
         """
-        raise NotImplementedError
-        if self.bc != 'finite':
-            raise ValueError('works only for finite systems')
+        if self.bc != 'finite' or psi.bc != 'finite':
+            raise NotImplementedError('MPO.variance works only for finite systems')
         if self.L != psi.L:
             raise ValueError('expect same L')
-        if psi._p_label != ['p']:
-            raise NotImplementedError('not adjusted for non-standard MPS.')
         if self.explicit_plus_hc:
             raise NotImplementedError('not implemented for explicit_plus_hc flag')
         assert self.L >= 1
         if exp_val is None:
             exp_val = self.expectation_value(psi)
 
-        th = psi.get_theta(0, n=1)
-        W = self.get_W(0).take_slice(self.get_IdL(0), 'wL')
-        contr = npc.tensordot(th, W.replace_label('wR', 'wR1'), axes=['p0', 'p*'])
-        contr = npc.tensordot(contr, W.replace_label('wR', 'wR2'), axes=['p', 'p*'])
-        contr = npc.tensordot(th.conj(), contr, axes=[['vL*', 'p0*'], ['vL', 'p']])
-        for i in range(1, self.L):
-            B = psi.get_B(i, form='B')
-            W = self.get_W(i)
-            contr = npc.tensordot(contr, B, axes=['vR', 'vL'])
-            contr = npc.tensordot(contr, W.replace_label('wR', 'wR1'), axes=[['wR1', 'p'], ['wL', 'p*']])
-            contr = npc.tensordot(contr, W.replace_label('wR', 'wR2'), axes=[['wR2', 'p'], ['wL', 'p*']])
-            contr = npc.tensordot(contr, B.conj(), axes=[['vR*', 'p'], ['vL*', 'p*']])
-        contr = contr.take_slice([self.get_IdR(self.L - 1)] * 2, ['wR1', 'wR2'])
-        contr = npc.trace(contr, 'vR', 'vR*')
-        return np.real_if_close(contr - exp_val**2)
+        env = MPOEnvironment(psi, self, psi)
+        # start with LP[vR*, wR1, vR] projected on IdL and add a second MPO leg, also projected on IdL
+        LP = env.init_LP(0)
+        LP.labels.update({'wR': 'wR1'})
+        W = self.get_W(0)
+        wL = W.get_leg('wL')
+        LP = lasy.add_trivial_leg(LP, 1, label='wR2', is_dual=not wL.is_dual)
+        mask = wL.projection_onto_summand('IdL', backend=LP.backend, labels=['wL', 'wR'], device=LP.device)
+        LP = lasy.tdot(LP, mask, 'wR2', 'wL')
+        LP.labels.update({'wR': 'wR2'})
+        LP = lasy.permute_legs(LP, codomain=['wR2', 'wR1', 'vR', 'vR*'])
+        for i in range(self.L):
+            B = psi.get_B(i, form='Th' if i == 0 else 'B')
+            LP = self._variance_LP_contraction.evaluate(dict(LP=LP, Bk=B, W1=self.get_W(i), W2=self.get_W(i), Bb=B.hc))
+        # project both MPO legs on IdR (leaving trivial legs) and contract the virtual legs
+        for label in ['wR1', 'wR2']:
+            mask = (
+                self.get_W(self.L - 1)
+                .get_leg('wR')
+                .projection_onto_summand('IdR', backend=LP.backend, labels=['new', 'wL'], device=LP.device)
+            )
+            LP = lasy.tdot(LP, mask, label, 'wL')
+            LP.labels.update({'new': label})
+        LP = lasy.squeeze_legs(LP, ['wR1', 'wR2'])
+        H2 = lasy.trace(lasy.permute_legs(LP, codomain=['vR*'], domain=['vR']))
+        return np.real_if_close(H2 - exp_val**2)
 
     def prefactor(self, i: int, ops) -> float | complex:
         """Get prefactor for a given string of operators in self.
@@ -1374,25 +1446,29 @@ class MPO(MPSGeometry):
         return TermList(all_terms, all_prefs)
 
     def dagger(self):
-        """Return hermitian conjugate copy of self."""
+        """Return the hermitian conjugate of `self` as a new MPO, for any `bc`.
+
+        The hermitian conjugate is taken on each ``W`` separately (cost linear in :attr:`L`): the physical
+        legs are transposed and the entries are complex conjugated. The virtual legs keep their labels
+        ``'wL'`` and ``'wR'``, their order and their ``'IdL'`` / ``'IdR'`` summand labels, such that the
+        block upper triangular structure of the `W` (see :func:`partition_W`) is preserved.
+        Taking the conjugate dualizes the virtual legs; they are flipped back with a gauge transformation,
+        such that the virtual legs of the result have the same duality (``is_dual``) as those of `self`.
+        The virtual basis of the result is therefore gauge transformed relative to `self`, the operator
+        is not. The sectors of the physical legs are conjugated, e.g. a term ``S+ S-`` becomes ``S- S+``.
+        The result can be added to `self`, e.g. ``H + H.dagger()`` is twice the hermitian part of `H`.
+        For ``explicit_plus_hc=True`` a copy is returned.
+        """
         if self.explicit_plus_hc:
-            return self.copy()
-        if self.bc != 'finite':
-            raise NotImplementedError("MPO.dagger() for bc != 'finite' is not yet supported")
-        # for finite bc, the `_W` tensors have the same structure as a lasyten Coupling's
-        # `factorization` (trivial boundary legs), so we can round-trip through `Coupling` to
-        # get the hermitian conjugate at the tensor level.
-        coupling = Coupling(sites=list(self.sites), factorization=list(self._W))
-        hc_coupling = Coupling.from_tensor(lasy.dagger(coupling.to_tensor()), sites=list(self.sites))
-        return MPO(
-            self.sites,
-            hc_coupling.factorization,
-            self.bc,
-            self.IdL,
-            self.IdR,
-            self.max_range,
-            mps_unit_cell_width=self.unit_cell_width,
-        )
+            new = self.copy()
+            new._W = list(self._W)  # `copy` is shallow; do not share the list with `self`
+            return new
+        # The conjugate of each W is bent back to the standard leg order and its (dualized) virtual
+        # legs are flipped back: the bonds between sites as a gauge transformation, and the two outer
+        # legs (contracted with each other for an infinite MPO, dummy legs for a finite MPO) on
+        # their own, see `lasyten.models.dagger_factorization`.
+        Ws = lasy.models.dagger_factorization(list(self._W), flip_boundary_legs=True)
+        return MPO(self.sites, Ws, self.bc, self.max_range, mps_unit_cell_width=self.unit_cell_width)
 
     def is_hermitian(self, eps: float = 1.0e-10, max_range: int | None = None):
         """Check if `self` is a hermitian MPO.
@@ -1437,8 +1513,8 @@ class MPO(MPSGeometry):
         ov = self.overlap(other, understood_infinite=True, num_sites=num_sites)
         s_norm = self.overlap(self, understood_infinite=True, num_sites=num_sites)
         o_norm = other.overlap(other, understood_infinite=True, num_sites=num_sites)
-        dist = abs(s_norm - 2 * np.real(ov) + o_norm)
-        return dist < eps * abs(s_norm + o_norm)
+        dist = abs(s_norm - 2 * ov.real() + o_norm)
+        return bool(dist < eps * abs(s_norm + o_norm))
 
     def apply(self, psi: MPS, options) -> MPO:
         """Apply `self` to an MPS `psi` and compress, updating `psi` with the result in-place.
@@ -1818,7 +1894,7 @@ class MPO(MPSGeometry):
             #                         = 2 Re[ <A|B> + <hc(A)|B> ]
             A_B = self._overlap_no_hc(other, num_sites=num_sites)
             hcA_B = self._overlap_no_hc(other, num_sites=num_sites, hconj_self=True)
-            ov = 2 * np.real(A_B + hcA_B)
+            ov = 2 * (A_B + hcA_B).real()
 
         elif self.explicit_plus_hc:
             A_B = self._overlap_no_hc(other, num_sites=num_sites)
@@ -1829,7 +1905,7 @@ class MPO(MPSGeometry):
             # <A|B + hc(B)> = <A|B> + <A|hc(B)> = <A|B> + conj(<hc(A)|B>)
             A_B = self._overlap_no_hc(other, num_sites=num_sites)
             hcA_B = self._overlap_no_hc(other, num_sites=num_sites, hconj_self=True)
-            ov = A_B + np.conj(hcA_B)
+            ov = A_B + hcA_B.conj()
 
         else:
             ov = self._overlap_no_hc(other, num_sites=num_sites)
@@ -1853,12 +1929,17 @@ class MPO(MPSGeometry):
             for i in range(1, num_sites):
                 res = lasy.planar_contraction(res, self.get_W(i), 'wRa', 'wL', relabel2={'wR': 'wRa'})
                 res = lasy.planar_contraction(
-                    res, other.get_W(i), ['wR', 'p*', 'p'], ['wL', 'p', 'p*'], relabel2={'wR': 'wRb'}
+                    res, other.get_W(i), ['wRb', 'p*', 'p'], ['wL', 'p', 'p*'], relabel2={'wR': 'wRb'}
                 )
         else:
             res = lasy.planar_contraction(
                 wA.hc, wB, ['p', 'p*'], ['p*', 'p'], relabel1={'wR*': 'wRa'}, relabel2={'wR': 'wRb'}
             )
+            for i in range(1, num_sites):
+                res = lasy.planar_contraction(res, self.get_W(i).hc, 'wRa', 'wL*', relabel2={'wR*': 'wRa'})
+                res = lasy.planar_contraction(
+                    res, other.get_W(i), ['wRb', 'p*', 'p'], ['wL', 'p', 'p*'], relabel2={'wR': 'wRb'}
+                )
         res = lasy.grid_project(res, ['wRa', 'wRb'], ['IdR', 'IdR'])
         return lasy.item(res)
 
@@ -1867,7 +1948,7 @@ class MPO(MPSGeometry):
         ov = self.overlap(other, understood_infinite=understood_infinite, num_sites=num_sites)
         s_norm = self.overlap(self, understood_infinite=understood_infinite, num_sites=num_sites)
         o_norm = other.overlap(other, understood_infinite=understood_infinite, num_sites=num_sites)
-        dist = s_norm - 2 * np.real(ov) + o_norm
+        dist = s_norm - 2 * ov.real() + o_norm
         if dist < -1e-14 * (s_norm + o_norm):
             raise RuntimeError('Negative distance encountered.')
         return abs(dist)
@@ -1899,47 +1980,132 @@ class MPO(MPSGeometry):
             raise KeyError(f'i = {i:d} out of bounds for finite MPO')
         return i
 
+    def has_IdL_IdR_labels(self) -> bool:
+        """Whether the virtual legs of `self` carry the summand labels ``'IdL'`` and ``'IdR'``.
+
+        This is the standard upper-block-triangular sum form (see :func:`partition_W`), as generated
+        e.g. by :class:`MPOGraph` / the models, which is required by various algorithms.
+        Every virtual bond needs to have both ``'IdL'`` and ``'IdR'`` as summand labels.
+        At the boundaries of a finite MPO (``bc == 'finite'``) only the respective existing one,
+        i.e. the left leg of the first tensor has the single summand ``'IdL'`` and the right leg of
+        the last tensor has the single summand ``'IdR'``. For other boundary conditions, all
+        virtual legs need both labels.
+
+        Returns
+        -------
+        bool
+            ``True`` if all virtual legs have these labels, ``False`` otherwise, e.g. for MPOs with
+            vanishing ``IdL`` or ``IdR`` columns or if the virtual legs have no summand labels.
+
+        """
+        for i, W in enumerate(self._W):
+            for leg_name, boundary_label in [
+                ('wL', 'IdL' if i == 0 else None),
+                ('wR', 'IdR' if i == self.L - 1 else None),
+            ]:
+                labels = getattr(W.get_leg(leg_name), 'summand_labels', None)
+                if labels is None:
+                    return False
+                if self.bc == 'finite' and boundary_label is not None:
+                    if labels != [boundary_label]:
+                        return False
+                elif 'IdL' not in labels or 'IdR' not in labels:
+                    return False
+        return True
+
     def __add__(self, other):
         """Return an MPO representing `self + other`.
 
-        Requires both `self` and `other` to be in standard sum form with `IdL` and `IdR` being set.
-
         This is a naive, block-wise addition without any compression!
+
+        If both `self` and `other` are in the standard upper-block-triangular sum form, i.e. if
+        :meth:`has_IdL_IdR_labels` is ``True`` and they actually have that structure (the
+        ``IdL-IdL`` and ``IdR-IdR`` cells are the identity, and there are no entries below the
+        diagonal blocks, see :func:`partition_W`), the ``IdL`` / ``IdR`` entries are shared:
+        The virtual bond dimension of the result is the sum of those of `self` and `other`, minus
+        the shared entries, and the result is again in this form and has the ``'IdL'`` and
+        ``'IdR'`` labels, such that it can be added again, used in :class:`MPOEnvironment`,
+        :meth:`make_U_I` etc. The labels of the other summands of the operands are *not* kept
+        (they become ``''``, i.e. unlabelled), since they could clash between the operands.
+        This also holds if one or both of them have no terms besides on-site terms on some bonds.
+        Note that e.g. a rescaled first tensor ``2 * W[0]`` breaks the structure.
+
+        Otherwise, we use the generic block-diagonal structure, i.e. the virtual bond dimension of
+        the result is the sum of those of `self` and `other`.
+        For finite bc, the outer virtual legs are trivial and the first / last tensor are
+        stacked horizontally / vertically instead::
+
+            |   W_left  =  [[W_self  W_other]]
+            |
+            |   W       =  [[W_self     0   ]
+            |               [  0     W_other]]
+            |
+            |   W_right =  [[W_self ]
+            |               [W_other]]
+
+        The result of this fallback for finite bc keeps only the outer ``'IdL'`` (left leg of the
+        first tensor) and ``'IdR'`` (right leg of the last tensor) summand labels, such that it can
+        be used e.g. in :class:`MPOEnvironment` and for :meth:`expectation_value`.
+        However, it is *not* in the standard form, i.e. :meth:`has_IdL_IdR_labels` is ``False`` and
+        e.g. :meth:`make_U_I` is not available for it (it needs the labels *and* the structure
+        described in :func:`partition_W`, and raises a ``ValueError`` otherwise).
+        For ``'infinite'`` bc, the result of the fallback has no summand labels at all.
+
+        Limitations (see also https://github.com/tenpy/tenpy/issues/676):
+
+        - Finite MPOs need ``L > 1`` (same restriction as :meth:`make_U_I`).
+        - ``'segment'`` boundary conditions are not supported.
 
         Parameters
         ----------
         other : :class:`MPO`
-            MPO to be added to `self`.
+            MPO to be added to `self`. Needs the same boundary conditions, length and
+            ``unit_cell_width``, as well as the same ``explicit_plus_hc`` flag as `self`.
 
         Returns
         -------
         sum_mpo : :class:`MPO`
             The sum `self + other`.
 
+        Raises
+        ------
+        ValueError
+            If the MPOs have different ``explicit_plus_hc``, ``bc``, ``L`` or ``unit_cell_width``,
+            if the ``is_dual`` flags of their virtual legs ``wL`` or ``wR`` do not match, or if
+            `self` is a finite MPO with ``L == 1``.
+        NotImplementedError
+            For ``'segment'`` bc.
+
         """
+        if not isinstance(other, MPO):
+            return NotImplemented
         if self.explicit_plus_hc != other.explicit_plus_hc:
             raise ValueError('Can not add MPOs with different explicit_plus_hc flags')
-
+        if self.bc != other.bc:
+            raise ValueError(f'Can not add MPOs with different bc: {self.bc!r} and {other.bc!r}')
+        if self.bc == 'segment':
+            raise NotImplementedError("Adding MPOs with 'segment' bc is not supported.")
+        if other.L != self.L:
+            raise ValueError(f'Can not add MPOs with different length L: {self.L} and {other.L}')
+        if self.unit_cell_width != other.unit_cell_width:
+            raise ValueError(
+                f'Can not add MPOs with different unit_cell_width: {self.unit_cell_width} and {other.unit_cell_width}'
+            )
         L = self.L
-        assert self.bc == other.bc
-        assert self.unit_cell_width == other.unit_cell_width
-        assert other.L == L
-
-        Ws = []
-        for i in range(L):
-            left = self.finite and i == 0
-            right = self.finite and i == L - 1
-            A1, B1, C1, D1, Id = partition_W(self._W[i], left_boundary=left, right_boundary=right)
-            A2, B2, C2, D2, _ = partition_W(other._W[i], left_boundary=left, right_boundary=right)
-            IdL = lasy.tensor_from_grid([[Id]], labels=['wL', 'p', 'wR', 'p*'], row_labels=['IdL'], col_labels=['IdL'])
-            IdR = lasy.tensor_from_grid([[Id]], labels=['wL', 'p', 'wR', 'p*'], row_labels=['IdR'], col_labels=['IdR'])
-            grid = [
-                [Id, C1, C2, D1 + D2],
-                [None, A1, None, B1],
-                [None, None, A2, B2],
-                [None, None, None, Id],
-            ]
-            Ws.append(lasy.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*']))
+        if self.finite and L < 2:
+            raise ValueError('Adding finite MPOs is only implemented for L > 1.')
+        for i, (W1, W2) in enumerate(zip(self._W, other._W)):
+            for leg_name in ['wL', 'wR']:
+                if W1.get_leg(leg_name).is_dual != W2.get_leg(leg_name).is_dual:
+                    raise ValueError(
+                        f'Can not add MPOs with mismatching duality of the virtual leg {leg_name!r} '
+                        f'of the tensor W[{i}]: is_dual={W1.get_leg(leg_name).is_dual} and '
+                        f'is_dual={W2.get_leg(leg_name).is_dual}.'
+                    )
+        if all(mpo.has_IdL_IdR_labels() and mpo._has_upper_triangular_structure() for mpo in [self, other]):
+            Ws = self._add_Ws_with_IdL_IdR(other)
+        else:
+            Ws = self._add_Ws_block_diagonal(other)
 
         if self.max_range is None or other.max_range is None:
             max_range = None
@@ -1949,25 +2115,128 @@ class MPO(MPSGeometry):
             self.sites,
             Ws,
             self.bc,
-            IdL,
-            IdR,
-            max_range,
-            self.explicit_plus_hc,
+            max_range=max_range,
+            explicit_plus_hc=self.explicit_plus_hc,
             mps_unit_cell_width=self.unit_cell_width,
-        )  # no graph
+        )
+
+    def _has_upper_triangular_structure(self) -> bool:
+        """Whether all tensors have the upper-block-triangular structure described in :func:`partition_W`.
+
+        Unlike :func:`partition_W`, this does not raise (and does not rely on ``assert``, which can
+        be disabled), but returns ``False`` if :meth:`has_IdL_IdR_labels` is ``False`` or if the
+        identity cells or the zero blocks are violated, e.g. for rescaled tensors.
+        """
+        if not self.has_IdL_IdR_labels():
+            return False
+        for i, W in enumerate(self._W):
+            left = self.bc == 'finite' and i == 0
+            right = self.bc == 'finite' and i == self.L - 1
+            if not _W_has_upper_triangular_structure(W, left_boundary=left, right_boundary=right):
+                return False
+        return True
+
+    def _add_Ws_with_IdL_IdR(self, other: MPO) -> list[lasy.Tensor]:
+        """Tensors for ``self + other``, assuming that both are in the standard form, see :meth:`__add__`.
+
+        The grid is built from cells with unlabelled legs (see :func:`_grid_cells`), such that equal
+        summand labels of `self` and `other` can not collide; only ``'IdL'`` and ``'IdR'`` are set
+        as labels of the rows / columns of the result.
+        """
+        labels = ['wL', 'p', 'wR', 'p*']
+        Ws = []
+        for W1, W2 in zip(self._W, other._W):
+            Id = _identity_cell(W1)
+            ops = []  # per operand: cells and the indices of the IdL, IdR and other summands
+            for W in (W1, W2):
+                lab_L, lab_R = W.get_leg('wL').summand_labels, W.get_leg('wR').summand_labels
+                ops.append(
+                    dict(
+                        cells=_grid_cells(W),
+                        L=[
+                            lab_L.index('IdL') if 'IdL' in lab_L else None,
+                            lab_L.index('IdR') if 'IdR' in lab_L else None,
+                        ],
+                        R=[
+                            lab_R.index('IdL') if 'IdL' in lab_R else None,
+                            lab_R.index('IdR') if 'IdR' in lab_R else None,
+                        ],
+                        others_L=[i for i, l in enumerate(lab_L) if l not in ['IdL', 'IdR']],
+                        others_R=[i for i, l in enumerate(lab_R) if l not in ['IdL', 'IdR']],
+                    )
+                )
+            # rows / columns: ('IdL',), then ('o', operand, index) for the others, then ('IdR',)
+            rows = [('IdL',)] + [('o', k, i) for k, op in enumerate(ops) for i in op['others_L']] + [('IdR',)]
+            cols = [('IdL',)] + [('o', k, i) for k, op in enumerate(ops) for i in op['others_R']] + [('IdR',)]
+
+            def cell(row, col):
+                if row[0] == 'o' and col[0] == 'o':
+                    if row[1] != col[1]:
+                        return None
+                    return ops[row[1]]['cells'][row[2]][col[2]]
+                if row[0] == 'o':  # other row, Id column: only IdR is nonzero
+                    return ops[row[1]]['cells'][row[2]][ops[row[1]]['R'][1]] if col[0] == 'IdR' else None
+                if col[0] == 'o':  # Id row, other column
+                    if row[0] != 'IdL':
+                        return None
+                    return ops[col[1]]['cells'][ops[col[1]]['L'][0]][col[2]]
+                if row[0] == col[0]:
+                    present = all(
+                        op['L'][row[0] == 'IdR'] is not None and op['R'][row[0] == 'IdR'] is not None for op in ops
+                    )
+                    return Id if present else None
+                if row[0] == 'IdL':  # IdL row, IdR column
+                    summands = [
+                        op['cells'][op['L'][0]][op['R'][1]]
+                        for op in ops
+                        if op['L'][0] is not None and op['R'][1] is not None
+                    ]
+                    return sum(summands[1:], summands[0]) if summands else None
+                return None  # IdR row, IdL column
+
+            full_grid = [[cell(r, c) for c in cols] for r in rows]
+            # Rows / columns without any entry (no summands besides IdL, IdR or at a boundary) are dropped.
+            keep_rows = [r for r, row in enumerate(full_grid) if any(c is not None for c in row)]
+            keep_cols = [c for c in range(len(cols)) if any(row[c] is not None for row in full_grid)]
+            grid = [[full_grid[r][c] for c in keep_cols] for r in keep_rows]
+            row_labels = [rows[r][0] if rows[r][0] != 'o' else '' for r in keep_rows]  # '' = no label
+            col_labels = [cols[c][0] if cols[c][0] != 'o' else '' for c in keep_cols]
+            Ws.append(lasy.tensor_from_grid(grid, labels=labels, row_labels=row_labels, col_labels=col_labels))
+        return Ws
+
+    def _add_Ws_block_diagonal(self, other: MPO) -> list[lasy.Tensor]:
+        """Tensors for ``self + other`` with the generic block-diagonal structure, see :meth:`__add__`."""
+        L = self.L
+        Ws = []
+        labels = ['wL', 'p', 'wR', 'p*']
+        for i in range(L):
+            cells1, cells2 = _grid_cells(self._W[i]), _grid_cells(other._W[i])
+            if self.finite and i == 0:
+                grid = [cells1[0] + cells2[0]]
+                W = lasy.tensor_from_grid(grid, labels=labels, row_labels=['IdL'])
+            elif self.finite and i == L - 1:
+                grid = [[row[0]] for row in cells1] + [[row[0]] for row in cells2]
+                W = lasy.tensor_from_grid(grid, labels=labels, col_labels=['IdR'])
+            else:
+                grid = [row + [None] * len(cells2[0]) for row in cells1]
+                grid += [[None] * len(cells1[0]) + row for row in cells2]
+                W = lasy.tensor_from_grid(grid, labels=labels)
+            Ws.append(W)
+        return Ws
 
 
-def _ensure_identity_op(site):
-    """Make sure `site` has an 'Id' onsite operator.
+def _grid_cells(W: lasy.Tensor) -> list[list[lasy.Tensor]]:
+    """Split `W` along the virtual legs ``wL, wR`` into a grid of cells with unlabelled legs.
 
-    Unlike the old `tenpy.networks.site.Site`, :class:`lasyten.models.degrees_of_freedom.Site`
-    does not come with a predefined identity operator, but :class:`MPOGraph` relies on 'Id'
-    being valid on every site
+    Without the summand labels (which can be duplicate between different MPOs), the cells of
+    different `W` can be stacked together again with :func:`lasyten.tensor_from_grid`.
+    A leg without summand labels (not a direct sum) is considered a single summand.
     """
-    if site.valid_opname('Id'):
-        return
-    op = SymmetricTensor.from_eye([site.leg], backend=site.backend, labels=['p', 'p*'], device=site.default_device)
-    site.add_onsite_operator('Id', op)
+    num_rows = len(getattr(W.get_leg('wL'), 'summand_labels', [None]))
+    num_cols = len(getattr(W.get_leg('wR'), 'summand_labels', [None]))
+    if num_rows == 1 and num_cols == 1 and not hasattr(W.get_leg('wL'), 'summand_labels'):
+        return [[W]]
+    return [[lasy.tensor_grid_cell(W, r, c, 'wL', 'wR') for c in range(num_cols)] for r in range(num_rows)]
 
 
 class MPOGraph(MPSGeometry):
@@ -1975,21 +2244,36 @@ class MPOGraph(MPSGeometry):
 
     This representation is used for building H_MPO from the interactions.
     The idea is to view the MPO as a kind of 'finite state machine'.
-    The **states** or **keys** of this finite state machine life on the MPO bonds *between* the
-    `Ws`. They label the indices of the virtual bonds of the MPOs, i.e., the indices on legs
-    ``wL`` and ``wR``. They can be anything hash-able like a ``str``, ``int`` or a tuple of them.
+    The **states** or **keys** of this finite state machine live on the MPO bonds *between* the
+    `Ws`. They correspond to single sectors in the :attr:`~lasyten.ElementarySpace.sector_decomposition`
+    of the MPO virtual legs. The keys can be anything hash-able like a ``str``, ``int`` or a tuple of them.
 
-    The **edges** of the graph are the entries ``W[keyL, keyR]``, which itself are onsite operators
-    on the local Hilbert space. The indices `keyL` and `keyR` correspond to the legs ``'wL', 'wR'``
-    of the MPO. The entry ``W[keyL, keyR]`` connects the state ``keyL`` on bond ``(i-1, i)``
-    with the state ``keyR`` on bond ``(i, i+1)``.
+    The **edges** of the graph are the elementary cells in the grid of the ``W`` tensors, i.e.
+    they are 4-leg tensors where the virtual legs are single-sector.
+    The cell ``lasyten.tensor_grid_cell(W, keyL, keyR, 'wL', 'wR')`` connects the state
+    ``keyL`` on bond ``(i-1, i)`` with the state ``keyR`` on bond ``(i, i+1)``.
+    TODO: the above is currently not correct; the keyL, keyR need to be mapped by ``str`` currently...
 
     The keys ``'IdR'`` (for 'identity left') and ``'IdR'`` (for 'identity right') are reserved to
     represent only ``'Id'`` (=identity) operators to the left and right of the bond, respectively.
+    The graph is initialized to have an ``'IdL'`` state on all sites except a finite right boundary,
+    and ``'IdR'`` state on all sites except a finite left boundary.
 
-    .. todo ::
-        might be useful to add a "cleanup" function which removes operators cancelling each other
-        and/or unused states. Or better use a 'compress' of the MPO?
+    This means the initial graph for finite systems has the structure::
+
+        |           0               1             ...            L
+        |
+        |   IdL  ---Id-->  IdL  ---Id-->  IdL  ---Id-->  IdL
+        |
+        |                  IdR  ---Id-->  IdR  ---Id-->  IdR  ---Id-->  IdR
+
+    And for infinite::
+
+        |           0               1             ...            L
+        |
+        |   IdL  ---Id-->  IdL  ---Id-->  IdL  ---Id-->  IdL  ---Id-->  IdL
+        |
+        |   IdR  ---Id-->  IdR  ---Id-->  IdR  ---Id-->  IdR  ---Id-->  IdR
 
     Parameters
     ----------
@@ -2006,57 +2290,72 @@ class MPOGraph(MPSGeometry):
     ----------
     max_range : int | np.inf | None
         Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
-    states : list of set of keys
-        ``states[i]`` gives the possible keys at the virtual bond ``(i-1, i)`` of the MPO.
-        `L+1` entries.
-    graph : list of dict of dict of list of tuples
-        For each site `i` a dictionary ``{keyL: {keyR: [(opname, strength)]}}`` with
+        if built using :class:`from_terms`, this is updated with the range of these terms.
+    states : list of dict of :class:`~lasyten.ElementarySpace`
+        ``states[i]`` lives on the bond between sites ``(i-1, i)`` of the MPO.
+        It is a dict with arbitrary hashable labels as keys, and the single-sector virtual leg
+        as entries.
+    graph : list of dict of dict of tuple
+        For each site `i` a dictionary ``{keyL: {keyR: [(W_block, strength)]}}`` with
         ``keyL in states[i]`` and ``keyR in states[i+1]``.
-    _grid_legs : None | list of LegCharge
-        The charges for the MPO
+        Here, ``W_block`` is a 4-leg tensor with legs ``wL, p, wR, p*`` normalized to
+        ``lasy.norm(W_block) == 1``.
 
     """
 
     _valid_bc = ['finite', 'infinite']  # TODO:need to adapt
+    _norm_tol = 1e-14
 
-    def __init__(self, sites, bc='finite', max_range=None, unit_cell_width=None):
+    def __init__(
+        self,
+        sites: list[lasy.Site],
+        bc: Literal['finite', 'infinite'] = 'finite',
+        max_range: int | float | None = None,
+        unit_cell_width: int | None = None,
+    ):
         super().__init__(sites=sites, bc=bc, unit_cell_width=unit_cell_width)
         self.max_range = max_range
-        # empty graph
-        self.states = [set() for _ in range(self.L + 1)]
-        self.graph = [{} for _ in range(self.L)]
-        self._ordered_states = None
-        # lasyten-native graph for lasyten Couplings: entries are actual SymmetricTensor blocks
-        # (not opname strings), see :meth:`add_coupling_as_term`/:meth:`build_coupling`.
-        # ``_coupling_graph[i] == {keyL: {keyR: SymmetricTensor}}``
-        self._coupling_graph = [dict() for _ in range(self.L)]
-        # ``_coupling_states[bond] == {key: ElementarySpace}``, the space associated to each state
-        self._coupling_states = [dict() for _ in range(self.L + 1)]
-        # rightmost bond where 'IdL' is actually used / leftmost bond where 'IdR' is actually used,
-        # updated by :meth:`add_coupling_as_term`; used by :meth:`add_missing_IdL_IdR_for_couplings`
-        self._coupling_idL_reach = 0
-        self._coupling_idR_reach = self.L
+        # build IdL / IdR states as needed
+        w_triv = lasy.ElementarySpace.from_trivial_sector(symmetry=self.symmetry)
+        states_bulk = dict(IdL=w_triv, IdR=w_triv)
+        if self.finite:
+            states_0 = dict(IdL=w_triv)
+            states_L = dict(IdR=w_triv)
+        else:
+            states_0 = states_bulk.copy()
+            states_L = states_bulk.copy()
+        self.states: list[dict[Any, lasy.ElementarySpace]] = [
+            states_0,
+            *(states_bulk.copy() for _ in range(1, self.L)),
+            states_L,
+        ]
+        self.graph: list[dict[str, dict[str, tuple[lasy.Tensor, float | complex]]]] = [{} for _ in range(self.L)]
+        for i in range(self.L):
+            # Note: over/under does not matter for trivial w leg
+            if not self.finite or i < self.L - 1:
+                self.add_identity(i, 'IdL', 'IdL', overbraid=True)
+            if not self.finite or i > 0:
+                self.add_identity(i, 'IdR', 'IdR', overbraid=True)
         self.test_sanity()
 
     @classmethod
-    def from_terms(cls, terms, sites, bc, insert_all_id=True, unit_cell_width=None):
+    def from_terms(
+        cls,
+        terms: Sequence[Terms],
+        model: CouplingModel,
+        bc: Literal['finite', 'infinite'],
+        unit_cell_width: int | None = None,
+    ):
         """Initialize an :class:`MPOGraph` from OnsiteTerms and CouplingTerms.
 
         Parameters
         ----------
-        terms : iterable of ``tenpy.networks.terms.*Terms`` classes
-            Entries can be :class:`~tenpy.networks.terms.OnsiteTerms`,
-            :class:`~tenpy.networks.terms.CouplingTerms`,
-            :class:`~tenpy.networks.terms.MultiCouplingTerms` or
-            :class:`~tenpy.networks.terms.ExponentialCouplingTerms`.
+        terms : iterable of :class:`~tenpy.networks.terms.Terms`
             All the entries get added to the new :class:`MPOGraph`.
-        sites : list of :class:`~tenpy.networks.site.Site`
-            Local sites of the Hilbert space.
+        model : :class:`~tenpy.models.model.CouplingModel`
+            The model, used to e.g. translate coupling names in the `terms` to concrete tensors.
         bc : ``'finite' | 'infinite'``
             MPO boundary conditions.
-        insert_all_id : bool
-            Whether to insert identities such that `IdL` and `IdR` are defined on each bond.
-            See :meth:`add_missing_IdL_IdR`.
         unit_cell_width : int
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
@@ -2071,28 +2370,33 @@ class MPOGraph(MPSGeometry):
             equivalent for representation by :class:`~tenpy.networks.terms.TermList`.
 
         """
+        sites = model.lattice.mps_sites()
         graph = cls(sites, bc, 0, unit_cell_width=unit_cell_width)
         for term in terms:
-            term.add_to_graph(graph)
-            # add_to_graph increases `max_range` as necessary
-        graph.add_missing_IdL_IdR(insert_all_id)
+            term.add_to_graph(graph, model)  # add_to_graph increases `max_range` as necessary
+        if not any(graph.graph):
+            # ensure an empty graph has at least one IdL -> IdR connection
+            graph.add_identity(0, 'IdL', 'IdR', overbraid=True, strength=0)
         return graph
 
     @classmethod
-    def from_term_list(cls, term_list, sites, bc, insert_all_id=True, unit_cell_width=None):
+    def from_term_list(
+        cls,
+        term_list: TermList,
+        sites: list[lasy.Site],
+        bc: Literal['finite', 'infinite'],
+        unit_cell_width: int | None = None,
+    ):
         """Initialize from a list of operator terms and prefactors.
 
         Parameters
         ----------
         term_list : :class:`~tenpy.networks.mps.TermList`
             Terms to be added to the MPOGraph.
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`lasyten.Site`
             Local sites of the Hilbert space.
         bc : ``'finite' | 'infinite'``
             MPO boundary conditions.
-        insert_all_id : bool
-            Whether to insert identities such that `IdL` and `IdR` are defined on each bond.
-            See :meth:`add_missing_IdL_IdR`.
         unit_cell_width : int
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
@@ -2107,496 +2411,267 @@ class MPOGraph(MPSGeometry):
 
         """
         ot_ct = term_list.to_OnsiteTerms_CouplingTerms(sites)
-        return cls.from_terms(ot_ct, sites, bc, insert_all_id, unit_cell_width=unit_cell_width)
-
-    @classmethod
-    def from_couplings(
-        cls,
-        couplings,
-        sites,
-        bc='finite',
-        positions=None,
-        strengths=None,
-        splits=None,
-        insert_all_id=True,
-        unit_cell_width=None,
-    ):
-        """Initialize an :class:`MPOGraph` from lasyten Couplings using hashing.
-
-        This method creates an MPOGraph where the graph keys are tuples containing
-        the coupling hashes. The coupling hash uniquely identifies the coupling's data.
-        Use :meth:`build_coupling` (not :meth:`build_MPO`, which only ever produces an old
-        ``np_conserved``-based :class:`MPO`) to convert the resulting graph back into a single
-        lasyten Coupling.
-
-        Parameters
-        ----------
-        couplings : list of lasyten.models.couplings.Coupling
-            List of Couplings to build the graph from.
-        sites : list of :class:`~tenpy.models.lattice.Site`
-            Local sites of the Hilbert space.
-        bc : ``'finite' | 'infinite'``
-            MPO boundary conditions.
-        positions : None | list of (list of int)
-            For each entry of `couplings`, the MPS site index of every entry of its
-            :attr:`~lasyten.models.couplings.Coupling.factorization`; see
-            :meth:`add_coupling_as_term`. ``None`` defaults to every coupling starting at the
-            left edge of the graph.
-        strengths : None | list of float/complex
-            Overall prefactor for each entry of `couplings`. ``None`` defaults to ``1.`` for all.
-        splits : None | list of int
-            For each entry of `couplings`, the local index into its `factorization` whose tensor
-            gets scaled by the corresponding `strengths` entry; see :meth:`add_coupling_as_term`.
-            ``None`` defaults to the last tensor of each coupling.
-        insert_all_id : bool
-            Whether to insert the ``'IdL'``/``'IdR'`` identity edges via
-            :meth:`add_missing_IdL_IdR_for_couplings`.
-        unit_cell_width : int
-            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
-
-        Returns
-        -------
-        graph : :class:`MPOGraph`
-            Initialized with the given couplings.
-
-        """
-        if positions is None:
-            positions = [None] * len(couplings)
-        if strengths is None:
-            strengths = [1.0] * len(couplings)
-        if splits is None:
-            splits = [None] * len(couplings)
-        if not (len(couplings) == len(positions) == len(strengths) == len(splits)):
-            raise ValueError('`couplings`, `positions`, `strengths` and `splits` must have equal length')
-
-        graph = cls(sites, bc, 0, unit_cell_width=unit_cell_width)
-
-        for coupling, coupling_positions, strength, split in zip(couplings, positions, strengths, splits):
-            if not isinstance(coupling, Coupling):
-                raise TypeError(f'Expected Coupling, got {type(coupling)}')
-            graph.add_coupling_as_term(coupling, positions=coupling_positions, strength=strength, split=split)
-
-        if insert_all_id:
-            graph.add_missing_IdL_IdR_for_couplings()
-
-        return graph
+        return cls.from_terms(ot_ct, sites=sites, bc=bc, unit_cell_width=unit_cell_width)
 
     def test_sanity(self):
-        """Sanity check, raises ValueErrors, if something is wrong."""
+        """Sanity check, raises ValueErrors, if something is wrong.
+
+        Checks
+        - appropriate lengths
+        - IdL and IdR states exist and have trivial sector
+        - states have non-dual, single-sector legs with the correct symmetry
+        - edges are compatible, i.e. the keys exist in states, the labels and legs are as expected
+        - tensors are normalized
+        - IdL->IdL and IdR->IdR edges exist and have the expected identity tensor
+        - No other X->IdL or IdR->Y edges exist
+        """
         super().test_sanity()
         assert len(self.graph) == self.L
         assert len(self.states) == self.L + 1
+        infinite = not self.finite
+
+        # check states
+        for i, st in enumerate(self.states):
+            if infinite or i < self.L - 1:
+                assert st['IdL'].is_trivial
+            if infinite or i > 0:
+                assert st['IdR'].is_trivial
+            for w in st.values():
+                assert not w.is_dual
+                assert w.total_multiplicity == 1
+                assert w.symmetry == self.symmetry
+
+        # check edges
         for i, site in enumerate(self.sites):
             stL, stR = self.states[i : i + 2]
             # check graph
+            assert self.has_edge(i, 'IdL', 'IdL') or (self.finite and i == self.L - 1)
+            assert self.has_edge(i, 'IdR', 'IdR') or (self.finite and i == 0)
             gr = self.graph[i]
-            for keyL in gr:
+            for keyL, gr_L in gr.items():
                 assert keyL in stL
-                for keyR in gr[keyL]:
+                for keyR, (op, strength) in gr_L.items():
                     assert keyR in stR
-                    for opname, strength in gr[keyL][keyR]:
-                        assert site.valid_opname(opname)
-        # done
 
-    def add(self, i, keyL, keyR, opname, strength, check_op=True, skip_existing=False):
-        """Insert an edge into the graph.
+                    op.test_sanity()
+                    assert op.codomain_labels == ['wL', 'p']
+                    assert op.domain_labels == ['p*', 'wR']
+                    assert op.get_leg_co_domain('p') == site.leg
+                    assert op.get_leg_co_domain('p*') == site.leg
+                    assert op.get_leg_co_domain('wL') == stL[keyL]
+                    assert op.get_leg_co_domain('wR') == stR[keyR]
+                    norm = lasy.norm(op) / lasy.sqrt(site.dim)
+                    assert abs(1 - norm) < self._norm_tol
+
+                    assert np.ndim(strength) == 0
+
+                    if keyL == keyR == 'IdL' or keyL == keyR == 'IdR':
+                        # over/under does not matter since virt leg is trivial
+                        assert lasy.almost_equal(strength * op, site.identity_tensor(stL[keyL], overbraid=True))
+                    if keyL != keyR == 'IdL':
+                        raise ValueError('Only IdL may connect to IdL from the left')
+                    if 'IdR' == keyL != keyR:
+                        raise ValueError('IdR may only connect to IdR to the right')
+        return
+
+    def get_unused_key(self, prefix: str, sep: str = '_', n_min: int = 0, n_max: int = 1000):
+        """Generate a key from a prefix and running counter that is not used in any :attr:`states`."""
+        for n in range(n_min, n_max):
+            key = prefix + sep + str(n)
+            if all(key not in s for s in self.states):
+                return key
+        raise ValueError('All keys already taken')
+
+    def add(
+        self,
+        i: int,
+        keyL: Hashable,
+        keyR: Hashable,
+        op: lasy.Tensor,
+        strength: float | complex = 1,
+        exist_ok: bool = False,
+    ):
+        """Insert an edge into the graph, or add to an existing edge.
 
         Parameters
         ----------
         i : int
             Site index at which the edge of the graph is to be inserted.
         keyL : hashable
-            The state at bond (i-1, i) to connect from.
+            The state at bond (i-1, i) to connect from. If it does not exist yet, it is added.
         keyR : hashable
-            The state at bond (i, i+1) to connect to.
-        opname : str
-            Name of the operator.
-        strength : str
+            The state at bond (i, i+1) to connect to. If it does not exist yet, it is added.
+        op : Tensor
+            The 4-leg tensor for the edge, with labels ``wL, p; wR, p*``.
+            Virtual legs must be single-sector.
+        strength : float | complex
             Prefactor of the operator to be inserted.
-        check_op : bool
-            Whether to check that 'opname' exists on the given `site`.
-        skip_existing : bool
-            If ``True``, skip adding the graph node if it exists (with same keys and `opname`).
+        normalize: bool
+            If `op` should be explicitly normalized, absorbing the factor into `strength`.
+            If not, it is assumed to be normalized without checking.
+        exist_ok: bool
+            If ``False`` (default), an exisiting edge at that position causes a ``ValueError``.
+            If ``True``, an existing edge is modified inplace, by adding the new opertor.
 
+        """
+        assert isinstance(op, lasy.Tensor)
+        assert op.codomain_labels == ['wL', 'p']
+        assert op.domain_labels == ['p*', 'wR']
+
+        if self.finite and not (-self.L <= i < self.L):
+            raise ValueError('Index out of range for finite system')
+        i = i % self.L
+        G = self.graph[i]
+
+        # check if edge already exists ->
+        G_L = G.setdefault(keyL, {})
+        G_L_R = G_L.get(keyR, None)
+        if G_L_R is not None:
+            if not exist_ok:
+                raise ValueError(f'Edge already exists: {keyL} -> {keyR} on site {i}')
+            op_existing, strength_existing = G_L_R
+            op = strength * op + strength_existing * op_existing
+            strength = 1
+
+        # normalize
+        N = lasy.norm(op) / lasy.sqrt(op.get_leg('p').dim)
+        op = op / N
+        strength = strength * N
+
+        # for the keys: add if new state, check compatible if old
+        if keyL in self.states[i]:
+            assert self.states[i][keyL] == op.get_leg_co_domain('wL')
+        else:
+            self.states[i][keyL] = op.get_leg_co_domain('wL')
+        if keyR in self.states[i + 1]:
+            assert self.states[i + 1][keyR] == op.get_leg_co_domain('wR')
+        else:
+            self.states[i + 1][keyR] = op.get_leg_co_domain('wR')
+
+        G_L[keyR] = (op, strength)
+        return
+
+    def add_onsite(
+        self,
+        i: int,
+        keyL: Hashable,
+        keyR: Hashable,
+        opname: str,
+        strength: float | complex,
+        overbraid: bool,
+        exist_ok: bool = False,
+    ):
+        """Insert an edge with an onsite operator into the graph.
+
+        Wrapper around :meth:`add` using the :meth:`lasyten.Site.get_onsite_W_block`.
+        Requires that at least one of the states `keyL` or `keyR` already exists, to infer
+        the virtual leg.
+
+        The virtual leg passes over the onsite tensor if ``overbraid``.
         """
         i = i % self.L
-        if check_op:
-            if not self.sites[i].valid_opname(opname):
-                raise ValueError(f'operator {opname!r} not existent on site {i:d}')
-        G = self.graph[i]
-        if keyL not in self.states[i]:
-            self.states[i].add(keyL)
-        if keyR not in self.states[i + 1]:
-            self.states[i + 1].add(keyR)
-        D = G.setdefault(keyL, {})
-        if keyR not in D:
-            D[keyR] = [(opname, strength)]
+        if not self.finite and i == 0 and keyL in self.states[self.L]:
+            w = self.states[self.L][keyL]
+            if keyL in self.states[i] and self.states[i][keyL] != w:
+                raise ValueError('Incompatible virtual legs across the MPO unit-cell boundary')
+            self.states[i][keyL] = w
+        if not self.finite and i == self.L - 1 and keyR in self.states[0]:
+            w = self.states[0][keyR]
+            if keyR in self.states[self.L] and self.states[self.L][keyR] != w:
+                raise ValueError('Incompatible virtual legs across the MPO unit-cell boundary')
+            self.states[self.L][keyR] = w
+        if keyL in self.states[i] and keyR in self.states[i + 1]:
+            w = self.states[i][keyL]
+            if not w == self.states[i + 1][keyR]:
+                raise ValueError('Incompatible virtual legs')
+        elif keyL in self.states[i]:
+            w = self.states[i][keyL]
+            self.states[i + 1][keyR] = w
+        elif keyR in self.states[i + 1]:
+            w = self.states[i + 1][keyR]
+            self.states[i][keyL] = w
         else:
-            entry = D[keyR]
-            if not skip_existing or not any([op == opname for op, _ in entry]):
-                entry.append((opname, strength))
+            raise ValueError('At least one of the states must exist, otherwise can not infer the virtual leg.')
+        op = self.sites[i].get_onsite_W_block(opname, w, overbraid=overbraid)
+        self.add(i, keyL, keyR, op, strength, exist_ok=exist_ok)
 
-    def _add_coupling_state(self, bond, key, space):
-        """Register a state `key` on the given `bond` (0..L) with its `ElementarySpace`.
+    def add_identity(self, i: int, keyL: Hashable, keyR: Hashable, overbraid: bool, exist_ok: bool = False, strength=1):
+        """Insert an edge with the identity onsite operator crossing over/under the virtual leg."""
+        self.add_onsite(i, keyL, keyR, opname='Id', strength=strength, overbraid=overbraid, exist_ok=exist_ok)
 
-        Raises if `key` was already registered on this bond with a *different* space.
+    def add_elementary_two_site_coupling(self, i: int, j: int, coupling: lasy.Coupling, strength, label: str):
+        """Add an elementary two-site coupling on ordered sites ``i < j``.
+
+        These properties are not checked!
         """
-        states = self._coupling_states[bond]
-        existing = states.get(key)
-        if existing is None:
-            states[key] = space
-        elif existing != space:
-            raise ValueError(f'Conflicting virtual spaces for state {key!r} on bond {bond:d}')
-
-    def _add_coupling_edge(self, i, keyL, keyR, tensor):
-        """Insert (or add to) a single edge of :attr:`_coupling_graph` at site `i`."""
-        row = self._coupling_graph[i].setdefault(keyL, {})
-        if keyR in row:
-            row[keyR] = row[keyR] + tensor
+        if self.symmetry.has_symmetric_braid:
+            overbraid = True  # it doesnt matter
         else:
-            row[keyR] = tensor
+            raise NotImplementedError  # TODO how do we specify??
 
-    def _add_coupling_self_loop(self, i, key):
-        """Register a trivial ``key -> key`` identity self-loop edge at site `i`.
-
-        Used by :meth:`add_missing_IdL_IdR_for_couplings` to extend the IdL/IdR
-        states with an identity, if not already present.
-        """
-        site = self.sites[i]
-        trivial = ElementarySpace.from_trivial_sector(1, symmetry=site.symmetry)
-        self._add_coupling_state(i, key, trivial)
-        self._add_coupling_state(i + 1, key, trivial)
-        if key not in self._coupling_graph[i].get(key, {}):
-            self._add_coupling_edge(i, key, key, site.identity_tensor(trivial))
-
-    def add_coupling_as_term(self, coupling, positions=None, strength=1.0, split=None):
-        """Add a lasyten Coupling to the graph as a single term.
-
-        Unlike :meth:`add`, which stores ``(opname, strength)`` pairs referencing named onsite
-        operators, this inserts the entries of :attr:`~lasyten.models.couplings.Coupling.factorization`
-        directly as :class:`~lasyten.tensors.SymmetricTensor` blocks into :attr:`_coupling_graph`.
-        Since each factorization tensor already has correctly-sectored ``'wL'``/``'wR'`` legs
-        (from however the `coupling` itself was constructed), no manual charge/leg-charge
-        bookkeeping is needed here -- :meth:`build_coupling` later reassembles everything
-        via :func:`~lasyten.tensors.tensor_from_grid`, which handles the sector bookkeeping.
-
-        Parameters
-        ----------
-        coupling : lasyten.models.couplings.Coupling
-            The coupling to add to the graph.
-        positions : None | list of int
-            The MPS site index for every entry of :attr:`~lasyten.models.couplings.Coupling.factorization`,
-            strictly ascending. Gaps between consecutive positions are bridged with identity
-            tensors (:meth:`~lasyten.models.couplings.Coupling.stretch_with_identities`), allowing
-            the coupling to act on non-contiguous MPS sites. ``None`` defaults to
-            ``range(len(coupling.factorization))``, i.e. the coupling starts at the left edge of
-            the graph.
-        strength : float
-            Overall prefactor for the coupling. Multiplied into the tensor at `split` only.
-        split : None | int
-            Local index into :attr:`~lasyten.models.couplings.Coupling.factorization` whose tensor
-            gets scaled by `strength`. ``None`` defaults to the last tensor.
-
-        See Also
-        --------
-        tenpy.networks.terms.to_single_coupling : builds a single Coupling out of several of these.
-
-        """
-        if not isinstance(coupling, Coupling):
-            raise TypeError(f'Expected Coupling, got {type(coupling)}')
-
-        factorization = coupling.factorization
-        num_tensors = len(factorization)
-
-        if positions is None:
-            positions = list(range(num_tensors))
-        if len(positions) != num_tensors:
-            raise ValueError(f'need {num_tensors:d} positions (one per factorization tensor), got {len(positions):d}')
-        if any(p2 <= p1 for p1, p2 in zip(positions, positions[1:])):
-            raise ValueError('`positions` must be strictly ascending')
-        if split is None:
-            split = num_tensors - 1
-        if not 0 <= split < num_tensors:
-            raise ValueError(f'`split` must be in [0, {num_tensors:d}), got {split:d}')
-
-        self._coupling_idL_reach = max(self._coupling_idL_reach, positions[0])
-        self._coupling_idR_reach = min(self._coupling_idR_reach, positions[-1] + 1)
-
-        # Intermediate states are identified by the coupling object itself combined with
-        # its specific positions. Since Couplings can be hashed and compared directly
-        # (see Coupling.hash/eq), this ensures that placements of the exact same coupling
-        # with different spacings never share an intermediate state. For example, using
-        # the same hopping() Coupling for both nearest-neighbor and longer-range bonds
-        # won't mix up each other's MPO paths.
-        pos_key = tuple(positions)
-
-        # gaps between positions are bridged with identity tensors, one stretched tensor per MPS
-        # site from positions[0] to positions[-1], the split index is expressed in original
-        # (un-stretched) factors, so it must be remapped to the stretched version.
-        wrapped_sites = [self.sites[k % self.L] for k in range(positions[0], positions[-1] + 1)]
-        local_positions = [p - positions[0] for p in positions]
-        stretched = coupling.stretch_with_identities(wrapped_sites, local_positions)
-        split_offset = positions[split] - positions[0]
-
-        keyL = 'IdL'
-        last_idx = len(stretched.factorization) - 1
-        for local_idx, tensor in enumerate(stretched.factorization):
-            is_last = local_idx == last_idx
-            if local_idx == split_offset and strength != 1.0:
-                tensor = strength * tensor
-
-            site_idx = positions[0] + local_idx
-            wL_space = tensor.get_leg_co_domain('wL')
-            wR_space = tensor.get_leg_co_domain('wR')
-            keyR = 'IdR' if is_last else (coupling, pos_key, local_idx)
-
-            self._add_coupling_state(site_idx, keyL, wL_space)
-            self._add_coupling_state(site_idx + 1, keyR, wR_space)
-            self._add_coupling_edge(site_idx % self.L, keyL, keyR, tensor)
-
-            keyL = keyR
-
-    def add_coupling_string_left_to_right(
-        self, coupling, start_key, i, j, opname='Id', check_op=True, skip_existing=True
-    ):
-        """Add a string of identity operators for a coupling, starting from an existing key.
-
-        This is similar to add_string_left_to_right but works with coupling hash keys.
-
-        Parameters
-        ----------
-        coupling : lasyten.models.couplings.Coupling
-            The coupling to add the string for.
-        start_key : tuple
-            The key at bond (i+1, i) to connect from.
-        i, j : int
-            An edge is inserted on all sites between `i` and `j`, `i < j`.
-            j can be larger than :attr:`L`, in which case the operators are
-            supposed to act on different MPS unit cells.
-        opname : str
-            Name of the operator to be used for the string.
-        check_op : bool
-            Whether to check that 'opname' exists on the given site.
-        skip_existing : bool
-            Whether existing graph nodes should be skipped.
-
-        Returns
-        -------
-        key_i : tuple
-            The key on the right of site i we connected to.
-
-        """
-        if not isinstance(coupling, Coupling):
-            raise TypeError(f'Expected Coupling, got {type(coupling)}')
-
-        coupling_hash = coupling  # Coupling is directly hashable
-        hash_key = ('coupling', coupling_hash)
-
-        if j <= i:
-            raise ValueError('j <= i not allowed')
-
-        keyL = keyR = start_key
+        WL, WR = coupling.factorization
+        self.add(i, 'IdL', label, WL)
+        key = label
         for k in range(i + 1, j):
-            if (k - i) % self.L == 0:
-                keyR = keyL + (k, hash_key, opname)
-            k = k % self.L
-            if not self.has_edge(k, keyL, keyR):
-                self.add(k, keyL, keyR, opname, 1.0, check_op=check_op, skip_existing=skip_existing)
-            keyL = keyR
-        return keyL
+            if not self.finite and k % self.L == 0:
+                next_key = f'{label}#{k // self.L}'
+            else:
+                next_key = key
+            self.add_identity(k, key, next_key, overbraid=overbraid)
+            key = next_key
+        self.add(j, key, 'IdR', WR, strength)
 
-    def add_coupling_string_right_to_left(
-        self, coupling, start_key, j, i, opname='Id', check_op=True, skip_existing=True
-    ):
-        """Add a string of identity operators for a coupling, starting from an existing key.
+    def add_elementary_multi_coupling(self, ijkl: Sequence[int], coupling: lasy.Coupling, strength, label: str):
+        """Add an elementary multi-site coupling on ordered sites (``ijkl`` strictly ascending).
 
-        Similar to add_string_right_to_left but works with coupling hash keys.
-
-        Parameters
-        ----------
-        coupling : lasyten.models.couplings.Coupling
-            The coupling to add the string for.
-        start_key : tuple
-            The key at bond (j-1, j) to connect from.
-        j, i : int
-            An edge is inserted on all sites between `i` and `j`, `i < j`.
-            Note the switched argument order compared to add_coupling_string_left_to_right.
-        opname : str
-            Name of the operator to be used for the string.
-        check_op : bool
-            Whether to check that 'opname' exists on the given site.
-        skip_existing : bool
-            Whether existing graph nodes should be skipped.
-
-        Returns
-        -------
-        key_i : tuple
-            The key on the left of site i we connected to.
-
+        These properties are not checked!
         """
-        if not isinstance(coupling, Coupling):
-            raise TypeError(f'Expected Coupling, got {type(coupling)}')
-
-        coupling_hash = coupling  # Coupling is directly hashable
-        hash_key = ('coupling', coupling_hash)
-
-        if j <= i:
-            raise ValueError('j <= i not allowed')
-
-        keyL = keyR = start_key
-        for k in range(j - 1, i, -1):
-            if (j - k) % self.L == 0:
-                keyL = keyR + (k, hash_key, opname)
-            k = k % self.L
-            if not self.has_edge(k, keyL, keyR):
-                self.add(k, keyL, keyR, opname, 1.0, check_op=check_op, skip_existing=skip_existing)
-            keyR = keyL
-        return keyR
-
-    def add_missing_IdL_IdR_for_couplings(self):
-        """Add the ``'IdL'``/``'IdR'`` identity pass-through edges to the lasyten-native graph.
-
-        This is the counterpart of :meth:`add_missing_IdL_IdR` for the tensor-valued
-        :attr:`_coupling_graph` populated by :meth:`add_coupling_as_term`: it inserts an
-        ``'IdL'->'IdL'`` identity edge (:meth:`~lasyten.models.degrees_of_freedom.Site.identity_tensor` with a
-        trivial, dimension-1 bond space) on every site up to (not including) the rightmost bond
-        where some coupling actually starts, and an ``'IdR'->'IdR'`` identity edge from the
-        leftmost bond where some coupling actually ends through the right boundary. This mirrors
-        :meth:`add_missing_IdL_IdR`'s ``insert_all_id=False`` behaviour: 'IdL'/'IdR' are only
-        registered on bonds where they are actually reachable, since
-        :func:`~lasyten.tensors.tensor_from_grid` (used by :meth:`build_coupling`) requires every
-        declared state to have at least one nonzero edge.
-        Should be called once, after all couplings have been added.
-        """
-        for i in range(self._coupling_idL_reach):
-            self._add_coupling_self_loop(i, 'IdL')
-        for i in range(self._coupling_idR_reach, self.L):
-            self._add_coupling_self_loop(i, 'IdR')
-
-    def add_string_left_to_right(self, i, j, key, opname='Id', check_op=True, skip_existing=True):
-        r"""Insert a bunch of edges for an 'operator string' into the graph.
-
-        Terms like :math:`S^z_i S^z_j` actually stand for
-        :math:`S^z_i \otimes \prod_{i < k < j} \mathbb{1}_k \otimes S^z_j`.
-        This function adds the :math:`\mathbb{1}` terms to the graph.
-
-        Parameters
-        ----------
-        i, j: int
-            An edge is inserted on all sites between `i` and `j`, `i < j`.
-            `j` can be larger than :attr:`L`, in which case the operators are supposed to act on
-            different MPS unit cells.
-        key: tuple
-            The key at bond (i+1, i) to connect from.
-        opname : str
-            Name of the operator to be used for the string.
-            Useful for the Jordan-Wigner transformation to fermions.
-        skip_existing : bool
-            Whether existing graph nodes should be skipped.
-
-        Returns
-        -------
-        key_i : tuple
-            The `key` on the right of site i we connected to.
-
-        """
-        if j <= i:
-            raise ValueError('j <= i not allowed')
-        keyL = keyR = key
-        for k in range(i + 1, j):
-            if (k - i) % self.L == 0:
-                # necessary to extend key because keyL is already in use at this bond
-                keyR = keyL + (k, opname, opname)  # same structure as for other standard keys
-                # (i, op_i, op_str_right_of_i) e.g. in MultiCouplingTerms.add_to_graph
-            k = k % self.L
-            if not self.has_edge(k, keyL, keyR):
-                self.add(k, keyL, keyR, opname, 1.0, check_op=check_op, skip_existing=skip_existing)
-            keyL = keyR
-        return keyL
-
-    def add_string_right_to_left(self, j, i, key, opname='Id', check_op=True, skip_existing=True):
-        r"""Insert a bunch of edges for an 'operator string' into the graph.
-
-        Similar as :meth:`add_string_left_to_right`, but in the other direction.
-
-        Parameters
-        ----------
-        j, i: int
-            An edge is inserted on all sites between `i` and `j`, `i < j`.
-            Note the switched argument order compared to :meth:`add_string_left_to_right`.
-        key: tuple
-            The key at bond (j-1, j) to connect from.
-        opname : str
-            Name of the operator to be used for the string.
-            Useful for the Jordan-Wigner transformation to fermions.
-        skip_existing : bool
-            Whether existing graph nodes should be skipped.
-
-        Returns
-        -------
-        key_i : hashable
-            The `key` on the right of site i we connected to.
-
-        """
-        if j <= i:
-            raise ValueError('j <= i not allowed')
-        keyL = keyR = key
-        for k in range(j - 1, i, -1):
-            if (j - k) % self.L == 0:
-                # necessary to extend key because keyR is already in use at this bond
-                keyL = keyR + (k, opname, opname)
-            k = k % self.L
-            if not self.has_edge(k, keyL, keyR):
-                self.add(k, keyL, keyR, opname, 1.0, check_op=check_op, skip_existing=skip_existing)
-            keyR = keyL
-        return keyR
-
-    def add_missing_IdL_IdR(self, insert_all_id=True):
-        """Add missing identity ('Id') edges connecting ``'IdL'->'IdL' and ``'IdR'->'IdR'``.
-
-        This function should be called *after* all other operators have been inserted.
-
-        Parameters
-        ----------
-        insert_all_id : bool
-            If ``True``, insert 'Id' edges on *all* bonds.
-            If ``False`` and boundary conditions are finite, only insert
-            ``'IdL'->'IdL'`` to the left of the rightmost existing 'IdL' and
-            ``'IdR'->'IdR'`` to the right of the leftmost existing 'IdR'.
-            The latter avoid "dead ends" in the MPO, but some functions (like `make_WI`) expect
-            'IdL'/'IdR' to exist on all bonds.
-
-        """
-        for site in self.sites:
-            _ensure_identity_op(site)
-        if self.bc == 'infinite' or insert_all_id:
-            max_IdL = self.L  # add identities for all sites
-            min_IdR = 0
+        if self.symmetry.has_symmetric_braid:
+            overbraid = True  # it doesnt matter
         else:
-            max_IdL = max([0] + [i for i, s in enumerate(self.states[:-1]) if 'IdL' in s])
-            min_IdR = min([self.L] + [i for i, s in enumerate(self.states[:-1]) if 'IdR' in s])
-        for k in range(0, max_IdL):
-            if not self.has_edge(k, 'IdL', 'IdL'):
-                self.add(k, 'IdL', 'IdL', 'Id', 1.0)
-        for k in range(min_IdR, self.L):
-            if not self.has_edge(k, 'IdR', 'IdR'):
-                self.add(k, 'IdR', 'IdR', 'Id', 1.0)
-        # done
+            raise NotImplementedError  # TODO how do we specify??
+
+        # arbitrarily choose where to put the strength
+        M = len(ijkl)
+        factors = [1] * M
+        factors[(M + 1) // 2] = strength
+
+        self.add(ijkl[0], 'IdL', label, coupling.factorization[0], strength=factors[0])
+        key = label
+        for i, last_i, W, f in zip(ijkl[1:], ijkl, coupling.factorization[1:], factors[1:]):
+            # identities
+            for k in range(last_i + 1, i):
+                if not self.finite and k % self.L == 0:
+                    next_key = f'{label}#{k // self.L}'
+                else:
+                    next_key = key
+                self.add_identity(k, key, next_key, overbraid=overbraid)
+                key = next_key
+
+            # factor
+            if i == ijkl[-1]:
+                next_key = 'IdR'
+            elif not self.finite and i % self.L == 0:
+                next_key = f'{label}#{i // self.L}'
+            else:
+                next_key = key
+            self.add(i, key, next_key, W, strength=f)
+            key = next_key
 
     def has_edge(self, i, keyL, keyR):
         """True if there is an edge from `keyL` on bond (i-1, i) to `keyR` on bond (i, i+1)."""
         return keyR in self.graph[i].get(keyL, [])
 
-    def build_MPO(self, Ws_qtotal=None):
+    def build_MPO(self, explicit_plus_hc: bool = False):
         """Build the MPO represented by the graph (`self`).
 
         Parameters
         ----------
-        Ws_qtotal : None | (list of) charges
-            The `qtotal` for each of the Ws to be generated, default (``None``) means 0 charge.
-            A single qtotal holds for each site.
-        unit_cell_width : int
-            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+        explicit_plus_hc : bool
+            If ``True``, the resulting MPO will represent the operator given by this graph
+            plus the hc of that via :attr:`MPO.explicit_plus_hc`.
+            In either case the bare MPO tensors will represent the same operator as this graph,
+            this parameter only controls the flag of the resulting MPO.
 
         Returns
         -------
@@ -2605,91 +2680,38 @@ class MPOGraph(MPSGeometry):
 
         """
         self.test_sanity()
-        # pre-work: generate the grid
-        self._set_ordered_states()
-        grids = self._build_grids()
-        IdL = [s.get('IdL', None) for s in self._ordered_states]
-        IdR = [s.get('IdR', None) for s in self._ordered_states]
-        legs, Ws_qtotal = self._calc_legcharges(Ws_qtotal)
-        H = MPO.from_grids(
+        Ws = []
+        ordered_keys = [sorted(st, key=_mpo_graph_state_order) for st in self.states]
+        for i in range(self.L):
+            G = self.graph[i]
+            statesL, statesR = self.states[i : i + 2]
+            labelsL, labelsR = ordered_keys[i : i + 2]
+            grid = []
+            for keyL in labelsL:
+                G_L = G.get(keyL, {})
+                row = []
+                for keyR in labelsR:
+                    op_str = G_L.get(keyR, None)
+                    row.append(None if op_str is None else op_str[0] * op_str[1])
+                grid.append(row)
+            W = lasy.tensor_from_grid(
+                grid,
+                ['wL', 'p', 'wR', 'p*'],
+                row_labels=[str(l) for l in labelsL],
+                col_labels=[str(l) for l in labelsR],
+                row_summands=[statesL[k] for k in labelsL],
+                col_summands=[statesR[k] for k in labelsR],
+            )
+            Ws.append(W)
+
+        return MPO(
             self.sites,
-            grids,
-            self.bc,
-            IdL,
-            IdR,
-            Ws_qtotal,
-            legs,
-            self.max_range,
+            Ws,
+            bc=self.bc,
+            max_range=self.max_range,
+            explicit_plus_hc=explicit_plus_hc,
             mps_unit_cell_width=self.unit_cell_width,
         )
-        return H
-
-    def build_coupling(self, name=None):
-        """Build the  graph (see :meth:`add_coupling_as_term`) into a single Coupling.
-
-        This method instead each site's tensor
-        directly from :attr:`_coupling_graph` via :func:`~lasyten.tensors.tensor_from_grid`, which
-        stacks the  `SymmetricTensor` blocks along their virtual
-        bonds using :meth:`~lasyten.symmetries.ElementarySpace.direct_sum`.
-
-        Only ``bc='finite'`` is supported, since :class:`~lasyten.models.couplings.Coupling`
-        requires trivial (dimension-1) boundary legs; for the leftmost/rightmost bond, only the
-        ``'IdL'``/``'IdR'`` state is kept (mirroring the boundary projection that
-        :meth:`MPO.from_grids` performs for finite `bc`).
-
-        Parameters
-        ----------
-        name : str, optional
-            Name for the returned Coupling.
-
-        Returns
-        -------
-        coupling : lasyten.models.couplings.Coupling
-            Single coupling representing the sum of all terms added to the graph.
-
-        """
-        if self.bc != 'finite':
-            raise ValueError("build_coupling() requires bc='finite' (Coupling has trivial boundary legs)")
-
-        L = self.L
-        ordered_states = []
-        state_labels = []
-        IdL = [None] * (L + 1)
-        IdR = [None] * (L + 1)
-        for bond in range(L + 1):
-            if bond == 0:
-                keys = ['IdL']
-            elif bond == L:
-                keys = ['IdR']
-            else:
-                keys = sorted(self._coupling_states[bond].keys(), key=repr)
-            state_labels.append([k if isinstance(k, str) else None for k in keys])
-            ordered = {key: idx for idx, key in enumerate(keys)}
-            ordered_states.append(ordered)
-            IdL[bond] = ordered.get('IdL', None)
-            IdR[bond] = ordered.get('IdR', None)
-
-        factorization = []
-        for i in range(L):
-            stL, stR = ordered_states[i], ordered_states[i + 1]
-            graph_i = self._coupling_graph[i]
-            grid = [[None] * len(stR) for _ in range(len(stL))]
-            for keyL, a in stL.items():
-                for keyR, tensor in graph_i.get(keyL, {}).items():
-                    b = stR.get(keyR)
-                    if b is None:
-                        continue
-                    grid[a][b] = tensor
-            W = lasy.tensor_from_grid(
-                grid, labels=['wL', 'p', 'wR', 'p*'], row_labels=state_labels[i], col_labels=state_labels[i + 1]
-            )
-            factorization.append(W)
-
-        # Summand indices into the DirectSumSpace virtual legs of ``factorization``.
-        self.IdL = IdL
-        self.IdR = IdR
-        self._ordered_states = ordered_states
-        return Coupling(sites=list(self.sites), factorization=factorization, name=name)
 
     def __repr__(self):
         return f'<MPOGraph L={self.L:d}>'
@@ -2703,11 +2725,11 @@ class MPOGraph(MPSGeometry):
             for keyL in self.states[i]:
                 s = [repr(keyL)]
                 s.append('-' * len(s[-1]))
-                D = G.get(keyL, [])
+                D = G.get(keyL, {})
                 for keyR in D:
                     s.append(repr(keyR) + ':')
-                    for optuple in D[keyR]:
-                        s.append('  ' + repr(optuple))
+                    op, strength = D[keyR]
+                    s.append('  ' + f'{complex(strength):.2f}')
                 strs.append('\n'.join(s))
             res.append(vert_join(strs, delim='|'))
             res.append('')
@@ -2715,184 +2737,33 @@ class MPOGraph(MPSGeometry):
         res.append(vert_join([repr(keyR) for keyR in self.states[-1]], delim=' |'))
         return '\n'.join(res)
 
-    def _set_ordered_states(self):
-        """Define an ordering of the 'states' on each MPO bond.
-
-        Set ``self._ordered_states`` to a list of dictionaries ``{state: index}``.
-        """
-        res = self._ordered_states = []
-        for s in self.states:
-            d = {}
-            for i, key in enumerate(sorted(s, key=_mpo_graph_state_order)):
-                d[key] = i
-            res.append(d)
-
-    def _build_grids(self):
-        """Translate the graph dictionaries into grids for the `Ws`."""
-        states = self._ordered_states
-        assert states is not None  # make sure that _set_ordered_states was called
-        grids = []
-        for i in range(self.L):
-            stL, stR = states[i : i + 2]
-            graph = self.graph[i]  # ``{keyL: {keyR: [(opname, strength)]}}``
-            grid = [None] * len(stL)
-            for keyL, a in stL.items():
-                row = [None] * len(stR)
-                for keyR, lst in graph[keyL].items():
-                    b = stR[keyR]
-                    row[b] = lst
-                grid[a] = row
-            grids.append(grid)
-        return grids
-
-    def _calc_legcharges(self, Ws_qtotal):
-        """Obtain charges for the virtual legs of the MPO.
-
-        Should only be called after :meth:`_set_ordered_states`.
-
-        Parameters
-        ----------
-        Ws_qtotal : None | (list of) charges
-            The `qtotal` for each of the Ws to be generated, default (``None``) means 0 charge.
-            A single qtotal holds for each site.
-
-        Returns
-        -------
-        legs : list of :class:`~tenpy.linalg.charge.LegCharge`
-            LegCharges to be used on each bond, `L+1` entries.
-            Entry `i` contains the 'wL' leg of `W[i]`,
-            entry `i+1` needs to be conjugated to be used as `wR` leg of `W[i]`.
-        Ws_qtotal :  list of qtotal
-            Same as argument, but parsed to a list of L charges defaulting to zeros.
-
-        """
-        L = self.L
-        states = self._ordered_states
-        sites = self.sites
-        infinite = self.bc == 'infinite'
-        chinfo = self.chinfo
-
-        if Ws_qtotal is None:
-            Ws_qtotal = [chinfo.make_valid()] * L
-        else:
-            Ws_qtotal = chinfo.make_valid(Ws_qtotal)
-            if Ws_qtotal.ndim == 1:
-                Ws_qtotal = [Ws_qtotal] * L
-
-        charges = [[None] * len(st) for st in states]
-        charges[0][states[0]['IdL']] = chinfo.make_valid(None)  # default charge = 0.
-
-        def travel_q_LR(i, keyL):
-            """Transport charges from left to right through the MPO graph.
-
-            Inspect graph edges on site `i` starting on the left with `keyL` and add charges
-            for all connections to the right.
-            Originally we recursively transported charges from there, but now this is done
-            iteratively to avoid the maximum recursion limit in python for large systems.
-            """
-            stack = []
-            stack.append((i, keyL))
-            while len(stack):
-                i, keyL = stack.pop(-1)  # We are replacing system stack with one of our own
-                l = states[i][keyL]
-                site = sites[i]
-                st_r = states[i + 1]
-                ch_r = charges[i + 1]
-                # charge rule: q_left - q_right + op_qtotal = Ws_qtotal
-                qL_Wq = charges[i][l] - Ws_qtotal[i]  # q_left - Ws_qtotal
-                edges = self.graph[i][keyL]
-                edge_stack = []
-                for keyR, ops in edges.items():
-                    r = st_r[keyR]
-                    qR = ch_r[r]
-                    if qR is None:
-                        op_qtotal = site.get_op(ops[0][0]).qtotal
-                        ch_r[r] = qL_Wq + op_qtotal  # solve chargerule for q_right
-                        if infinite or i + 1 < L:
-                            edge_stack.append(((i + 1) % L, keyR))
-                        if infinite and i + 1 == L:  # copy and shift to the left leg
-                            charges[0][r] = self.shift_charges_unit_cells(ch_r[r], -1)
-                stack = edge_stack + stack
-
-        travel_q_LR(0, 'IdL')
-
-        # now we can still have unknown edges in the case of "dead ends" in the MPO graph.
-
-        def travel_q_RL(i, keyL):
-            """Transport charges from the right to left through the MPO graph.
-
-            Inspect graph edges on site `i` starting on the left with 'keyL', where
-            the charge needs to be determined. If one of them has a charge defined on the right,
-            use it to determine the charge for keyL and return True.
-            If none of them has the charge defined, return False.
-            """
-            l = states[i][keyL]
-            site = sites[i]
-            st_r = states[i + 1]
-            ch_r = charges[i + 1]
-            # charge rule: q_left - q_right + op_qtotal = Ws_qtotal
-            Wq = Ws_qtotal[i]  # q_left - Ws_qtotal
-            edges = self.graph[i][keyL]
-            for keyR, ops in edges.items():
-                r = st_r[keyR]
-                qR = ch_r[r]
-                if qR is not None:
-                    op_qtotal = site.get_op(ops[0][0]).qtotal
-                    charges[i][l] = Wq + qR - op_qtotal  # solve chargerule for q_left
-                    break
-            else:  # no break
-                return False
-            return True
-
-        if not infinite and any([ch is None for ch in charges[-1]]):
-            raise ValueError("can't determine all charges on the very right leg of the MPO!")
-
-        max_checks = 1000  # Hard-coded since for a properly set-up MPO graph, this loop will
-        # terminate after one iteration
-        for _ in range(max_checks):
-            repeat = False
-            for i in reversed(range(L)):
-                ch = charges[i]
-                for keyL, l in states[i].items():
-                    if ch[l] is None:
-                        if not travel_q_RL(i, keyL):
-                            repeat = True  # couldn't find it out.
-            if not repeat:
-                break
-        else:  # no break
-            raise ValueError("MPOGraph with dead ends: can't determine charges")
-        # have all charges determined
-        # convert to LegCharges
-        legs = []
-        for ch in charges:
-            ch = chinfo.make_valid(ch)
-            leg = npc.LegCharge.from_qflat(chinfo, ch, qconj=+1)
-            legs.append(leg)
-        return legs, Ws_qtotal
-
 
 class MPOEnvironment(BaseEnvironment):
     """Stores partial contractions of :math:`<bra|H|ket>` for an MPO `H`.
 
     The network for a contraction :math:`<bra|H|ket>` of an MPO `H` between two MPS looks like::
 
-        |     .------>-M[0]-->-M[1]-->-M[2]-->- ...  ->--.
-        |     |        |       |       |                 |
-        |     |        ^       ^       ^                 |
-        |     |        |       |       |                 |
-        |     LP[0] ->-W[0]-->-W[1]-->-W[2]-->- ...  ->- RP[-1]
-        |     |        |       |       |                 |
-        |     |        ^       ^       ^                 |
-        |     |        |       |       |                 |
-        |     .------<-N[0]*-<-N[1]*-<-N[2]*-<- ...  -<--.
+        |   ┏━━━━━━━━┓    ┏━━━━━━━┓    ┏━━━━━━━┓    ┏━━━━━━━┓             ┏━━━━━━━━┓
+        |   ┃        ┠────┨ M[0]  ┠────┨ M[1]  ┠────┨ M[2]  ┠──── ... ────┨        ┃
+        |   ┃        ┃    ┗━━━┯━━━┛    ┗━━━┯━━━┛    ┗━━━┯━━━┛             ┃        ┃
+        |   ┃        ┃        │            │            │                 ┃        ┃
+        |   ┃        ┃    ┏━━━┷━━━┓    ┏━━━┷━━━┓    ┏━━━┷━━━┓             ┃        ┃
+        |   ┃ LP[0]  ┠────┨ W[0]  ┠────┨ W[1]  ┠────┨ W[2]  ┠──── ... ────┨ RP[-1] ┃
+        |   ┃        ┃    ┗━━━┯━━━┛    ┗━━━┯━━━┛    ┗━━━┯━━━┛             ┃        ┃
+        |   ┃        ┃        │            │            │                 ┃        ┃
+        |   ┃        ┃    ┏━━━┷━━━┓    ┏━━━┷━━━┓    ┏━━━┷━━━┓             ┃        ┃
+        |   ┃        ┠────┨ N[0]* ┠────┨ N[1]* ┠────┨ N[2]* ┠──── ... ────┨        ┃
+        |   ┗━━━━━━━━┛    ┗━━━━━━━┛    ┗━━━━━━━┛    ┗━━━━━━━┛             ┗━━━━━━━━┛
 
     We use the following label convention::
 
-        |    .-->- vR           vL ->-.
-        |    |                        |
-        |    LP->- wR           wL ->-RP
-        |    |                        |
-        |    .--<- vR*         vL* -<-.
+        |   ┏━━━━━━━━┓                  ┏━━━━━━━━┓
+        |   ┃        ┠──── vR    vL ────┨        ┃
+        |   ┃        ┃                  ┃        ┃
+        |   ┃  LP    ┠──── wR    wL ────┨   RP   ┃
+        |   ┃        ┃                  ┃        ┃
+        |   ┃        ┠──── vR*  vL* ────┨        ┃
+        |   ┗━━━━━━━━┛                  ┗━━━━━━━━┛
 
     See :class:`BaseEnvironment` for further details.
 
@@ -3136,7 +3007,7 @@ class MPOEnvironment(BaseEnvironment):
             labels=['wL', 'wR'],
             device=init_LP.device,
         )
-        init_LP = lasy.tdot(init_LP, mask, 'wR', 'wL')
+        init_LP = lasy.planar_contract_mask(init_LP, mask, 'wR', 'wL')
         # TODO do we care about the leg arrangement or not?
         for j in range(i0, i):
             init_LP = self._contract_LP(j, init_LP)
@@ -3167,7 +3038,7 @@ class MPOEnvironment(BaseEnvironment):
         mask = mpo_wR.projection_onto_summand(
             'IdR', backend=init_RP.backend, labels=['wR', 'wL'], device=init_RP.device
         )
-        init_RP = lasy.tdot(init_RP, mask, 'wL', 'wR')
+        init_RP = lasy.planar_contract_mask(init_RP, mask, 'wL', 'wR')
         for j in range(i0, i, -1):
             init_RP = self._contract_RP(j, init_RP)
         return init_RP
@@ -3178,11 +3049,17 @@ class MPOEnvironment(BaseEnvironment):
         The returned ``LP_i`` corresponds to the following contraction,
         where the M's and the N's are in the 'A' form::
 
-            |     .-------M[0]--- ... --M[i-1]--->-   'vR'
-            |     |       |             |
-            |     LP[0]---W[0]--- ... --W[i-1]--->-   'wR'
-            |     |       |             |
-            |     .-------N[0]*-- ... --N[i-1]*--<-   'vR*'
+            |   ┏━━━━━━━━┓    ┏━━━━━━━┓             ┏━━━━━━━━━┓
+            |   ┃        ┠────┨ M[0]  ┠──── ... ────┨ M[i-1]  ┠──── 'vR'
+            |   ┃        ┃    ┗━━━┯━━━┛             ┗━━━━┯━━━━┛
+            |   ┃        ┃        │                      │
+            |   ┃        ┃    ┏━━━┷━━━┓             ┏━━━━┷━━━━┓
+            |   ┃ LP[0]  ┠────┨ W[0]  ┠──── ... ────┨ W[i-1]  ┠──── 'wR'
+            |   ┃        ┃    ┗━━━┯━━━┛             ┗━━━━┯━━━━┛
+            |   ┃        ┃        │                      │
+            |   ┃        ┃    ┏━━━┷━━━┓             ┏━━━━┷━━━━┓
+            |   ┃        ┠────┨ N[0]* ┠──── ... ────┨ N[i-1]* ┠──── 'vR*'
+            |   ┗━━━━━━━━┛    ┗━━━━━━━┛             ┗━━━━━━━━━┛
 
 
         Parameters
@@ -3209,11 +3086,17 @@ class MPOEnvironment(BaseEnvironment):
         The returned ``RP_i`` corresponds to the following contraction,
         where the M's and the N's are in the 'B' form::
 
-            |     'vL'  ->---M[i+1]-- ... --M[L-1]----.
-            |                |              |         |
-            |     'wL'  ->---W[i+1]-- ... --W[L-1]----RP[-1]
-            |                |              |         |
-            |     'vL*' -<---N[i+1]*- ... --N[L-1]*---.
+            |             ┏━━━━━━━━━┓             ┏━━━━━━━━━┓    ┏━━━━━━━━┓
+            |    'vL' ────┨ M[i+1]  ┠──── ... ────┨ M[L-1]  ┠────┨        ┃
+            |             ┗━━━━┯━━━━┛             ┗━━━━┯━━━━┛    ┃        ┃
+            |                  │                       │         ┃        ┃
+            |             ┏━━━━┷━━━━┓             ┏━━━━┷━━━━┓    ┃        ┃
+            |    'wL' ────┨ W[i+1]  ┠──── ... ────┨ W[L-1]  ┠────┨ RP[-1] ┃
+            |             ┗━━━━┯━━━━┛             ┗━━━━┯━━━━┛    ┃        ┃
+            |                  │                       │         ┃        ┃
+            |             ┏━━━━┷━━━━┓             ┏━━━━┷━━━━┓    ┃        ┃
+            |   'vL*' ────┨ N[i+1]* ┠──── ... ────┨ N[L-1]* ┠────┨        ┃
+            |             ┗━━━━━━━━━┛             ┗━━━━━━━━━┛    ┗━━━━━━━━┛
 
         Parameters
         ----------
@@ -3275,7 +3158,7 @@ class MPOEnvironment(BaseEnvironment):
         LP = self.get_LP(i)
         p, ps = label_p, label_p + '*'
         LHeff = lasy.planar_contraction(LP, self.H.get_W(i), 'wR', 'wL', relabel2={'p': p, 'p*': ps})
-        assert LHeff.labels_are('vR', 'vR*', p, 'wR', ps, planar=True)
+        assert LHeff.labels.are('vR', 'vR*', p, 'wR', ps, planar=True)
         return lasy.combine_legs(LHeff, ['vR*', p], ['vR', ps])
 
     def _contract_RHeff(self, i: int, label_p: str = 'p1') -> lasy.Tensor:
@@ -3286,7 +3169,7 @@ class MPOEnvironment(BaseEnvironment):
         RP = self.get_RP(i)
         p, ps = label_p, label_p + '*'
         RHeff = lasy.planar_contraction(self.H.get_W(i), RP, 'wR', 'wL', relabel1={'p': p, 'p*': ps})
-        assert RHeff.labels_are('vL', ps, 'wL', p, 'vL*', planar=True)
+        assert RHeff.labels.are('vL', ps, 'wL', p, 'vL*', planar=True)
         return lasy.combine_legs(RHeff, [ps, 'vL'], [p, 'vL*'])
 
 
@@ -3296,11 +3179,13 @@ class MPOEnvironmentBuilder:
     This class implement the construction scheme from :cite:`phien2012` to construct
     `LP[0]` and `RP[self.L-1]` for a periodic :class:`MPOEnvironment`::
 
-        |             - - > - - - - - 'vR*'
-        |            |          |
-        |   LP[0] = E[0] ->- T_H**n - 'wR' (index `j`)
-        |            |          |
-        |             - - > - - - - - 'vR'
+        |           ┏━━━━━━━━┓    ┏━━━━━━━━━━┓
+        |           ┃        ┠────┨          ┠──── 'vR*'
+        |           ┃        ┃    ┃          ┃
+        |   LP[0] = ┃  E[0]  ┠────┨  T_H**n  ┠──── 'wR' (index `j`)
+        |           ┃        ┃    ┃          ┃
+        |           ┃        ┠────┨          ┠──── 'vR'
+        |           ┗━━━━━━━━┛    ┗━━━━━━━━━━┛
 
     where T_H has the structure of a corresponding :class:`MPOTransferMatrix`
     and the limit :math:`n → \infty` has to be taken.
@@ -4026,13 +3911,13 @@ class MPOTransferMatrix(lasy.sparse.LinearOperator):
 
         """
         if not self.transpose:  # right to left
-            assert vec.labels_are('vL', 'wL', 'vL*', planar=True)
+            assert vec.labels.are('vL', 'wL', 'vL*', planar=True)
             vec.itranspose(['vL', 'wL', 'vL*'])  # shouldn't do anything
             for Bc, W, B in zip(self._M_conj, self._W, self._M):
                 vec = MPOEnvironment.RP_contraction.evaluate(dict(RP=vec, Bk=B, W=W, Bb=Bc))
             vec = vec.shift_charges_horizontal(dx_0=self.unit_cell_width)
         else:
-            assert vec.labels_are('vR*', 'wR', 'vR', planar=True)
+            assert vec.labels.are('vR*', 'wR', 'vR', planar=True)
             for Ac, W, A in zip(self._M_conj, self._W, self._M):
                 vec = MPOEnvironment.LP_contraction.evaluate(dict(LP=vec, Bk=A, W=W, Bb=Ac))
             vec = vec.shift_charges_horizontal(dx_0=-self.unit_cell_width)
@@ -4199,7 +4084,7 @@ def grid_insert_ops(site, grid):
 
     Parameters
     ----------
-    site : :class:`~tenpy.networks.site`
+    site : :class:`lasyten.Site`
         The site on which the grid acts.
     grid : list of list of `entries`
         Represents a single matrix `W` of an MPO, i.e. the lists correspond to the legs
@@ -4265,8 +4150,6 @@ def _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, leg0, IdL_0):
     The way this works: gauge 'IdL' on the very left leg to 0,
     then gradually calculate the charges by going along the edges of the graph
     (maybe also over the iMPO boundary).
-
-    When initializing from an MPO graph directly, use :meth:`MPOGraph._calc_legcharges` directly.
     """
     raise NotImplementedError('TODO: MPO.from_grids')
     if leg0 is not None:
@@ -4312,28 +4195,22 @@ def _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, leg0, IdL_0):
 def _mpo_graph_state_order(key):
     """Key-function for sorting they `states` of an MPO Graph.
 
-    For standard TeNPy MPOs we expect keys of the form
-    ``'IdL'``, ``'IdR'``, ``(i, op_i, opstr)`` and recursively ``key + (j, op_j, opstr)``,
-    (Note that op_j can be opstr if ``j-i >= L``.)
-    For multi coupling terms keys have the form ``("left",i, op_i, opstr)``
+    We use the following order::
+
+        - 'IdL' (if it exists)
+        - 'Id' (if it exists, which appears in WI / WII evolution MPOs)
+        - any other keys, ordered alphabetically
+        - 'IdR' (if it exists)
 
     The goal is to ensure that standard TeNPy MPOs yield an upper-right W for the MPO.
     """
-    raise NotImplementedError('TODO: MPO._graph')
-    if isinstance(key, tuple):
-        if key[0] == 'left':  # left states first
-            return (-1, len(key)) + key[1:]
-        elif key[0] == 'right':  # right states afterwards
-            return (1, -len(key)) + key[1:]
-        return key
-    if isinstance(key, str):
-        if key == 'IdL':  # should be first
-            return (-2,)
-        if key == 'IdR':  # should be last
-            return (2,)
-        # fallback: compare strings
-        return (0, key)
-    return (0, str(key))
+    if key == 'IdL':
+        return 0, ''
+    if key == 'Id':
+        return 1, ''
+    if key == 'IdR':
+        return 3, ''
+    return 2, str(key)
 
 
 def _mpo_check_for_iter_LP_RP_infinite(mpo):
@@ -4346,6 +4223,87 @@ def _mpo_check_for_iter_LP_RP_infinite(mpo):
     if mpo._outer_permutation is None:
         mpo._order_graph()
     return mpo._outer_permutation
+
+
+def _identity_cell(W: lasy.Tensor) -> lasy.Tensor:
+    """The identity cell of `W` as a 4-leg tensor, with trivial virtual legs matching those of `W`."""
+    Id = lasy.SymmetricTensor.from_eye([W.get_leg('p')], W.backend, labels=['p', 'p*'])
+    Id = lasy.add_trivial_leg(Id, codomain_pos=0, label='wL', is_dual=W.get_leg('wL').is_dual)
+    Id = lasy.add_trivial_leg(Id, domain_pos=-1, label='wR', is_dual=not W.get_leg('wR').is_dual)
+    return Id
+
+
+def _upper_triangular_violation(
+    W: lasy.Tensor,
+    IdL='IdL',
+    IdR='IdR',
+    left_boundary: bool = False,
+    right_boundary: bool = False,
+) -> str | None:
+    """The first violated condition of the structure described in :func:`partition_W`, or ``None``.
+
+    Single source of truth for :func:`partition_W` (which raises a ``ValueError`` with this message)
+    and :func:`_W_has_upper_triangular_structure` (which returns a bool). Does not use ``assert``.
+    """
+    if left_boundary and right_boundary:
+        return 'Can not be left and right boundary at the same time'
+    for leg_name in ('wL', 'wR'):
+        if getattr(W.get_leg(leg_name), 'summand_labels', None) is None:
+            return f'The virtual leg {leg_name!r} has no summand labels'
+    labels_L = W.get_leg('wL').summand_labels
+    labels_R = W.get_leg('wR').summand_labels
+    Id = _identity_cell(W)
+    others_wL = [i for i, l in enumerate(labels_L) if l not in [IdL, IdR]]
+    others_wR = [i for i, l in enumerate(labels_R) if l not in [IdL, IdR]]
+
+    def vanishes(rows, cols):
+        if len(rows) == 0 or len(cols) == 0:
+            return True  # nothing to check
+        return lasy.norm(lasy.tensor_subgrid(W, rows, cols, 'wL', 'wR')).to_numpy() == 0
+
+    def is_identity(label):
+        return lasy.almost_equal(lasy.tensor_grid_cell(W, label, label, 'wL', 'wR'), Id)
+
+    if left_boundary:
+        if labels_L != [IdL]:
+            return f'The left leg of a left boundary tensor needs the single summand label {IdL!r}'
+        if not all(l in labels_R for l in (IdL, IdR)):
+            return f'The right leg needs the summand labels {IdL!r} and {IdR!r}'
+        if not is_identity(IdL):
+            return f'The {IdL!r}-{IdL!r} cell is not the identity'
+        return None
+    if right_boundary:
+        if not all(l in labels_L for l in (IdL, IdR)):
+            return f'The left leg needs the summand labels {IdL!r} and {IdR!r}'
+        if labels_R != [IdR]:
+            return f'The right leg of a right boundary tensor needs the single summand label {IdR!r}'
+        if not is_identity(IdR):
+            return f'The {IdR!r}-{IdR!r} cell is not the identity'
+        return None
+    if not all(l in labels for l in (IdL, IdR) for labels in (labels_L, labels_R)):
+        return f'Both virtual legs need the summand labels {IdL!r} and {IdR!r}'
+    if not is_identity(IdL):
+        return f'The {IdL!r}-{IdL!r} cell is not the identity'
+    if not vanishes(others_wL, [IdL]):
+        return f'There are nonzero entries below the {IdL!r}-{IdL!r} cell (in the column {IdL!r})'
+    if not vanishes([IdR], [IdL]):
+        return f'The {IdR!r}-{IdL!r} cell is nonzero'
+    if not vanishes([IdR], others_wR):
+        return f'There are nonzero entries left of the {IdR!r}-{IdR!r} cell (in the row {IdR!r})'
+    if not is_identity(IdR):
+        return f'The {IdR!r}-{IdR!r} cell is not the identity'
+    return None
+
+
+def _W_has_upper_triangular_structure(
+    W: lasy.Tensor,
+    IdL='IdL',
+    IdR='IdR',
+    left_boundary: bool = False,
+    right_boundary: bool = False,
+) -> bool:
+    """Whether `W` has the structure described in :func:`partition_W`; same conditions, but no raise."""
+    return _upper_triangular_violation(W, IdL, IdR, left_boundary, right_boundary) is None
 
 
 def partition_W(
@@ -4373,52 +4331,159 @@ def partition_W(
 
     We verify that structure and extract the grid cells ``A, B, C, D``.
 
+    Parameters
+    ----------
+    W : :class:`lasyten.Tensor`
+        The MPO tensor with legs ``wL, p, wR, p*`` and summand labels on ``wL, wR``.
+    IdL, IdR : str
+        The summand labels of the first and last row/column.
+    Id_summand_label : str
+        Unused.
+    left_boundary, right_boundary : bool
+        Whether `W` is the first / last tensor of a finite MPO.
+
     Returns
     -------
     A, B, C, D: :class:`lasyten.Tensor` | None
-        The subgrids of W. If at a boundary, non-existing entires are set to ``None``.
+        The subgrids of W. Blocks without entries (at a boundary, or if there are no summands
+        besides `IdL` and `IdR` on the relevant virtual leg, e.g. for only on-site terms) are ``None``.
     Id: :class:`lasyten.Tensor`
         The identity cell, as a 4-leg Tensor
 
+    Raises
+    ------
+    ValueError
+        If `W` does not have the structure above (e.g. a rescaled first tensor, nonzero entries
+        below the diagonal blocks or missing summand labels).
+
     """
-    Id = lasy.SymmetricTensor.from_eye([W.get_leg('p')], W.backend, labels=['p', 'p*'])
-    Id = lasy.add_trivial_leg(Id, codomain_pos=0, label='wL', is_dual=W.get_leg('wL').is_dual)
-    Id = lasy.add_trivial_leg(Id, domain_pos=-1, label='wR', is_dual=not W.get_leg('wR').is_dual)
+    violation = _upper_triangular_violation(W, IdL, IdR, left_boundary, right_boundary)
+    if violation is not None:
+        raise ValueError(f'partition_W: the tensor does not have the upper-block-triangular structure: {violation}.')
+    Id = _identity_cell(W)
     others_wL = [i for i, l in enumerate(W.get_leg('wL').summand_labels) if l not in [IdL, IdR]]
     others_wR = [i for i, l in enumerate(W.get_leg('wR').summand_labels) if l not in [IdL, IdR]]
 
-    if left_boundary and right_boundary:
-        raise ValueError('Can not be left and right boundary at the same time')
+    def subgrid(rows, cols):
+        if len(rows) == 0 or len(cols) == 0:
+            return None
+        return lasy.tensor_subgrid(W, rows, cols, 'wL', 'wR')
 
     if left_boundary:
-        assert W.get_leg('wL').summand_labels == [IdL]
-        assert all(l in W.get_leg('wR').summand_labels for l in (IdL, IdR))
-        assert lasy.almost_equal(lasy.tensor_grid_cell(W, IdL, IdL, 'wL', 'wR'), Id)
-        C = lasy.tensor_subgrid(W, [IdL], others_wR, 'wL', 'wR')
-        D = lasy.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
+        C = subgrid([IdL], others_wR)
+        D = subgrid([IdL], [IdR])
         return None, None, C, D, Id
 
     if right_boundary:
-        assert all(l in W.get_leg('wL').summand_labels for l in (IdL, IdR))
-        assert W.get_leg('wR').summand_labels == [IdR]
-        D = lasy.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
-        B = lasy.tensor_subgrid(W, others_wL, [IdR], 'wL', 'wR')
-        assert lasy.almost_equal(lasy.tensor_grid_cell(W, IdR, IdR, 'wL', 'wR'), Id)
+        D = subgrid([IdL], [IdR])
+        B = subgrid(others_wL, [IdR])
         return None, B, None, D, Id
 
     # remaining case: bulk tensor
-    assert all(l in W.get_leg(leg).summand_labels for l in (IdL, IdR) for leg in ('wL', 'wR'))
-    # first row
-    assert lasy.almost_equal(lasy.tensor_grid_cell(W, IdL, IdL, 'wL', 'wR'), Id)
-    C = lasy.tensor_subgrid(W, [IdL], others_wR, 'wL', 'wR')
-    D = lasy.tensor_subgrid(W, [IdL], [IdR], 'wL', 'wR')
-    # middle rows
-    assert lasy.norm(lasy.tensor_subgrid(W, others_wL, [IdL], 'wL', 'wR')).to_numpy() == 0
-    A = lasy.tensor_subgrid(W, others_wL, others_wR, 'wL', 'wR')
-    B = lasy.tensor_subgrid(W, others_wL, [IdR], 'wL', 'wR')
-    # bottom row
-    assert lasy.norm(lasy.tensor_grid_cell(W, IdR, IdL, 'wL', 'wR')).to_numpy() == 0
-    assert lasy.norm(lasy.tensor_subgrid(W, [IdR], others_wR, 'wL', 'wR')).to_numpy() == 0
-    assert lasy.almost_equal(lasy.tensor_grid_cell(W, IdR, IdR, 'wL', 'wR'), Id)
-
+    C = subgrid([IdL], others_wR)
+    D = subgrid([IdL], [IdR])
+    A = subgrid(others_wL, others_wR)
+    B = subgrid(others_wL, [IdR])
     return A, B, C, D, Id
+
+
+def _show_W_grid(W: lasy.SymmetricTensor, wL='wL', wR='wR'):
+    """Helper for :meth:`MPO.show_W_grid`."""
+    assert W.codomain_labels[0] == wL  # assumption for checking vs Id below
+    assert W.domain_labels[-1] == wR  # assumption for checking vs Id below
+    wL_labels = W.get_leg(wL).summand_labels
+    wR_labels = W.get_leg(wR).summand_labels
+    assert None not in wL_labels
+    assert None not in wR_labels
+
+    info_grid = np.full((len(wL_labels), len(wR_labels)), '  ', dtype='<U2')
+    for i, labelL in enumerate(wL_labels):
+        for j, labelR in enumerate(wR_labels):
+            cell = lasy.tensor_grid_cell(W, labelL, labelR, wL, wR)
+            cell_norm = lasy.norm(cell)
+            if cell_norm < 1e-14:
+                info_grid[i, j] = '  '
+                continue
+
+            # check overlap with identity
+            if not W.symmetry.has_symmetric_braid:
+                raise NotImplementedError  # should check vs "over Id" *and* "under Id"
+
+            braided = lasy.move_leg(cell, wL, codomain_pos=-1)
+            if braided.codomain == braided.domain:
+                id_ov = lasy.trace(braided)
+                id_norm = lasy.sqrt(cell.domain.dim)
+                if abs(abs(id_ov) - id_norm * cell_norm) < 1e-14:
+                    if abs(id_ov - id_norm**2) < 1e-14:
+                        # exactly identity
+                        info_grid[i, j] = 'Id'
+                    else:
+                        # multiple of identity
+                        info_grid[i, j] = '~I'
+                    continue
+
+            # no special case:
+            info_grid[i, j] = '**'
+
+    row_labels = [str(label) for label in wL_labels]
+    column_labels = [str(label) for label in wR_labels]
+
+    row_symbols = [label if label in ('IdL', 'IdR') else str(index) for index, label in enumerate(row_labels)]
+    column_symbols = [label if label in ('IdL', 'IdR') else str(index) for index, label in enumerate(column_labels)]
+    row_label_width = max(map(len, row_symbols))
+    column_width = max(3, max(max(np.max(np.char.str_len(info_grid)), len(symbol)) for symbol in column_symbols))
+    full_label_width = max(9, max(map(len, row_labels)))
+
+    header = (
+        ' ' * row_label_width
+        + ' || '
+        + ' | '.join(symbol.center(column_width) for symbol in column_symbols)
+        + ' || '
+        + 'row label'.ljust(full_label_width)
+    )
+    divider = (
+        '=' * row_label_width
+        + '=++='
+        + '=+='.join('=' * column_width for _ in column_labels)
+        + '=++='
+        + '=' * full_label_width
+    )
+    row_divider = (
+        '-' * row_label_width
+        + '-++-'
+        + '-+-'.join('-' * column_width for _ in column_labels)
+        + '-++-'
+        + '-' * full_label_width
+    )
+    rows = []
+    for row_number, symbol in enumerate(row_symbols):
+        rows.append(
+            symbol.rjust(row_label_width)
+            + ' || '
+            + ' | '.join(
+                info_grid[row_number, column_index].center(column_width) for column_index in range(len(column_labels))
+            )
+            + ' || '
+            + row_labels[row_number].ljust(full_label_width)
+        )
+        if row_number < len(row_labels) - 1:
+            rows.append(row_divider)
+
+    wrapped_column_labels = []
+    for label in column_labels:
+        compact_width = column_width + 2 if len(label) > 2 * column_width else column_width
+        wrapped_column_labels.append(
+            [label[offset : offset + compact_width] for offset in range(0, len(label), compact_width)] or ['']
+        )
+    rows.append(row_divider)
+    for line_number in range(max(map(len, wrapped_column_labels))):
+        label_fields = []
+        for label_lines in wrapped_column_labels:
+            label = label_lines[line_number] if line_number < len(label_lines) else ''
+            if len(label_lines[0]) > column_width:
+                label_fields.append(label.ljust(column_width + 2))
+            else:
+                label_fields.append(' ' + label.ljust(column_width) + ' ')
+        rows.append(' ' * row_label_width + ' ||' + '|'.join(label_fields) + '||')
+
+    return '\n'.join([header, divider, *rows])

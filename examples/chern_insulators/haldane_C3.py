@@ -100,23 +100,23 @@ class FermionicC3HaldaneModel(CouplingMPOModel):
         t2 = 0.39 * t * 1j
         t3 = -0.34 * t
 
-        for u1, u2, dx in self.lat.NN:
+        for u1, u2, dx in self.lattice.NN:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
             self.add_coupling(t1_phi, u1, 'CdA', u2, 'CB', dx, 'JW')
             self.add_coupling(np.conj(t1_phi), u2, 'CdB', u1, 'CA', -dx, 'JW')
             self.add_coupling(V, u1, 'Ntot', u2, 'Ntot', dx)
 
-        for u1, u2, dx in self.lat.nNNA:
+        for u1, u2, dx in self.lattice.nNNA:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
             self.add_coupling(t2_phi, u1, 'CdA', u2, 'CA', dx, 'JW')
             self.add_coupling(np.conj(t2_phi), u2, 'CdA', u1, 'CA', -dx, 'JW')
 
-        for u1, u2, dx in self.lat.nNNB:
+        for u1, u2, dx in self.lattice.nNNB:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
             self.add_coupling(t2_phi, u1, 'CdB', u2, 'CB', dx, 'JW')
             self.add_coupling(np.conj(t2_phi), u2, 'CdB', u1, 'CB', -dx, 'JW')
 
-        for u1, u2, dx in self.lat.nnNN:
+        for u1, u2, dx in self.lattice.nnNN:
             t3_phi = self.coupling_strength_add_ext_flux(t3, dx, [0, phi_ext])
             self.add_coupling(t3_phi, u1, 'CdA', u2, 'CB', dx, 'JW')
             self.add_coupling(np.conj(t3_phi), u2, 'CdB', u1, 'CA', -dx, 'JW')
@@ -168,7 +168,7 @@ def run(phi_ext=np.linspace(0, 1.0, 7)):
         if eng is None:  # first time in the loop
             M = FermionicC3HaldaneModel(model_params)
             psi = MPS.from_product_state(
-                M.lat.mps_sites(), prod_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+                M.lattice.mps_sites(), prod_state, bc=M.lattice.bc_MPS, unit_cell_width=M.lattice.mps_unit_cell_width
             )
             eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
         else:

@@ -2,16 +2,16 @@
 
 Uniform lattice of spin-S sites, coupled by nearest-neighbor interactions.
 """
-# Copyright (C) TeNPy Developers, Apache license
 
+# Copyright (C) TeNPy Developers, Apache license
+from typing import Literal
+
+import lasyten as lasy
 import numpy as np
-from lasyten.models.couplings import Coupling
-from lasyten.models.sites import SpinSite
-from lasyten.tensors import dagger
 
 from ..tools import to_array
 from .lattice import Chain
-from .model import CouplingMPOModel, NearestNeighborModel
+from .model import ModelBuilder
 
 __all__ = ['SpinModel', 'SpinChain', 'DipolarSpinChain']
 
@@ -24,7 +24,7 @@ def _onsite_matrix(site, hx, hy, hz, D, E):
     combine into an overall-symmetric operator (e.g. when hx=hy=E=0, only diagonal Sz terms
     remain).
     """
-    Sx, Sy, Sz = (site.spin_vector[:, :, k] for k in range(3))
+    Sx, Sy, Sz = (site.spin.spin_vector[:, :, k] for k in range(3))
     return -hx * Sx - hy * Sy - hz * Sz + D * (Sz @ Sz) + E * (Sx @ Sx - Sy @ Sy)
 
 
@@ -34,7 +34,7 @@ def _coupling_matrix(site1, site2, Jx, Jy, Jz, muJ):
     Legs are ``[p0, p0*, p1, p1*]``; built as a single matrix for the same reason as
     :func:`_onsite_matrix`.
     """
-    s1, s2 = site1.spin_vector, site2.spin_vector
+    s1, s2 = site1.spin.spin_vector, site2.spin.spin_vector
     h = Jx * np.tensordot(s1[:, :, 0], s2[:, :, 0], axes=0)
     h = h + Jy * np.tensordot(s1[:, :, 1], s2[:, :, 1], axes=0)
     h = h + Jz * np.tensordot(s1[:, :, 2], s2[:, :, 2], axes=0)
@@ -42,7 +42,7 @@ def _coupling_matrix(site1, site2, Jx, Jy, Jz, muJ):
     return h
 
 
-class SpinModel(CouplingMPOModel):
+class SpinModel(ModelBuilder):
     r"""Spin-S sites coupled by nearest neighbor interactions.
 
     The Hamiltonian reads:
@@ -66,11 +66,11 @@ class SpinModel(CouplingMPOModel):
     Options
     -------
     .. cfg:config :: SpinModel
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         S : {0.5, 1, 1.5, 2, ...}
             The 2S+1 local states range from m = -S, -S+1, ... +S.
-        conserve : 'best' | 'Sz' | 'parity' | None
+        conserve : 'best' | 'SU2' | 'Sz' | 'parity' | None
             What should be conserved. See :class:`~lasyten.models.sites.SpinSite`.
             For ``'best'``, we check the parameters what can be preserved.
         Jx, Jy, Jz, hx, hy, hz, muJ, D, E  : float | array
@@ -79,66 +79,86 @@ class SpinModel(CouplingMPOModel):
 
     """
 
+    conserve: Literal['SU2', 'Sz', 'parity'] | None  # set during init_sites
+
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5, 'real')
         conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
             # check how much we can conserve
-            if not model_params.any_nonzero([('Jx', 'Jy'), 'hx', 'hy', 'E'], 'check Sz conservation'):
+            if not model_params.any_nonzero(
+                [('Jx', 'Jy', 'Jz'), 'muJ', 'hx', 'hy', 'hz', 'D', 'E'], 'check SU(2) conservation'
+            ):
+                conserve = 'SU2'
+            elif not model_params.any_nonzero([('Jx', 'Jy'), 'hx', 'hy', 'E'], 'check Sz conservation'):
                 conserve = 'Sz'
             elif not model_params.any_nonzero(['hx', 'hy'], 'check parity conservation'):
                 conserve = 'parity'
             else:
                 conserve = None
             self.logger.info('%s: set conserve to %s', self.name, conserve)
-        site = SpinSite(S=S, conserve=conserve)
+        assert conserve in ['SU2', 'Sz', 'parity', None]
+        self.conserve = conserve
+        site = lasy.sites.SpinSite(S=S, conserve=conserve, backend=self.backend)
         return site
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jx=1, Jy=1, Jz=1, name='S.S'),
+            hc='S.S',
+            permute='invariant',
+        )
+        if self.conserve != 'SU2':
+            self.define_coupling(
+                lasy.models.spin_spin_coupling([site, site], Jz=1, name='Sz.Sz'),
+                hc='Sz.Sz',
+                permute='invariant',
+            )
+            self.define_coupling(
+                lasy.models.spin_spin_coupling([site, site], Jpm=1, name='Sp.Sm'),
+                hc='Sm.Sp',
+                permute='swap_hc',
+            )
+        if self.conserve not in ['SU2', 'Sz']:
+            self.define_coupling(
+                lasy.models.spin_spin_coupling([site, site], Jpp=1, name='Sp.Sp'),
+                hc='Sm.Sm',
+                permute='invariant',
+            )
+        return
 
     def init_terms(self, model_params):
         Jx = model_params.get('Jx', 1.0, 'real_or_array')
         Jy = model_params.get('Jy', 1.0, 'real_or_array')
         Jz = model_params.get('Jz', 1.0, 'real_or_array')
-        hx = to_array(model_params.get('hx', 0.0, 'real_or_array'), self.lat.Ls)
-        hy = to_array(model_params.get('hy', 0.0, 'real_or_array'), self.lat.Ls)
-        hz = to_array(model_params.get('hz', 0.0, 'real_or_array'), self.lat.Ls)
-        D = to_array(model_params.get('D', 0.0, 'real_or_array'), self.lat.Ls)
-        E = to_array(model_params.get('E', 0.0, 'real_or_array'), self.lat.Ls)
+        hx = to_array(model_params.get('hx', 0.0, 'real_or_array'), self.lattice.Ls)
+        hy = to_array(model_params.get('hy', 0.0, 'real_or_array'), self.lattice.Ls)
+        hz = to_array(model_params.get('hz', 0.0, 'real_or_array'), self.lattice.Ls)
+        D = to_array(model_params.get('D', 0.0, 'real_or_array'), self.lattice.Ls)
+        E = to_array(model_params.get('E', 0.0, 'real_or_array'), self.lattice.Ls)
         muJ = model_params.get('muJ', 0.0, 'real_or_array')
 
-        # (u is always 0 as we have only one site in the unit cell)
-        for u in range(len(self.lat.unit_cell)):
-            site = self.lat.unit_cell[u]
-            for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
-                idx = tuple(i_lat)
-                mat = _onsite_matrix(site, hx[idx], hy[idx], hz[idx], D[idx], E[idx])
-                if not np.any(mat != 0.0):
-                    continue
-                coupling = Coupling.from_dense_block(mat, [site], understood_braiding=True)
-                self.add_coupling(coupling, [i])
-        # Jx Sx.Sx + Jy Sy.Sy + Jz Sz.Sz + muJ (Sy_i Sx_j - Sx_i Sy_j)
-        # NB: don't call `possible_couplings` separately per coefficient: it filters out
-        # positions where *that* coefficient is zero, which would misalign the four arrays
-        # whenever e.g. muJ=0 but Jx/Jy/Jz aren't. Get the (unfiltered) positions once via
-        # strength=None, then look up each coefficient at those lattice positions.
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            site1, site2 = self.lat.unit_cell[u1], self.lat.unit_cell[u2]
-            mps_i, mps_j, lat_indices, coupling_shape = self.lat.possible_couplings(u1, u2, dx)
-            Jx_arr = to_array(Jx, coupling_shape)
-            Jy_arr = to_array(Jy, coupling_shape)
-            Jz_arr = to_array(Jz, coupling_shape)
-            muJ_arr = to_array(muJ, coupling_shape)
-            for i, j, lat_idx in zip(mps_i, mps_j, lat_indices):
-                idx = tuple(lat_idx)
-                h = _coupling_matrix(site1, site2, Jx_arr[idx], Jy_arr[idx], Jz_arr[idx], muJ_arr[idx])
-                if not np.any(h != 0.0):
-                    continue
-                h = np.transpose(h, [0, 2, 3, 1])
-                coupling = Coupling.from_dense_block(h, [site1, site2], understood_braiding=True)
-                self.add_coupling(coupling, [int(i), int(j)])
-        # done
+        self.add_onsite_operator(-hx, 'Sx')
+        self.add_onsite_operator(-hy, 'Sy')
+        self.add_onsite_operator(-hz, 'Sz')
+        self.add_onsite_operator(D, 'Sz Sz')
+        self.add_onsite_operator(0.5 * E, 'Sp Sp', plus_hc=True)
+
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
+            if np.all(Jx == Jy) and np.all(Jy == Jz):
+                self.add_two_site_coupling(Jx, 'S.S', dx, u1=u1, u2=u2)
+            else:
+                self.add_two_site_coupling(0.25 * (Jx + Jy), 'Sp.Sm', dx, u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling(0.25 * (Jx - Jy), 'Sp.Sp', dx, u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling(Jz, 'Sz.Sz', dx, u1=u1, u2=u2)
+            self.add_two_site_coupling(0.5j * muJ, 'Sp.Sm', dx, u1=u1, u2=u2, plus_hc=True)
+
+        return
 
 
-class SpinChain(SpinModel, NearestNeighborModel):
+class SpinChain(SpinModel):
     """The :class:`SpinModel` on a Chain, suitable for TEBD.
 
     See the :class:`SpinModel` for the documentation of parameters.
@@ -148,7 +168,7 @@ class SpinChain(SpinModel, NearestNeighborModel):
     force_default_lattice = True
 
 
-class DipolarSpinChain(CouplingMPOModel):
+class DipolarSpinChain(ModelBuilder):
     r"""Dipole conserving H3-H4 spin-S chain.
 
     The Hamiltonian reads:
@@ -170,7 +190,7 @@ class DipolarSpinChain(CouplingMPOModel):
     Options
     -------
     .. cfg:config :: DipolarSpinChain
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         S : {0.5, 1, 1.5, 2, ...}
             The 2S+1 local states range from m = -S, -S+1, ... +S.
@@ -194,33 +214,41 @@ class DipolarSpinChain(CouplingMPOModel):
         bc_MPS = model_params.get('bc_MPS', 'finite')
         bc = 'periodic' if bc_MPS in ['infinite', 'segment'] else 'open'
         bc = model_params.get('bc', bc)
-        site = SpinSite(S=S, conserve=conserve)
+        site = lasy.sites.SpinSite(S=S, conserve=conserve)
         lattice = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
         return lattice
+
+    def init_couplings(self, model_params):
+        s, *_ = self.lattice.unit_cell
+        Sx, Sy, Sz = (s.spin.spin_vector[:, :, k] for k in range(3))
+        Sp = Sx + 1.0j * Sy
+        Sm = Sx - 1.0j * Sy
+        self.define_coupling(
+            Coupling_from_numpy_onsite([Sp, Sm @ Sm, Sp], [s, s, s], name='Sp.SmSm.Sp'),
+            hc='Sm.SpSp.Sm',
+            permute=None,  # should not need permutations on the chain
+        )
+        self.define_coupling(
+            Coupling_from_numpy_onsite([Sp, Sm, Sm, Sp], [s, s, s, s], name='Sp.Sm.Sm.Sp'),
+            hc='Sm.Sp.Sp.Sm',
+            permute=None,
+        )
 
     def init_terms(self, model_params):
         """Add the onsite and coupling terms to the model"""
         J3 = model_params.get('J3', 1)
         J4 = model_params.get('J4', 0)
-        site = self.lat.unit_cell[0]
-        Sp = site.spin_vector[:, :, 0] + 1.0j * site.spin_vector[:, :, 1]
-        Sm = site.spin_vector[:, :, 0] - 1.0j * site.spin_vector[:, :, 1]
-        Sm2 = Sm @ Sm
 
-        # -J3 (Sp_0 Sm_1^2 Sp_2 + h.c.)
-        h3 = np.tensordot(np.tensordot(Sp, Sm2, axes=0), Sp, axes=0)  # [p0,p0*,p1,p1*,p2,p2*]
-        h3 = np.transpose(h3, [0, 2, 4, 5, 3, 1])  # -> [p0,p1,p2,p2*,p1*,p0*]
-        coupling3 = Coupling.from_dense_block(h3, [site, site, site], understood_braiding=True)
-        hc_coupling3 = Coupling.from_tensor(dagger(coupling3.to_tensor()), [site, site, site])
-        for i in range(self.lat.N_sites - 2):
-            self.add_coupling(coupling3, [i, i + 1, i + 2], strength=-J3)
-            self.add_coupling(hc_coupling3, [i, i + 1, i + 2], strength=-np.conj(J3))
+        self.add_multi_site_coupling(-J3, 'Sp.SmSm.Sp', dx=[[0], [1], [2]], plus_hc=True)
+        self.add_multi_site_coupling(-J4, 'Sp.Sm.Sm.Sp', dx=[[0], [1], [2], [3]], plus_hc=True)
 
-        # -J4 (Sp_0 Sm_1 Sm_2 Sp_3 + h.c.)
-        h4 = np.tensordot(np.tensordot(np.tensordot(Sp, Sm, axes=0), Sm, axes=0), Sp, axes=0)
-        h4 = np.transpose(h4, [0, 2, 4, 6, 7, 5, 3, 1])  # -> [p0,p1,p2,p3,p3*,p2*,p1*,p0*]
-        coupling4 = Coupling.from_dense_block(h4, [site, site, site, site], understood_braiding=True)
-        hc_coupling4 = Coupling.from_tensor(dagger(coupling4.to_tensor()), [site, site, site, site])
-        for i in range(self.lat.N_sites - 3):
-            self.add_coupling(coupling4, [i, i + 1, i + 2, i + 3], strength=-J4)
-            self.add_coupling(hc_coupling4, [i, i + 1, i + 2, i + 3], strength=-np.conj(J4))
+
+def Coupling_from_numpy_onsite(ops: list[np.ndarray], sites: list[lasy.Site], name: str = None):
+    N = len(ops)
+    assert N == len(sites)
+    res, *more = ops
+    # build in order [p0, p0*, p1, p1*, ...], permute at the end
+    for o in more:
+        res = res[..., None, None] * o
+    res = np.transpose(res, [*range(0, 2 * N, 2), *reversed(range(1, 2 * N, 2))])
+    return lasy.Coupling.from_dense_block(res, sites, name=name, understood_braiding=True)

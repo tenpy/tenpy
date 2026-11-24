@@ -3,19 +3,21 @@
 The XXZ chain is contained in the more general :class:`~tenpy.models.spins.SpinChain`; the idea of
 this module is more to serve as a pedagogical example for a model.
 """
-# Copyright (C) TeNPy Developers, Apache license
 
-from lasyten.models.couplings import spin_field_coupling, spin_spin_coupling
-from lasyten.models.sites import SpinSite
+# Copyright (C) TeNPy Developers, Apache license
+from typing import Literal
+
+import lasyten as lasy
+import numpy as np
 
 from ..tools import asConfig, to_array
 from .lattice import Chain
-from .model import CouplingModel, CouplingMPOModel, MPOModel, NearestNeighborModel
+from .model import CouplingModel, ModelBuilder
 
 __all__ = ['XXZChain', 'XXZChain2']
 
 
-class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
+class XXZChain(CouplingModel):
     r"""Spin-1/2 XXZ chain with Sz conservation.
 
     The Hamiltonian reads:
@@ -36,7 +38,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     Options
     -------
     .. cfg:config :: XXZChain
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
         L : int
             Length of the chain.
@@ -52,7 +54,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     """
 
     def __init__(self, model_params):
-        # 0) read out/set default parameters
+        # 0) Read out model parameters
         model_params = asConfig(model_params, 'XXZChain')
         L = model_params.get('L', 2, int)
         Jxx = model_params.get('Jxx', 1.0, 'real_or_array')
@@ -60,40 +62,61 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         hz = to_array(model_params.get('hz', 0.0, 'real_or_array'), [L])
         bc_MPS = model_params.get('bc_MPS', 'finite', str)
         conserve = model_params.get('conserve', 'best', str)
+
+        # 1) Determine the symmetry / what should be conserved
         if conserve == 'best':
             conserve = 'Sz'
-        # 1-3) local physical site
-        site = SpinSite(S=0.5, conserve=conserve)
-        # 4) lattice
+
+        # 2) Initialize backend
+        default_backend = 'no_symmetry' if conserve in ['None', None] else 'abelian'
+        symmetry_backend = model_params.get('symmetry_backend', default_backend)
+        block_backend = model_params.get('block_backend', None)
+        backend = lasy.get_backend(symmetry_backend, block_backend)
+
+        # 3) Initialize site(s)
+        site = lasy.sites.SpinSite(S=0.5, conserve=conserve, backend=backend)
+
+        # 4) Initialize lattice
         bc = 'open' if bc_MPS == 'finite' else 'periodic'
-        lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
-        # 5) initialize CouplingModel
-        CouplingModel.__init__(self, lat)
-        # 6) add terms of the Hamiltonian
-        # (u is always 0 as we have only one site in the unit cell)
-        field = spin_field_coupling([site], hz=1.0)
-        for i in range(L):
-            self.add_coupling(field, [i], strength=-hz[i])
-        # Jxx/2 (Sp_i Sm_j + Sm_i Sp_j) = Jxx (Sx_i Sx_j + Sy_i Sy_j)
-        coupling_xy = spin_spin_coupling([site, site], Jx=1.0, Jy=1.0)
-        coupling_z = spin_spin_coupling([site, site], Jz=1.0)
-        mps_i, mps_j, Jxx_vals = self.lat.possible_couplings_strengths(0, 0, [1], Jxx)
-        for i, j, strength in zip(mps_i, mps_j, Jxx_vals):
-            self.add_coupling(coupling_xy, [int(i), int(j)], strength=strength)
-        mps_i, mps_j, Jz_vals = self.lat.possible_couplings_strengths(0, 0, [1], Jz)
-        for i, j, strength in zip(mps_i, mps_j, Jz_vals):
-            self.add_coupling(coupling_z, [int(i), int(j)], strength=strength)
-        # 7) initialize H_MPO
-        MPOModel.__init__(self, lat, self.calc_H_MPO())
-        # 8) initialize H_bond (the order of 7/8 doesn't matter)
-        NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
+        lattice = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
+
+        # 5) Initialize CouplingModel
+        CouplingModel.__init__(self, lattice)
+
+        # 6) Define necessary couplings
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jx=1, Jy=1, Jz=1, name='S.S'),
+            hc='S.S',
+            permute='invariant',
+        )
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jpm=1, name='Sp.Sm'),
+            hc='Sm.Sp',
+            permute='swap_hc',
+        )
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jz=1, name='Sz.Sz'),
+            hc='Sz.Sz',
+            permute='invariant',
+        )
+
+        # 7) Add terms of the Hamiltonian
+        self.add_onsite_operator(-hz, 'Sz')
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
+            if np.all(Jz == Jxx):
+                self.add_two_site_coupling(Jz, 'S.S', dx, u1=u1, u2=u2)
+            else:
+                self.add_two_site_coupling(0.5 * Jxx, 'Sp.Sm', dx, u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling(Jz, 'Sz.Sz', dx, u1=u1, u2=u2)
+
+        return
 
 
-class XXZChain2(CouplingMPOModel, NearestNeighborModel):
+class XXZChain2(ModelBuilder):
     """Another implementation of the Spin-1/2 XXZ chain with Sz conservation.
 
     This implementation takes the same parameters as the :class:`XXZChain`, but is implemented
-    based on the :class:`~tenpy.models.model.CouplingMPOModel`.
+    based on the :class:`~tenpy.models.model.ModelBuilder`.
 
     Parameters
     ----------
@@ -104,31 +127,43 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
 
     default_lattice = 'Chain'
     force_default_lattice = True
+    conserve: Literal['Sz', 'parity', None]
 
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
             conserve = 'Sz'
-        return SpinSite(S=0.5, conserve=conserve)  # use predefined Site
+        self.conserve = conserve
+        return lasy.sites.SpinSite(S=0.5, conserve=conserve, backend=self.backend)  # use predefined Site
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jx=1, Jy=1, Jz=1, name='S.S'),
+            hc='S.S',
+            permute='invariant',
+        )
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jpm=1, name='Sp.Sm'),
+            hc='Sm.Sp',
+            permute='swap_hc',
+        )
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jz=1, name='Sz.Sz'),
+            hc='Sz.Sz',
+            permute='invariant',
+        )
 
     def init_terms(self, model_params):
         # read out parameters
         Jxx = model_params.get('Jxx', 1.0, 'real_or_array')
         Jz = model_params.get('Jz', 1.0, 'real_or_array')
-        hz = to_array(model_params.get('hz', 0.0, 'real_or_array'), self.lat.Ls)
-        # add terms
-        for u in range(len(self.lat.unit_cell)):
-            site = self.lat.unit_cell[u]
-            field = spin_field_coupling([site], hz=1.0)
-            for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
-                self.add_coupling(field, [i], strength=-hz[tuple(i_lat)])
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            site1, site2 = self.lat.unit_cell[u1], self.lat.unit_cell[u2]
-            coupling_xy = spin_spin_coupling([site1, site2], Jx=1.0, Jy=1.0)
-            coupling_z = spin_spin_coupling([site1, site2], Jz=1.0)
-            mps_i, mps_j, Jxx_vals = self.lat.possible_couplings_strengths(u1, u2, dx, Jxx)
-            for i, j, strength in zip(mps_i, mps_j, Jxx_vals):
-                self.add_coupling(coupling_xy, [int(i), int(j)], strength=strength)
-            mps_i, mps_j, Jz_vals = self.lat.possible_couplings_strengths(u1, u2, dx, Jz)
-            for i, j, strength in zip(mps_i, mps_j, Jz_vals):
-                self.add_coupling(coupling_z, [int(i), int(j)], strength=strength)
+        hz = to_array(model_params.get('hz', 0.0, 'real_or_array'), self.lattice.Ls)
+
+        self.add_onsite_operator(-hz, 'Sz')
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
+            if np.all(Jz == Jxx):
+                self.add_two_site_coupling(Jz, 'S.S', dx, u1=u1, u2=u2)
+            else:
+                self.add_two_site_coupling(0.5 * Jxx, 'Sp.Sm', dx, u1=u1, u2=u2, plus_hc=True)
+                self.add_two_site_coupling(Jz, 'Sz.Sz', dx, u1=u1, u2=u2)

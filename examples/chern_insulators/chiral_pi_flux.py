@@ -78,16 +78,16 @@ class FermionicPiFluxModel(CouplingMPOModel):
         self.add_onsite(mu, 0, 'N', category='mu N')
         self.add_onsite(-mu, 1, 'N', category='mu N')
 
-        for u1, u2, dx in self.lat.NN:
+        for u1, u2, dx in self.lattice.NN:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
             self.add_coupling(t1_phi, u1, 'Cd', u2, 'C', dx, 'JW', category='t1 Cd_i C_j', plus_hc=True)
             self.add_coupling(V, u1, 'N', u2, 'N', dx, category='V N_i N_j')
 
-        for u1, u2, dx in self.lat.nNNdashed:
+        for u1, u2, dx in self.lattice.nNNdashed:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
             self.add_coupling(t2_phi, u1, 'Cd', u2, 'C', dx, 'JW', category='t2 Cd_i C_j', plus_hc=True)
 
-        for u1, u2, dx in self.lat.nNNdotted:
+        for u1, u2, dx in self.lattice.nNNdotted:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
             self.add_coupling(-t2_phi, u1, 'Cd', u2, 'C', dx, 'JW', category='-t2 Cd_i C_j', plus_hc=True)
 
@@ -137,7 +137,7 @@ def run(phi_ext=np.linspace(0, 1.0, 7)):
         if eng is None:  # first time in the loop
             M = FermionicPiFluxModel(model_params)
             psi = MPS.from_product_state(
-                M.lat.mps_sites(), prod_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+                M.lattice.mps_sites(), prod_state, bc=M.lattice.bc_MPS, unit_cell_width=M.lattice.mps_unit_cell_width
             )
             eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
         else:

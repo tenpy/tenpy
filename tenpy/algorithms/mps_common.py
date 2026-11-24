@@ -502,7 +502,7 @@ class Sweep(Algorithm):
 
         Returns
         -------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Current best guess for the ground state, which is to be optimized.
             Labels are ``'vL', 'p0', 'p1', 'vR'``, or combined versions of it (if `self.combine`).
             For single-site DMRG, the ``'p1'`` label is missing.
@@ -534,7 +534,8 @@ class Sweep(Algorithm):
             RP = o_env.get_RP(i0 + self.eff_H.length - 1, store=True)
             theta = lasy.tdot(LP, theta, ['vR'], ['vL'])
             theta = lasy.tdot(theta, RP, ['vR'], ['vL'])
-            theta = theta.relabel({'vR*': 'vL', 'vL*': 'vR'})
+            theta = theta
+            theta.labels.update({'vR*': 'vL', 'vL*': 'vR'})
             if self.eff_H.combine:
                 theta = self.eff_H.combine_theta(theta)
             theta = lasy.permute_legs(theta, codomain=self.eff_H.acts_on, domain=[])
@@ -555,7 +556,7 @@ class Sweep(Algorithm):
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Local single- or two-site wave function, as returned by :meth:`prepare_update_local`.
 
         Returns
@@ -601,7 +602,15 @@ class Sweep(Algorithm):
             i_L = self.i0
             i_R = self.i0 + 1
         else:  # n == 1 and left moving
-            # TODO is this also correct if move_right is None?
+            # `move_right is None` (only the last entry of the TDVP schedules, with
+            # `update_LP_RP == [False, False]`) also ends up here, giving i_L = -1 for i0 = 0.
+            # This index is never used: `SingleSiteTDVPEngine.update_local` skips the base
+            # `update_env` for i0 == 0 (`left_moving_update`), and `free_no_longer_needed_envs`
+            # deletes nothing for `None`. Otherwise `del_RP(-1)` would not raise, but wrap around
+            # (with a FutureWarning) and delete the right-most RP. `TwoSiteTDVPEngine` has n == 2,
+            # so it never gets here; it calls the base `update_env` even for the `None` update, which
+            # only deletes LP[1], RP[0] (both outdated after the update, not recomputed).
+            # NOTE: this path is untested (tests/test_tdvp.py is skipped).
             i_L = self.i0 - 1
             i_R = self.i0
         return i_L, i_R
@@ -991,12 +1000,12 @@ class EffectiveH(PlanarLinearOperator):
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Wave function to apply the effective Hamiltonian to, with uncombined legs.
 
         Returns
         -------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Wave function with labels as given by `self.acts_on`.
 
         """
@@ -1005,8 +1014,9 @@ class EffectiveH(PlanarLinearOperator):
     def to_matrix(self):
         """Contract `self` to a matrix."""
         tensor = self.to_tensor()
-        n = len(tensor.labels) // 2
-        return lasy.combine_legs(tensor, tensor.labels[:n], tensor.labels[n:])
+        labels = tensor.labels.as_list()
+        n = len(labels) // 2
+        return lasy.combine_legs(tensor, labels[:n], labels[n:])
 
     def update_LP(self, env, i, U=None):
         """Equivalent to ``env.get_LP(i, store=True)``; optimized for `combine`.
@@ -1018,7 +1028,7 @@ class EffectiveH(PlanarLinearOperator):
         i : int
             We update the part left of site `i`.
             Can optimize if `i` == :attr:`i0` and :attr:`combine` is True.
-        U : None | :class:`~tenpy.linalg.np_conserved.Array`
+        U : None | :class:`~lasyten.tensors.SymmetricTensor`
             The tensor on the left-most site `self` acts on, with combined legs after SVD.
             Only used if trying to optimize.
 
@@ -1036,7 +1046,7 @@ class EffectiveH(PlanarLinearOperator):
         i : int
             We update the part right of site `i`.
             Can optimize if `i` == :attr:`i0` + 2 - :attr:`length` and :attr:`combine` is True.
-        U : None | :class:`~tenpy.linalg.np_conserved.Array`
+        U : None | :class:`~lasyten.tensors.SymmetricTensor`
             The tensor on the right-most site `self` acts on, with combined legs after SVD.
             Only used if trying to optimize.
 
@@ -1084,11 +1094,11 @@ class OneSiteH(EffectiveH):
         Overwritten by normal attribute, if `combine`.
     combine, move_right : bool
         See above.
-    LHeff, RHeff : :class:`~tenpy.linalg.np_conserved.Array`
+    LHeff, RHeff : :class:`~lasyten.tensors.SymmetricTensor`
         Only set if :attr:`combine`, and only one of them depending on :attr:`move_right`.
         If `move_right` was True, `LHeff` is set with labels ``'(vR*.p0)', 'wR', '(vR.p0*)'``
         for bra, MPO, ket; otherwise `RHeff` is set with labels ``'(p0*.vL)', 'wL', '(p0, vL*)'``
-    LP, W0, RP : :class:`~tenpy.linalg.np_conserved.Array`
+    LP, W0, RP : :class:`~lasyten.tensors.SymmetricTensor`
         Tensors making up the network of `self`.
 
     """
@@ -1116,10 +1126,10 @@ class OneSiteH(EffectiveH):
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0)
         self.W0 = env.H.get_W(i0)
-        self.dtype = lasy.Dtype.from_numpy_dtype(env.H.dtype)
         self.combine = combine
         self.move_right = move_right
         self.N = self.LP.get_leg('vR').dim * self.W0.get_leg('p').dim * self.RP.get_leg('vL').dim
+        # C++ ``dtype`` is a nanobind property — set it only after the base is constructed.
         PlanarLinearOperator.__init__(
             self,
             op_diagram=self.op_diagram,
@@ -1127,6 +1137,7 @@ class OneSiteH(EffectiveH):
             op_tensors=dict(Lp=self.LP, W0=self.W0, Rp=self.RP),
             vec_name='theta',
         )
+        self.dtype = env.H.dtype
         if combine:
             self.combine_Heff(env)
 
@@ -1139,7 +1150,6 @@ class OneSiteH(EffectiveH):
         self.LP = lasy.permute_legs(LP, codomain=['vR*', 'wR', 'vR'], domain=[])
         self.RP = lasy.permute_legs(RP, codomain=['vL*', 'vL', 'wL'], domain=[])
         self.W0 = W0
-        self.dtype = LP.dtype
         self.combine = combine
         self.move_right = move_right
         self.N = self.LP.get_leg('vR').dim * self.W0.get_leg('p').dim * self.RP.get_leg('vL').dim
@@ -1150,6 +1160,7 @@ class OneSiteH(EffectiveH):
             op_tensors=dict(Lp=self.LP, W0=self.W0, Rp=self.RP),
             vec_name='theta',
         )
+        self.dtype = LP.dtype
         return self
 
     def matvec(self, theta):
@@ -1157,13 +1168,13 @@ class OneSiteH(EffectiveH):
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Labels: ``vL, p0, vR`` if combine=False, ``(vL.p0), vR`` or ``vL, (p0.vR)`` if True
             (depending on the direction of movement)
 
         Returns
         -------
-        theta :class:`~tenpy.linalg.np_conserved.Array`
+        theta :class:`~lasyten.tensors.SymmetricTensor`
             Product of `theta` and the effective Hamiltonian.
 
         """
@@ -1205,12 +1216,12 @@ class OneSiteH(EffectiveH):
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Wave function with labels ``'vL', 'p0', 'vR'``
 
         Returns
         -------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Wave function with labels ``'(vL.p0)', 'vR'``
 
         """
@@ -1299,13 +1310,13 @@ class TwoSiteH(EffectiveH):
     acts_on : list of str
         Labels of the state on which `self` acts. NB: class attribute.
         Overwritten by normal attribute, if `combine`.
-    LHeff : :class:`~tenpy.linalg.np_conserved.Array`
+    LHeff : :class:`~lasyten.tensors.SymmetricTensor`
         Left part of the effective Hamiltonian.
         Labels ``'(vR*.p0)', 'wR', '(vR.p0*)'`` for bra, MPO, ket.
-    RHeff : :class:`~tenpy.linalg.np_conserved.Array`
+    RHeff : :class:`~lasyten.tensors.SymmetricTensor`
         Right part of the effective Hamiltonian.
         Labels ``'(p1*.vL)', 'wL', '(p1.vL*)'`` for ket, MPO, bra.
-    LP, W0, W1, RP : :class:`~tenpy.linalg.np_conserved.Array`
+    LP, W0, W1, RP : :class:`~lasyten.tensors.SymmetricTensor`
         Tensors making up the network of `self`.
 
     """
@@ -1337,11 +1348,11 @@ class TwoSiteH(EffectiveH):
         # 'wL', 'wR', 'p', 'p*'
         self.W1 = env.H.get_W(i0 + 1)
         # 'wL', 'wR', 'p', 'p*'
-        self.dtype = env.H.dtype
         self.combine = combine
         self.N = (
             self.LP.get_leg('vR').dim * self.W0.get_leg('p').dim * self.W1.get_leg('p').dim * self.RP.get_leg('vL').dim
         )
+        # C++ ``dtype`` is a nanobind property — set it only after the base is constructed.
         PlanarLinearOperator.__init__(
             self,
             op_diagram=self.op_diagram,
@@ -1349,6 +1360,7 @@ class TwoSiteH(EffectiveH):
             op_tensors=dict(Lp=self.LP, W0=self.W0, W1=self.W1, Rp=self.RP),
             vec_name='theta',
         )
+        self.dtype = env.H.dtype
         if combine:
             self.combine_Heff(env)
 
@@ -1357,12 +1369,12 @@ class TwoSiteH(EffectiveH):
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Labels: ``vL, p0, p1, vR`` if combine=False, ``(vL.p0), (p1.vR)`` if True
 
         Returns
         -------
-        theta :class:`~tenpy.linalg.np_conserved.Array`
+        theta :class:`~lasyten.tensors.SymmetricTensor`
             Product of `theta` and the effective Hamiltonian.
 
         """
@@ -1405,18 +1417,18 @@ class TwoSiteH(EffectiveH):
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Wave function with labels ``'vL', 'p0', 'p1', 'vR'``
 
         Returns
         -------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Wave function with labels ``'vL', 'p0', 'p1', 'vR'``
 
         """
         if self.combine:
             theta = lasy.combine_legs(theta, ['vL', 'p0'], ['p1', 'vR'], pipes=[self.pipeL, self.pipeR])
-        return lasy.permute_legs(theta, codomain=self.acts_on, domain=[])
+        return lasy.planar_permute_legs(theta, codomain=self.acts_on, domain=[])
 
     def adjoint(self):
         """Return the hermitian conjugate of `self`."""
@@ -1482,11 +1494,11 @@ class ZeroSiteH(EffectiveH):
     acts_on : list of str
         Labels of the state on which `self` acts. NB: class attribute.
         Overwritten by normal attribute, if `combine`.
-    LHeff, RHeff : :class:`~tenpy.linalg.np_conserved.Array`
+    LHeff, RHeff : :class:`~lasyten.tensors.SymmetricTensor`
         Only set if :attr:`combine`, and only one of them depending on :attr:`move_right`.
         If `move_right` was True, `LHeff` is set with labels ``'(vR*.p0)', 'wR', '(vR.p0*)'``
         for bra, MPO, ket; otherwise `RHeff` is set with labels ``'(p0*.vL)', 'wL', '(p0, vL*)'``
-    LP, W0, RP : :class:`~tenpy.linalg.np_conserved.Array`
+    LP, W0, RP : :class:`~lasyten.tensors.SymmetricTensor`
         Tensors making up the network of `self`.
 
     """
@@ -1509,8 +1521,8 @@ class ZeroSiteH(EffectiveH):
         self.i0 = i0
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0 - 1)
-        self.dtype = lasy.Dtype.from_numpy_dtype(env.H.dtype)
         self.N = self.LP.get_leg('vR').dim * self.RP.get_leg('vL').dim
+        # C++ ``dtype`` is a nanobind property — set it only after the base is constructed.
         PlanarLinearOperator.__init__(
             self,
             op_diagram=self.op_diagram,
@@ -1518,6 +1530,7 @@ class ZeroSiteH(EffectiveH):
             op_tensors=dict(Lp=self.LP, Rp=self.RP),
             vec_name='theta',
         )
+        self.dtype = env.H.dtype
 
     @classmethod
     def from_LP_RP(cls, LP, RP, i0=0):
@@ -1525,7 +1538,6 @@ class ZeroSiteH(EffectiveH):
         self.i0 = i0
         self.LP = lasy.permute_legs(LP, codomain=['vR*', 'wR', 'vR'], domain=[])
         self.RP = lasy.permute_legs(RP, codomain=['vL*', 'vL', 'wL'], domain=[])
-        self.dtype = LP.dtype
         self.N = LP.get_leg('vR').dim * RP.get_leg('vL').dim
         PlanarLinearOperator.__init__(
             self,
@@ -1534,6 +1546,7 @@ class ZeroSiteH(EffectiveH):
             op_tensors=dict(Lp=self.LP, Rp=self.RP),
             vec_name='theta',
         )
+        self.dtype = LP.dtype
         return self
 
     def matvec(self, theta):
@@ -1541,12 +1554,12 @@ class ZeroSiteH(EffectiveH):
 
         Parameters
         ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~lasyten.tensors.SymmetricTensor`
             Labels: ``vL, vR``.
 
         Returns
         -------
-        theta :class:`~tenpy.linalg.np_conserved.Array`
+        theta :class:`~lasyten.tensors.SymmetricTensor`
             Product of `theta` and the effective Hamiltonian.
 
         """
@@ -2398,7 +2411,8 @@ class VariationalCompression(IterativeSweeps):
         RP = self.env.get_RP(i0 + 1)
         th = lasy.tdot(LP, th, ['vR'], ['vL'])
         th = lasy.tdot(th, RP, ['vR'], ['vL'])
-        th = th.relabel({'vR*': 'vL', 'vL*': 'vR'})
+        th = th
+        th.labels.update({'vR*': 'vL', 'vL*': 'vR'})
         th = lasy.permute_legs(th, codomain=['vL', 'p0'], domain=['p1', 'vR'])
         th = lasy.combine_legs(th, ['vL', 'p0'], ['p1', 'vR'])
         return self.update_new_psi(th)
@@ -2422,8 +2436,10 @@ class VariationalCompression(IterativeSweeps):
             theta_diff = 1.0 - abs(ov)
             self._theta_diff.append(theta_diff)
         # now set the new tensors to the MPS
-        A0 = U.relabel({'p0': 'p'})
-        B1 = VH.relabel({'p1': 'p'})
+        A0 = U
+        A0.labels.update({'p0': 'p'})
+        B1 = VH
+        B1.labels.update({'p1': 'p'})
         new_psi.set_B(i0, A0, form='A')  # left-canonical
         new_psi.set_B(i0 + 1, B1, form='B')  # right-canonical
         new_psi.set_SR(i0, S)

@@ -53,5 +53,5 @@ repos:
         entry: FIXME|DONTSHIP
         language: pygrep
         types: [text]
-        # this file needs to include the forbidden patterns, so we need to exclude it.
-        exclude: ^(\.pre-commit-config\.yaml|doc/contr/guidelines.rst)$
+        # This file and the guidelines need to include the forbidden patterns.
+        exclude: ^(\.pre-commit-config\.yaml|doc/contr/guidelines\.rst)

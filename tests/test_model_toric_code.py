@@ -1,8 +1,4 @@
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
-
-pytest.skip(allow_module_level=True)
-
 import numpy as np
 import pytest
 from test_model import check_general_model
@@ -10,13 +6,14 @@ from test_model import check_general_model
 from tenpy.algorithms import dmrg
 from tenpy.models.toric_code import ToricCode
 from tenpy.networks.mps import MPS
+from tenpy.tools import asConfig
 
 
 @pytest.mark.slow
 def test_ToricCode_general():
     check_general_model(
         ToricCode,
-        dict(Lx=2, Ly=3, bc_MPS='infinite', sort_charge=True),
+        dict(Lx=2, Ly=3, bc_MPS='infinite'),
         {
             'conserve': [None, 'parity'],
         },
@@ -25,10 +22,10 @@ def test_ToricCode_general():
 
 @pytest.mark.slow
 def test_ToricCode(Lx=1, Ly=2):
-    model_params = {'Lx': Lx, 'Ly': Ly, 'bc_MPS': 'infinite', 'sort_charge': True}
+    model_params = {'Lx': Lx, 'Ly': Ly, 'bc_MPS': 'infinite'}
     M = ToricCode(model_params)
     psi = MPS.from_product_state(
-        M.lat.mps_sites(), [0] * M.lat.N_sites, bc='infinite', unit_cell_width=M.lat.mps_unit_cell_width
+        M.lattice.mps_sites(), [0] * M.lattice.N_sites, bc='infinite', unit_cell_width=M.lattice.mps_unit_cell_width
     )
     dmrg_params = {
         'mixer': True,
@@ -37,7 +34,14 @@ def test_ToricCode(Lx=1, Ly=2):
         'max_E_err': 1.0e-10,
         'N_sweeps_check': 4,
     }
-    result = dmrg.run(psi, M, dmrg_params)
+
+    with pytest.raises(NotImplementedError, match='Mixer is not ported yet.'):
+        dmrg_params = asConfig(dmrg_params, 'DMRG')
+        dmrg_params.touch_all(subconfigs=['trunc_params'])
+        result = dmrg.run(psi, M, dmrg_params, resume_data={'init_env_data': dict(start_env_sites=0)})
+    pytest.xfail('Mixer not ported yet')
+
+    result = dmrg.run(psi, M, dmrg_params, resume_data={'init_env_data': dict(start_env_sites=0)})
     E = result['E']
     print('E =', E)
     psi.canonical_form()

@@ -45,8 +45,8 @@ As outlined in :doc:`/install/conda`, on Linux/Mac you also need to pin blas to 
     MKL uses different threads to parallelize various BLAS and LAPACK routines.
     If you run the code on a cluster, make sure that you specify the number of used cores/threads correctly.
     By default, MKL uses all the available CPUs, which might be in stark contrast than what you required from the
-    cluster. The easiest way to set the used threads is using the environment variable `MKL_NUM_THREADS` (or `OMP_NUM_THREADS`).
-    For a dynamic change of the used threads, you might want to look at :mod:`~tenpy.tools.process`.
+    cluster. Set the number of threads with the environment variables `MKL_NUM_THREADS` and/or `OMP_NUM_THREADS`
+    *before* starting Python. If PyTorch is loaded, use ``torch.set_num_threads(n)`` for a runtime change.
 
 
 

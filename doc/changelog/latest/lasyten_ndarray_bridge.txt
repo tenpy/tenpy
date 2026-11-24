@@ -1,0 +1,9 @@
+- Dense ``Tensor.to_numpy`` returns are treated as read-only under Eigen
+  (do not mutate those buffers in place).
+- Set ``EffectiveH`` / ``OneSiteH`` / ``TwoSiteH`` / ``ZeroSiteH`` ``dtype`` only
+  after ``PlanarLinearOperator.__init__`` (nanobind property on an uninitialized
+  trampoline instance raised ``TypeError``); assign ``env.H.dtype`` directly
+  (already a lasyten ``Dtype``).
+- MPS array imports (``from_Bflat`` / product-state / overlap zeros) use
+  ``block_from_ndarray``. Numpy import now **copies** into an owned ndarray so
+  the Block outlives the caller's array (fixes the previous segfault after GC).

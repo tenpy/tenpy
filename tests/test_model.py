@@ -3,57 +3,39 @@
 # Copyright (C) TeNPy Developers, Apache license
 import itertools
 
+import lasyten as lasy
 import numpy as np
 import numpy.testing as npt
 import pytest
-from lasyten.models.couplings import Coupling, heisenberg_coupling, spin_field_coupling, spin_spin_coupling
-
-# from tenpy.models.spins import DipolarSpinChain
-# from tenpy.models.xxz_chain import XXZChain
 from lasyten.models.sites import SpinSite
-from lasyten.tensors import almost_equal, dagger
+from lasyten.tensors import almost_equal
 
-# import tenpy.linalg.np_conserved as npc
-# import tenpy.networks.site
-# from tenpy.algorithms.exact_diag import ExactDiag, get_numpy_Hamiltonian
+from tenpy.algorithms import ExactDiag, dmrg
+from tenpy.algorithms.exact_diag import get_numpy_Hamiltonian
 from tenpy.models import lattice, model
-
-# spin_half_site = tenpy.networks.site.SpinHalfSite('Sz', sort_charge=False)
-
-# fermion_site = tenpy.networks.site.FermionSite('N')
+from tenpy.models.spins import Coupling_from_numpy_onsite, DipolarSpinChain, SpinChain
+from tenpy.models.xxz_chain import XXZChain2
+from tenpy.networks import MPS
+from tenpy.tools import asConfig
 
 __all__ = ['check_model_sanity', 'check_general_model']
 
 
-def _mpo_is_hermitian(H_MPO, eps=1.0e-10):
-    """Check hermiticity of a finite `H_MPO` at the dense-tensor level.
-
-    ``MPO.is_hermitian()``/``MPO.overlap()`` still rely on np_conserved-only methods that
-    haven't been ported to lasyten tensors; for the (currently finite-only) models under test we
-    can instead just contract the whole MPO into a single Coupling and compare to its dagger.
-    """
-    if H_MPO.bc != 'finite':
-        raise NotImplementedError('hermiticity check only implemented for bc="finite"')
-    coupling = Coupling(sites=list(H_MPO.sites), factorization=list(H_MPO._W))
-    op = coupling.to_tensor()
-    return almost_equal(op, dagger(op), atol=eps, rtol=eps)
-
-
 def check_model_sanity(M, hermitian=True):
     """call M.test_sanity() for all different subclasses of M."""
-    if isinstance(M, model.CouplingModel):
-        model.CouplingModel.test_sanity(M)
-    if isinstance(M, model.NearestNeighborModel):
-        model.NearestNeighborModel.test_sanity(M)
-        if hermitian:
-            for i, H in enumerate(M.H_bond):
-                if H is not None and not almost_equal(H, dagger(H)):
-                    print(H)
-                    raise ValueError(f'H on bond {i:d} not hermitian')
-    if isinstance(M, model.MPOModel):
-        model.MPOModel.test_sanity(M)
-        if hermitian:
-            assert _mpo_is_hermitian(M.H_MPO)
+    M.test_sanity()
+    if hermitian:
+        assert M.get_H_MPO().is_hermitian()
+
+        try:
+            H_bond = M.get_H_bond()
+        except Exception:
+            pass
+        else:
+            for H in H_bond:
+                if H is None:
+                    continue
+                assert almost_equal(H, H.hc)
 
 
 def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True):
@@ -86,25 +68,88 @@ def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True
         check_model_sanity(M, hermitian)
 
 
-def test_CouplingModel():
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
-    for bc in ['open', 'periodic']:
-        spin_half_lat = lattice.Chain(5, spin_half_site, bc=bc, bc_MPS='finite')
-        M = model.CouplingModel(spin_half_lat)
-        M.add_twosite_coupling(1.2, 0, 'Sz', 0, 'Sz', 1)
-        M.test_sanity()
-        M.calc_H_MPO()
-        if bc == 'periodic':
-            with pytest.raises(ValueError, match='initialize H_bond for a NearestNeighborModel'):
-                M.calc_H_bond()  # should raise a ValueError
-                # periodic bc but finite bc_MPS leads to a long-range coupling
-        else:
-            M.calc_H_bond()
+@pytest.mark.parametrize('bc', ['open', 'periodic'])
+@pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
+@pytest.mark.parametrize('tensor_backend', ['fusion_tree', 'abelian', 'no_symmetry'])
+@pytest.mark.parametrize('conserve', ['SU2', 'Sz', 'parity', None])
+def test_CouplingModel_basic(bc, bc_MPS, tensor_backend, conserve):
+    backend = lasy.get_backend(tensor_backend)
+
+    if (tensor_backend == 'abelian' and conserve == 'SU2') or (
+        tensor_backend == 'no_symmetry' and conserve is not None
+    ):
+        with pytest.raises(ValueError, match='backend does not support this symmetry'):
+            site = SpinSite(conserve=conserve, backend=backend)
+        # error is expected behavior
+        return
+
+    site = SpinSite(conserve=conserve, backend=backend)
+
+    if bc == 'open' and bc_MPS == 'infinite':
+        with pytest.raises(ValueError, match='Need periodic boundary conditions'):
+            spin_half_lat = lattice.Chain(5, site, bc=bc, bc_MPS=bc_MPS)
+        # error is expected behavior
+        return
+
+    spin_half_lat = lattice.Chain(5, site, bc=bc, bc_MPS=bc_MPS)
+
+    M = model.CouplingModel(spin_half_lat)
+    M.define_coupling(
+        lasy.models.spin_spin_coupling([site, site], Jx=1, Jy=1, Jz=1, name='S.S'),
+        hc='S.S',
+        permute='invariant',
+    )
+    if conserve not in ['SU2', 'Sz']:
+        M.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jx=1, name='Sx.Sx'),
+            hc='Sx.Sx',
+            permute='invariant',
+        )
+
+    # 1) Only NN terms
+    M.add_two_site_coupling(1.2, 'S.S', dx=1)
+    if conserve == 'SU2':
+        with pytest.raises(lasy.SymmetryError):
+            M.add_onsite_operator(0.3, 'Sz')
+    else:
+        M.add_onsite_operator(0.3, 'Sz')
+    if conserve not in ['SU2', 'Sz']:
+        M.add_two_site_coupling(0.7, 'Sx.Sx', dx=1)
+    if conserve is None:
+        M.add_onsite_operator(0.8, 'Sx')
+    with pytest.raises(ValueError):
+        M.add_onsite_operator(0.2, 'unknownOp')
+    with pytest.raises(ValueError):
+        M.add_two_site_coupling(0.7, 'unknownCoupling', dx=1)
+
+    M.test_sanity()
+
+    H_MPO = M.get_H_MPO()
+    H_MPO.test_sanity()
+
+    if bc == 'periodic' and bc_MPS == 'finite':
+        with pytest.raises(ValueError, match='not nearest neighbor'):
+            # periodic bc but finite bc_MPS leads to a long-range coupling
+            M.get_H_bond()
+        # error is expected behavior
+    else:
+        H_bond = M.get_H_bond()
+        H_bond_from_MPO = model.calc_H_bond_from_MPO(H_MPO)
+
+        for h1, h2 in zip(H_bond, H_bond_from_MPO):
+            if h1 is None and h2 is None:
+                pass
+            elif h1 is None:
+                assert lasy.norm(h2) < 1e-14
+            elif h2 is None:
+                assert lasy.norm(h1) < 1e-14
+            else:
+                assert lasy.almost_equal(h1, h2)
 
 
 def test_ext_flux():
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     Lx, Ly = 3, 4
+    fermion_site = lasy.sites.SpinlessFermionSite()
     lat = lattice.Square(Lx, Ly, fermion_site, bc=['periodic', 'periodic'], bc_MPS='infinite')
     M = model.CouplingModel(lat)
     strength = 1.23
@@ -140,243 +185,326 @@ def test_ext_flux():
 
 
 def test_CouplingModel_shift(Lx=3, Ly=3, shift=1):
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     bc = ['periodic', shift]
-    spin_half_square = lattice.Square(Lx, Ly, spin_half_site, bc=bc, bc_MPS='infinite')
+    s = lasy.sites.SpinSite()
+    spin_half_square = lattice.Square(Lx, Ly, s, bc=bc, bc_MPS='infinite')
     M = model.CouplingModel(spin_half_square)
-    M.add_twosite_coupling(1.2, 0, 'Sz', 0, 'Sz', [1, 0])
-    M.add_multi_coupling(0.8, [('Sz', [0, 0], 0), ('Sz', [0, 1], 0), ('Sz', [1, 0], 0)])
+    Sz = s.get_op('Sz').as_SymmetricTensor()
+    Sz_Sz = lasy.outer(Sz, Sz, relabel1={'p': 'p0', 'p*': 'p0*'}, relabel2={'p': 'p1', 'p*': 'p1*'})
+    Sz_Sz_Sz = lasy.outer(Sz_Sz, Sz, relabel2={'p': 'p2', 'p*': 'p2*'})
+    M.define_coupling(lasy.Coupling.from_tensor(Sz_Sz, [s, s], 'Sz.Sz'), hc='Sz.Sz', permute='invariant')
+    M.define_coupling(lasy.Coupling.from_tensor(Sz_Sz_Sz, [s, s, s], 'Sz.Sz.Sz'), hc='Sz.Sz.Sz', permute='invariant')
+    M.add_two_site_coupling(1.2, 'Sz.Sz', dx=[1, 0])
+    M.add_multi_site_coupling(0.8, 'Sz.Sz.Sz', dx=[[0, 0], [0, 1], [1, 0]])
     M.test_sanity()
-    H = M.calc_H_MPO()
-    dims = [W.shape[0] for W in H._W]
-    # check translation invariance of the MPO: at least the dimensions should fit
-    # (the states are differently ordered, so the matrices differ!)
-    for i in range(1, Lx):
-        assert dims[:Ly] == dims[i * Ly : (i + 1) * Ly]
+    H = M.get_H_MPO()
+
+    # check translation invariance of the MPO
+    for y in range(Ly):
+        W = H._W[y]
+        wL_labels = W.get_leg('wL').summand_labels
+        assert 'IdL' in wL_labels
+        assert 'IdR' in wL_labels
+        assert sum(l.startswith('Sz.Sz#') for l in wL_labels) == 3
+        assert sum(l.startswith('Sz.Sz.Sz#') for l in wL_labels) == (4 if y == 0 else 5)
+        for x in range(1, Lx):
+            W_shifted = H._W[y + x * Ly]
+            wL_labels = W_shifted.get_leg('wL').summand_labels
+            assert 'IdL' in wL_labels
+            assert 'IdR' in wL_labels
+            assert sum(l.startswith('Sz.Sz#') for l in wL_labels) == 3
+            assert sum(l.startswith('Sz.Sz.Sz#') for l in wL_labels) == (4 if y == 0 else 5)
+            # comparing tensors is too annoying, since they dont have matching order of cells...
+            # -> at least compare the legs
+            assert W.get_leg('wL').is_isomorphic_to(W_shifted.get_leg('wL'))
 
 
-def test_CouplingModel_fermions():
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
-    for bc, bc_MPS in zip(['open', 'periodic'], ['finite', 'infinite']):
-        fermion_lat = lattice.Chain(5, fermion_site, bc=bc, bc_MPS=bc_MPS)
-        M = model.CouplingModel(fermion_lat)
-        M.add_twosite_coupling(1.2, 0, 'Cd', 0, 'C', 1, 'JW')
-        M.add_twosite_coupling(1.2, 0, 'Cd', 0, 'C', -1, 'JW')
-        M.test_sanity()
-        M.calc_H_MPO()
-        M.calc_H_bond()
+@pytest.mark.parametrize('bc, bc_MPS', [['open', 'finite'], ['periodic', 'infinite']])
+def test_CouplingModel_fermions(bc, bc_MPS):
+    s = lasy.sites.SpinlessFermionSite()
+    fermion_lat = lattice.Chain(5, s, bc=bc, bc_MPS=bc_MPS)
+    M = model.CouplingModel(fermion_lat)
+    M.define_coupling(lasy.models.hopping([s, s], t_right=0, name='Cd.C'), hc='C.Cd', permute='swap_hc')
+    M.add_two_site_coupling(1.2, 'Cd.C', dx=1)
+    M.add_two_site_coupling(1.2, 'Cd.C', dx=-1)
+    M.test_sanity()
+    M.get_H_MPO()
+    M.get_H_bond()
 
 
 def test_CouplingModel_explicit():
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
-    fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
+    s = lasy.sites.SpinlessFermionSite()
+    fermion_lat_cyl = lattice.Square(1, 2, s, bc='periodic', bc_MPS='infinite')
+
     M = model.CouplingModel(fermion_lat_cyl)
-    M.add_onsite(0.125, 0, 'N')
-    M.add_twosite_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), None)  # auto-determine JW-string!
-    M.add_twosite_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), None)
-    M.add_twosite_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), None)
-    M.add_twosite_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), None)
-    M.add_twosite_coupling(4.0, 0, 'N', 0, 'N', (-2, -1), None)  # a full unit cell inbetween!
-    H_mpo = M.calc_H_MPO()
+    Cd_C = lasy.models.hopping([s, s], t_right=0, name='Cd.C')
+    M.define_coupling(Cd_C, hc='C.Cd', permute='swap_hc')
+    M.define_coupling(lasy.models.density_density_interaction([s, s], name='N.N'), hc='N.N', permute='invariant')
+
+    M.add_onsite_operator(0.125, 'N')
+    M.add_two_site_coupling(0.25, 'Cd.C', dx=[0, 1])
+    M.add_two_site_coupling(0.25, 'Cd.C', dx=[0, -1])
+    M.add_two_site_coupling(1.5, 'Cd.C', dx=[1, 0])
+    M.add_two_site_coupling(1.5, 'Cd.C', dx=[-1, 0])
+    M.add_two_site_coupling(4.0, 'N.N', dx=[-2, -1])  # a full unit cell inbetween!
+
+    H_mpo = M.get_H_MPO()
+
     W0_new = H_mpo.get_W(0)
     W1_new = H_mpo.get_W(1)
-    Id, JW, N = fermion_site.Id, fermion_site.JW, fermion_site.N
-    Cd, C = fermion_site.Cd, fermion_site.C
-    CdJW = Cd.matvec(JW)  # = Cd
-    JWC = JW.matvec(C)  # = C
-    #  H_MPO_graph = tenpy.networks.mpo.MPOGraph.from_terms((M.all_onsite_terms(),
-    #                                                        M.all_coupling_terms(),
-    #                                                        M.exp_decaying_terms),
-    #                                                       M.lat.mps_sites(),
-    #                                                       M.lat.bc_MPS,
-    #                                                       unit_cell_width=M.lat.mps_unit_cell_width)
-    #  H_MPO_graph._set_ordered_states()
-    #  from pprint import pprint
-    #  pprint(H_MPO_graph._ordered_states)
-    #  print(M.all_coupling_terms().to_TermList())
-    #  [{'IdL': 0,
-    #    ('left', 0, 'Cd JW', 'JW'): 1,
-    #    ('left', 0, 'JW C', 'JW'): 2,
-    #    ('left', 0, 'N', 'Id'): 3,
-    #    ('left', 1, 'Cd JW', 'JW'): 4,
-    #    ('left', 1, 'JW C', 'JW'): 5,
-    #    ('left', 1, 'N', 'Id'): 6,
-    #    ('left', 0, 'N', 'Id', 2, 'Id', 'Id'): 7,
-    #    ('left', 1, 'N', 'Id', 3, 'Id', 'Id'): 8},
-    #    'IdR': 9,
-    #   {'IdL': 0,
-    #    ('left', 0, 'Cd JW', 'JW'): 1,
-    #    ('left', 0, 'JW C', 'JW'): 2,
-    #    ('left', 0, 'N', 'Id'): 3,
-    #    ('left', 1, 'Cd JW', 'JW'): 4,
-    #    ('left', 1, 'JW C', 'JW'): 5,
-    #    ('left', 1, 'N', 'Id'): 6},
-    #    ('left', 0, 'N', 'Id', 2, 'Id', 'Id'): 7,
-    #    ('left', 0, 'N', 'Id', 2, 'Id', 'Id', 4, 'Id', 'Id'): 8,
-    #    'IdR': 9,
-    #  0.50000 * Cd JW_0 C_1 +
-    #  1.50000 * Cd JW_0 C_2 +
-    #  0.50000 * JW C_0 Cd_1 +
-    #  1.50000 * JW C_0 Cd_2 +
-    #  4.00000 * N_0 N_5 +
-    #  1.50000 * Cd JW_1 C_3 +
-    #  1.50000 * JW C_1 Cd_3 +
-    #  4.00000 * N_1 N_4
+
+    w_triv = lasy.ElementarySpace.from_trivial_sector(symmetry=M.symmetry)
+    w_odd = lasy.ElementarySpace(M.symmetry, M.symmetry.get_sector('odd'))
+    Id_0 = s.get_onsite_W_block('Id', w=w_triv)
+    Id_1 = s.get_onsite_W_block('Id', w=w_odd)
+    N_block = s.get_onsite_W_block('N', w=w_triv)
+    Cd_L, C_R = Cd_C.factorization
+    # The model defines the coupling 'C.Cd' as the `dagger` of 'Cd.C'. The factorization of `dagger` agrees with the
+    # natural factorization ``hopping([s, s], t_left=0).factorization`` only up to a gauge on the virtual leg
+    # (signs on the odd sector, from the isomorphism that flips the duality of the virtual leg), so we do not
+    # compare the *cells* against the latter (the operators are compared below).
+    C_L, Cd_R = Cd_C.dagger().factorization
+    # independent check, the factorization above is gauge dependent but the operator is not
+    assert lasy.almost_equal(Cd_C.dagger().to_tensor(), lasy.models.hopping([s, s], t_left=0).to_tensor())
+    N_L, N_R = lasy.models.density_density_interaction([s, s]).factorization
+
+    print()
+    print(H_mpo.show_W_grid(0))
+    print()
+    print(H_mpo.show_W_grid(1))
 
     # fmt: off
-    W0_ex = [[Id,   CdJW, JWC,  N,    None, None, None, None, None, N*0.125],
-             [None, None, None, None, None, None, None, None, None, C*1.5],
-             [None, None, None, None, None, None, None, None, None, Cd*1.5],
-             [None, None, None, None, None, None, None, Id,   None, None],
-             [None, None, None, None, JW,   None, None, None, None, None],
-             [None, None, None, None, None, JW,   None, None, None, None],
-             [None, None, None, None, None, None, Id,   None, None, None],
-             [None, None, None, None, None, None, None, None, Id,   None],
-             [None, None, None, None, None, None, None, None, None, N*4.0],
-             [None, None, None, None, None, None, None, None, None, Id]]
-    W1_ex = [[Id,   None, None, None, CdJW, JWC,  N,    None, None, N*0.125],
-             [None, JW,   None, None, None, None, None, None, None, C*0.5],
-             [None, None, JW,   None, None, None, None, None, None, Cd*0.5],
-             [None, None, None, Id,   None, None, None, None, None, None],
-             [None, None, None, None, None, None, None, None, None, C*1.5],
-             [None, None, None, None, None, None, None, None, None, Cd*1.5],
-             [None, None, None, None, None, None, None, None, Id,   None],
-             [None, None, None, None, None, None, None, Id,   None, None],
-             [None, None, None, None, None, None, None, None, None, N*4.0],
-             [None, None, None, None, None, None, None, None, None, Id]]
+    # NOTE: we currently do not re-use edges in the MPOGraph
+    #       commented out is what we may expect once we do
+    #       The first two terms (dx=[0, 1] and dx=[0, -1]) act on the exact same sites,
+    #       so those *are* combined
+
+    # W0_ex = [[Id,   Cd_L, C_L,  N_L,  None, None, None, None, None, 0.125 * N_block],
+    #          [None, None, None, None, None, None, None, None, None, 1.5 * C_R      ],
+    #          [None, None, None, None, None, None, None, None, None, 1.5 * Cd_R     ],
+    #          [None, None, None, None, None, None, None, Id,   None, None           ],
+    #          [None, None, None, None, Id,   None, None, None, None, None           ],
+    #          [None, None, None, None, None, Id,   None, None, None, None           ],
+    #          [None, None, None, None, None, None, Id,   None, None, None           ],
+    #          [None, None, None, None, None, None, None, None, Id,   None           ],
+    #          [None, None, None, None, None, None, None, None, None, 4.0 * N_R      ],
+    #          [None, None, None, None, None, None, None, None, None, Id             ]]
+
+    # W1_ex = [[Id,   None, None, None, Cd_L, C_L,  N_L,  None, None, 0.125 * N_block],
+    #          [None, Id,   None, None, None, None, None, None, None, 0.5 * C_R      ],
+    #          [None, None, Id,   None, None, None, None, None, None, .5 * Cd_R      ],
+    #          [None, None, None, Id,   None, None, None, None, None, None           ],
+    #          [None, None, None, None, None, None, None, None, None, 1.5 * C_R      ],
+    #          [None, None, None, None, None, None, None, None, None, 1.5 * Cd_R     ],
+    #          [None, None, None, None, None, None, None, None, Id,   None           ],
+    #          [None, None, None, None, None, None, None, Id,   None, None           ],
+    #          [None, None, None, None, None, None, None, None, None, 4.0 * N_R      ],
+    #          [None, None, None, None, None, None, None, None, None, Id             ]]
+
+    W0_ex = [[Id_0, C_L,  C_L,  None, Cd_L, Cd_L, None, N_L,  None, None, None, 0.125 * N_block],
+             [None, None, None, None, None, None, None, None, None, None, None, 1.5 * Cd_R     ],
+             [None, None, None, Id_1, None, None, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, 1.5 * C_R      ],
+             [None, None, None, None, None, None, Id_1, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, Id_0, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, Id_0, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, Id_0, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, 4.0 * N_R      ],
+             [None, None, None, None, None, None, None, None, None, None, None, Id_0           ]]
+
+    W1_ex = [[Id_0, None, C_L,  None, Cd_L, None, None, N_L,  None, 0.125 * N_block],
+             [None, None, None, None, None, None, None, None, None, 2 * 0.25 * Cd_R],
+             [None, Id_1, None, None, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, 1.5 * Cd_R     ],
+             [None, None, None, None, None, None, None, None, None, 2 * 0.25 * C_R ],
+             [None, None, None, Id_1, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, 1.5 * C_R      ],
+             [None, None, None, None, None, Id_0, None, None, None, None           ],
+             [None, None, None, None, None, None, Id_0, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, 4.0 * N_R      ],
+             [None, None, None, None, None, None, None, None, Id_0, None           ],
+             [None, None, None, None, None, None, None, None, None, Id_0           ]]
     # fmt: on
 
-    W0_ex = npc.grid_outer(W0_ex, W0_new.legs[:2])
-    W1_ex = npc.grid_outer(W1_ex, W1_new.legs[:2])
-    assert npc.norm(W0_new - W0_ex) ** 2 == 0.0  # coupling constants: no rounding errors
-    assert npc.norm(W1_new - W1_ex) ** 2 == 0.0  # coupling constants: no rounding errors
+    # compare cells individually: better for debugging
+    _compare_grids(W0_new, W0_ex, 'W0')
+    _compare_grids(W1_new, W1_ex, 'W1')
+
+    # compare reconstructed tensor: easier to trust
+    W0_ex = lasy.tensor_from_grid(W0_ex, ['wL', 'p', 'wR', 'p*'])
+    W1_ex = lasy.tensor_from_grid(W1_ex, ['wL', 'p', 'wR', 'p*'])
+    assert lasy.almost_equal(W0_new, W0_ex)
+    assert lasy.almost_equal(W1_new, W1_ex)
 
 
-@pytest.mark.parametrize('use_plus_hc, JW', [(False, 'JW'), (False, None), (True, None)])
-def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
-    fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
-    M = model.CouplingModel(fermion_lat_cyl)
+@pytest.mark.parametrize('use_plus_hc', [True, False])
+def test_CouplingModel_multi_couplings_explicit(use_plus_hc):
+    s = lasy.sites.SpinlessFermionSite()
+    fermion_lat_cyl = lattice.Square(1, 2, s, bc='periodic', bc_MPS='infinite')
+
     # create a weird fermionic model with 3-body interactions
-    M.add_onsite(0.125, 0, 'N')
-    M.add_twosite_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), plus_hc=use_plus_hc)
-    M.add_twosite_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), JW, plus_hc=use_plus_hc)
+    M = model.CouplingModel(fermion_lat_cyl)
+    Cd_C = lasy.models.hopping([s, s], t_right=0, name='Cd.C')
+    M.define_coupling(Cd_C, hc='C.Cd', permute='swap_hc')
+    M.define_coupling(lasy.models.density_density_interaction([s, s], name='N.N'), hc='N.N', permute='invariant')
+    N_Cd_C = lasy.outer(
+        s.get_op('N').as_SymmetricTensor(),
+        M.couplings['Cd.C'].to_tensor(),
+        relabel1={'p': 'p0', 'p*': 'p0*'},
+        relabel2={'p0': 'p1', 'p0*': 'p1*', 'p1': 'p2', 'p1*': 'p2*'},
+    )
+    Cd_N_C = -1 * lasy.permute_legs(N_Cd_C, codomain=['p1', 'p0', 'p2'], domain=['p1*', 'p0*', 'p2*'])
+    Cd_N_C.labels.update({'p0': 'p1', 'p0*': 'p1*', 'p1': 'p0', 'p1*': 'p0*'})
+    Cd_C_N = -1 * lasy.permute_legs(N_Cd_C, codomain=['p0', 'p2', 'p1'], domain=['p0*', 'p2*', 'p1*'])
+    Cd_C_N.labels.update({'p2': 'p1', 'p2*': 'p1*', 'p1': 'p2', 'p1*': 'p2*'})
+
+    def N_Cd_C_permute(perm):
+        if np.array_equal(perm, [0, 1, 2]):
+            return {'N.Cd.C': 1.0}
+        if np.array_equal(perm, [0, 2, 1]):
+            return {'N.C.Cd': -1.0}
+        if np.array_equal(perm, [1, 0, 2]):
+            return {'Cd.N.C': -1.0}
+        if np.array_equal(perm, [1, 2, 0]):
+            return {'Cd.C.N': 1.0}
+        if np.array_equal(perm, [2, 1, 0]):
+            return {'C.Cd.N': -1.0}
+        if np.array_equal(perm, [2, 0, 1]):
+            return {'Cd.C.N': 1.0}
+        raise RuntimeError
+
+    M.define_coupling(lasy.Coupling.from_tensor(N_Cd_C, [s, s, s], name='N.Cd.C'), hc='N.C.Cd', permute=N_Cd_C_permute)
+    M.define_coupling(lasy.Coupling.from_tensor(Cd_N_C, [s, s, s], name='Cd.N.C'), hc='C.N.Cd', permute=None)
+    M.define_coupling(lasy.Coupling.from_tensor(Cd_C_N, [s, s, s], name='Cd.C.N'), hc='C.Cd.N', permute=None)
+
+    M.add_onsite_operator(0.125, 'N')
+    M.add_two_site_coupling(0.25, 'Cd.C', dx=[0, 1], plus_hc=use_plus_hc)
+    M.add_two_site_coupling(1.5, 'Cd.C', dx=[1, 0], plus_hc=use_plus_hc)
     if not use_plus_hc:
-        M.add_twosite_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), JW)
-        M.add_twosite_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), JW)
-    # multi_coupling with a full unit cell inbetween the operators!
-    M.add_multi_coupling(4.0, [('N', (0, 0), 0), ('N', (-2, -1), 0)])
-    # some weird mediated hopping along the diagonal
-    M.add_multi_coupling(1.125, [('N', (0, 0), 0), ('Cd', (0, 1), 0), ('C', (1, 0), 0)])
-    H_mpo = M.calc_H_MPO()
+        M.add_two_site_coupling(0.25, 'Cd.C', dx=[0, -1], plus_hc=use_plus_hc)
+        M.add_two_site_coupling(1.5, 'Cd.C', dx=[-1, 0], plus_hc=use_plus_hc)
+    M.add_multi_site_coupling(4.0, 'N.N', dx=[[0, 0], [-2, -1]])
+    M.add_multi_site_coupling(1.125, 'N.Cd.C', dx=[[0, 0], [0, 1], [1, 0]])
+
+    H_mpo = M.get_H_MPO()
+
     W0_new = H_mpo.get_W(0)
     W1_new = H_mpo.get_W(1)
-    Id, JW, N = fermion_site.Id, fermion_site.JW, fermion_site.N
-    Cd, C = fermion_site.Cd, fermion_site.C
-    CdJW = Cd.matvec(JW)  # = Cd
-    JWC = JW.matvec(C)  # = C
-    NJW = N.matvec(JW)
+
+    w_triv = lasy.ElementarySpace.from_trivial_sector(symmetry=M.symmetry)
+    w_odd = lasy.ElementarySpace(M.symmetry, M.symmetry.get_sector('odd'))
+    Id_0 = s.get_onsite_W_block('Id', w=w_triv)
+    Id_1 = s.get_onsite_W_block('Id', w=w_odd)
+    N_0 = s.get_onsite_W_block('N', w=w_triv)
+    N_1 = s.get_onsite_W_block('N', w=w_odd)
+    N_block = s.get_onsite_W_block('N', w=w_triv)
+    Cd_L, C_R = Cd_C.factorization
+    # 'C.Cd' is the `dagger` of 'Cd.C', see test_CouplingModel_explicit regarding the gauge
+    C_L, Cd_R = Cd_C.dagger().factorization
+    # independent check, the factorization above is gauge dependent but the operator is not
+    assert lasy.almost_equal(Cd_C.dagger().to_tensor(), lasy.models.hopping([s, s], t_left=0).to_tensor())
+
+    print()
+    print(H_mpo.show_W_grid(0))
+    print()
+    print(H_mpo.show_W_grid(1))
+
     # fmt: off
-    H_MPO_graph = tenpy.networks.mpo.MPOGraph.from_terms((M.all_onsite_terms(),
-                                                          M.all_coupling_terms(),
-                                                          M.exp_decaying_terms),
-                                                         M.lat.mps_sites(),
-                                                         M.lat.bc_MPS,
-                                                         unit_cell_width=M.lat.mps_unit_cell_width)
-    H_MPO_graph._set_ordered_states()
-    from pprint import pprint
-    pprint(H_MPO_graph._ordered_states)
-    pprint(H_MPO_graph._build_grids())
-    print(M.all_coupling_terms().to_TermList())
-    #  0.50000 * Cd JW_0 C_1 +
-    #  1.50000 * Cd JW_0 C_2 +
-    #  0.50000 * JW C_0 Cd_1 +
-    #  1.50000 * JW C_0 Cd_2 +
-    #  1.50000 * Cd JW_1 C_3 +
-    #  1.50000 * JW C_1 Cd_3 +
-    #  4.00000 * N_0 N_5 +
-    #  4.00000 * N_1 N_4 +
-    #  1.12500 * N_0 Cd JW_1 C_2 +
-    #  1.12500 * Cd JW_0 N JW_1 C_3
+    # NOTE: we currently do not re-use edges in the MPOGraph
+    #       commented out is what we may expect once we do
+    #       The first two terms (dx=[0, 1] and dx=[0, -1]) act on the exact same sites,
+    #       so those *are* combined
+    W0_ex = [[Id_0, C_L,  C_L,  None, Cd_L, Cd_L, None, Cd_L, None, N_0,  N_0,  None, None, None, 0.125 * N_block],
+             [None, None, None, None, None, None, None, None, None, None, None, None, None, None, 1.5 * Cd_R     ],
+             [None, None, None, Id_1, None, None, None, None, None, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, None, None, None, 1.5 * C_R      ],
+             [None, None, None, None, None, None, Id_1, None, None, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, Id_1, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, None, None, None, 1.125 * C_R    ],
+             [None, None, None, None, None, None, None, None, None, None, None, Id_0, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, None, Id_0, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, None, None, Id_0, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, None, None, None, 4.0 * N_0      ],
+             [None, None, None, None, None, None, None, None, None, None, None, None, None, None, Id_0           ]]
 
-    W0_ex = [[Id,   CdJW, JWC,  N,    None, None, None, None, None, N*0.125],
-             [None, None, None, None, None, Id,   None, None, None, None],
-             [None, None, None, None, None, None, JW*1.5,   None, None, None],
-             [None, None, None, None, None, None, None, JW*1.5,   None, None],
-             [None, None, None, None, Id,   None, None, None, None, None],
-             [None, None, None, None, None, None, JW*1.125, None, None, None],
-             [None, None, None, None, None, None, None, None, None, C],
-             [None, None, None, None, None, None, None, None, None, Cd],
-             [None, None, None, None, None, None, None, None, None, N],
-             [None, None, None, None, None, None, None, None, Id,   None],
-             [None, None, None, None, None, None, None, None, None, Id]]
-
-    W1_ex = [[Id,   None, CdJW, JWC,  N,    None, None, None, None, None, N*0.125],
-             [None, None, None, None, None, NJW,  JW*1.5, None, None, None, C*0.5],
-             [None, None, None, None, None, None, None, JW*1.5, None, None, Cd*0.5],
-             [None, Id,   None, None, None, None, CdJW*1.125, None, None, None, None],
-             [None, None, None, None, None, None, None, None, Id*4., None, None],
-             [None, None, None, None, None, None, None, None, None, Id*4., None],
-             [None, None, None, None, None, None, None, None, None, None, C],
-             [None, None, None, None, None, None, None, None, None, None, Cd],
-             [None, None, None, None, None, None, None, None, None, None, N],
-             [None, None, None, None, None, None, None, None, None, None, Id]]
+    # Note: the signs come fermionic anti-commutation and were carefully checked by hand.
+    W1_ex = [[Id_0, None, C_L,  None, Cd_L, None, None, None, None, N_0,  None, 0.125 * N_block],
+             [None, None, None, None, None, None, None, None, None, None, None, 2 * 0.25 * Cd_R],
+             [None, Id_1, None, None, None, None, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, 1.5 * Cd_R     ],
+             [None, None, None, None, None, None, None, None, None, None, None, 2 * 0.25 * C_R ],
+             [None, None, None, Id_1, None, None, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, 1.5 * C_R      ],
+             [None, None, None, None, None, -N_1, None, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, -1.125 * C_R   ],
+             [None, None, None, None, None, None, Cd_L, None, None, None, None, None           ],
+             [None, None, None, None, None, None, None, Id_0, None, None, None, None           ],
+             [None, None, None, None, None, None, None, None, Id_0, None, None, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, 4.0 * N_0      ],
+             [None, None, None, None, None, None, None, None, None, None, Id_0, None           ],
+             [None, None, None, None, None, None, None, None, None, None, None, Id_0           ]]
     # fmt: on
-    W0_ex = npc.grid_outer(W0_ex, W0_new.legs[:2])
-    assert npc.norm(W0_new - W0_ex) == 0.0  # coupling constants: no rounding errors
-    W1_ex = npc.grid_outer(W1_ex, W1_new.legs[:2])
 
-    assert npc.norm(W1_new - W1_ex) == 0.0  # coupling constants: no rounding errors
+    # compare cells individually: better for debugging
+    _compare_grids(W0_new, W0_ex, 'W0')
+    _compare_grids(W1_new, W1_ex, 'W1')
+
+    # compare reconstructed tensor: easier to trust
+    W0_ex = lasy.tensor_from_grid(W0_ex, ['wL', 'p', 'wR', 'p*'])
+    W1_ex = lasy.tensor_from_grid(W1_ex, ['wL', 'p', 'wR', 'p*'])
+    assert lasy.almost_equal(W0_new, W0_ex)
+    assert lasy.almost_equal(W1_new, W1_ex)
 
 
 @pytest.mark.parametrize('use_fermions', [False, True], ids=['spins', 'fermions'])
 @pytest.mark.parametrize('add_hc', [False, 'manually', 'flag'], ids=['no_hc', 'manual_hc', 'plus_hc'])
 @pytest.mark.parametrize('bc', ['finite', 'infinite'])
 def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc, L=6):
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     """test add_exponentially_decaying coupling by comparing with manual couplings"""
+
     if use_fermions:
-        s = tenpy.networks.site.FermionSite(None)
-        op_i = 'Cd'
-        op_j = 'C'
-        anti_commute_sign = -1
+        s = lasy.sites.SpinlessFermionSite()
+        coupling = 'Cd.C'
+        hc_coupling = 'C.Cd'
     else:
-        s = tenpy.networks.site.SpinHalfSite(None)
-        op_i = 'Sp'
-        op_j = 'Sm'
-        anti_commute_sign = +1
+        s = lasy.sites.SpinSite()
+        coupling = 'Sp.Sm'
+        hc_coupling = 'Sm.Sp'
 
     lat = lattice.Chain(L=L, site=s, bc=['open' if bc == 'finite' else 'periodic'], bc_MPS=bc)
-    m_exp = model.CouplingModel(lat)
-    m_manual = model.CouplingModel(lat)
+
+    def init_model():
+        M = model.CouplingModel(lat)
+        if use_fermions:
+            M.define_coupling(lasy.models.hopping([s, s], t_right=0, name=coupling), hc=hc_coupling, permute='swap_hc')
+        else:
+            M.define_coupling(
+                lasy.models.spin_spin_coupling([s, s], Jpm=1, name=coupling), hc=hc_coupling, permute='swap_hc'
+            )
+        return M
 
     print('standard case: no subsites')
+    m_exp = init_model()
+    m_manual = init_model()
     a = 3.0 + 0.42j
     l = 0.2
-    m_exp.add_exponentially_decaying_coupling(a, l, op_i, op_j, plus_hc=(add_hc == 'flag'))
+
+    m_exp.add_exponentially_decaying_coupling(a, l, coupling, plus_hc=(add_hc == 'flag'))
     if add_hc == 'manually':
-        # interface does not allow us to change the order of operators, so we need to manually
-        # include the sign for anti-commuting them
-        m_exp.add_exponentially_decaying_coupling(
-            anti_commute_sign * np.conj(a), np.conj(l), s.hc_ops[op_i], s.hc_ops[op_j], plus_hc=(add_hc == 'flag')
-        )
+        m_exp.add_exponentially_decaying_coupling(np.conj(a), np.conj(l), hc_coupling)
     max_range = L if bc == 'finite' else int(np.ceil(np.log(1e-10) / np.log(l)))
     for k in range(1, max_range):
-        m_manual.add_twosite_coupling(a * (l**k), 0, op_i, 0, op_j, dx=k, plus_hc=add_hc is not False)
-    assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
+        m_manual.add_two_site_coupling(a * (l**k), coupling, dx=k, plus_hc=add_hc is not False)
+    assert m_exp.get_H_MPO().is_equal(m_manual.get_H_MPO())
 
     print('non-uniform decay')
-    m_exp = model.CouplingModel(lat)
-    m_manual = model.CouplingModel(lat)
+    m_exp = init_model()
+    m_manual = init_model()
     a = 3.0 + 0.42j
     l = np.random.uniform(0.01, 0.2, size=L)
-    m_exp.add_exponentially_decaying_coupling(a, l, op_i, op_j, plus_hc=(add_hc == 'flag'))
+    m_exp.add_exponentially_decaying_coupling(a, l, coupling, plus_hc=(add_hc == 'flag'))
     if add_hc == 'manually':
-        # interface does not allow us to change the order of operators, so we need to manually
-        # include the sign for anti-commuting them
-        m_exp.add_exponentially_decaying_coupling(
-            anti_commute_sign * np.conj(a), np.conj(l), s.hc_ops[op_i], s.hc_ops[op_j]
-        )
+        m_exp.add_exponentially_decaying_coupling(np.conj(a), np.conj(l), hc_coupling)
     # use the max_range from before. since l <= .2, this can only decay faster
     for k in range(1, max_range):
         strength = a
@@ -387,22 +515,18 @@ def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc,
                 strength = strength * np.roll(l, -j)
         if np.all(strength < 1e-10):
             continue
-        m_manual.add_twosite_coupling(strength, 0, op_i, 0, op_j, dx=k, plus_hc=add_hc is not False)
-    assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
+        m_manual.add_two_site_coupling(strength, coupling, dx=k, plus_hc=add_hc is not False)
+    assert m_exp.get_H_MPO().is_equal(m_manual.get_H_MPO())
 
     print('with subsites')
-    m_exp = model.CouplingModel(lat)
-    m_manual = model.CouplingModel(lat)
+    m_exp = init_model()
+    m_manual = init_model()
     a = 3.0 + 0.42j
     l = np.random.uniform(0.01, 0.2, size=L)
     subsites = [1, 3, 5]
-    m_exp.add_exponentially_decaying_coupling(a, l, op_i, op_j, subsites, plus_hc=(add_hc == 'flag'))
+    m_exp.add_exponentially_decaying_coupling(a, l, coupling, subsites, plus_hc=(add_hc == 'flag'))
     if add_hc == 'manually':
-        # interface does not allow us to change the order of operators, so we need to manually
-        # include the sign for anti-commuting them
-        m_exp.add_exponentially_decaying_coupling(
-            anti_commute_sign * np.conj(a), np.conj(l), s.hc_ops[op_i], s.hc_ops[op_j], subsites
-        )
+        m_exp.add_exponentially_decaying_coupling(np.conj(a), np.conj(l), hc_coupling, subsites)
     # use the max_range from before. since l <= .2, this can only decay faster
     # except now we interpret it as a distance *within* subsites
     for n_i, i in enumerate(subsites):
@@ -414,29 +538,24 @@ def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc,
             strength = a
             for m in range(n_i, n_j):
                 strength *= l[subsites[m % len(subsites)]]
-            m_manual.add_coupling_term(
-                strength, i, j, op_i, op_j, plus_hc=add_hc is not False, op_string='JW' if use_fermions else 'Id'
-            )
-    assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
+            m_manual._add_two_site_coupling_mps(strength, i, j, coupling, plus_hc=add_hc is not False)
+    assert m_exp.get_H_MPO().is_equal(m_manual.get_H_MPO())
 
     print('with subsites and subsites_start')
-    m_exp = model.CouplingModel(lat)
-    m_manual = model.CouplingModel(lat)
+    m_exp = init_model()
+    m_manual = init_model()
     a = 3.0 + 0.42j
     l = np.random.uniform(0.01, 0.2, size=L)
     subsites_start = [0, 2]
     subsites = [1, 3, 5]
     m_exp.add_exponentially_decaying_coupling(
-        a, l, op_i, op_j, subsites, subsites_start=subsites_start, plus_hc=(add_hc == 'flag')
+        a, l, coupling, subsites, subsites_start=subsites_start, plus_hc=(add_hc == 'flag')
     )
     if add_hc == 'manually':
-        # interface does not allow us to change the order of operators, so we need to manually
-        # include the sign for anti-commuting them
         m_exp.add_exponentially_decaying_coupling(
-            anti_commute_sign * np.conj(a),
+            np.conj(a),
             np.conj(l),
-            s.hc_ops[op_i],
-            s.hc_ops[op_j],
+            hc_coupling,
             subsites,
             subsites_start=subsites_start,
         )
@@ -451,116 +570,142 @@ def test_CouplingModel_exponentially_decaying_coupling(use_fermions, add_hc, bc,
             strength = a * l[i]
             for m in range(min_n_j, n_j):
                 strength *= l[subsites[m % len(subsites)]]
-            m_manual.add_coupling_term(
-                strength, i, j, op_i, op_j, plus_hc=add_hc is not False, op_string='JW' if use_fermions else 'Id'
-            )
-    assert m_exp.calc_H_MPO().is_equal(m_manual.calc_H_MPO())
+            m_manual._add_two_site_coupling_mps(strength, i, j, coupling, plus_hc=add_hc is not False)
+    assert m_exp.get_H_MPO().is_equal(m_manual.get_H_MPO())
 
 
-class MyMod(model.CouplingMPOModel, model.NearestNeighborModel):
+class MyMod(model.ModelBuilder):
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
-        return tenpy.networks.site.SpinHalfSite(conserve, True)
+        return lasy.sites.SpinSite(S=0.5, conserve=conserve, backend=self.backend)
+
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jx=1, name='Sx.Sx'), hc='Sx.Sx', permute='invariant'
+        )
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jy=1, name='Sy.Sy'), hc='Sy.Sy', permute='invariant'
+        )
 
     def init_terms(self, model_params):
         x = model_params.get('x', 1.0)
         y = model_params.get('y', 0.25)
-        self.add_onsite_term(y, 0, 'Sz')
-        self.add_local_term(y, [('Sz', [4, 0])])
-        self.add_coupling_term(x, 0, 1, 'Sx', 'Sx')
-        self.add_coupling_term(2.0 * x, 1, 2, 'Sy', 'Sy')
-        self.add_local_term(3.0 * x, [('Sy', [3, 0]), ('Sy', [4, 0])])
+        self.add_onsite_operator(y, 'Sz')
+        self.add_onsite_operator(y, 'Sz', x=4, u=0)
+        self._add_two_site_coupling_mps(x, 0, 1, 'Sx.Sx')
+        self.add_two_site_coupling(3 * x, 'Sy.Sy', dx=1, x1=3)
 
 
-def test_CouplingMPOModel_group():
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
-    m1 = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
-    model_params = {'L': 6, 'hz': np.random.random([6]), 'bc_MPS': 'finite', 'sort_charge': True}
-    m2 = XXZChain(model_params)
-    for m in [m1, m2]:
-        print('model = ', m)
-        assert m.H_MPO.max_range == 1
-        # test grouping sites
-        ED = ExactDiag.from_model(m)
-        #  ED.build_full_H_from_mpo()
-        ED.build_full_H_from_bonds()
+@pytest.mark.parametrize('symmetry_backend', ['no_symmetry', 'abelian', 'fusion_tree', None])
+@pytest.mark.parametrize('block_backend', ['numpy', 'torch', None])
+@pytest.mark.parametrize('conserve', ['SU2', 'Sz', None])
+def test_ModelBuilder_backend(symmetry_backend, block_backend, conserve):
+    model_params = dict(conserve=conserve, Jx=1, Jy=1, Jz=1)
+    if symmetry_backend is not None:
+        model_params['symmetry_backend'] = symmetry_backend
+    if block_backend is not None:
+        model_params['block_backend'] = block_backend
+
+    conserve_symmetry = lasy.sites.SpinSite(conserve=conserve).symmetry
+    expect_backend: lasy.TensorBackend = lasy.get_backend(
+        conserve_symmetry if symmetry_backend is None else symmetry_backend, block_backend
+    )
+
+    if not expect_backend.supports_symmetry(conserve_symmetry):
+        model_params = asConfig(model_params, 'SpinChain')
+        model_params.touch_all()  # to suppress warnings on __del__
+        with pytest.raises(ValueError, match='backend does not support this symmetry'):
+            M = SpinChain(model_params)
+        return  # error is expected behavior
+
+    M = SpinChain(model_params)
+    M.test_sanity()
+    assert M.backend == expect_backend
+    assert M.lattice.backend == expect_backend
+    assert all(site.backend == expect_backend for site in M.lattice.unit_cell)
+
+
+def test_post_init_add_warnings():
+    m = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
+    expect_msg = 'Adding terms to a ModelBuilder after initialization. This invalidates caches!'
+
+    with pytest.warns(UserWarning, match=expect_msg):
+        m.add_onsite_operator(2, 'Sz')
+
+    with pytest.warns(UserWarning, match=expect_msg):
+        m.add_two_site_coupling(3, 'Sy.Sy', dx=1, x1=3)
+
+    with pytest.warns(UserWarning, match=expect_msg):
+        m.add_multi_site_coupling(2, 'Sx.Sx', dx=[[0, 1]])
+
+    with pytest.warns(UserWarning, match=expect_msg):
+        m.add_exponentially_decaying_coupling(1, 2, 'Sx.Sx')
+
+    with pytest.warns(UserWarning, match=expect_msg):
+        m.add_exponentially_decaying_centered_terms(1, 2, 'Sx.Sx', 1)
+
+
+@pytest.mark.parametrize('which_model', ['MyMod', 'XXZ'])
+def test_ModelBuilder_group_sites(which_model):
+    if which_model == 'MyMod':
+        m = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
+    elif which_model == 'XXZ':
+        model_params = {'L': 6, 'hz': np.random.random([6]), 'bc_MPS': 'finite'}
+        m = XXZChain2(model_params)
+
+    assert m.H_MPO.max_range == 1
+    # test grouping sites
+    ED = ExactDiag.from_model(m)
+    #  ED.build_full_H_from_mpo()
+    ED.build_full_H_from_bonds()
+
+    with pytest.raises(NotImplementedError, match='site grouping not implemented'):
         m.group_sites(n=2)
-        assert m.H_MPO.max_range == 1
-        ED_gr = ExactDiag.from_model(m)
-        ED_gr.build_full_H_from_mpo()
-        H = ED.full_H.split_legs().to_ndarray()
-        Hgr = ED_gr.full_H.split_legs()
-        Hgr.idrop_labels()
-        Hgr = Hgr.split_legs().to_ndarray()
-        assert np.linalg.norm(H - Hgr) < 1.0e-14
-        ED_gr.full_H = None
-        ED_gr.build_full_H_from_bonds()
-        Hgr = ED_gr.full_H.split_legs()
-        Hgr.idrop_labels()
-        Hgr = Hgr.split_legs().to_ndarray()
-        assert np.linalg.norm(H - Hgr) < 1.0e-14
+    pytest.xfail('site grouping not implemented')
+
+    m.group_sites(n=2)
+    assert m.H_MPO.max_range == 1
+    ED_gr = ExactDiag.from_model(m)
+    ED_gr.build_full_H_from_mpo()
+    H = ED.full_H.split_legs().to_ndarray()
+    Hgr = ED_gr.full_H.split_legs()
+    Hgr.idrop_labels()
+    Hgr = Hgr.split_legs().to_ndarray()
+    assert np.linalg.norm(H - Hgr) < 1.0e-14
+    ED_gr.full_H = None
+    ED_gr.build_full_H_from_bonds()
+    Hgr = ED_gr.full_H.split_legs()
+    Hgr.idrop_labels()
+    Hgr = Hgr.split_legs().to_ndarray()
+    assert np.linalg.norm(H - Hgr) < 1.0e-14
 
 
-def test_model_H_conversion(L=6):
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
+@pytest.mark.parametrize('which_model', ['XXZ', 'dipolar'])
+def test_model_H_MPO_vs_H_bond(which_model, L=6):
     bc = 'finite'
-    model_params = {'L': L, 'hz': np.random.random([L]), 'bc_MPS': bc, 'sort_charge': True}
-    m = XXZChain(model_params)
+    if which_model == 'XXZ':
+        model_params = {'L': L, 'hz': np.random.random([L]), 'bc_MPS': bc}
+        m = XXZChain2(model_params)
+    elif which_model == 'dipolar':
+        model_params = dict(L=L, S=1, J3=1.0, J4=0.5, bc_MPS='finite')
+        m = DipolarSpinChain(model_params)
 
-    # can we run the conversion?
-    # conversion from bond to MPO in NearestNeighborModel
-    H_MPO = m.calc_H_MPO_from_bond()
-    # conversion from MPO to bond in MPOModel
-    H_bond = m.calc_H_bond_from_MPO()
-    # compare: did we get the correct result?
+        with pytest.raises(NotImplementedError, match='site grouping not implemented'):
+            m.group_sites(3)
+        pytest.xfail('site grouping not implemented')
+
+        m.group_sites(3)
+
     ED = ExactDiag.from_model(m)
     ED.build_full_H_from_bonds()
-    H0 = ED.full_H  # this should be correct
-    ED.full_H = None
-    m.H_MPO = H_MPO
-    ED.build_full_H_from_mpo()
-    full_H_mpo = ED.full_H  # the one generated by NearstNeighborModel.calc_H_MPO_from_bond()
-    print('npc.norm(H0 - full_H_mpo) = ', npc.norm(H0 - full_H_mpo))
-    assert npc.norm(H0 - full_H_mpo) < 1.0e-14  # round off errors on order of 1.e-15
-    m.H_bond = H_bond
-    ED.full_H = None
-    ED.build_full_H_from_bonds()
-    full_H_bond = ED.full_H  # the one generated by NearstNeighborModel.calc_H_MPO_from_bond()
-    print('npc.norm(H0 - full_H_bond) = ', npc.norm(H0 - full_H_bond))
-    assert npc.norm(H0 - full_H_bond) < 1.0e-14  # round off errors on order of 1.e-15
+    full_H_bond = ED.full_H  # this should be correct
 
-
-def test_model_H_conversion_dipolar(L=6):
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
-    model_params = dict(L=L, S=1, J3=1.0, J4=0.5, bc_MPS='finite', sort_charge=True)
-
-    # build full hamiltonian from MPO, assume that to be correct
-    m = DipolarSpinChain(model_params)
-    m.group_sites(3)
-    ED = ExactDiag.from_model(m)
-    ED.build_full_H_from_mpo()
-    H0 = ED.full_H
-    H0.test_sanity()
-    assert np.all(H0.qtotal == 0)
-
-    # convert H_MPO -> H_bond (calc_H_bond_from_MPO called by from_MPOModel)
-    m_nn = model.NearestNeighborModel.from_MPOModel(m)
-    ED = ExactDiag.from_model(m_nn)
-    ED.build_full_H_from_bonds()
-    H1 = ED.full_H
-    H1.test_sanity()
-    assert np.all(H1.qtotal == 0)
-
-    # convert H_bond -> H_MPO
-    m_nn.H_MPO = m_nn.calc_H_MPO_from_bond()
     ED.full_H = None
     ED.build_full_H_from_mpo()
-    H2 = ED.full_H
-    H2.test_sanity()
-    assert np.all(H2.qtotal == 0)
+    full_H_mpo = ED.full_H
 
-    assert npc.norm(H0 - H1) < 1e-13
-    assert npc.norm(H0 - H2) < 1e-13
+    assert lasy.almost_equal(full_H_bond, full_H_mpo)
 
 
 def compare_models_plus_hc(
@@ -569,194 +714,163 @@ def compare_models_plus_hc(
     m_explicit: model.CouplingModel,
     expect_non_hermitian_mpo: bool = False,  # if MPO without hc is non-hermitian
 ):
-    # helper for test_model_plus_hc; check if the models are equivalent
-    for m in [m_manual, m_plus_hc, m_explicit]:
-        m.H_MPO = m.calc_H_MPO()
+    """helper for test_model_plus_hc; check if the models are equivalent"""
 
-    assert m_manual.H_MPO.is_hermitian(), 'm_manual not hermitian'
-    assert m_plus_hc.H_MPO.is_hermitian(), 'm_plus_hc not hermitian'
-    assert m_explicit.H_MPO.is_hermitian(), 'm_explicit not hermitian'
+    assert m_manual.get_H_MPO().is_hermitian(), 'm_manual not hermitian'
+    assert m_plus_hc.get_H_MPO().is_hermitian(), 'm_plus_hc not hermitian'
+    assert m_explicit.get_H_MPO().is_hermitian(), 'm_explicit not hermitian'
 
     # for m_explicit, look at the "bare" MPO, without its hc
-    m_explicit_bare_MPO = m_explicit.H_MPO.copy()
+    m_explicit_bare_MPO = m_explicit.get_H_MPO().copy()
     m_explicit_bare_MPO.explicit_plus_hc = False  # now this is an MPO without the +hc part
     if expect_non_hermitian_mpo:
         assert not m_explicit_bare_MPO.is_hermitian()
 
-    if expect_non_hermitian_mpo and m_explicit.H_MPO.chi[3] > 2:
+    if expect_non_hermitian_mpo and m_explicit.get_H_MPO().chi[3] > 2:
         # check for smaller MPO bond dimension
-        assert m_explicit.H_MPO.chi[3] < m_plus_hc.H_MPO.chi[3]
+        assert m_explicit.get_H_MPO().chi[3] < m_plus_hc.get_H_MPO().chi[3]
 
-    assert m_plus_hc.H_MPO.is_equal(m_manual.H_MPO)
-    assert m_explicit.H_MPO.is_equal(m_manual.H_MPO)
+    assert m_plus_hc.get_H_MPO().is_equal(m_manual.get_H_MPO())
+    assert m_explicit.get_H_MPO().is_equal(m_manual.get_H_MPO())
 
 
 @pytest.mark.parametrize(
-    'which_site, which_ops, op_string',
+    'which_site, which_ops',
     [
-        ('spin', 'Sp-Sm', None),
-        ('fermion', 'Cd-C', None),
-        ('spin-fermion', 'Sp-Sm', None),
-        ('spin-fermion', 'Cd-C', None),
+        ('spin', 'Sp-Sm'),
+        ('fermion', 'Cd-C'),
+        ('spin-fermion', 'Sp-Sm'),
+        ('spin-fermion', 'Cd-C'),
     ],
 )
-def test_model_plus_hc(which_site, which_ops, op_string, L=6):
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
+def test_model_plus_hc(which_site, which_ops, L=6):
     """Same as `test_model_plus_hc`, but uses fermions and default JW behavior"""
     if which_site == 'spin':
-        lat = lattice.Chain(L=L, site=tenpy.networks.site.SpinHalfSite(None))
+        s = lasy.sites.SpinSite()
     elif which_site == 'fermion':
-        lat = lattice.Chain(L=L, site=tenpy.networks.site.FermionSite(None))
+        s = lasy.sites.SpinlessFermionSite(filling=0.5)
     elif which_site == 'spin-fermion':
-        lat = lattice.Chain(L=L, site=tenpy.networks.site.SpinHalfFermionSite(None, None))
+        s = lasy.sites.SpinHalfFermionSite(filling=1)
     else:
         raise ValueError
+    lat = lattice.Chain(L=L, site=s)
+
+    def init_model(explicit_plus_hc=False):
+        m = model.CouplingModel(lat, explicit_plus_hc=explicit_plus_hc)
+        if which_site in ['spin', 'spin-fermion']:
+            Sx = s.spin.spin_vector[:, :, 0]
+            Sy = s.spin.spin_vector[:, :, 1]
+            Sz = s.spin.spin_vector[:, :, 2]
+            Sp = Sx + 1j * Sy
+            Sm = Sx - 1j * Sy
+            m.define_coupling(
+                lasy.models.spin_spin_coupling([s, s], Jpm=1, name='Sp.Sm'), hc='Sm.Sp', permute='swap_hc'
+            )
+            m.define_coupling(
+                Coupling_from_numpy_onsite([Sp, Sz, Sm], [s, s, s], name='Sp.Sz.Sm'), hc='Sm.Sz.Sp', permute=None
+            )
+        if which_site in ['fermion', 'spin-fermion']:
+            Cd, C = lasy.models.FermionicDOF.creation_annihilation_ops(s.occupation.num_species)
+            Cd, C = Cd[:, :, 0], C[:, :, 0]
+            N = Cd @ C
+            m.define_coupling(lasy.models.hopping([s, s], t_right=0, name='Cd.C'), hc='C.Cd', permute='swap_hc')
+            m.define_coupling(
+                Coupling_from_numpy_onsite([Cd, N, C], [s, s, s], name='Cd.N.C'), hc='C.N.Cd', permute=None
+            )
+        return m
 
     if which_ops == 'Sp-Sm':
-        hconj_map = dict(Sp='Sm', Sm='Sp', Sz='Sz')
         onsite_op = 'Sp'
-        Sp = 'Sp'
-        Sm = 'Sm'
-        Sz = 'Sz'
-        exp_A = 'Sp'
-        exp_B = 'Sz'
-    elif which_ops == 'Cd-C' and which_site == 'spin-fermion':
-        hconj_map = dict(dN='dN', Cdu='Cu', Cd='Cdd', Ntot='Ntot', Cu='Cdu', Cdd='Cd')
+        Sp_Sm = 'Sp.Sm'
+        Sm_Sp = 'Sm.Sp'
+        op3 = 'Sp.Sz.Sm'
+        op3hc = 'Sm.Sz.Sp'
+    elif which_ops == 'Cd-C':
         onsite_op = 'dN'
-        Sp = 'Cdu'
-        Sm = 'Cd'
-        Sz = 'Ntot'
-        exp_A = 'Cdu'
-        exp_B = 'Cu'
-    elif which_ops == 'Cd-C' and which_site == 'fermion':
-        hconj_map = dict(dN='dN', Cd='C', C='Cd', N='N')
-        onsite_op = 'dN'
-        Sp = 'Cd'
-        Sm = 'C'
-        Sz = 'N'
-        exp_A = 'Cd'
-        exp_B = 'C'
+        Sp_Sm = 'Cd.C'
+        Sm_Sp = 'C.Cd'
+        op3 = 'Cd.N.C'
+        op3hc = 'C.N.Cd'
     else:
         raise ValueError
 
-    if op_string is None:
-        op_str_kw = {}  # TODO use, more cases
-    else:
-        raise ValueError
-
-    m_manual = model.CouplingModel(lat)
-    m_plus_hc = model.CouplingModel(lat)
-    m_explicit = model.CouplingModel(lat, explicit_plus_hc=True)
+    m_manual = init_model()
+    m_plus_hc = init_model()
+    m_explicit = init_model(explicit_plus_hc=True)
 
     print('onsite')
     hx = np.random.random(L)
-    m_manual.add_onsite(hx, 0, onsite_op)
-    m_manual.add_onsite(hx, 0, hconj_map[onsite_op])
-    m_plus_hc.add_onsite(hx, 0, onsite_op, plus_hc=True)
-    m_explicit.add_onsite(hx, 0, onsite_op, plus_hc=True)
+    m_manual.add_onsite_operator(hx, onsite_op)
+    m_manual.add_onsite_operator(hx, 'Sm' if onsite_op == 'Sp' else 'dN')
+    m_plus_hc.add_onsite_operator(hx, onsite_op, plus_hc=True)
+    m_explicit.add_onsite_operator(hx, onsite_op, plus_hc=True)
     compare_models_plus_hc(m_manual, m_plus_hc, m_explicit, expect_non_hermitian_mpo=(which_ops != 'Cd-C'))
+
+    print('verify assumption about what the manual dagger should be')
+    assert lasy.almost_equal(m_manual.couplings[Sp_Sm].to_tensor().dagger, m_manual.couplings[Sm_Sp].to_tensor())
 
     print('coupling')
     t = np.random.random(L - 1) + 1.0j * np.random.random(L - 1)
-    m_manual.add_twosite_coupling(t, 0, Sp, 0, Sm, 1)
-    m_manual.add_twosite_coupling(np.conj(t), 0, hconj_map[Sm], 0, hconj_map[Sp], -1)
-    m_plus_hc.add_twosite_coupling(t, 0, Sp, 0, Sm, 1, plus_hc=True)
-    m_explicit.add_twosite_coupling(t, 0, Sp, 0, Sm, 1, plus_hc=True)
+    m_manual.add_two_site_coupling(t, Sp_Sm, dx=1)
+    m_manual.add_two_site_coupling(np.conj(t), Sm_Sp, dx=1)
+    m_plus_hc.add_two_site_coupling(t, Sp_Sm, dx=1, plus_hc=True)
+    m_explicit.add_two_site_coupling(t, Sp_Sm, dx=1, plus_hc=True)
     compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
+
+    # To avoid label collisions in the MPOGraph, we undo the 2-site coupling terms above,
+    # since we want to add the exact same couplings via multi coupling again
+    m_manual = init_model()
+    m_plus_hc = init_model()
+    m_explicit = init_model(explicit_plus_hc=True)
 
     print('multi coupling (2-site)')
     t2 = np.random.random(L - 1)
-    ops = [(Sp, [+1], 0), (Sm, [0], 0), (Sz, [0], 0)]
-    ops_hc = [(hconj_map[Sz], [0], 0), (hconj_map[Sm], [0], 0), (hconj_map[Sp], [+1], 0)]
-    m_manual.add_multi_coupling(t2, ops)
-    m_manual.add_multi_coupling(t2, ops_hc)
-    m_plus_hc.add_multi_coupling(t2, ops, plus_hc=True)
-    m_explicit.add_multi_coupling(t2, ops, plus_hc=True)
+    m_manual.add_multi_site_coupling(t2, Sm_Sp, dx=[+1, 0])
+    m_manual.add_multi_site_coupling(t2, Sp_Sm, dx=[+1, 0])
+    m_plus_hc.add_multi_site_coupling(t2, Sm_Sp, dx=[+1, 0], plus_hc=True)
+    m_explicit.add_multi_site_coupling(t2, Sm_Sp, dx=[+1, 0], plus_hc=True)
     compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
     print('multi coupling (3-site)')
     t3 = np.random.random(L - 2)
-    ops = [(Sp, [+2], 0), (Sm, [+1], 0), (Sz, [0], 0)]
-    ops_hc = [(hconj_map[Sz], [0], 0), (hconj_map[Sm], [+1], 0), (hconj_map[Sp], [+2], 0)]
-    m_manual.add_multi_coupling(t3, ops)
-    m_manual.add_multi_coupling(t3, ops_hc)
-    m_plus_hc.add_multi_coupling(t3, ops, plus_hc=True)
-    m_explicit.add_multi_coupling(t3, ops, plus_hc=True)
-    compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
-
-    if which_ops != 'Cd-C':
-        a = -1.5j
-        print('1-body local term')
-        m_manual.add_local_term(a, [(Sp, [1, 0])])
-        m_manual.add_local_term(np.conj(a), [(hconj_map[Sp], [1, 0])])
-        m_plus_hc.add_local_term(a, [(Sp, [1, 0])], plus_hc=True)
-        m_explicit.add_local_term(a, [(Sp, [1, 0])], plus_hc=True)
-        compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
-
-    print('2-body local term')
-    b = 2.5
-    m_manual.add_local_term(b, [(Sp, [0, 0]), (Sm, [2, 0])])
-    m_manual.add_local_term(np.conj(b), [(hconj_map[Sm], [2, 0]), (hconj_map[Sp], [0, 0])])
-    m_plus_hc.add_local_term(b, [(Sp, [0, 0]), (Sm, [2, 0])], plus_hc=True)
-    m_explicit.add_local_term(b, [(Sp, [0, 0]), (Sm, [2, 0])], plus_hc=True)
-    compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
-
-    print('3-body local term')
-    c = 0.5j
-    m_manual.add_local_term(c, [(Sp, [4, 0]), (Sz, [3, 0]), (Sm, [5, 0])])
-    m_manual.add_local_term(np.conj(c), [(hconj_map[Sm], [5, 0]), (hconj_map[Sz], [3, 0]), (hconj_map[Sp], [4, 0])])
-    m_plus_hc.add_local_term(c, [(Sp, [4, 0]), (Sz, [3, 0]), (Sm, [5, 0])], plus_hc=True)
-    m_explicit.add_local_term(c, [(Sp, [4, 0]), (Sz, [3, 0]), (Sm, [5, 0])], plus_hc=True)
+    m_manual.add_multi_site_coupling(t3, op3, dx=[0, 1, 2])
+    m_manual.add_multi_site_coupling(t3, op3hc, dx=[0, 1, 2])
+    m_plus_hc.add_multi_site_coupling(t3, op3, dx=[0, 1, 2], plus_hc=True)
+    m_explicit.add_multi_site_coupling(t3, op3, dx=[0, 1, 2], plus_hc=True)
     compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
     print('exponentially decaying coupling')
     d = 0.25
     l = 0.2
-    hc_coeff = np.conj(d)
-    if which_ops == 'Cd-C':
-        # the interface doesnt allow us to control the order of the two operators, so we need
-        # to take care of the anti-commutation manually...
-        hc_coeff = -hc_coeff
-    m_manual.add_exponentially_decaying_coupling(d, l, exp_A, exp_B)
-    m_manual.add_exponentially_decaying_coupling(hc_coeff, np.conj(l), hconj_map[exp_A], hconj_map[exp_B])
-    m_plus_hc.add_exponentially_decaying_coupling(d, l, exp_A, exp_B, plus_hc=True)
-    m_explicit.add_exponentially_decaying_coupling(d, l, exp_A, exp_B, plus_hc=True)
+    m_manual.add_exponentially_decaying_coupling(d, l, Sp_Sm)
+    m_manual.add_exponentially_decaying_coupling(np.conj(d), np.conj(l), Sm_Sp)
+    m_plus_hc.add_exponentially_decaying_coupling(d, l, Sp_Sm, plus_hc=True)
+    m_explicit.add_exponentially_decaying_coupling(d, l, Sp_Sm, plus_hc=True)
     compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
     print('exponentially decaying coupling with subsites')
     subsite_kwargs = dict(subsites=[1, 3, 5], subsites_start=[0, 2])
     e = 3 + 0.42j
-    hc_coeff = np.conj(e)
-    if which_ops == 'Cd-C':
-        # the interface doesnt allow us to control the order of the two operators, so we need
-        # to take care of the anti-commutation manually...
-        hc_coeff = -hc_coeff
-    m_manual.add_exponentially_decaying_coupling(e, l, exp_A, exp_B, **subsite_kwargs)
-    m_manual.add_exponentially_decaying_coupling(hc_coeff, l, hconj_map[exp_A], hconj_map[exp_B], **subsite_kwargs)
-    m_plus_hc.add_exponentially_decaying_coupling(e, l, exp_A, exp_B, **subsite_kwargs, plus_hc=True)
-    m_explicit.add_exponentially_decaying_coupling(e, l, exp_A, exp_B, **subsite_kwargs, plus_hc=True)
+    m_manual.add_exponentially_decaying_coupling(e, l, Sp_Sm, **subsite_kwargs)
+    m_manual.add_exponentially_decaying_coupling(np.conj(e), np.conj(l), Sm_Sp, **subsite_kwargs)
+    m_plus_hc.add_exponentially_decaying_coupling(e, l, Sp_Sm, **subsite_kwargs, plus_hc=True)
+    m_explicit.add_exponentially_decaying_coupling(e, l, Sp_Sm, **subsite_kwargs, plus_hc=True)
     compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
     print('exponentially decaying centered terms')
     subsites = [1, 3, 5]
     f = 0.42j
-    if which_ops == 'Cd-C':
-        with pytest.raises(NotImplementedError):
-            m_manual.add_exponentially_decaying_centered_terms(f, l, exp_A, exp_B, 3, subsites=subsites)
-    else:
-        m_manual.add_exponentially_decaying_centered_terms(f, l, exp_A, exp_B, 3, subsites=subsites)
-        m_manual.add_exponentially_decaying_centered_terms(
-            np.conj(f), l, hconj_map[exp_A], hconj_map[exp_B], 3, subsites=subsites
-        )
-        m_plus_hc.add_exponentially_decaying_centered_terms(f, l, exp_A, exp_B, 3, subsites=subsites, plus_hc=True)
-        m_explicit.add_exponentially_decaying_centered_terms(f, l, exp_A, exp_B, 3, subsites=subsites, plus_hc=True)
-        compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
+    m_manual.add_exponentially_decaying_centered_terms(f, l, Sp_Sm, 3, subsites=subsites)
+    m_manual.add_exponentially_decaying_centered_terms(np.conj(f), np.conj(l), Sm_Sp, 3, subsites=subsites)
+    m_plus_hc.add_exponentially_decaying_centered_terms(f, l, Sp_Sm, 3, subsites=subsites, plus_hc=True)
+    m_explicit.add_exponentially_decaying_centered_terms(f, l, Sp_Sm, 3, subsites=subsites, plus_hc=True)
+    compare_models_plus_hc(m_manual, m_plus_hc, m_explicit)
 
 
-class DisorderedLatticeModel(model.CouplingMPOModel):
+class DisorderedLatticeModel(model.ModelBuilder):
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
-        return tenpy.networks.site.SpinHalfSite(conserve, sort_charge=True)
+        return lasy.sites.SpinSite(conserve=conserve, backend=self.backend)
 
     def init_lattice(self, model_params):
         lat = super().init_lattice(model_params)
@@ -765,19 +879,31 @@ class DisorderedLatticeModel(model.CouplingMPOModel):
         lat.position_disorder = np.random.normal(scale=sigma, size=shape)
         return lat
 
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jz=1, name='Sz.Sz'),
+            hc='Sz.Sz',
+            permute='invariant',
+        )
+        self.define_coupling(
+            lasy.models.spin_spin_coupling([site, site], Jx=1, name='Sx.Sx'),
+            hc='Sx.Sx',
+            permute='invariant',
+        )
+
     def init_terms(self, model_params):
         J = model_params.get('J', 1.0)
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            dist = self.lat.distance(u1, u2, dx)
-            self.add_twosite_coupling(J / dist, u1, 'Sz', u2, 'Sz', dx)
-        for u1, u2, dx in self.lat.pairs['next_nearest_neighbors']:
-            dist = self.lat.distance(u1, u2, dx)
-            self.add_twosite_coupling(J / dist, u1, 'Sx', u2, 'Sx', dx)
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
+            dist = self.lattice.distance(u1, u2, dx)
+            self.add_two_site_coupling(J / dist, 'Sz.Sz', dx, u1, u2)
+        for u1, u2, dx in self.lattice.pairs['next_nearest_neighbors']:
+            dist = self.lattice.distance(u1, u2, dx)
+            self.add_two_site_coupling(J / dist, 'Sx.Sx', dx, u1, u2)
 
 
 @pytest.mark.parametrize('bc', ['open', 'periodic'])
 def test_disordered_lattice_model(bc, J=2.0):
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
     model_params = {
         'lattice': 'Kagome',
         'Lx': 2,
@@ -789,7 +915,6 @@ def test_disordered_lattice_model(bc, J=2.0):
         'J': J,
     }
     M = DisorderedLatticeModel(model_params)
-    terms = M.all_coupling_terms().to_TermList()
     for i, j, op, need_pbc in [
         ([0, 0, 0], [0, 0, 1], 'Sz', False),
         ([1, 0, 0], [0, 0, 1], 'Sz', False),
@@ -805,30 +930,34 @@ def test_disordered_lattice_model(bc, J=2.0):
         if need_pbc and bc == 'open':
             continue
         ij = np.array([i, j])
-        mps_i, mps_j = M.lat.lat2mps_idx(ij)
-        pos_i, pos_j = M.lat.position(ij)
+        mps_i, mps_j = M.lattice.lat2mps_idx(ij)
+        try:
+            strength = M.coupling_terms.coupling_terms[mps_i][f'{op}.{op}'][mps_j]
+        except KeyError:
+            strength = M.coupling_terms.coupling_terms[mps_j][f'{op}.{op}'][mps_i]
+        pos_i, pos_j = M.lattice.position(ij)
         dist = np.linalg.norm(pos_i - pos_j)
         if need_pbc:
-            dist = min(dist, np.linalg.norm(pos_i - pos_j + M.lat.basis[1] * M.lat.Ls[1]))
-        try:
-            idx = terms.terms.index([(op, mps_i), (op, mps_j)])
-        except ValueError:
-            idx = terms.terms.index([(op, mps_j), (op, mps_i)])
-        assert abs(terms.strength[idx] - J / dist) < 1.0e-14
+            dist = min(dist, np.linalg.norm(pos_i - pos_j + M.lattice.basis[1] * M.lattice.Ls[1]))
+        assert abs(strength - J / dist) < 1.0e-14
 
 
-def test_fixes_511(L=6, t=1.234, tp=2.54):
-    pytest.skip('not yet adapted to lasyten; uses the old np_conserved-based Site/add_coupling API')
+def test_fixes_511(L=5, t=1.234, tp=2.54):
     # https://github.com/tenpy/tenpy/issues/511
 
-    class TTprimeSpinfulChain(model.CouplingMPOModel):
+    class TTprimeSpinfulChain(model.ModelBuilder):
         """Spin-1/2 fermions on a 1D chain with NN hopping t and NNN hopping t'."""
 
         def init_sites(self, p):
-            # conserve total N and Sz; degenerate spin DOF
-            return tenpy.networks.site.SpinHalfFermionSite(cons_N=None, cons_Sz=None)
+            return lasy.sites.SpinHalfFermionSite(backend=self.backend)
 
-        # CouplingMPOModel already defaults to a Chain lattice with length p['L'].
+        def init_couplings(self, model_params):
+            site, *_ = self.lattice.unit_cell
+            self.define_coupling(
+                lasy.models.hopping([site, site], t_left=1, t_right=0, species=None, name='sum_Cd.C'),
+                hc='sum_C.Cd',
+                permute='swap_hc',
+            )  # summed over all species, i.e. Cud.Cu + Cdd.Cd
 
         def init_terms(self, p):
             t = float(p.get('t', 1.0))  # NN hopping
@@ -837,363 +966,70 @@ def test_fixes_511(L=6, t=1.234, tp=2.54):
             U = float(p.get('U', 0.0))  # onsite Hubbard U (optional)
 
             # onsite: -mu * (n_up + n_down) + U * n_up n_down
-            self.add_onsite(-mu, 0, 'Ntot')
-            if abs(U) > 0:
-                self.add_onsite(U, 0, 'NuNd')
+            self.add_onsite_operator(-mu, 'Ntot')
+            self.add_onsite_operator(U, 'NuNd')
 
             # NN hopping: -t * (c†_{iσ} c_{i+1,σ} + h.c.)
-            for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-                self.add_twosite_coupling(-t, u1, 'Cdu', u2, 'Cu', dx, plus_hc=True)  # spin ↑
-                self.add_twosite_coupling(-t, u1, 'Cdd', u2, 'Cd', dx, plus_hc=True)  # spin ↓
+            for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
+                self.add_two_site_coupling(-t, 'sum_C.Cd', dx, u1, u2, plus_hc=True)
 
             # NNN hopping: -t' * (c†_{iσ} c_{i+2,σ} + h.c.)
-            for u1, u2, dx in self.lat.pairs['next_nearest_neighbors']:
-                self.add_twosite_coupling(-tp, u1, 'Cdu', u2, 'Cu', dx, plus_hc=True)
-                self.add_twosite_coupling(-tp, u1, 'Cdd', u2, 'Cd', dx, plus_hc=True)
+            for u1, u2, dx in self.lattice.pairs['next_nearest_neighbors']:
+                self.add_two_site_coupling(-tp, 'sum_C.Cd', dx, u1, u2, plus_hc=True)
 
-    m_NN = TTprimeSpinfulChain(dict(L=L, t=t, tp=0, mu=0, bc_MPS='finite'))
-    m_NNN = TTprimeSpinfulChain(dict(L=L, t=0, tp=tp, mu=0, bc_MPS='finite'))
-    m_full = TTprimeSpinfulChain(dict(L=L, t=t, tp=tp, mu=0, bc_MPS='finite'))
+    H_full = {}
+    for key, _t, _tp in zip(['full', 'NN', 'NNN'], [t, t, 0], [tp, 0, tp]):
+        m = TTprimeSpinfulChain(dict(L=L, t=_t, tp=_tp, mu=0, bc_MPS='finite'))
+        ED = ExactDiag.from_model(m, max_size=2e7)
+        ED.build_full_H_from_mpo()
+        H_full[key] = ED.full_H
 
-    H_NN = get_numpy_Hamiltonian(m_NN)
-    H_NNN = get_numpy_Hamiltonian(m_NNN)
-    H_full = get_numpy_Hamiltonian(m_full)
+    assert lasy.almost_equal(H_full['full'], H_full['NN'] + H_full['NNN'])
 
-    assert np.allclose(H_full, H_NN + H_NNN)
 
-
-def _dense_Heisenberg(site, L, J):
-    """Reference dense Heisenberg chain Hamiltonian, built directly from the `site` operators."""
-    Sx = site.get_op('Sx').to_numpy()
-    Sy = site.get_op('Sy').to_numpy()
-    Sz = site.get_op('Sz').to_numpy()
-    Id = np.eye(site.dim)
-
-    def kron_list(ops):
-        out = np.eye(1)
-        for op in ops:
-            out = np.kron(out, op)
-        return out
-
-    H = np.zeros((site.dim**L, site.dim**L), dtype=complex)
-    for i in range(L - 1):
-        for S in (Sx, Sy, Sz):
-            ops_i = [Id] * L
-            ops_i[i] = S
-            ops_j = [Id] * L
-            ops_j[i + 1] = S
-            H += J * kron_list(ops_i) @ kron_list(ops_j)
-    return H
-
-
-def test_CouplingModel_add_coupling_lasyten():
-    """CouplingModel.add_coupling (lasyten Coupling version) should reproduce a Heisenberg chain."""
-    L = 4
-    J = 1.5
-    site = SpinSite(S=0.5, conserve=None)
-    lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    M = model.CouplingModel(lat)
-
-    coupling = heisenberg_coupling([site, site], J=J)
-    for i in range(L - 1):  # sum over all nearest-neighbor bonds
-        M.add_coupling(coupling, [i, i + 1])
-
-    H_coupling = M.calc_H_coupling(name='Heisenberg')
-    labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
-    H = H_coupling.to_tensor().to_numpy(labels).reshape(site.dim**L, site.dim**L)
-
-    H_expected = _dense_Heisenberg(site, L, J)
-    npt.assert_allclose(H, H_expected, atol=1e-10)
-    npt.assert_allclose(H, H.conj().T, atol=1e-10)
-
-
-def _dense_TFIM(L, J, g):
-    r"""Hard-coded reference transverse field Ising Hamiltonian, built purely with numpy
-        to independently verify CouplingModel.add_coupling.
-
-        H = -J \sum_i Sx_i Sx_{i+1} - g \sum_i Sz_i
-
-    Uses the same spin-1/2 basis convention as ``lasyten.models.sites.SpinSite(S=0.5, conserve=None)``:
-    state 0 = down (Sz=-1/2), state 1 = up (Sz=+1/2).
-    """
-    Sx = np.array([[0, 0.5], [0.5, 0]])
-    Sz = np.array([[-0.5, 0], [0, 0.5]])
-    Id = np.eye(2)
-
-    def kron_list(ops):
-        out = np.eye(1)
-        for op in ops:
-            out = np.kron(out, op)
-        return out
-
-    H = np.zeros((2**L, 2**L))
-    for i in range(L - 1):
-        ops_i = [Id] * L
-        ops_i[i] = Sx
-        ops_j = [Id] * L
-        ops_j[i + 1] = Sx
-        H -= J * kron_list(ops_i) @ kron_list(ops_j)
-    for i in range(L):
-        ops_i = [Id] * L
-        ops_i[i] = Sz
-        H -= g * kron_list(ops_i)
-    return H
-
-
-def test_CouplingModel_add_coupling_lasyten_tfim():
-    """CouplingModel.add_coupling (lasyten Coupling version) should reproduce the transverse field
-    Ising model, checked against a fully hard-coded (pure numpy) reference Hamiltonian.
-    """
-    L = 5
-    J = 1.5
-    g = 0.9
-    site = SpinSite(S=0.5, conserve=None)
-    lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    M = model.CouplingModel(lat)
-
-    coupling_xx = spin_spin_coupling([site, site], Jx=1.0)
-    for i in range(L - 1):
-        M.add_coupling(coupling_xx, [i, i + 1], strength=-J)
-
-    coupling_z = spin_field_coupling([site], hz=1.0)
-    for i in range(L):
-        M.add_coupling(coupling_z, [i], strength=-g)
-
-    H_coupling = M.calc_H_coupling(name='TFIM')
-    labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
-    H = H_coupling.to_tensor().to_numpy(labels).reshape(site.dim**L, site.dim**L)
-
-    H_expected = _dense_TFIM(L, J, g)
-    npt.assert_allclose(H, H_expected, atol=1e-10)
-    npt.assert_allclose(H, H.conj().T, atol=1e-10)  # Hermitian, since TFIM is
-
-
-def test_CouplingModel_add_coupling_reversed_dx():
-    """add_coupling should auto-permute a coupling whose (u, dx) pattern maps to non-ascending
-    MPS positions (e.g. dx[1] < dx[0]), instead of raising, and give the same physics as the
-    equivalent coupling built with ascending dx.
-    """
-    L = 4
-    J = 1.5
-    site = SpinSite(S=0.5, conserve=None)
-    lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
-
-    # forward: indices ascend -> no permutation needed
-    M_fwd = model.CouplingModel(lat)
-    coupling_fwd = heisenberg_coupling([site, site], J=J)
-    for i in range(L - 1):
-        M_fwd.add_coupling(coupling_fwd, [i, i + 1])
-    H_fwd = M_fwd.calc_H_coupling().to_tensor().to_numpy(labels).reshape(2**L, 2**L)
-
-    # reversed: indices descend -> triggers permute()
-    M_rev = model.CouplingModel(lat)
-    coupling = heisenberg_coupling([site, site], J=J)
-    for i in range(1, L):
-        M_rev.add_coupling(coupling, [i, i - 1])
-    H_rev = M_rev.calc_H_coupling().to_tensor().to_numpy(labels).reshape(2**L, 2**L)
-
-    npt.assert_allclose(H_rev, H_fwd, atol=1e-10)
-    npt.assert_allclose(H_rev, H_rev.conj().T, atol=1e-10)
-    # the reversed dx pattern is the same for every bond of the chain -> a single cached permutation
-    assert len(coupling._permuted) == 1
-
-
-def test_CouplingModel_add_coupling_reversed_dx_split():
-    """The `split` index passed to add_coupling should track the same *site* (not the same local
-    index into the possibly-permuted coupling) regardless of whether a placement needed
-    permuting.
-    """
-    L = 4
-    site = SpinSite(S=0.5, conserve=None)
-    lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
-
-    Sm = site.get_op('Sm').to_numpy()
-    Sp = site.get_op('Sp').to_numpy()
-
-    def hopping_coupling(op_i, op_j):
-        h = np.tensordot(op_i, op_j, axes=0)
-        h = np.transpose(h, [0, 2, 3, 1])
-        return Coupling.from_dense_block(h, [site, site], understood_braiding=True)
-
-    # coupling = Sm_(index0) Sp_(index1); place with indices reversed, prefactor absorbed at index1
-    coupling = hopping_coupling(Sm, Sp)
-    M = model.CouplingModel(lat)
-    for i in range(1, L):
-        M.add_coupling(coupling, [i, i - 1], strength=2.0, split=1)
-
-    H = M.calc_H_coupling().to_tensor().to_numpy(labels).reshape(2**L, 2**L)
-
-    Id = np.eye(2)
-
-    def kron_list(ops):
-        out = np.eye(1)
-        for op in ops:
-            out = np.kron(out, op)
-        return out
-
-    # index0 sits at the reference position i, index1 (dx=-1) sits at i - 1
-    H_expected = np.zeros((2**L, 2**L), dtype=complex)
-    for i in range(1, L):
-        ops_i = [Id] * L
-        ops_i[i] = Sm
-        ops_j = [Id] * L
-        ops_j[i - 1] = Sp
-        H_expected += 2.0 * kron_list(ops_i) @ kron_list(ops_j)
-
-    npt.assert_allclose(H, H_expected, atol=1e-10)
-
-
-def test_add_coupling_three_entry_points_agree():
-    """add_coupling, add_twosite_coupling and add_multi_coupling should give identical results
-    for a Heisenberg chain, since add_twosite_coupling/add_multi_coupling are just
-    wrappers that build a Coupling and delegate to add_coupling for each lattice placement.
-    """
-    L = 4
-    J = 1.5
-    site = SpinSite(S=0.5, conserve=None)
-    lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
-    dim = site.dim
-
-    # 1) direct add_coupling with an explicit Coupling
-    M1 = model.CouplingModel(lat)
-    coupling = heisenberg_coupling([site, site], J=J)
-    for i in range(L - 1):
-        M1.add_coupling(coupling, [i, i + 1])
-    H1 = M1.calc_H_coupling().to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
-
-    # 2) add_twosite_coupling (old two-site signature), one call per Pauli component
-    M2 = model.CouplingModel(lat)
-    for op in ('Sx', 'Sy', 'Sz'):
-        M2.add_twosite_coupling(J, 0, op, 0, op, 1)
-    H2 = M2.calc_H_coupling().to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
-
-    # 3) add_multi_coupling (old multi-site signature)
-    M3 = model.CouplingModel(lat)
-    for op in ('Sx', 'Sy', 'Sz'):
-        M3.add_multi_coupling(J, [(op, [0], 0), (op, [1], 0)])
-    H3 = M3.calc_H_coupling().to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
-
-    H_expected = _dense_Heisenberg(site, L, J)
-    for name, H in [('add_coupling', H1), ('add_twosite_coupling', H2), ('add_multi_coupling', H3)]:
-        npt.assert_allclose(H, H_expected, atol=1e-10, err_msg=name)
-        npt.assert_allclose(H, H.conj().T, atol=1e-10, err_msg=f'{name} not hermitian')
-
-
-def test_add_twosite_coupling_plus_hc():
-    """add_twosite_coupling(..., plus_hc=True) should reproduce a hand-built h.c.-added
-    Hamiltonian, and give the same result as adding the h.c. term explicitly.
-    """
-    L = 4
-    t = 1.0 + 0.5j
-    site = SpinSite(S=0.5, conserve=None)
-    lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    labels = [f'p{i}' for i in range(L)] + [f'p{i}*' for i in range(L)]
-    dim = site.dim
-
-    Sp = site.get_op('Sp').to_numpy()
-    Sm = site.get_op('Sm').to_numpy()
-    Id = np.eye(dim)
-
-    def kron_list(ops):
-        out = np.eye(1)
-        for op in ops:
-            out = np.kron(out, op)
-        return out
-
-    H_expected = np.zeros((dim**L, dim**L), dtype=complex)
-    for i in range(L - 1):
-        ops_i, ops_j = [Id] * L, [Id] * L
-        ops_i[i], ops_j[i + 1] = Sp, Sm
-        H_expected += t * kron_list(ops_i) @ kron_list(ops_j)
-        ops_i2, ops_j2 = [Id] * L, [Id] * L
-        ops_i2[i], ops_j2[i + 1] = Sm, Sp
-        H_expected += np.conj(t) * kron_list(ops_i2) @ kron_list(ops_j2)
-
-    # add_twosite_coupling already sums over all lattice bonds internally (via
-    # lat.possible_couplings) -- call it exactly once, not once per bond.
-    M_plus_hc = model.CouplingModel(lat)
-    M_plus_hc.add_twosite_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
-    H_plus_hc = M_plus_hc.calc_H_coupling().to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
-
-    # equivalent: add the h.c. term explicitly, by hand
-    M_explicit = model.CouplingModel(lat)
-    M_explicit.add_twosite_coupling(t, 0, 'Sp', 0, 'Sm', 1)
-    M_explicit.add_twosite_coupling(np.conj(t), 0, 'Sm', 0, 'Sp', 1)
-    H_explicit = M_explicit.calc_H_coupling().to_tensor().to_numpy(labels).reshape(dim**L, dim**L)
-
-    npt.assert_allclose(H_plus_hc, H_expected, atol=1e-10)
-    npt.assert_allclose(H_plus_hc, H_plus_hc.conj().T, atol=1e-10)
-    npt.assert_allclose(H_plus_hc, H_explicit, atol=1e-10)
-
-
-def test_add_coupling_error_paths():
-    """Error paths of add_coupling / add_twosite_coupling / add_multi_coupling / calc_H_coupling."""
-    L = 4
-    site = SpinSite(S=0.5, conserve=None)
-    lat = lattice.Chain(L, site, bc='open', bc_MPS='finite')
-    M = model.CouplingModel(lat)
-    coupling = heisenberg_coupling([site, site], J=1.0)
-
-    # explicit op_string (Jordan-Wigner) is not yet supported
-    with pytest.raises(NotImplementedError):
-        M.add_twosite_coupling(1.0, 0, 'Sz', 0, 'Sz', 1, op_string='JW')
-    with pytest.raises(NotImplementedError):
-        M.add_multi_coupling(1.0, [('Sz', [0], 0), ('Sz', [1], 0)], op_string='JW')
-
-    # add_coupling: repeated MPS index
-    with pytest.raises(ValueError):
-        M.add_coupling(coupling, [0, 0])
-
-    # add_coupling: wrong number of indices
-    with pytest.raises(ValueError):
-        M.add_coupling(coupling, [0, 1, 2])
-
-    # add_twosite_coupling: purely onsite coupling is rejected
-    with pytest.raises(ValueError):
-        M.add_twosite_coupling(1.0, 0, 'Sz', 0, 'Sx', 0)
-
-    # calc_H_coupling: not every MPS site in [0, L) is covered
-    M_partial = model.CouplingModel(lat)
-    M_partial.add_coupling(coupling, [1, 2])  # leaves sites 0, 3 uncovered
-    with pytest.raises(ValueError):
-        M_partial.calc_H_coupling()
-
-    # fermionic sites: named-operator path refuses (gap-bridging would need JW dressing)
-    from lasyten.models.sites import SpinlessFermionSite
-
-    fsite = SpinlessFermionSite(num_species=1, conserve='N')
-    flat = lattice.Chain(L, fsite, bc='open', bc_MPS='finite')
-    Mf = model.CouplingModel(flat)
-    with pytest.raises(NotImplementedError):
-        Mf.add_twosite_coupling(1.0, 0, 'N0', 0, 'N0', 1)
-    with pytest.raises(NotImplementedError):
-        Mf.add_multi_coupling(1.0, [('N0', [0], 0), ('N0', [1], 0)])
-
-
-@pytest.mark.skip
 def test_fixes_consistency_check_IrregularLattice():
     # tests if the bug reported at https://tenpy.johannes-hauschild.de/viewtopic.php?t=757 is fixed.
 
-    class SpinModel_triangular_finite(tenpy.models.CouplingMPOModel):
+    class SpinModel_triangular_finite(model.ModelBuilder):
         def init_sites(self, model_params):
-            return tenpy.SpinHalfSite(conserve=None, sort_charge=True)
+            return lasy.sites.SpinSite(backend=self.backend)
 
         def init_terms(self, model_params):
-            self.add_onsite(-1, 0, 'Sz')
+            self.add_onsite_operator(-1, 'Sz')
 
         def init_lattice(self, model_params):
-            regular_lat = tenpy.models.lattice.Triangular(5, 5, self.init_sites(model_params))
-            return tenpy.IrregularLattice(regular_lat, remove=[(0, 0, 0)])
+            regular_lat = lattice.Triangular(5, 5, self.init_sites(model_params))
+            return lattice.IrregularLattice(regular_lat, remove=[(0, 0, 0)])
 
-    model = SpinModel_triangular_finite({})
+    M = SpinModel_triangular_finite({})
 
     ad_hoc_fix = False
     if ad_hoc_fix:
-        model.lat.N_sites_per_ring = 1
+        M.lattice.N_sites_per_ring = 1
 
-    psi = tenpy.MPS.from_lat_product_state(model.lat, [[['up']]])
+    psi = MPS.from_lat_product_state(M.lattice, [[['up']]])
     dmrg_params = dict(max_sweeps=2)
-    _ = tenpy.algorithms.dmrg.run(psi, model, dmrg_params)
+    _ = dmrg.run(psi, M, dmrg_params)
+
+
+def _compare_grids(W, grid, name):
+    for i, row in enumerate(grid):
+        for j, grid_cell in enumerate(row):
+            W_cell = lasy.tensor_grid_cell(W, i, j, 'wL', 'wR')
+            if grid_cell is None:
+                assert lasy.norm(W_cell) < 1e-16, f'{name}:  not zero: grid[{i}][{j}]'
+            else:
+                assert W_cell.get_leg('wL') == grid_cell.get_leg('wL'), f'{name}:  wL mismatch [{i}][{j}]'
+                assert W_cell.get_leg('wR') == grid_cell.get_leg('wR'), f'{name}:  wR mismatch [{i}][{j}]'
+                assert lasy.almost_equal(W_cell, grid_cell), f'{name}:  Tensor mismatch: [{i}][{j}]'
+
+
+@pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
+def test_zero_coupling_spin_model(bc_MPS):
+    """A spin chain at the zero-coupling endpoint has a zero Hamiltonian."""
+    M = SpinChain(dict(L=4, Jx=0.0, Jy=0.0, Jz=0.0, bc_MPS=bc_MPS, conserve='Sz'))
+    psi = MPS.from_lat_product_state(M.lattice, [['up'], ['down']] * 2)
+    assert M.get_H_MPO().expectation_value(psi) == 0
+    if bc_MPS == 'finite':
+        H_np = get_numpy_Hamiltonian(M)
+        npt.assert_array_equal(H_np, np.zeros((16, 16)))

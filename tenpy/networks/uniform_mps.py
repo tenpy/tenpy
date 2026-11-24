@@ -41,7 +41,7 @@ class UniformMPS(MPS):
 
     Parameters
     ----------
-    sites : list of :class:`~tenpy.networks.site.Site`
+    sites : list of :class:`~lasyten.Site`
         Defines the local Hilbert space for each site.
     ALs : list of :class:`~tenpy.linalg.np_conserved.Array`
         The 'left-orthonormal' tensors of the MPS. Labels are ``vL, vR, p`` (in any order).
@@ -54,7 +54,7 @@ class UniformMPS(MPS):
 
     Attributes
     ----------
-    sites : list of :class:`~tenpy.networks.site.Site`
+    sites : list of :class:`~lasyten.Site`
         Defines the local Hilbert space for each site.
     bc : {'infinite'}
         For uniform MPS only infinite bc are allowed.
@@ -477,7 +477,7 @@ class UniformMPS(MPS):
 
         Parameters
         ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~lasyten.Site`
             The sites defining the local Hilbert space.
         A{L,R,C}flat : iterable of numpy ndarrays
             The matrices defining the MPS on each site, with legs ``'p', 'vL', 'vR'``
@@ -488,7 +488,7 @@ class UniformMPS(MPS):
         dtype : type or string
             The data type of the array entries. Defaults to the common dtype of `Bflat`.
         permute : bool
-            The :class:`~tenpy.networks.Site` might permute the local basis states if charge
+            The :class:`lasyten.Site` might permute the local basis states if charge
             conservation gets enabled.
             If `permute` is True (default), we permute the given `Bflat` locally according to
             each site's :attr:`~tenpy.networks.Site.perm`.

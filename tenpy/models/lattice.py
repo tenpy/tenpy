@@ -137,7 +137,7 @@ class Lattice:
         This is the same as :attr:`N_rings` in most cases, except that it is unchanged by grouping
         sites. It always provides the horizontal distance traversed by an MPS unit cell,
         e.g. for the purpose of :ref:`shift_symmetry` or
-        :meth:`~tenpy.networks.mps.MPS.correlation_length2`.
+        :meth:`~tenpy.networks.mps.MPS.correlation_length`.
     unit_cell : list of :class:`lasyten.Site`
         the sites making up a unit cell of the lattice.
     symmetry : :class:`lasyten.Symmetry`
@@ -706,12 +706,12 @@ class Lattice:
         return res
 
     def site(self, i):
-        """Return :class:`~tenpy.networks.site.Site` instance corresponding to an MPS index `i`"""
+        """Return :class:`~lasyten.Site` instance corresponding to an MPS index `i`"""
         if self._mps_sites_cache is None:
             _ = self.mps_sites()  # populate cache
         return self._mps_sites_cache[i]
 
-    def mps_sites(self):
+    def mps_sites(self) -> list[lasy.Site]:
         """Return a list of sites for all MPS indices.
 
         Equivalent to ``[self.site(i) for i in range(self.N_sites)]``.
@@ -1073,8 +1073,8 @@ class Lattice:
             For example to add a Z-Z interaction of strength `J/r` with r the distance,
             you can do something like this in :meth:`~tenpy.models.CouplingModel.init_terms`:
 
-                for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-                    dist = self.lat.distance(u1, u2, dx)
+                for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
+                    dist = self.lattice.distance(u1, u2, dx)
                     self.add_coupling(J/dist, u1, 'Sz', u2, 'Sz', dx)
 
         """
@@ -1351,7 +1351,7 @@ class Lattice:
         # make 3D arrays ["iteration over lattice", "operator", "spatial direction"]
         # recall numpy broadcasting: 1D equivalent to [np.newaxis, np.newaxis, :]
         dx = np.asarray(dx, int).reshape([1, M, D])
-        u = np.asarray(dx, int).reshape([1, M, 1])
+        u = np.asarray(u, int).reshape([1, M, 1])
         coupling_shape, shift_lat_indices = self.multi_coupling_shape(dx[0, :, :])
         if any([s == 0 for s in coupling_shape]):
             return np.zeros([0, M], int), np.zeros([0, D], int), coupling_shape
@@ -1749,7 +1749,7 @@ class TrivialLattice(Lattice):
 
     Parameters
     ----------
-    mps_sites : list of :class:`~tenpy.networks.site.Site`
+    mps_sites : list of :class:`~lasyten.Site`
         The sites making up a unit cell of the lattice.
     **kwargs :
         Further keyword arguments given to :class:`Lattice`.
@@ -1777,7 +1777,7 @@ class SimpleLattice(Lattice):
     ----------
     Ls : list of int
         the length in each direction
-    site : :class:`~tenpy.networks.site.Site`
+    site : :class:`~lasyten.Site`
         the lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
@@ -1825,7 +1825,7 @@ class MultiSpeciesLattice(Lattice):
         :class:`Square`, :class:`Triangular` or :class:`Honeycomb`.
         You can initialize the `simple_lattice` with any local sites, e.g. ``sites=None``, since
         the sites of the MultiSpeciesLattice are defined below.
-    species_sites : list of :class:`~tenpy.networks.site.Site`
+    species_sites : list of :class:`~lasyten.Site`
         A collection of sites representing different species.
     species_names : list of str | None
         Names for the species. Defaults to ``['0', '1', ...]``.
@@ -1857,8 +1857,8 @@ class MultiSpeciesLattice(Lattice):
     .. doctest :: MultiSpeciesLattice
 
         >>> simple_lat = Square(2, 3, None)
-        >>> f = tenpy.networks.site.FermionSite(conserve='N')
-        >>> s = tenpy.networks.site.SpinHalfSite(conserve='Sz', sort_charge=False)
+        >>> f = lasyten.sites.SpinlessFermionSite(conserve='N')
+        >>> s = lasyten.sites.SpinSite(S=0.5, conserve='Sz')
         >>> tenpy.networks.site.set_common_charges([f, s], 'independent')
         [array([0, 1]), array([1, 0])]
         >>> fs_lat = MultiSpeciesLattice(simple_lat, [f, s], ['f', 's'])
@@ -1896,7 +1896,7 @@ class MultiSpeciesLattice(Lattice):
     .. doctest :: MultiSpeciesLattice
 
         >>> simple_lat = Honeycomb(2, 3, None)
-        >>> f = tenpy.networks.site.FermionSite(conserve='N')
+        >>> f = lasyten.sites.SpinlessFermionSite(conserve='N')
         >>> sites = [f, copy(f)]
         >>> tenpy.networks.site.set_common_charges(sites, 'same')  # same = total N conserved
         [array([0, 1]), array([0, 1])]
@@ -2073,7 +2073,7 @@ class IrregularLattice(Lattice):
         and sorted into it, so "2.5" goes between what was site 2 and 3 in the regular lattice.
         An entry `None` indicates that the site should be inserted after the lattice site
         ``(x_0, ..., x_{dim-1}, -1)`` of the `regular_lattice`.
-    add_unit_cell : list of :class:`~tenpy.networks.site.Site`
+    add_unit_cell : list of :class:`~lasyten.Site`
         Extra sites to be added to the unit cell.
     add_positions : iterable of 1D arrays
         For each extra site in `add_unit_cell` the position within the unit cell.
@@ -2337,7 +2337,7 @@ class HelicalLattice(Lattice):
 
     _REMOVED = IrregularLattice._REMOVED
 
-    def __init__(self, regular_lattice, N_unit_cells):
+    def __init__(self, regular_lattice: Lattice, N_unit_cells):
         assert not isinstance(regular_lattice, HelicalLattice)
         if isinstance(regular_lattice, IrregularLattice):
             raise ValueError("regular_lattice can't be irregular: we want translation invariance!")
@@ -2499,7 +2499,7 @@ class HelicalLattice(Lattice):
         return mps_i[keep], mps_j[keep], lat_ind[keep], coupl_sh
 
     def possible_couplings_strengths(self, u1, u2, dx, strength):
-        mps_i, mps_j, strength_vals = self.regular_lattice.possible_couplings(u1, u2, dx, strength)
+        mps_i, mps_j, strength_vals = self.regular_lattice.possible_couplings_strengths(u1, u2, dx, strength)
         # we can actually check that everything is translation invariant!
         self._check_transl_invar_strength(np.stack([mps_i, mps_j]).T, strength_vals)
         keep = np.min([mps_i, mps_j], axis=0) < self.N_sites
@@ -2511,7 +2511,7 @@ class HelicalLattice(Lattice):
         return mps_ijkl[keep, :], lat_inds[keep, :], coupl_shape
 
     def possible_multi_couplings_strengths(self, dx, u, strength):
-        mps_ijkl, strength_vals = self.regular_lattice.possible_multi_couplings(dx, u, strength)
+        mps_ijkl, strength_vals = self.regular_lattice.possible_multi_couplings_strengths(dx, u, strength)
         # we can actually check that everything is translation invariant!
         self._check_transl_invar_strength(mps_ijkl, strength_vals)
         keep = np.min(mps_ijkl, axis=1) < self.N_sites
@@ -2592,7 +2592,7 @@ class Chain(SimpleLattice):
     ----------
     L : int
         The length of the chain.
-    site : :class:`~tenpy.networks.site.Site`
+    site : :class:`~lasyten.Site`
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
@@ -2706,9 +2706,9 @@ class Ladder(Lattice):
     ----------
     L : int
         The length of each chain, we have 2*L sites in total.
-    sites : (list of) :class:`~tenpy.networks.site.Site`
+    sites : (list of) :class:`~lasyten.Site`
         The two local lattice sites making the `unit_cell` of the :class:`Lattice`.
-        If only a single :class:`~tenpy.networks.site.Site` is given, it is used for both chains.
+        If only a single :class:`~lasyten.Site` is given, it is used for both chains.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `pairs` are set accordingly.
@@ -2823,9 +2823,9 @@ class NLegLadder(Lattice):
         The length of each chain, we have N*L sites in total.
     N : int
         The number of legs of the ladder.
-    sites : (list of) :class:`~tenpy.networks.site.Site`
+    sites : (list of) :class:`~lasyten.Site`
         The N local lattice sites making the `unit_cell` of the :class:`Lattice`.
-        If only a single :class:`~tenpy.networks.site.Site` is given, it is used for all chains.
+        If only a single :class:`~lasyten.Site` is given, it is used for all chains.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `pairs` are set accordingly.
@@ -2956,7 +2956,7 @@ class Square(SimpleLattice):
     ----------
     Lx, Ly : int
         The length in each direction.
-    site : :class:`~tenpy.networks.site.Site`
+    site : :class:`~lasyten.Site`
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
@@ -3029,7 +3029,7 @@ class Triangular(SimpleLattice):
     ----------
     Lx, Ly : int
         The length in each direction.
-    site : :class:`~tenpy.networks.site.Site`
+    site : :class:`~lasyten.Site`
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
@@ -3106,9 +3106,9 @@ class Honeycomb(Lattice):
     ----------
     Lx, Ly : int
         The length in each direction.
-    sites : (list of) :class:`~tenpy.networks.site.Site`
+    sites : (list of) :class:`~lasyten.Site`
         The two local lattice sites making the `unit_cell` of the :class:`Lattice`.
-        If only a single :class:`~tenpy.networks.site.Site` is given, it is used for both sites.
+        If only a single :class:`~lasyten.Site` is given, it is used for both sites.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `pairs` are set accordingly.
@@ -3225,9 +3225,9 @@ class Kagome(Lattice):
     ----------
     Lx, Ly : int
         The length in each direction.
-    sites : (list of) :class:`~tenpy.networks.site.Site`
+    sites : (list of) :class:`~lasyten.Site`
         The two local lattice sites making the `unit_cell` of the :class:`Lattice`.
-        If only a single :class:`~tenpy.networks.site.Site` is given, it is used for both sites.
+        If only a single :class:`~lasyten.Site` is given, it is used for both sites.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `pairs` are set accordingly.

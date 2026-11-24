@@ -1,9 +1,7 @@
 """A collection of tests to check the functionality of algorithms.exact_diagonalization."""
 
 # Copyright (C) TeNPy Developers, Apache license
-import copy
 from functools import reduce
-from types import SimpleNamespace
 
 import lasyten as lasy
 import numpy as np
@@ -12,12 +10,12 @@ from lasyten.models.sites import FibonacciAnyonSite, SpinSite
 from lasyten.symmetries import SymmetryError
 from lasyten.symmetries.spaces import AbelianLegPipe
 from lasyten.tensors import SymmetricTensor, compose, dagger, norm
+from scipy.linalg import expm
 
 from tenpy.algorithms import exact_diag
 from tenpy.models.spins import SpinChain
 from tenpy.models.tf_ising import TFIChain
-
-_LEGACY = 'legacy np_conserved test, not migrated to lasyten yet'
+from tenpy.networks.mps import MPS
 
 
 def _dense_heisenberg(L):
@@ -189,7 +187,6 @@ def test_exact_diag_mps_roundtrip(conserve, L):
 @pytest.mark.parametrize('conserve', ['Sz', 'parity', 'None'])
 @pytest.mark.parametrize('L', [3, 4])
 def test_exact_diag_exp_H(conserve, L):
-    from scipy.linalg import expm
 
     site = SpinSite(0.5, conserve=conserve)
     H, H_ref = _heisenberg_tensor(site, L)
@@ -303,58 +300,81 @@ def test_exact_diag_sparse_diag_su2(L=3):
         ED_sec.sparse_diag(1)
 
 
-def test_ED():
-    pytest.skip(_LEGACY)
-    import tenpy.linalg.np_conserved as npc
-    from tenpy.linalg.krylov_based import LanczosGroundState
-
-    from tenpy.models import XXZChain
-
+@pytest.mark.parametrize(
+    'conserve, symmetry_backend',
+    [
+        ('SU2', 'fusion_tree'),
+        ('Sz', 'fusion_tree'),
+        ('Sz', 'abelian'),
+        (None, 'fusion_tree'),
+        (None, 'abelian'),
+        (None, 'no_symmetry'),
+    ],
+)
+def test_ED(conserve, symmetry_backend):
     # just quickly check that it runs without errors for a small system
-    xxz_pars = dict(L=4, Jxx=1.0, Jz=1.0, hz=0.1, bc_MPS='finite', sort_charge=True)
-    M = XXZChain(xxz_pars)
+    base_params = dict(
+        Jx=1.0, Jy=1.0, Jz=1.0, hz=0 if conserve == 'SU2' else 0.1, conserve=conserve, symmetry_backend=symmetry_backend
+    )
+    M = SpinChain(dict(**base_params, L=4, bc_MPS='finite'))
+
     ED = exact_diag.ExactDiag.from_model(M)
     ED.build_full_H_from_mpo()
-    H, ED.full_H = ED.full_H, None
+    H = ED.full_H
+
+    ED = exact_diag.ExactDiag.from_model(M)
     ED.build_full_H_from_bonds()
     H2 = ED.full_H
-    assert npc.norm(H - H2, np.inf) < 1.0e-14
+    assert lasy.almost_equal(H, H2)
+
     ED.full_diagonalization()
     E, psi = ED.groundstate()
-    print('select charge_sector =', psi.qtotal)
-    assert np.all(psi.qtotal == [0])
-    E_sec2, psi_sec2 = ED.groundstate([2])
-    assert np.all(psi_sec2.qtotal == [2])
-    ED2 = exact_diag.ExactDiag.from_model(M, psi.qtotal)
+    assert psi.get_leg('!slice').sector_decomposition == lasy.SectorArray([M.symmetry.trivial_sector])
+
+    if conserve == 'Sz':
+        target_sector = lasy.Sector([2])
+        E_sec2, psi_sec2 = ED.groundstate(target_sector)
+        charge = M.symmetry.dual_sectors(psi_sec2.get_leg('!slice').sector_decomposition)
+        assert charge == lasy.SectorArray([target_sector])
+
+    ED2 = exact_diag.ExactDiag.from_model(M, M.symmetry.trivial_sector)
     ED2.build_full_H_from_mpo()
     ED2.full_diagonalization()
     E2, psi2 = ED2.groundstate()
-    full_psi2 = psi.zeros_like()
-    full_psi2[ED2._mask] = psi2
-    ov = npc.inner(psi, full_psi2, 'range', do_conj=True)
-    print('overlap <psi | psi2> = 1. -', 1.0 - ov)
-    assert abs(abs(ov) - 1.0) < 1.0e-15
-    # starting from a random guess in the correct charge sector,
-    # check if we can also do lanczos.
+    ov = lasy.inner(psi2, psi)
+    assert abs(ov) == pytest.approx(1)
+
+    # compare with scipy sparse eigensolver
     np.random.seed(12345)
-    psi3 = npc.Array.from_func(np.random.random, psi2.legs, qtotal=psi2.qtotal, shape_kw='size')
-    E0, psi3, N = LanczosGroundState(ED2, psi3, {}).run()
-    print('Lanczos E0 =', E0)
-    ov = npc.inner(psi3, psi2, 'range', do_conj=True)
-    print('overlap <psi2 | psi3> = 1. -', 1.0 - ov)
-    assert abs(abs(ov) - 1.0) < 1.0e-15
+    psi3 = lasy.SymmetricTensor.from_random_normal(ED2.full_H.codomain, [], backend=H.backend)
+    op = lasy.tensors.HermitianNumpyArrayLinearOperator.from_Tensor(
+        ED2.full_H, legs1=ED2._labels_pconj, legs2=ED2._labels_p, charge_sector='trivial'
+    )
 
-    ED3 = exact_diag.ExactDiag.from_H_mpo(M.H_MPO)
+    if symmetry_backend == 'fusion_tree':
+        with pytest.raises(NotImplementedError, match='to_dense_block_trivial_sector not implemented'):
+            _ = op.eigenvectors(num_ev=1, which='SA', v0_tensor=psi3)
+        pytest.xfail('to_dense_block_trivial_sector not implemented')
+
+    (E3,), (psi3,) = op.eigenvectors(num_ev=1, which='SA', v0_tensor=psi3)
+    assert E3 == pytest.approx(E)
+    ov = lasy.inner(psi3, lasy.squeeze_legs(psi2.as_SymmetricTensor()))
+    assert abs(ov) == pytest.approx(1)
+
+    ED3 = exact_diag.ExactDiag.from_H_mpo(M.get_H_MPO())
     ED3.build_full_H_from_mpo()
-    assert npc.norm(ED3.full_H - H, np.inf) < 1.0e-14
+    assert lasy.almost_equal(ED3.full_H, H)
 
-    xxz_pars_inf = copy.copy(xxz_pars)
-    xxz_pars_inf['bc_MPS'] = 'infinite'
-    xxz_pars_inf['L'] = 2
-    M_inf = XXZChain(xxz_pars_inf)
+    M_inf = SpinChain(dict(**base_params, L=2, bc_MPS='infinite'))
+
+    with pytest.raises(AttributeError, match="has no attribute 'extract_segment'"):
+        _ = exact_diag.ExactDiag.from_infinite_model(M_inf, enlarge=2)
+    # https://github.com/tenpy/lasyten/issues/339
+    pytest.xfail('Extract segment not ported. #339')
+
     ED4 = exact_diag.ExactDiag.from_infinite_model(M_inf, enlarge=2)
     ED4.build_full_H_from_mpo()
-    assert npc.norm(ED4.full_H - H, np.inf) < 1.0e-14
+    assert lasy.almost_equal(ED4.full_H, H)
 
 
 def get_tfi_Hamiltonian(L, J, g, up_down_basis=True):
@@ -377,19 +397,15 @@ def get_tfi_Hamiltonian(L, J, g, up_down_basis=True):
     return H_expect
 
 
-@pytest.mark.parametrize('undo_sort_charge', [True, False])
 @pytest.mark.parametrize('conserve', ['best', 'None'])
-def test_get_full_wavefunction(undo_sort_charge, conserve, L=10):
-    pytest.skip(_LEGACY)
-    from tenpy.networks import MPS, SpinHalfSite
-
+def test_get_full_wavefunction(conserve, L=10):
     # check with a singlet covering
     # sign convention of singlet = (|up,down> - |down,up>) / sqrt(2)
     assert L % 2 == 0
     assert L % 4 == 2  # only for an odd number of singlets do we detect mixing up the basis order
 
     # build wavefunction exactly
-    up_down_basis = undo_sort_charge or conserve == 'None'
+    up_down_basis = False
     singlet = np.zeros((2, 2))
     if up_down_basis:
         singlet[0, 1] = +1
@@ -401,43 +417,33 @@ def test_get_full_wavefunction(undo_sort_charge, conserve, L=10):
     expect = reduce(np.kron, [singlet] * (L // 2))
 
     # use get_full_wavefunction
-    site = SpinHalfSite(conserve='Sz' if conserve == 'best' else conserve)
+    site = SpinSite(conserve='Sz' if conserve == 'best' else conserve)
     psi = MPS.from_singlets(site=site, L=L, pairs=[[i, i + 1] for i in range(0, L, 2)], unit_cell_width=L)
-    res = exact_diag.get_full_wavefunction(psi, undo_sort_charge=undo_sort_charge)
+    res = exact_diag.get_full_wavefunction(psi)
 
     # compare
     assert np.allclose(res, expect)
 
 
-@pytest.mark.parametrize('undo_sort_charge', [True, False])
 @pytest.mark.parametrize('conserve', ['best', 'None'])
-def test_get_scipy_sparse_Hamiltonian(undo_sort_charge, conserve, L=10, J=1, g=4.3291):
-    pytest.skip(_LEGACY)
-    from tenpy.models import TFIChain
-
+def test_get_scipy_sparse_Hamiltonian(conserve, L=10, J=1, g=4.3291):
     model = TFIChain(dict(L=L, conserve=conserve, J=J, g=g))
-    H_expect = get_tfi_Hamiltonian(L=L, J=J, g=g, up_down_basis=undo_sort_charge or conserve == 'None')
-    H_res = exact_diag.get_scipy_sparse_Hamiltonian(model, undo_sort_charge=undo_sort_charge)
+    H_expect = get_tfi_Hamiltonian(L=L, J=J, g=g, up_down_basis=False)
+    H_res = exact_diag.get_scipy_sparse_Hamiltonian(model)
     assert np.allclose(H_res.toarray(), H_expect)
 
 
-@pytest.mark.parametrize('undo_sort_charge', [True, False])
 @pytest.mark.parametrize('conserve', ['best', 'None'])
 @pytest.mark.parametrize('use_ED', [True, False])
-def test_get_numpy_Hamiltonian(undo_sort_charge, conserve, use_ED, J=1, g=4.3291):
-    pytest.skip(_LEGACY)
-    from tenpy.models import TFIChain
-
+def test_get_numpy_Hamiltonian(conserve, use_ED, J=1, g=4.3291):
     L = 6 if use_ED else 10  # using ED is a bit slow (overhead from combine? or is np.ix_ slow?)
     model = TFIChain(dict(L=L, conserve=conserve, J=J, g=g))
-    H_expect = get_tfi_Hamiltonian(L=L, J=J, g=g, up_down_basis=undo_sort_charge or conserve == 'None')
+    H_expect = get_tfi_Hamiltonian(L=L, J=J, g=g, up_down_basis=False)
     if use_ED:
         # default behavior for this model is from couplings. test from full_H explicitly.
-        H_res = exact_diag._get_numpy_Hamiltonian_ExactDiag_full_H(
-            model, from_mpo=True, undo_sort_charge=undo_sort_charge
-        )
+        H_res = exact_diag._get_numpy_Hamiltonian_ExactDiag_full_H(model, from_mpo=True)
     else:
-        H_res = exact_diag.get_numpy_Hamiltonian(model, undo_sort_charge=undo_sort_charge)
+        H_res = exact_diag.get_numpy_Hamiltonian(model)
     assert np.allclose(H_res, H_expect)
 
 
@@ -491,7 +497,7 @@ def _check_built_models(M, H_ref, H_expect):
 @pytest.mark.parametrize('L', [3, 4])
 def test_build_full_H_heisenberg(conserve, L):
     M = SpinChain(dict(L=L, bc_MPS='finite', conserve=conserve))
-    H_expect, H_ref = _heisenberg_tensor(M.lat.mps_sites()[0], L)
+    H_expect, H_ref = _heisenberg_tensor(M.lattice.mps_sites()[0], L)
     _check_built_models(M, H_ref, H_expect)
 
 
@@ -499,7 +505,7 @@ def test_build_full_H_heisenberg(conserve, L):
 @pytest.mark.parametrize('L', [3, 4])
 def test_build_full_H_tfi(conserve, L):
     M = TFIChain(dict(L=L, J=1.0, g=1.2, bc_MPS='finite', conserve=conserve))
-    site = M.lat.mps_sites()[0]
+    site = M.lattice.mps_sites()[0]
     assert site.state_labels['down'] == 0 and site.state_labels['up'] == 1
     H_ref = _dense_tfi(L, 1.0, 1.2)
     _check_built_models(M, H_ref, _dense_to_tensor(site, H_ref, L))
@@ -519,7 +525,7 @@ def test_assembly_route(conserve, dense):
 @pytest.mark.parametrize('conserve', [None, 'Sz', 'SU2'])
 def test_build_full_H_explicit_plus_hc(conserve, L=3):
     M = SpinChain(dict(L=L, bc_MPS='finite', conserve=conserve))
-    H_expect, H_ref = _heisenberg_tensor(M.lat.mps_sites()[0], L)
+    H_expect, H_ref = _heisenberg_tensor(M.lattice.mps_sites()[0], L)
     M.H_MPO.explicit_plus_hc = True  # the Heisenberg MPO is hermitian, so H + h.c. = 2 H
     ED = exact_diag.ExactDiag.from_model(M)
     ED.build_full_H_from_mpo()
@@ -530,17 +536,3 @@ def test_dense_H_from_mpo_matches_reference():
     M = SpinChain(dict(L=4, bc_MPS='finite', conserve=None))
     H = exact_diag.ExactDiag._dense_H_from_mpo(M.H_MPO)
     np.testing.assert_allclose(H, _dense_heisenberg(4), atol=1e-12)
-
-
-def test_build_full_H_errors():
-    L = 3
-    site = SpinSite(0.5, conserve='Sz')
-    H, _ = _heisenberg_tensor(site, L)
-    ED = exact_diag.ExactDiag.from_hamiltonian(H, [site] * L)
-    with pytest.raises(ValueError, match='from_model'):
-        ED.build_full_H_from_mpo()
-    with pytest.raises(ValueError, match='from_model'):
-        ED.build_full_H_from_bonds()
-    infinite_model = SimpleNamespace(lat=SimpleNamespace(bc_MPS='infinite'))  # infinite models cannot be built yet
-    with pytest.raises(ValueError, match='finite'):
-        exact_diag.ExactDiag.from_model(infinite_model)

@@ -1,14 +1,13 @@
 """tJ model"""
 # Copyright (C) TeNPy Developers, Apache license
 
-from ..networks.site import SpinHalfHoleSite
 from .lattice import Chain
-from .model import CouplingMPOModel, NearestNeighborModel
+from .model import ModelBuilder
 
 __all__ = ['tJModel', 'tJChain']
 
 
-class tJModel(CouplingMPOModel):
+class tJModel(ModelBuilder):
     r"""Spin-1/2 t-J model.
 
     The Hamiltonian reads:
@@ -38,24 +37,29 @@ class tJModel(CouplingMPOModel):
     Options
     -------
     .. cfg:config :: tJModel
-        :include: CouplingMPOModel
+        :include: ModelBuilder
 
-        cons_N : {'N' | 'parity' | None}
+        conserve_N : {'N' | 'parity' | None}
             Whether particle number is conserved,
-            see :class:`~tenpy.networks.site.SpinHalfHoleSite` for details.
-        cons_Sz : {'Sz' | 'parity' | None}
+            see :class:`lasyten.sites.SpinHalfHoleSite` for details.
+        conserve_S : {'Sz' | 'parity' | None}
             Whether spin is conserved,
-            see :class:`~tenpy.networks.site.SpinHalfHoleSite` for details.
+            see :class:`lasyten.sites.SpinHalfHoleSite` for details.
         t, J: float | array
             Couplings as defined for the Hamiltonian above. Note the signs!
             Defaults to ``t=J=1``
 
     """
 
+    def __init__(self, model_params):
+        # TODO can prbly implement very similarly to the hubbard models
+        raise NotImplementedError('Need to implement SpinHalfHoleSite in lasy')
+
     def init_sites(self, model_params):
-        cons_N = model_params.get('cons_N', 'N', str)
-        cons_Sz = model_params.get('cons_Sz', 'Sz', str)
-        site = SpinHalfHoleSite(cons_N=cons_N, cons_Sz=cons_Sz)
+        conserve_N = model_params.get('conserve_N', 'N', str)
+        conserve_S = model_params.get('conserve_S', 'Sz', str)
+        model_params.deprecated_ignore('cons_N', 'cons_Sz')
+        site = SpinHalfHoleSite(conserve_N=conserve_N, conserve_S=conserve_S, backend=self.backend)
         return site
 
     def init_terms(self, model_params):
@@ -63,7 +67,7 @@ class tJModel(CouplingMPOModel):
         t = model_params.get('t', 1.0, 'real_or_array')
         J = model_params.get('J', 1.0, 'real_or_array')
 
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             self.add_coupling(-t, u1, 'Cdu', u2, 'Cu', dx, plus_hc=True)
             self.add_coupling(-t, u1, 'Cdd', u2, 'Cd', dx, plus_hc=True)
             self.add_coupling(J / 2.0, u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
@@ -72,7 +76,7 @@ class tJModel(CouplingMPOModel):
             self.add_coupling(-J / 4, u1, 'Ntot', u2, 'Ntot', dx)
 
 
-class tJChain(tJModel, NearestNeighborModel):
+class tJChain(tJModel):
     """The :class:`tJModel` on a Chain, suitable for TEBD.
 
     See the :class:`tJModel` for the documentation of parameters.

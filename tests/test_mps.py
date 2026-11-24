@@ -7,11 +7,10 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 
-# from random_test import rand_permutation, random_MPS
 # from tenpy.algorithms import tebd
 # from tenpy.models.aklt import AKLTChain
 from tenpy.models.lattice import Chain, MultiSpeciesLattice, Square
-from tenpy.models.xxz_chain import XXZChain
+from tenpy.models.xxz_chain import XXZChain2
 from tenpy.networks import mps, site
 from tenpy.networks.terms import TermList
 from tenpy.tools import misc
@@ -82,12 +81,11 @@ def test_mps():
 
 
 def test_mps_add():
-    pytest.skip(_LEGACY)
-    s = site.SpinHalfSite(conserve='Sz', sort_charge=True)
+    s = spin_half
     u, d = 'up', 'down'
     psi1 = mps.MPS.from_product_state([s] * 4, [u, u, d, u], bc='finite', unit_cell_width=4)
     psi2 = mps.MPS.from_product_state([s] * 4, [u, d, u, u], bc='finite', unit_cell_width=4)
-    npt.assert_equal(psi1.get_total_charge(True), [2])
+    npt.assert_equal(psi1.get_total_charge(), lasy.Sector([2]))
     psi_sum = psi1.add(psi2, 0.5**0.5, -(0.5**0.5))
     npt.assert_almost_equal(psi_sum.norm, 1.0)
     npt.assert_almost_equal(psi_sum.overlap(psi1), 0.5**0.5)
@@ -97,17 +95,17 @@ def test_mps_add():
     npt.assert_almost_equal(psi_sum.overlap(psi), 1.0)
 
     psi2_prime = mps.MPS.from_product_state([s] * 4, [u, u, u, u], bc='finite', unit_cell_width=4)
-    npt.assert_equal(psi2_prime.get_total_charge(True), [4])
+    npt.assert_equal(psi2_prime.get_total_charge(), lasy.Sector([4]))
+    pytest.skip(_LEGACY)
     psi2_prime.apply_local_op(1, 'Sm', False, False)
     # now psi2_prime is psi2 up to gauging of charges.
-    npt.assert_equal(psi2_prime.get_total_charge(True), [2])
+    npt.assert_equal(psi2_prime.get_total_charge(), lasy.Sector([2]))
     # can MPS.add handle this?
     psi_sum_prime = psi1.add(psi2_prime, 0.5**0.5, -(0.5**0.5))
     npt.assert_almost_equal(psi_sum_prime.overlap(psi), 1.0)
 
 
 def test_mps_overlap_translate_finite():
-    pytest.skip(_LEGACY)
     s = spin_half
     u, d = 'up', 'down'
     psi1 = mps.MPS.from_product_state([s] * 4, [u, u, d, u], bc='finite', unit_cell_width=4)
@@ -125,11 +123,13 @@ def test_mps_overlap_translate_finite():
 
 
 def test_MPSEnvironment():
-    xxz_pars = dict(L=4, Jxx=1.0, Jz=1.1, hz=0.1, bc_MPS='finite')
+    xxz_pars = dict(L=4, Jxx=1.0, Jz=1.1, hz=0.1, bc_MPS='finite', conserve='parity')
     L = xxz_pars['L']
-    M = XXZChain(xxz_pars)
+    M = XXZChain2(xxz_pars)
     state = ([0, 1] * L)[:L]  # Neel state
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc='finite', unit_cell_width=M.lat.mps_unit_cell_width)
+    psi = mps.MPS.from_product_state(
+        M.lattice.mps_sites(), state, bc='finite', unit_cell_width=M.lattice.mps_unit_cell_width
+    )
     env = mps.MPSEnvironment(psi, psi)
     env.get_LP(3, True)
     env.get_RP(0, True)
@@ -141,8 +141,25 @@ def test_MPSEnvironment():
     env.expectation_value('Sz')
 
 
+def test_different_total_charges():
+    # bra and ket in different charge sectors -> vanishing overlap instead of an error during contraction
+    s = lasy.sites.SpinSite(S=0.5, conserve='Sz')
+    psi_a = mps.MPS.from_product_state([s] * 4, ['up', 'up', 'up', 'down'], bc='finite', unit_cell_width=4)
+    psi_b = mps.MPS.from_product_state([s] * 4, ['up', 'down', 'up', 'up'], bc='finite', unit_cell_width=4)
+    psi_0 = mps.MPS.from_product_state([s] * 4, ['up', 'down', 'up', 'down'], bc='finite', unit_cell_width=4)
+    assert psi_0.total_charge_leg is None
+    assert psi_a.total_charge_leg == psi_b.total_charge_leg  # 2 * Sz = 2
+    assert tuple(psi_a.get_total_charge()) == tuple(psi_b.get_total_charge()) == (2,)
+    assert psi_0.get_total_charge() == s.symmetry.trivial_sector
+    assert not mps._different_total_charges(psi_a, psi_b)
+    assert mps._different_total_charges(psi_a, psi_0)
+    for bra, ket, expect in [(psi_a, psi_a, 1.0), (psi_a, psi_b, 0.0), (psi_a, psi_0, 0.0), (psi_0, psi_a, 0.0)]:
+        npt.assert_allclose(bra.overlap(ket).to_numpy(), expect)
+    with pytest.raises(ValueError, match='different total charges'):
+        mps.MPSEnvironment(psi_a, psi_0)
+
+
 def test_singlet_mps():
-    pytest.skip(_LEGACY)
     u, d = 'up', 'down'
     pairs = [(0, 3), (1, 6), (2, 5)]
     bond_singlets = np.array([1, 2, 3, 2, 2, 1, 0])
@@ -156,17 +173,29 @@ def test_singlet_mps():
     assert np.all(2**bond_singlets == np.array(psi.chi))
     ent = psi.entanglement_entropy() / np.log(2)
     npt.assert_array_almost_equal_nulp(ent, bond_singlets, 5)
-    psi.entanglement_spectrum(True)  # (just check that the function runs)
+    # TODO entanglement_spectrum is not ported yet
+    # psi.entanglement_spectrum(True)  # (just check that the function runs)
     npt.assert_almost_equal(psi.norm, 1.0)
     npt.assert_almost_equal(psi.overlap(psi), 1.0)
-    id_vals = psi.expectation_value('Id')
-    npt.assert_almost_equal(id_vals, [1.0] * L)
+    # TODO expectation_value('Id') fails: the 'Id' operator of the site has labels 'W:p', 'W:p*'
+    # id_vals = psi.expectation_value('Id')
+    # npt.assert_almost_equal(id_vals, [1.0] * L)
     Sz_vals = psi.expectation_value('Sigmaz')
     expected_Sz_vals = [(0.0 if i not in lonely else 1.0) for i in range(L)]
     print('Sz_vals = ', Sz_vals)
     print('expected_Sz_vals = ', expected_Sz_vals)
     npt.assert_almost_equal(Sz_vals, expected_Sz_vals)
 
+    product_state = [None] * L
+    for i, j in pairs:
+        product_state[i] = u
+        product_state[j] = d
+    for k in lonely:
+        product_state[k] = u
+    psi2 = mps.MPS.from_product_state([spin_half] * L, product_state, bc='finite', unit_cell_width=L)
+    npt.assert_almost_equal(psi.overlap(psi2), 0.5 ** (0.5 * len(pairs)))
+
+    pytest.skip('TODO: entanglement_entropy_segment(2) and mutinf_two_site are not ported yet')
     ent_segm = psi.entanglement_entropy_segment(list(range(4))) / np.log(2)
     npt.assert_array_almost_equal_nulp(ent_segm, [2, 3, 1, 3, 2], 5)
     ent_segm = psi.entanglement_entropy_segment([0, 1, 3, 4]) / np.log(2)
@@ -187,19 +216,10 @@ def test_singlet_mps():
         k = coord.index((i, j))
         mutinf[k] -= 2.0  # S(i)+S(j)-S(ij) = (1+1-0)*log(2)
     npt.assert_array_almost_equal(mutinf, 0.0, decimal=14)
-    product_state = [None] * L
-    for i, j in pairs:
-        product_state[i] = u
-        product_state[j] = d
-    for k in lonely:
-        product_state[k] = u
-    psi2 = mps.MPS.from_product_state([spin_half] * L, product_state, bc='finite', unit_cell_width=L)
-    npt.assert_almost_equal(psi.overlap(psi2), 0.5 ** (0.5 * len(pairs)))
 
 
 def test_from_mps_covering():
-    pytest.skip(_LEGACY)
-    spin = site.SpinSite(conserve=None)
+    spin = lasy.sites.SpinSite(S=0.5, conserve=None)
     psi_uuu = mps.MPS.from_product_state([spin] * 3, ['up', 'up', 'up'], unit_cell_width=3)
     psi_ddd = mps.MPS.from_product_state([spin] * 3, ['down', 'down', 'down'], unit_cell_width=3)
     GHZ = psi_uuu.add(psi_ddd, 0.5**0.5, -(0.5**0.5))
@@ -232,10 +252,10 @@ def test_from_mps_covering():
     )
 
     # this code is also an example in MPS.from_product_mps_covering
-    ferm = site.FermionSite(conserve='N')
-    lat = MultiSpeciesLattice(Square(4, 2, None), [ferm] * 2, ['up', 'down'])
-    ferm_up_down = mps.MPS.from_product_state([ferm] * 4, ['full', 'empty', 'empty', 'full'], unit_cell_width=4)
-    ferm_down_up = mps.MPS.from_product_state([ferm] * 4, ['empty', 'full', 'full', 'empty'], unit_cell_width=4)
+    ferm = lasy.sites.SpinlessFermionSite(conserve='N')
+    lat = MultiSpeciesLattice(Square(4, 2, ferm), [ferm] * 2, ['up', 'down'])
+    ferm_up_down = mps.MPS.from_product_state([ferm] * 4, ['1', '0', '0', '1'], unit_cell_width=4)
+    ferm_down_up = mps.MPS.from_product_state([ferm] * 4, ['0', '1', '1', '0'], unit_cell_width=4)
     ferm_singlet = ferm_up_down.add(ferm_down_up, 0.5**0.5, -(0.5**0.5))
     index_map = [[(x, y, 0), (x, y, 1), (x + 1, y, 0), (x + 1, y, 1)] for (x, y) in [(0, 0), (0, 1), (2, 0), (2, 1)]]
     index_map = [[lat.lat2mps_idx(x_y_u) for x_y_u in pairs] for pairs in index_map]
@@ -290,6 +310,7 @@ def test_from_mps_covering():
             ]
         ),
     )
+    pytest.skip('TODO: the lasyten SpinlessFermionSite has no charged operators, use couplings')
     corrs = psi.term_correlation_function_right([('Cd', 1), ('C', 0)], [('Cd', 0), ('C', 1)], 0, [2, 4, 6])
     npt.assert_almost_equal(corrs, [0.0, -0.5, 0.0])
 
@@ -405,8 +426,14 @@ def test_compute_K():
 )
 def test_canonical_form(bc, method):
     pytest.skip(_LEGACY)
+
+    # TODO random_MPS was removed.
+    #      (see old version: tests/random_test in v1)
+    #      iMPS has a helper _random_mps or similar, should probably unify these
+    #      maybe we should have tenpy.testing ? similar to lasyten and numpy
     psi = random_MPS(8, 2, 6, form=None, bc=bc)
     psi2 = psi.copy()
+
     norm = np.sqrt(psi2.overlap(psi2, ignore_form=True, understood_infinite=True))
     print('norm =', norm)
     psi2.norm /= norm  # normalize psi2
@@ -518,55 +545,78 @@ def test_enlarge_mps_unit_cell():
 
 
 def test_roll_mps_unit_cell():
-    pytest.skip(_LEGACY)
-    s = site.SpinHalfSite(conserve='Sz', sort_charge=True)
+    s = lasy.sites.SpinSite(S=0.5, conserve='Sz')
     psi = mps.MPS.from_product_state([s] * 4, ['down', 'up', 'up', 'up'], bc='infinite', unit_cell_width=4)
     psi1 = psi.copy()
     psi1.roll_mps_unit_cell(1)
     psi1.test_sanity()
+    psi1_ = psi1._gauged()
+    assert not psi1.is_gauged
+    assert psi1_.is_gauged
     npt.assert_equal(psi.expectation_value('Sigmaz'), [-1.0, 1.0, 1.0, 1.0])
     npt.assert_equal(psi1.expectation_value('Sigmaz'), [1.0, -1.0, 1.0, 1.0])
+    npt.assert_equal(psi1_.expectation_value('Sigmaz'), [1.0, -1.0, 1.0, 1.0])
     psi_m_1 = psi.copy()
     psi_m_1.roll_mps_unit_cell(-1)
     psi_m_1.test_sanity()
     npt.assert_equal(psi_m_1.expectation_value('Sigmaz'), [1.0, 1.0, 1.0, -1.0])
     psi3 = psi.copy()
+
+    with pytest.raises(NotImplementedError):
+        psi3.spatial_inversion()
+    pytest.xfail('spatial_inversion not implemented')
+
     psi3.spatial_inversion()
     psi3.test_sanity()
     ov = psi3.overlap(psi_m_1, understood_infinite=True)
     assert abs(ov - 1.0) < 1.0e-14
 
 
-def test_mps_enlarge_chi(eps=1.0e-14):
-    pytest.skip(_LEGACY)
-    s = site.SpinHalfSite(conserve='Sz', sort_charge=True)
-    # infinite
-    psi = mps.MPS.from_product_state([s] * 2, ['up', 'down'], bc='infinite', unit_cell_width=2)
-    psi.perturb({'trunc_params': {'chi_max': 10}, 'N_steps': 10}, close_1=False)
-
-    extra_qflat = [np.zeros([4, 1]) + (i % 2) for i in range(psi.L)]
-    extra_legs = [npc.LegCharge.from_qflat(psi.chinfo, qflat).bunch()[1] for qflat in extra_qflat]
-
+@pytest.mark.parametrize('conserve', [None, 'Sz', 'SU2'])
+@pytest.mark.parametrize('extra_legs', [[0] * 5 + [1] + [0] * 5, [None] * 4 + [1, 1] + [None] * 5])
+def test_mps_enlarge_chi_finite(conserve, extra_legs):
+    np.random.seed(0)
+    s = lasy.sites.SpinSite(S=0.5, conserve=conserve)
+    psi = mps.MPS.from_desired_bond_dimension(
+        [s] * 10, 6, bc='finite', total_charge=s.leg.symmetry.trivial_sector, unit_cell_width=10
+    )
     psi_enl = psi.copy()
     psi_enl.enlarge_chi(extra_legs)
-    assert np.max(psi_enl.norm_test()) < eps
-    assert abs(psi_enl.overlap(psi, understood_infinite=True) - 1.0) < eps
+    psi_enl.test_sanity()
+    for B_enl, B, extra in zip(psi_enl._B, psi._B, extra_legs):
+        assert (B_enl.get_leg('vL').dim > B.get_leg('vL').dim) == bool(extra)
+    assert np.max(np.abs(psi_enl.norm_test())) < 1e-12
+    npt.assert_allclose(psi_enl.overlap(psi), 1.0, atol=1e-12)
 
-    # finite
-    psi = mps.MPS.from_product_state([s] * 8, ['up', 'down'] * 4, bc='finite', unit_cell_width=8)
-    psi.perturb({'trunc_params': {'chi_max': 3}, 'N_steps': 3}, close_1=False)
 
-    extra_legs = [None, None, 1, 2, None, 2, 1, None, None]
-
+def test_mps_enlarge_chi_repeated_and_numpy_int():
+    np.random.seed(0)
+    s = lasy.sites.SpinSite(S=0.5, conserve='Sz')
+    psi = mps.MPS.from_desired_bond_dimension([s] * 10, 6, bc='finite', unit_cell_width=10)
     psi_enl = psi.copy()
-    psi_enl.enlarge_chi(extra_legs)
-    assert np.max(psi_enl.norm_test()) < eps
-    assert abs(psi_enl.overlap(psi, understood_infinite=True) - 1.0) < eps
+    psi_enl.enlarge_chi([0] * 5 + [np.int64(1)] + [0] * 5)
+    psi_enl.enlarge_chi([0] * 5 + [1] + [0] * 5)  # the bond space is a nested direct sum now
+    psi_enl.test_sanity()
+    assert not any(isinstance(B.get_leg('vL'), lasy.DirectSumSpace) for B in psi_enl._B)  # plain bond spaces
+    assert np.max(np.abs(psi_enl.norm_test())) < 1e-12
+    npt.assert_allclose(psi_enl.overlap(psi), 1.0, atol=1e-12)
+
+
+def test_mps_enlarge_chi_errors_leave_mps_unchanged():
+    s = lasy.sites.SpinSite(S=0.5, conserve=None)
+    psi = mps.MPS.from_desired_bond_dimension([s] * 6, 2, bc='finite', unit_cell_width=6)
+    chi = [B.get_leg('vL').dim for B in psi._B]
+    with pytest.raises(ValueError, match='boundary bonds'):
+        psi.enlarge_chi([1, 0, 0, 0, 0, 0, 0])
+    with pytest.raises(ValueError, match='overcomplete'):  # the last site has no room for more rows
+        psi.enlarge_chi([0, 0, 0, 0, 0, 5, 0])
+    psi.test_sanity()  # (the MPS is still intact)
+    assert [B.get_leg('vL').dim for B in psi._B] == chi
 
 
 def test_group():
     pytest.skip(_LEGACY)
-    s = site.SpinHalfSite(conserve='parity', sort_charge=True)
+    s = site.SpinHalfSite(conserve='parity')
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='finite', unit_cell_width=6)
     psi2 = psi1.copy()
     print('group n=2')
@@ -603,7 +653,7 @@ def test_fixes_issue_197():
     conserve = None
 
     L = sites_to_group * num_groups
-    s = site.SpinHalfSite(conserve=conserve, sort_charge=True)
+    s = site.SpinHalfSite(conserve=conserve)
     psi = mps.MPS.from_product_state(sites=[s] * L, p_state=misc.to_array(['up', 'down'], (L,)), unit_cell_width=L)
     tebd.RandomUnitaryEvolution(psi, options=dict(N_steps=4)).run()
     chi_init = max(psi.chi)
@@ -762,10 +812,10 @@ def test_expectation_value_multisite():
 
 def test_correlation_length():
     pytest.skip(_LEGACY)
-    spin_half = site.SpinHalfSite(conserve=None, sort_charge=True)
+    spin_half = site.SpinHalfSite(conserve=None)
     up_state = ['up'] * 4
     psi_product = mps.MPS.from_product_state([spin_half] * 4, up_state, bc='infinite', unit_cell_width=4)
-    assert psi_product.correlation_length2() == 0.0  # trivial
+    assert psi_product.correlation_length() == 0.0  # trivial
     ch_s = psi_product.correlation_length_charge_sectors()
 
     # generate test-MPS with non-trivial correlation length
@@ -773,23 +823,23 @@ def test_correlation_length():
     psi_AKLT = model_AKLT.psi_AKLT()
     # eigenvalues of AKLT single-site TM are [1, 1./3., 1./3., 1/3.] for charges [0, 0, +2, -2]
     xi_AKLT = 1.0 / np.log(3)
-    xi = psi_AKLT.correlation_length2()
+    xi = psi_AKLT.correlation_length()
     assert abs(xi - xi_AKLT) < 1.0e-13
     charges = psi_AKLT.correlation_length_charge_sectors()
     npt.assert_array_equal(charges[np.argsort(charges[:, 0])], [[0], [2]])  # dropped [-2]
-    xis, charges = psi_AKLT.correlation_length2(target=3, charge_sector=None, return_charges=True)
+    xis, charges = psi_AKLT.correlation_length(target=3, charge_sector=None, return_charges=True)
     assert len(xis) == 3
     assert np.all(np.abs(xi - xi_AKLT) < 1.0e-13)
     charges = np.asarray(charges)
     npt.assert_array_equal(charges[np.argsort(charges[:, 0])], [[-2], [0], [2]])
 
     with pytest.warns(UserWarning, match='trimming speigs k to smaller matrix dimension d'):
-        xi_m2, charges = psi_AKLT.correlation_length2(target=1, charge_sector=[-2], return_charges=True)
+        xi_m2, charges = psi_AKLT.correlation_length(target=1, charge_sector=[-2], return_charges=True)
     npt.assert_array_equal(charges, [-2])
     assert abs(xi_m2 - xi_AKLT) < 1.0e-13
     # note: sectors have only one entry, so target only changes resulting
     with pytest.warns(UserWarning, match='trimming speigs k to smaller matrix dimension d'):
-        xi_p2 = psi_AKLT.correlation_length2(target=2, charge_sector=np.array([+2]), tol_ev0=None)
+        xi_p2 = psi_AKLT.correlation_length(target=2, charge_sector=np.array([+2]), tol_ev0=None)
     assert abs(xi_p2[0] - xi_AKLT) < 1.0e-13
 
     assert abs(xi - xi_AKLT) < 1.0e-13
@@ -840,7 +890,7 @@ def test_MPSEnvironment_expectation_values():
 
 def test_sample_measurements(eps=1.0e-14, seed=5):
     pytest.skip(_LEGACY)
-    spin_half = site.SpinHalfSite('Sz', sort_charge=True)
+    spin_half = site.SpinHalfSite('Sz')
     u, d = spin_half.state_indices(['up', 'down'])
     spin_half.add_op('Pup', spin_half.Sz + 0.5 * spin_half.Id)
     psi = mps.MPS.from_singlets(spin_half, 6, [(0, 1), (2, 5)], lonely=[3, 4], bc='finite', unit_cell_width=6)
@@ -998,7 +1048,7 @@ def test_InitialStateBuilder():
 def test_fixes_181():
     pytest.skip(_LEGACY)
     # See https://github.com/tenpy/tenpy/issues/181
-    s0 = site.SpinHalfSite('Sz', sort_charge=True)
+    s0 = site.SpinHalfSite('Sz')
     lat = Chain(10, s0, bc_MPS='finite')
     psi1 = mps.InitialStateBuilder(
         lat,
@@ -1018,3 +1068,32 @@ def test_fixes_181():
 
 if __name__ == '__main__':
     test_sample_measurements()
+
+
+@pytest.mark.parametrize('chi_max', [2, 3])
+def test_swap_sites_truncation_error(chi_max):
+    """`swap_sites` truncation error is the squared discarded weight and the state stays normalized."""
+    L, d = 4, 2
+    rng = np.random.default_rng(0)
+    s = lasy.sites.SpinSite(S=0.5, conserve=None)
+    backend = lasy.get_backend('no_symmetry', 'numpy')
+    block = rng.normal(size=(d,) * L) + 1.0j * rng.normal(size=(d,) * L)
+    block /= np.linalg.norm(block)
+    p_labels = [f'p{i}' for i in range(L)]
+    tensor = lasy.SymmetricTensor.from_dense_block(block, codomain=[s.leg] * L, backend=backend, labels=p_labels)
+    psi = mps.MPS.from_full([s] * L, tensor, unit_cell_width=L)
+
+    err = psi.swap_sites(1, trunc_par={'chi_max': chi_max})
+
+    # independent reference: SVD of the (exactly) swapped dense state at the swapped bond
+    swapped = block.transpose(0, 2, 1, 3)
+    S_ref = np.linalg.svd(swapped.reshape(d**2, d**2), compute_uv=False)
+    eps_ref = np.sum(S_ref[chi_max:] ** 2)
+    npt.assert_allclose(err.eps, eps_ref, atol=1e-12)
+    assert err.eps < np.sqrt(eps_ref)  # i.e. not the linear error
+
+    # the truncated state is renormalized
+    got = psi.get_theta(0, n=L).to_numpy(['vL'] + p_labels + ['vR']).reshape((d,) * L)
+    npt.assert_allclose(np.linalg.norm(got), 1.0, atol=1e-12)
+    # and is the best rank-chi_max approximation of the swapped state
+    npt.assert_allclose(abs(np.vdot(got.ravel(), swapped.ravel())) ** 2, 1.0 - eps_ref, atol=1e-12)

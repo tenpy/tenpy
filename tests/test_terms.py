@@ -1,25 +1,23 @@
 """A collection of tests for :module:`tenpy.networks.terms`."""
 
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
-
-pytest.skip(allow_module_level=True)
-
 import copy
 
+import lasyten as lasy
 import numpy as np
 import pytest
 
-from tenpy.models.spins_nnn import SpinChainNNN2
-from tenpy.networks import mpo, site
+from tenpy.models.spins import SpinChain
+
+# from tenpy.models.spins_nnn import SpinChainNNN2
+from tenpy.networks import mpo
 from tenpy.networks.terms import *
 
-spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=True)
-fermion = site.FermionSite(conserve='N')
-dummy = site.Site(spin_half.leg)
+spin_half = lasy.models.SpinSite(0.5, conserve='Sz')
 
 
 def test_TermList():
+    pytest.skip('TermList not adapted yet')
     terms = [
         [('N', 3), ('N', 2), ('N', 3)],
         [('C', 0), ('N', 2), ('N', 4), ('Cd', 3), ('C', 2)],
@@ -77,18 +75,16 @@ def test_onsite_terms():
                                {"X_3": strength1[3]+ strength2[3], "Y_3": strength2[3]},
                                {"Y_4": strength2[4]},
                                {"Y_5": strength2[5]}]  # fmt: skip
-    # convert to term_list
-    tl = o1.to_TermList()
-    assert tl.terms == [[('X_0', 0)], [('Y_1', 1)], [('X_3', 3)], [('Y_3', 3)], [('Y_4', 4)], [('Y_5', 5)]]
-    o3, c3 = tl.to_OnsiteTerms_CouplingTerms([dummy] * L)
-    assert o3.onsite_terms == o1.onsite_terms
+    # TODO: skipped to/from TermList
 
 
-def test_coupling_terms():
+def test_coupling_terms(backend=None):
+    pytest.skip('Test needs to change')
+    spin_half = lasy.models.SpinSite(0.5, conserve='Sz', backend=backend)
     L = 4
     sites = []
     for i in range(L):
-        s = site.Site(spin_half.leg)
+        s = lasy.Site(spin_half.leg)
         s.add_op(f'X_{i:d}', 2.0 * np.eye(2))
         s.add_op(f'Y_{i:d}', 3.0 * np.eye(2))
         s.add_op('S1', 4.0 * np.eye(2))
@@ -247,235 +243,110 @@ def test_coupling_terms():
 
 
 def test_coupling_terms_handle_JW():
-    strength = 0.25
-    sites = []
-    L = 4
-    for i in range(L):
-        s = site.Site(spin_half.leg)
-        s.add_op(f'X_{i:d}', 2.0 * np.eye(2))
-        s.add_op(f'Y_{i:d}', 3.0 * np.eye(2), need_JW=True)
-        sites.append(s)
-    mc = MultiCouplingTerms(L)
-    # two-site terms
-    term = [('X_1', 1), ('X_0', 4)]
-    args = mc.coupling_term_handle_JW(strength, term, sites)
-    # args = i, j, op_i, op_j, op_str
-    assert args == (strength, 1, 4, 'X_1', 'X_0', 'Id')
-    term = [('Y_1', 1), ('Y_0', 4)]
-    args = mc.coupling_term_handle_JW(strength, term, sites)
-    assert args == (strength, 1, 4, 'Y_1 JW', 'Y_0', 'JW')
-
-    # switch order
-    term = [('Y_0', 4), ('Y_1', 1)]
-    term, sign = order_combine_term(term, sites)
-    assert term == [('Y_1', 1), ('Y_0', 4)]
-    args = mc.coupling_term_handle_JW(strength * sign, term, sites)
-    assert args == (-strength, 1, 4, 'Y_1 JW', 'Y_0', 'JW')
-
-    # multi coupling
-    term = [('X_0', 0), ('X_1', 1), ('X_3', 3)]
-    args = mc.multi_coupling_term_handle_JW(strength, term, sites)
-    assert args == (strength, [0, 1, 3], ['X_0', 'X_1', 'X_3'], ['Id', 'Id'])
-    term = [('X_0', 0), ('Y_1', 1), ('Y_3', 3)]
-    args = mc.multi_coupling_term_handle_JW(strength, term, sites)
-    assert args == (strength, [0, 1, 3], ['X_0', 'Y_1 JW', 'Y_3'], ['Id', 'JW'])
-
-    term = [('Y_0', 0), ('X_1', 1), ('Y_3', 3), ('X_0', 4), ('Y_2', 6), ('Y_3', 7)]
-    args = mc.multi_coupling_term_handle_JW(strength, term, [dummy] * 4)
-    assert args == (strength, [0, 1, 3, 4, 6, 7], [op[0] for op in term], ['Id'] * (len(term) - 1))
-    args = mc.multi_coupling_term_handle_JW(strength, term, sites)
-    print(args)
-    assert args == (
-        strength,
-        [0, 1, 3, 4, 6, 7],
-        ['Y_0 JW', 'X_1 JW', 'Y_3', 'X_0', 'Y_2 JW', 'Y_3'],
-        ['JW', 'JW', 'Id', 'Id', 'JW'],
-    )
-
-    term = [
-        ('Y_3', 7),
-        ('X_1', 1),
-        ('Y_0', 0),
-        ('X_0', 4),
-        ('Y_2', 6),
-        ('Y_3', 3),
-    ]
-    term, sign = order_combine_term(term, sites)
-    args = mc.multi_coupling_term_handle_JW(strength * sign, term, sites)
-    print(args)
-    assert args == (
-        strength,
-        [0, 1, 3, 4, 6, 7],
-        ['Y_0 JW', 'X_1 JW', 'Y_3', 'X_0', 'Y_2 JW', 'Y_3'],
-        ['JW', 'JW', 'Id', 'Id', 'JW'],
-    )
+    pytest.skip('coupling_term_handle_JW no longer exists. Instead do some fermion consistency checks')
 
 
-def test_exp_decaying_terms():
-    ## subsites == subsites_start
-    # check finite version
+@pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
+def test_exp_decaying_terms(bc_MPS, cutoff=0.01):
     L = 8
-    spin = site.Site(spin_half.leg)
-    spin.add_op('X', 2.0 * np.eye(2))
-    spin.add_op('Y', 3.0 * np.eye(2))
-    sites = [spin] * L
-    edt = ExponentiallyDecayingTerms(L)
     p, l = 3.0, 0.5
-    edt.add_exponentially_decaying_coupling(p, l, 'X', 'Y', subsites=[0, 2, 4, 6])
-    edt._test_terms(sites)
-    ts = edt.to_TermList(bc='finite', cutoff=0.01)
-    ts_desired = [
-        [('X', 0), ('Y', 2)],
-        [('X', 0), ('Y', 4)],
-        [('X', 0), ('Y', 6)],
-        [('X', 2), ('Y', 4)],
-        [('X', 2), ('Y', 6)],
-        [('X', 4), ('Y', 6)],
-    ]
-    assert ts.terms == ts_desired
-    assert np.all(ts.strength == p * np.array([l, l**2, l**3, l, l**2, l]))
-
-    # check whether the MPO construction works by comparing MPOs
-    # constructed from ts vs. directly
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite', unit_cell_width=L).build_MPO()  # Chain geometry
-    G = mpo.MPOGraph(sites, bc='finite', unit_cell_width=len(sites))
-    edt.add_to_graph(G)
-    G.test_sanity()
-    G.add_missing_IdL_IdR()
-    H2 = G.build_MPO()
-    assert H1.is_equal(H2)
-
-    # check infinite versions
-    cutoff = 0.01
     cutoff_range = 8
     assert p * l**cutoff_range > cutoff > p * l ** (cutoff_range + 1)
-    ts = edt.to_TermList(bc='infinite', cutoff=cutoff)
-    ts_desired = ([[("X", 0), ("Y", 0 + 2 * i)] for i in range(1, cutoff_range + 1)] +
-                  [[("X", 2), ("Y", 2 + 2 * i)] for i in range(1, cutoff_range + 1)] +
-                  [[("X", 4), ("Y", 4 + 2 * i)] for i in range(1, cutoff_range + 1)] +
-                  [[("X", 6), ("Y", 6 + 2 * i)] for i in range(1, cutoff_range + 1)])  # fmt: skip
-    assert ts.terms == ts_desired
-    strength_desired = np.tile(l ** np.arange(1, cutoff_range + 1) * p, 4)
-    assert np.all(ts.strength == strength_desired)
-    G = mpo.MPOGraph(sites, bc='infinite', unit_cell_width=len(sites))
-    edt.add_to_graph(G)
-    G.test_sanity()
-    G.add_missing_IdL_IdR()
-    H2 = G.build_MPO()
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='infinite', unit_cell_width=L).build_MPO()
-    assert H1.is_equal(H2, cutoff)
 
-    ## subsites != subsites_start - 1
-    # check finite version
-    L = 8
-    spin = site.Site(spin_half.leg)
-    spin.add_op('X', 2.0 * np.eye(2))
-    spin.add_op('Y', 3.0 * np.eye(2))
-    sites = [spin] * L
+    model = SpinChain(dict(L=L, bc_MPS=bc_MPS, conserve='Sz'))
+    sites = model.lattice.mps_sites()
+
+    # ======================================================================
+    print('without subsites_start')
+    # ======================================================================
     edt = ExponentiallyDecayingTerms(L)
-    p, l = 3.0, 0.5
-    edt.add_exponentially_decaying_coupling(p, l, 'X', 'Y', subsites=[1, 3, 5, 7], subsites_start=[0, 2, 4, 6])
-    edt._test_terms(sites)
-    ts = edt.to_TermList(bc='finite', cutoff=0.01)
-    ts_desired = [
-        [('X', 0), ('Y', 1)],
-        [('X', 0), ('Y', 3)],
-        [('X', 0), ('Y', 5)],
-        [('X', 0), ('Y', 7)],
-        [('X', 2), ('Y', 3)],
-        [('X', 2), ('Y', 5)],
-        [('X', 2), ('Y', 7)],
-        [('X', 4), ('Y', 5)],
-        [('X', 4), ('Y', 7)],
-        [('X', 6), ('Y', 7)],
-    ]
-    assert ts.terms == ts_desired
-    assert np.all(ts.strength == p * np.array([l, l**2, l**3, l**4, l, l**2, l**3, l, l**2, l]))
+    edt.add_exponentially_decaying_coupling(p, l, 'Sp.Sm', subsites=[0, 2, 4, 6])
+    edt.test_terms(sites, model)
+
+    # recreate manually, for comparison
+    ct = CouplingTerms(L)
+    if bc_MPS == 'finite':
+        ct.add_coupling_term(p * l**1, 0, 2, 'Sp.Sm')
+        ct.add_coupling_term(p * l**2, 0, 4, 'Sp.Sm')
+        ct.add_coupling_term(p * l**3, 0, 6, 'Sp.Sm')
+        ct.add_coupling_term(p * l**1, 2, 4, 'Sp.Sm')
+        ct.add_coupling_term(p * l**2, 2, 6, 'Sp.Sm')
+        ct.add_coupling_term(p * l**1, 4, 6, 'Sp.Sm')
+    else:
+        for i in [0, 2, 4, 6]:
+            for k in range(1, cutoff_range + 1):
+                ct.add_coupling_term(p * l**k, i, i + 2 * k, 'Sp.Sm')
+    assert edt.to_CouplingTerms(model, cutoff=cutoff, bc=bc_MPS) == ct
 
     # check whether the MPO construction works by comparing MPOs
-    # constructed from ts vs. directly
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite', unit_cell_width=L).build_MPO()
-    G = mpo.MPOGraph(sites, bc='finite', unit_cell_width=L)
-    edt.add_to_graph(G)
-    G.test_sanity()
-    G.add_missing_IdL_IdR()
-    H2 = G.build_MPO()
-    assert H1.is_equal(H2)
+    H_expect = mpo.MPOGraph.from_terms([ct], model, bc=bc_MPS, unit_cell_width=L).build_MPO()
+    graph = mpo.MPOGraph.from_terms([edt], model, bc=bc_MPS, unit_cell_width=L)
+    graph.test_sanity()
+    H = graph.build_MPO()
+    assert H.is_equal(H_expect, eps=1e-10 if bc_MPS == 'finite' else cutoff)
 
-    # check infinite versions
-    cutoff = 0.01
-    cutoff_range = 8
-    assert p * l**cutoff_range > cutoff > p * l ** (cutoff_range + 1)
-    ts = edt.to_TermList(bc='infinite', cutoff=cutoff)
-    ts_desired = ([[("X", 0), ("Y", -1 + 2 * i)] for i in range(1, cutoff_range + 1)] +
-                  [[("X", 2), ("Y", 1 + 2 * i)] for i in range(1, cutoff_range + 1)] +
-                  [[("X", 4), ("Y", 3 + 2 * i)] for i in range(1, cutoff_range + 1)] +
-                  [[("X", 6), ("Y", 5 + 2 * i)] for i in range(1, cutoff_range + 1)])  # fmt: skip
-    assert ts.terms == ts_desired
-    strength_desired = np.tile(l ** np.arange(1, cutoff_range + 1) * p, 4)
-    assert np.all(ts.strength == strength_desired)
-    G = mpo.MPOGraph(sites, bc='infinite', unit_cell_width=L)
-    edt.add_to_graph(G)
-    G.test_sanity()
-    G.add_missing_IdL_IdR()
-    H2 = G.build_MPO()
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='infinite', unit_cell_width=L).build_MPO()
-    assert H1.is_equal(H2, cutoff)
-
-    ## subsites != subsites_start - 2
-    # check finite version
-    L = 8
-    spin = site.Site(spin_half.leg)
-    spin.add_op('X', 2.0 * np.eye(2))
-    spin.add_op('Y', 3.0 * np.eye(2))
-    sites = [spin] * L
+    # ======================================================================
+    print('with subsites_start (-1)')
+    # ======================================================================
     edt = ExponentiallyDecayingTerms(L)
-    p, l = 3.0, 0.5
-    edt.add_exponentially_decaying_coupling(p, l, 'X', 'Y', subsites=[0, 2, 4, 6], subsites_start=[1, 3, 5, 7])
-    edt._test_terms(sites)
-    ts = edt.to_TermList(bc='finite', cutoff=0.01)
-    ts_desired = [
-        [('X', 1), ('Y', 2)],
-        [('X', 1), ('Y', 4)],
-        [('X', 1), ('Y', 6)],
-        [('X', 3), ('Y', 4)],
-        [('X', 3), ('Y', 6)],
-        [('X', 5), ('Y', 6)],
-    ]
-    assert ts.terms == ts_desired
-    assert np.all(ts.strength == p * np.array([l, l**2, l**3, l, l**2, l]))
+    edt.add_exponentially_decaying_coupling(p, l, 'Sp.Sm', subsites=[1, 3, 5, 7], subsites_start=[0, 2, 4, 6])
+    edt.test_terms(sites, model)
+
+    # recreate manually, for comparison
+    ct = CouplingTerms(L)
+    if bc_MPS == 'finite':
+        ct.add_coupling_term(p * l**1, 0, 1, 'Sp.Sm')
+        ct.add_coupling_term(p * l**2, 0, 3, 'Sp.Sm')
+        ct.add_coupling_term(p * l**3, 0, 5, 'Sp.Sm')
+        ct.add_coupling_term(p * l**4, 0, 7, 'Sp.Sm')
+        ct.add_coupling_term(p * l**1, 2, 3, 'Sp.Sm')
+        ct.add_coupling_term(p * l**2, 2, 5, 'Sp.Sm')
+        ct.add_coupling_term(p * l**3, 2, 7, 'Sp.Sm')
+        ct.add_coupling_term(p * l**1, 4, 5, 'Sp.Sm')
+        ct.add_coupling_term(p * l**2, 4, 7, 'Sp.Sm')
+        ct.add_coupling_term(p * l**1, 6, 7, 'Sp.Sm')
+    else:
+        for i in [0, 2, 4, 6]:
+            for k in range(1, cutoff_range + 1):
+                ct.add_coupling_term(p * l**k, i, i - 1 + 2 * k, 'Sp.Sm')
+    assert edt.to_CouplingTerms(model, cutoff=cutoff, bc=bc_MPS) == ct
 
     # check whether the MPO construction works by comparing MPOs
-    # constructed from ts vs. directly
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite', unit_cell_width=L).build_MPO()
-    G = mpo.MPOGraph(sites, bc='finite', unit_cell_width=L)
-    edt.add_to_graph(G)
-    G.test_sanity()
-    G.add_missing_IdL_IdR()
-    H2 = G.build_MPO()
-    assert H1.is_equal(H2)
+    H_expect = mpo.MPOGraph.from_terms([ct], model, bc=bc_MPS, unit_cell_width=L).build_MPO()
+    graph = mpo.MPOGraph.from_terms([edt], model, bc=bc_MPS, unit_cell_width=L)
+    graph.test_sanity()
+    H = graph.build_MPO()
+    assert H.is_equal(H_expect, eps=1e-10 if bc_MPS == 'finite' else cutoff)
 
-    # check infinite versions
-    cutoff = 0.01
-    cutoff_range = 8
-    assert p * l**cutoff_range > cutoff > p * l ** (cutoff_range + 1)
-    ts = edt.to_TermList(bc='infinite', cutoff=cutoff)
-    ts_desired = ([[("X", 1), ("Y", 0 + 2 * i)] for i in range(1, cutoff_range + 1)] +
-                  [[("X", 3), ("Y", 2 + 2 * i)] for i in range(1, cutoff_range + 1)] +
-                  [[("X", 5), ("Y", 4 + 2 * i)] for i in range(1, cutoff_range + 1)] +
-                  [[("X", 7), ("Y", 6 + 2 * i)] for i in range(1, cutoff_range + 1)])  # fmt: skip
-    print(ts.terms)
-    print(ts_desired)
-    assert ts.terms == ts_desired
-    strength_desired = np.tile(l ** np.arange(1, cutoff_range + 1) * p, 4)
-    assert np.all(ts.strength == strength_desired)
-    G = mpo.MPOGraph(sites, bc='infinite', unit_cell_width=L)
-    edt.add_to_graph(G)
-    G.test_sanity()
-    G.add_missing_IdL_IdR()
-    H2 = G.build_MPO()
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='infinite', unit_cell_width=L).build_MPO()
-    assert H1.is_equal(H2, cutoff)
+    # ======================================================================
+    print('with subsites_start (+1)')
+    # ======================================================================
+    edt = ExponentiallyDecayingTerms(L)
+    edt.add_exponentially_decaying_coupling(p, l, 'Sp.Sm', subsites=[0, 2, 4, 6], subsites_start=[1, 3, 5, 7])
+    edt.test_terms(sites, model)
+
+    # recreate manually, for comparison
+    ct = CouplingTerms(L)
+    if bc_MPS == 'finite':
+        ct.add_coupling_term(p * l**1, 1, 2, 'Sp.Sm')
+        ct.add_coupling_term(p * l**2, 1, 4, 'Sp.Sm')
+        ct.add_coupling_term(p * l**3, 1, 6, 'Sp.Sm')
+        ct.add_coupling_term(p * l**1, 3, 4, 'Sp.Sm')
+        ct.add_coupling_term(p * l**2, 3, 6, 'Sp.Sm')
+        ct.add_coupling_term(p * l**1, 5, 6, 'Sp.Sm')
+    else:
+        for i in [0, 2, 4, 6]:
+            for k in range(1, cutoff_range + 1):
+                ct.add_coupling_term(p * l**k, i + 1, i + 2 * k, 'Sp.Sm')
+    assert edt.to_CouplingTerms(model, cutoff=cutoff, bc=bc_MPS) == ct
+
+    # check whether the MPO construction works by comparing MPOs
+    H_expect = mpo.MPOGraph.from_terms([ct], model, bc=bc_MPS, unit_cell_width=L).build_MPO()
+    graph = mpo.MPOGraph.from_terms([edt], model, bc=bc_MPS, unit_cell_width=L)
+    graph.test_sanity()
+    H = graph.build_MPO()
+    assert max(H.chi) == 3
+    assert H.is_equal(H_expect, eps=1e-10 if bc_MPS == 'finite' else cutoff)
 
 
 @pytest.mark.parametrize('bc', ['finite', 'infinite'])
@@ -484,69 +355,40 @@ def test_exp_non_uniform_decaying_terms(bc):
     subsite_step = 2
     subsites = np.arange(0, L, subsite_step)
     cutoff = 1e-2
-    spin = site.Site(spin_half.leg)
-    spin.add_op('X', 2.0 * np.eye(2))
-    spin.add_op('Y', 3.0 * np.eye(2))
-    sites = [spin] * L
+    model = SpinChain(dict(L=L, bc_MPS=bc, conserve='Sz'))
+    sites = model.lattice.mps_sites()
 
     edt = ExponentiallyDecayingTerms(L)
     p = 3.0
     l = 1.0 / (1 + np.arange(L))
-    edt.add_exponentially_decaying_coupling(p, l, 'X', 'Y', subsites=subsites)
-    edt._test_terms(sites)
+    edt.add_exponentially_decaying_coupling(p, l, 'Sp.Sm', subsites=subsites)
+    edt.test_terms(sites, model)
 
-    # check if ExponentiallyDecayingTerms.to_TermList and ExponentiallyDecayingTerms.add_to_graph
-    # yield the same MPO
-    ts = edt.to_TermList(bc=bc, cutoff=cutoff)
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc=bc, unit_cell_width=L).build_MPO()
-    G = mpo.MPOGraph(sites, bc=bc, unit_cell_width=L)
-    edt.add_to_graph(G)
-    G.test_sanity()
-    G.add_missing_IdL_IdR()
-    H2 = G.build_MPO()
-    assert H1.is_equal(H2, eps=1e-10 if bc == 'finite' else cutoff)
-
-    # check term list
-    ts_desired = []
-    strength_desired = []
-    for n, i in enumerate(subsites):
-        for m in range(n + 1, 1000):
-            j = subsites[m % len(subsites)] + (m // len(subsites)) * L
-            subsite_idcs = np.arange(n, m) % len(subsites)
-            strength = p * np.prod(l[subsites[subsite_idcs]])
-            if bc == 'finite' and m >= len(subsites):
-                break
-            if bc == 'infinite' and strength < cutoff:
-                break
-            ts_desired.append([('X', i), ('Y', j)])
-            strength_desired.append(strength)
-    # check if we build the desired objects correctly: check vs hardcoded result
+    ct = CouplingTerms(L)
     if bc == 'finite':
-        assert ts_desired == [
-            [('X', 0), ('Y', 2)],
-            [('X', 0), ('Y', 4)],
-            [('X', 0), ('Y', 6)],
-            [('X', 2), ('Y', 4)],
-            [('X', 2), ('Y', 6)],
-            [('X', 4), ('Y', 6)],
-        ]
-        decay_factors = [l[0], l[0] * l[2], l[0] * l[2] * l[4], l[2], l[2] * l[4], l[4]]
-        assert strength_desired == [p * d for d in decay_factors]
+        ct.add_coupling_term(p * l[0], 0, 2, 'Sp.Sm')
+        ct.add_coupling_term(p * l[0] * l[2], 0, 4, 'Sp.Sm')
+        ct.add_coupling_term(p * l[0] * l[2] * l[4], 0, 6, 'Sp.Sm')
+        ct.add_coupling_term(p * l[2], 2, 4, 'Sp.Sm')
+        ct.add_coupling_term(p * l[2] * l[4], 2, 6, 'Sp.Sm')
+        ct.add_coupling_term(p * l[4], 4, 6, 'Sp.Sm')
     else:
-        for (opi, i), (opj, j) in ts_desired:
-            assert opi == 'X'
-            assert opj == 'Y'
-            assert j > i
-            assert (j - i) % subsite_step == 0
-            assert i in subsites
-        assert ts_desired[:3] == [[('X', 0), ('Y', 2)], [('X', 0), ('Y', 4)], [('X', 0), ('Y', 6)]]
-        i = ts_desired.index([('X', 2), ('Y', 4)])
-        assert ts_desired[i : i + 3] == [[('X', 2), ('Y', 4)], [('X', 2), ('Y', 6)], [('X', 2), ('Y', 8)]]
-        i = ts_desired.index([('X', 4), ('Y', 6)])
-        assert ts_desired[i : i + 3] == [[('X', 4), ('Y', 6)], [('X', 4), ('Y', 8)], [('X', 4), ('Y', 10)]]
-    # check term list
-    assert ts.terms == ts_desired
-    assert np.all(ts.strength == np.array(strength_desired))
+        for n, i in enumerate(subsites):
+            for m in range(n + 1, 1000):
+                j = subsites[m % len(subsites)] + (m // len(subsites)) * L
+                subsite_idcs = np.arange(n, m) % len(subsites)
+                strength = p * np.prod(l[subsites[subsite_idcs]])
+                if strength < cutoff:
+                    break
+                ct.add_coupling_term(strength, i, j, 'Sp.Sm')
+    assert edt.to_CouplingTerms(model, cutoff=cutoff, bc=bc) == ct
+
+    H_expect = mpo.MPOGraph.from_terms([ct], model, bc=bc, unit_cell_width=L).build_MPO()
+    graph = mpo.MPOGraph.from_terms([edt], model, bc=bc, unit_cell_width=L)
+    graph.test_sanity()
+    H = graph.build_MPO()
+    assert max(H.chi) == 3
+    assert H.is_equal(H_expect, eps=1e-10 if bc == 'finite' else cutoff)
 
 
 @pytest.mark.parametrize('bc', ['finite', 'infinite'])
@@ -556,69 +398,40 @@ def test_exp_non_uniform_decaying_terms_subsites_start(bc):
     subsites = np.arange(0, L, subsite_step)
     subsites_start = np.arange(1, L, subsite_step)
     cutoff = 1e-2
-    spin = site.Site(spin_half.leg)
-    spin.add_op('X', 2.0 * np.eye(2))
-    spin.add_op('Y', 3.0 * np.eye(2))
-    sites = [spin] * L
+    model = SpinChain(dict(L=L, bc_MPS=bc, conserve='Sz'))
+    sites = model.lattice.mps_sites()
 
     edt = ExponentiallyDecayingTerms(L)
     p = 3.0
     l = 1.0 / (1 + np.arange(L))
-    edt.add_exponentially_decaying_coupling(p, l, 'X', 'Y', subsites=subsites, subsites_start=subsites_start)
-    edt._test_terms(sites)
+    edt.add_exponentially_decaying_coupling(p, l, 'Sp.Sm', subsites=subsites, subsites_start=subsites_start)
+    edt.test_terms(sites, model)
 
-    # check if ExponentiallyDecayingTerms.to_TermList and ExponentiallyDecayingTerms.add_to_graph
-    # yield the same MPO
-    ts = edt.to_TermList(bc=bc, cutoff=cutoff)
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc=bc, unit_cell_width=L).build_MPO()
-    G = mpo.MPOGraph(sites, bc=bc, unit_cell_width=L)
-    edt.add_to_graph(G)
-    G.test_sanity()
-    G.add_missing_IdL_IdR()
-    H2 = G.build_MPO()
-    assert H1.is_equal(H2, eps=1e-10 if bc == 'finite' else cutoff)
-
-    # check term list
-    ts_desired = []
-    strength_desired = []
-    for n, i in enumerate(subsites_start):
-        for m in range(n + 1, 1000):
-            j = subsites[m % len(subsites)] + (m // len(subsites)) * L
-            subsite_idcs = np.arange(n + 1, m) % len(subsites)
-            strength = p * np.prod([l[i]] + list(l[subsites[subsite_idcs]]))
-            if bc == 'finite' and m >= len(subsites):
-                break
-            if bc == 'infinite' and strength < cutoff:
-                break
-            ts_desired.append([('X', i), ('Y', j)])
-            strength_desired.append(strength)
-    # check if we build the desired objects correctly: check vs hardcoded result
+    ct = CouplingTerms(L)
     if bc == 'finite':
-        assert ts_desired == [
-            [('X', 1), ('Y', 2)],
-            [('X', 1), ('Y', 4)],
-            [('X', 1), ('Y', 6)],
-            [('X', 3), ('Y', 4)],
-            [('X', 3), ('Y', 6)],
-            [('X', 5), ('Y', 6)],
-        ]
-        decay_factors = [l[1], l[1] * l[2], l[1] * l[2] * l[4], l[3], l[3] * l[4], l[5]]
-        assert strength_desired == [p * d for d in decay_factors]
+        ct.add_coupling_term(p * l[1], 1, 2, 'Sp.Sm')
+        ct.add_coupling_term(p * l[1] * l[2], 1, 4, 'Sp.Sm')
+        ct.add_coupling_term(p * l[1] * l[2] * l[4], 1, 6, 'Sp.Sm')
+        ct.add_coupling_term(p * l[3], 3, 4, 'Sp.Sm')
+        ct.add_coupling_term(p * l[3] * l[4], 3, 6, 'Sp.Sm')
+        ct.add_coupling_term(p * l[5], 5, 6, 'Sp.Sm')
     else:
-        for (opi, i), (opj, j) in ts_desired:
-            assert opi == 'X'
-            assert opj == 'Y'
-            assert j > i
-            assert (j - i) % subsite_step == 1
-            assert i in subsites_start
-        assert ts_desired[:3] == [[('X', 1), ('Y', 2)], [('X', 1), ('Y', 4)], [('X', 1), ('Y', 6)]]
-        i = ts_desired.index([('X', 3), ('Y', 4)])
-        assert ts_desired[i : i + 3] == [[('X', 3), ('Y', 4)], [('X', 3), ('Y', 6)], [('X', 3), ('Y', 8)]]
-        i = ts_desired.index([('X', 5), ('Y', 6)])
-        assert ts_desired[i : i + 3] == [[('X', 5), ('Y', 6)], [('X', 5), ('Y', 8)], [('X', 5), ('Y', 10)]]
-    # check term list
-    assert ts.terms == ts_desired
-    assert np.all(ts.strength == np.array(strength_desired))
+        for n, i in enumerate(subsites_start):
+            for m in range(n + 1, 1000):
+                j = subsites[m % len(subsites)] + (m // len(subsites)) * L
+                subsite_idcs = np.arange(n + 1, m) % len(subsites)
+                strength = p * np.prod([l[i]] + list(l[subsites[subsite_idcs]]))
+                if strength < cutoff:
+                    break
+                ct.add_coupling_term(strength, i, j, 'Sp.Sm')
+    assert edt.to_CouplingTerms(model, cutoff=cutoff, bc=bc) == ct
+
+    H_expect = mpo.MPOGraph.from_terms([ct], model, bc=bc, unit_cell_width=L).build_MPO()
+    graph = mpo.MPOGraph.from_terms([edt], model, bc=bc, unit_cell_width=L)
+    graph.test_sanity()
+    H = graph.build_MPO()
+    assert max(H.chi) == 3
+    assert H.is_equal(H_expect, eps=1e-10 if bc == 'finite' else cutoff)
 
 
 @pytest.mark.parametrize('i', [0, 3, -1])
@@ -626,10 +439,8 @@ def test_exp_non_uniform_decaying_terms_subsites_start(bc):
 @pytest.mark.parametrize('uniform', [True, False])
 def test_exponentially_decaying_centered_terms(i, subsites, uniform):
     L = 8
-    spin = site.Site(spin_half.leg)
-    spin.add_op('X', 2.0 * np.eye(2))
-    spin.add_op('Y', 3.0 * np.eye(2))
-    sites = [spin] * L
+    model = SpinChain(dict(L=L, bc_MPS='finite', conserve='Sz'))
+    sites = model.lattice.mps_sites()
 
     edt = ExponentiallyDecayingTerms(L)
     p = 3.0
@@ -638,47 +449,39 @@ def test_exponentially_decaying_centered_terms(i, subsites, uniform):
         l_compare = np.full((L,), l_arg)
     else:
         l_arg = l_compare = 1.0 / (1 + np.arange(L))
-    edt.add_centered_exponentially_decaying_term(p, l_arg, 'X', 'Y', i, subsites=subsites)
-    edt._test_terms(sites)
+    edt.add_centered_exponentially_decaying_term(p, l_arg, 'Sp.Sm', i, subsites=subsites)
+    edt.test_terms(sites, model)
 
-    # check if ExponentiallyDecayingTerms.to_TermList and ExponentiallyDecayingTerms.add_to_graph
-    # yield the same MPO
-    ts = edt.to_TermList(bc='finite', cutoff=1e-6)
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite', unit_cell_width=L).build_MPO()
-    G = mpo.MPOGraph(sites, bc='finite', unit_cell_width=L)
-    edt.add_to_graph(G)
-    G.test_sanity()
-    G.add_missing_IdL_IdR()
-    H2 = G.build_MPO()
-    assert H1.is_equal(H2, eps=1e-10)
-
-    # check term list
     if i < 0:
         i = i + L
     if subsites is None:
-        ts_desired = [[('Y', j), ('X', i)] for j in range(i)] + [[('X', i), ('Y', j)] for j in range(i + 1, L)]
-        strength_desired = [p * np.prod(l_compare[j + 1 : i + 1]) for j in range(i)] + [
-            p * np.prod(l_compare[i:j]) for j in range(i + 1, L)
-        ]
-    else:
-        ts_desired = [[('Y', j), ('X', i)] for j in subsites if j < i] + [
-            [('X', i), ('Y', j)] for j in subsites if j > i
-        ]
-        strength_desired = []
-        for j in subsites:
-            if j == i:
-                continue
-            if j < i:
-                which_sites = subsites[(j < subsites) & (subsites <= i)]
-            else:
-                which_sites = subsites[(i <= subsites) & (subsites < j)]
-            strength_desired.append(p * np.prod(l_compare[which_sites]))
-    assert ts.terms == ts_desired
-    assert np.array_equal(ts.strength, strength_desired)
+        subsites = np.arange(L)
+    ct = CouplingTerms(L)
+    for j in subsites:
+        if j == i:
+            continue
+        if j < i:
+            prefactor_sites = subsites[(subsites > j) & (subsites <= i)]
+            strength = p * np.prod(l_compare[prefactor_sites])
+            ct.add_coupling_term(strength, j, i, 'Sm.Sp')  # Note: always act with Sp on site i
+        else:
+            prefactor_sites = subsites[(subsites >= i) & (subsites < j)]
+            strength = p * np.prod(l_compare[prefactor_sites])
+            ct.add_coupling_term(strength, i, j, 'Sp.Sm')
+
+    assert edt.to_CouplingTerms(model, cutoff=1e-6, bc='finite') == ct
+
+    H_expect = mpo.MPOGraph.from_terms([ct], model, bc='finite', unit_cell_width=L).build_MPO()
+    graph = mpo.MPOGraph.from_terms([edt], model, bc='finite', unit_cell_width=L)
+    graph.test_sanity()
+    H = graph.build_MPO()
+    assert max(H.chi) == 3
+    assert H.is_equal(H_expect, eps=1e-10)
 
 
 @pytest.mark.parametrize('bc', ['finite', 'infinite'])
 def test_mpo_to_term_list(bc):
+    pytest.skip('MPO.to_TermList not adapted yet.')
     # Addresses PR 477 / 479
     L = 6
     model = SpinChainNNN2(dict(bc_MPS=bc, Jx=0, Jy=0, Jz=1, Jxp=0, Jyp=0, Jzp=1, L=6, S=0.5))

@@ -4,21 +4,20 @@ The AKLT model is famous for having a very simple ground state MPS of bond dimen
 Writing down the Hamiltonian is easiest done in terms of bond couplings.
 This class thus serves as an example how this can be done.
 """
+
 # Copyright (C) TeNPy Developers, Apache license
+from typing import Literal
 
-import numpy as np
+import lasyten as lasy
 
-# from ..linalg import np_conserved as npc
 from ..networks.mps import MPS
-from ..networks.site import SpinSite, kron
-from ..tools import asConfig
 from .lattice import Chain
-from .model import MPOModel, NearestNeighborModel
+from .model import ModelBuilder
 
 __all__ = ['AKLTChain']
 
 
-class AKLTChain(NearestNeighborModel, MPOModel):
+class AKLTChain(ModelBuilder):
     r"""A simple implementation of the AKLT model.
 
     Here we define the Hamiltonian on a chain of S=1 spins as originally defined by
@@ -32,102 +31,60 @@ class AKLTChain(NearestNeighborModel, MPOModel):
                      +\frac{1}{3} (\vec{S}_i \cdot \vec{S}_{i+1})^2)
     """
 
-    def __init__(self, model_params):
-        model_params = asConfig(model_params, 'AKLTModel')
-        L = model_params.get('L', 2, int)
-        conserve = model_params.get('conserve', 'Sz', str)
+    default_lattice = Chain
+    force_default_lattice = True
+    conserve: Literal['SU2', 'Sz', 'parity', None]
+
+    def init_sites(self, model_params):
+        conserve = model_params.get('conserve', 'best', str)
         if conserve == 'best':
-            conserve = 'Sz'
-            self.logger.info('%s: set conserve to %s', self.name, conserve)
-        sort_charge = model_params.get('sort_charge', True, bool)
-        site = SpinSite(S=1.0, conserve=conserve, sort_charge=sort_charge)
+            conserve = 'SU2'
+        assert conserve in ['SU2', 'Sz', 'parity', 'None', None]
+        self.conserve = conserve
+        return lasy.sites.SpinSite(S=1, conserve=conserve, backend=self.backend)
 
-        # lattice
-        bc_MPS = model_params.get('bc_MPS', 'finite', str)
-        bc = 'open' if bc_MPS == 'finite' else 'periodic'
-        lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
+    def init_couplings(self, model_params):
+        site, *_ = self.lattice.unit_cell
+        self.define_coupling(lasy.models.aklt_coupling([site, site], name='AKLT'), hc='AKLT', permute='invariant')
 
-        Sp, Sm, Sz = site.Sp, site.Sm, site.Sz
-        S_dot_S = 0.5 * (kron(Sp, Sm) + kron(Sm, Sp)) + kron(Sz, Sz)
-        S_dot_S_square = npc.tensordot(S_dot_S, S_dot_S, [['(p0*.p1*)'], ['(p0.p1)']])
-
-        H_bond = S_dot_S + S_dot_S_square / 3.0
-        # P_2 = H_bond * 0.5 + 1/3 * npc.eye_like(S_dot_S)
-
+    def init_terms(self, model_params):
         J = model_params.get('J', 1.0, 'real_or_array')
-        H_bond = J * H_bond.split_legs().transpose(['p0', 'p1', 'p0*', 'p1*'])
-        H_bond = [H_bond] * L
-        # H_bond[i] acts on sites (i-1, i)
-        if bc_MPS == 'finite':
-            H_bond[0] = None
-        # 7) initialize H_bond (the order of 7/8 doesn't matter)
-        NearestNeighborModel.__init__(self, lat, H_bond)
-        # 9) initialize H_MPO
-        MPOModel.__init__(self, lat, self.calc_H_MPO_from_bond())
+        self.add_two_site_coupling(J, 'AKLT', dx=1)
 
     def psi_AKLT(self):
         """Initialize the chi=2 MPS which is exact ground state of the AKLT model.
+
+        Only implemented for ``conserve='SU2'`` and infinite boundary conditions.
+
+        The AKLT state is built from a spin-1/2 singlet on each bond and a projector from two
+        spin-1/2 to a spin-1 on each site. Hence, all bonds carry a single spin-1/2 multiplet.
+        With SU(2) symmetry, the (right canonical) tensor with this virtual space is unique up to
+        a gauge transformation, such that a random symmetric tensor with spin-1/2 bonds is the
+        AKLT state.
 
         Returns
         -------
         psi_aklt : :class:`~tenpy.networks.mps.MPS`
             The AKLT groundstate
 
+        Raises
+        ------
+        NotImplementedError
+            For all other symmetries and for finite boundary conditions.
+            A finite SU(2) symmetric chain has no trivial virtual spaces at the ends
+            (spin-1/2 times spin-1 contains no singlet), so the bond spaces would have to be
+            chosen differently and the tensors constructed explicitly.
+
         """
-        # build each B tensor of the MPS as contraction of
-        #    --sR  sL--
-        #       |  |
-        #       proj
-        #         |
-        #
-        # where  sL--sR forms a singlet between neighboring spin-1/2,
-        # and proj is the projector from two spin-1/2 to spin-1.
-        # indexing of basis states:
-        # spin-1/2: 0=|m=-1/2>, 1=|m=+1/2>;  spin-1: 0=|m=-1>, 1=|m=0> 2=|m=+1>
-        sL = np.sqrt(0.5) * np.array([[1.0, 0.0], [0.0, -1.0]])  # p2 vR
-        sR = np.array([[0.0, 1.0], [1.0, 0.0]])  # vL p1
-        proj = np.zeros([3, 2, 2])  # p p1 p2
-        proj[0, 0, 0] = 1.0  # |m=-1> = |down down>
-        proj[1, 0, 1] = proj[1, 1, 0] = np.sqrt(0.5)  # |m=0> = (|up down> + |down, up>)/sqrt(2)
-        proj[2, 1, 1] = 1.0  # |m=+1> = |up up>
-        B = np.tensordot(sR, proj, axes=[1, 1])  # vL [p1], p [p1] p2
-        B = np.tensordot(B, sL, axes=[2, 0])  # vL p [p2], [p2] vR
-        B = B * np.sqrt(4.0 / 3.0)  # normalize after projection
-        B = B.transpose([1, 0, 2])  # p vL vR
-        # it's easy to check that B is right-canonical:
-        BB = np.tensordot(B, B.conj(), axes=[[0, 2], [0, 2]])
-        assert np.linalg.norm(np.eye(2) - BB) < 1.0e-14, 'BB=' + str(BB).replace('\n', '  ')
-
-        L = self.lat.N_sites
-        Bs = [B] * L
-
-        if self.lat.bc_MPS == 'finite':
-            # project onto one of the two virtual states on the left/right most state.
-            # It's a ground state whatever you choose here,
-            # but we project to different indices to allow Sz conservation
-            # and fix overall Sz=0 sector
-            Bs[0] = Bs[0][:, :1, :]
-            Bs[-1] = Bs[-1][:, :, :-1]
-            form = None  # Bs[-1] is not right canonical
-        else:
-            form = 'B'
-
-        spin1 = self.lat.unit_cell[0]
-        if self.lat.bc_MPS != 'finite' and spin1.conserve in ['Sz', 'parity']:
-            charges = [[0], [2]] if spin1.conserve == 'Sz' else [[0], [1]]
-            legL = npc.LegCharge.from_qflat(spin1.leg.chinfo, charges)
-        else:
-            legL = None
-
-        res = MPS.from_Bflat(
-            self.lat.mps_sites(),
-            Bs,
-            bc=self.lat.bc_MPS,
-            permute=True,
-            form=form,
-            legL=legL,
-            unit_cell_width=self.lat.mps_unit_cell_width,
+        if self.conserve != 'SU2' or self.lattice.bc_MPS != 'infinite':
+            raise NotImplementedError('psi_AKLT is only ported for conserve="SU2" and bc_MPS="infinite"')
+        sites = self.lattice.mps_sites()
+        sym = sites[0].symmetry
+        spin_half = lasy.ElementarySpace(sym, sym.get_sector('[1 0]'))
+        return MPS.from_desired_virtual_spaces(
+            sites,
+            [spin_half] * len(sites),
+            bc='infinite',
+            total_charge=sym.trivial_sector,
+            unit_cell_width=self.lattice.mps_unit_cell_width,
         )
-        if form is None:
-            res.canonical_form()
-        return res

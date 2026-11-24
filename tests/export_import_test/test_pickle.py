@@ -75,7 +75,6 @@ def test_simulation_export_import(tmp_path):
         'model_params': {
             'bc_MPS': 'infinite',
             'L': 2,
-            'sort_charge': False,
         },
         'algorithm_class': 'DummyAlgorithmSleep',
         'algorithm_params': {'N_steps': 3},  # only one step

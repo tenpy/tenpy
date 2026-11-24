@@ -1,0 +1,3 @@
+- The integer attributes ``MPO.IdL`` and ``MPO.IdR`` were removed (accessing them raises a ``ValueError``).
+  The states with only identities to the left / right are now marked by the summand labels ``'IdL'`` and ``'IdR'``
+  on the virtual legs of the :attr:`~tenpy.networks.mpo.MPO._W` tensors, see :func:`~tenpy.networks.mpo.partition_W`.

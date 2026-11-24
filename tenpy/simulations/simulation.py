@@ -24,7 +24,7 @@ import numpy as np
 
 from .. import version
 from ..algorithms.algorithm import Algorithm
-from ..models.model import Model, NearestNeighborModel
+from ..models.model import EvolutionModel
 from ..networks.mps import InitialStateBuilder
 from ..tools import (
     CacheFile,
@@ -498,7 +498,7 @@ class Simulation:
         if hasattr(self, 'model'):
             self.options.touch('model_params')
             return  # skip actually regenerating the model
-        ModelClass = find_subclass(Model, model_class_name)
+        ModelClass = find_subclass(EvolutionModel, model_class_name)
         params = self.options.subconfig('model_params')
         self.model = ModelClass(params)
 
@@ -524,7 +524,7 @@ class Simulation:
             builder_class = self.options.get('initial_state_builder_class', 'InitialStateBuilder')
             Builder = find_subclass(InitialStateBuilder, builder_class)
             params = self.options.subconfig('initial_state_params')
-            initial_state_builder = Builder(self.model.lat, params, self.model.dtype)
+            initial_state_builder = Builder(self.model.lattice, params, self.model.dtype)
             self.psi = initial_state_builder.run()
         else:
             self.logger.info('initial state as given')  # nothing to do
@@ -558,7 +558,7 @@ class Simulation:
             self.model_ungrouped = self.model.copy()
             self.model.group_sites(group_sites)
             if to_NN:
-                self.model = NearestNeighborModel.from_MPOModel(self.model)
+                raise NotImplementedError  # TODO
 
     def group_split(self):
         """Split sites of psi that were grouped in  :meth:`group_sites_for_algorithm`."""

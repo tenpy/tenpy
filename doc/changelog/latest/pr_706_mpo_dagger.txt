@@ -1,0 +1,9 @@
+- :meth:`~tenpy.networks.mpo.MPO.dagger` takes the hermitian conjugate of each ``W`` tensor separately, with a cost that is
+  linear in the number of sites, instead of contracting the whole MPO into a single tensor. It now also works for
+  ``bc='infinite'`` and keeps the ``'IdL'`` / ``'IdR'`` summand labels of the virtual legs, such that the result can be
+  added to the original MPO, e.g. ``H + H.dagger()``.
+  The virtual legs of the result have the same duality (``is_dual``) as those of the original MPO.
+- :meth:`~tenpy.networks.mpo.MPO.is_hermitian` works again, and :meth:`~tenpy.networks.mpo.MPO.is_equal` returns a python ``bool``.
+- The factorization of the hermitian conjugate of a ``Coupling`` (``Coupling.dagger``) differs from the previous one by a
+  gauge transformation on the virtual legs (e.g. signs on the odd sector of fermions). The operator is unchanged, but the
+  cells of the ``W`` tensors of models with hermitian conjugate couplings, e.g. ``'C.Cd'`` of fermionic hoppings, can differ by these signs.

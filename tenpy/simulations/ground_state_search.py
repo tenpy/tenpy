@@ -451,7 +451,7 @@ class OrthogonalExcitations(GroundStateSearch):
         first = self.options.get('segment_first', 0, int)
         last = self.options.get('segment_last', None, int)
         self.model = model_inf.extract_segment(first, last, enlarge)
-        first, last = self.model.lat.segment_first_last
+        first, last = self.model.lattice.segment_first_last
         write_back = self.options.get('write_back_converged_ground_state_environments', False, bool)
         if resume_data.get('converged_environments', False):
             self.logger.info('use converged environments from ground state file')
@@ -523,7 +523,7 @@ class OrthogonalExcitations(GroundStateSearch):
             # incompatible with InitialStateBuilder: pass `sim` to __init__
             initial_state_builder = Builder(self, params)
         else:
-            initial_state_builder = Builder(self.model.lat, params, self.model.dtype)
+            initial_state_builder = Builder(self.model.lattice, params, self.model.dtype)
         self.psi = initial_state_builder.run()
 
         if self.options.get('save_psi', True, bool):
@@ -743,7 +743,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             self.init_env_data = self.init_env_data_beta
             self.write_back_environments(gs_data_beta, gs_fn_beta)
             self.init_env_data = init_env_data
-        self.results['segment_first_last'] = self.model.lat.segment_first_last
+        self.results['segment_first_last'] = self.model.lattice.segment_first_last
 
         # here, psi0_seg is the *unperturbed* ground state in the segment!
         self.get_reference_energy(psi0_alpha, psi0_beta)
@@ -850,7 +850,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             assert boundary < last
 
         self.model = model_fin.extract_segment(first, last)  # subset of original model
-        first, last = self.model.lat.segment_first_last
+        first, last = self.model.lattice.segment_first_last
 
         env = MPOEnvironment(psi0_fin_alpha, self.model_orig.H_MPO, psi0_fin_alpha)
         self.env_data_alpha = env.get_initialization_data(first, last)
@@ -919,7 +919,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         write_back = self.options.get('write_back_converged_ground_state_environments', False, bool)
 
         self.model = model_inf.extract_segment(first, last, enlarge)
-        first, last = self.model.lat.segment_first_last
+        first, last = self.model.lattice.segment_first_last
         H = model_inf.H_MPO
 
         gauge = self.options.get('gauge', 'rho', str)
@@ -1279,7 +1279,7 @@ class ExcitationInitialState(InitialStateBuilder):
         self.sim = sim
         self.options = asConfig(options, self.__class__.__name__)
         self.options.setdefault('method', 'from_orthogonal')
-        super().__init__(sim.model.lat, options, sim.model.dtype)
+        super().__init__(sim.model.lattice, options, sim.model.dtype)
 
     def from_orthogonal(self):
         if self.options.get('use_highest_excitation', True, bool):

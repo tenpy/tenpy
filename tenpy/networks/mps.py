@@ -7,7 +7,7 @@ An MPS looks roughly like this::
     |     ┗━━━┯━━━┛    ┗━━━┯━━━┛    ┗━━━┯━━━┛
     |         │            │            │
 
-We use the following label convention for the `B` (where arrows indicate `qconj`)::
+We use the following label convention for the `B`::
 
     |        ┏━━━━━━━┓
     |   vL ──┨   B   ┠── vR
@@ -173,7 +173,6 @@ from ..tools import (
     asConfig,
     get_recursive,
     hdf5_io,
-    inverse_permutation,
     lcm,
     svd_theta,
     to_array,
@@ -267,6 +266,17 @@ mps_contraction_diagram_operations: dict[str, lasy.PlanarDiagram] = {
         definition='RP:vL @ ket:vR, ket:p @ bra:p*, RP:vL* @ bra:vR*, ket:vL -> vL, bra:vL* -> vL*',
         dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*']),
     ),
+    # with an additional leg `c` on the outer side of LP / RP, which is not contracted
+    'LP2c @ TM': lasy.PlanarDiagram(
+        tensors='LP[vR*, vR, c], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='LP:vR @ ket:vL, ket:p @ bra:p*, LP:vR* @ bra:vL*, ket:vR -> vR, bra:vR* -> vR*, LP:c -> c',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], c=['c']),
+    ),
+    'TM @ RP2c': lasy.PlanarDiagram(
+        tensors='RP[vL*, c, vL], ket[vL, p, vR], bra[vR*, p*, vL*]',
+        definition='RP:vL @ ket:vR, ket:p @ bra:p*, RP:vL* @ bra:vR*, ket:vL -> vL, bra:vL* -> vL*, RP:c -> c',
+        dims=dict(chi=['vR', 'vL', 'vR*', 'vL*'], d=['p', 'p*'], c=['c']),
+    ),
     'bra-W-ket2 @ RP2': lasy.PlanarDiagram(
         tensors='RP[vL*, vL], W[p, p*], ket[vL, p, vR], bra[vR*, p*, vL*]',
         definition=('RP:vL @ ket:vR, ket:p @ W:p*, RP:vL* @ bra:vR*, bra:p* @ W:p, ket:vL -> vL, bra:vL* -> vL*'),
@@ -316,7 +326,7 @@ class MPSGeometry:
         The width (i.e. length along the first dimension) of an MPS unit cell, in units of the
         lattice spacing. It is given by :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
         For a :class:`~tenpy.models.lattice.Chain`, this is just the length of the chain.
-        Is used for :ref:`shift_symmetry` or :meth:`MPS.correlation_length2`.
+        Is used for :ref:`shift_symmetry` or :meth:`MPS.correlation_length`.
 
     """
 
@@ -517,13 +527,17 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         Calculates n-site expectation values of operators sandwiched between bra and ket.
         For example the contraction for a two-site operator on site `i` would look like::
 
-            |          .--S--B[i]--B[i+1]--.
-            |          |     |     |       |
-            |          |     |-----|       |
-            |          LP[i] | op  |       RP[i+1]
-            |          |     |-----|       |
-            |          |     |     |       |
-            |          .--S--B*[i]-B*[i+1]-.
+            |   ┏━━━━━━━┓  ┏━━━┓  ┏━━━━━━━┓  ┏━━━━━━━━━┓  ┏━━━━━━━━━┓
+            |   ┃       ┠──┨ S ┠──┨ B[i]  ┠──┨ B[i+1]  ┠──┨         ┃
+            |   ┃       ┃  ┗━━━┛  ┗━━━┯━━━┛  ┗━━━━┯━━━━┛  ┃         ┃
+            |   ┃       ┃             │           │       ┃         ┃
+            |   ┃       ┃         ┏━━━┷━━━━━━━━━━━┷━━━━┓  ┃         ┃
+            |   ┃ LP[i] ┃         ┃         op         ┃  ┃ RP[i+1] ┃
+            |   ┃       ┃         ┗━━━┯━━━━━━━━━━━┯━━━━┛  ┃         ┃
+            |   ┃       ┃             │           │       ┃         ┃
+            |   ┃       ┃  ┏━━━┓  ┏━━━┷━━━┓  ┏━━━━┷━━━━┓  ┃         ┃
+            |   ┃       ┠──┨ S ┠──┨ B*[i] ┠──┨ B*[i+1] ┠──┨         ┃
+            |   ┗━━━━━━━┛  ┗━━━┛  ┗━━━━━━━┛  ┗━━━━━━━━━┛  ┗━━━━━━━━━┛
 
         Here, the `B` are taken from `ket`, the `B*` from `bra`.
         For MPS expectation values these are the same and LP / RP are trivial.
@@ -581,7 +595,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         .. doctest :: MPS.expectation_value
 
-            >>> spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
+            >>> spin_half = lasyten.sites.SpinSite(conserve=None)
             >>> p_state = ['up', [np.sqrt(0.5), -np.sqrt(0.5)]] * 3
             >>> psi = tenpy.networks.mps.MPS.from_product_state([spin_half] * 6, p_state, unit_cell_width=6)
 
@@ -629,7 +643,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         .. doctest :: MPS.expectation_value
 
-            >>> spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
+            >>> spin_half = lasyten.sites.SpinSite(conserve=None)
             >>> p2_state = [[np.sqrt(0.5), -np.sqrt(0.5)], 'up'] * 3
             >>> phi = tenpy.networks.mps.MPS.from_product_state([spin_half] * 6, p2_state, unit_cell_width=6)
             >>> env = tenpy.networks.mps.MPSEnvironment(phi, psi)
@@ -743,11 +757,10 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         _, ket = self._get_bra_ket()
         if axes is not None:
             # None means we already have the expected labels
-            op = op.copy(deep=False, device=op.device).relabel(
-                {l_old: l_new for l_old, l_new in zip(axes[0] + axes[1], new_axes[0] + new_axes[1])}
-            )
+            op = op.copy(deep=False, device=op.device)
+            op.labels.update({l_old: l_new for l_old, l_new in zip(axes[0] + axes[1], new_axes[0] + new_axes[1])})
         else:
-            assert op.labels_are(*new_axes[0], *new_axes[1])
+            assert op.labels.are(*new_axes[0], *new_axes[1])
         return self.expectation_value(
             op=lasy.Coupling.from_tensor(op, sites=[ket.get_site(i) for i in site_list]),
             sites=sites,
@@ -766,11 +779,17 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         ``op0_i0 op1_{i0+1} op2_{i0+2} ...``, looking like this (with `op` short for `operators`,
         for ``len(operators)=3``)::
 
-            |          .--S--B[i0]---B[i0+1]--B[i0+2]--B[i0+3]--.
-            |          |     |       |        |        |        |
-            |         LP[i0] op[0]   op[1]    op[2]    op[3]    RP[i0+3]
-            |          |     |       |        |        |        |
-            |          .--S--B*[i0]--B*[i0+1]-B*[i0+2]-B*[i0+3]-.
+            |   ┏━━━━━━━━┓  ┏━━━┓  ┏━━━━━━━━┓  ┏━━━━━━━━━━┓  ┏━━━━━━━━━━┓  ┏━━━━━━━━━━┓  ┏━━━━━━━━━━┓
+            |   ┃        ┠──┨ S ┠──┨ B[i0]  ┠──┨ B[i0+1]  ┠──┨ B[i0+2]  ┠──┨ B[i0+3]  ┠──┨          ┃
+            |   ┃        ┃  ┗━━━┛  ┗━━━━┯━━━┛  ┗━━━━━┯━━━━┛  ┗━━━━━┯━━━━┛  ┗━━━━━┯━━━━┛  ┃          ┃
+            |   ┃        ┃              │            │             │             │       ┃          ┃
+            |   ┃        ┃         ┏━━━━┷━━━┓  ┏━━━━━┷━━━━┓  ┏━━━━━┷━━━━┓  ┏━━━━━┷━━━━┓  ┃          ┃
+            |   ┃ LP[i0] ┃         ┃ op[0]  ┃  ┃  op[1]   ┃  ┃  op[2]   ┃  ┃  op[3]   ┃  ┃ RP[i0+3] ┃
+            |   ┃        ┃         ┗━━━━┯━━━┛  ┗━━━━━┯━━━━┛  ┗━━━━━┯━━━━┛  ┗━━━━━┯━━━━┛  ┃          ┃
+            |   ┃        ┃              │            │             │             │       ┃          ┃
+            |   ┃        ┃  ┏━━━┓  ┏━━━━┷━━━┓  ┏━━━━━┷━━━━┓  ┏━━━━━┷━━━━┓  ┏━━━━━┷━━━━┓  ┃          ┃
+            |   ┃        ┠──┨ S ┠──┨ B*[i0] ┠──┨ B*[i0+1] ┠──┨ B*[i0+2] ┠──┨ B*[i0+3] ┠──┨          ┃
+            |   ┗━━━━━━━━┛  ┗━━━┛  ┗━━━━━━━━┛  ┗━━━━━━━━━━┛  ┗━━━━━━━━━━┛  ┗━━━━━━━━━━┛  ┗━━━━━━━━━━┛
 
         Note: Use `expectation_value` for computing expectation values for a :class:`~lasyten.Coupling` or
         `expectation_value_tensor` for a multi-site :class:`~lasyten.Tensor`.
@@ -818,11 +837,17 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         For example the contraction of three one-site operators on sites ``i0``,
         ``i1 = i0 + 1``, ``i2 = i0 + 3`` would look like::
 
-            |          .--S--B[i0]---B[i0+1]--B[i0+2]--B[i0+3]--.
-            |          |     |       |        |        |        |
-            |         LP[i0] op1     op2      |        op3      RP[i0+3]
-            |          |     |       |        |        |        |
-            |          .--S--B*[i0]--B*[i0+1]-B*[i0+2]-B*[i0+3]-.
+            |   ┏━━━━━━━━┓  ┏━━━┓  ┏━━━━━━━━┓  ┏━━━━━━━━━━┓  ┏━━━━━━━━━━┓  ┏━━━━━━━━━━┓  ┏━━━━━━━━━━┓
+            |   ┃        ┠──┨ S ┠──┨ B[i0]  ┠──┨ B[i0+1]  ┠──┨ B[i0+2]  ┠──┨ B[i0+3]  ┠──┨          ┃
+            |   ┃        ┃  ┗━━━┛  ┗━━━━┯━━━┛  ┗━━━━━┯━━━━┛  ┗━━━━━┯━━━━┛  ┗━━━━━┯━━━━┛  ┃          ┃
+            |   ┃        ┃              │            │             │             │       ┃          ┃
+            |   ┃        ┃         ┏━━━━┷━━━┓  ┏━━━━━┷━━━━┓        │       ┏━━━━━┷━━━━┓  ┃          ┃
+            |   ┃ LP[i0] ┃         ┃  op1   ┃  ┃   op2    ┃        │       ┃   op3    ┃  ┃ RP[i0+3] ┃
+            |   ┃        ┃         ┗━━━━┯━━━┛  ┗━━━━━┯━━━━┛        │       ┗━━━━━┯━━━━┛  ┃          ┃
+            |   ┃        ┃              │            │             │             │       ┃          ┃
+            |   ┃        ┃  ┏━━━┓  ┏━━━━┷━━━┓  ┏━━━━━┷━━━━┓  ┏━━━━━┷━━━━┓  ┏━━━━━┷━━━━┓  ┃          ┃
+            |   ┃        ┠──┨ S ┠──┨ B*[i0] ┠──┨ B*[i0+1] ┠──┨ B*[i0+2] ┠──┨ B*[i0+3] ┠──┨          ┃
+            |   ┗━━━━━━━━┛  ┗━━━┛  ┗━━━━━━━━┛  ┗━━━━━━━━━━┛  ┗━━━━━━━━━━┛  ┗━━━━━━━━━━┛  ┗━━━━━━━━━━┛
 
         Parameters
         ----------
@@ -859,7 +884,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         .. testsetup :: MPS.expectation_value_term
 
-            spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
+            spin_half = lasyten.sites.SpinSite(conserve=None)
             psi = tenpy.networks.mps.MPS.from_product_state([spin_half]*8, ['up']*8, unit_cell_width=8)
 
         .. doctest :: MPS.expectation_value_term
@@ -895,27 +920,53 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         For example the contraction for a two on-site operators on sites `i` and `j` would look
         like::
 
-            |          .--S--B[i]--B[i+1]--...--B[j]---.
-            |          |     |     |            |      |
-            |          |     |     |            op2    |
-            |          LP[i] |     |            |      RP[j]
-            |          |     op1   |            |      |
-            |          |     |     |            |      |
-            |          .--S--B*[i]-B*[i+1]-...--B*[j]--.
+            |   ┏━━━━━━━┓  ┏━━━┓  ┏━━━━━━━┓  ┏━━━━━━━━━┓     ┏━━━━━━━┓  ┏━━━━━━━┓
+            |   ┃       ┠──┨ S ┠──┨ B[i]  ┠──┨ B[i+1]  ┠─...─┨ B[j]  ┠──┨       ┃
+            |   ┃       ┃  ┗━━━┛  ┗━━━┯━━━┛  ┗━━━━┯━━━━┛     ┗━━━┯━━━┛  ┃       ┃
+            |   ┃       ┃             │           │              │      ┃       ┃
+            |   ┃       ┃             │           │          ┏━━━┷━━━┓  ┃       ┃
+            |   ┃       ┃             │           │          ┃  op2  ┃  ┃       ┃
+            |   ┃ LP[i] ┃         ┏━━━┷━━━┓       │          ┗━━━┯━━━┛  ┃ RP[j] ┃
+            |   ┃       ┃         ┃  op1  ┃       │              │      ┃       ┃
+            |   ┃       ┃         ┗━━━┯━━━┛       │              │      ┃       ┃
+            |   ┃       ┃             │           │              │      ┃       ┃
+            |   ┃       ┃  ┏━━━┓  ┏━━━┷━━━┓  ┏━━━━┷━━━━┓     ┏━━━┷━━━┓  ┃       ┃
+            |   ┃       ┠──┨ S ┠──┨ B*[i] ┠──┨ B*[i+1] ┠─...─┨ B*[j] ┠──┨       ┃
+            |   ┗━━━━━━━┛  ┗━━━┛  ┗━━━━━━━┛  ┗━━━━━━━━━┛     ┗━━━━━━━┛  ┗━━━━━━━┛
 
 
         Onsite terms are taken in the order ``<psi|op1_i op2_j|psi>``.
         If `opstr` is given, it calculates::
 
-            |           for i < j                               for i > j
+            |   for i < j
+            |   ┏━━━━━━━┓  ┏━━━┓  ┏━━━━━━━┓  ┏━━━━━━━━━┓     ┏━━━━━━━┓  ┏━━━━━━━┓
+            |   ┃       ┠──┨ S ┠──┨ B[i]  ┠──┨ B[i+1]  ┠─...─┨ B[j]  ┠──┨       ┃
+            |   ┃       ┃  ┗━━━┛  ┗━━━┯━━━┛  ┗━━━━┯━━━━┛     ┗━━━┯━━━┛  ┃       ┃
+            |   ┃       ┃             │           │              │      ┃       ┃
+            |   ┃       ┃             │      ┏━━━━┷━━━━┓     ┏━━━┷━━━┓  ┃       ┃
+            |   ┃       ┃             │      ┃  opstr  ┃     ┃  op2  ┃  ┃       ┃
+            |   ┃ LP[i] ┃         ┏━━━┷━━━┓  ┗━━━━┯━━━━┛     ┗━━━┯━━━┛  ┃ RP[j] ┃
+            |   ┃       ┃         ┃  op1  ┃       │              │      ┃       ┃
+            |   ┃       ┃         ┗━━━┯━━━┛       │              │      ┃       ┃
+            |   ┃       ┃             │           │              │      ┃       ┃
+            |   ┃       ┃  ┏━━━┓  ┏━━━┷━━━┓  ┏━━━━┷━━━━┓     ┏━━━┷━━━┓  ┃       ┃
+            |   ┃       ┠──┨ S ┠──┨ B*[i] ┠──┨ B*[i+1] ┠─...─┨ B*[j] ┠──┨       ┃
+            |   ┗━━━━━━━┛  ┗━━━┛  ┗━━━━━━━┛  ┗━━━━━━━━━┛     ┗━━━━━━━┛  ┗━━━━━━━┛
             |
-            |          .--S--B[i]---B[i+1]--...- B[j]---.     .--S--B[j]---B[j+1]--...- B[i]---.
-            |          |     |      |            |      |     |     |      |            |      |
-            |          |     |      opstr        op2    |     |     op2    |            |      |
-            |          LP[i] |      |            |      RP[j] LP[j] |      |            |      RP[i]
-            |          |     op1    |            |      |     |     |      opstr        op1    |
-            |          |     |      |            |      |     |     |      |            |      |
-            |          .--S--B*[i]--B*[i+1]-...- B*[j]--.     .--S--B*[j]--B*[j+1]-...- B*[i]--.
+            |   for i > j
+            |   ┏━━━━━━━┓  ┏━━━┓  ┏━━━━━━━┓  ┏━━━━━━━━━┓     ┏━━━━━━━┓  ┏━━━━━━━┓
+            |   ┃       ┠──┨ S ┠──┨ B[j]  ┠──┨ B[j+1]  ┠─...─┨ B[i]  ┠──┨       ┃
+            |   ┃       ┃  ┗━━━┛  ┗━━━┯━━━┛  ┗━━━━┯━━━━┛     ┗━━━┯━━━┛  ┃       ┃
+            |   ┃       ┃             │           │              │      ┃       ┃
+            |   ┃       ┃         ┏━━━┷━━━┓       │              │      ┃       ┃
+            |   ┃       ┃         ┃  op2  ┃       │              │      ┃       ┃
+            |   ┃ LP[j] ┃         ┗━━━┯━━━┛  ┏━━━━┷━━━━┓     ┏━━━┷━━━┓  ┃ RP[i] ┃
+            |   ┃       ┃             │      ┃  opstr  ┃     ┃  op1  ┃  ┃       ┃
+            |   ┃       ┃             │      ┗━━━━┯━━━━┛     ┗━━━┯━━━┛  ┃       ┃
+            |   ┃       ┃             │           │              │      ┃       ┃
+            |   ┃       ┃  ┏━━━┓  ┏━━━┷━━━┓  ┏━━━━┷━━━━┓     ┏━━━┷━━━┓  ┃       ┃
+            |   ┃       ┠──┨ S ┠──┨ B*[j] ┠──┨ B*[j+1] ┠─...─┨ B*[i] ┠──┨       ┃
+            |   ┗━━━━━━━┛  ┗━━━┛  ┗━━━━━━━┛  ┗━━━━━━━━━┛     ┗━━━━━━━┛  ┗━━━━━━━┛
 
 
         Strings (like ``'Id', 'Sz'``) in ``opstr`` are translated into single-site operators
@@ -925,13 +976,19 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         Couplings are in general multi-site operators, for which the following diagram is
         evaluated (for i < j)::
 
-            |          .--S--B[i1]-...--B[in]--...-B[k]-...--B[j1]--...-B[jm]---.
-            |          |     |          |          |         |          |       |
-            |          |     |          |          opstr     op2_j1-...-op2_jm  |
-            |          LP[i] |          |          |         |          |       RP[jm]
-            |          |     op1_i1-...-op1_in     |         |          |       |
-            |          |     |          |          |         |          |       |
-            |          .--S--B*[i1]-...-B*[in]-...-B*[k]-...-B*[j1]-...-B*[jm]--.
+            |   ┏━━━━━━━┓ ┏━━━┓ ┏━━━━━━━━┓     ┏━━━━━━━━┓     ┏━━━━━━━┓     ┏━━━━━━━━┓     ┏━━━━━━━━┓ ┏━━━━━━━━┓
+            |   ┃       ┠─┨ S ┠─┨ B[i1]  ┠─...─┨ B[in]  ┠─...─┨ B[k]  ┠─...─┨ B[j1]  ┠─...─┨ B[jm]  ┠─┨        ┃
+            |   ┃       ┃ ┗━━━┛ ┗━━━━┯━━━┛     ┗━━━━┯━━━┛     ┗━━━┯━━━┛     ┗━━━━┯━━━┛     ┗━━━━┯━━━┛ ┃        ┃
+            |   ┃       ┃            │              │             │              │              │     ┃        ┃
+            |   ┃       ┃            │              │         ┏━━━┷━━━┓     ┏━━━━┷━━━━━━━━━━━━━━┷━━━┓ ┃        ┃
+            |   ┃       ┃            │              │         ┃ opstr ┃     ┃   op2_j1-...-op2_jm   ┃ ┃        ┃
+            |   ┃ LP[i] ┃       ┏━━━━┷━━━━━━━━━━━━━━┷━━━┓     ┗━━━┯━━━┛     ┗━━━━┯━━━━━━━━━━━━━━┯━━━┛ ┃ RP[jm] ┃
+            |   ┃       ┃       ┃   op1_i1-...-op1_in   ┃         │              │              │     ┃        ┃
+            |   ┃       ┃       ┗━━━━┯━━━━━━━━━━━━━━┯━━━┛         │              │              │     ┃        ┃
+            |   ┃       ┃            │              │             │              │              │     ┃        ┃
+            |   ┃       ┃ ┏━━━┓ ┏━━━━┷━━━┓     ┏━━━━┷━━━┓     ┏━━━┷━━━┓     ┏━━━━┷━━━┓     ┏━━━━┷━━━┓ ┃        ┃
+            |   ┃       ┠─┨ S ┠─┨ B*[i1] ┠─...─┨ B*[in] ┠─...─┨ B*[k] ┠─...─┨ B*[j1] ┠─...─┨ B*[jm] ┠─┨        ┃
+            |   ┗━━━━━━━┛ ┗━━━┛ ┗━━━━━━━━┛     ┗━━━━━━━━┛     ┗━━━━━━━┛     ┗━━━━━━━━┛     ┗━━━━━━━━┛ ┗━━━━━━━━┛
 
         Here `op1` acts on sites `i1`, ..., `in` and `op2` acts on sites `j1`, ..., `jm`
         (in both cases not necessarily consecutive sites). If given, `opstr` is applied at every
@@ -1041,7 +1098,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         .. doctest :: MPS.correlation_function
 
-            >>> spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
+            >>> spin_half = lasyten.sites.SpinSite(conserve=None)
             >>> p_state = ['up', [np.sqrt(0.5), -np.sqrt(0.5)]] * 3
             >>> psi = tenpy.networks.mps.MPS.from_product_state([spin_half] * 6, p_state, 'infinite', unit_cell_width=6)
 
@@ -1069,7 +1126,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
         .. doctest :: MPS.correlation_function
 
-            >>> fermion = tenpy.networks.site.FermionSite(conserve='N')
+            >>> fermion = lasyten.sites.SpinlessFermionSite(conserve='N')
             >>> p_state = ['empty', 'full'] * 3
             >>> psi = tenpy.networks.mps.MPS.from_product_state([fermion] * 6, p_state, 'finite', unit_cell_width=6)
             >>> CdC = psi.correlation_function('Cd', 'C')  # optionally: use `hermitian=True`
@@ -1087,10 +1144,10 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         leg_err = 'specified tensor must be on-site with two legs `p` and `p*`'
         if isinstance(op1, lasy.Tensor):
             assert op1.num_legs == 2, leg_err
-            assert op1.labels_are('p', 'p*'), leg_err
+            assert op1.labels.are('p', 'p*'), leg_err
         if isinstance(op2, lasy.Tensor):
             assert op2.num_legs == 2, leg_err
-            assert op2.labels_are('p', 'p*'), leg_err
+            assert op2.labels.are('p', 'p*'), leg_err
 
         # the updated sites1 and sites2 also include the information of offsets1 and offsets2 and are sorted
         sites1, sites2 = self._correlation_function_args(
@@ -1842,11 +1899,15 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
             The site on which the operator acts.
 
         """
+        ket_th = ket.get_theta(site, n=1)
+        ket_th.labels.update({'p0': 'p'})
+        bra_th = bra.get_theta(site, n=1)
+        bra_th.labels.update({'p0': 'p'})
         res = mps_contraction_diagram_operations['LP2 @ bra-W-ket2'].evaluate(
             dict(
                 LP=self.get_LP(site),
-                ket=ket.get_theta(site, n=1).relabel({'p0': 'p'}),
-                bra=bra.get_theta(site, n=1).relabel({'p0': 'p'}).hc,
+                ket=ket_th,
+                bra=bra_th.hc,
                 W=op,
             )
         )
@@ -1875,7 +1936,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         elif isinstance(sites2, int):
             sites2 = range(0, sites2)
 
-        site_list = np.asarray([sites1, sites2])
+        site_list = [np.asarray(sites1), np.asarray(sites2)]
         offset_list = [offsets1, offsets2]
         widths = [width1, width2]
         offset_err = 'specified offsets are not sorted'
@@ -2044,13 +2105,19 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         The order in which `coupling1` and `coupling2` are contracted is analogous to the tensor
         contraction in :func:`lasyten.compose`.
 
-        Graphically::
+        Graphically, where lines that cross are not connected (the line with a gap passes behind
+        the continuous line)::
 
-            |          |    |    |    |    |    |
-            |         ─W0───W1───W2───|────W3───|─
-            |          |    |    |    |    |    |    == _multiply_couplings(Vs, Ws, [2, 5, 6, 8], [0, 2, 3, 6])
-            |         ─|────V0───|────V1───V2───V3─
-            |          |    |    |    |    |    |
+            |         │         │         │         │         │         │
+            |       ┏━┷━━┓    ┏━┷━━┓    ┏━┷━━┓      │       ┏━┷━━┓      │
+            |   ────┨ W0 ┠────┨ W1 ┠────┨ W2 ┠───── │ ──────┨ W3 ┠───── │ ─────
+            |       ┗━┯━━┛    ┗━┯━━┛    ┗━┯━━┛      │       ┗━┯━━┛      │
+            |         │         │         │         │         │         │
+            |         │       ┏━┷━━┓      │       ┏━┷━━┓    ┏━┷━━┓    ┏━┷━━┓
+            |   ───── │ ──────┨ V0 ┠───── │ ──────┨ V1 ┠────┨ V2 ┠────┨ V3 ┠───
+            |         │       ┗━┯━━┛      │       ┗━┯━━┛    ┗━┯━━┛    ┗━┯━━┛
+            |         │         │         │         │         │         │
+            |   == _multiply_couplings(Vs, Ws, [2, 5, 6, 8], [0, 2, 3, 6])
 
         Here `Wi` are the individual tensors of `coupling2` and `Vi` those of `coupling1`.
         `sites1` and `sites2` are one of many possible realizations for this contraction.
@@ -2127,18 +2194,18 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 pipes = []
                 pipes_relabel = {}
                 pipe_dualities = []
-                if W1.has_label('wR'):
-                    codom_pos = 2 if W1.has_label('wL') else 1
+                if W1.labels.has('wR'):
+                    codom_pos = 2 if W1.labels.has('wL') else 1
                     W1 = lasy.move_leg(W1, 'wR', codomain_pos=codom_pos, bend_right=True)
-                    if W2.has_label('wR'):
+                    if W2.labels.has('wR'):
                         relabel1['wR'] = 'wR1'
                         relabel2['wR'] = 'wR2'
                         pipes.append(['wR2', 'wR1'])
                         pipes_relabel['(wR1.wR2)'] = 'wR'
                         pipe_dualities.append(True)
-                if W2.has_label('wL'):
+                if W2.labels.has('wL'):
                     W2 = lasy.move_leg(W2, 'wL', domain_pos=0, bend_right=False)
-                    if W1.has_label('wL'):
+                    if W1.labels.has('wL'):
                         relabel1['wL'] = 'wL1'
                         relabel2['wL'] = 'wL2'
                         pipes.append(['wL1', 'wL2'])
@@ -2148,7 +2215,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 if len(pipes) > 0:
                     # order in the pipes chosen such that the legs end up in the correct positions
                     W = lasy.planar.planar_combine_legs(W, *pipes, pipe_dualities=pipe_dualities)
-                    W.relabel(pipes_relabel)
+                    W.labels.update(pipes_relabel)
                 if '(wL2.wL1)' not in pipes_relabel:
                     # a single wL has been there (no piping) -> move to correct position
                     W = lasy.move_leg(W, 'wL', codomain_pos=0, bend_right=False)
@@ -2213,7 +2280,9 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         this function, the re-implementation of various functions (like get_theta) in derived
         classes with multiple legs per site can be avoided.
         """
-        return A.copy(deep=False).relabel({old: new for old, new in zip(self._p_label, self._get_p_label(s))})
+        A = A.copy(deep=False)
+        A.labels.update({old: new for old, new in zip(self._p_label, self._get_p_label(s))})
+        return A
 
     def _get_p_label(self, s: str) -> list[str]:
         """Return  self._p_label with additional string `s`."""
@@ -2289,7 +2358,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
                 op = lasy.add_trivial_leg(op, codomain_pos=0, label='wL')
             if 'wR' not in op.labels:
                 op = lasy.add_trivial_leg(op, domain_pos=1, label='wR')
-            assert op.labels_are('wL', 'wR', 'p', 'p*')
+            assert op.labels.are('wL', 'wR', 'p', 'p*')
         return op
 
     @abstractmethod
@@ -2451,10 +2520,10 @@ class MPS(BaseMPSExpectationValue):
             B_final = self._B[-1]
             if not B_final.get_leg('vR').is_trivial:
                 vR_charge_label = MPS_TOTAL_CHARGE_LABEL + '_vR'
-                B_final.relabel({'vR': vR_charge_label})
+                B_final.labels.update({'vR': vR_charge_label})
                 B_final = lasy.add_trivial_leg(B_final, domain_pos=B_final.num_domain_legs, label='vR', is_dual=False)
                 if isinstance(B_final, lasy.HiddenLegTensor):
-                    B_final.relabel({vR_charge_label: '!' + vR_charge_label})
+                    B_final.labels.update({vR_charge_label: '!' + vR_charge_label})
                 else:
                     B_final = lasy.HiddenLegTensor(B_final, [vR_charge_label])
                 self._B[-1] = _merge_charge_legs(B_final, _charge_leg_labels(B_final), '!' + MPS_TOTAL_CHARGE_LABEL)
@@ -2498,12 +2567,8 @@ class MPS(BaseMPSExpectationValue):
                 assert len(f) == 2
         for i, B in enumerate(self._B):
             assert isinstance(B, lasy.SymmetricTensor)
-            if not B.labels_are(*self._B_labels):
-                if not (
-                    isinstance(B, lasy.HiddenLegTensor)
-                    and set(self._B_labels) == set([B.labels[i] for i in B.public_leg_idcs()])
-                ):
-                    raise ValueError(f'B has wrong labels {B.labels!r}, expected {self._B_labels!r}')
+            if not B.labels.are(*self._B_labels, planar=True):
+                raise ValueError(f'B has wrong labels {B.labels!r}, expected {self._B_labels!r}')
             i2 = (i + 1) if self.finite else (i + 1) % self.L
             if isinstance(self._S[i2], lasy.DiagonalTensor):
                 if (
@@ -2550,7 +2615,7 @@ class MPS(BaseMPSExpectationValue):
             raise ValueError('MPS is not gauged, call `gauge_total_charge` first')
         label = '!' + MPS_TOTAL_CHARGE_LABEL
         B = self._B[-1]
-        return B.get_leg(label) if B.has_label(label) else None
+        return B.get_leg(label) if B.labels.has(label) else None
 
     def copy(self) -> MPS:
         """Returns a copy of `self`.
@@ -2581,15 +2646,18 @@ class MPS(BaseMPSExpectationValue):
 
         Specifically, it saves
         :attr:`sites`,
-        :attr:`chinfo`,
-        :attr:`unit_cell_width` (under these names),
+        :attr:`unit_cell_width`,
+        :attr:`segment_boundaries` (under these names),
         :attr:`_B` as ``"tensors"``,
         :attr:`_S` as ``"singular_values"``,
         :attr:`bc` as ``"boundary_condition"``,
-        :attr:`form` converted to a single array of shape (L, 2) as ``"canonical_form"``.
+        :attr:`form` converted to a single array of shape (L, 2) as ``"canonical_form"``,
+        where a non-canonical form ``None`` is represented as ``(nan, nan)``.
         Moreover, it saves :attr:`norm`, :attr:`L`, :attr:`grouped` and
         :attr:`_transfermatrix_keep` (as "transfermatrix_keep") as HDF5 attributes, as well as
         the maximum of :attr:`chi` under the name "max_bond_dimension".
+        The :attr:`symmetry`, :attr:`dtype`, :attr:`backend` and :attr:`device` are not saved
+        separately, but recovered from the sites and tensors when loading.
 
         Parameters
         ----------
@@ -2601,13 +2669,12 @@ class MPS(BaseMPSExpectationValue):
             The `name` of `h5gr` with a ``'/'`` in the end.
 
         """
-        # TODO
+        form = np.array([(np.nan, np.nan) if f is None else f for f in self.form], dtype=float)
         hdf5_saver.save(self.sites, subpath + 'sites')
         hdf5_saver.save(self._B, subpath + 'tensors')
         hdf5_saver.save(self._S, subpath + 'singular_values')
         hdf5_saver.save(self.bc, subpath + 'boundary_condition')
-        hdf5_saver.save(np.array(self.form), subpath + 'canonical_form')
-        hdf5_saver.save(self.chinfo, subpath + 'chinfo')
+        hdf5_saver.save(form, subpath + 'canonical_form')
         hdf5_saver.save(self.unit_cell_width, subpath + 'unit_cell_width')
         hdf5_saver.save(self.segment_boundaries, subpath + 'segment_boundaries')
         h5gr.attrs['norm'] = self.norm
@@ -2637,23 +2704,25 @@ class MPS(BaseMPSExpectationValue):
             Newly generated class instance containing the required data.
 
         """
-        # TODO
+        # TODO option to load from tenpy v1?
         obj = cls.__new__(cls)  # create class instance, no __init__() call
         hdf5_loader.memorize_load(h5gr, obj)
 
         obj.sites = hdf5_loader.load(subpath + 'sites')
+        obj.symmetry = obj.sites[0].symmetry
         obj._B = hdf5_loader.load(subpath + 'tensors')
         obj._S = hdf5_loader.load(subpath + 'singular_values')
         obj.bc = hdf5_loader.load(subpath + 'boundary_condition')
         form = hdf5_loader.load(subpath + 'canonical_form')
-        obj.form = [tuple(f) for f in form]
+        obj.form = [None if np.any(np.isnan(f)) else (float(f[0]), float(f[1])) for f in form]
         obj.norm = hdf5_loader.get_attr(h5gr, 'norm')
 
         obj.grouped = hdf5_loader.get_attr(h5gr, 'grouped')
         obj._transfermatrix_keep = hdf5_loader.get_attr(h5gr, 'transfermatrix_keep')
-        obj.chinfo = hdf5_loader.load(subpath + 'chinfo')
-        obj.unit_cell_width = hdf5_loader.load(subpath + 'unit_cell_width')
-        obj.dtype = np.result_type(*[B.dtype for B in obj._B])
+        obj.unit_cell_width = int(hdf5_loader.load(subpath + 'unit_cell_width'))
+        obj.dtype = lasy.Dtype.common(*[B.dtype for B in obj._B])
+        obj.backend = lasy.backends.get_same_backend(*obj._B, *obj.sites)
+        obj.device = lasy.tensors.get_same_device(*obj._B)
         if 'segment_boundaries' in h5gr:
             obj.segment_boundaries = hdf5_loader.load(subpath + 'segment_boundaries')
         else:
@@ -2697,13 +2766,13 @@ class MPS(BaseMPSExpectationValue):
         --------
         TODO
         Let's first consider a :class:`~tenpy.models.lattice.Ladder` composed of a
-        :class:`~tenpy.networks.site.SpinHalfSite` and a
-        :class:`~tenpy.networks.site.FermionSite`.
+        :class:`~lasyten.sites.SpinSite` and a
+        :class:`lasyten.sites.SpinlessFermionSite`.
 
         .. doctest : MPS.from_lat_product_state
 
-            >>> spin_half = tenpy.networks.site.SpinHalfSite()
-            >>> fermion = tenpy.networks.site.FermionSite()
+            >>> spin_half = lasyten.sites.SpinSite()
+            >>> fermion = lasyten.sites.SpinlessFermionSite()
             >>> ladder_i = tenpy.models.lattice.Ladder(2, [spin_half, fermion], bc_MPS='infinite')
 
         To initialize a state of up-spins on the spin sites and half-filled fermions, you can use:
@@ -2830,11 +2899,11 @@ class MPS(BaseMPSExpectationValue):
             >>> M = tenpy.models.tf_ising.TFIChain({'L': L})
             >>> p_state = ['up', 'down'] * (L // 2)  # repeats entries L/2 times
             >>> psi = MPS.from_product_state(
-            ...     M.lat.mps_sites(), p_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+            ...     M.lattice.mps_sites(), p_state, bc=M.lattice.bc_MPS, unit_cell_width=M.lattice.mps_unit_cell_width
             ... )
 
-        The meaning of the labels ``"up","down"`` is defined by the :class:`~tenpy.networks.Site`,
-        in this example a :class:`~tenpy.networks.site.SpinHalfSite`.
+        The meaning of the labels ``"up","down"`` is defined by the :class:`lasyten.Site`,
+        in this example a :class:`~lasyten.sites.SpinSite`.
 
         Extending the example, we can replace the spin in the center with one with arbitrary
         angles ``theta, phi`` in the bloch sphere.
@@ -2844,21 +2913,25 @@ class MPS(BaseMPSExpectationValue):
 
         .. doctest :: MPS.from_product_state
 
-            >>> spin = tenpy.networks.site.SpinHalfSite(conserve=None, sort_charge=False)
+            >>> spin = lasyten.sites.SpinSite(conserve=None)
             >>> p_state = ['up', 'down'] * (L // 2)  # repeats entries L/2 times
             >>> theta, phi = np.pi / 4, np.pi / 6
             >>> bloch_sphere_state = np.array([np.cos(theta / 2), np.exp(1.0j * phi) * np.sin(theta / 2)])
             >>> p_state[L // 2] = bloch_sphere_state  # replace one spin in center
             >>> psi = MPS.from_product_state(
-            ...     [spin] * L, p_state, bc=M.lat.bc_MPS, dtype=complex, unit_cell_width=M.lat.mps_unit_cell_width
+            ...     [spin] * L,
+            ...     p_state,
+            ...     bc=M.lattice.bc_MPS,
+            ...     dtype=complex,
+            ...     unit_cell_width=M.lattice.mps_unit_cell_width,
             ... )
 
         Note that for the more general :class:`~tenpy.models.spins.SpinChain`,
         the order of the two entries for the ``bloch_sphere_state`` would be *exactly the opposite*
         (when we keep the the north-pole of the bloch sphere being the up-state).
-        The reason is that the `SpinChain` uses the general :class:`~tenpy.networks.site.SpinSite`,
+        The reason is that the `SpinChain` uses the general :class:`lasyten.sites.SpinSite`,
         where the states are ordered ascending from ``'down'`` to ``'up'``.
-        The :class:`~tenpy.networks.site.SpinHalfSite` on the other hand uses the order
+        The :class:`~lasyten.sites.SpinSite` on the other hand uses the order
         ``'up', 'down'`` where that the Pauli matrices look as usual.
 
         """
@@ -3144,7 +3217,7 @@ class MPS(BaseMPSExpectationValue):
                     'of the desired bond dimension or a converged charge distribution.'
                 )
             for i in range(L):
-                virtual_spaces[i] = _truncate_virtual_space(virtual_spaces[i], chi=chis[i])
+                virtual_spaces[i] = _truncate_virtual_space(virtual_spaces[i], None, chi=chis[i])
 
         res = cls.from_desired_virtual_spaces(
             sites, virtual_spaces, bc, dtype, total_charge, norm, unit_cell_width, device, understood_shift_symmetry
@@ -3231,7 +3304,7 @@ class MPS(BaseMPSExpectationValue):
             domain = lasy.TensorProduct([virtual_spaces[i + 1]], sym)
             B = lasy.SymmetricTensor.from_random_uniform(codomain, domain, backend, labels, dtype=dtype, device=device)
             B, _ = lasy.qr(B, new_labels=['vR', 'vL'])
-            if B.has_label(MPS_TOTAL_CHARGE_LABEL):
+            if B.labels.has(MPS_TOTAL_CHARGE_LABEL):
                 B = lasy.move_leg(B, MPS_TOTAL_CHARGE_LABEL, domain_pos=0, bend_right=False)
                 B = lasy.HiddenLegTensor(B, [MPS_TOTAL_CHARGE_LABEL])
             Bs.append(B)
@@ -3348,6 +3421,7 @@ class MPS(BaseMPSExpectationValue):
             # TODO is it necessary to cast to np array here? Or do we have the necessary methods in the block_backends?
             # TODO here we use `not isinstance(B, np.ndarray)`, should be converted to `isinstance(B, lasy.Block)`?
             if not isinstance(B, np.ndarray):
+                # Owning copy with dtype conversion (to_ndarray is a zero-copy view).
                 B = backend.block_backend.to_numpy(B, lasy.Dtype.to_numpy_dtype(B.dtype))
             new_charges = []
             for i in range(B.shape[2]):
@@ -3473,7 +3547,7 @@ class MPS(BaseMPSExpectationValue):
         Bs = []
         for i, B in enumerate(Bflat):
             if isinstance(B, np.ndarray):
-                B = backend.block_backend.block_from_numpy(B, dtype=dtype, device=device)
+                B = backend.block_backend.block_from_ndarray(B, dtype=dtype, device=device)
             # convert to vL, p, vR
             # we allow the user to specify all 4 legs in case for a nontrivial total charge (iMPS)
             B_shape = backend.block_backend.get_shape(B)
@@ -3506,7 +3580,7 @@ class MPS(BaseMPSExpectationValue):
                 device=device,
                 understood_braiding=True,
             )
-            if B.has_label(MPS_TOTAL_CHARGE_LABEL):
+            if B.labels.has(MPS_TOTAL_CHARGE_LABEL):
                 B = lasy.HiddenLegTensor(B, [MPS_TOTAL_CHARGE_LABEL])
             Bs.append(B)
         if SVs is None:
@@ -3522,7 +3596,7 @@ class MPS(BaseMPSExpectationValue):
                 if isinstance(S, np.ndarray):
                     if S.ndim == 1:
                         S = np.diag(S)
-                    S = backend.block_backend.block_from_numpy(S, dtype=dtype.to_real, device=device)
+                    S = backend.block_backend.block_from_ndarray(S, dtype=dtype.to_real, device=device)
                 new_SVs.append(
                     lasy.DiagonalTensor.from_dense_block(
                         S, virtual_spaces[i % n_bonds], backend, ['vL', 'vR'], dtype=dtype.to_real, device=device
@@ -3608,17 +3682,17 @@ class MPS(BaseMPSExpectationValue):
         norm = 1.0 if normalize else lasy.norm(psi)
 
         new_domain = [f'{p}{L - 1}' for p in reversed(cls._p_label)]
-        if psi.has_label('vR'):
+        if psi.labels.has('vR'):
             new_domain = ['vR'] + new_domain
         psi = lasy.planar_permute_legs(psi, domain=new_domain)
 
-        if not psi.has_label('vL'):
+        if not psi.labels.has('vL'):
             if bc == 'segment':
                 raise ValueError("left leg must be specified for 'segment' boundary conditions")
             psi = lasy.add_trivial_leg(psi, codomain_pos=0, label='vL')
         elif bc == 'finite' and not psi.get_leg('vL').is_trivial:
             raise ValueError("non-trivial left leg for 'finite' bc!")
-        if not psi.has_label('vR'):
+        if not psi.labels.has('vR'):
             if bc == 'segment':
                 raise ValueError("right leg must be specified for 'segment' boundary conditions")
             psi = lasy.add_trivial_leg(psi, domain_pos=0, label='vR')
@@ -3632,7 +3706,7 @@ class MPS(BaseMPSExpectationValue):
             # bring S and B to default form
             S /= lasy.norm(S)
             B = lasy.planar_permute_legs(B, domain=['vR'])
-            B.relabel({f'{p}{i}': f'{p}' for p in cls._p_label})
+            B.labels.update({f'{p}{i}': f'{p}' for p in cls._p_label})
             B_list[i] = B
             S_list[i] = S
             if i > 1:
@@ -3641,7 +3715,7 @@ class MPS(BaseMPSExpectationValue):
                 new_domain = ['vR'] + [f'{p}{i - 1}' for p in reversed(cls._p_label)]
                 psi = lasy.planar_permute_legs(psi, domain=new_domain)
         # psi is now the first `B` in 'A' form
-        psi.relabel({f'{p}0': f'{p}' for p in cls._p_label})
+        psi.labels.update({f'{p}0': f'{p}' for p in cls._p_label})
         B_list[0] = psi
         B_form = ['A'] + ['B'] * (L - 1)
 
@@ -3684,7 +3758,7 @@ class MPS(BaseMPSExpectationValue):
 
         Parameters
         ----------
-        site : :class:`~tenpy.networks.site.Site`
+        site : :class:`~lasyten.Site`
             The `site` defining the local Hilbert space, taken uniformly for all sites.
         L : int
             The number of sites.
@@ -3764,6 +3838,13 @@ class MPS(BaseMPSExpectationValue):
         just initialize the corresponding local states and generate a corresponding `index_map`
         of the geometry of pairs, see the example below.
 
+        If the entries of an `index_map` are not sorted, the sites of the corresponding local MPS
+        are first permuted with :meth:`permute_sites`.
+        If the local MPS are interleaved (or wrap around the unit cell of an infinite MPS), the
+        physical legs of some local MPS cross the virtual bonds of others. This requires a
+        symmetry with symmetric braids (e.g. bosons or fermions, but not anyons).
+        Symmetries with a non-trivial shift under translations are not supported.
+
         Parameters
         ----------
         mps_covering : list of :class:`MPS`
@@ -3779,44 +3860,57 @@ class MPS(BaseMPSExpectationValue):
         Returns
         -------
         psi : :class:`MPS`
-            An MPS constructed as explained above.
+            An MPS constructed as explained above. It is *not* gauged, see :attr:`is_gauged`:
+            the total charge of each local MPS is kept on the site of its last tensor.
+            Call :meth:`gauge_total_charge` if required.
 
         Example
         -------
         Say you have three local MPS with ``mps_covering = [psi_A, psi_B, psi_C]``
         with `A`, `B` and `C` tensors on 3, 2, and 2 sites, respectively.
+        In the sketches below, lines that cross are not connected. The line with a gap passes
+        behind the continuous line.
         Using the ``index_map=[[0, 1, 3], [2, 5], [4, 6]]`` would combine them as::
 
-            |    A0-A1----A2 C0----C1
-            |    |  |     |  |     |
-            |    |  |  B0-|--|--B1 |
-            |    |  |  |  |  |  |  |
-            |    0  1  2  3  4  5  6
+            |    ┏━━━━┓  ┏━━━━┓          ┏━━━━┓  ┏━━━━┓          ┏━━━━┓
+            |    ┃ A0 ┠──┨ A1 ┠──────────┨ A2 ┃  ┃ C0 ┠──────────┨ C1 ┃
+            |    ┗━┯━━┛  ┗━┯━━┛          ┗━┯━━┛  ┗━┯━━┛          ┗━┯━━┛
+            |      │       │               │       │               │
+            |      │       │     ┏━━━━┓    │       │     ┏━━━━┓    │
+            |      │       │     ┃ B0 ┠─── │ ───── │ ────┨ B1 ┃    │
+            |      │       │     ┗━┯━━┛    │       │     ┗━┯━━┛    │
+            |      │       │       │       │       │       │       │
+            |      0       1       2       3       4       5       6
 
         Using the ``index_map=[[1, 2, 0], [3, 5], [6, 4]]`` would rather combine them as::
 
-            |    A2----.     C1----C0
-            |    |     |     |     |
-            |    |  A0-A1 B0-|--B1 |
-            |    |  |  |  |  |  |  |
-            |    0  1  2  3  4  5  6
+            |    ┏━━━━┓                          ┏━━━━┓          ┏━━━━┓
+            |    ┃ A2 ┠────────────┐             ┃ C1 ┠──────────┨ C0 ┃
+            |    ┗━┯━━┛            │             ┗━┯━━┛          ┗━┯━━┛
+            |      │               │               │               │
+            |      │     ┏━━━━┓  ┏━┷━━┓  ┏━━━━┓    │     ┏━━━━┓    │
+            |      │     ┃ A0 ┠──┨ A1 ┃  ┃ B0 ┠─── │ ────┨ B1 ┃    │
+            |      │     ┗━┯━━┛  ┗━┯━━┛  ┗━┯━━┛    │     ┗━┯━━┛    │
+            |      │       │       │       │       │       │       │
+            |      0       1       2       3       4       5       6
 
         As another example, let's generalize :meth:`from_singlets` to "spin-full" fermions
-        represented by the (spin-less!) :class:`~tenpy.networks.site.FermionSite` with an extra
+        represented by the (spin-less!) :class:`lasyten.sites.SpinlessFermionSite` with an extra
         index for the spin, here `u=0,1` on a 2D square lattice.
 
         .. testsetup :: product_mps_covering
 
+            import lasyten as lasy
             from tenpy.networks.mps import MPS
-            from tenpy.networks.site import FermionSite
+            from lasyten.sites import SpinlessFermionSite
             from tenpy.models.lattice import Square, MultiSpeciesLattice
 
         .. doctest :: product_mps_covering
 
-            >>> ferm = FermionSite(conserve='N')
+            >>> ferm = SpinlessFermionSite(conserve='N')
             >>> lat = MultiSpeciesLattice(Square(4, 2, None), [ferm] * 2, ['up', 'down'])
-            >>> ferm_up_down = MPS.from_product_state([ferm] * 4, ['full', 'empty', 'empty', 'full'], unit_cell_width=4)
-            >>> ferm_down_up = MPS.from_product_state([ferm] * 4, ['empty', 'full', 'full', 'empty'], unit_cell_width=4)
+            >>> ferm_up_down = MPS.from_product_state([ferm] * 4, ['1', '0', '0', '1'], unit_cell_width=4)
+            >>> ferm_down_up = MPS.from_product_state([ferm] * 4, ['0', '1', '1', '0'], unit_cell_width=4)
             >>> ferm_singlet = ferm_up_down.add(ferm_down_up, 0.5**0.5, -(0.5**0.5))
             >>> index_map = [
             ...     [(x, y, 0), (x, y, 1), (x + 1, y, 0), (x + 1, y, 1)] for (x, y) in [(0, 0), (0, 1), (2, 0), (2, 1)]
@@ -3836,67 +3930,72 @@ class MPS(BaseMPSExpectationValue):
         sites = [None] * L
         for local_psi, ind_map in zip(mps_covering, index_map):
             assert local_psi.bc == 'finite'
+            assert local_psi.L == len(ind_map)
             for site, i in zip(local_psi.sites, ind_map):
                 if sites[i % L] is not None:
                     raise ValueError(f'duplicate index {i:d} for {L:d}-site index_map\n{index_map!r}')
                 sites[i % L] = site
-        chinfo = sites[0].leg.chinfo
+        symmetry = sites[0].symmetry
         for site in sites:
-            assert site.leg.chinfo == chinfo, 'incompatible types of charges'
+            assert site.symmetry == symmetry, 'incompatible symmetries'
+        if not symmetry.trivial_shift:
+            raise ValueError('MPS.from_product_mps_covering does not support symmetries with non-trivial shift.')
         # first extract tensors from local mps
         # i = index in new psi to be constructed, j = index in local_psi
         B_parts = [[] for _ in range(L)]
         SR_parts = [[] for _ in range(L)]
-        for local_psi, ind_map in zip(mps_covering, index_map):
+        charge_label = '!' + MPS_TOTAL_CHARGE_LABEL
+        for k, (local_psi, ind_map) in enumerate(zip(mps_covering, index_map)):
             local_psi = local_psi.copy()
             argsort = np.argsort(ind_map)
             if not np.all(argsort == np.arange(len(argsort))):
                 local_psi.permute_sites(argsort)
                 ind_map = [ind_map[i] for i in argsort]
             local_psi.convert_form('B')
-            triv_leg = npc.LegCharge(chinfo, [0, 1], [chinfo.make_valid()])  # trivial leg
-            local_psi.gauge_total_charge(vL_leg=triv_leg, vR_leg=triv_leg.conj())
+            local_psi.gauge_total_charge()  # only charge leg on the last tensor, trivial outer bonds
             for j, i in enumerate(ind_map):
                 B = local_psi.get_B(j, 'B')
+                if B.labels.has(charge_label):
+                    # unique label for each local MPS; still recognized by `_charge_leg_labels`
+                    B.labels.update({charge_label: f'{charge_label}_{k:d}'})
                 B_parts[i % L].append(B)
-                SR = local_psi.get_SR(j)
-                SR_parts[i % L].append(SR)
                 if j + 1 < len(ind_map):
+                    SR = local_psi.get_SR(j).as_SymmetricTensor()
+                    SR_parts[i % L].append(SR)
                     next_i = ind_map[j + 1]
-                    vR_leg = B.get_leg('vR')
-                    Triv = npc.diag(1.0, vR_leg.conj(), labels=['vL', 'vR'])
+                    Triv = lasy.DiagonalTensor.from_eye(
+                        leg=B.get_leg('vR').dual,
+                        backend=B.backend,
+                        labels=['vL', 'vR'],
+                        dtype=B.dtype,
+                        device=B.device,
+                    ).as_SymmetricTensor()
                     for i2 in range(i + 1, next_i):
                         B_parts[i2 % L].append(Triv)
                         SR_parts[i2 % L].append(SR)
         # combine B_parts and SR_parts to big tensors Bs and SVs
-        Bs = []
+        Bs = [_combine_virtual_legs(B_p) for B_p in B_parts]
         SVs = [None]
-        for B_p, S_p in zip(B_parts, SR_parts):
-            B = B_p[0]
-            SR = S_p[0]
-            for B2, SR2 in zip(B_p[1:], S_p[1:]):
-                B2 = B2.replace_labels(['vL', 'vR'], ['vL2', 'vR2'])
-                B = npc.outer(B, B2).combine_legs([['vL', 'vL2'], ['vR', 'vR2']], qconj=[+1, -1])
-                B.ireplace_labels(['(vL.vL2)', '(vR.vR2)'], ['vL', 'vR'])
-                pipeR = B.get_leg('vR')
-                d, d2 = (len(SR), len(SR2))
-                inds = np.indices([d, d2]).transpose([1, 2, 0]).reshape([d * d2, 2])
-                SR = SR[inds[:, 0]] * SR2[inds[:, 1]]  # = np.outer(SR, SR2).flatten()
-                perm = [pipeR.map_incoming_flat(ind) for ind in inds]
-                SR = SR[inverse_permutation(perm)]
-                B.legs[B.get_leg_index('vR')] = pipeR.to_LegCharge()
-                B.legs[B.get_leg_index('vL')] = B.get_leg('vL').to_LegCharge()
-            Bs.append(B)
+        for B, SR_p in zip(Bs, SR_parts):
+            if len(SR_p) == 0:  # no local MPS crosses this bond
+                SR = lasy.DiagonalTensor.from_eye(
+                    leg=lasy.ElementarySpace.from_trivial_sector(symmetry=symmetry),
+                    backend=B.backend,
+                    labels=['vL', 'vR'],
+                    dtype=B.dtype.to_real,
+                    device=B.device,
+                )
+            else:
+                SR = lasy.DiagonalTensor.from_tensor(_combine_virtual_legs(SR_p))
             SVs.append(SR)
         SVs[0] = SVs[-1]
-        if bc == 'finite':
-            SVs = SVs[:-1]
         return cls(
             sites,
             Bs,
             SVs,
             bc=bc,
             form='B',
+            norm=float(np.prod([local_psi.norm for local_psi in mps_covering])),
             unit_cell_width=unit_cell_width,
             understood_shift_symmetry=understood_shift_symmetry,
         )
@@ -4135,7 +4234,7 @@ class MPS(BaseMPSExpectationValue):
             ``None`` stands for non-canonical form.
 
         """
-        assert B.labels_are('vL', 'p', 'vR', planar=True)
+        assert B.labels.are('vL', 'p', 'vR', planar=True)
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
         B = self.shift_Tensor_unit_cells(B, -num_unit_cells)
         self.form[i_in_unit_cell] = self._to_valid_form(form)
@@ -4148,43 +4247,63 @@ class MPS(BaseMPSExpectationValue):
         theta: lasy.Tensor,
         trunc_par: dict | None = None,
         update_norm: bool = False,
-        charge_leg_right: bool = True,
-    ) -> float | None:
+        charge_leg_right: bool | None = None,
+    ) -> TruncationError | None:
         """SVD a two-site wave function `theta` and save it in `self`.
+
+        The new tensors are stored in form ``'A'`` on site `i` and ``'B'`` on site `i + 1`, the singular
+        values on the bond in between.
 
         Parameters
         ----------
         i : int
             `theta` is the wave function on sites `i`, `i + 1`.
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            The two-site wave function with labels ``'vL', 'p0', 'p1', 'vR'``,
-            ready for svd.
+        theta : :class:`~lasyten.Tensor`
+            The two-site wave function with labels ``'vL', 'p0', 'p1', 'vR'``, as obtained from
+            :meth:`get_theta`. It may be a :class:`~lasyten.HiddenLegTensor` with hidden total charge
+            legs (see :meth:`gauge_total_charge`), which need to be (cyclically) between ``'vR'`` and
+            ``'vL'``. The arrangement of the legs between codomain and domain does not matter.
         trunc_par : None | dict
             Parameters for truncation, see :cfg:config:`truncation`.
             If ``None``, no truncation is done.
         update_norm : bool
             If ``True``, multiply the norm of `theta` into :attr:`norm`.
-        charge_leg_right : bool
-            For a theta that is a :class:`~lasyten.ChargedTensor`, determines if the charge leg
-            should be part of the tensor at site `i + 1` (`True`) or at site `i` (`False`).
+        charge_leg_right : bool | None
+            Determines on which tensor the hidden total charge legs of `theta` (if any) end up:
+            on the tensor at site `i + 1` (``True``) or at site `i` (``False``).
+            ``None`` keeps a gauged MPS gauged (see :attr:`is_gauged`), i.e., the charge legs move
+            towards the last tensor of the (unit cell of the) MPS: they go to site `i + 1`, except for
+            the bond crossing the unit cell boundary of an infinite MPS, where they stay on site `i`.
+            The virtual leg on the bond between the sites depends on this choice, since its charges
+            are shifted by the total charge. For a total charge leg with ``dim == 1``, the singular
+            values do not.
+
+        Returns
+        -------
+        err : :class:`~tenpy.TruncationError` | None
+            The truncation error introduced, ``None`` if `trunc_par` is ``None``.
 
         """
+        if charge_leg_right is None:
+            charge_leg_right = self.finite or self._to_valid_site_index(i) != self.L - 1
         self.dtype = lasy.Dtype.common(self.dtype, theta.dtype)
-        theta = lasy.planar_permute_legs(theta, codomain=['vL', 'p0'])
+        theta = _permute_theta_for_svd(theta, charge_leg_right)
         if trunc_par is None:
-            U, S, Vh = lasy.svd(theta, new_labels=['vR', 'vL'], charge_leg_top=charge_leg_right)
+            U, S, Vh = lasy.svd(theta, new_labels=['vR', 'vL'])
             renorm = lasy.norm(S)
             S /= renorm
             err = None
             if update_norm:
                 self.norm *= renorm
         else:
-            U, S, Vh, err, renormalize = svd_theta(theta, trunc_par)
+            U, S, Vh, err, renormalize = svd_theta(theta, trunc_par, new_labels=['vR', 'vL'])
             if update_norm:
                 self.norm *= renormalize
         Vh = lasy.planar_permute_legs(Vh, codomain=['vL', 'p1'])
-        self.set_B(i, U.relabel({'p0': 'p'}), form='A')
-        self.set_B(i + 1, Vh.relabel({'p1': 'p'}), form='B')
+        U.labels.update({'p0': 'p'})
+        Vh.labels.update({'p1': 'p'})
+        self.set_B(i, U, form='A')
+        self.set_B(i + 1, Vh, form='B')
         self.set_SR(i, S)
         return err
 
@@ -4271,7 +4390,7 @@ class MPS(BaseMPSExpectationValue):
             new_fR = None if k + 1 < n else formR  # right form as stored, except for last B
             B = self.get_B(i + k, (1.0 - old_fR, new_fR), False, cutoff, str(k))
             _, old_fR = self.form[self._to_valid_site_index(i + k)]
-            theta = lasy.tensors.partial_compose(B, theta, 'vL')
+            theta = lasy.tensors.partial_compose(B, _hidden_legs_to_codomain(theta), 'vL')
         return theta
 
     def convert_form(self, new_form='B'):
@@ -4297,7 +4416,7 @@ class MPS(BaseMPSExpectationValue):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
         For tensors with hidden charge legs, the new charge labels are `old_label + 'i'`, with `i`
-        the index of the unit cell (starting from 0).
+        the index of the unit cell (starting from 0). The resulting MPS is not gauged.
 
         Parameters
         ----------
@@ -4318,7 +4437,7 @@ class MPS(BaseMPSExpectationValue):
             for i in range(factor):
                 # TODO do we want to keep the condition MPS_TOTAL_CHARGE_LABEL in l?
                 # We would not want to relabel the (hidden) q leg for purification MPS
-                self._B[i * self.L + idx].relabel({l: l + str(i) for l in labels if MPS_TOTAL_CHARGE_LABEL in l})
+                self._B[i * self.L + idx].labels.update({l: l + str(i) for l in labels if MPS_TOTAL_CHARGE_LABEL in l})
         self._S = [self.get_SL(j) for j in range(0, factor * self.L)]
         if self.finite:
             self._S.append(self.get_SR(factor * self.L - 1))
@@ -4333,6 +4452,7 @@ class MPS(BaseMPSExpectationValue):
         Suppose we have a unit cell with tensors ``[A, B, C, D]`` (repeated on both sites).
         With ``shift = 1``, the new unit cell will be ``[D, A, B, C]``,
         whereas ``shift = -1`` will give ``[B, C, D, A]``.
+        The resulting MPS is not gauged.
 
         Parameters
         ----------
@@ -4350,14 +4470,20 @@ class MPS(BaseMPSExpectationValue):
         self._B = [self.get_B(i, form=None) for i in inds]
         self._S = [self.get_SL(i) for i in inds]
 
-    def overlap_translate_finite(self, psi: MPS, shift: int = 1) -> float | complex:
+    def overlap_translate_finite(
+        self, psi: MPS, shift: int = 1, overbraid: bool | None = None
+    ) -> lasy.BlockBackend.Scalar:
         r"""Contract ``<self|T^N|psi>`` for translation `T` with finite, periodic boundaries.
 
         Looks like this for ``shift=1``, with the open virtual legs contracted in the end::
 
-           --B[L-1] Th[0] -- B[1] -- B[2] -- ..... B[L-2] --
-              |      |       |       |             |
-            Th*[0] --B*[1] --B*[2] --B*[3] --..... B*[L-1]
+             ┏━━━━━━━━┓  ┏━━━━━━━┓  ┏━━━━━━━┓  ┏━━━━━━━┓     ┏━━━━━━━━━┓
+           ──┨ B[L-1] ┃  ┃ Th[0] ┠──┨ B[1]  ┠──┨ B[2]  ┠─...─┨ B[L-2]  ┠──
+             ┗━━━━┯━━━┛  ┗━━━┯━━━┛  ┗━━━┯━━━┛  ┗━━━┯━━━┛     ┗━━━━┯━━━━┛
+                  │          │          │          │              │
+             ┏━━━━┷━━━┓  ┏━━━┷━━━┓  ┏━━━┷━━━┓  ┏━━━┷━━━┓     ┏━━━━┷━━━━┓
+             ┃ Th*[0] ┠──┨ B*[1] ┠──┨ B*[2] ┠──┨ B*[3] ┠─...─┨ B*[L-1] ┃
+             ┗━━━━━━━━┛  ┗━━━━━━━┛  ┗━━━━━━━┛  ┗━━━━━━━┛     ┗━━━━━━━━━┛
 
 
         An alternative to calling this method would be to call :meth:`permute_sites` followed by
@@ -4373,10 +4499,16 @@ class MPS(BaseMPSExpectationValue):
         shift : int
             Translation by how many sites. Note that for large shift, the contraction is
             :math:`O(\chi^4)` compared to DMRG etc scaling as :math:`O(\chi^3)`.
+        overbraid : bool | None
+            The contraction is non-planar: the virtual legs closing the periodic boundaries are
+            braided through the physical legs. Whether they braid over (``True``) or under
+            (``False``) the physical legs of the first `shift` sites; the braids across the
+            remaining sites have the opposite chirality.
+            ``None`` is only allowed for symmetric braids, where the chirality does not matter.
 
         Returns
         -------
-        self_Tn_psi : float or complex
+        self_Tn_psi : :class:`~lasyten.BlockBackend.Scalar`
             Contraction of ``<self|T^N|psi>``.
 
         See Also
@@ -4386,149 +4518,243 @@ class MPS(BaseMPSExpectationValue):
         roll_mps_unit_cell : Effectively applies ``T^shift`` on infinite MPS.
 
         """
-        # TODO not sure how to generalize
+        # this is a non-planar contraction: we need to braid the left leg connecting Th[0] and Th*[0] through
+        # shift physical legs, the leg connecting B[L - shift] and B[L - shift -1] and the leg connecting
+        # B[L - 1] and B*[L - 1] are braided through L - shift physical legs
+        # The braids can however be expressed in terms of planar contractions by using site.identity_tensor
+        if overbraid is None:
+            if not self.symmetry.has_symmetric_braid:
+                raise ValueError('overbraid=None is only allowed for symmetric braids; specify True or False.')
+            overbraid = True
         assert self.bc == psi.bc == 'finite'
         L = self.L
         assert L == psi.L
         if shift < 0:
             shift = shift + self.L
         assert 0 < shift < self.L
+        if _different_total_charges(self, psi):
+            # the hidden total charge legs would not be contracted
+            zero = self.backend.block_backend.block_from_ndarray(
+                np.asarray(0.0), dtype=lasy.Dtype.common(self.dtype, psi.dtype), device=self.device
+            )
+            return lasy.block_backends.Scalar(zero)
         forms = ['Th'] + ['B'] * (L - 1)
         inds = np.roll(np.arange(self.L), shift)  # consistent with `roll_mps_unit_cell`!
         B_bra = self.get_B(0, forms[0])
         B_ket = psi.get_B(inds[0], forms[inds[0]])
-        C = npc.tensordot(B_bra.conj(), B_ket, axes=[self._get_p_label('*'), self._get_p_label('')])
+        braid_leg = B_bra.get_leg('vL')
+        W = self.sites[0].identity_tensor(w=braid_leg, overbraid=overbraid)
+        C = lasy.planar_contraction(B_bra.hc, W, ['vL*', 'p*'], ['wL', 'p'])
+        C = lasy.planar_contraction(C, B_ket, self._get_p_label('*'), self._get_p_label(''))
         for i in range(1, L):
-            j = inds[i]
-            B_ket = psi.get_B(j, forms[j])
-            if i != shift:
-                C = npc.tensordot(C, B_ket, axes=['vR', 'vL'])
-            else:
+            if i == shift:
                 # here, B_ket is the Th[0] - handle the open left/rightmost, trivial virtual legs
-                C.ireplace_label('vR', 'openR')
-                C = npc.tensordot(C, B_ket, axes=['vL*', 'vL'])  # contract trivial left legs
-            B_bra = self.get_B(i, forms[i])
-            C = npc.tensordot(C, B_bra.conj(), axes=[['vR*'] + self._get_p_label(''), ['vL*'] + self._get_p_label('*')])
-        return npc.trace(npc.trace(C, 'vR', 'vL'), 'openR', 'vR*')
+                # exchange the current wR (contract with Th0) with current vL and vR, which are
+                # now braided with the opposite overbraid across the remaining physical legs
+                # (pipe them to use the same contractions as before)
+                C = lasy.planar_permute_legs(C, codomain=['vR*'], domain=['vL', 'vR', 'wR'])
+                C = lasy.planar.planar_combine_legs(C, ['vR', 'vL'])
+                # wR is braided with the pipe; hidden legs (total charge) get levels automatically
+                levels = {'wR': 1, '(vR.vL)': 0} if overbraid else {'wR': 0, '(vR.vL)': 1}
+                C = lasy.move_leg(C, 'wR', domain_pos=0, levels=levels)
+                C.labels.update({'(vR.vL)': 'wR', 'wR': 'vR'})
+                braid_leg = C.get_leg('wR').dual
+                overbraid = not overbraid
 
-    def enlarge_chi(self, extra_legs, random_fct=np.random.normal):
-        """Artificially enlarge the bond dimension by the specified extra legs/charges. In place.
+            j = inds[i]
+            B_bra = self.get_B(i, forms[i])
+            B_ket = psi.get_B(j, forms[j])
+            W = self.sites[i].identity_tensor(w=braid_leg, overbraid=overbraid)
+            if i == L - 1:
+                W.labels.update({'wR': '(vRp.vLp)'})
+                W = lasy.split_legs(W, '(vRp.vLp)')
+                C = lasy.planar_contraction(C, B_bra.hc, ['vR*'], ['vL*'])
+                C = lasy.planar_contraction(C, W, ['wR', 'p*', 'vR*'], ['wL', 'p', 'vRp'])
+                C = lasy.planar_contraction(
+                    C, B_ket, ['vR', 'vLp'] + self._get_p_label('*'), ['vL', 'vR'] + self._get_p_label('')
+                )
+            else:
+                C = lasy.planar_contraction(C, B_bra.hc, ['vR*'], ['vL*'])
+                C = lasy.planar_contraction(C, W, ['wR', 'p*'], ['wL', 'p'])
+                C = lasy.planar_contraction(C, B_ket, ['vR'] + self._get_p_label('*'), ['vL'] + self._get_p_label(''))
+        return C.real_if_close()
+
+    def enlarge_chi(self, extra_legs):
+        """Artificially enlarge the bond dimension by the specified extra bond spaces. In place.
 
         First converts the MPS in B form.
-        This function then fills up the 'vR' leg with zeros, and then groups physical and vR legs
-        to fill up the 'vL' leg with orthogonal rows. In than way, we get an MPS with larger bond
-        dimension, still in right-canonical form (assuming no "overcomplete" charge block),
-        representing the *same* state, with the additional singular values being exactly zero.
+        This function then fills up the ``'vR'`` leg of the `B` tensors with zeros, and adds extra
+        rows on the ``'vL'`` leg, which are random, but orthonormal to each other and to the
+        existing rows. In that way, we get an MPS with larger bond dimension, still in
+        right-canonical form, representing the *same* state, with the additional
+        singular values being exactly zero.
 
         .. note ::
-            You should probably **choose** the extra charges to be sensible,
+            You should probably **choose** the extra sectors to be sensible,
             to expand into the space you are interested in, and not just into a random direction!
+
+        .. note ::
+            The random numbers are drawn from the random number generator of the backend of the
+            tensors (for the numpy backend, the global state of ``np.random``).
 
         Parameters
         ----------
-        extra_legs : list of {None, :class:`~tenpy.linalg.charges.LegCharge`, int}
-            The extra charges to be added on the virtual legs, with qconj=+1.
-            Length `L` +1 for finite, length `L` for infinite, with entry `i` left of site `i`.
-            If an `int` is given, fill up with a single block of charges like the Schmidt state
-            with highest weight. Note that this might force the resulting state to not be in
-            strict "right-canonical" B form if that charge block becomes overcomplete.
-        random_fct :
-            Function generating random entries to choose extra orthogonal rows in the B tensors.
-            Should accept a `size` keyword for the shape, and return numpy arrays.
+        extra_legs : list of {None, :class:`~lasyten.ElementarySpace`, int}
+            The extra states to be added on the virtual bonds.
+            Length `L` + 1 for finite, length `L` for infinite, with entry `i` left of site `i`.
+            ``None`` (or ``0``) means no extra states on that bond.
+            An :class:`~lasyten.ElementarySpace` has to have the same symmetry and the same
+            duality (``is_dual``) as the virtual space of the corresponding bond, i.e., as the
+            ``'vL'`` leg of the `B` tensor right of the bond. It is *added* to the existing bond space.
+            If an `int` `n` is given, add `n` times the sector of the Schmidt state with the largest
+            singular value, i.e., `n` is a *multiplicity* and not a dimension: e.g., for SU(2), ``1``
+            adds a multiplet of that spin, which is more than one state.
+            For a finite MPS, the first and last entry (the trivial boundary bonds) must be ``None``.
 
-        Returns
-        -------
-        permutations: list of 1D array | None
-            Permutation performed on each virtual leg, such that
-            ``new_S = concatenate(old_S, zeros)[perm]``.
+        Raises
+        ------
+        ValueError
+            If `extra_legs` has the wrong length or has entries on the boundary bonds of a finite MPS.
+            If the new rows do not fit into the space of the ``(p, vR)`` legs, i.e., if there is
+            no room left in the sector to add orthogonal rows (the extra block is "overcomplete").
 
         """
-        # TODO
-        self.convert_form('B')
         if len(extra_legs) != self.L + (1 if self.finite else 0):
             raise ValueError('wrong len of extra_legs.')
-        perms_L = [None] * (self.L + 1)
-        perms_R = [None] * (self.L + 1)
-        extra_legs = list(extra_legs)
-        for i, add_chi in enumerate(extra_legs):
-            if not isinstance(add_chi, int):
-                continue
-            # convert chi to extra LegCharge
-            if add_chi == 0:
-                extra_legs[i] = None
-            elif self.chinfo.qnumber == 0:
-                extra_legs[i] = npc.LegCharge.from_trivial(add_chi, self.chinfo)
-            else:
-                max_weight = np.argmax(self._S[i])
-                if i < self.L:
-                    leg = self._B[i].get_leg('vL')
-                else:
-                    leg = self._B[-1].get_leg('vR')
-                extra_charge = leg.get_charge(leg.get_qindex(max_weight)[0])[np.newaxis, :]
-                extra_legs[i] = npc.LegCharge.from_qind(self.chinfo, [0, add_chi], extra_charge)
-        if not self.finite:
-            extra_legs.append(extra_legs[0])  # ensure length L+1
-        for i, B in enumerate(self._B):
-            extra_leg_L = extra_legs[i]
-            extra_leg_R = extra_legs[i + 1]
-            B.itranspose(self._B_labels)
-            if extra_leg_R is not None:
-                # add extra zero columns on the vR leg and sort by charges
-                extra_leg_R = extra_leg_R.conj()
-                B2 = B.extend('vR', extra_leg_R)
-                sort = [False] * (len(self._B_labels) - 1) + [True]
-                (_, _, perm_R), B2 = B2.sort_legcharge(sort, sort)
-                perms_R[i + 1] = perm_R
-            else:
-                B2 = B
-            B2 = B2.combine_legs(self._p_label + ['vR'], qconj=-1, new_axes=1)
-            if extra_leg_L is not None:
-                p_vR = B2.legs[1]
-                # get a new extra block of random entries for the vL leg
-                extra_B = npc.Array.from_func(
-                    random_fct, [extra_leg_L, p_vR], dtype=B2.dtype, qtotal=B2.qtotal, shape_kw='size'
+        if self.finite and (extra_legs[0] not in (None, 0) or extra_legs[-1] not in (None, 0)):
+            raise ValueError('extra_legs must be None on the boundary bonds of a finite MPS.')
+        if any(isinstance(B, lasy.HiddenLegTensor) for B in self._B):
+            raise NotImplementedError('enlarge_chi is not implemented for a hidden leg (non-trivial total charge)')
+        self.convert_form('B')
+        num_bonds = len(extra_legs)
+        extra_spaces = []
+        for j, extra in enumerate(extra_legs):
+            V = self._B[j].get_leg('vL') if j < self.L else self._B[-1].get_leg('vR').dual
+            if extra is None or (isinstance(extra, (int, np.integer)) and extra == 0):
+                extra_spaces.append(None)
+            elif isinstance(extra, (int, np.integer)):
+                # sector of the largest singular value
+                sector = V.sectors_of_basis[np.argmax(self._S[j].diagonal_as_numpy())]
+                extra_spaces.append(
+                    lasy.ElementarySpace.from_sector_decomposition(
+                        V.symmetry, sector[None, :], multiplicities=[extra], is_dual=V.is_dual
+                    )
                 )
-                # orthogonalize rows of extra_B against rows of B2
-                extra_B = extra_B - npc.tensordot(npc.tensordot(extra_B, B2.conj(), [1, 1]), B2, [1, 0])
-                if npc.norm(extra_B) < 1e-12:
-                    logger.warning(f'Failed to orthogonalize extra_B against B2. norm(extra_B) = {npc.norm(extra_B)}.')
-                # orthogonalize rows within extra_B by QR
-                extra_B, extra_R = npc.qr(extra_B.itranspose([1, 0]), inner_qconj=-1, qtotal_Q=extra_B.qtotal)
-                try:
-                    extra_B.legs[1].test_equal(extra_R.legs[1])
-                except ValueError as e:
-                    print(extra_R)
-                    raise ValueError('QR for Gram-Schmidt messed up charges. Incompatible charges?') from e
-                extra_B.itranspose([1, 0])
-                # append extra block in vL leg of B2 and sort by charges
-                new_B = npc.concatenate([B2, extra_B], axis='vL')
-                (perm_L, _), new_B = new_B.sort_legcharge([True, False], [True, False])
-                perms_L[i] = perm_L
             else:
-                new_B = B2
-            new_B = new_B.split_legs().itranspose(self._B_labels)
-            self._B[i] = new_B
-        if self.finite:
-            # fix undefined permutations at boundaries
-            perms_R[0] = perms_L[0]
-            perms_L[-1] = perms_R[-1]
-        else:
-            perms_L[-1] = perms_L[0]
-            perms_R[0] = perms_R[-1]
-        for perm_L, perm_R in zip(perms_L, perms_R):
-            assert (perm_L is not None) == (perm_R is not None)
-            if perm_L is not None:
-                assert np.all(perm_L == perm_R)
-        # append zeros to singular values
-        for i, S in enumerate(self._S):
-            leg = extra_legs[i]
-            if leg is not None:
-                new_S = np.concatenate([S, np.zeros(leg.ind_len)])
-                assert perms_L[i] is not None
-                new_S = new_S[perms_L[i]]
-                self._S[i] = new_S
+                if extra.symmetry != V.symmetry or extra.is_dual != V.is_dual:
+                    raise ValueError(f'extra_legs[{j}] needs the same symmetry and duality as the bond space.')
+                extra_spaces.append(extra)
+        # the new bond spaces, as direct sum (old, extra).
+        new_spaces = [
+            None
+            if X is None
+            else lasy.DirectSumSpace(
+                [self._B[j].get_leg('vL') if j < self.L else self._B[-1].get_leg('vR').dual, X],
+                is_dual=X.is_dual,
+            )
+            for j, X in enumerate(extra_spaces)
+        ]
+        if not self.finite:
+            extra_spaces.append(extra_spaces[0])  # ensure length L + 1
+            new_spaces.append(new_spaces[0])
+        # note: setting `labels` acts in place, so only apply it to new tensors.
+        # We only assign to `self._B` and `self._S` at the end, such that `self` is unchanged if we raise.
+        new_Bs, new_Ss = [], list(self._S)
+
+        def to_plain(j, dtype, backend, device):
+            # identification of the bond space `new_spaces[j]` with a plain ElementarySpace, such that we do not
+            # leave the (nested) direct sum spaces on the legs of the MPS. Legs ``'s'`` (plain) and ``'l'``.
+            P = new_spaces[j].projection_onto_summands([0, 1], backend=backend, device=device)
+            P = P.as_SymmetricTensor(dtype=dtype)
+            P.labels = ['s', 'l']
+            return P
+
+        for i, B in enumerate(self._B):
+            X_L, X_R = extra_spaces[i], extra_spaces[i + 1]
+            backend, device, dtype = B.backend, B.device, B.dtype
+            if X_R is not None:
+                # fill up the vR leg with zeros: compose with the projection onto the old subspace.
+                proj = new_spaces[i + 1].projection_onto_summand(0, backend=backend, device=device)
+                proj = proj.as_SymmetricTensor(dtype=dtype)
+                proj.labels = ['s', 'l']
+                B = lasy.planar_contraction(B, proj, 'vR', 's', relabel2={'l': 'vR'})
+            if X_L is not None:
+                # B with the legs arranged as a matrix (vL) x (p, vR) with orthonormal rows
+                T = lasy.planar_permute_legs(B, codomain=['vL'], domain=['vR'] + self._p_label[::-1])
+                T_labels = T.labels.as_list()
+                labels = ['xL'] + T_labels[1:]
+                E = lasy.SymmetricTensor.from_random_normal(
+                    lasy.TensorProduct([X_L], T.symmetry),
+                    T.domain,
+                    backend=backend,
+                    labels=labels,
+                    dtype=dtype,
+                    device=device,
+                )
+                # orthogonalize rows of E against the rows of T, then rows of E among each other by QR
+                E = E - lasy.compose(lasy.compose(E, T.hc), T)
+                Q, _ = lasy.qr(E.hc, new_labels=['xL*', 'xL'])
+                E = Q.hc
+                E.labels = labels
+                if E.get_leg('xL') != X_L or lasy.norm(lasy.compose(E, T.hc)) > 1e-8:
+                    raise ValueError(
+                        'Failed to add orthogonal rows on the vL leg: not enough room, i.e. the '
+                        f'extra states on bond {i} are overcomplete.'
+                    )
+                incl_old = new_spaces[i].inclusion_of_summand(0, backend=backend, device=device)
+                incl_old = incl_old.as_SymmetricTensor(dtype=dtype)
+                incl_old.labels = ['vL', 'x']
+                incl_extra = new_spaces[i].inclusion_of_summand(1, backend=backend, device=device)
+                incl_extra = incl_extra.as_SymmetricTensor(dtype=dtype)
+                incl_extra.labels = ['vL', 'x']
+                T_x = T.copy()
+                T_x.labels = ['x'] + T_labels[1:]
+                E_x = E.copy()
+                E_x.labels = ['x'] + T_labels[1:]
+                B_old = lasy.compose(incl_old, T_x)
+                B_extra = lasy.compose(incl_extra, E_x)
+                B_old.labels = T_labels
+                B_extra.labels = T_labels
+                B = B_old + B_extra
+                B = lasy.planar_permute_legs(B, codomain=['vL'] + self._p_label, domain=['vR'])
+                P = to_plain(i, dtype, backend, device)
+                B = lasy.planar_contraction(P, B, 'l', 'vL', relabel1={'s': 'vL'})
+            if X_R is not None:
+                P = to_plain(i + 1, dtype, backend, device)
+                P_hc = P.hc
+                P_hc.labels = ['l', 's']
+                B = lasy.planar_contraction(B, P_hc, 'vR', 'l', relabel2={'s': 'vR'})
+            if X_L is not None or X_R is not None:
+                B = lasy.planar_permute_legs(B, codomain=['vL'] + self._p_label, domain=['vR'])
+            if B.labels != self._B_labels:
+                B.labels = self._B_labels
+            new_Bs.append(B)
+        # append zeros to the singular values
+        for j, S in enumerate(self._S[:num_bonds]):
+            if extra_spaces[j] is None:
+                continue
+            incl_old = new_spaces[j].inclusion_of_summand(0, backend=S.backend, device=S.device)
+            incl_old = incl_old.as_SymmetricTensor(dtype=S.dtype)
+            incl_old_l = incl_old
+            incl_old_l.labels = ['vL', 'x']
+            S_xy = S.copy()
+            S_xy.labels = ['x', 'y']
+            incl_old_r = incl_old.hc
+            incl_old_r.labels = ['y', 'vR']
+            S_new = lasy.compose(lasy.compose(incl_old_l, S_xy), incl_old_r)
+            P = to_plain(j, S.dtype, S.backend, S.device)
+            P_l = P.copy()
+            P_l.labels = ['vL', 'x']
+            S_xy = S_new
+            S_xy.labels = ['x', 'y']
+            P_r = P.hc
+            P_r.labels = ['y', 'vR']
+            S_new = lasy.compose(lasy.compose(P_l, S_xy), P_r)
+            S_new.labels = ['vL', 'vR']
+            new_Ss[j] = lasy.DiagonalTensor.from_tensor(S_new).as_dtype(S.dtype)
+        self._B = new_Bs
+        self._S = new_Ss
         self.test_sanity()
-        return perms_L
 
     def spatial_inversion(self):
         """Perform a spatial inversion along the MPS.
@@ -4546,6 +4772,7 @@ class MPS(BaseMPSExpectationValue):
 
         self.sites = self.sites[::-1]
         self.form = [(f if f is None else (f[1], f[0])) for f in self.form[::-1]]
+        raise NotImplementedError('How to braid? This is not planar')
         self._B = [B.replace_labels(['vL', 'vR'], ['vR', 'vL']).transpose(self._B_labels) for B in self._B[::-1]]
         self._S = self._S[::-1]
         self.test_sanity()
@@ -4655,7 +4882,7 @@ class MPS(BaseMPSExpectationValue):
                 # split off the right-most physical leg and vR from theta
                 # theta: vL p0 ... pj vR
                 theta = theta.combine_legs(combine, qconj=[+1, -1])
-                U, S, V, err, _ = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
+                U, S, V, err, _ = svd_theta(theta, trunc_par, new_labels=['vR', 'vL'])
                 Ss_new.append(S)
                 trunc_err += err
                 theta = U.scale_axis(S, 'vR').split_legs(0)  # vL p0 ... pj-1 vR
@@ -4895,103 +5122,121 @@ class MPS(BaseMPSExpectationValue):
 
         return psi_new, new_first, new_last
 
-    def get_total_charge(self, only_physical_legs=False):
-        """Calculate and return the `qtotal` of the whole MPS (when contracted).
+    def get_total_charge(self) -> lasy.Sector:
+        """Return the total charge of the MPS, i.e., of a unit cell for infinite MPS.
 
-        If set, the :attr:`segment_boundaries` are included (unless `only_physical_legs` is True).
+        The total charge is carried by the hidden total charge legs, see :meth:`gauge_total_charge`.
+        The MPS does not need to be gauged; the charges of all total charge legs are fused.
+        For finite MPS, the outer virtual legs are trivial, such that this is the charge of the
+        physical legs. For segment MPS, it does not include the charges of the outer virtual legs.
 
-        Parameters
-        ----------
-        only_physical_legs : bool
-            For ``'finite'`` boundary conditions, the total charge can be gauged away
-            by changing the LegCharge of the trivial legs on the left and right of the MPS.
-            This option allows to project out the trivial legs to get the actual "physical"
-            total charge.
+        TODO: Only implemented for total charge legs with dim 1, which have a unique fusion outcome.
+        For dim > 1, the total charge can consist of several sectors.
 
         Returns
         -------
-        qtotal : charges
-            The sum of the `qtotal` of the individual `B` tensors.
+        total_charge : :class:`~lasyten.Sector`
+            The total charge, the trivial sector if there are no total charge legs.
 
         """
-        # TODO
-        tensors = self._B
-        U, V = self.segment_boundaries
-        if U is not None:
-            assert V is not None
-            tensors = tensors + [U, V]
-        qtotal = np.sum([B.qtotal for B in tensors], axis=0)
-        if only_physical_legs:
-            if self.bc != 'finite':
-                raise ValueError('`only_physical_legs` not supported for bc=' + repr(self.bc))
-            qtotal -= self._B[0].get_leg('vL').get_charge(0)
-            qtotal -= self._B[-1].get_leg('vR').get_charge(0)  # takes qconj into account
-        return self.chinfo.make_valid(qtotal)
+        total_charge = self.symmetry.trivial_sector
+        for B in self._B:
+            for label in _charge_leg_labels(B):
+                leg = B.get_leg(label)
+                if leg.dim != 1:
+                    raise NotImplementedError('Only implemented for total charge legs with dim 1.')
+                # the charge leg points towards the tensor (like vR) -> the charge is the dual sector
+                charge = leg.dual.sector_decomposition[0]
+                total_charge = self.symmetry.fusion_outcomes(total_charge, charge)[0]
+        return total_charge
 
-    def gauge_total_charge(self, qtotal=None, vL_leg=None, vR_leg=None):
-        """Gauge the legcharges of the virtual bonds s.t. MPS has given `qtotal`; in place.
+    def gauge_total_charge(self, cutoff: float = 1.0e-14):
+        """Collect all total charge legs on the last tensor of the (unit cell of the) MPS; in place.
 
-        Acts in place, i.e. changes the B tensors. Make a (shallow) copy if needed.
+        The total charge of the MPS is carried by hidden legs whose labels contain
+        :data:`MPS_TOTAL_CHARGE_LABEL`. This method sweeps from left to right through the MPS,
+        merges all such legs found on a tensor into a single leg and moves it to the next tensor
+        with :func:`~lasyten.move_hidden_leg`. On the last tensor, the remaining legs are merged into
+        a single hidden leg ``'!' + MPS_TOTAL_CHARGE_LABEL``, such that the outer virtual legs of
+        the MPS (and the bond crossing the unit cell boundary for infinite MPS) are not modified.
+
+        Moving a charge leg `h` across a bond changes the bipartition from ``(left + h) | right``
+        to ``left | (h + right)``. For ``dim(h) == 1``, the bond space is just charge-shifted and
+        the singular values are unchanged. For ``dim(h) > 1`` (non-abelian multiplets), the new
+        Schmidt rank can be anything between ``chi / dim(h)`` and ``chi * dim(h)``. We then perform
+        a SVD on each bond we cross to obtain the minimal bond spaces. If the MPS is in canonical
+        form, these give the correct singular values and the sites we cross are left in form ``'A'``.
+        Otherwise, the singular values are only placeholders and the sites are left in form ``None``.
+
+        Acts in place, i.e. changes the B tensors and singular values. Use :meth:`_gauged` if a
+        (shallow) copy is needed.
 
         Parameters
         ----------
-        qtotal : (list of) charges
-            If a single set of charges is given, it is the desired total charge of the MPS
-            (which :meth:`get_total_charge` will return afterwards).
-            By default (``None``), use 0 charges, unless vL_leg and vR_leg are specified, in which
-            case we adjust the total charge to match these legs.
-        vL_leg, vR_leg: None | LegCharge
-            Desired new virtual leg on the very left and right.
-            Needs to have the same block structure as the current legs, but can have shifted
-            charge entries.
-            For infinite MPS, we need `vL_leg` to be the conjugate leg of `vR_leg`.
-            For segment MPS, these legs are the *outer-most* legs, possibly including the
-            :attr:`segment_boundaries`.
+        cutoff : float
+            Cutoff for the singular values when moving charge legs with ``dim > 1``.
 
         """
-        # TODO
-        if self.chinfo.qnumber == 0:
+        # TODO: Moving charge legs with dim > 1 is not supported yet and raises a NotImplementedError
+        if self.is_gauged:
             return
-        if self.segment_boundaries[0] is not None:
-            raise NotImplementedError('could be implemented.... do you need this?')
-        if vL_leg is not None:
-            vL_chdiff = vL_leg.get_charge(0) - self._B[0].get_leg('vL').get_charge(0)
-        if vR_leg is not None:
-            vR_chdiff = vR_leg.get_charge(0) - self._B[-1].get_leg('vR').get_charge(0)
-        if qtotal is None:
-            if vL_leg is not None and vR_leg is not None:
-                qtotal = self.get_total_charge() + vL_chdiff + vR_chdiff
-        qtotal = self.chinfo.make_valid(qtotal)
-        if qtotal.ndim == 1:
-            qtotal_factor = np.array([0] * (self.L - 1) + [1], npc.QTYPE)
-            qtotal = qtotal_factor[:, np.newaxis] * qtotal[np.newaxis, :]
-        if qtotal.shape != (self.L, self.chinfo.qnumber):
-            raise ValueError('wrong shape of `qtotal`')
-        if vL_leg is not None:
-            B = self._B[0]
-            if np.any(vL_chdiff != 0):
-                # adjust left leg
-                self._B[0] = B.gauge_total_charge('vL', B.qtotal + vL_chdiff, vL_leg.qconj)
-            self._B[0].get_leg('vL').test_equal(vL_leg)
-        for i in range(self.L):
-            B = self._B[i]
-            desired_qtotal = qtotal[i]
-            chdiff = B.qtotal - desired_qtotal
-            if np.any(chdiff != 0):
-                self._B[i] = B.gauge_total_charge('vR', desired_qtotal)
-                if i + 1 != self.L:  # this 'vR' is contracted with the 'vL' of the next B
-                    # so we need to adjust the next B as well
-                    nextB = self._B[i + 1]
-                    self._B[i + 1] = nextB.gauge_total_charge('vL', nextB.qtotal + chdiff)
-                    self._B[i].get_leg('vR').test_contractible(self._B[i + 1].get_leg('vL'))
-        # just to check
-        assert np.all(self.get_total_charge() == self.chinfo.make_valid(np.sum(qtotal, 0)))
-        if vR_leg is not None:
-            # check that the charges match
-            self._B[-1].get_leg('vR').test_equal(vR_leg)
-        if self.bc == 'infinite':
-            self._B[0].get_leg('vL').test_contractible(self._B[-1].get_leg('vR'))
-        # done
+        label = '!' + MPS_TOTAL_CHARGE_LABEL
+        tmp_label = label + '_gauge'  # contains MPS_TOTAL_CHARGE_LABEL -> merged on next site
+        L = self.L
+        for i in range(L):
+            labels = _charge_leg_labels(self._B[i])
+            if len(labels) == 0:
+                continue
+            if i == L - 1:
+                self._B[i] = _merge_charge_legs(self._B[i], labels, label)
+                break
+            h_dim = np.prod([self._B[i].get_leg(l).dim for l in labels])  # dim of the merged charge leg
+            canonical = self.form[i] is not None and self.form[i + 1] is not None
+            B = self.get_B(i, 'B') if h_dim > 1 and canonical else self._B[i]
+            B = _merge_charge_legs(B, labels, tmp_label)
+            if h_dim == 1:
+                # exact relabeling of the bond: move through the singular values to keep them consistent
+                S = self._S[i + 1]
+                is_diagonal = isinstance(S, lasy.DiagonalTensor)
+                if is_diagonal:
+                    S = S.as_SymmetricTensor()
+                B, S = lasy.move_hidden_leg(B, S, 'vR', 'vL', tmp_label, target_domain_pos=0)
+                S, B_next = lasy.move_hidden_leg(S, self._B[i + 1], 'vR', 'vL', tmp_label, target_domain_pos=0)
+                self._B[i] = B
+                self._B[i + 1] = B_next
+                self._S[i + 1] = lasy.DiagonalTensor.from_tensor(S) if is_diagonal else S
+                continue
+            # dim > 1: the bond V \otimes h is not minimal and S \otimes id_h are no Schmidt values -> SVD
+            raise NotImplementedError(
+                'Moving total charge legs with dim > 1 requires lasyten operations (e.g. partial_compose, '
+                'scale_axis) to return HiddenLegTensors.'
+            )
+            B_next = self.get_B(i + 1, 'B') if canonical else self._B[i + 1]
+            B, B_next = lasy.move_hidden_leg(B, B_next, 'vR', 'vL', tmp_label, target_domain_pos=0)
+            theta = lasy.scale_axis(B, self.get_SL(i), 'vL') if canonical else B
+            theta = lasy.planar_permute_legs(theta, codomain=['vL', 'p'])
+            U, S, V, _, _ = lasy.truncated_svd(theta, new_labels=['vR', 'vL'], svd_min=cutoff)
+            B_next = lasy.tensors.partial_compose(B_next, V, 'vL')  # absorbs the pipe
+            if canonical:
+                self.set_B(i, U, form='A')
+                self.set_SR(i, S)
+                self.set_B(i + 1, B_next, form='B')
+            else:  # S is not used for non-canonical forms; keep it as a normalized placeholder
+                self.set_B(i, U, form=None)
+                self.set_SR(i, S / lasy.norm(S))
+                self.set_B(i + 1, lasy.scale_axis(B_next, S, 'vL'), form=None)
+        self.test_sanity()
+
+    def _gauged(self) -> MPS:
+        """Return `self` if :attr:`is_gauged`, otherwise a gauged shallow copy."""
+        if self.is_gauged:
+            return self
+        res = copy.copy(self)
+        res._B = res._B[:]
+        res._S = res._S[:]
+        res.form = res.form[:]
+        res.gauge_total_charge()
+        return res
 
     def entanglement_entropy(
         self, n: int | float = 1, bonds: None | int | Iterable[int] = None, for_matrix_S: bool = False
@@ -5496,12 +5741,20 @@ class MPS(BaseMPSExpectationValue):
             raise ValueError("can't take overlap between MPS with different bc")
         if self.finite:
             if ignore_form:
-                # Use TransferMatrix with option to ignore the form
-                TM = TransferMatrix(self, other, charge_sector=charge_sector, form=None)
-                res = TM.matvec(TM.initial_guess(1.0))  # apply transfer matrix to identity
-                return npc.trace(res, 0, 1) * self.norm * other.norm
+                # TODO: Use TransferMatrix with option to ignore the form (still uses np_conserved)
+                raise NotImplementedError('overlap with ignore_form=True is not ported to lasyten yet')
             else:
-                env = MPSEnvironment(self, other)
+                bra = self
+                if other is not self:
+                    # gauge as in MPSEnvironment, such that we can check for different total charges
+                    other.gauge_total_charge()
+                    bra = self._gauged()
+                    if _different_total_charges(bra, other):
+                        zero = self.backend.block_backend.block_from_ndarray(
+                            np.asarray(0.0), dtype=lasy.Dtype.common(self.dtype, other.dtype), device=self.device
+                        )
+                        return lasy.block_backends.Scalar(zero)
+                env = MPSEnvironment(bra, other)
                 return env.full_contraction(0)
         else:  # infinite
             if not understood_infinite:
@@ -5609,7 +5862,7 @@ class MPS(BaseMPSExpectationValue):
         -------
         sigmas : list of int | list of float
             On each site the index of the local basis that was measured,
-            as specified in the corresponding :class:`~tenpy.networks.site.Site` in :attr:`sites`.
+            as specified in the corresponding :class:`~lasyten.Site` in :attr:`sites`.
             Note that this can change depending on whether/what charges you conserve!
             Explicitly specifying the measurement operator will avoid that issue.
         weight : complex
@@ -5666,9 +5919,9 @@ class MPS(BaseMPSExpectationValue):
                 assert theta.shape == (1, 1)
                 # already divided by norm, so only include the phase now
                 total_weight = total_weight * theta[0, 0] / weight
-            if not complex_amplitude:
-                # return probability
-                total_weight = np.abs(total_weight) ** 2
+        if not complex_amplitude:
+            # return probability
+            total_weight = np.abs(total_weight) ** 2
         return sigmas, total_weight
 
     def norm_test(self) -> np.ndarray:
@@ -5681,20 +5934,29 @@ class MPS(BaseMPSExpectationValue):
             The error ``norm_error[i, 0]`` is defined as the norm-difference between
             the following networks::
 
-                |   --theta[i]---.       --s[i]--.
-                |       |        |    vs         |
-                |   --theta*[i]--.       --s[i]--.
+                |     ┏━━━━━━━━━━━┓              ┏━━━━━━┓
+                |   ──┨ theta[i]  ┠──┐         ──┨ s[i] ┠──┐
+                |     ┗━━━━━┯━━━━━┛  │           ┗━━━━━━┛  │
+                |           │        │    vs               │
+                |     ┏━━━━━┷━━━━━┓  │           ┏━━━━━━┓  │
+                |   ──┨ theta*[i] ┠──┘         ──┨ s[i] ┠──┘
+                |     ┗━━━━━━━━━━━┛              ┗━━━━━━┛
 
             Similarly, ``norm_error[i, 1]`` is the norm-difference of::
 
-                |   .--theta[i]---         .--s[i+1]--
-                |   |    |          vs     |
-                |   .--theta*[i]--         .--s[i+1]--
+                |     ┏━━━━━━━━━━━┓             ┏━━━━━━━━┓
+                |   ┌─┨ theta[i]  ┠──         ┌─┨ s[i+1] ┠──
+                |   │ ┗━━━━━┯━━━━━┛           │ ┗━━━━━━━━┛
+                |   │       │            vs   │
+                |   │ ┏━━━━━┷━━━━━┓           │ ┏━━━━━━━━┓
+                |   └─┨ theta*[i] ┠──         └─┨ s[i+1] ┠──
+                |     ┗━━━━━━━━━━━┛             ┗━━━━━━━━┛
 
         """
         err = np.empty((self.L, 2), dtype=float)
         for i in range(self.L):
-            th = self.get_theta(i, 1).relabel({'p0': 'p'})
+            th = self.get_theta(i, 1)
+            th.labels.update({'p0': 'p'})
             # use the planar diagrams to account for charged tensors
             rho_L = mps_contraction_diagram_operations['TM @ RP2'].evaluate(dict(RP=self.get_RP(i), ket=th, bra=th.hc))
             # same leg arrangement as obtained for S (diagonal tensor): vL in domain and vL* in codomain
@@ -5702,7 +5964,12 @@ class MPS(BaseMPSExpectationValue):
             S = self.get_SL(i)
             if isinstance(S, lasy.DiagonalTensor):
                 # transpose to get vR = vL* to the codomain
-                rho_L2 = S.T.relabel({'vR': 'vL*'}) ** 2
+                rho_L2 = S.T
+                rho_L2.labels.update({'vR': 'vL*'})
+                rho_L2 = rho_L2**2
+                if self.symmetry.has_complex_topological_data:
+                    # real rho_L2 might not be allowed as SymmetricTensor
+                    rho_L2 = rho_L2.as_dtype(rho_L2.dtype.to_complex)
             else:
                 assert S.num_legs == 2
                 S = S.T
@@ -5713,7 +5980,10 @@ class MPS(BaseMPSExpectationValue):
             rho_R = lasy.planar_permute_legs(rho_R, codomain='vR*')
             S = self.get_SR(i)
             if isinstance(S, lasy.DiagonalTensor):
-                rho_R2 = (S**2).relabel({'vL': 'vR*'})
+                rho_R2 = S**2
+                rho_R2.labels.update({'vL': 'vR*'})
+                if self.symmetry.has_complex_topological_data:
+                    rho_R2 = rho_R2.as_dtype(rho_R2.dtype.to_complex)
             else:
                 assert S.num_legs == 2
                 rho_R2 = lasy.compose(S.hc, S)
@@ -5764,7 +6034,6 @@ class MPS(BaseMPSExpectationValue):
             with legs ``'vL', 'vR'``.
 
         """
-        # TODO the decompositions do not return HiddenLegTensors -> fix in lasyten
         assert self.finite
         L = self.L
         assert L > 1  # otherwise implement yourself...
@@ -5810,8 +6079,9 @@ class MPS(BaseMPSExpectationValue):
 
         if self.bc == 'segment':
             # also need to calculate new singular values on the very right
+            # keep the total charge legs on the MPS (in U), not in the segment boundary VR_segment
             U, S, VR_segment, _, _ = lasy.truncated_svd(
-                M, new_labels=['vR', 'vL'], charge_leg_top=False, svd_min=cutoff
+                _hidden_legs_to_codomain(M), new_labels=['vR', 'vL'], svd_min=cutoff
             )
             if not renormalize:
                 self.norm = self.norm * lasy.norm(S)
@@ -5821,9 +6091,8 @@ class MPS(BaseMPSExpectationValue):
         else:
             VR_segment = None
         # sweep from right to left, calculating all the singular values
-        U, S, V, _, _ = lasy.truncated_svd(
-            lasy.planar_permute_legs(M, codomain=['vL']), new_labels=['vR', 'vL'], svd_min=cutoff
-        )
+        # the total charge legs end up in V, i.e. stay on the last site
+        U, S, V, _, _ = lasy.truncated_svd(_split_off_vL(M), new_labels=['vR', 'vL'], svd_min=cutoff)
         V = lasy.planar_permute_legs(V, codomain=['vL', 'p'])
         if not renormalize and self.bc == 'finite':
             self.norm = self.norm * lasy.norm(S)
@@ -5900,14 +6169,19 @@ class MPS(BaseMPSExpectationValue):
             (which indicates a degenerate "cat" state, e.g., for spontaneous symmetry breaking).
 
         """
-        # TODO
         assert not self.finite
+        if any(isinstance(B, lasy.HiddenLegTensor) for B in self._B):
+            raise NotImplementedError('canonical_form_infinite1 does not support a non-trivial total charge yet.')
         L = self.L
-        i1 = np.argmin(self.chi) % L  # start at this bond
+        # start at the bond with the smallest dimension (note: ``MPS.chi`` counts multiplets, not dimensions)
+        i1 = int(np.argmin([B.get_leg('vL').dim for B in self._B])) % L
         if any([(f is None) for f in self.form]):
             # ignore any 'S' and canonical form, just state that we are in 'B' form
             self.form = self._parse_form('B')
-            self._S[i1] = np.ones(self.chi[i1], dtype=np.float64)  # (later used for guess of Gl)
+            # trivial S[i1] (later used for the guess of Gl)
+            self._S[i1] = lasy.DiagonalTensor.from_eye(
+                self._B[i1].get_leg('vL'), self.backend, ['vL', 'vR'], self.dtype.to_real, self.device
+            )
         else:
             # was in canonical form before; bring back into canonical form
             # -> make sure we don't use multiple S on one bond in our definition of the MPS
@@ -5923,9 +6197,10 @@ class MPS(BaseMPSExpectationValue):
             self.norm *= np.sqrt(norm)
         # make Gr diagonal to Wr
         Wr, Kl, Kr = self._canonical_form_correct_right(i1, Gr)
-        # guess for Gl
-        Gl = npc.tensordot(Kr.scale_axis(self.get_SL(i1) ** 2, 1), Kl, axes=['vR', 'vL'])
-        Gl.iset_leg_labels(['vR*', 'vR'])
+        # guess for Gl = Kr S^2 Kl, i.e. S^2 expressed in the new basis
+        S2 = self.get_SL(i1) ** 2
+        Gl = lasy.compose(Kr, lasy.scale_axis(Kl, S2, 'vL'))
+        Gl.labels = ['vR*', 'vR']
         # find dominant left eigenvector
         norm, Gl = self._canonical_form_dominant_gram_matrix(i1, True, tol_xi, Gl)
         if abs(1.0 - norm) > 1.0e-13:
@@ -5938,15 +6213,25 @@ class MPS(BaseMPSExpectationValue):
         # bring bond to canonical form
         Gl, Yl, Yr = self._canonical_form_correct_left(i1, Gl, Wr)
         Gl = self.shift_Tensor_unit_cells(Gl, -1)
-        Wr = np.ones(Yr.legs[0].ind_len, np.float64)
-        # now the bond (i1-1,i1) is in canonical form
+        # now the bond (i1-1,i1) is in canonical form; the right eigenvector is the identity
+        Wr = lasy.DiagonalTensor.from_eye(
+            self.get_SL(i1).get_leg('vL'), self.backend, ['vL', 'vR'], self.dtype.to_real, self.device
+        )
         Wr_list[i1] = Wr  # diag(Wr) is right eigenvector on bond (i1-1, i1)
 
         # phase 2: sweep from right to left; find other right eigenvectors and make them diagonal
         for j1 in range(i1 - 1, i1 - L, -1):
             B1 = self.get_B(j1, 'B')
-            axes = [self._p_label + ['vR'], self._get_p_label('*') + ['vR*']]
-            Gr = npc.tensordot(B1.scale_axis(Wr, 'vR'), B1.conj(), axes=axes)
+            # The diagonal `Wr` has its legs in the codomain and domain. Depending on whether the bond space is
+            # dual or not, we need `Wr` or its transpose, such that the RP's `vL` can be contracted with B1's `vR`.
+            RP = Wr.copy()
+            RP.labels = ['vL*', 'vL']
+            RP = RP.as_SymmetricTensor()
+            if RP.get_leg('vL') != B1.get_leg('vR').dual:
+                RP = Wr.T.copy()
+                RP.labels = ['vL*', 'vL']
+                RP = RP.as_SymmetricTensor()
+            Gr = mps_contraction_diagram_operations['TM @ RP2'].evaluate(dict(RP=RP, ket=B1, bra=B1.hc))
             Wr, Kl, Kr = self._canonical_form_correct_right(j1, Gr)
             Wr_list[j1 % L] = Wr
 
@@ -5955,12 +6240,7 @@ class MPS(BaseMPSExpectationValue):
         for j1 in range(i1 - L + 1, i1, +1):
             # find Gl on bond j1-1, j1
             B1 = self.get_B(j1 - 1, 'B')
-            Gl = npc.tensordot(
-                B1.conj(),  # old B1; now on site j1-1
-                npc.tensordot(Gl, B1, axes=['vR', 'vL']),
-                axes=[self._get_p_label('*') + ['vL*'], self._p_label + ['vR*']],
-            )
-            # axes=[['p*', 'vL*'], ['p', 'vR*']])
+            Gl = mps_contraction_diagram_operations['LP2 @ TM'].evaluate(dict(LP=Gl, ket=B1, bra=B1.hc))
             Gl, Yl, Yr = self._canonical_form_correct_left(j1, Gl, Wr_list[j1 % L])
         # done
 
@@ -6109,9 +6389,9 @@ class MPS(BaseMPSExpectationValue):
             Qs[i] = Q.split_legs()
         return Qs, R
 
-    def correlation_length2(
+    def correlation_length(
         self, target: int = 1, tol_ev0: float | None = 1.0e-8, charge_sector=0, return_charges: bool = False
-    ) -> float | np.ndarray | tuple[float | np.ndarray, lasy.SectorArray]:
+    ) -> float | np.ndarray | tuple[float | np.ndarray, lasy.Sector | list[lasy.Sector]]:
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
         Assumes that `self` is in canonical form.
@@ -6129,13 +6409,19 @@ class MPS(BaseMPSExpectationValue):
         More general for a `L`-site unit cell we get :math:`\lambda_2 = \exp(-\frac{L}{\xi})`,
         where the `xi` is given in units of the horizontal lattice spacing.
 
-        Unlike the old :meth:`correlation_length`, this method returns the correlation length in
-        correct units, even for higher-dimensional lattices.
+        .. note ::
+            In older TeNPy versions, :meth:`correlation_length` returned values in MPS-site units
+            (without dividing by :attr:`N_sites_per_hor_spacing`), while :meth:`correlation_length2`
+            returned the correctly scaled result. :meth:`correlation_length2` is now only a
+            deprecated alias for this method; both return the same value.
 
         Parameters
         ----------
         target : int
-            We look for the `target` + 1 largest eigenvalues.
+            We look for the `target` + 1 largest eigenvalues (in absolute value, over all `charge_sector`\ s).
+            Fewer than `target` correlation lengths are returned if fewer eigenvalues are found, e.g. if the
+            sectors contain less eigenvectors, or if eigenvalues are exactly degenerate (e.g. for SU(2) multiplets
+            or complex conjugate pairs), which a single Krylov run does not resolve.
         tol_ev0 : float | None
             Print warning if largest eigenvalue deviates from 1 by more than `tol_ev0`.
             If `None`, **assume** dominant eigenvector in 0-charge-sector to be 1 for
@@ -6145,8 +6431,10 @@ class MPS(BaseMPSExpectationValue):
             of the TransferMatrix.
             ``None`` stands for *all* sectors, ``0`` stands for the trivial charge sector.
             Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in trivial sector.
-            If you pass a sector array, this function returns `target` dominant eigenvalues in
-            each of those sectors.
+            If you pass several sectors (a sector array or a list), the eigenvalues of all of them are
+            pooled and this function returns the overall `target` dominant ones.
+            For ``None``, we only look in one of each pair of sectors ``q, -q``, see
+            :meth:`correlation_length_charge_sectors`, since they have identical eigenvalues.
         return_charges : bool
             If True, return the charge sectors along with the eigenvalues.
 
@@ -6156,7 +6444,7 @@ class MPS(BaseMPSExpectationValue):
             If `target` = 1, return just the correlation length,
             otherwise an array of the `target` largest correlation lengths.
             It is measured in units of the horizontal spacing of the lattice.
-        charge_sectors :  :class:`~lasyten.SectorArray`, optional
+        charge_sectors :  :class:`~lasyten.Sector` | list of :class:`~lasyten.Sector`, optional
             For each entry in `xi` the charge sector, i.e., the sector of the dominant eigenvalue.
             Only returned if `return_charges`.
 
@@ -6175,103 +6463,89 @@ class MPS(BaseMPSExpectationValue):
             return xi, charges
         return xi
 
-    def correlation_length(
+    def correlation_length2(
         self, target: int = 1, tol_ev0: float | None = 1.0e-8, charge_sector=0, return_charges: bool = False
-    ) -> float | np.ndarray | tuple[float | np.ndarray, lasy.SectorArray]:
-        r"""Calculate the correlation length by diagonalizing the transfer matrix.
+    ) -> float | np.ndarray | tuple[float | np.ndarray, lasy.Sector | list[lasy.Sector]]:
+        """Deprecated alias for :meth:`correlation_length`.
 
         .. deprecated ::
-            This is an old implementation, from before MPS had access to ``N_sites_per_hor_spacing``.
-            It is only kept for backwards compatibility. Use :meth:`correlation_length2` instead.
-
-        .. warning ::
-            For higher-dimensional lattices, this function does not return the correlation length
-            in correct units. Use :meth:`correlation_length2` or read the documentation of the
-            return value carefully.
-
-        Parameters
-        ----------
-        target, tol_ev0, charge_sector, return_charges
-            same as for :meth:`correlation_length2`.
-        _ignore_warning : bool
-            Flag to suppress the ``DeprecationWarning``.
-
-        Returns
-        -------
-        xi : float | 1D array
-            The correlation length(s) in units of "lattice spacing per MPS site", i.e.
-            ``self.correlation_length(*a) == self.correlation_length2(*a) * self.N_sites_per_hor_spacing``.
-        charge_sectors :  list of charge sectors, optional
-            For each entry in `xi` the charge sector, i.e., qtotal of the dominant eigenvalue.
-            Only returned if `return_charges`.
+            Renamed to :meth:`correlation_length`. Both now return the same value (in units of the
+            horizontal lattice spacing). In older versions, :meth:`correlation_length` used different
+            (MPS-site) units. See https://github.com/tenpy/tenpy/pull/766.
 
         """
-        msg = (
-            'The method `correlation_length` is deprecated. Use `correlation_length2` instead. '
-            'Note the different units of the output for higher-dimensional lattices!'
+        warnings.warn(
+            'correlation_length2 was renamed to correlation_length; both return the same value now. '
+            'In older versions, correlation_length used different (MPS-site) units. '
+            'See https://github.com/tenpy/tenpy/pull/766.',
+            DeprecationWarning,
+            2,
         )
-        warnings.warn(msg, DeprecationWarning, 2)
-        return self._correlation_length(target, tol_ev0, charge_sector, return_charges)
+        return self.correlation_length(target, tol_ev0, charge_sector, return_charges)
 
     def _correlation_length(self, target, tol_ev0, charge_sector, return_charges):
-        """Internal implementation of :meth:`correlation_length2` and :meth:`correlation_length`.
+        """Internal implementation of :meth:`correlation_length`.
 
-        Returns like :meth:`correlation_length`, in particular *without* accounting for
-        lattice geometry.
+        Returns the correlation length in MPS-site units, i.e. *without* dividing by
+        :attr:`N_sites_per_hor_spacing`.
+
+        For non-abelian symmetries, note that each eigenvalue in a sector (e.g. spin ``S``) belongs to a
+        whole multiplet. In particular, the correlation length of the spin-spin correlations
+        (e.g. in the spin-1 Heisenberg chain) is found in the spin-1 sector, not in the trivial sector.
+        Use ``charge_sector=None`` to look in all sectors.
         """
-        # TODO
         assert not self.finite
-        zero_charge = self.chinfo.make_valid()
-        if any(chi == 1 for chi in self.chi):
+        zero_charge = self.symmetry.trivial_sector
+        # (note: ``MPS.chi`` counts multiplets, we need the dimension of the bond)
+        if any(S.get_leg('vL').dim == 1 for S in self._S):
             # product states have zero correlation length
             if return_charges:
                 if target == 1:
                     return 0, zero_charge
                 return [0] * target, [zero_charge] * target
             return 0.0 if target == 1 else [0] * target
-        if charge_sector is not None and isinstance(charge_sector, Iterable):
-            # iterable check excludes charge_sector=0 (c.f. issue 289)
-            charge_sector = self.chinfo.make_valid(charge_sector)
-        elif charge_sector is None:
-            pass
+        # normalize the `charge_sector` to a list of sectors
+        if charge_sector is None:
+            # bra and ket are identical: the sectors `q` and `-q` have the same eigenvalues, only look in one of them
+            sectors = list(self.correlation_length_charge_sectors())
+        elif isinstance(charge_sector, (lasy.Sector, int, np.integer, str)):
+            sectors = [_normalize_sector(charge_sector, self.symmetry)]
         else:
-            assert charge_sector == 0
-            charge_sector = zero_charge
-        num = max(target + 1, self._transfermatrix_keep)
-        # now charge_sector is None or 1D or 2D ndarray (but not 0)
-        if charge_sector is None or charge_sector.ndim == 1:
-            # a single charge sector or charge_sector=None -> (only dominant eigvals for all charge_sectors)
-            T = TransferMatrix(self, self, charge_sector=charge_sector, form='B')
-            E, V = T.eigenvectors(num, which='LM')
-            # note: LM implies E is sorted largest magnitude first
-            if return_charges:
-                V_charges = [vec.qtotal for vec in V]
-            looked_in_zero_charge_sector = charge_sector is None or np.all(charge_sector == 0)
-        else:
-            assert charge_sector.ndim == 2
-            # loop over different charge sectors
-            charge_sector_list = charge_sector
-            T = TransferMatrix(self, self, form='B')
-            E = []
-            V_charges = []
-            for charge_sector in charge_sector_list:
-                T.charge_sector = charge_sector
+            sectors = []  # e.g. a SectorArray; we need every sector only once
+            for sector in charge_sector:
+                sector = _normalize_sector(sector, self.symmetry)
+                if sector not in sectors:
+                    sectors.append(sector)
+        # one more than needed: for real tensors, eigenvalues come in complex conjugate pairs,
+        # which a Krylov method does not resolve (slow or no convergence) if it only looks for one of them.
+        num = max(target + 2, self._transfermatrix_keep)
+        T = TransferMatrix(self, self, charge_sector=0, form='B')
+        E = []
+        V_charges = []
+        for sector in sectors:
+            # the trivial sector is special-cased (no charge leg) in the TransferMatrix
+            T.charge_sector = 0 if sector == zero_charge else sector
+            with warnings.catch_warnings():
+                # a sector can have less than `num` vectors (e.g. just one for the trivial sector of an AKLT state)
+                warnings.filterwarnings('ignore', 'TransferMatrix.eigenvectors: reduce num_ev')
                 E_s, V_s = T.eigenvectors(num, which='LM')
-                E.extend(E_s)
-                if return_charges:
-                    V_charges.extend([vec.qtotal for vec in V_s])
-            sort = argsort(E, 'LM')
-            E = np.array(E)[sort]
+            E.extend(E_s)
             if return_charges:
-                V_charges = [V_charges[i] for i in sort]
-            looked_in_zero_charge_sector = np.any(np.all(charge_sector_list == 0, axis=1))
+                V_charges.extend([T.eigenvector_charge(vec) for vec in V_s])
+        sort = argsort(E, 'LM')
+        E = np.array(E)[sort]
+        if return_charges:
+            V_charges = [V_charges[i] for i in sort]
+        looked_in_zero_charge_sector = any(sector == zero_charge for sector in sectors)
 
         if not looked_in_zero_charge_sector:
             # need to add the eigval 1 from the 0 charge sector
             if tol_ev0 is not None:
                 # diagonalize zero_charge sector
-                T.charge_sector = zero_charge
-                E0, _ = T.eigenvectors(num, which='LM')
+                T.charge_sector = 0
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', 'TransferMatrix.eigenvectors: reduce num_ev')
+                    E0, _ = T.eigenvectors(1, which='LM')
                 E0 = E0[0]
             else:
                 E0 = 1.0  # explicitly set it by hand
@@ -6286,22 +6560,27 @@ class MPS(BaseMPSExpectationValue):
                 if prec is not None:
                     logger.warning(
                         'correlation_length: other charge sector has eigenvalue '
-                        ' bigger than the eigenvalue 1. in the zero charge sector, '
-                        'but still within precision {prec:.1e}'
+                        'bigger than the eigenvalue 1. in the zero charge sector, '
+                        f'but still within precision {prec:.1e}'
                     )
                     E0 = E[0] + prec
                 else:
                     raise ValueError('dominant eigenvalue is not in zero charge sector???')
             E = [E0] + list(E)
             if return_charges:
-                V_charges = [None] + V_charges
+                V_charges = [zero_charge] + V_charges
         if tol_ev0 is not None and abs(E[0] - 1.0) > tol_ev0:
             logger.warning(
                 f'Correlation length: largest eigenvalue not one, but {E[0]:.12f}. Not in canonical form/normalized?'
             )
-        assert len(E) >= 2
+        if len(E) < 2:
+            raise ValueError(
+                'Found only a single eigenvalue of the TransferMatrix in the given `charge_sector`. '
+                'Use `charge_sector=None` to look in all sectors.'
+            )
         E = np.array(E)
-        xis = -1.0 / np.log(np.abs(E[1 : target + 1] / E[0])) * self.L
+        with np.errstate(divide='ignore'):  # an eigenvalue can be exactly zero, which means xi = 0
+            xis = -1.0 / np.log(np.abs(E[1 : target + 1] / E[0])) * self.L
         # finally return
         if return_charges:
             if target == 1:
@@ -6384,16 +6663,16 @@ class MPS(BaseMPSExpectationValue):
         assert self.symmetry == other.symmetry
         assert self.backend == other.backend
 
-        # TODO gauge to move total charge to final tensor
-        # other = self._gauge_compatible_vL_vR(other)
+        psi_self = self._gauged()
+        other = other._gauged()
         # alpha and beta appear only on the first site
-        alpha = alpha * self.norm
+        alpha = alpha * psi_self.norm
         beta = beta * other.norm
-        theta_self = self.get_B(0, 'Th')
+        theta_self = psi_self.get_B(0, 'Th')
         theta_other = other.get_B(0, 'Th')
-        last_B_self = self.get_B(L - 1)
+        last_B_self = psi_self.get_B(L - 1)
         last_B_other = other.get_B(L - 1)
-        U, V = self.segment_boundaries
+        U, V = psi_self.segment_boundaries
         if U is not None:
             theta_self = lasy.tensors.partial_compose(theta_self, U, 'vL')
             last_B_self = lasy.planar_contraction(last_B_self, V, ['vR'], ['vL'])
@@ -6403,11 +6682,13 @@ class MPS(BaseMPSExpectationValue):
             last_B_other = lasy.planar_contraction(last_B_other, V, ['vR'], ['vL'])
         Bs = [lasy.tensor_from_grid([[alpha * theta_self, beta * theta_other]], labels=theta_self.labels)]
         for i in range(1, L - 1):
-            # TODO we should make sure that the hidden legs are by convention not in the positions along which we stack
-            Bs.append(
-                lasy.tensor_from_grid([[self.get_B(i), None], [None, other.get_B(i)]], labels=self.get_B(i).labels)
-            )
+            B_self = psi_self.get_B(i)
+            Bs.append(lasy.tensor_from_grid([[B_self, None], [None, other.get_B(i)]], labels=B_self.labels))
         Bs.append(lasy.tensor_from_grid([[last_B_self], [last_B_other]], labels=last_B_self.labels))
+        # The outer legs are DirectSumSpaces with a single summand; replace them by that summand,
+        # which is an isomorphism. (The inner bonds are replaced in canonical_form_finite.)
+        Bs[0] = _project_onto_single_summand(Bs[0], 'vL')
+        Bs[-1] = _project_onto_single_summand(Bs[-1], 'vR')
         Ss = [
             lasy.DiagonalTensor.from_eye(
                 leg=B.get_leg('vL'),
@@ -6627,10 +6908,11 @@ class MPS(BaseMPSExpectationValue):
             opname = op
             need_JW = False
 
-        # Infer n_sites and the labels to contract from op._labels
-        p = [l for l in op._labels if not l.endswith('*')]
+        # Infer n_sites and the labels to contract from op.labels
+        op_labels = op.labels.as_list()
+        p = [l for l in op_labels if not l.endswith('*')]
         pstar = [f'{l}*' for l in p]
-        if set(op._labels) != set(p + pstar):
+        if set(op_labels) != set(p + pstar):
             raise ValueError('The labels of `op` must come in pairs ``l, l + "*"``.')
         if p[0][-1].isdigit():
             # need to consider edge case n_sites > 10, where multiple characters give the site index
@@ -6890,20 +7172,17 @@ class MPS(BaseMPSExpectationValue):
             else:
                 raise ValueError(f'invalid swap_op: {swap_op!r}')
             swap_op = siteL.identity_tensor(siteR.leg, overbraid=overbraid)
-            swap_op.relabel({'wL': 'p0', 'p': 'p1', 'p*': 'p0*', 'wR': 'p1*'})
+            swap_op.labels.update({'wL': 'p0', 'p': 'p1', 'p*': 'p0*', 'wR': 'p1*'})
 
         C = self.get_theta(i, n=2, formL=0.0)  # inversion free, see also TEBDEngine.update_bond()
         C = lasy.planar_contraction(C, swap_op, ['p0', 'p1'], ['p0*', 'p1*'])
         C = lasy.planar_permute_legs(C, codomain=['vL', 'p0'], domain=['vR', 'p1'])
         theta = lasy.tensors.partial_compose(C, self.get_SL(i), 'vL')
-        U, S, V, err, renormalize = lasy.truncated_svd(theta, **trunc_par, new_labels=['vR', 'vL'])
-        # like TruncationError.from_S, but using the err (float) from truncated_svd
-        err = TruncationError(err, 1.0 - 2.0 * err)
+        U, S, V, err, renormalize = svd_theta(theta, trunc_par, new_labels=['vR', 'vL'])
         B_L = lasy.compose(C, V.hc, relabel1={'p0': 'p'}, relabel2={'vL*': 'vR'})
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         B_R = lasy.planar_permute_legs(V, codomain=['vL', 'p1'])
-        B_R.relabel({'p1': 'p'})
-        S /= lasy.norm(S)
+        B_R.labels.update({'p1': 'p'})
         self.set_SR(i, S)
         self.set_B(i, B_L, 'B')
         self.set_B(i + 1, B_R, 'B')
@@ -7011,6 +7290,7 @@ class MPS(BaseMPSExpectationValue):
             performing the truncation.
 
         """
+        raise NotImplementedError('compute_K is not ported to lasyten yet')
         # TODO
         from ..models.lattice import Lattice  # dynamical import to avoid import loops
 
@@ -7226,14 +7506,21 @@ class MPS(BaseMPSExpectationValue):
         """Find dominant eigenvector of the transfer matrix starting between sites (bond0-1,bond0).
 
         Find right (transpose=False) or left (transpose=True) eigenvector of the transfermatrix.
+
+        Returns
+        -------
+        eta : float | complex
+            The dominant eigenvalue.
+        G : :class:`~lasyten.SymmetricTensor`
+            The dominant eigenvector, with legs ``'vL*', 'vL'`` (right eigenvector)
+            or ``'vR*', 'vR'`` (left eigenvector).
+
         """
-        # TODO
         TM = TransferMatrix(self, self, bond0, bond0, transpose=transpose, charge_sector=0)
         if guess is None:
             diag = self.get_SL(bond0) ** 2 if transpose else 1.0
             guess = TM.initial_guess(diag)
-        guess = guess.combine_legs([0, 1], pipes=TM.pipe)
-        eta, V = TM.eigenvectors(self._transfermatrix_keep, v0_npc=guess, which='LM')
+        eta, V = TM.eigenvectors(self._transfermatrix_keep, v0=guess, which='LM')
         self._transfermatrix_keep = len(eta)
         if len(eta) > 1:
             if np.abs(eta[0]) > np.abs(eta[1]):
@@ -7243,17 +7530,17 @@ class MPS(BaseMPSExpectationValue):
             if xi > tol_xi:
                 raise ValueError(f'Degenerate spectrum of TransferMatrix (corr length xi={xi:.3e})')
         eta, G = eta[0], V[0]
-        G = G.split_legs()
         # note: the dominant eigenvector should be hermitian and positive
         # removes phase (arbitrary for eigenvectors!) and normalize
         # right eigenvectors should have trace chi, left ones trace 1
         # (since we expect something close to eye(chi) for right and diag(S**2) for left G)
-        norm = 1.0 if transpose else G.shape[0]
-        G *= norm / npc.trace(G, 0, 1)
-        if self.dtype.kind != 'c':  # psi is real -> G should be real
+        # (note that chi is the dimension of the virtual space, not the number of multiplets)
+        chi = G.get_leg('vR' if transpose else 'vL').dim
+        norm = 1.0 if transpose else chi
+        G = G * (norm / lasy.trace(G).to_numpy())
+        if self.dtype.is_real:  # psi is real -> G should be real
             eta = np.abs(eta)
-            G.iunary_blockwise(np.real)
-        return eta, G  # G has legs vL, vL* or vR, vR*
+        return eta, G  # G has legs vL*, vL or vR*, vR
 
     def _canonical_form_correct_right(self, i1, Gr, eps=2.0 * np.finfo(np.double).eps):
         """Given the right gram matrix Gr, updated the bond (i0, i1), where i0 = i1 - 1.
@@ -7264,28 +7551,48 @@ class MPS(BaseMPSExpectationValue):
         If `Wr` has (almost) zero entries, reduce the bond dimension at the given bond.
         Then ``Gr -> Wr``.
         Return Wr normalized to ``sum(Wr) = chi``.
+
+        Parameters
+        ----------
+        i1 : int
+            The site to the right of the bond.
+        Gr : :class:`~lasyten.SymmetricTensor`
+            The right gram matrix with legs ``'vL*', 'vL'``.
+
+        Returns
+        -------
+        Wr : :class:`~lasyten.DiagonalTensor`
+            The eigenvalues of `Gr` (labels ``'vL', 'vR'``), normalized to ``trace(Wr) = chi``.
+        Kl, Kr : :class:`~lasyten.SymmetricTensor`
+            The gauge transformations that were applied to ``B[i0]`` (``compose(B, Kl)``)
+            and ``B[i1]`` (``partial_compose(B, Kr, 'vL')``), with labels ``'vL', 'vR'``.
+
         """
-        # TODO
-        Gr.itranspose(['vL', 'vL*'])
-        W, XH = npc.eigh(Gr)  # -> XH has legs vL vL* = vL vR
-        if np.sign(W[np.argmax(np.abs(W))]) == -1:  # fix sign
-            W = -W  # should actually never happen:  we initially normalize tr(Gr) = chi > 0
+        Gr = lasy.planar_permute_legs(Gr, codomain=['vL*'], domain=['vL'])
+        Gr = 0.5 * (Gr + Gr.hc)  # (should be hermitian already, up to numerical noise)
+        W, Y = lasy.eigh(Gr, new_labels=['vR', 'vL'], sort='>')  # Gr = Y W Y^dagger
+        if abs(W.min().to_numpy()) > abs(W.max().to_numpy()):  # fix sign
+            W = W * -1.0  # should actually never happen:  we initially normalize tr(Gr) = chi > 0
         # discard small values on order of machine precision
-        proj = W > eps
-        if np.count_nonzero(proj) < len(W):
+        mask = lasy.Mask.from_DiagonalTensor(W > eps)
+        chi_old, chi = mask.large_leg.dim, mask.small_leg.dim
+        if chi < chi_old:
             # project into non-degenerate subspace, reducing the bond dimensions!
-            if np.count_nonzero(proj) < len(W) * 0.9:
+            if chi < chi_old * 0.9:
                 logger.warning('canonical_form_infinite: project to significantly smaller chi')
-            XH.iproject(proj, axes=1)
-            W = W[proj]
-        norm = len(W) / np.sum(W)
-        W *= norm
+            Y = lasy.planar_contract_mask(Y, mask.hc.T, 'vR', 'vR*', relabel2={'vL*': 'vR'})
+            W = lasy.tensors.apply_mask_DiagonalTensor(W, mask)
+        norm = chi / lasy.trace(W).to_numpy()
+        W = W * norm
         norm = np.sqrt(norm)  # (norm doesn't change eigenvalue of TM)
-        Kl = XH.iset_leg_labels(['vL', 'vR']) * (1.0 / norm)
-        Kr = XH.transpose().iconj().iset_leg_labels(['vL', 'vR']) * norm
+        # the right gram matrix of the new tensors is diag(W): Kr = Y^T and Kl = conj(Y), see `Y` convention above
+        Kl = Y.hc.T / norm
+        Kl.labels = ['vL', 'vR']
+        Kr = Y.T * norm
+        Kr.labels = ['vL', 'vR']
         i0 = i1 - 1
-        self.set_B(i0, npc.tensordot(self.get_B(i0), Kl, axes=['vR', 'vL']))
-        self.set_B(i1, npc.tensordot(Kr, self.get_B(i1), axes=['vR', 'vL']))
+        self.set_B(i0, lasy.compose(self.get_B(i0), Kl))
+        self.set_B(i1, lasy.tensors.partial_compose(self.get_B(i1), Kr, 'vL'))
         return W, Kl, Kr
 
     def _canonical_form_correct_left(self, i1, Gl, Wr, eps=2.0 * np.finfo(np.double).eps):
@@ -7302,48 +7609,48 @@ class MPS(BaseMPSExpectationValue):
         and dominant right eigenvector is
         diag(Wr) -> Y 1/sqrt(Wr) diag(Wr) 1/sqrt(W) Y^H = diag(1)
         i.e., we brought the bond to canonical form and `S` is the Schmidt spectrum.
+
+        Returns
+        -------
+        Gl : :class:`~lasyten.SymmetricTensor`
+            The new left gram matrix ``S^2`` with legs ``'vR*', 'vR'``.
+        Yl, Yr : :class:`~lasyten.SymmetricTensor`
+            The unitary parts of the gauge transformations applied to ``B[i0]`` and ``B[i1]``.
+
         """
-        # TODO
-        sqrt_Wr = np.sqrt(Wr)
-        Gl.itranspose(['vR*', 'vR'])
-        rhor = Gl.scale_axis(sqrt_Wr, 0).iscale_axis(sqrt_Wr, 1)
-        S2, YH = npc.eigh(rhor, sort='>')  # YH has legs 'vR*', 'vR'
-        S2 /= np.sum(S2)  # equivalent to normalizing tr(rhor)=1
+        sqrt_Wr = lasy.sqrt(Wr)
+        Gl = lasy.planar_permute_legs(Gl, codomain=['vR*'], domain=['vR'])
+        rhor = lasy.scale_axis(lasy.scale_axis(Gl, sqrt_Wr, 'vR*'), sqrt_Wr, 'vR')
+        rhor = 0.5 * (rhor + rhor.hc)  # (should be hermitian already, up to numerical noise)
+        S2, Y = lasy.eigh(rhor, new_labels=['vR', 'vL'], sort='>')  # rhor = Y S2 Y^dagger
+        S2 = S2 / lasy.trace(S2)  # equivalent to normalizing tr(rhor)=1
         s_norm = 1.0
         # discard small values on order of machine precision
-        proj = S2 > eps
-        if np.count_nonzero(proj) < len(S2):
+        mask = lasy.Mask.from_DiagonalTensor(S2 > eps)
+        chi_old, chi = mask.large_leg.dim, mask.small_leg.dim
+        if chi < chi_old:
             # project into non-degenerate subspace, reducing the bond dimensions!
-            if np.count_nonzero(proj) < len(S2) * 0.9:
+            if chi < chi_old * 0.9:
                 logger.warning('canonical_form_infinite: project to significantly smaller chi')
-            YH.iproject(proj, axes=1)
-            S2 = S2[proj]
-            s_norm = np.sqrt(np.sum(S2))
-        S = np.sqrt(S2) / s_norm
+            Y = lasy.planar_contract_mask(Y, mask.hc.T, 'vR', 'vR*', relabel2={'vL*': 'vR'})
+            S2 = lasy.tensors.apply_mask_DiagonalTensor(S2, mask)
+            s_norm = np.sqrt(lasy.trace(S2).to_numpy())
+        S = lasy.sqrt(S2) / s_norm
         self.set_SL(i1, S)
-        Yl = YH.scale_axis(sqrt_Wr / s_norm, 0).iset_leg_labels(['vL', 'vR'])
-        Yr = YH.transpose().iconj().scale_axis(1.0 / sqrt_Wr, 1).iset_leg_labels(['vL', 'vR'])
+        Yl = Y / s_norm
+        Yl.labels = ['vL', 'vR']
+        Yr = Y.hc.copy()
+        Yr.labels = ['vL', 'vR']
         i0 = i1 - 1
-        self.set_B(i0, npc.tensordot(self.get_B(i0), Yl, axes=['vR', 'vL']))
-        self.set_B(i1, npc.tensordot(Yr, self.get_B(i1), axes=['vR', 'vL']))
-        Gl = npc.tensordot(Gl, Yl, axes=['vR', 'vL'])
-        Gl = npc.tensordot(Yl.conj(), Gl, axes=['vL*', 'vR*'])  # labels 'vR*', 'vR'
-        Gl /= npc.trace(Gl)
-        # Gl is diag(S**2) up to numerical errors...
+        B0 = lasy.scale_axis(self.get_B(i0), sqrt_Wr, 'vR')
+        self.set_B(i0, lasy.compose(B0, Yl))
+        B1 = lasy.scale_axis(self.get_B(i1), 1.0 / sqrt_Wr, 'vL')
+        self.set_B(i1, lasy.tensors.partial_compose(B1, Yr, 'vL'))
+        # the new Gl is diag(S**2), up to numerical errors
+        Gl = S**2
+        Gl.labels = ['vR*', 'vR']
+        Gl = Gl.as_SymmetricTensor()
         return Gl, Yl, Yr
-
-    def _gauge_compatible_vL_vR(self, other: MPS) -> MPS:
-        """If necessary, gauge total charge of `other` to match the vL, vR legs of self.
-
-        Returns a shallow copy where legs are adjusted.
-        """
-        need_gauge = self.outer_virtual_legs() != other.outer_virtual_legs()
-        if need_gauge:
-            vL, vR = self.outer_virtual_legs()
-            other = copy.copy(other)  # make shallow copy
-            other._B = other._B[:]
-            other.gauge_total_charge(None, vL, vR)
-        return other
 
     def outer_virtual_legs(self) -> tuple[lasy.ElementarySpace, lasy.ElementarySpace]:
         """Return the virtual legs on the left and right of the MPS.
@@ -7402,11 +7709,13 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         The MPS to project on. Should be given in usual 'ket' form;
         we call `hc` on the matrices directly.
         Stored in place, without making copies.
-        If necessary to match charges, we call :meth:`~tenpy.networks.mps.MPS.gauge_total_charge`.
+        If necessary to match charges, we use a shallow copy gauged with
+        :meth:`~tenpy.networks.mps.MPS.gauge_total_charge`.
     ket : :class:`~tenpy.networks.mpo.MPO` | None
         The MPS on which the local operator acts.
         Stored in place, without making copies.
-        If ``None``, use `bra`.
+        If ``None``, use `bra`. Otherwise, the charge legs are gauged in place with
+        :meth:`~tenpy.networks.mps.MPS.gauge_total_charge`, if necessary.
     cache : :class:`~tenpy.tools.cache.DictCache` | None
         Cache in which the tensors should be saved. If ``None``, a new `DictCache` is generated.
     **init_env_data :
@@ -7447,7 +7756,14 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         if ket is None:
             ket = bra
         if ket is not bra:
-            bra = ket._gauge_compatible_vL_vR(bra)  # ensure matching charges
+            # ensure that the charge legs of bra and ket are on the same (last) site
+            ket.gauge_total_charge()
+            bra = bra._gauged()
+            if _different_total_charges(bra, ket):
+                raise ValueError('bra and ket have different total charges; all contractions vanish.')
+            # TODO: for total charge legs with dim > 1, bra and ket may only share some sectors (check with
+            #       _have_common_total_charge); restrict the charge leg of (the copy of) bra to these sectors?
+            #       Requires masks on LegPipes in lasyten, since merged charge legs with dim > 1 are pipes.
         self.bra = bra
         self.ket = ket
         self.dtype = lasy.Dtype.common(bra.dtype, ket.dtype)
@@ -7601,9 +7917,11 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
                 if U_bra is not None and U_ket is not None:
                     init_LP = lasy.compose(U_bra.hc, U_ket)
                 elif U_bra is not None:
-                    init_LP = U_bra.hc.relabel({'vL*': 'vR'})
+                    init_LP = U_bra.hc
+                    init_LP.labels.update({'vL*': 'vR'})
                 else:
-                    init_LP = U_ket.relabel({'vL': 'vR*'})
+                    init_LP = U_ket
+                    init_LP.labels.update({'vL': 'vR*'})
                 return init_LP
         leg_ket = self.ket.get_B(i - start_env_sites, None).get_leg('vL')
         leg_bra = self.bra.get_B(i - start_env_sites, None).get_leg('vL')
@@ -7646,9 +7964,11 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
                 if V_bra is not None and V_ket is not None:
                     init_RP = lasy.compose(V_ket, V_bra.hc).T
                 elif V_bra is not None:
-                    init_RP = V_bra.T.hc.relabel({'vR*': 'vL'})
+                    init_RP = V_bra.T.hc
+                    init_RP.labels.update({'vR*': 'vL'})
                 else:
-                    init_RP = V_ket.T.relabel({'vR': 'vL*'})
+                    init_RP = V_ket.T
+                    init_RP.labels.update({'vR': 'vL*'})
                 return init_RP
         leg_ket = self.ket.get_B(i + start_env_sites, None).get_leg('vR')
         leg_bra = self.bra.get_B(i + start_env_sites, None).get_leg('vR')
@@ -7668,11 +7988,13 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         The returned ``LP_i`` corresponds to the following contraction,
         where the M's and the N's are in the 'A' form::
 
-            |     .-------M[0]--- ... --M[i-1]--->-   'vR'
-            |     |       |             |
-            |     LP[0]   |             |
-            |     |       |             |
-            |     .-------N[0]*-- ... --N[i-1]*--<-   'vR*'
+            |   ┏━━━━━━━┓  ┏━━━━━━━┓     ┏━━━━━━━━━┓
+            |   ┃       ┠──┨ M[0]  ┠─...─┨ M[i-1]  ┠── 'vR'
+            |   ┃       ┃  ┗━━━┯━━━┛     ┗━━━━┯━━━━┛
+            |   ┃ LP[0] ┃      │              │
+            |   ┃       ┃  ┏━━━┷━━━┓     ┏━━━━┷━━━━┓
+            |   ┃       ┠──┨ N[0]* ┠─...─┨ N[i-1]* ┠── 'vR*'
+            |   ┗━━━━━━━┛  ┗━━━━━━━┛     ┗━━━━━━━━━┛
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
 
@@ -7715,11 +8037,13 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         The returned ``RP_i`` corresponds to the following contraction,
         where the M's and the N's are in the 'B' form::
 
-            |     'vL'  ->---M[i+1]-- ... --M[L-1]----.
-            |                |              |         |
-            |                |              |         RP[L-1]
-            |                |              |         |
-            |     'vL*' -<---N[i+1]*- ... --N[L-1]*---.
+            |           ┏━━━━━━━━━┓     ┏━━━━━━━━━┓  ┏━━━━━━━━━┓
+            |   'vL' ───┨ M[i+1]  ┠─...─┨ M[L-1]  ┠──┨         ┃
+            |           ┗━━━━┯━━━━┛     ┗━━━━┯━━━━┛  ┃         ┃
+            |                │               │       ┃ RP[L-1] ┃
+            |           ┏━━━━┷━━━━┓     ┏━━━━┷━━━━┓  ┃         ┃
+            |   'vL*' ──┨ N[i+1]* ┠─...─┨ N[L-1]* ┠──┨         ┃
+            |           ┗━━━━━━━━━┛     ┗━━━━━━━━━┛  ┗━━━━━━━━━┛
 
         Takes care of shifting as described in :ref:`shift_symmetry`.
 
@@ -7892,18 +8216,18 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         if first == 0:
             if ket_U is not None:
                 LP = lasy.planar_contraction(LP, ket_U.hc, ['vR'], ['vR*'])
-                LP.relabel({'vL*': 'vR'})
+                LP.labels.update({'vL*': 'vR'})
             if bra_U is not None:
                 LP = lasy.planar_contraction(LP, bra_U, ['vR*'], ['vR'])
-                LP.relabel({'vL': 'vR*'})
+                LP.labels.update({'vL': 'vR*'})
         if last == self.ket.L - 1:
             if ket_V is not None:
                 RP = lasy.planar_contraction(RP, ket_V.hc, ['vL'], ['vL*'])
-                RP.relabel({'vR*': 'vL'})
+                RP.labels.update({'vR*': 'vL'})
         if last == self.bra.L - 1:
             if bra_V is not None:
                 RP = lasy.planar_contraction(RP, bra_V, ['vL*'], ['vL'])
-                RP.relabel({'vR': 'vL*'})
+                RP.labels.update({'vR': 'vL*'})
         data = {
             'init_LP': LP,
             'age_LP': self.get_LP_age(first),
@@ -8079,24 +8403,28 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
     The network for a contraction :math:`<bra|Op|ket>` of a local operator `Op`, say exemplary
     at sites `i, i+1` looks like::
 
-        |     .-----M[0]--- ... --M[1]---M[2]--- ... ->--.
-        |     |     |             |      |               |
-        |     |     |             |------|               |
-        |     LP[0] |             |  Op  |               RP[-1]
-        |     |     |             |------|               |
-        |     |     |             |      |               |
-        |     .-----N[0]*-- ... --N[1]*--N[2]*-- ... -<--.
+        |   ┏━━━━━━━┓  ┏━━━━━━━┓     ┏━━━━━━━┓  ┏━━━━━━━┓     ┏━━━━━━━━┓
+        |   ┃       ┠──┨ M[0]  ┠─...─┨ M[1]  ┠──┨ M[2]  ┠─...─┨        ┃
+        |   ┃       ┃  ┗━━━┯━━━┛     ┗━━━┯━━━┛  ┗━━━┯━━━┛     ┃        ┃
+        |   ┃       ┃      │             │          │         ┃        ┃
+        |   ┃       ┃      │         ┏━━━┷━━━━━━━━━━┷━━━┓     ┃        ┃
+        |   ┃ LP[0] ┃      │         ┃        Op        ┃     ┃ RP[-1] ┃
+        |   ┃       ┃      │         ┗━━━┯━━━━━━━━━━┯━━━┛     ┃        ┃
+        |   ┃       ┃      │             │          │         ┃        ┃
+        |   ┃       ┃  ┏━━━┷━━━┓     ┏━━━┷━━━┓  ┏━━━┷━━━┓     ┃        ┃
+        |   ┃       ┠──┨ N[0]* ┠─...─┨ N[1]* ┠──┨ N[2]* ┠─...─┨        ┃
+        |   ┗━━━━━━━┛  ┗━━━━━━━┛     ┗━━━━━━━┛  ┗━━━━━━━┛     ┗━━━━━━━━┛
 
     This class stores the partial contractions `LP` and `RP` coming from the left and right up to
     each bond, allowing efficient calculations of expectation values, correlation functions etc.
 
-    We use the following label convention (where arrows indicate `qconj`)::
+    We use the following label convention::
 
-        |    .-->- vR           vL ->-.
-        |    |                        |
-        |    LP                       RP
-        |    |                        |
-        |    .--<- vR*         vL* -<-.
+        |   ┏━━━━━━┓                 ┏━━━━━━┓
+        |   ┃      ┠── vR      vL ───┨      ┃
+        |   ┃  LP  ┃                 ┃  RP  ┃
+        |   ┃      ┠── vR*    vL* ───┨      ┃
+        |   ┗━━━━━━┛                 ┗━━━━━━┛
 
     """
 
@@ -8148,10 +8476,7 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         return np.real_if_close(np.asarray(value)) * (self.bra.norm * self.ket.norm)
 
 
-# TODO_MPS stopped here
-
-
-class TransferMatrix(lasy.tensors.sparse.LinearOperator):  # TODO: adapt for LinearOperator
+class TransferMatrix(lasy.tensors.sparse.LinearOperator):
     r"""Transfer matrix of two MPS (bra & ket).
 
     For an iMPS in the thermodynamic limit, we often need to find the 'dominant `RP`' (and `LP`).
@@ -8162,14 +8487,24 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):  # TODO: adapt for Lin
 
     Given two MPS, we define the transfer matrix as::
 
-        |    ---M[i]---M[i+1]- ... --M[i+L]---
-        |       |      |             |
-        |    ---N[j]*--N[j+1]* ... --N[j+L]*--
+        |     ┏━━━━━━━┓  ┏━━━━━━━━━┓     ┏━━━━━━━━━┓
+        |   ──┨ M[i]  ┠──┨ M[i+1]  ┠─...─┨ M[i+L]  ┠──
+        |     ┗━━━┯━━━┛  ┗━━━━┯━━━━┛     ┗━━━━┯━━━━┛
+        |         │           │               │
+        |     ┏━━━┷━━━┓  ┏━━━━┷━━━━┓     ┏━━━━┷━━━━┓
+        |   ──┨ N[j]* ┠──┨ N[j+1]* ┠─...─┨ N[j+L]* ┠──
+        |     ┗━━━━━━━┛  ┗━━━━━━━━━┛     ┗━━━━━━━━━┛
 
     Here the `N` denotes the matrices of the bra and `M` the ones of the ket, respectively.
-    To view it as a `matrix`, we combine the left and right indices to pipes::
+    The transfer matrix acts on the "vectors" `RP` with legs ``vL* <- vL`` (``transpose=False``)
+    or `LP` with legs ``vR* <- vR`` (``transpose=True``), as obtained from
+    :meth:`MPS.get_RP` and :meth:`MPS.get_LP`.
+    For a non-trivial :attr:`charge_sector`, the vectors have an additional leg ``'c'`` carrying
+    the charge, which is placed on the outer side, i.e., the legs are ``[vL*, c, vL]`` for `RP`
+    and ``[vR*, vR, c]`` for `LP` (in the cyclic order of :attr:`~lasyten.Tensor.legs`).
 
-        |  (vL.vL*) ->-TM->- (vR.vR*)   acting on  (vL.vL*) ->-RP
+    The eigenvectors are found with the :class:`~lasyten.tensors.krylov_based.Arnoldi` method
+    acting directly on the tensors, such that it works for all symmetries and backends.
 
     Note that we keep all M and N as copies.
 
@@ -8188,15 +8523,14 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):  # TODO: adapt for Lin
         We start the `M` of the ket at site `shift_ket` (i.e. the `i` in the above network).
     transpose : bool
         Whether `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
-    charge_sector : None | :class:``~lasyten.Sector`` | ``0``
+    charge_sector : None | :class:`~lasyten.Sector` | ``0`` | ``'trivial'``
         Selects the charge sector of the vector onto which the linear operator acts.
-        ``None`` stands for *all* sectors, ``0`` stands for the trivial charge sector.
-        Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in charge sector 0.
+        ``None`` stands for *all* sectors, ``0`` or ``'trivial'`` for the trivial sector.
+        Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in the trivial sector.
         Note that you can update the `charge_sector` after initialization
         via the :attr:`charge_sector` property.
     form : ``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)
         In which canonical form we take the `M` and `N` matrices.
-
 
     Attributes
     ----------
@@ -8209,21 +8543,20 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):  # TODO: adapt for Lin
         We start the `M` of the ket at site `shift_ket`.
     transpose : bool
         Whether `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
-    qtotal : charges
-        Total charge of the transfer matrix (which is gauged away in matvec).
-    form : tuple(float, float) | None
-        In which canonical form (all of) the `M` and `N` matrices are.
-    flat_linop : :class:`~tenpy.linalg.sparse.FlatLinearOperator`
-        Class lifting :meth:`matvec` to ndarrays in order to use :func:`~tenpy.tools.math.speigs`.
-    pipe : :class:`~tenpy.linalg.charges.LegPipe`
-        Pipe corresponding to ``'(vL.vL*)'`` for ``transpose=False``
-        or to ``'(vR.vR*)'`` for ``transpose=True``.
-    label_split :
-        ``['vL', 'vL*']`` if ``transpose=False`` or ``['vR', 'vR*']`` if ``transpose=True``.
-    _bra_N : list of npc.Array
-        Complex conjugated matrices of the bra, transposed for fast `matvec`.
-    _ket_M : list of npc.Array
-        The matrices of the ket, transposed for fast `matvec`.
+    unit_cell_width : int
+        See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+    backend : :class:`~lasyten.TensorBackend`
+        The backend of the bra and ket tensors.
+    device : str
+        The device of the bra and ket tensors.
+    charge_leg : :class:`~lasyten.ElementarySpace` | None
+        The space of the leg ``'c'`` of the vectors for the :attr:`charge_sector`,
+        as it appears in the codomain of `RP` and in the domain of `LP`.
+        ``None`` for the trivial sector, where the vectors have no leg ``'c'``.
+    _bra_N : list of :class:`~lasyten.SymmetricTensor`
+        Complex conjugated matrices of the bra (with labels ``vR*, p*, vL*``), left to right.
+    _ket_M : list of :class:`~lasyten.SymmetricTensor`
+        The matrices of the ket, left to right.
 
     """
 
@@ -8234,32 +8567,36 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):  # TODO: adapt for Lin
         shift_bra: int = 0,
         shift_ket: int = 0,
         transpose: bool = False,
-        charge_sector: None | lasy.Sector | 0 = 0,
+        charge_sector: None | lasy.Sector | Literal[0, 'trivial'] = 0,
         form='B',
     ):
         L = lcm(bra.L, ket.L)
         unit_cell_width = ket.unit_cell_width * (L // ket.L)
         if ket.symmetry != bra.symmetry:
             raise ValueError('incompatible symmetries')
+        if bra is not ket:
+            # ensure that the charge legs of bra and ket are on the same (last) site, see MPSEnvironment
+            bra = bra._gauged()
+            ket = ket._gauged()
+            if _different_total_charges(bra, ket):
+                raise ValueError(
+                    'bra and ket have different total charges, such that the TransferMatrix is nil-potent '
+                    '(or its eigenvectors break the symmetry, e.g. for Z_N charges). '
+                    'For Z_N charges, you can enlarge the unit cell of the MPS to avoid that.'
+                )
         self.shift_bra = shift_bra
         self.shift_ket = shift_ket
-        assert ket._p_label == bra._p_label
         form = ket._to_valid_form(form)
         ket_M = [ket.get_B(i, form=form) for i in range(shift_ket, shift_ket + L)]
         bra_N = [bra.get_B(i, form=form) for i in range(shift_bra, shift_bra + L)]
-
-        self._init_from_Ns_Ms(
-            bra_N, ket_M, transpose, charge_sector, ket._p_label, not ket.finite, unit_cell_width=unit_cell_width
-        )
+        self._init_from_Ns_Ms(bra_N, ket_M, transpose, charge_sector, unit_cell_width=unit_cell_width)
 
     def _init_from_Ns_Ms(
         self,
-        bra_N: list[lasy.Tensor],
-        ket_M: list[lasy.Tensor],
+        bra_N: list[lasy.SymmetricTensor],
+        ket_M: list[lasy.SymmetricTensor],
         transpose: bool,
-        charge_sector: None | lasy.Sector | 0,
-        p_label: list[str],
-        infinite: bool = True,
+        charge_sector: None | lasy.Sector | Literal[0, 'trivial'],
         conjugate_Ns: bool = True,
         unit_cell_width: int = None,
     ):
@@ -8283,57 +8620,29 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):  # TODO: adapt for Lin
         self.unit_cell_width = unit_cell_width
         assert len(ket_M) == L
         self.transpose = transpose
-        self._p_label = p = p_label  # for usual MPS just ['p']
-        self._pstar_label = pstar = [lbl + '*' for lbl in self._p_label]
+        self._ket_M = ket_M
+        self._bra_N = [B.hc for B in bra_N] if conjugate_Ns else bra_N
+        self.backend = lasy.backends.get_same_backend(*[T for T in self._ket_M + self._bra_N])
+        self.device = lasy.tensors.get_same_device(*[T for T in self._ket_M + self._bra_N])
         if not transpose:  # right to left
-            label = '(vL.vL*)'  # what we act on
-            label_split = ['vL', 'vL*']
-            M = self._ket_M = [B.itranspose(['vL'] + p + ['vR']) for B in reversed(ket_M)]
-            if conjugate_Ns:
-                N = self._bra_N = [B.conj().itranspose(pstar + ['vR*', 'vL*']) for B in reversed(bra_N)]
-            else:
-                N = self._bra_N = [B.itranspose(pstar + ['vR*', 'vL*']) for B in reversed(bra_N)]
-            pipe = npc.LegPipe([M[0].get_leg('vR'), N[0].get_leg('vR*')], qconj=-1).conj()
+            legs = [self._bra_N[-1].get_leg('vR*').dual, ket_M[-1].get_leg('vR').dual]
+            labels = ['vL*', 'vL']
         else:  # left to right
-            label = '(vR*.vR)'  # mathematically more natural
-            label_split = ['vR*', 'vR']
-            M = self._ket_M = [B.itranspose(['vL'] + p + ['vR']) for B in ket_M]
-            if conjugate_Ns:
-                N = self._bra_N = [B.conj().itranspose(['vR*', 'vL*'] + pstar) for B in bra_N]
-            else:
-                N = self._bra_N = [B.itranspose(['vR*', 'vL*'] + pstar) for B in bra_N]
-            pipe = npc.LegPipe([N[0].get_leg('vL*'), M[0].get_leg('vL')], qconj=+1).conj()
-        dtype = np.promote_types(M[0].dtype, N[0].dtype)
-        self.pipe = pipe
-        self.label_split = label_split
-        self.flat_linop = npc.FlatLinearOperator(self.matvec, pipe, dtype, charge_sector, label)
-        chinfo = M[0].chinfo
-        self.qtotal = chinfo.make_valid(np.sum([B.qtotal for B in M + N], axis=0))
-        if infinite and np.any(self.qtotal != 0):
-            # for non-zero U(1) qtotal, we can immediately say that `self` is nilpotent.
-            # In contrast, nonzero Z_N qtotal does not imply that, since the transfer-matrix
-            # doesn't have to be hermitian: it could be circulant, with arbitrary eigenvalues!
-            # The eigenvectors will *not* conserve the charge in this case!
-            enlarge_factors = []
-            for i in np.nonzero(self.qtotal)[0]:
-                if chinfo.mod[i] == 1:  # U(1) qtotal
-                    raise ValueError('TransferMatrix is nil-potent due to charges')
-                enlarge_factors.append(chinfo.mod[i])  # get N of Z_N charge
-            raise ValueError(
-                'TransferMatrix has non-zero qtotal for Z_N charges. '
-                'It can have valid eigenvectors, but they will break the Z_N charge. '
-                'To avoid that, you can enlarge the unit cell of the MPS '
-                'by a factor of ' + str(enlarge_factors)
-            )
+            legs = [self._bra_N[0].get_leg('vL*').dual, ket_M[0].get_leg('vL').dual]
+            labels = ['vR*', 'vR']
+        self._trivial_legs = legs
+        self._trivial_labels = labels
+        dtype = lasy.Dtype.common(*[T.dtype for T in self._ket_M + self._bra_N])
+        super().__init__(legs, dtype, labels)
+        self.charge_sector = charge_sector
 
     @classmethod
     def from_Ns_Ms(
         cls,
-        bra_N: list[lasy.Tensor],
-        ket_M: list[lasy.Tensor],
+        bra_N: list[lasy.SymmetricTensor],
+        ket_M: list[lasy.SymmetricTensor],
         transpose: bool = False,
-        charge_sector: None | lasy.Sector | 0 = 0,
-        p_label: list[str] = ['p'],
+        charge_sector: None | lasy.Sector | Literal[0, 'trivial'] = 0,
         conjugate_Ns: bool = True,
         unit_cell_width: int = None,
     ):
@@ -8341,17 +8650,15 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):  # TODO: adapt for Lin
 
         Parameters
         ----------
-        bra_N, ket_M : list of :class:`~lasyten.tensors.Tensor`
+        bra_N, ket_M : list of :class:`~lasyten.SymmetricTensor`
             Plain tensors of the bra and ket, in a list going left to right,
             the bra not conjugated.
         transpose : bool
             Whether `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
-        charge_sector : None | :class:``~lasyten.Sector`` | ``0``
+        charge_sector : None | :class:`~lasyten.Sector` | ``0`` | ``'trivial'``
             Selects the charge sector of the vector onto which the Linear operator acts.
-            ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
-            Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in charge sector 0.
-        p_label : list of str
-            Physical label(s) of the tensors.
+            ``None`` stands for *all* sectors, ``0`` or ``'trivial'`` for the trivial sector.
+            Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in the trivial sector.
         conjugate_Ns : bool
             If False, assumes that bra_N is already complex conjugated.
         unit_cell_width : int
@@ -8361,85 +8668,237 @@ class TransferMatrix(lasy.tensors.sparse.LinearOperator):  # TODO: adapt for Lin
         self = cls.__new__(cls)
         self.shift_bra = self.shift_ket = 0
         self._init_from_Ns_Ms(
-            bra_N, ket_M, transpose, charge_sector, p_label, conjugate_Ns=conjugate_Ns, unit_cell_width=unit_cell_width
+            bra_N, ket_M, transpose, charge_sector, conjugate_Ns=conjugate_Ns, unit_cell_width=unit_cell_width
         )
         return self
 
     @property
-    def charge_sector(self):
-        return self.flat_linop.charge_sector
+    def charge_sector(self) -> None | lasy.Sector:
+        """The charge sector of the vectors, ``None`` for all sectors. See :attr:`charge_leg`."""
+        return self._charge_sector
 
     @charge_sector.setter
-    def charge_sector(self, value):
-        self.flat_linop.charge_sector = value
-
-    def matvec(self, vec):
-        """Given `vec` as an npc.Array, apply the transfer matrix.
-
-        Parameters
-        ----------
-        vec : :class:`~tenpy.linalg.np_conserved.Array`
-            Vector to act on with the transfermatrix.
-            If not `transposed`, `vec` is the right part `RP` of an environment,
-            with legs ``'(vL.vL*)'`` in a pipe or splitted.
-            If `transposed`, the left part `LP` of an environment with legs ``'(vR*.vR)'``.
-
-        Returns
-        -------
-        mat_vec : :class:`~tenpy.linalg.np_conserved.Array`
-            The transfer matrix acted on `vec`, in the same form as given.
-
-        """
-        pipe = None
-        if self.label_split[0] not in vec._labels:
-            vec = vec.split_legs(0)
-            pipe = self.pipe
-        orig_labels = vec.get_leg_labels()
-        # vec.itranspose(self.label_split)  # ['vL', 'vL*'] or ['vR*', 'vR']
-        # the actual work
-        if not self.transpose:  # right to left
-            contract = [self._p_label + ['vL*'], self._pstar_label + ['vR*']]
-            for N, M in zip(self._bra_N, self._ket_M):
-                vec = npc.tensordot(M, vec, axes=['vR', 'vL'])
-                vec = npc.tensordot(vec, N, axes=contract)  # [['p', 'vL*'], ['p*', 'vR*']]
-            vec = vec.shift_charges_horizontal(dx_0=self.unit_cell_width)
-        else:  # left to right
-            contract = [['vL*'] + self._pstar_label, ['vR*'] + self._p_label]
-            for N, M in zip(self._bra_N, self._ket_M):
-                vec = npc.tensordot(vec, M, axes=['vR', 'vL'])
-                vec = npc.tensordot(N, vec, axes=contract)  # [['vL*', 'p*'], ['vR*', 'p']])
-            vec = vec.shift_charges_horizontal(dx_0=-self.unit_cell_width)
-        if pipe is None:
-            vec.itranspose(orig_labels)  # make sure we have the same labels/order as before
+    def charge_sector(self, value: None | lasy.Sector | Literal[0, 'trivial']):
+        symmetry = self._ket_M[0].symmetry
+        if value == 'trivial' or value == 0:
+            value = symmetry.trivial_sector
+            self.charge_leg = None
+        elif value is None:
+            # all sectors, each with multiplicity 1: the operator is the direct sum over the sectors
+            sectors = lasy.TensorProduct(self._trivial_legs, symmetry).sector_decomposition
+            self.charge_leg = lasy.ElementarySpace.from_defining_sectors(symmetry, sectors)
+        elif isinstance(value, lasy.Sector):
+            if not symmetry.is_valid_sector(value):
+                raise ValueError(f'invalid charge_sector {value!r}')
+            self.charge_leg = lasy.ElementarySpace.from_defining_sectors(symmetry, [value])
         else:
-            vec = vec.combine_legs(self.label_split, pipes=pipe)
-        return vec
+            raise ValueError(f'invalid charge_sector {value!r}')
+        self._charge_sector = value
+        if self.charge_leg is None:
+            self.vector_legs = self._trivial_legs
+            self.vector_labels = self._trivial_labels
+        elif not self.transpose:  # RP: [vL*, c, vL] with c in the codomain
+            self.vector_legs = [self._trivial_legs[0], self.charge_leg.dual, self._trivial_legs[1]]
+            self.vector_labels = ['vL*', 'c', 'vL']
+        else:  # LP: [vR*, vR, c] with c in the domain
+            self.vector_legs = [*self._trivial_legs, self.charge_leg.dual]
+            self.vector_labels = ['vR*', 'vR', 'c']
 
-    def initial_guess(self, diag=1.0):
-        """Return a diagonal matrix as initial guess for the eigenvector.
+    def matvec(self, vec: lasy.SymmetricTensor) -> lasy.SymmetricTensor:
+        """Apply the transfer matrix to `vec`.
 
         Parameters
         ----------
-        diag : float | 1D ndarray
-            Should be ``1.`` for the identity or some singular values squared.
+        vec : :class:`~lasyten.SymmetricTensor`
+            Vector to act on with the transfer matrix.
+            If not `transposed`, `vec` is the right part `RP` of an environment,
+            with legs ``vL*, vL`` (and ``c`` for a non-trivial :attr:`charge_sector`).
+            If `transposed`, the left part `LP` of an environment with legs ``vR*, vR`` (and ``c``).
 
         Returns
         -------
-        mat : :class:`~tenpy.linalg.np_conserved.Array`
-            A 2D array with `diag` on the diagonal such that :meth:`matvec` can act on it.
+        mat_vec : :class:`~lasyten.SymmetricTensor`
+            The transfer matrix acted on `vec`, with the same legs in codomain and domain as `vec`.
 
         """
-        return npc.diag(diag, self.pipe.legs[0], labels=self.label_split)
+        codomain, domain = vec.codomain_labels, vec.domain_labels
+        charged = vec.labels.has('c')
+        if not self.transpose:  # right to left
+            diagram = mps_contraction_diagram_operations['TM @ RP2c' if charged else 'TM @ RP2']
+            for N, M in zip(reversed(self._bra_N), reversed(self._ket_M)):
+                vec = diagram.evaluate(dict(RP=vec, ket=M, bra=N))
+        else:  # left to right
+            diagram = mps_contraction_diagram_operations['LP2c @ TM' if charged else 'LP2 @ TM']
+            for N, M in zip(self._bra_N, self._ket_M):
+                vec = diagram.evaluate(dict(LP=vec, ket=M, bra=N))
+        # TODO: shift the charges by one unit cell (with unit_cell_width) for shift-symmetries
+        return lasy.planar_permute_legs(vec, codomain=codomain, domain=domain)
 
-    def eigenvectors(self, *args, **kwargs):
-        """Find (dominant) eigenvector(s) of self using :mod:`scipy.sparse`.
+    def initial_guess(self, diag: float | lasy.DiagonalTensor = 1.0) -> lasy.SymmetricTensor:
+        """Return an initial guess for the eigenvector.
 
-        For arguments see :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors`.
+        Parameters
+        ----------
+        diag : float | :class:`~lasyten.DiagonalTensor`
+            For the trivial :attr:`charge_sector`, the guess is the identity times `diag`, or
+            `diag` itself if it is a :class:`~lasyten.DiagonalTensor`, e.g., some singular values squared.
+            Requires that the virtual legs of bra and ket are the same; otherwise (and for a
+            non-trivial :attr:`charge_sector`) we return a random tensor.
 
-        If no :attr:`charge_sector` was selected, we look in *all* charge sectors.
-        The returned eigenvectors have combined legs ``'(vL.vL*)'`` or ``(vR*.vR)``.
+        Returns
+        -------
+        guess : :class:`~lasyten.SymmetricTensor`
+            A tensor with the legs such that :meth:`matvec` can act on it.
+
         """
-        return self.flat_linop.eigenvectors(*args, **kwargs)
+        leg_bra, leg_ket = self._trivial_legs
+        if self.charge_leg is None and leg_bra == leg_ket.dual:
+            if isinstance(diag, lasy.DiagonalTensor):
+                guess = diag.copy().as_dtype(lasy.Dtype.common(diag.dtype, self.dtype))
+                guess.labels.set(self._trivial_labels)
+            else:
+                guess = lasy.DiagonalTensor.from_eye(
+                    leg_bra, backend=self.backend, labels=self._trivial_labels, dtype=self.dtype, device=self.device
+                )
+                guess = guess * diag
+            return guess.as_SymmetricTensor()
+        # TODO: adjust this guess later on
+        if self.charge_leg is None:
+            codomain, domain = [leg_bra], [leg_ket.dual]
+        elif not self.transpose:  # RP: [vL*, c, vL]
+            codomain, domain = [leg_bra, self.charge_leg.dual], [leg_ket.dual]
+        else:  # LP: [vR*, vR, c]
+            codomain, domain = [leg_bra], [self.charge_leg, leg_ket.dual]
+        return lasy.SymmetricTensor.from_random_normal(
+            codomain, domain, backend=self.backend, labels=self.vector_labels, dtype=self.dtype, device=self.device
+        )
+
+    def eigenvectors(
+        self,
+        num_ev: int = 1,
+        which: str = 'LM',
+        v0: lasy.SymmetricTensor | None = None,
+        tol: float | None = None,
+        N_max: int = 80,
+        max_restarts: int = 50,
+    ) -> tuple[np.ndarray, list[lasy.SymmetricTensor]]:
+        """Find (dominant) eigenvector(s) of self with the :class:`~lasyten.tensors.krylov_based.Arnoldi` method.
+
+        We restart the Arnoldi iteration from the sum of the current eigenvector estimates, until all of them
+        are converged.
+        If :attr:`charge_sector` is ``None``, we look in *all* charge sectors, one after the other: a Krylov
+        method can not resolve exact degeneracies (e.g. between the sectors ``q`` and ``-q`` for ``bra == ket``)
+        from a single starting vector. Use :meth:`eigenvector_charge` to find the charge sector of an eigenvector.
+
+        Parameters
+        ----------
+        num_ev : int
+            Number of eigenvalues/vectors to look for. Reduced (with a warning) if it is larger than the
+            dimension of the space the transfer matrix acts on.
+        which : ``'LM' | 'LR' | 'SR'``
+            Which eigenvalues to look for, see :class:`~lasyten.tensors.krylov_based.Arnoldi`.
+        v0 : :class:`~lasyten.SymmetricTensor` | None
+            Initial guess, with legs as for :meth:`matvec`. Defaults to :meth:`initial_guess`.
+            Ignored for ``charge_sector=None``.
+        tol : float | None
+            Tolerance for the residuals ``norm(self.matvec(v) - eta * v)`` of the normalized eigenvectors
+            `v`, relative to the largest magnitude of the eigenvalues `eta`.
+            Defaults to ``1e-13`` for a single eigenvector. If we look for several, the transfer matrix is not
+            normal and subdominant eigenvalues (e.g. complex conjugate pairs) do not converge that far: ``1e-10``.
+        N_max : int
+            Maximum dimension of the Krylov space in each Arnoldi run.
+        max_restarts : int
+            Maximum number of restarts. We warn if the eigenvectors are not converged after that.
+
+        Returns
+        -------
+        eta : 1D ndarray
+            The eigenvalues, sorted according to `which`.
+        w : list of :class:`~lasyten.SymmetricTensor`
+            The corresponding (normalized) eigenvectors, with legs as for :meth:`matvec`.
+
+        """
+        if self.charge_sector is None:
+            eta, w = [], []
+            try:
+                trivial_sector = self.charge_leg.symmetry.trivial_sector
+                for sector in self.charge_leg.defining_sectors:
+                    # the trivial sector is special-cased (no charge leg, identity as initial guess)
+                    self.charge_sector = 0 if sector == trivial_sector else sector
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings('ignore', 'TransferMatrix.eigenvectors: reduce num_ev')
+                        eta_s, w_s = self.eigenvectors(num_ev, which, None, tol, N_max, max_restarts)
+                    eta.extend(eta_s)
+                    w.extend(w_s)
+            finally:
+                self.charge_sector = None
+            perm = argsort(np.array(eta), which)[:num_ev]
+            return np.real_if_close(np.array(eta)[perm]), [w[i] for i in perm]
+        if v0 is None:
+            v0 = self.initial_guess()
+        dim = v0.num_parameters
+        if num_ev > dim:
+            warnings.warn(f'TransferMatrix.eigenvectors: reduce num_ev={num_ev} to the dimension {dim}', stacklevel=2)
+            num_ev = dim
+        if num_ev > 1:
+            # make sure v0 is not an (exact) eigenvector, which would stop Arnoldi after a single step
+            noise = lasy.SymmetricTensor.from_random_normal(
+                v0.codomain, v0.domain, backend=v0.backend, labels=v0.labels, dtype=v0.dtype, device=v0.device
+            )
+            v0 = v0 / lasy.norm(v0) + 1.0e-3 * noise / lasy.norm(noise)
+        if dim == 1:
+            # the only vector is an eigenvector (and Arnoldi needs at least 2 steps)
+            v = v0 / lasy.norm(v0)
+            eta = np.atleast_1d(np.real_if_close(lasy.inner(v, self.matvec(v)).to_numpy()))
+            return eta, [v]
+        if tol is None:
+            tol = 1.0e-13 if num_ev == 1 else 1.0e-10
+        N = int(min(N_max, dim))
+        options = dict(num_ev=num_ev, which=which, N_min=min(N, num_ev + 2), N_max=N, N_cache=N, E_tol=0.1 * tol)
+        for restart in range(max_restarts + 1):
+            eta, w, _ = lasy.tensors.Arnoldi(self, v0, options).run()
+            # Arnoldi might stop early (if v0 is in an invariant subspace) with less than `num_ev` vectors
+            eta = np.asarray(eta)[: len(w)]
+            norms = [lasy.norm(v).to_numpy() for v in w]
+            keep = [k for k, n in enumerate(norms) if n > 0.0]
+            eta = eta[keep]
+            w = [w[k] / norms[k] for k in keep]
+            scale = max(np.max(np.abs(eta)), np.finfo(float).tiny)
+            residuals = [lasy.norm(self.matvec(v) - complex(e) * v).to_numpy() for e, v in zip(eta, w)]
+            if len(w) == num_ev and max(residuals) <= tol * scale:
+                break
+            if restart > 0 and 0 < len(w) < num_ev and max(residuals) <= tol * scale:
+                # Even after restarting with the full Krylov space (and some noise), we find less than `num_ev`
+                # vectors, all of them converged: there are no further eigenvectors reachable by the
+                # Krylov method (e.g. an exactly invariant subspace of smaller dimension than `dim`).
+                break
+            # restart from the sum of the eigenvector estimates, with some noise to leave invariant subspaces
+            noise = lasy.SymmetricTensor.from_random_normal(
+                v0.codomain, v0.domain, backend=v0.backend, labels=v0.labels, dtype=v0.dtype, device=v0.device
+            )
+            v0 = 1.0e-3 * noise / lasy.norm(noise)
+            for v in w:
+                v0 = v0 + v
+            options['N_min'] = N  # build the full Krylov space after the first restart
+        else:
+            warnings.warn(
+                f'TransferMatrix.eigenvectors did not converge to tol={tol:.1e}: found {len(w):d} of {num_ev:d} '
+                f'eigenvectors with residuals {max(residuals, default=np.inf) / scale:.1e} after {max_restarts:d} '
+                'restarts',
+                stacklevel=2,
+            )
+        eta = np.atleast_1d(np.real_if_close(eta))
+        return eta, w
+
+    def eigenvector_charge(self, vec: lasy.SymmetricTensor) -> lasy.Sector:
+        """The charge sector of an eigenvector `vec`."""
+        if not vec.labels.has('c'):
+            return self._ket_M[0].symmetry.trivial_sector
+        charge_leg = vec.get_leg('c').dual
+        sectors = charge_leg.defining_sectors
+        if len(sectors) == 1:
+            return sectors[0]
+        raise ValueError(f'charge_leg {charge_leg!r} has more than one sector: {sectors!r}')
 
 
 class InitialStateBuilder:
@@ -8471,15 +8930,15 @@ class InitialStateBuilder:
     Examples
     --------
     If you use the :class:`~tenpy.simulations.simulation.Simulation` setup, it will extract
-    the `lattice` and `model_dtype` from the :attr:`~tenpy.models.model.Model.lat` and MPO dtype.
-    Let's assume that we have a lattice `lat` with :class:`~tenpy.networks.site.SpinHalfSite`
+    the `lattice` and `model_dtype` from the :attr:`~tenpy.models.model.Model.lattice` and MPO dtype.
+    Let's assume that we have a lattice `lat` with :class:`~lasyten.sites.SpinSite`
     on a square lattices. Then you could initialize a Neel state like this:
 
     .. testsetup :: InitialStateBuilder
 
         from tenpy.networks.mps import InitialStateBuilder
         import tenpy
-        spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
+        spin_half = lasyten.sites.SpinSite(conserve=None)
         lat = tenpy.models.lattice.Square(4, 4, spin_half)
 
     .. doctest :: InitialStateBuilder
@@ -8556,7 +9015,7 @@ class InitialStateBuilder:
         if check_charge is None:
             return
         check_charge = tuple(check_charge)
-        has_charge = tuple(psi.get_total_charge(psi.bc == 'finite'))
+        has_charge = tuple(psi.get_total_charge())
         assert check_charge == has_charge
 
     def from_file(self):
@@ -8933,6 +9392,53 @@ def _charge_leg_labels(B: lasy.Tensor) -> list[str]:
     return [B.labels[i] for i in B.hidden_leg_idcs() if MPS_TOTAL_CHARGE_LABEL in B.labels[i]]
 
 
+def _combine_virtual_legs(parts: list[lasy.SymmetricTensor]) -> lasy.SymmetricTensor:
+    """Combine tensors on parallel virtual bonds into a single tensor with legs ``vL, (p), vR``.
+
+    Each of the `parts` has legs ``vL, vR`` and at most one of them additionally a physical leg.
+    The outer product of the `parts` is taken and the virtual legs are combined to
+    ``vL = (vL0.vL1...)`` and ``vR = (vR0.vR1...)``, which are then flattened to
+    :class:`~lasyten.ElementarySpace`s. If the `parts` on the left and right of a bond contain the
+    same bonds in the same order (up to additional trivial legs), the resulting legs are
+    contractible. Used by :meth:`MPS.from_product_mps_covering`.
+    """
+    n = len(parts)
+    if n == 1:
+        return parts[0]
+    p_parts = [k for k, T in enumerate(parts) if T.num_legs - len(_charge_leg_labels(T)) > 2]
+    if any(k != n - 1 for k in p_parts) and not parts[0].symmetry.has_symmetric_braid:
+        # the physical leg would need to be braided past the virtual legs of the following parts
+        raise NotImplementedError('Crossing bonds require a symmetry with symmetric braids.')
+    T = parts[0].copy(deep=False)
+    T.labels.update({'vL': 'vL0', 'vR': 'vR0'})
+    for k in range(1, n):
+        T = lasy.outer(T, parts[k], relabel2={'vL': f'vL{k:d}', 'vR': f'vR{k:d}'})
+    vLs = [f'vL{k:d}' for k in range(n)]
+    vRs = [f'vR{k:d}' for k in reversed(range(n))]  # reversed, such that vR pipe is dual to vL pipe
+    T = lasy.combine_legs(T, vLs, vRs, pipe_dualities=[False, True])
+    combine_labels = lasy.tensors._tensors._combine_leg_labels
+    T.labels.update({combine_labels(vLs): 'vL', combine_labels(vRs): 'vR'})
+    return lasy.flatten_pipe_leg(lasy.flatten_pipe_leg(T, 'vL'), 'vR')
+
+
+def _different_total_charges(bra: MPS, ket: MPS) -> bool:
+    """Whether the gauged `bra` and `ket` have different total charges, see :meth:`MPS.get_total_charge`.
+
+    If so, `bra` and `ket` are in different charge sectors such that e.g. their overlap vanishes.
+    For different unit cells, the total charges (per unit cell) are not comparable and we return ``False``.
+
+    TODO: For total charge legs with dim > 1, this always returns ``False``, although `bra` and `ket` may
+    only share some (or none) of the sectors, see :func:`_have_common_total_charge`.
+    """
+    if bra.L != ket.L:
+        return False
+    for psi in [bra, ket]:
+        leg = psi.total_charge_leg
+        if leg is not None and leg.dim > 1:
+            return False
+    return bra.get_total_charge() != ket.get_total_charge()
+
+
 def _flatten_domain_pipe(B: lasy.SymmetricTensor, domain_pos: int) -> lasy.SymmetricTensor:
     """Replace a one-dimensional pipe in the domain of `B` by the equivalent :class:`~lasyten.ElementarySpace`.
 
@@ -8940,7 +9446,7 @@ def _flatten_domain_pipe(B: lasy.SymmetricTensor, domain_pos: int) -> lasy.Symme
     A :class:`~lasyten.HiddenLegTensor` `B` gives a :class:`~lasyten.HiddenLegTensor` with the same hidden legs.
     """
     pipe = B.domain.factors[domain_pos]
-    assert isinstance(pipe, lasy.LegPipe) and pipe.dim == 1
+    assert lasy.is_leg_pipe(pipe) and pipe.dim == 1
     leg = pipe.as_ElementarySpace(pipe.is_dual)
     leg = lasy.ElementarySpace(B.symmetry, leg.defining_sectors, leg.multiplicities, leg.is_dual)
     factors = list(B.domain.factors)
@@ -8949,9 +9455,24 @@ def _flatten_domain_pipe(B: lasy.SymmetricTensor, domain_pos: int) -> lasy.Symme
     if not isinstance(B, lasy.HiddenLegTensor):
         return lasy.SymmetricTensor(B.data, B.codomain, domain, B.backend, B.labels)
     hidden_idcs = B.hidden_leg_idcs()
-    labels = [l[1:] if i in hidden_idcs else l for i, l in enumerate(B.labels)]  # strip '!'
+    labels = [l[1:] if i in hidden_idcs else l for i, l in enumerate(B.labels.as_list())]  # strip '!'
     T = lasy.SymmetricTensor(B.data, B.codomain, domain, B.backend, labels)
     return lasy.HiddenLegTensor(T, [labels[i] for i in hidden_idcs])
+
+
+def _hidden_legs_to_codomain(T: lasy.Tensor) -> lasy.Tensor:
+    """Bend the hidden legs in the domain of `T` to the front of its codomain, such that the domain is ``[vR]``.
+
+    `T` has public legs ``vL, ..., vR`` with ``vR`` and possibly hidden (total charge) legs in the domain,
+    e.g. a :class:`~lasyten.HiddenLegTensor` as obtained from :meth:`MPS.get_B`. Then ``vR`` can be contracted
+    with :func:`~lasyten.tensors.partial_compose`. Only the hidden legs are bent; if the domain is already
+    ``[vR]``, `T` is returned unchanged.
+    """
+    if T.num_domain_legs == 1:
+        return T
+    labels = T.labels.as_list()
+    k = labels.index('vR')
+    return lasy.planar_permute_legs(T, codomain=labels[k + 1 :] + labels[:k], domain=['vR'])
 
 
 def _merge_charge_legs(B: lasy.HiddenLegTensor, labels: list[str], new_label: str) -> lasy.HiddenLegTensor:
@@ -8967,13 +9488,63 @@ def _merge_charge_legs(B: lasy.HiddenLegTensor, labels: list[str], new_label: st
     labels = [l[1:] for l in labels]
     if len(labels) > 1:
         B = lasy.combine_legs(B, labels, pipe_dualities=True)
-        B.relabel({lasy.tensors._tensors._combine_leg_labels(labels): new_label[1:]})
+        B.labels.update({lasy.tensors._tensors._combine_leg_labels(labels): new_label[1:]})
     else:
-        B.relabel({labels[0]: new_label[1:]})
+        B.labels.update({labels[0]: new_label[1:]})
     B = lasy.move_leg(B, new_label[1:], domain_pos=0, bend_right=False)
     if len(labels) > 1 and B.get_leg(new_label[1:]).dim == 1:
         B = _flatten_domain_pipe(B, 0)  # such that equal charges give equal legs
     return lasy.HiddenLegTensor(B, [new_label[1:], *other_hidden])
+
+
+def _permute_theta_for_svd(theta: lasy.Tensor, charge_leg_right: bool) -> lasy.Tensor:
+    """Arrange a two-site `theta` as ``[vL, p0] <- [vR, p1]`` for an SVD, placing its hidden legs explicitly.
+
+    The SVD of a :class:`~lasyten.HiddenLegTensor` keeps each hidden leg on the factor of its side,
+    i.e., hidden legs in the codomain end up on `U` and those in the domain on `Vh`.
+    The hidden total charge legs of `theta` need to be (cyclically) between ``'vR'`` and ``'vL'``, as for
+    :meth:`MPS.get_theta`. They are put into the domain for ``charge_leg_right=True`` and into the codomain
+    otherwise, which is possible without braiding them.
+    """
+    if not isinstance(theta, lasy.HiddenLegTensor):
+        return lasy.planar_permute_legs(theta, codomain=['vL', 'p0'])
+    labels = theta.labels
+    k = labels.index('vL')
+    labels = labels[k:] + labels[:k]
+    hidden = labels[4:]
+    if labels[:4] != ['vL', 'p0', 'p1', 'vR']:
+        raise ValueError(f'hidden legs of theta need to be between vR and vL, got labels {theta.labels!r}')
+    if charge_leg_right:
+        return lasy.planar_permute_legs(theta, codomain=['vL', 'p0'], domain=hidden[::-1] + ['vR', 'p1'])
+    return lasy.planar_permute_legs(theta, codomain=hidden + ['vL', 'p0'], domain=['vR', 'p1'])
+
+
+def _normalize_sector(charge_sector, symmetry: lasy.Symmetry) -> lasy.Sector:
+    """Convert one entry of a `charge_sector` argument (a sector, ``0`` or ``'trivial'``) to a Sector."""
+    if isinstance(charge_sector, lasy.Sector):
+        return charge_sector
+    if isinstance(charge_sector, str):
+        valid = charge_sector == 'trivial'
+    elif isinstance(charge_sector, (int, np.integer)):
+        valid = charge_sector == 0
+    else:
+        return lasy.Sector(charge_sector)
+    if not valid:
+        raise ValueError(f'invalid charge_sector {charge_sector!r}')
+    return symmetry.trivial_sector
+
+
+def _project_onto_single_summand(B: lasy.SymmetricTensor, leg: str) -> lasy.SymmetricTensor:
+    """Replace a :class:`~lasyten.DirectSumSpace` `leg` with a single summand by that summand.
+
+    The projection onto the only summand is an isomorphism, i.e. no information is lost.
+    Other legs are returned unchanged.
+    """
+    space = B.get_leg(leg)
+    if not isinstance(space, lasy.DirectSumSpace):
+        return B
+    assert len(space.spaces) == 1, 'expected a single summand'
+    return lasy.apply_mask(B, space.projection_onto_summand(0, backend=B.backend, device=B.device), leg)
 
 
 def _real_if_close_nested(value, factor: float = 1.0):
@@ -8981,6 +9552,16 @@ def _real_if_close_nested(value, factor: float = 1.0):
     if isinstance(value, list):
         return [_real_if_close_nested(val, factor) for val in value]
     return value.real_if_close() * factor
+
+
+def _split_off_vL(T: lasy.Tensor) -> lasy.Tensor:
+    """Arrange `T` as ``[vL] <- [...]`` for a decomposition, with all hidden legs explicitly in the domain.
+
+    The cyclic order of the legs is kept, i.e., only the legs switching between codomain and domain are bent.
+    """
+    labels = T.labels.as_list()
+    k = labels.index('vL')
+    return lasy.planar_permute_legs(T, codomain=['vL'], domain=(labels[k + 1 :] + labels[:k])[::-1])
 
 
 def _truncate_virtual_space(

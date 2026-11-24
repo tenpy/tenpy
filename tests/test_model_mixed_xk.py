@@ -1,7 +1,4 @@
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
-
-pytest.skip(allow_module_level=True)
 import numpy as np
 import pytest
 from test_model import check_general_model
@@ -11,11 +8,14 @@ from tenpy.models.fermions_spinless import FermionModel
 from tenpy.models.hubbard import FermiHubbardModel
 from tenpy.models.mixed_xk import HubbardMixedXKSquare, SpinlessMixedXKSquare
 from tenpy.networks.mps import MPS
+from tenpy.tools import asConfig
 
 
 @pytest.mark.parametrize('model_class', [SpinlessMixedXKSquare, HubbardMixedXKSquare])
 def test_MixedXKModel_general(model_class):
-    check_general_model(model_class, dict(Lx=2, Ly=3, bc_MPS='infinite'))
+    with pytest.raises(NotImplementedError):
+        check_general_model(model_class, dict(Lx=2, Ly=3, bc_MPS='infinite'))
+    pytest.xfail()
 
 
 def test_mixed_spinless():
@@ -35,25 +35,43 @@ def test_mixed_spinless():
         'max_S_err': 1.0e-8,
         'trunc_params': {'chi_max': chimax, 'svd_min': 1.0e-10},
     }
+
     product_state = [
         [['full'], ['empty'], ['full'], ['empty']],
         [['full'], ['empty'], ['full'], ['empty']],
     ]  # half filling
-    psi = MPS.from_lat_product_state(M.lat, product_state)
-    info = dmrg.run(psi, M, dmrg_params)
+    psi = MPS.from_lat_product_state(M.lattice, product_state)
+
+    with pytest.raises(NotImplementedError, match='Mixer is not ported yet'):
+        _params = asConfig(dmrg_params, 'DMRG')
+        _params.touch_all(['trunc_params'])
+        dmrg.run(psi, M, _params, resume_data={'init_env_data': dict(start_env_sites=0)})
+    # doing without mixer for now. Once implemented remove this block and run with mixer again
+    dmrg_params['mixer'] = False
+    dmrg_params['max_sweeps'] = 5  # without mixer, convergence is super slow otherwise
+
+    info = dmrg.run(psi, M, dmrg_params, resume_data={'init_env_data': dict(start_env_sites=0)})
     E_real = info['E']
 
     # measure particle number and Cd C correlators
-    N_real = M.lat.mps2lat_values(psi.expectation_value('N'))
-    CdC_real = M.lat.mps2lat_values(psi.correlation_function('Cd', 'C')[0, :])
+    N_real = psi.expectation_value('N')
+    CdC_real = psi.correlation_function_split_right(
+        M.couplings['Cd.C'], sites_L=[0], distances=[*range(psi.L - 1)], offsets_R=[0]
+    )
+    CdC_real = np.append(N_real[0], CdC_real)
+    # mps idx -> lat idcs
+    N_real = M.lattice.mps2lat_values(N_real)
+    CdC_real = M.lattice.mps2lat_values(CdC_real)
 
     # mixed space
     model_params = dict(t=J, V=V, Lx=Lx, Ly=Ly, bc_MPS='finite', conserve_k=True)
-    M = SpinlessMixedXKSquare(model_params)
+    with pytest.raises(NotImplementedError):
+        M = SpinlessMixedXKSquare(model_params)
+    pytest.xfail('mixed_xk not adapted')
 
     # initial product state with momentum 0
     product_xk = [['full', 'empty', 'full', 'empty'], ['full', 'empty', 'full', 'empty']]
-    psi_xk = MPS.from_lat_product_state(M.lat, product_xk)
+    psi_xk = MPS.from_lat_product_state(M.lattice, product_xk)
     info = dmrg.run(psi_xk, M, dmrg_params)  # the main work...
     E_mixed = info['E']
 
@@ -73,7 +91,8 @@ def test_mixed_spinless():
 
 
 @pytest.mark.slow
-def test_mixed_hubbard():
+@pytest.mark.parametrize('conserve_S', ['SU2', 'Sz'])
+def test_mixed_hubbard(conserve_S):
     """
     compare the Hubbard model on a small square lattice in in real and mixed space
     """
@@ -81,7 +100,9 @@ def test_mixed_hubbard():
     t, U = 1.0, 10
     chimax = 100
     # real space
-    model_params = dict(t=t, U=U, lattice='Square', Lx=Lx, Ly=Ly, bc_x='open', bc_y='cylinder', bc_MPS='finite')
+    model_params = dict(
+        t=t, U=U, lattice='Square', Lx=Lx, Ly=Ly, bc_x='open', bc_y='cylinder', bc_MPS='finite', conserve_S=conserve_S
+    )
     M = FermiHubbardModel(model_params)
 
     dmrg_params = {
@@ -90,27 +111,55 @@ def test_mixed_hubbard():
         'max_S_err': 1.0e-10,
         'trunc_params': {'chi_max': chimax, 'svd_min': 1.0e-10},
     }
-    product_state = [[['full'], ['empty'], ['full']],
-                     [['full'], ['empty'], ['empty']]]  # fmt: skip
-    psi = MPS.from_lat_product_state(M.lat, product_state)
-    info = dmrg.run(psi, M, dmrg_params)
+
+    if conserve_S == 'SU2':
+        site, *_ = M.lattice.unit_cell
+        with pytest.raises(AssertionError, match='can only construct product states for Abelian symmetries'):
+            psi = MPS.from_singlets(site, L=Lx * Ly, pairs=[(0, 1), (2, 3), (4, 5)])
+        pytest.xfail('from_singlet broken for SU(2), uses from_product_state')
+        psi = MPS.from_singlets(site, L=Lx * Ly, pairs=[(0, 1), (2, 3), (4, 5)])
+    else:
+        product_state = [[['full'], ['empty'], ['full']],
+                        [['full'], ['empty'], ['empty']]]  # fmt: skip
+        psi = MPS.from_lat_product_state(M.lattice, product_state)
+
+    # Planar DMRG no longer raises SymmetryError on fermions; the old
+    # ``dmrg.run(psi, M, {})`` probe would run unbounded sweeps (default
+    # max_sweeps=1000, no chi_max) and hang CI. Expect the mixer gap instead,
+    # then xfail: full Hubbard DMRG is still too expensive / incomplete here
+    # (spinless covers the working real-space fermionic path).
+    with pytest.raises(NotImplementedError, match='Mixer is not ported yet'):
+        _params = asConfig(dmrg_params, 'DMRG')
+        _params.touch_all(['trunc_params'])
+        dmrg.run(psi, M, _params, resume_data={'init_env_data': dict(start_env_sites=0)})
+    pytest.xfail('Mixer is not ported yet')
+
+    # doing without mixer for now. Once implemented remove the xfail and run with mixer again
+    dmrg_params['mixer'] = False
+    dmrg_params['max_sweeps'] = 5  # without mixer, convergence is super slow otherwise
+
+    info = dmrg.run(psi, M, dmrg_params, resume_data={'init_env_data': dict(start_env_sites=0)})
     E_real = info['E']
 
     # measure Sz onsite and SpSm correlators
-    Sz_real = M.lat.mps2lat_values(psi.expectation_value('Sz'))
-    SpSm_real = M.lat.mps2lat_values(psi.correlation_function('Sp', 'Sm')[0, :])
+    Sz_real = M.lattice.mps2lat_values(psi.expectation_value('Sz'))
+
+    # TODO will need to use updated correlation_function methods, see test_mixed_spinless above
+    SpSm_real = M.lattice.mps2lat_values(psi.correlation_function('Sp', 'Sm')[0, :])
 
     # mixed space
     # implemented with two spinless fermion sites for up/down !
     model_params = dict(t=t, U=U, Lx=Lx, Ly=Ly, bc_MPS='finite', conserve_k=True)
-    M2 = HubbardMixedXKSquare(model_params)
+    with pytest.raises(NotImplementedError):
+        M2 = HubbardMixedXKSquare(model_params)
+    pytest.xfail('mixed_xk not adapted')
 
     # initial product state with momentum 0
     product_xk = [
         ['full', 'full', 'full', 'empty', 'empty', 'empty'],
         ['full', 'full', 'empty', 'empty', 'empty', 'full'],
     ]
-    psi_xk = MPS.from_lat_product_state(M2.lat, product_xk)
+    psi_xk = MPS.from_lat_product_state(M2.lattice, product_xk)
     info = dmrg.run(psi_xk, M2, dmrg_params)  # the main work...
     E_mixed = info['E']
 

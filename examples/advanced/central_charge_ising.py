@@ -21,9 +21,9 @@ from tenpy.networks.mps import MPS
 def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
     model_params = dict(L=2, J=1.0, g=g, bc_MPS='infinite', conserve='best')
     M = TFIChain(model_params)
-    product_state = ['up'] * M.lat.N_sites
+    product_state = ['up'] * M.lattice.N_sites
     psi = MPS.from_product_state(
-        M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width
+        M.lattice.mps_sites(), product_state, bc=M.lattice.bc_MPS, unit_cell_width=M.lattice.mps_unit_cell_width
     )
     dmrg_params = {
         'start_env': 10,

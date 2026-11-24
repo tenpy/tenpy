@@ -18,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ..models import Model
+from ..models import EvolutionModel
 from ..tools import (
     Config,
     find_subclass,
@@ -221,16 +221,16 @@ class DataLoader:
     def _get_model(self):
         model_class_name = self.sim_params['model_class']
         model_params = self.sim_params['model_params']
-        model_class = find_subclass(Model, model_class_name)
+        model_class = find_subclass(EvolutionModel, model_class_name)
         return model_class(model_params)
 
     @property
     def lat(self):
-        return self.model.lat
+        return self.model.lattice
 
     @property
     def BZ(self):
-        return self.lat.BZ
+        return self.lattice.BZ
 
     @property
     def psi(self):
@@ -397,7 +397,7 @@ def pp_spectral_function(DL: DataLoader, *, correlation_key, conjugate_correlati
     if conjugate_correlation is True:
         time_dep_corr = np.conjugate(time_dep_corr)
 
-    return spectral_function(time_dep_corr, DL.lat, dt, **kwargs)
+    return spectral_function(time_dep_corr, DL.lattice, dt, **kwargs)
 
 
 def pp_plot_correlations_on_lattice(
@@ -444,7 +444,7 @@ def pp_plot_correlations_on_lattice(
 
     keys = to_iterable(keys)
     markers = to_iterable(markers)
-    lat = DL.lat
+    lat = DL.lattice
     correlations = DL.get_data_m(data_key)
     # loop over nearest_neighbors, next_nearest_neighbors, etc.
     fig, ax = plt.subplots(figsize=figsize)

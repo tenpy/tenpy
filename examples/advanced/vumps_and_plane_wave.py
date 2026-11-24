@@ -15,7 +15,7 @@ from tenpy.networks import mps
 def tfi_vumps(g=1.5):
     model_params = dict(L=2, J=1.0, g=g, bc_MPS='infinite', conserve='parity')
     M = TFIChain(model_params)
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), [0, 0], bc='infinite')
+    psi = mps.MPS.from_product_state(M.lattice.mps_sites(), [0, 0], bc='infinite')
     vumps_pars = {
         'combine': False,
         'N_sweeps_check': 1,

@@ -31,19 +31,18 @@ class AnisotropicSpin1Chain(CouplingMPOModel, NearestNeighborModel):
         if conserve == 'best':
             conserve = 'Sz' if not model_params.any_nonzero(['B']) else None
             self.logger.info('%s: set conserve to %s', self.name, conserve)
-        sort_charge = model_params.get('sort_charge', True)
-        return SpinSite(S=1.0, conserve=None, sort_charge=sort_charge)
+        return SpinSite(S=1.0, conserve=None)
 
     def init_terms(self, model_params):
         J = model_params.get('J', 1.0)
         B = model_params.get('B', 0.0)
         D = model_params.get('D', 0.0)
 
-        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+        for u1, u2, dx in self.lattice.pairs['nearest_neighbors']:
             self.add_coupling(J / 2.0, u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
             self.add_coupling(J, u1, 'Sz', u2, 'Sz', dx)
 
-        for u in range(len(self.lat.unit_cell)):
+        for u in range(len(self.lattice.unit_cell)):
             self.add_onsite(B, u, 'Sx')
             self.add_onsite(D, u, 'Sz Sz')
 
