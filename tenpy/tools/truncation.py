@@ -227,23 +227,34 @@ def svd_theta(
         Equal to ``theta.norm() * sqrt(1 - err.eps) <= theta.norm()``.
 
     """
-    trunc_params = asConfig(trunc_params, 'trunc_params')
-    chi_max = trunc_params.get('chi_max', 100, int)
-    chi_min = trunc_params.get('chi_min', None, int)
-    degeneracy_tol = trunc_params.get('degeneracy_tol', None, 'real')
-    svd_min = trunc_params.get('svd_min', 1.0e-14, 'real')
-    trunc_cut = trunc_params.get('trunc_cut', 1.0e-14, 'real')
     U, S, Vh, rel_err, renormalize = lasy.truncated_svd(
         theta,
         new_labels=new_labels,
         new_leg_dual=False,
         charge_leg_top=True,
         normalize_to=1.0,
-        chi_max=chi_max,
-        chi_min=1 if chi_min is None else chi_min,
-        degeneracy_tol=0 if degeneracy_tol is None else degeneracy_tol,
-        trunc_cut=trunc_cut,
-        svd_min=svd_min,
+        **_get_trunc_kwargs(trunc_params)
     )
     err = TruncationError.from_Frobenius_distance(rel_err)
     return U, S, Vh, err, renormalize
+
+
+def truncate_singular_values(S: lasy.DiagonalTensor, trunc_params, mask_labels=['vL', 'vR']) -> tuple[lasy.Mask, float, TruncationError]:
+    """FIXME"""
+    mask, err, new_norm = lasy.tensors.truncate_singular_values(S, **_get_trunc_kwargs(trunc_params), mask_labels=mask_labels)
+    err = TruncationError.from_Frobenius_distance(err)
+    # FIXME double check err handling! -> test to compare to the above too
+    return mask, err, new_norm
+
+
+def _get_trunc_kwargs(trunc_params):
+    trunc_params = asConfig(trunc_params, 'trunc_params')
+    chi_min = trunc_params.get('chi_min', None, int)
+    degeneracy_tol = trunc_params.get('degeneracy_tol', None, 'real')
+    return dict(
+        chi_max=trunc_params.get('chi_max', 100, int),
+        chi_min=1 if chi_min is None else chi_min,
+        degeneracy_tol=0 if degeneracy_tol is None else degeneracy_tol,
+        trunc_cut=trunc_params.get('trunc_cut', 1.0e-14, 'real'),
+        svd_min=trunc_params.get('svd_min', 1.0e-14, 'real'),
+    )

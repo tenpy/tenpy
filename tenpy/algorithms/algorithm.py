@@ -9,7 +9,7 @@ import numpy as np
 
 from ..models import EvolutionModel
 from ..networks import MPS
-from ..tools import DictCache, EventHandler, TruncationError, asConfig, consistency_check, svd_theta
+from ..tools import DictCache, EventHandler, TruncationError, asConfig, consistency_check, svd_theta, truncate_singular_values
 
 logger = logging.getLogger(__name__)
 
@@ -357,6 +357,12 @@ class Algorithm:
 
         """
         return svd_theta(theta, self.trunc_params, new_labels=['vR', 'vL'])
+
+    def truncate_singular_values(self, S: lasy.DiagonalTensor, mask_labels=['vL', 'vR']) -> tuple[lasy.Mask, float, TruncationError]:
+        """FIXME"""
+        # FIXME type hint
+        # FIXME good default for mask_labels?
+        return truncate_singular_values(S, self.trunc_params, mask_labels)
 
 
 class TimeEvolutionAlgorithm(Algorithm):
