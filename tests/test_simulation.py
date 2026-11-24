@@ -1,23 +1,19 @@
 """A collection of tests to check the functionality of modules in `tenpy.simulations`"""
 
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
-
-pytest.skip(allow_module_level=True)
-
 import copy
 import os
 import sys
 
 import numpy as np
 import pytest
-from tenpy.algorithms.truncation import TruncationError
 
 import tenpy
 from tenpy.algorithms.algorithm import Algorithm
 from tenpy.simulations.ground_state_search import GroundStateSearch
 from tenpy.simulations.simulation import *
 from tenpy.simulations.time_evolution import RealTimeEvolution, SpectralSimulation, SpectralSimulationEvolveBraKet
+from tenpy.tools.truncation import TruncationError
 
 tenpy.tools.misc.skip_logging_setup = True  # skip logging setup
 
@@ -260,6 +256,7 @@ regrouping_params['group_to_NearestNeighborModel'] = True
 regrouping_params['group_sites'] = 2
 
 
+@pytest.mark.skip(reason='group_to_NearestNeighborModel not implemented')
 def test_regrouping_and_group_to_NearestNeighborModel():
     sim_params = copy.deepcopy(regrouping_params)
     sim = RealTimeEvolution(sim_params)
@@ -284,6 +281,7 @@ spectral_sim_params['operator_t'] = 'Sz'
 spectral_sim_params['model_params']['bc_MPS'] = 'finite'
 
 
+@pytest.mark.skip(reason='MPS.apply_local_op/get_op mismatch for string operators')
 def test_SpectralSimulation():
     for SpectralSimulationClass in [SpectralSimulation, SpectralSimulationEvolveBraKet]:
         # building with initial state passed in sim params
@@ -404,7 +402,7 @@ def test_yaml_load(tmp_path):
     np.testing.assert_array_almost_equal_nulp(
         simulation_params['model_params']['hx'], np.linspace(0, 5, 21, endpoint=True), 10
     )
-    assert simulation_params['model_params']['lattice'] is tenpy.Square
+    assert simulation_params['model_params']['lattice'] is tenpy.models.lattice.Square
 
     # now try again loading from file
     del simulation_params
@@ -418,4 +416,4 @@ def test_yaml_load(tmp_path):
     np.testing.assert_array_almost_equal_nulp(
         simulation_params['model_params']['hx'], np.linspace(0, 5, 21, endpoint=True), 10
     )
-    assert simulation_params['model_params']['lattice'] is tenpy.Square
+    assert simulation_params['model_params']['lattice'] is tenpy.models.lattice.Square

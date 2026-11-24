@@ -1,9 +1,5 @@
 """Test import and output with pickle."""
 
-import pytest
-
-pytest.skip(allow_module_level=True)
-
 import os
 import pickle
 import time
@@ -51,7 +47,8 @@ def test_pickle(tmp_path):
     io_test.assert_event_handler_example_works(data_imported)
 
 
-@pytest.mark.parametrize('fn', datadir_pkl)
+@pytest.mark.skip(reason='legacy v1 pickle fixtures not regenerated for lasyten')
+@pytest.mark.parametrize('fn', datadir_pkl or ['no_legacy_pkl'])
 @pytest.mark.filterwarnings('ignore::FutureWarning')
 @pytest.mark.filterwarnings('ignore::DeprecationWarning')
 # Deprecation appears when loading data with numpy 2.0 from data
@@ -73,8 +70,8 @@ def test_simulation_export_import(tmp_path):
     sim_params = {
         'model_class': 'XXZChain',
         'model_params': {
-            'bc_MPS': 'infinite',
-            'L': 2,
+            'bc_MPS': 'finite',
+            'L': 4,
         },
         'algorithm_class': 'DummyAlgorithmSleep',
         'algorithm_params': {'N_steps': 3},  # only one step

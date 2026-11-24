@@ -501,15 +501,14 @@ class MPO(MPSGeometry):
 
         Specifically, it saves
         :attr:`sites`,
-        :attr:`chinfo`,
         :attr:`max_range`,
         :attr:`unit_cell_width` (under these names),
-        :attr:`_W` as ``"tensors"``,
-        :attr:`IdL` as ``"index_identity_left"``,
-        :attr:`IdR` as ``"index_identity_right"``, and
+        :attr:`_W` as ``"tensors"``, and
         :attr:`bc` as ``"boundary_condition"``.
         Moreover, it saves :attr:`L`, :attr:`explicit_plus_hc` and :attr:`grouped` as HDF5 attributes,
-        as well as the maximum of :attr:`chi` under the name :attr:`max_bond_dimension`.
+        as well as the maximum of :attr:`chi` under the name ``max_bond_dimension``.
+        The :attr:`symmetry` and :attr:`dtype` are not saved separately, but recovered from the
+        sites and tensors when loading.
 
         Parameters
         ----------
@@ -522,7 +521,6 @@ class MPO(MPSGeometry):
 
         """
         hdf5_saver.save(self.sites, subpath + 'sites')
-        hdf5_saver.save(self.chinfo, subpath + 'chinfo')
         hdf5_saver.save(self._W, subpath + 'tensors')
         h5gr.attrs['grouped'] = self.grouped
         hdf5_saver.save(self.bc, subpath + 'boundary_condition')
@@ -554,17 +552,18 @@ class MPO(MPSGeometry):
             Newly generated class instance containing the required data.
 
         """
+        # TODO option to load from tenpy v1?
         obj = cls.__new__(cls)  # create class instance, no __init__() call
         hdf5_loader.memorize_load(h5gr, obj)
 
         obj.sites = hdf5_loader.load(subpath + 'sites')
-        obj.chinfo = hdf5_loader.load(subpath + 'chinfo')
+        obj.symmetry = obj.sites[0].symmetry
         obj._W = hdf5_loader.load(subpath + 'tensors')
         obj.dtype = lasy.Dtype.common(*[W.dtype for W in obj._W])
         obj.grouped = hdf5_loader.get_attr(h5gr, 'grouped')
         obj.bc = hdf5_loader.load(subpath + 'boundary_condition')
         obj.max_range = hdf5_loader.load(subpath + 'max_range')
-        obj.unit_cell_width = hdf5_loader.load(subpath + 'unit_cell_width')
+        obj.unit_cell_width = int(hdf5_loader.load(subpath + 'unit_cell_width'))
         obj.explicit_plus_hc = h5gr.attrs.get('explicit_plus_hc', False)
         obj._graph = None
         obj._outer_permutation = None
