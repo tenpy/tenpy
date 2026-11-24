@@ -84,7 +84,7 @@ def bad_dummy_measurement(results, psi, model, simulation):
 simulation_params = {
     'model_class': 'XXZChain',
     'model_params': {
-        'bc_MPS': 'finite',  # infinite CouplingModel not yet supported in lasyten
+        'bc_MPS': 'infinite',  # defaults to finite
         'L': 4,
     },
     'algorithm_class': 'DummyAlgorithm',
@@ -114,7 +114,7 @@ def test_Simulation(tmp_path):
     with sim:
         results = sim.run()
         # should do exactly two measurements: one before and one after eng.run()
-    assert sim.model.lattice.bc_MPS == 'finite'  # check whether model parameters were used
+    assert sim.model.lattice.bc_MPS == 'infinite'  # check whether model parameters were used
     assert 'psi' in results  # should be by default
     meas = results['measurements']
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
@@ -159,7 +159,7 @@ def test_measure_at_algorithm_checkpoint():
     with sim:
         results = sim.run()
         # should do exactly two measurements: one before and one after eng.run()
-    assert sim.model.lattice.bc_MPS == 'finite'  # check whether model parameters were used
+    assert sim.model.lattice.bc_MPS == 'infinite'  # check whether model parameters were used
     assert 'psi' in results  # should be by default
     meas = results['measurements']
     # expect multiple measurements:
@@ -221,7 +221,7 @@ def test_GroundStateSearch():
     sim_params = copy.deepcopy(groundstate_params)
     sim = GroundStateSearch(sim_params)
     results = sim.run()  # should do exactly two measurements: one before and one after eng.run()
-    assert sim.model.lattice.bc_MPS == 'finite'  # check whether model parameters were used
+    assert sim.model.lattice.bc_MPS == 'infinite'  # check whether model parameters were used
     assert 'psi' in results  # should be by default
     meas = results['measurements']
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
@@ -238,7 +238,7 @@ def test_RealTimeEvolution():
     sim_params = copy.deepcopy(timeevol_params)
     sim = RealTimeEvolution(sim_params)
     results = sim.run()
-    assert sim.model.lattice.bc_MPS == 'finite'  # check whether model parameters were used
+    assert sim.model.lattice.bc_MPS == 'infinite'  # check whether model parameters were used
     assert 'psi' in results  # should be by default
     meas = results['measurements']
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
@@ -261,7 +261,7 @@ def test_regrouping_and_group_to_NearestNeighborModel():
     sim_params = copy.deepcopy(regrouping_params)
     sim = RealTimeEvolution(sim_params)
     results = sim.run()
-    assert sim.model.lattice.bc_MPS == 'finite'  # check whether model parameters were used
+    assert sim.model.lattice.bc_MPS == 'infinite'  # check whether model parameters were used
     assert 'psi' in results  # should be by default
     meas = results['measurements']
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
