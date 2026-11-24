@@ -105,7 +105,6 @@ simulation_params = {
 expected_dummy_value = simulation_params['algorithm_params']['N_steps'] ** 2
 
 
-@pytest.mark.skip(reason='cannot pickle lasyten SpinSite yet')
 def test_Simulation(tmp_path):
     os.chdir(tmp_path)
     sim_params = copy.deepcopy(simulation_params)
@@ -170,7 +169,6 @@ def test_measure_at_algorithm_checkpoint():
     assert np.all(meas['dummy_value'] == [-1] + [expected_dummy_value] * (1 + 4))
 
 
-@pytest.mark.skip(reason='Not ported yet for lasyten')
 def test_Simulation_resume(tmp_path):
     sim_params = copy.deepcopy(simulation_params)
     sim_params['directory'] = tmp_path
@@ -198,7 +196,6 @@ def test_Simulation_resume(tmp_path):
         assert np.all(r['measurements']['measurement_index'] == np.arange(2))
 
 
-@pytest.mark.skip(reason='cannot pickle lasyten SpinSite yet')
 def test_sequential_simulation(tmp_path):
     os.chdir(tmp_path)
     sim_params = copy.deepcopy(simulation_params)
@@ -237,7 +234,6 @@ timeevol_params = copy.deepcopy(simulation_params)
 timeevol_params['final_time'] = 4.0
 
 
-@pytest.mark.skip(reason='Not ported yet for lasyten')
 def test_RealTimeEvolution():
     sim_params = copy.deepcopy(timeevol_params)
     sim = RealTimeEvolution(sim_params)
@@ -260,7 +256,7 @@ regrouping_params['group_to_NearestNeighborModel'] = True
 regrouping_params['group_sites'] = 2
 
 
-@pytest.mark.skip(reason='Not ported yet for lasyten')
+@pytest.mark.skip(reason='group_to_NearestNeighborModel not implemented')
 def test_regrouping_and_group_to_NearestNeighborModel():
     sim_params = copy.deepcopy(regrouping_params)
     sim = RealTimeEvolution(sim_params)
@@ -285,7 +281,7 @@ spectral_sim_params['operator_t'] = 'Sz'
 spectral_sim_params['model_params']['bc_MPS'] = 'finite'
 
 
-@pytest.mark.skip(reason='Not ported yet for lasyten')
+@pytest.mark.skip(reason='MPS.apply_local_op/get_op mismatch for string operators')
 def test_SpectralSimulation():
     for SpectralSimulationClass in [SpectralSimulation, SpectralSimulationEvolveBraKet]:
         # building with initial state passed in sim params
@@ -396,7 +392,6 @@ sequential:
 """
 
 
-@pytest.mark.skip(reason='Not ported yet for lasyten')
 def test_yaml_load(tmp_path):
     yaml = pytest.importorskip('yaml')
 
@@ -407,7 +402,7 @@ def test_yaml_load(tmp_path):
     np.testing.assert_array_almost_equal_nulp(
         simulation_params['model_params']['hx'], np.linspace(0, 5, 21, endpoint=True), 10
     )
-    assert simulation_params['model_params']['lattice'] is tenpy.Square
+    assert simulation_params['model_params']['lattice'] is tenpy.models.lattice.Square
 
     # now try again loading from file
     del simulation_params
@@ -421,4 +416,4 @@ def test_yaml_load(tmp_path):
     np.testing.assert_array_almost_equal_nulp(
         simulation_params['model_params']['hx'], np.linspace(0, 5, 21, endpoint=True), 10
     )
-    assert simulation_params['model_params']['lattice'] is tenpy.Square
+    assert simulation_params['model_params']['lattice'] is tenpy.models.lattice.Square

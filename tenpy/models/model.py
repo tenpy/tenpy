@@ -72,6 +72,17 @@ class EvolutionModel(metaclass=ABCMeta):
     def test_sanity(self):
         self.lattice.test_sanity()
 
+    def get_extra_default_measurements(self):
+        """Extra default measurements for simulations involving this model.
+
+        Returns
+        -------
+        m_extra_default_list : list
+            List of tuples as for :cfg:option:`Simulation.connect_measurements`.
+
+        """
+        return []
+
     @property
     def finite(self):
         return self.bc_MPS == 'finite'
@@ -159,6 +170,11 @@ class HamiltonianModel(EvolutionModel, metaclass=ABCMeta):
 
     def __init__(self, lattice: Lattice):
         EvolutionModel.__init__(self, lattice=lattice)
+
+    @property
+    def dtype(self):
+        """Dtype of the Hamiltonian MPO / tensors used by this model."""
+        return self.get_H_MPO().dtype
 
     @abstractmethod
     def get_H_bond(self) -> list[lasy.Tensor | None]:

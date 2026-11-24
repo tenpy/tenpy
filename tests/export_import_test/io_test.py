@@ -9,18 +9,16 @@ and the tenpy version in the filename.
 """
 
 # Copyright (C) TeNPy Developers, Apache license
-import pytest
-
-pytest.skip(allow_module_level=True)
-
 import os
 import types
 
+import lasyten as lasy
 import numpy as np
-import tenpy.linalg.np_conserved as npc
 
 import tenpy
-import tenpy.models.tf_ising
+import tenpy.models.xxz_chain
+from tenpy.networks.mpo import MPO
+from tenpy.networks.mps import MPS
 
 try:
     from packaging.version import parse as parse_version  # part of setuptools
@@ -62,16 +60,17 @@ def dummy_function(obj):
 def gen_example_data(version=tenpy.version.full_version):
     if '+' in version:
         version = version.split('+')[0]  # discard '+GITHASH' from version
-    s = lasyten.sites.SpinSite()
+    s = lasy.sites.SpinSite(S=0.5, conserve='Sz')
+    Sz = s.get_op('Sz')
     data = {
         'SpinHalfSite': s,
-        'trivial_array': npc.Array.from_ndarray_trivial(np.arange(20).reshape([4, 5])),
-        'Sz': s.Sz,
+        'trivial_tensor': Sz,
+        'Sz': Sz,
     }
-    if parse_version(version) >= parse_version('0.5.0.dev25'):
-        psi = tenpy.networks.mps.MPS.from_singlets(s, 6, [(0, 3), (1, 2), (4, 5)], unit_cell_width=6)
+    if parse_version(version) >= parse_version('2.0.0-alpha.dev0'):
+        psi = MPS.from_product_state([s] * 4, ['up', 'down', 'up', 'down'], bc='finite', unit_cell_width=4)
         psi.test_sanity()
-        M = tenpy.models.tf_ising.TFIChain({'L': 3, 'bc_MPS': 'infinite'})
+        M = tenpy.models.xxz_chain.XXZChain({'L': 4, 'bc_MPS': 'finite'})
         data.update(
             {
                 'version': version,
@@ -85,19 +84,19 @@ def gen_example_data(version=tenpy.version.full_version):
                 'range': range(2, 8, 3),
                 'dtypes': [np.dtype('int64'), np.dtype([('a', np.int32, 8), ('b', np.float64, 5)])],
                 'psi': psi,
-                'H_mpo': M.H_MPO,
-                'model': M,
+                'H_mpo': M.get_H_MPO(),
+                # Full CouplingModel is not picklable yet (lasyten Coupling); H_MPO covers I/O.
             }
         )
         data['recursive'][3][1] = data['recursive'][1] = data['recursive']
         data['exportable'].some_attr = 'something'
-    if parse_version(version) >= parse_version('0.7.2.dev33'):
         dummy = DummyClass()
         data['dummy'] = dummy
         event_handler = tenpy.tools.events.EventHandler('obj')
         event_handler.connect(dummy_function)
         event_handler.connect(dummy.dummy_append)
         data['event_handler'] = event_handler
+    assert len(data) > 3, 'version parsing worked and we included data for >=2.0.0-alpha'
     return data
 
 
@@ -118,6 +117,9 @@ def assert_event_handler_example_works(data):
 
 def assert_equal_data(data_imported, data_expected, max_recursion_depth=10):
     """Check that the imported data is as expected."""
+    if data_expected is None:
+        assert data_imported is None
+        return
     assert isinstance(data_imported, type(data_expected))
     if hasattr(data_expected, 'test_sanity'):
         data_imported.test_sanity()
@@ -130,15 +132,39 @@ def assert_equal_data(data_imported, data_expected, max_recursion_depth=10):
         if max_recursion_depth > 0:
             for vi, ve in zip(data_imported, data_expected):
                 assert_equal_data(vi, ve, max_recursion_depth - 1)
-    elif isinstance(data_expected, npc.Array):
-        assert npc.norm(data_imported - data_expected) == 0.0  # should be exactly equal!
+    elif isinstance(data_expected, set):
+        assert data_imported == data_expected
+    elif isinstance(data_expected, lasy.Tensor):
+        assert lasy.almost_equal(data_imported, data_expected)
+    elif isinstance(data_expected, MPS):
+        assert data_imported.L == data_expected.L
+        assert data_imported.bc == data_expected.bc
+        for B_i, B_e in zip(data_imported._B, data_expected._B):
+            assert lasy.almost_equal(B_i, B_e)
+    elif isinstance(data_expected, MPO):
+        assert data_imported.L == data_expected.L
+        assert data_imported.bc == data_expected.bc
+        for W_i, W_e in zip(data_imported._W, data_expected._W):
+            assert lasy.almost_equal(W_i, W_e)
+    elif isinstance(data_expected, lasy.Site):
+        assert data_imported.leg == data_expected.leg
+        assert data_imported.state_labels == data_expected.state_labels
     elif isinstance(data_expected, np.ndarray):
         np.testing.assert_array_equal(data_imported, data_expected)
-    elif isinstance(data_expected, (int, float, np.int64, np.float64, complex, str)):
+    elif isinstance(
+        data_expected, (bool, int, float, np.integer, np.floating, complex, str, range, np.dtype, lasy.Dtype)
+    ):
         assert data_imported == data_expected
     elif isinstance(data_expected, (types.FunctionType, type)):
         # global variables where no copy should be made
         assert data_imported is data_expected
+    elif isinstance(data_expected, (DummyClass, tenpy.tools.hdf5_io.Hdf5Exportable, tenpy.tools.events.EventHandler)):
+        # structural equality is enough; event handler checked separately
+        pass
+    elif hasattr(data_expected, '__eq__'):
+        assert data_imported == data_expected
+    else:
+        raise TypeError(f'unsupported type for assert_equal_data: {type(data_expected)!r}')
 
 
 def get_datadir_filename(template='pickled_from_tenpy_{0}.pkl'):
