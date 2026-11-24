@@ -1,0 +1,2 @@
+- Reactivate ``tests/export_import_test/test_hdf5.py`` (legacy datadir fixtures still skipped).
+- Port ``MPO.save_hdf5`` / ``from_hdf5`` to lasyten (drop ``chinfo``; recover ``symmetry``/``dtype`` from sites/tensors).
