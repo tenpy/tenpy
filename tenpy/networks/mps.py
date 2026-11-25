@@ -3010,12 +3010,14 @@ class MPS(BaseMPSExpectationValue):
         dtype: lasy.Dtype = None,
         form='B',
         chargeL: lasy.Sector = None,
+        unit_cell_width: int = None,
         device: str = None,
         understood_shift_symmetry: bool = False,
     ) -> MPS:
         """Construct a matrix product state by evolving a product state with random unitaries.
 
-        Note: Only applicable to Abelian symmetries.
+        The initial product state is constructed with :meth:`from_product_state`, see there for
+        the requirements on `p_state` (local states in sectors of quantum dimension one).
 
         Parameters
         ----------
@@ -3042,7 +3044,9 @@ class MPS(BaseMPSExpectationValue):
             A single choice holds for all of the entries.
         chargeL : :class:`~lasyten.Sector` or None
             Leg charge / symmetry sector at bond 0, which is purely conventional for Abelian
-            symmetries. Chosen to be the trivial charge by default.
+            symmetries. Must have quantum dimension one. Chosen to be the trivial charge by default.
+        unit_cell_width : int, optional
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
         device : str, optional
             Device of the resulting MPS.
 
@@ -3057,8 +3061,16 @@ class MPS(BaseMPSExpectationValue):
         if bc == 'segment':
             msg = 'MPS.from_random_unitary_evolution not implemented for segment BC.'
             raise NotImplementedError(msg)
-        psi = MPS.from_product_state(
-            sites, p_state, bc, dtype, form, chargeL, device=device, understood_shift_symmetry=understood_shift_symmetry
+        psi = cls.from_product_state(
+            sites,
+            p_state,
+            bc,
+            dtype,
+            form,
+            chargeL,
+            unit_cell_width=unit_cell_width,
+            device=device,
+            understood_shift_symmetry=understood_shift_symmetry,
         )
         tebd_params = dict(N_steps=10, trunc_params={'chi_max': chi})
         eng = RandomUnitaryEvolution(psi, tebd_params)
