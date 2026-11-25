@@ -2814,8 +2814,14 @@ class MPS(BaseMPSExpectationValue):
             p_state_flat = p_state[tuple(lat.order.T)]  # "advanced" numpy indexing
         elif p_state.ndim == len(lat.shape) + 1:
             # extra dimension could be from purely 1D array entries
-            # make sure this is the case by converting to float
-            p_state = np.array(p_state, kwargs.get('dtype', lasy.Dtype.float64).to_numpy_dtype())
+            # make sure this is the case by converting to a numeric dtype (inferred if not given)
+            dtype = kwargs.get('dtype', None)
+            if dtype is None:
+                p_state = np.array(p_state.tolist())
+                if not np.issubdtype(p_state.dtype, np.number):
+                    raise ValueError(f'invalid `p_state`: {p_state}')
+            else:
+                p_state = np.array(p_state, dtype.to_numpy_dtype())
             # tile to lattice shape, ignore last dimension
             p_state = to_array(p_state, shape=lat.shape + (None,), allow_incommensurate=allow_incommensurate)
             inds = tuple(lat.order.T) + (slice(None),)
