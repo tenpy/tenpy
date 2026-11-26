@@ -1178,7 +1178,8 @@ class OneSiteH(EffectiveH):
             Product of `theta` and the effective Hamiltonian.
 
         """
-        labels = theta.labels
+        codomain_labels = theta.codomain_labels
+        domain_labels = theta.domain_labels
         if self.combine:
             theta = lasy.split_legs(theta)
         theta = PlanarLinearOperator.matvec(self, theta)
@@ -1187,7 +1188,7 @@ class OneSiteH(EffectiveH):
                 theta = lasy.combine_legs(theta, ['vL', 'p0'], pipes=[self.pipeL])
             else:
                 theta = lasy.combine_legs(theta, ['p0', 'vR'], pipes=[self.pipeR])
-        theta = lasy.permute_legs(theta, codomain=labels, domain=[])  # if necessary, transpose
+        theta = lasy.permute_legs(theta, codomain=codomain_labels, domain=domain_labels)  # if necessary, transpose
         return theta
 
     def combine_Heff(self, env):
@@ -1378,13 +1379,14 @@ class TwoSiteH(EffectiveH):
             Product of `theta` and the effective Hamiltonian.
 
         """
-        labels = theta.labels
+        codomain_labels = theta.codomain_labels
+        domain_labels = theta.domain_labels
         if self.combine:
             theta = lasy.split_legs(theta)
         theta = PlanarLinearOperator.matvec(self, theta)
         if self.combine:
             theta = lasy.combine_legs(theta, ['vL', 'p0'], ['p1', 'vR'], pipes=[self.pipeL, self.pipeR])
-        theta = lasy.permute_legs(theta, codomain=labels, domain=[])  # if necessary, transpose
+        theta = lasy.permute_legs(theta, codomain=codomain_labels, domain=domain_labels)  # if necessary, transpose
         # This is where we would truncate. Separate mode from combine?
         return theta
 
@@ -1563,9 +1565,10 @@ class ZeroSiteH(EffectiveH):
             Product of `theta` and the effective Hamiltonian.
 
         """
-        labels = theta.labels
+        codomain_labels = theta.codomain_labels
+        domain_labels = theta.domain_labels
         theta = PlanarLinearOperator.matvec(self, theta)
-        theta = lasy.permute_legs(theta, codomain=labels, domain=[])  # if necessary, transpose
+        theta = lasy.permute_legs(theta, codomain=codomain_labels, domain=domain_labels)  # if necessary, transpose
         return theta
 
     def adjoint(self):
