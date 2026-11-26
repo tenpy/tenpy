@@ -40,7 +40,7 @@ import warnings
 import lasyten as lasy
 import numpy as np
 
-from ..networks.mps import MPS_TOTAL_CHARGE_LABEL
+from ..networks.mps import MPS_TOTAL_CHARGE_LABEL, _permute_theta_for_svd
 from ..tools import TruncationError, asConfig, memory_usage
 from . import mps_common
 from .mps_common import EffectiveH, IterativeSweeps, OneSiteH, TwoSiteH
@@ -763,7 +763,25 @@ class DMRGEngine(IterativeSweeps):
             E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=False)
         else:
             raise ValueError('Unknown diagonalization method: ' + repr(self.diag_method))
-        ov_change = 1.0 - abs(lasy.inner(theta_guess, theta))
+        if diag_method == 'ED_all' and (theta_guess.codomain != theta.codomain or theta_guess.domain != theta.domain):
+            # ED_all may change the charge sector of theta (or its hidden-leg placement);
+            # orthogonal charge sectors have zero overlap.
+            if (
+                isinstance(theta_guess, lasy.HiddenLegTensor)
+                and isinstance(theta, lasy.HiddenLegTensor)
+                and theta_guess.labels.has(f'!{MPS_TOTAL_CHARGE_LABEL}')
+                and theta.labels.has(f'!{MPS_TOTAL_CHARGE_LABEL}')
+                and theta_guess.as_SymmetricTensor().get_leg(MPS_TOTAL_CHARGE_LABEL)
+                == theta.as_SymmetricTensor().get_leg(MPS_TOTAL_CHARGE_LABEL)
+            ):
+                theta_aligned = lasy.planar_permute_legs(
+                    theta, codomain=theta_guess.codomain_labels, domain=theta_guess.domain_labels
+                )
+                ov_change = 1.0 - abs(lasy.inner(theta_guess, theta_aligned))
+            else:
+                ov_change = 1.0
+        else:
+            ov_change = 1.0 - abs(lasy.inner(theta_guess, theta))
         return E, theta, N, ov_change
 
     def plot_update_stats(self, axes, xaxis='time', yaxis='E', y_exact=None, **kwargs):
@@ -931,7 +949,8 @@ class TwoSiteDMRGEngine(DMRGEngine):
             if self.combine:
                 theta = lasy.planar_permute_legs(theta, codomain=['(vL.p0)'], domain=['(p1.vR)'])
             else:
-                theta = lasy.planar_permute_legs(theta, codomain=['vL', 'p0'], domain=['vR', 'p1'])
+                charge_leg_right = self.psi.finite or self.psi._to_valid_site_index(i0) != self.psi.L - 1
+                theta = _permute_theta_for_svd(theta, charge_leg_right)
             U, S, VH, err, _ = self.svd_theta(theta)
             if self.combine:
                 U.labels.update({'(vL.p0)': '(vL.p)'})
@@ -1225,17 +1244,27 @@ def full_diag_effH(
     else:
         # do not restrict the sector
         sector = None
-        new_leg_dual = False  # arbitrary choice
+        if isinstance(theta_guess, lasy.HiddenLegTensor) and theta_guess.labels.has(f'!{charge_label}'):
+            new_leg_dual = theta_guess.as_SymmetricTensor().get_leg(charge_label).dual.is_dual
+        else:
+            new_leg_dual = False  # arbitrary choice
 
     E, V = lasy.eigh(fullH, new_labels='eig*', new_leg_dual=new_leg_dual)
 
     gs_projector, E0 = E.sector_argmin(sector)
     theta: lasy.Tensor = lasy.compose(V, gs_projector.hc)
 
-    if gs_projector.small_leg.sector_decomposition[0] == symmetry.trivial_sector:
+    if not (keep_sector and isinstance(theta_guess, lasy.HiddenLegTensor)) and (
+        gs_projector.small_leg.sector_decomposition[0] == symmetry.trivial_sector
+    ):
         theta = lasy.squeeze_legs(theta, 'eig*')
     else:
         theta.labels.update({'eig*': charge_label})
         theta = lasy.HiddenLegTensor.from_tensor(theta, [charge_label])
+
+    if keep_sector and (
+        theta.codomain_labels != theta_guess.codomain_labels or theta.domain_labels != theta_guess.domain_labels
+    ):
+        theta = lasy.planar_permute_legs(theta, codomain=theta_guess.codomain_labels, domain=theta_guess.domain_labels)
 
     return E0, theta

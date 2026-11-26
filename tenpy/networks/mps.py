@@ -9508,7 +9508,7 @@ def _permute_theta_for_svd(theta: lasy.Tensor, charge_leg_right: bool) -> lasy.T
     """
     if not isinstance(theta, lasy.HiddenLegTensor):
         return lasy.planar_permute_legs(theta, codomain=['vL', 'p0'])
-    labels = theta.labels
+    labels = theta.labels.as_list()
     k = labels.index('vL')
     labels = labels[k:] + labels[:k]
     hidden = labels[4:]

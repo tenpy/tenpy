@@ -686,3 +686,88 @@ def test_segment_dmrg(model):
     with pytest.warns():
         eng0.options.warn_unused()
         eng1.options.warn_unused()
+
+
+@pytest.mark.parametrize(
+    'site_kind, conserve',
+    [('spin', 'parity'), ('spin', 'Sz'), ('spin', 'SU2'), ('fermion', 'parity'), ('fermion', 'N'), ('golden', None)],
+)
+@pytest.mark.parametrize('charge_leg_dual', [False, True])
+@pytest.mark.parametrize('hidden_pos', ['codom_front', 'codom_back'])
+def test_full_diag_effH_hidden_leg_in_codomain(site_kind, conserve, charge_leg_dual, hidden_pos, L=4):
+    # Regression test for #763: when theta_guess carries its hidden leg in the codomain (as occurs when
+    # crossing the unit cell boundary in iDMRG), full_diag_effH(..., keep_sector=True) must return theta
+    # with the exact same (codomain, domain) partition so lasy.inner(theta_guess, theta) succeeds.
+    charge_label = 'CHARGE'
+    if site_kind == 'spin':
+        site = sites.SpinSite(0.5, conserve=conserve)
+    elif site_kind == 'fermion':
+        site = sites.SpinlessFermionSite(conserve=conserve)
+    else:
+        site = sites.GoldenSite()
+    legs = [site.leg] * L
+    labels = [*(f'p{i}' for i in range(L)), *(f'p{i}*' for i in range(L - 1, -1, -1))]
+    full_H = lasy.SymmetricTensor.from_random_normal(legs, legs, labels=labels)
+    full_H += full_H.hc
+    sectors = [s for s in full_H.codomain.sector_decomposition if s != full_H.symmetry.trivial_sector]
+    theta_sector = sectors[0]
+    charge_leg = lasy.ElementarySpace(full_H.symmetry, [theta_sector])
+    if charge_leg_dual:
+        charge_leg = charge_leg.as_bra_space()
+    base = lasy.SymmetricTensor.from_random_normal(
+        legs, [charge_leg], backend=full_H.backend, labels=[*full_H.codomain_labels, charge_label]
+    )
+    base_h = lasy.HiddenLegTensor(base, [charge_label])
+    pub = list(full_H.codomain_labels)
+    target_codom = [f'!{charge_label}', *pub] if hidden_pos == 'codom_front' else [*pub, f'!{charge_label}']
+    theta_guess = lasy.planar_permute_legs(base_h, codomain=target_codom, domain=[])
+
+    E0, theta = dmrg.full_diag_effH(_DummyEffH(full_H), theta_guess, keep_sector=True, charge_label=charge_label)
+    assert theta.codomain == theta_guess.codomain
+    assert theta.domain == theta_guess.domain
+    assert theta.labels == theta_guess.labels
+    # Overlap must work directly and match domain-aligned inner product
+    ov = lasy.inner(theta_guess, theta).to_numpy()
+    theta_dom = lasy.planar_permute_legs(theta, codomain=pub, domain=[f'!{charge_label}'])
+    guess_dom = lasy.planar_permute_legs(theta_guess, codomain=pub, domain=[f'!{charge_label}'])
+    assert np.allclose(ov, lasy.inner(guess_dom, theta_dom).to_numpy(), atol=1e-12)
+    assert lasy.almost_equal(lasy.compose(full_H, theta_dom), E0 * theta_dom)
+
+
+def test_charged_finite_dmrg_lanczos_and_ed_all():
+    # Finite charged SpinChain: Lanczos must preserve hidden-leg domain partition and keep psi gauged.
+    M = SpinChain(dict(L=4, S=0.5, conserve='Sz', bc_MPS='finite', bc_x='open', Jx=1, Jy=1, Jz=1, hz=0))
+    psi = mps.MPS.from_product_state(M.lattice.mps_sites(), ['up', 'up', 'up', 'down'], bc='finite', unit_cell_width=4)
+    assert isinstance(psi._B[-1], lasy.HiddenLegTensor)
+    res = dmrg.run(
+        psi,
+        M,
+        dict(combine=False, mixer=False, max_sweeps=6, diag_method='lanczos', trunc_params=dict(chi_max=16)),
+    )
+    assert psi.is_gauged
+    assert psi.get_total_charge() == lasy.Sector([2])
+    psi.test_sanity()
+    # Exact ground state of 4-site open Heisenberg chain in Sz=+1 sector:
+    # H = sum_{i=0}^2 S_i . S_{i+1}, lowest eigenvalue in the 4-dim Sz=+1 subspace is -1/4 - sqrt(2)/2.
+    assert np.isclose(res['E'], -0.25 - np.sqrt(2) / 2, atol=1e-12)
+    # Also verify MPS.set_svd_theta works with HiddenLegTensor (LegLabels.as_list() fix in _permute_theta_for_svd).
+    th = psi.get_theta(2, n=2)
+    psi.set_svd_theta(2, th, trunc_par=dict(chi_max=16))
+    assert psi.is_gauged
+
+    # Verify diag_method='ED_all' handles sector change (Sz=+2 guess -> Sz=+1 ground state) cleanly.
+    psi_ed = mps.MPS.from_product_state(M.lattice.mps_sites(), ['up', 'up', 'up', 'up'], bc='finite', unit_cell_width=4)
+    eng = dmrg.TwoSiteDMRGEngine(
+        psi_ed,
+        M,
+        dict(combine=False, diag_method='ED_all'),
+    )
+    eng.i0 = 2
+    eng.make_eff_H()
+    theta_guess = eng.eff_H.combine_theta(psi_ed.get_theta(2, n=2))
+    _, theta_gs, _, ov_change = eng.diag(theta_guess)
+    assert isinstance(theta_gs, lasy.HiddenLegTensor)
+    assert theta_gs.as_SymmetricTensor().get_leg('unit_cell_charge') != theta_guess.as_SymmetricTensor().get_leg(
+        'unit_cell_charge'
+    )
+    assert ov_change == 1.0

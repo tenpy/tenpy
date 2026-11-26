@@ -12,6 +12,7 @@ import lasyten as lasy
 import numpy as np
 import numpy.testing as npt
 import pytest
+from scipy import integrate
 
 from tenpy.algorithms import dmrg
 from tenpy.models.aklt import AKLTChain
@@ -111,15 +112,15 @@ def test_heisenberg_Sz_matches_tenpy_v1():
             id='parity',
         ),
         # With N conservation, any non-zero number of fermions per unit cell is a non-trivial charge (hidden leg).
-        # This fails in `dmrg.diag` (#763), and then in the final `canonical_form` (#765).
-        # (The tolerance below was checked for parity only.)
+        # With #763 fixed, small-chi ED_block steps work; at chi_max=16 it still hits Lanczos (#762) and then
+        # the final `canonical_form` (#765).
         pytest.param(
             'N',
             2,
             ['empty', 'full'],
             marks=pytest.mark.xfail(
-                reason='iDMRG with a charged unit cell: hidden leg in dmrg.diag #763, canonical_form_infinite1 #765',
-                raises=(lasy.SymmetryError, ValueError, NotImplementedError),
+                reason='fermionic Lanczos #762 (SymmetryError), canonical_form_infinite1 #765 (NotImplementedError)',
+                raises=(lasy.SymmetryError, NotImplementedError),
                 strict=True,
             ),
             id='N',
@@ -157,3 +158,112 @@ def test_heisenberg_on_aklt_state_su2():
     M = SpinChain(dict(L=2, S=1, conserve='SU2', bc_MPS='infinite'))
     psi = AKLTChain(dict(L=2, bc_MPS='infinite', conserve='SU2')).psi_AKLT()
     npt.assert_allclose(M.get_H_MPO().expectation_value(psi), -4.0 / 3.0, atol=1e-12)
+
+
+@pytest.mark.parametrize('diag_method', ['ED_block', 'lanczos'])
+@pytest.mark.parametrize('start_env', [0, 1])
+def test_charged_unit_cell_spin_ferromagnetic(diag_method, start_env):
+    # Regression test for #763: fully polarized spin-1/2 unit cell carries non-trivial total Sz=+1 (hidden leg).
+    M = SpinChain(dict(L=2, S=0.5, conserve='Sz', bc_MPS='infinite', Jx=1, Jy=1, Jz=1, hz=0))
+    psi = mps.MPS.from_product_state(M.lattice.mps_sites(), ['up', 'up'], bc='infinite', unit_cell_width=2)
+    assert isinstance(psi._B[-1], lasy.HiddenLegTensor)
+    dmrg_pars = {
+        'combine': False,
+        'mixer': False,
+        'active_sites': 2,
+        'start_env': start_env,
+        'N_sweeps_check': 2,
+        'max_sweeps': 4,
+        'diag_method': diag_method,
+        'trunc_params': {'chi_max': 16},
+    }
+    res = dmrg.run(psi, M, dmrg_pars, resume_data={'init_env_data': dict(start_env_sites=0)})
+    npt.assert_allclose(res['E'], 0.25, atol=1e-12)
+    assert psi.is_gauged
+    assert psi.get_total_charge() == lasy.Sector([2])
+    psi.test_sanity()
+    assert np.max(np.abs(psi.norm_test())) < 1e-12
+    npt.assert_allclose(M.get_H_MPO().expectation_value(psi), 0.25, atol=1e-12)
+
+
+def test_charged_unit_cell_spin_staggered_L3():
+    # Non-trivial magnetized L=3 unit cell (Sz=+1/2 per unit cell, chi_max=16 exercises both ED_block and Lanczos).
+    # Compare against conserve=None iDMRG control on a gapped staggered-field chain.
+    hz = [1.5, 1.5, -1.5]
+    model_pars = dict(L=3, S=0.5, bc_MPS='infinite', Jx=0.5, Jy=0.5, Jz=1.0, hz=hz)
+    M_sz = SpinChain({**model_pars, 'conserve': 'Sz'})
+    psi_sz = mps.MPS.from_product_state(
+        M_sz.lattice.mps_sites(), ['up', 'up', 'down'], bc='infinite', unit_cell_width=3
+    )
+    res_sz = _run_idmrg(M_sz, psi_sz, chi_max=16, max_sweeps=24, N_sweeps_check=8)
+
+    M_no = SpinChain({**model_pars, 'conserve': None})
+    psi_no = mps.MPS.from_product_state(
+        M_no.lattice.mps_sites(), ['up', 'up', 'down'], bc='infinite', unit_cell_width=3
+    )
+    res_no = _run_idmrg(M_no, psi_no, chi_max=16, max_sweeps=24, N_sweeps_check=8)
+
+    assert psi_sz.is_gauged
+    assert psi_sz.get_total_charge() == lasy.Sector([1])
+    psi_sz.test_sanity()
+    assert np.max(np.abs(psi_sz.norm_test())) < 1e-10
+    npt.assert_allclose(res_sz['E'], res_no['E'], atol=1e-10)
+    npt.assert_allclose(M_sz.get_H_MPO().expectation_value(psi_sz), res_sz['E'], atol=1e-10)
+    npt.assert_allclose(psi_sz.expectation_value('Sz'), psi_no.expectation_value('Sz'), atol=1e-10)
+
+
+@pytest.mark.parametrize('conserve', ['parity', 'N'])
+def test_charged_unit_cell_fermions_staggered(conserve):
+    # Charged fermionic unit cell (1 fermion per 2 sites) on a gapped staggered-mu free-fermion chain,
+    # using ED_block (avoiding #762 Lanczos) and verifying exact convergence to the analytical band integral.
+    mu_stag = 1.5
+    E_exact = (
+        integrate.quad(lambda q: -np.sqrt(mu_stag**2 + 4.0 * np.cos(q / 2.0) ** 2) / (2.0 * np.pi), -np.pi, np.pi)[0]
+        / 2.0
+    )
+    M = FermionChain(dict(L=2, J=1.0, V=0.0, mu=np.array([mu_stag, -mu_stag]), bc_MPS='infinite', conserve=conserve))
+    psi = mps.MPS.from_product_state(M.lattice.mps_sites(), ['empty', 'full'], bc='infinite', unit_cell_width=2)
+    assert isinstance(psi._B[-1], lasy.HiddenLegTensor)
+    dmrg_pars = {
+        'combine': False,
+        'mixer': False,
+        'active_sites': 2,
+        'start_env': 1,
+        'N_sweeps_check': 8,
+        'max_sweeps': 24,
+        'diag_method': 'ED_block',
+        'trunc_params': {'chi_max': 8, 'svd_min': 1e-12},
+    }
+    res = dmrg.run(psi, M, dmrg_pars, resume_data={'init_env_data': dict(start_env_sites=0)})
+    assert psi.is_gauged
+    psi.test_sanity()
+    assert np.max(np.abs(psi.norm_test())) < 1e-10
+    npt.assert_allclose(res['E'], E_exact, atol=1e-7)
+    npt.assert_allclose(M.get_H_MPO().expectation_value(psi), res['E'], atol=1e-10)
+    npt.assert_allclose(np.sum(psi.expectation_value('N')), 1.0, atol=1e-12)
+
+
+@pytest.mark.parametrize('conserve', ['parity', 'N'])
+def test_charged_unit_cell_fermions_gapless_ed(conserve):
+    # Reproducer from #763 for gapless half-filled free fermions (exact E = -2/pi),
+    # kept at small chi with ED_block and norm_tol=None so #762 and #765 are not triggered.
+    E_exact = -2.0 / np.pi
+    M = FermionChain(dict(L=2, J=1.0, V=0.0, mu=0.0, bc_MPS='infinite', conserve=conserve))
+    psi = mps.MPS.from_product_state(M.lattice.mps_sites(), ['empty', 'full'], bc='infinite', unit_cell_width=2)
+    dmrg_pars = {
+        'combine': False,
+        'mixer': False,
+        'active_sites': 2,
+        'start_env': 1,
+        'N_sweeps_check': 4,
+        'max_sweeps': 12,
+        'diag_method': 'ED_block',
+        'norm_tol': None,
+        'trunc_params': {'chi_max': 4, 'svd_min': 1e-10},
+    }
+    res = dmrg.run(psi, M, dmrg_pars, resume_data={'init_env_data': dict(start_env_sites=0)})
+    assert psi.is_gauged
+    psi.test_sanity()
+    assert E_exact - 1e-8 <= res['E'] <= E_exact + 1e-2
+    npt.assert_allclose(M.get_H_MPO().expectation_value(psi), res['E'], atol=1e-5)
+    npt.assert_allclose(np.sum(psi.expectation_value('N')), 1.0, atol=1e-10)
