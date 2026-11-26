@@ -1,4 +1,4 @@
-"""Tests for infinite two-site DMRG with uniform spin chains (and free fermions, currently xfail).
+"""Tests for infinite two-site DMRG with uniform spin chains and free fermions.
 
 All tests use plain two-site DMRG without mixer.
 For the iDMRG with SU(2) symmetry, we only test cases where the bond stays small (AKLT), since the
@@ -93,21 +93,13 @@ def test_heisenberg_Sz_matches_tenpy_v1():
 @pytest.mark.parametrize(
     'conserve, L, state',
     [
-        # An even number of fermions per unit cell has a trivial total charge with parity conservation. The (exact)
-        # diagonalization of the effective Hamiltonian works, but Lanczos fails for fermions, which is used for larger chi.
-        # slow: many iDMRG sweeps; with the exact diagonalization, it takes 35 s (Release), much longer than the Sz tests.
+        # An even number of fermions per unit cell has a trivial total charge with parity conservation.
+        # slow: many iDMRG sweeps.
         pytest.param(
             'parity',
             4,
             ['empty', 'full'] * 2,
-            marks=[
-                pytest.mark.slow,
-                pytest.mark.xfail(
-                    reason='fermionic DMRG: plain permute_legs in the effective Hamiltonians fails with Lanczos, #762',
-                    raises=lasy.SymmetryError,
-                    strict=True,
-                ),
-            ],
+            marks=[pytest.mark.slow],
             id='parity',
         ),
         # With N conservation, any non-zero number of fermions per unit cell is a non-trivial charge (hidden leg).
