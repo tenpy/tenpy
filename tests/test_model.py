@@ -331,8 +331,8 @@ def test_CouplingModel_explicit():
     _compare_grids(W1_new, W1_ex, 'W1')
 
     # compare reconstructed tensor: easier to trust
-    W0_ex = lasy.tensor_from_grid(W0_ex, ['wL', 'p', 'wR', 'p*'])
-    W1_ex = lasy.tensor_from_grid(W1_ex, ['wL', 'p', 'wR', 'p*'])
+    W0_ex = lasy.tensor_from_grid(W0_ex, ['wL', 'wR'])
+    W1_ex = lasy.tensor_from_grid(W1_ex, ['wL', 'wR'])
     assert lasy.almost_equal(W0_new, W0_ex)
     assert lasy.almost_equal(W1_new, W1_ex)
 
@@ -450,8 +450,8 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc):
     _compare_grids(W1_new, W1_ex, 'W1')
 
     # compare reconstructed tensor: easier to trust
-    W0_ex = lasy.tensor_from_grid(W0_ex, ['wL', 'p', 'wR', 'p*'])
-    W1_ex = lasy.tensor_from_grid(W1_ex, ['wL', 'p', 'wR', 'p*'])
+    W0_ex = lasy.tensor_from_grid(W0_ex, ['wL', 'wR'])
+    W1_ex = lasy.tensor_from_grid(W1_ex, ['wL', 'wR'])
     assert lasy.almost_equal(W0_new, W0_ex)
     assert lasy.almost_equal(W1_new, W1_ex)
 

@@ -466,7 +466,7 @@ def test_MPO_dagger_golden_chain(bc, L=4):
     J = 1.0 + 0.5j
     grid = [[Id, J * gold.factorization[0], None], [None, None, gold.factorization[1]], [None, None, Id]]
     labels = ['IdL', 'gold', 'IdR']
-    W = lasy.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*'], row_labels=labels, col_labels=labels)
+    W = lasy.tensor_from_grid(grid, ['wL', 'wR'], stack_labels=(labels, labels))
     H = mpo.MPO([site] * 2, [W, W], 'infinite', mps_unit_cell_width=2)
     if bc == 'finite':
         H = _finite_from_infinite(H, L)
@@ -556,7 +556,7 @@ def test_MPO_dagger_infinite(L=4):
         [None, None, None, Id],
     ]
     labels = ['IdL', 'a', 'b', 'IdR']
-    W = lasy.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*'], row_labels=labels, col_labels=labels)
+    W = lasy.tensor_from_grid(grid, ['wL', 'wR'], stack_labels=(labels, labels))
     M = mpo.MPO([site], [W], 'infinite', mps_unit_cell_width=1)
     M.test_sanity()
     M_dag = M.dagger()
@@ -782,7 +782,7 @@ def test_MPO_addition_errors():
 
 def _unlabelled_MPO(H):
     """Copy of the MPO `H` without any summand labels (not in the standard form)."""
-    Ws = [lasy.tensor_from_grid(mpo._grid_cells(W), labels=['wL', 'p', 'wR', 'p*']) for W in H._W]
+    Ws = [lasy.tensor_from_grid(mpo._grid_cells(W), ['wL', 'wR']) for W in H._W]
     return mpo.MPO(H.sites, Ws, H.bc, H.max_range, mps_unit_cell_width=H.unit_cell_width)
 
 
@@ -1076,7 +1076,7 @@ def _W_with_cell(W, row_label, col_label, factor):
     row_labels, col_labels = W.get_leg('wL').summand_labels, W.get_leg('wR').summand_labels
     cells = mpo._grid_cells(W)
     cells[row_labels.index(row_label)][col_labels.index(col_label)] = factor * mpo._identity_cell(W)
-    return lasy.tensor_from_grid(cells, labels=['wL', 'p', 'wR', 'p*'], row_labels=row_labels, col_labels=col_labels)
+    return lasy.tensor_from_grid(cells, ['wL', 'wR'], stack_labels=(row_labels, col_labels))
 
 
 # modifications of an MPO of a spin chain, which do / do not keep the upper triangular structure
@@ -1135,9 +1135,8 @@ def _with_summand_labels(H, prefix):
         Ws.append(
             lasy.tensor_from_grid(
                 mpo._grid_cells(W),
-                labels=['wL', 'p', 'wR', 'p*'],
-                row_labels=new_labels[0],
-                col_labels=new_labels[1],
+                ['wL', 'wR'],
+                stack_labels=(new_labels[0], new_labels[1]),
             )
         )
     return mpo.MPO(H.sites, Ws, 'finite', H.max_range, mps_unit_cell_width=H.unit_cell_width)
@@ -1186,7 +1185,7 @@ def test_MPO_addition_duplicate_summand_labels_infinite(case, operands):
             [None, None, None, cell('Sz', factor)],
             [None, None, None, Id],
         ]
-        W = lasy.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*'], row_labels=labels, col_labels=labels)
+        W = lasy.tensor_from_grid(grid, ['wL', 'wR'], stack_labels=(labels, labels))
         return mpo.MPO([site], [W], 'infinite', mps_unit_cell_width=1)
 
     prefix1, prefix2 = _SUMMAND_LABELS[case]

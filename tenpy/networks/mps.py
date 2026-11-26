@@ -6680,11 +6680,11 @@ class MPS(BaseMPSExpectationValue):
         if U is not None:
             theta_other = lasy.tensors.partial_compose(theta_other, U, 'vL')
             last_B_other = lasy.planar_contraction(last_B_other, V, ['vR'], ['vL'])
-        Bs = [lasy.tensor_from_grid([[alpha * theta_self, beta * theta_other]], labels=theta_self.labels)]
+        Bs = [lasy.tensor_from_grid([[alpha * theta_self, beta * theta_other]], ['vL', 'vR'])]
         for i in range(1, L - 1):
             B_self = psi_self.get_B(i)
-            Bs.append(lasy.tensor_from_grid([[B_self, None], [None, other.get_B(i)]], labels=B_self.labels))
-        Bs.append(lasy.tensor_from_grid([[last_B_self], [last_B_other]], labels=last_B_self.labels))
+            Bs.append(lasy.tensor_from_grid([[B_self, None], [None, other.get_B(i)]], ['vL', 'vR']))
+        Bs.append(lasy.tensor_from_grid([[last_B_self], [last_B_other]], ['vL', 'vR']))
         # The outer legs are DirectSumSpaces with a single summand; replace them by that summand,
         # which is an isomorphism. (The inner bonds are replaced in canonical_form_finite.)
         Bs[0] = _project_onto_single_summand(Bs[0], 'vL')
