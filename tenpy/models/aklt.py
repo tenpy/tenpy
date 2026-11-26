@@ -61,27 +61,30 @@ class AKLTChain(ModelBuilder):
 
         **Infinite chain.**
         The AKLT state is the unique ground state, with energy ``-2/3`` per site.
-        For ``conserve='SU2'``, the (right canonical) tensor with spin-1/2 bonds is unique up to a
-        gauge transformation, such that a random symmetric tensor with spin-1/2 bonds is the AKLT
-        state.
+        MPS tensors are unique up to gauge transformations. For ``conserve='SU2'``, the virtual
+        legs are a single spin-1/2 sector, such that the gauge transformation is just a phase factor.
+        We fill the single block of the tensor with ones and bring the MPS into canonical form, such that
+        the tensor is right-canonical and its phase is deterministic.
         For the abelian symmetries (``None``, ``'parity'`` and ``'Sz'``), the tensor is
-        constructed explicitly. The two states of the virtual spin-1/2 carry the charges
-        ``Sz=-1/2`` and ``Sz=+1/2`` (up to an overall shift).
+        constructed explicitly.
 
         **Finite chain.**
-        An open chain of ``L`` sites has a free spin-1/2 at each of its two ends, such that the
-        ground space is 4-fold degenerate: the two edge spins form a singlet (spin 0) or a
-        triplet (spin 1), and all four states have the energy ``-(L-1) * 2/3``.
-        Which of these states is returned depends on `conserve`:
+        An open chain has a free spin-1/2 at each of its two ends. The ground state is therefore
+        4-fold degenerate, and we need to choose one of the ground states.
 
-        - ``conserve=None``, ``'parity'`` or ``'Sz'``: The left edge spin is up and the right edge
-          spin is down, which is a superposition of the singlet and the ``S^z=0`` triplet state.
-          It has total ``Sz=0`` and bond dimension 2 on all bonds, and it is not invariant under SU(2).
-        - ``conserve='SU2'``: The two edge spins are in a singlet, such that the state has total
-          spin 0. It is the AKLT state on a periodic ring of ``L`` sites (the open chain has no
-          term on the closing bond), written as an open MPS by carrying the closing bond along the
-          chain: the bond dimension is 4 on the inner bonds and 3 on the bonds next to the two
-          edge sites.
+        - ``conserve=None``, ``'parity'`` or ``'Sz'``: We choose the state where the left edge spin
+          is up and the right edge spin is down. This choice is motivated as follows:
+          Choosing a product state of the two boundary spins is best to keep the MPS bond dimension
+          low. Choosing ``Sz`` eigenstates is required if ``Sz`` or parity are conserved.
+          Choosing opposite ``Sz`` eigenstates makes the resulting state symmetric
+          (total ``Sz = 0``) and choosing up/down rather than down/up is arbitrary.
+        - ``conserve='SU2'``: The state chosen above is not SU(2) symmetric, so a different choice
+          needs to be made. The only SU(2) symmetric pure state results from choosing the two
+          boundary spins in a joint singlet state. This is the unique ground state of the AKLT model
+          on a ring, i.e. with periodic boundary conditions. Note that, unlike in the abelian case
+          above, this means that the finite AKLT ground state has a higher MPS bond dimension than
+          the infinite ground state: the virtual bonds carry two spin-1/2 indices, i.e. dense bond
+          dimension 4 rather than 2 (3 on the bonds next to the two edge sites).
 
         A finite chain needs ``L >= 2`` sites.
 
@@ -110,14 +113,17 @@ class AKLTChain(ModelBuilder):
 
         if self.conserve == 'SU2':
             spin_half = lasy.ElementarySpace(sym, sym.get_sector('[1 0]'))
-            # the tensor with spin-1/2 bonds is unique up to a gauge transformation
-            psi = MPS.from_desired_virtual_spaces(
-                sites,
-                [spin_half] * L,
-                bc='infinite',
-                total_charge=sym.trivial_sector,
-                unit_cell_width=unit_cell_width,
+            # The tensor with spin-1/2 bonds has a single block, and is unique up to a phase.
+            # We fill it with ones, canonical_form takes care of the normalization.
+            dtype = lasy.Dtype.complex128 if sym.has_complex_topological_data else lasy.Dtype.float64
+            codomain = lasy.TensorProduct([spin_half, sites[0].leg], sym)
+            domain = lasy.TensorProduct([spin_half], sym)
+            B = lasy.SymmetricTensor.from_block_func(
+                np.ones, codomain, domain, sites[0].backend, labels=['vL', 'p', 'vR'], dtype=dtype
             )
+            SV = lasy.DiagonalTensor.from_eye(spin_half, sites[0].backend, ['vL', 'vR'], dtype.to_real)
+            psi = MPS(sites, [B] * L, [SV] * L, bc='infinite', form=None, unit_cell_width=unit_cell_width)
+            psi.canonical_form()
             if bc == 'infinite':
                 return psi
             return self._psi_AKLT_SU2_finite(psi)
@@ -155,8 +161,8 @@ class AKLTChain(ModelBuilder):
             total_charge = None  # ignored for finite bc
         else:
             form = 'B'
-            # The two virtual states are the spin-1/2 states with Sz=-1/2 and Sz=+1/2, up to an overall shift of
-            # the charge: 2*Sz = 0 and 2 for Sz, and the parities 0 and 1. Without symmetry, the charges are trivial.
+            # The two virtual states have 2*Sz = 0 and 2 for Sz, and the parities 0 and 1.
+            # Without symmetry, the charges are trivial.
             charges = {'Sz': [[0], [2]], 'parity': [[0], [1]]}.get(self.conserve, [[0], [0]])
             legL = lasy.ElementarySpace.from_defining_sectors(sym, charges, unique_sectors=False)
             # Once the virtual charges return to their initial value, the charge of the unit cell is L times the
