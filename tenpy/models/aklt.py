@@ -56,8 +56,8 @@ class AKLTChain(ModelBuilder):
         r"""Initialize an MPS which is an exact ground state of the AKLT model.
 
         The AKLT state is built from a spin-1/2 singlet on each bond and a projector from two
-        spin-1/2 to a spin-1 on each site. Hence, all bonds carry a spin-1/2, and the state has
-        bond dimension ``chi=2``.
+        spin-1/2 to a spin-1 on each site. Hence, each bond carries a spin-1/2, i.e. the bond
+        dimension is ``chi=2``; the finite SU(2) state below is the exception.
 
         **Infinite chain.**
         The AKLT state is the unique ground state, with energy ``-2/3`` per site.
