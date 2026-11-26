@@ -974,7 +974,7 @@ class MPO(MPSGeometry):
             left = self.finite and i == 0
             right = self.finite and i == self.L - 1
             A, B, C, D, Id = partition_W(W, left_boundary=left, right_boundary=right)
-            Id = lasy.tensor_from_grid([[Id]], labels=['wL', 'p', 'wR', 'p*'], row_labels=['Id'], col_labels=['Id'])
+            Id = lasy.tensor_from_grid([[Id]], ['wL', 'wR'], stack_labels=(['Id'], ['Id']))
             if left and right:
                 raise RuntimeError
             elif left:
@@ -983,7 +983,7 @@ class MPO(MPSGeometry):
                 grid = [[Id + dt * D], [dt * B]]
             else:
                 grid = [[Id + dt * D, C], [dt * B, A]]
-            U = lasy.tensor_from_grid(grid, labels=['wL', 'p', 'wR', 'p*'])
+            U = lasy.tensor_from_grid(grid, ['wL', 'wR'])
             assert 'Id' in U.get_leg('wL').summand_labels
             assert 'Id' in U.get_leg('wR').summand_labels
             U_list.append(U)
@@ -2142,7 +2142,6 @@ class MPO(MPSGeometry):
         summand labels of `self` and `other` can not collide; only ``'IdL'`` and ``'IdR'`` are set
         as labels of the rows / columns of the result.
         """
-        labels = ['wL', 'p', 'wR', 'p*']
         Ws = []
         for W1, W2 in zip(self._W, other._W):
             Id = _identity_cell(W1)
@@ -2200,26 +2199,25 @@ class MPO(MPSGeometry):
             grid = [[full_grid[r][c] for c in keep_cols] for r in keep_rows]
             row_labels = [rows[r][0] if rows[r][0] != 'o' else '' for r in keep_rows]  # '' = no label
             col_labels = [cols[c][0] if cols[c][0] != 'o' else '' for c in keep_cols]
-            Ws.append(lasy.tensor_from_grid(grid, labels=labels, row_labels=row_labels, col_labels=col_labels))
+            Ws.append(lasy.tensor_from_grid(grid, ['wL', 'wR'], stack_labels=(row_labels, col_labels)))
         return Ws
 
     def _add_Ws_block_diagonal(self, other: MPO) -> list[lasy.Tensor]:
         """Tensors for ``self + other`` with the generic block-diagonal structure, see :meth:`__add__`."""
         L = self.L
         Ws = []
-        labels = ['wL', 'p', 'wR', 'p*']
         for i in range(L):
             cells1, cells2 = _grid_cells(self._W[i]), _grid_cells(other._W[i])
             if self.finite and i == 0:
                 grid = [cells1[0] + cells2[0]]
-                W = lasy.tensor_from_grid(grid, labels=labels, row_labels=['IdL'])
+                W = lasy.tensor_from_grid(grid, ['wL', 'wR'], stack_labels=(['IdL'], None))
             elif self.finite and i == L - 1:
                 grid = [[row[0]] for row in cells1] + [[row[0]] for row in cells2]
-                W = lasy.tensor_from_grid(grid, labels=labels, col_labels=['IdR'])
+                W = lasy.tensor_from_grid(grid, ['wL', 'wR'], stack_labels=(None, ['IdR']))
             else:
                 grid = [row + [None] * len(cells2[0]) for row in cells1]
                 grid += [[None] * len(cells1[0]) + row for row in cells2]
-                W = lasy.tensor_from_grid(grid, labels=labels)
+                W = lasy.tensor_from_grid(grid, ['wL', 'wR'])
             Ws.append(W)
         return Ws
 
@@ -2695,11 +2693,9 @@ class MPOGraph(MPSGeometry):
                 grid.append(row)
             W = lasy.tensor_from_grid(
                 grid,
-                ['wL', 'p', 'wR', 'p*'],
-                row_labels=[str(l) for l in labelsL],
-                col_labels=[str(l) for l in labelsR],
-                row_summands=[statesL[k] for k in labelsL],
-                col_summands=[statesR[k] for k in labelsR],
+                ['wL', 'wR'],
+                stack_labels=([str(l) for l in labelsL], [str(l) for l in labelsR]),
+                stack_summands=([statesL[k] for k in labelsL], [statesR[k] for k in labelsR]),
             )
             Ws.append(W)
 
