@@ -532,13 +532,18 @@ class Sweep(Algorithm):
             theta = o_env.ket.get_theta(i0, n=self.eff_H.length)
             LP = o_env.get_LP(i0, store=True)
             RP = o_env.get_RP(i0 + self.eff_H.length - 1, store=True)
-            theta = lasy.tdot(LP, theta, ['vR'], ['vL'])
-            theta = lasy.tdot(theta, RP, ['vR'], ['vL'])
-            theta = theta
+            theta = _hidden_legs_to_front_codomain(theta)
+            theta = lasy.planar_contraction(LP, theta, ['vR'], ['vL'])
+            theta = lasy.planar_contraction(theta, RP, ['vR'], ['vL'])
             theta.labels.update({'vR*': 'vL', 'vL*': 'vR'})
             if self.eff_H.combine:
                 theta = self.eff_H.combine_theta(theta)
-            theta = lasy.permute_legs(theta, codomain=self.eff_H.acts_on, domain=[])
+            if isinstance(theta, lasy.HiddenLegTensor):
+                # Match `combine_theta(psi.get_theta(...))`, which keeps hidden legs in the domain.
+                hidden = [l for l in theta.labels.as_list() if l.startswith('!')]
+                theta = lasy.planar_permute_legs(theta, codomain=self.eff_H.acts_on, domain=hidden[::-1])
+            else:
+                theta = lasy.planar_permute_legs(theta, codomain=self.eff_H.acts_on, domain=[])
             ortho_vecs.append(theta)
         self.eff_H = lasy_sparse.ProjectedLinearOperator(self.eff_H, ortho_vecs)
 
@@ -943,6 +948,74 @@ class IterativeSweeps(Sweep):
         self.mixer_cleanup()
 
 
+def _hidden_legs_to_front_codomain(theta: lasy.Tensor) -> lasy.Tensor:
+    """Move hidden legs to the front of the codomain (with an empty domain).
+
+    Works around a lasyten ``planar_contraction`` sign issue: when a :class:`~lasyten.HiddenLegTensor`
+    enters a planar contraction with hidden legs in the domain (or at the right end of the codomain),
+    lasyten bends them with ``bend_right=True`` and braids them to the front of the open legs, which
+    flips the sign by ``-1`` for odd-parity fermionic hidden legs once permuted back planarly.
+    Placing hidden legs at the front of the codomain on the hidden plane (``level = -1``), bending
+    domain hidden legs up on the left (``bend_right=False``) and domain public legs up on the right
+    (``bend_right=True``), avoids hidden-hidden and public-public braids and pairs inversely with
+    :func:`_restore_matvec_legs` for both boundary and interleaved hidden-leg layouts.
+    """
+    if not isinstance(theta, lasy.HiddenLegTensor):
+        return theta
+    co = list(theta.codomain_labels)
+    dom = list(theta.domain_labels)
+    h_co = [l for l in co if l.startswith('!')]
+    h_dom = [l for l in dom if l.startswith('!')]
+    pub_co = [l for l in co if not l.startswith('!')]
+    pub_dom = [l for l in dom if not l.startswith('!')]
+    target_co = h_dom[::-1] + h_co + pub_co + pub_dom[::-1]
+    if co == target_co and not dom:
+        return theta
+    all_labs = theta.labels.as_list()
+    levels = [-1 if l.startswith('!') else 0 for l in all_labs]
+    bend_right = [False if l.startswith('!') else True for l in all_labs]
+    return lasy.permute_legs(theta, codomain=target_co, domain=[], levels=levels, bend_right=bend_right)
+
+
+def _restore_matvec_legs(
+    theta: lasy.Tensor,
+    codomain_labels: list[str],
+    domain_labels: list[str],
+) -> lasy.Tensor:
+    """Restore the input leg layout after :meth:`PlanarLinearOperator.matvec`.
+
+    For non-hidden tensors this reduces to :func:`lasyten.planar_permute_legs`.
+    For :class:`~lasyten.HiddenLegTensor`, first brings ``theta`` planarly to the canonical
+    all-codomain layout matching :func:`_hidden_legs_to_front_codomain`, then applies the exact
+    inverse level-separated permutation (hidden legs at ``level = -1`` bending down on the left,
+    public legs at ``level = 0`` bending down on the right). This preserves exact fermionic/anyonic
+    signs and leg placement for both boundary and interleaved hidden-leg layouts.
+    """
+    if not isinstance(theta, lasy.HiddenLegTensor):
+        return lasy.planar_permute_legs(theta, codomain=codomain_labels, domain=domain_labels)
+    co_target = list(codomain_labels)
+    dom_target = list(domain_labels)
+    if list(theta.codomain_labels) == co_target and list(theta.domain_labels) == dom_target:
+        return theta
+    pub_target_ccw = [l for l in co_target if not l.startswith('!')] + [
+        l for l in reversed(dom_target) if not l.startswith('!')
+    ]
+    h_target_front = [l for l in reversed(dom_target) if l.startswith('!')] + [
+        l for l in co_target if l.startswith('!')
+    ]
+    try:
+        theta_can = lasy.planar_permute_legs(theta, codomain=h_target_front + pub_target_ccw, domain=[])
+    except ValueError:
+        theta_pub = lasy.planar_permute_legs(theta, codomain=pub_target_ccw, domain=[])
+        theta_can = _hidden_legs_to_front_codomain(theta_pub)
+    if list(theta_can.codomain_labels) == co_target and list(theta_can.domain_labels) == dom_target:
+        return theta_can
+    all_labs = theta_can.labels.as_list()
+    levels = [-1 if l.startswith('!') else 0 for l in all_labs]
+    bend_right = [False if l.startswith('!') else True for l in all_labs]
+    return lasy.permute_legs(theta_can, codomain=co_target, domain=dom_target, levels=levels, bend_right=bend_right)
+
+
 class EffectiveH(PlanarLinearOperator):
     """Prototype class for local effective Hamiltonians used in sweep algorithms.
 
@@ -1147,8 +1220,8 @@ class OneSiteH(EffectiveH):
         if combine:
             raise NotImplementedError("Shouldn't need this for vumps")
         self.i0 = i0
-        self.LP = lasy.permute_legs(LP, codomain=['vR*', 'wR', 'vR'], domain=[])
-        self.RP = lasy.permute_legs(RP, codomain=['vL*', 'vL', 'wL'], domain=[])
+        self.LP = lasy.planar_permute_legs(LP, codomain=['vR*', 'wR', 'vR'], domain=[])
+        self.RP = lasy.planar_permute_legs(RP, codomain=['vL*', 'vL', 'wL'], domain=[])
         self.W0 = W0
         self.combine = combine
         self.move_right = move_right
@@ -1178,16 +1251,18 @@ class OneSiteH(EffectiveH):
             Product of `theta` and the effective Hamiltonian.
 
         """
-        labels = theta.labels
+        codomain_labels = theta.codomain_labels
+        domain_labels = theta.domain_labels
         if self.combine:
             theta = lasy.split_legs(theta)
+        theta = _hidden_legs_to_front_codomain(theta)
         theta = PlanarLinearOperator.matvec(self, theta)
         if self.combine:
             if self.move_right:
                 theta = lasy.combine_legs(theta, ['vL', 'p0'], pipes=[self.pipeL])
             else:
                 theta = lasy.combine_legs(theta, ['p0', 'vR'], pipes=[self.pipeR])
-        theta = lasy.permute_legs(theta, codomain=labels, domain=[])  # if necessary, transpose
+        theta = _restore_matvec_legs(theta, codomain_labels, domain_labels)
         return theta
 
     def combine_Heff(self, env):
@@ -1230,7 +1305,7 @@ class OneSiteH(EffectiveH):
                 theta = lasy.combine_legs(theta, ['vL', 'p0'], pipes=[self.pipeL])
             else:
                 theta = lasy.combine_legs(theta, ['p0', 'vR'], pipes=[self.pipeR])
-        return lasy.permute_legs(theta, codomain=self.acts_on, domain=[])
+        return lasy.planar_permute_legs(theta, codomain=self.acts_on, domain=[])
 
     def adjoint(self):
         """Return the hermitian conjugate of `self`."""
@@ -1378,13 +1453,15 @@ class TwoSiteH(EffectiveH):
             Product of `theta` and the effective Hamiltonian.
 
         """
-        labels = theta.labels
+        codomain_labels = theta.codomain_labels
+        domain_labels = theta.domain_labels
         if self.combine:
             theta = lasy.split_legs(theta)
+        theta = _hidden_legs_to_front_codomain(theta)
         theta = PlanarLinearOperator.matvec(self, theta)
         if self.combine:
             theta = lasy.combine_legs(theta, ['vL', 'p0'], ['p1', 'vR'], pipes=[self.pipeL, self.pipeR])
-        theta = lasy.permute_legs(theta, codomain=labels, domain=[])  # if necessary, transpose
+        theta = _restore_matvec_legs(theta, codomain_labels, domain_labels)
         # This is where we would truncate. Separate mode from combine?
         return theta
 
@@ -1536,8 +1613,8 @@ class ZeroSiteH(EffectiveH):
     def from_LP_RP(cls, LP, RP, i0=0):
         self = cls.__new__(cls)
         self.i0 = i0
-        self.LP = lasy.permute_legs(LP, codomain=['vR*', 'wR', 'vR'], domain=[])
-        self.RP = lasy.permute_legs(RP, codomain=['vL*', 'vL', 'wL'], domain=[])
+        self.LP = lasy.planar_permute_legs(LP, codomain=['vR*', 'wR', 'vR'], domain=[])
+        self.RP = lasy.planar_permute_legs(RP, codomain=['vL*', 'vL', 'wL'], domain=[])
         self.N = LP.get_leg('vR').dim * RP.get_leg('vL').dim
         PlanarLinearOperator.__init__(
             self,
@@ -1563,9 +1640,11 @@ class ZeroSiteH(EffectiveH):
             Product of `theta` and the effective Hamiltonian.
 
         """
-        labels = theta.labels
+        codomain_labels = theta.codomain_labels
+        domain_labels = theta.domain_labels
+        theta = _hidden_legs_to_front_codomain(theta)
         theta = PlanarLinearOperator.matvec(self, theta)
-        theta = lasy.permute_legs(theta, codomain=labels, domain=[])  # if necessary, transpose
+        theta = _restore_matvec_legs(theta, codomain_labels, domain_labels)
         return theta
 
     def adjoint(self):
@@ -2409,12 +2488,17 @@ class VariationalCompression(IterativeSweeps):
         th = self.env.ket.get_theta(i0, n=2)  # ket is old psi
         LP = self.env.get_LP(i0)
         RP = self.env.get_RP(i0 + 1)
-        th = lasy.tdot(LP, th, ['vR'], ['vL'])
-        th = lasy.tdot(th, RP, ['vR'], ['vL'])
-        th = th
+        th = _hidden_legs_to_front_codomain(th)
+        th = lasy.planar_contraction(LP, th, ['vR'], ['vL'])
+        th = lasy.planar_contraction(th, RP, ['vR'], ['vL'])
         th.labels.update({'vR*': 'vL', 'vL*': 'vR'})
-        th = lasy.permute_legs(th, codomain=['vL', 'p0'], domain=['p1', 'vR'])
-        th = lasy.combine_legs(th, ['vL', 'p0'], ['p1', 'vR'])
+        if isinstance(th, lasy.HiddenLegTensor):
+            # Place hidden legs in the domain so svd_theta keeps them on VH (site i0 + 1),
+            # matching MPS's convention (see tenpy.networks.mps._permute_theta_for_svd).
+            hidden = [l for l in th.labels.as_list() if l.startswith('!')]
+            th = lasy.planar_permute_legs(th, codomain=['vL', 'p0'], domain=hidden[::-1] + ['vR', 'p1'])
+        else:
+            th = lasy.planar_permute_legs(th, codomain=['vL', 'p0'], domain=['vR', 'p1'])
         return self.update_new_psi(th)
 
     def update_new_psi(self, theta):
@@ -2428,8 +2512,8 @@ class VariationalCompression(IterativeSweeps):
         # first compare to old best guess to check convergence of the sweeps
         if self._tol_theta_diff is not None and self.update_LP_RP[0] is False:
             theta_old = new_psi.get_theta(i0)
-            theta_new_trunc = lasy.tdot(lasy.scale_axis(U, S, 'vR'), VH, ['vR'], ['vL'])
-            theta_new_trunc = lasy.permute_legs(
+            theta_new_trunc = lasy.compose(lasy.scale_axis(U, S, 'vR'), VH)
+            theta_new_trunc = lasy.planar_permute_legs(
                 theta_new_trunc, codomain=theta_old.codomain_labels, domain=theta_old.domain_labels
             )
             ov = lasy.inner(theta_new_trunc, theta_old)

@@ -12,11 +12,13 @@ from scipy import integrate
 
 from tenpy.algorithms import dmrg, dmrg_parallel
 from tenpy.algorithms.exact_diag import ExactDiag
+from tenpy.models.fermions_spinless import FermionChain
 from tenpy.models.lattice import Chain
 from tenpy.models.model import CouplingModel
 from tenpy.models.spins import DipolarSpinChain, SpinChain
 from tenpy.models.tf_ising import TFIChain
 from tenpy.networks import mps
+from tenpy.networks.mps import MPSEnvironment
 from tenpy.tools import asConfig
 
 
@@ -686,3 +688,103 @@ def test_segment_dmrg(model):
     with pytest.warns():
         eng0.options.warn_unused()
         eng1.options.warn_unused()
+
+
+def _exact_free_fermion_energies(L, N_ferm, J=1.0):
+    """Single-particle spectrum and ground-state energy for an open L-site FermionChain."""
+    ks = np.arange(1, L + 1)
+    sp = np.sort(-2.0 * J * np.cos(np.pi * ks / (L + 1)))
+    return float(np.sum(sp[:N_ferm])), sp
+
+
+@pytest.mark.parametrize(
+    'L, state, conserve, diag_method, chi_max',
+    [
+        # Exact issue #762 reproducer: L=12 reaches eff_H.N >= 400 and triggers Lanczos by default.
+        pytest.param(12, ['empty', 'full'] * 6, 'parity', 'default', 32, marks=pytest.mark.slow, id='L12_parity'),
+        # Odd fermion number exercises HiddenLegTensor with odd fermion parity in matvec.
+        pytest.param(6, ['empty', 'full'] * 3, 'parity', 'lanczos', 8, id='L6_N3_parity'),
+        pytest.param(6, ['empty', 'full'] * 3, 'N', 'lanczos', 8, id='L6_N3_N'),
+        # Even fermion number with parity and N conservation.
+        pytest.param(
+            6, ['empty', 'full', 'empty', 'full', 'empty', 'empty'], 'parity', 'lanczos', 8, id='L6_N2_parity'
+        ),
+        pytest.param(6, ['empty', 'full', 'empty', 'full', 'empty', 'empty'], 'N', 'lanczos', 8, id='L6_N2_N'),
+    ],
+)
+def test_dmrg_fermions_lanczos(L, state, conserve, diag_method, chi_max):
+    N_ferm = state.count('full')
+    E_exact, _ = _exact_free_fermion_energies(L, N_ferm)
+    M = FermionChain(dict(L=L, J=1.0, V=0.0, mu=0.0, bc_MPS='finite', bc_x='open', conserve=conserve))
+    psi = mps.MPS.from_product_state(M.lattice.mps_sites(), state, bc='finite', unit_cell_width=L)
+    dmrg_pars = {
+        'combine': False,
+        'mixer': False,
+        'diag_method': diag_method,
+        'max_sweeps': 6,
+        'max_E_err': 1.0e-12,
+        'max_S_err': 1.0e-10,
+        'trunc_params': {'chi_max': chi_max, 'svd_min': 1.0e-12},
+    }
+    res = dmrg.run(psi, M, dmrg_pars)
+    E_dmrg = float(res['E'].as_float64()) if hasattr(res['E'], 'as_float64') else float(res['E'])
+    E_mpo = float(np.real(M.get_H_MPO().expectation_value(psi)))
+    assert abs(E_dmrg - E_exact) < 1.0e-10
+    assert abs(E_mpo - E_exact) < 1.0e-10
+    assert np.max(np.abs(psi.norm_test())) < 1.0e-10
+
+    # Compare half-filled L=6 against Jordan-Wigner equivalent spin chain (conserve=None).
+    if L == 6 and N_ferm == 3 and conserve == 'parity':
+        M_jw = SpinChain(dict(L=L, S=0.5, Jx=2.0, Jy=2.0, Jz=0.0, bc_MPS='finite', conserve=None))
+        psi_jw = mps.MPS.from_product_state(
+            M_jw.lattice.mps_sites(), ['down', 'up'] * 3, bc='finite', unit_cell_width=L
+        )
+        jw_pars = {
+            'combine': False,
+            'mixer': False,
+            'diag_method': diag_method,
+            'max_sweeps': 6,
+            'max_E_err': 1.0e-12,
+            'max_S_err': 1.0e-10,
+            'trunc_params': {'chi_max': chi_max, 'svd_min': 1.0e-12},
+        }
+        res_jw = dmrg.run(psi_jw, M_jw, jw_pars)
+        E_jw = float(res_jw['E'].as_float64()) if hasattr(res_jw['E'], 'as_float64') else float(res_jw['E'])
+        assert abs(E_dmrg - E_jw) < 1.0e-10
+
+
+@pytest.mark.parametrize('conserve', ['parity', 'N'])
+def test_dmrg_fermions_lanczos_vs_ed_and_excited(conserve):
+    # Interacting odd-fermion chain: Lanczos must match ED_block in energy and wavefunction overlap.
+    L = 6
+    state = ['empty', 'full'] * 3  # N=3 (odd parity -> HiddenLegTensor)
+    M = FermionChain(dict(L=L, J=1.0, V=0.7, mu=0.2, bc_MPS='finite', bc_x='open', conserve=conserve))
+    psi_ed = mps.MPS.from_product_state(M.lattice.mps_sites(), state, bc='finite', unit_cell_width=L)
+    psi_la = psi_ed.copy()
+    base_opts = {
+        'combine': False,
+        'mixer': False,
+        'max_sweeps': 6,
+        'max_E_err': 1.0e-12,
+        'trunc_params': {'chi_max': 8, 'svd_min': 1.0e-12},
+    }
+    res_ed = dmrg.run(psi_ed, M, {**base_opts, 'diag_method': 'ED_block'})
+    res_la = dmrg.run(psi_la, M, {**base_opts, 'diag_method': 'lanczos'})
+    E_ed = float(res_ed['E'].as_float64()) if hasattr(res_ed['E'], 'as_float64') else float(res_ed['E'])
+    E_la = float(res_la['E'].as_float64()) if hasattr(res_la['E'], 'as_float64') else float(res_la['E'])
+    ov = abs(MPSEnvironment(psi_ed, psi_la).full_contraction(0).as_complex128())
+    assert abs(E_la - E_ed) < 1.0e-10
+    assert abs(ov - 1.0) < 1.0e-10
+
+    # First excited state via Sweep._wrap_ortho_eff_H (`orthogonal_to=[psi0]`).
+    M_free = FermionChain(dict(L=L, J=1.0, V=0.0, mu=0.0, bc_MPS='finite', bc_x='open', conserve=conserve))
+    E0_exact, sp = _exact_free_fermion_energies(L, 3)
+    E1_exact = E0_exact - sp[2] + sp[3]
+    psi0 = mps.MPS.from_product_state(M_free.lattice.mps_sites(), state, bc='finite', unit_cell_width=L)
+    dmrg.run(psi0, M_free, {**base_opts, 'diag_method': 'lanczos'})
+    psi1 = mps.MPS.from_product_state(M_free.lattice.mps_sites(), list(reversed(state)), bc='finite', unit_cell_width=L)
+    res1 = dmrg.run(psi1, M_free, {**base_opts, 'diag_method': 'lanczos'}, orthogonal_to=[psi0])
+    E1 = float(res1['E'].as_float64()) if hasattr(res1['E'], 'as_float64') else float(res1['E'])
+    ov01 = abs(MPSEnvironment(psi0, psi1).full_contraction(0).as_complex128())
+    assert abs(E1 - E1_exact) < 1.0e-8
+    assert ov01 < 1.0e-8
