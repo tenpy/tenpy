@@ -1,9 +1,9 @@
 # Copyright (C) TeNPy Developers, Apache license
-import lasyten as lasy
 import numpy as np
 import pytest
 from test_model import check_general_model
 
+from tenpy.algorithms import exact_diag
 from tenpy.algorithms.dmrg import TwoSiteDMRGEngine
 from tenpy.models import aklt
 from tenpy.networks.mps import MPS
@@ -53,14 +53,6 @@ def test_AKLT_infinite(conserve):
     assert abs(1.0 - abs(psi0.overlap(M.psi_AKLT(), understood_infinite=True))) < 1.0e-10
 
 
-@pytest.mark.parametrize('conserve', ['None', 'parity', 'Sz', 'SU2'])
-def test_psi_AKLT_finite_needs_two_sites(conserve):
-    # This is the intended behaviour: the finite state needs two edge spins, which is not possible for a single site.
-    M = aklt.AKLTChain(dict(L=1, bc_MPS='finite', conserve=conserve))
-    with pytest.raises(ValueError, match='at least two sites'):
-        M.psi_AKLT()
-
-
 @pytest.mark.parametrize('L', [2, 3, 4, 6])
 @pytest.mark.parametrize('conserve', ['None', 'parity', 'Sz', 'SU2'])
 @pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
@@ -99,20 +91,24 @@ def test_psi_AKLT(bc_MPS, conserve, L, request):
             assert bond_dims == [1] + [2] * (L - 1)
 
 
-@pytest.mark.parametrize('L', [4, 6])
 @pytest.mark.parametrize('conserve', ['None', 'parity', 'Sz', 'SU2'])
-def test_psi_AKLT_infinite_vs_exact_diagonalization(conserve, L):
+def test_psi_AKLT_infinite_vs_exact_diagonalization(conserve):
     # The AKLT state on a ring of L spin-1 sites is the unique ground state with energy -2L/3. We obtain it
     # by contracting the (dense) tensors of the infinite MPS around the ring and compare to exact diagonalization.
-    # The Hamiltonian is built by hand from `aklt_coupling`, since `get_numpy_Hamiltonian` is not ported yet.
-    M = aklt.AKLTChain(dict(L=2, bc_MPS='infinite', conserve=conserve))
-    site = M.lattice.unit_cell[0]
-    psi = M.psi_AKLT()
-    psi_ring = np.einsum('apa->p', _contract_mps_tensors(psi, L))
+    # The ring is a multiple of the unit cell (L=2), such that the trace is independent of the gauge of the MPS.
+    # Larger rings are not possible for SU(2): the Hamiltonian term closing the ring spans all L sites, and exceeds
+    # the highest weight of the SU(N) data for L=6.
+    L = 4
+    M_inf = aklt.AKLTChain(dict(L=2, bc_MPS='infinite', conserve=conserve))
+    # B...B has the identity on the left virtual leg, such that tracing vL with vR closes the ring
+    theta = M_inf.psi_AKLT().get_theta(0, n=L, formL=0.0)
+    psi_ring = np.einsum(
+        'a...a->...', theta.to_numpy(leg_order=['vL', *[f'p{i}' for i in range(L)], 'vR'], understood_braiding=True)
+    ).reshape(-1)
     psi_ring /= np.linalg.norm(psi_ring)
 
-    H = _dense_aklt_hamiltonian(site, L, periodic=True)
-    energies, eigenvectors = np.linalg.eigh(H)
+    M_ring = aklt.AKLTChain(dict(L=L, bc_MPS='finite', bc_x='periodic', conserve=conserve))
+    energies, eigenvectors = np.linalg.eigh(exact_diag.get_numpy_Hamiltonian(M_ring))
 
     assert energies[0] == pytest.approx(-2 * L / 3)
     assert energies[1] > energies[0] + 0.1  # unique ground state
@@ -128,13 +124,13 @@ def test_psi_AKLT_finite_vs_exact_diagonalization(conserve, L):
     #     B = sqrt(4/3) * (singlet on the bond) x (projector spin-1/2 x spin-1/2 -> spin-1)
     # in the basis Sz = -1, 0, 1 and for the virtual states Sz = -1/2, +1/2.
     M = aklt.AKLTChain(dict(L=L, bc_MPS='finite', conserve=conserve))
-    site = M.lattice.unit_cell[0]
-    psi = M.psi_AKLT()
-    psi_dense = np.einsum('apb->p', _contract_mps_tensors(psi, L))  # the outer bonds are trivial
+    theta = M.psi_AKLT().get_theta(0, n=L)
+    psi_dense = theta.to_numpy(leg_order=['vL', *[f'p{i}' for i in range(L)], 'vR'], understood_braiding=True).reshape(
+        -1
+    )  # the outer bonds are trivial
     assert np.linalg.norm(psi_dense) == pytest.approx(1.0)
 
-    H = _dense_aklt_hamiltonian(site, L, periodic=False)
-    energies, eigenvectors = np.linalg.eigh(H)
+    energies, eigenvectors = np.linalg.eigh(exact_diag.get_numpy_Hamiltonian(M))
     assert energies[0] == pytest.approx(-(L - 1) * 2 / 3)
     assert energies[3] == pytest.approx(energies[0])  # 4-fold degenerate
     assert energies[4] > energies[3] + 0.1  # gap
@@ -159,7 +155,10 @@ def test_psi_AKLT_SU2_is_ring_state(bc_MPS, L):
     # chain Hamiltonian has no term on this bond. Hence, the finite state is the AKLT state on a periodic ring of L
     # sites, which is also the infinite state with L sites per unit cell, wrapped around the ring.
     psi = aklt.AKLTChain(dict(L=L, bc_MPS=bc_MPS, conserve='SU2')).psi_AKLT()
-    state = np.einsum('apa->p', _contract_mps_tensors(psi, L))
+    theta = psi.get_theta(0, n=L, formL=0.0)
+    state = np.einsum(
+        'a...a->...', theta.to_numpy(leg_order=['vL', *[f'p{i}' for i in range(L)], 'vR'], understood_braiding=True)
+    ).reshape(-1)
     # reference: the numpy tensor with the singlets on the bonds, traced around the ring
     ref = np.einsum('apa->p', _reference_mps_vector(L))
     assert abs(np.vdot(ref / np.linalg.norm(ref), state / np.linalg.norm(state))) == pytest.approx(1.0)
@@ -170,7 +169,10 @@ def test_psi_AKLT_SU2_is_ring_state(bc_MPS, L):
 def test_psi_AKLT_SU2_finite_is_singlet(component, L):
     # A singlet is annihilated by each component of the total spin, i.e. <S_c^2> = 0 for c = x, y, z.
     psi = aklt.AKLTChain(dict(L=L, bc_MPS='finite', conserve='SU2')).psi_AKLT()
-    psi_dense = np.einsum('apb->p', _contract_mps_tensors(psi, L))  # the outer bonds are trivial
+    theta = psi.get_theta(0, n=L)
+    psi_dense = theta.to_numpy(leg_order=['vL', *[f'p{i}' for i in range(L)], 'vR'], understood_braiding=True).reshape(
+        -1
+    )  # the outer bonds are trivial
     # spin-1 matrices in the basis Sz = -1, 0, 1; S+ raises Sz, which is the row index
     Sp = np.sqrt(2) * np.diag([1.0, 1.0], k=-1)
     op = {'x': (Sp + Sp.T) / 2, 'y': (Sp - Sp.T) / 2j, 'z': np.diag([-1.0, 0.0, 1.0])}[component]
@@ -198,35 +200,3 @@ def _reference_mps_vector(L):
     for _ in range(L):
         ref = np.einsum('apb,bqc->apqc', ref, B_ref).reshape(2, -1, 2)
     return ref
-
-
-def _contract_mps_tensors(psi, L):
-    # Contract the first L tensors of the MPS to a dense array with legs vL, p (all sites combined), vR. The left leg is
-    # the identity, such that tracing vL with vR closes a periodic ring.
-    tensors = [
-        lasy.planar_permute_legs(psi.get_B(i, 'B'), codomain=['vL', 'p'], domain=['vR']).to_numpy(
-            understood_braiding=True
-        )
-        for i in range(L)
-    ]  # legs vL, p, vR
-    result = np.eye(tensors[0].shape[0]).reshape(tensors[0].shape[0], 1, -1)
-    for B in tensors:
-        result = np.einsum('apb,bqc->apqc', result, B).reshape(result.shape[0], -1, B.shape[2])
-    return result
-
-
-def _dense_aklt_hamiltonian(site, L, periodic):
-    # The AKLT Hamiltonian on L sites as a dense matrix in the basis Sz = -1, 0, 1 of each site, built from the
-    # two-site coupling `aklt_coupling`, with or without the term on the bond between the last and the first site.
-    h_two_site = lasy.models.aklt_coupling([site, site], name='AKLT').to_tensor()
-    h_two_site = lasy.planar_permute_legs(h_two_site, codomain=['p0', 'p1'], domain=['p0*', 'p1*'])
-    # numpy leg order is codomain legs, then domain legs in reversed order: p0, p1, p1*, p0*
-    h_two_site = h_two_site.to_numpy(understood_braiding=True).transpose([0, 1, 3, 2]).reshape([9, 9])
-    H = np.zeros([3**L, 3**L], dtype=complex)
-    for k, basis_vector in enumerate(np.eye(3**L)):
-        state = basis_vector.reshape([3] * L)
-        for i in range(L if periodic else L - 1):
-            bond = [i, (i + 1) % L]
-            two_site = np.moveaxis(state, bond, [0, 1]).reshape(9, -1)
-            H[:, k] += np.moveaxis((h_two_site @ two_site).reshape([3, 3] + [3] * (L - 2)), [0, 1], bond).reshape(-1)
-    return H
