@@ -3920,12 +3920,29 @@ class MPS(BaseMPSExpectationValue):
         lonely: list[int] = [],
         lonely_state: int | str = 'up',
         bc: Literal['finite', 'segment', 'infinite'] = 'finite',
-        dtype: lasy.Dtype = lasy.Dtype.float64,
+        dtype: lasy.Dtype = None,
         device: str | None = None,
         unit_cell_width: int = None,
         understood_shift_symmetry: bool = False,
+        singlet_sector: lasy.Sector | None = None,
     ) -> MPS:
         """Create an MPS of entangled singlets.
+
+        If `up` and `down` lie in sectors of quantum dimension one (e.g. for Abelian symmetries),
+        a singlet is ``(|up down> - |down up>)/2**0.5``.
+        Otherwise (e.g. for ``SU(2)``), a singlet is defined on the level of the multiplets: for a
+        pair ``(i, j)``, site ``i`` is in the multiplet (sector `a`) containing `up`, site ``j`` in
+        the multiplet (sector `b`) containing `down`, and the two are fused to a sector
+        `singlet_sector` of quantum dimension one in ``a x b``. This sector is unique and may carry
+        a non-trivial Abelian charge, e.g. a particle number.
+        For a spin-1/2, the singlet is again ``(|up down> - |down up>)/2**0.5``; for a spin-1,
+        `up` and `down` select the spin-1 singlet ``sum_m (-1)**(1-m) |m, -m> / 3**0.5``.
+        For symmetries that can not be dropped, `up` and `down` are indices of the internal basis,
+        see :meth:`from_product_state`. Singlets of crossing pairs (e.g. ``(0, 2), (1, 3)``)
+        require symmetric braids.
+
+        Note that `lonely` sites are in a product state, see :meth:`from_product_state`. For
+        ``SU(2)`` symmetry, `lonely_state` hence can not be a spin-1/2 state.
 
         Parameters
         ----------
@@ -3938,21 +3955,30 @@ class MPS(BaseMPSExpectationValue):
             for each pair in `pairs`. For ``bc='infinite'`` MPS, some indices can be outside
             the range [0, L) to indicate couplings across infinite MPS unit cells.
         up, down : int | str
-            A singlet is defined as ``(|up down> - |down up>)/2**0.5``,
-            ``up`` and ``down`` give state indices or labels defined on the corresponding site.
+            State indices or labels defined on the `site`, selecting the singlet, see above.
         lonely : list of int
             Sites which are not included into a singlet pair.
         lonely_state : int | str
             The state for the lonely sites.
         bc : {'infinite', 'finite', 'segment'}
             MPS boundary conditions. See docstring of :class:`MPS`.
+        dtype : :class:`~lasyten.Dtype`, optional
+            The data type of the tensors. By default, the data type is chosen to be float for
+            symmetries with real topological data, and complex otherwise.
+        device : str, optional
+            Device of the resulting MPS.
         unit_cell_width : int
             See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+        singlet_sector : :class:`~lasyten.Sector`, optional
+            Only used if `up` or `down` lie in a sector of quantum dimension larger than one.
+            The sector of quantum dimension one in ``a x b`` to fuse to. By default, the unique such
+            sector; it needs to be given only if there are several.
 
         Returns
         -------
         singlet_mps : :class:`MPS`
             An MPS representing singlets on the specified pairs of sites.
+            In contrast to :meth:`from_product_mps_covering`, it is gauged, see :attr:`is_gauged`.
 
         """
         if not site.symmetry.trivial_shift:
@@ -3964,10 +3990,7 @@ class MPS(BaseMPSExpectationValue):
                 'Singlet state are not necessarily symmetric w.r.t. such symmetries.'
             )
         assert 2 * len(pairs) + len(lonely) == L, 'incompatible indices'
-        # set unit_cell_width as if on a Chain. Will not be used by from_product_mps_covering
-        psi_up_down = MPS.from_product_state([site] * 2, [up, down], unit_cell_width=2, dtype=dtype, device=device)
-        psi_down_up = MPS.from_product_state([site] * 2, [down, up], unit_cell_width=2, dtype=dtype, device=device)
-        psi_singlet = psi_up_down.add(psi_down_up, 0.5**0.5, -(0.5**0.5))
+        psi_singlet = _singlet_pair(site, up, down, singlet_sector=singlet_sector, dtype=dtype, device=device)
         mps_covering = [psi_singlet] * len(pairs)
         index_map = list(pairs)
         if len(lonely) > 0:
@@ -3982,6 +4005,7 @@ class MPS(BaseMPSExpectationValue):
             understood_shift_symmetry=understood_shift_symmetry,
         )
         assert psi.L == L
+        psi.gauge_total_charge()  # only 1-dimensional total charges
         return psi
 
     @classmethod
@@ -9723,6 +9747,101 @@ def _real_if_close_nested(value, factor: float = 1.0):
     if isinstance(value, list):
         return [_real_if_close_nested(val, factor) for val in value]
     return value.real_if_close() * factor
+
+
+def _sector_and_multiplicity(leg: lasy.ElementarySpace, idx: int) -> tuple[int, int]:
+    """The sector (as index into ``leg.sector_decomposition``) and its multiplicity copy of a basis state.
+
+    For symmetries that can be dropped, `idx` is an index of the public basis. For symmetries that can not be dropped,
+    `idx` is an index of the internal basis, which only enumerates the copies of each sector, not basis states.
+    """
+    if leg.symmetry.can_be_dropped:
+        k, pos = leg.parse_index(idx)
+        # take modulo to account for multiple basis states in a sector
+        return k, pos % leg.multiplicities[k]
+    offsets = np.cumsum([0, *leg.multiplicities])
+    if not 0 <= idx < offsets[-1]:
+        raise ValueError(f'Index {idx} out of range for {offsets[-1]} internal basis states')
+    k = int(np.searchsorted(offsets, idx, side='right') - 1)
+    return k, idx - offsets[k]
+
+
+def _singlet_pair(
+    site: lasy.Site,
+    up: int | str,
+    down: int | str,
+    singlet_sector: lasy.Sector | None = None,
+    dtype: lasy.Dtype = None,
+    device: str = None,
+) -> MPS:
+    """Two-site finite MPS of a singlet, used by :meth:`MPS.from_singlets`.
+
+    If `up` and `down` lie in sectors of quantum dimension one (e.g. for Abelian symmetries), the singlet is
+    ``(|up down> - |down up>)/2**0.5``, the sum of two product states. Otherwise, the first site is in the multiplet
+    (sector `a`) of `up`, the second site in the multiplet (sector `b`) of `down`, and they are fused to the sector
+    `singlet_sector` of quantum dimension one in ``a x b``. It is unique for invertible `singlet_sector` and may carry a
+    non-trivial (Abelian) charge, e.g. a particle number two for fermions. By default, `singlet_sector` is the unique
+    sector of quantum dimension one in ``a x b``. For a spin-1/2 with ``SU(2)`` symmetry, this again is
+    ``(|up down> - |down up>)/2**0.5``. The sectors `a` and `b` may differ.
+    """
+    if isinstance(up, str):
+        up = site.state_labels[up]
+    if isinstance(down, str):
+        down = site.state_labels[down]
+    sym = site.symmetry
+    leg = site.leg
+    k_up, m_up = _sector_and_multiplicity(leg, up)
+    k_down, m_down = _sector_and_multiplicity(leg, down)
+    sector_up = leg.sector_decomposition[k_up]
+    sector_down = leg.sector_decomposition[k_down]
+    if np.isclose(sym.qdim(sector_up), 1.0) and np.isclose(sym.qdim(sector_down), 1.0):
+        # Abelian case taking the superposition
+        psi_up_down = MPS.from_product_state([site] * 2, [up, down], unit_cell_width=2, dtype=dtype, device=device)
+        psi_down_up = MPS.from_product_state([site] * 2, [down, up], unit_cell_width=2, dtype=dtype, device=device)
+        return psi_up_down.add(psi_down_up, 0.5**0.5, -(0.5**0.5))
+
+    candidates = [c for c in sym.fusion_outcomes(sector_up, sector_down) if np.isclose(sym.qdim(c), 1.0)]
+    if singlet_sector is not None:
+        if not any(singlet_sector == c for c in candidates):
+            raise ValueError(
+                f'singlet_sector={singlet_sector} is not a sector of quantum dimension 1 in the fusion of {sector_up} '
+                f'and {sector_down}; possible sectors are {candidates}.'
+            )
+    elif len(candidates) == 1:
+        singlet_sector = candidates[0]
+    else:
+        raise ValueError(
+            f'The fusion of {sector_up} and {sector_down} contains {len(candidates)} sectors of quantum dimension 1 '
+            f'({candidates}), but a singlet requires one of them. Specify `singlet_sector` if there are several.'
+        )
+    if dtype is None:
+        dtype = lasy.Dtype.complex128 if sym.has_complex_topological_data else lasy.Dtype.float64
+    if device is None:
+        device = site.default_device
+    backend = site.backend
+    # construct state as a map from the (one-dimensional) singlet sector to the two sites
+    W = lasy.ElementarySpace.from_defining_sectors(sym, [singlet_sector])
+    X = lasy.FusionTree(sym, [sector_up, sector_down], singlet_sector, [False, False], [], [0])
+    Y = lasy.FusionTree(sym, [singlet_sector], singlet_sector, [False], [], [])
+    coeffs = np.zeros((leg.multiplicities[k_up], leg.multiplicities[k_down], 1))
+    coeffs[m_up, m_down, 0] = 1.0
+    psi = lasy.SymmetricTensor.from_tree_pairs(
+        {(X, Y): coeffs}, [leg, leg], [W], backend, ['p0', 'p1', 'vR'], dtype=dtype, device=device
+    )
+    # split into a two-site MPS; cannot use MPS.from_full due to nontrivial right bond W
+    psi = lasy.add_trivial_leg(psi, codomain_pos=0, label='vL')
+    psi = lasy.planar_permute_legs(psi, codomain=['vL', 'p0'], domain=['vR', 'p1'])
+    A, S, B, _, _ = lasy.truncated_svd(psi, new_labels=['vR', 'vL'])
+    S = S / lasy.norm(S)
+    A.labels.update({'p0': 'p'})
+    B = lasy.planar_permute_legs(B, domain=['vR'])
+    B.labels.update({'p1': 'p'})
+    S_triv = lasy.DiagonalTensor.from_eye(
+        lasy.ElementarySpace.from_trivial_sector(symmetry=sym), backend, ['vL', 'vR'], dtype.to_real, device
+    )
+    res = MPS([site] * 2, [A, B], [S_triv, S, S_triv], bc='finite', form=['A', 'B'], unit_cell_width=2)
+    res.convert_form('B')
+    return res
 
 
 def _split_off_vL(T: lasy.Tensor) -> lasy.Tensor:
