@@ -91,20 +91,23 @@ def test_psi_AKLT(bc_MPS, conserve, L, request):
             assert bond_dims == [1] + [2] * (L - 1)
 
 
+@pytest.mark.parametrize('L', [4, 6])
 @pytest.mark.parametrize('conserve', ['None', 'parity', 'Sz', 'SU2'])
-def test_psi_AKLT_infinite_vs_exact_diagonalization(conserve):
+def test_psi_AKLT_infinite_vs_exact_diagonalization(conserve, L, request):
+    if conserve == 'SU2' and L == 6:
+        # the Hamiltonian term closing the ring spans all 6 sites, which needs irreps of weight 22, but the SU(N) data
+        # only has the highest weight 20
+        request.applymarker(
+            pytest.mark.xfail(reason='SU(N) data too small for a term on 6 sites', raises=ValueError, strict=True)
+        )
     # The AKLT state on a ring of L spin-1 sites is the unique ground state with energy -2L/3. We obtain it
     # by contracting the (dense) tensors of the infinite MPS around the ring and compare to exact diagonalization.
     # The ring is a multiple of the unit cell (L=2), such that the trace is independent of the gauge of the MPS.
-    # Larger rings are not possible for SU(2): the Hamiltonian term closing the ring spans all L sites, and exceeds
-    # the highest weight of the SU(N) data for L=6.
-    L = 4
     M_inf = aklt.AKLTChain(dict(L=2, bc_MPS='infinite', conserve=conserve))
     # B...B has the identity on the left virtual leg, such that tracing vL with vR closes the ring
     theta = M_inf.psi_AKLT().get_theta(0, n=L, formL=0.0)
-    psi_ring = np.einsum(
-        'a...a->...', theta.to_numpy(leg_order=['vL', *[f'p{i}' for i in range(L)], 'vR'], understood_braiding=True)
-    ).reshape(-1)
+    legs = ['vL', *[f'p{i}' for i in range(L)], 'vR']
+    psi_ring = np.einsum('a...a->...', theta.to_numpy(leg_order=legs, understood_braiding=True)).reshape(-1)
     psi_ring /= np.linalg.norm(psi_ring)
 
     M_ring = aklt.AKLTChain(dict(L=L, bc_MPS='finite', bc_x='periodic', conserve=conserve))
@@ -125,9 +128,8 @@ def test_psi_AKLT_finite_vs_exact_diagonalization(conserve, L):
     # in the basis Sz = -1, 0, 1 and for the virtual states Sz = -1/2, +1/2.
     M = aklt.AKLTChain(dict(L=L, bc_MPS='finite', conserve=conserve))
     theta = M.psi_AKLT().get_theta(0, n=L)
-    psi_dense = theta.to_numpy(leg_order=['vL', *[f'p{i}' for i in range(L)], 'vR'], understood_braiding=True).reshape(
-        -1
-    )  # the outer bonds are trivial
+    legs = ['vL', *[f'p{i}' for i in range(L)], 'vR']
+    psi_dense = theta.to_numpy(leg_order=legs, understood_braiding=True).reshape(-1)  # the outer bonds are trivial
     assert np.linalg.norm(psi_dense) == pytest.approx(1.0)
 
     energies, eigenvectors = np.linalg.eigh(exact_diag.get_numpy_Hamiltonian(M))
@@ -156,9 +158,8 @@ def test_psi_AKLT_SU2_is_ring_state(bc_MPS, L):
     # sites, which is also the infinite state with L sites per unit cell, wrapped around the ring.
     psi = aklt.AKLTChain(dict(L=L, bc_MPS=bc_MPS, conserve='SU2')).psi_AKLT()
     theta = psi.get_theta(0, n=L, formL=0.0)
-    state = np.einsum(
-        'a...a->...', theta.to_numpy(leg_order=['vL', *[f'p{i}' for i in range(L)], 'vR'], understood_braiding=True)
-    ).reshape(-1)
+    legs = ['vL', *[f'p{i}' for i in range(L)], 'vR']
+    state = np.einsum('a...a->...', theta.to_numpy(leg_order=legs, understood_braiding=True)).reshape(-1)
     # reference: the numpy tensor with the singlets on the bonds, traced around the ring
     ref = np.einsum('apa->p', _reference_mps_vector(L))
     assert abs(np.vdot(ref / np.linalg.norm(ref), state / np.linalg.norm(state))) == pytest.approx(1.0)
@@ -170,9 +171,8 @@ def test_psi_AKLT_SU2_finite_is_singlet(component, L):
     # A singlet is annihilated by each component of the total spin, i.e. <S_c^2> = 0 for c = x, y, z.
     psi = aklt.AKLTChain(dict(L=L, bc_MPS='finite', conserve='SU2')).psi_AKLT()
     theta = psi.get_theta(0, n=L)
-    psi_dense = theta.to_numpy(leg_order=['vL', *[f'p{i}' for i in range(L)], 'vR'], understood_braiding=True).reshape(
-        -1
-    )  # the outer bonds are trivial
+    legs = ['vL', *[f'p{i}' for i in range(L)], 'vR']
+    psi_dense = theta.to_numpy(leg_order=legs, understood_braiding=True).reshape(-1)  # the outer bonds are trivial
     # spin-1 matrices in the basis Sz = -1, 0, 1; S+ raises Sz, which is the row index
     Sp = np.sqrt(2) * np.diag([1.0, 1.0], k=-1)
     op = {'x': (Sp + Sp.T) / 2, 'y': (Sp - Sp.T) / 2j, 'z': np.diag([-1.0, 0.0, 1.0])}[component]
