@@ -2527,7 +2527,7 @@ class MPS(BaseMPSExpectationValue):
                 else:
                     B_final = lasy.HiddenLegTensor(B_final, [vR_charge_label])
                 self._B[-1] = _merge_charge_legs(B_final, _charge_leg_labels(B_final), '!' + MPS_TOTAL_CHARGE_LABEL)
-        if any(B.get_leg(l).dim > 1 for B in self._B for l in _charge_leg_labels(B)):
+        if any(not np.isclose(B.get_leg(l).dim, 1.0) for B in self._B for l in _charge_leg_labels(B)):
             warnings.warn(
                 'MPS has a higher-dimensional total charge and corresponds to a density matrix, not a pure state!'
             )
@@ -3064,10 +3064,6 @@ class MPS(BaseMPSExpectationValue):
         backend = lasy.backends.get_same_backend(*sites)
         if device is None:
             device = sites[0].default_device
-        if dtype is None:
-            dtype = lasy.Dtype.from_numpy_dtype(np.result_type(np.float64, *states))
-            if dtype.is_real and sym.has_complex_topological_data:
-                dtype = dtype.to_complex
 
         virtual_spaces = [lasy.ElementarySpace.from_defining_sectors(sym, [chargeL])]
         blocks = []
@@ -3105,13 +3101,17 @@ class MPS(BaseMPSExpectationValue):
             chargeR = sym.fusion_outcomes(virtual_spaces[-1].defining_sectors[0], charge_p)
             virtual_spaces.append(lasy.ElementarySpace.from_defining_sectors(sym, chargeR))
             blocks.append(np.asarray(vec[offsets[sector_idcs[0]] : offsets[sector_idcs[0] + 1]]).reshape(-1, 1))
+        if dtype is None:
+            dtype = lasy.Dtype.from_numpy_dtype(np.result_type(np.float64, *blocks))
+            if dtype.is_real and sym.has_complex_topological_data:
+                dtype = dtype.to_complex
 
         charge_leg = None
         if bc == 'infinite':
             total_charge = sym.fusion_outcomes(virtual_spaces[-1].defining_sectors[0], sym.dual_sector(chargeL))[0]
             if total_charge != sym.trivial_sector:
                 charge_leg = lasy.ElementarySpace.from_defining_sectors(sym, [total_charge])
-            virtual_spaces[:-1] = virtual_spaces[0]
+            virtual_spaces[-1] = virtual_spaces[0]
 
         Bs = []
         for i, block in enumerate(blocks):
@@ -5314,7 +5314,7 @@ class MPS(BaseMPSExpectationValue):
         for B in self._B:
             for label in _charge_leg_labels(B):
                 leg = B.get_leg(label)
-                if leg.dim != 1:
+                if not np.isclose(leg.dim, 1.0):
                     raise NotImplementedError('Only implemented for total charge legs with dim 1.')
                 # the charge leg points towards the tensor (like vR) -> the charge is the dual sector
                 charge = leg.dual.sector_decomposition[0]
@@ -5363,9 +5363,9 @@ class MPS(BaseMPSExpectationValue):
                 break
             h_dim = np.prod([self._B[i].get_leg(l).dim for l in labels])  # dim of the merged charge leg
             canonical = self.form[i] is not None and self.form[i + 1] is not None
-            B = self.get_B(i, 'B') if h_dim > 1 and canonical else self._B[i]
+            B = self.get_B(i, 'B') if not np.isclose(h_dim, 1.0) and canonical else self._B[i]
             B = _merge_charge_legs(B, labels, tmp_label)
-            if h_dim == 1:
+            if np.isclose(h_dim, 1.0):
                 # exact relabeling of the bond: move through the singular values to keep them consistent
                 S = self._S[i + 1]
                 is_diagonal = isinstance(S, lasy.DiagonalTensor)
@@ -9285,7 +9285,7 @@ class InitialStateBuilder:
         if p_state is None:
             p_state = self.options.get('product_state', None)  # only optional
         if p_state is None:
-            p_state = np.ones((lat.N_sites, sites[0].leg.block_number))  # equal superposition product state
+            p_state = np.ones((lat.N_sites, sites[0].leg.total_multiplicity))  # equal superposition product state
         self.check_filling(p_state)
         # sites must all be the same, however an error would be raised anyways in :meth:`project_onto_charge_sector`
         psi = MPS.project_onto_charge_sector(sites, p_state, charge_sector=charge_sector, dtype=dtype, bc=lat.bc_MPS)
@@ -9605,7 +9605,7 @@ def _different_total_charges(bra: MPS, ket: MPS) -> bool:
         return False
     for psi in [bra, ket]:
         leg = psi.total_charge_leg
-        if leg is not None and leg.dim > 1:
+        if leg is not None and not np.isclose(leg.dim, 1.0):
             return False
     return bra.get_total_charge() != ket.get_total_charge()
 
@@ -9663,8 +9663,8 @@ def _merge_charge_legs(B: lasy.HiddenLegTensor, labels: list[str], new_label: st
     else:
         B.labels.update({labels[0]: new_label[1:]})
     B = lasy.move_leg(B, new_label[1:], domain_pos=0, bend_right=False)
-    if len(labels) > 1 and B.get_leg(new_label[1:]).dim == 1:
-        B = _flatten_domain_pipe(B, 0)  # such that equal charges give equal legs
+    if len(labels) > 1 and np.isclose(B.get_leg(new_label[1:]).dim, 1.0):
+        B = lasy.flatten_pipe_leg(B, new_label[1:])  # such that equal charges give equal legs
     return lasy.HiddenLegTensor(B, [new_label[1:], *other_hidden])
 
 
