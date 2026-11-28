@@ -2965,7 +2965,7 @@ class MPS(BaseMPSExpectationValue):
             chargeL = sym.trivial_sector
         else:
             assert sym.is_valid_sector(chargeL), f'{chargeL} is not a valid charge sector of the symmetry {sym}'
-        if not np.isclose(sym.qdim(chargeL), 1.):
+        if not np.isclose(sym.qdim(chargeL), 1.0):
             raise ValueError(
                 f'chargeL={chargeL} has quantum dimension {sym.qdim(chargeL)}, but a product state '
                 'requires a sector of quantum dimension 1.'
@@ -3012,7 +3012,7 @@ class MPS(BaseMPSExpectationValue):
                     )
                 charge_p = charge_p[0]
                 B = np.array(p_st).reshape((site.dim, 1, 1))
-            if not np.isclose(sym.qdim(charge_p), 1.):
+            if not np.isclose(sym.qdim(charge_p), 1.0):
                 raise ValueError(
                     f'on-site sector {charge_p} has quantum dimension {sym.qdim(charge_p)}, '
                     'but a product state requires a sector of quantum dimension 1.'
@@ -3093,7 +3093,7 @@ class MPS(BaseMPSExpectationValue):
                     f'p_state {p_st} incompatible with product state, product states require unique on-site sectors'
                 )
             charge_p = site.leg.sector_decomposition[sector_idcs[0]]
-            if not np.isclose(sym.qdim(charge_p), 1.):
+            if not np.isclose(sym.qdim(charge_p), 1.0):
                 raise ValueError(
                     f'on-site sector {charge_p} has quantum dimension {sym.qdim(charge_p)}, '
                     'but a product state requires a sector of quantum dimension 1.'
@@ -3115,6 +3115,7 @@ class MPS(BaseMPSExpectationValue):
 
         Bs = []
         for i, block in enumerate(blocks):
+
             def block_func(shape, coupled, block=block):
                 assert tuple(shape) == block.shape, f'unexpected block shape {shape} != {block.shape}'
                 return block
@@ -4155,7 +4156,11 @@ class MPS(BaseMPSExpectationValue):
                     B.labels.update({charge_label: f'{charge_label}_{k:d}'})
                 B_parts[i % L].append(B)
                 if j + 1 < len(ind_map):
-                    SR = local_psi.get_SR(j).as_SymmetricTensor()
+                    SR = local_psi.get_SR(j)
+                    if SR.dtype.is_real and symmetry.has_complex_topological_data:
+                        # a (non-diagonal) SymmetricTensor needs a complex dtype
+                        SR = SR.copy(dtype=SR.dtype.to_complex)
+                    SR = SR.as_SymmetricTensor()
                     SR_parts[i % L].append(SR)
                     next_i = ind_map[j + 1]
                     Triv = lasy.DiagonalTensor.from_eye(
@@ -4182,6 +4187,8 @@ class MPS(BaseMPSExpectationValue):
                 )
             else:
                 SR = lasy.DiagonalTensor.from_tensor(_combine_virtual_legs(SR_p))
+                if not SR.dtype.is_real:  # may have complex type from casting to SymmetricTensor
+                    SR = lasy.real(SR)
             SVs.append(SR)
         SVs[0] = SVs[-1]
         return cls(
@@ -4245,7 +4252,7 @@ class MPS(BaseMPSExpectationValue):
         # only the sectors in which the product state has weight can appear
         weighted_legs = [
             lasy.ElementarySpace.from_defining_sectors(
-                site.sym, [site.leg.sector_decomposition[k] for k in ks], unique_sectors=True
+                site.symmetry, [site.leg.sector_decomposition[k] for k in ks], unique_sectors=True
             )
             for site, ks in zip(sites, weighted_sectors)
         ]
@@ -5491,14 +5498,25 @@ class MPS(BaseMPSExpectationValue):
             if np.isclose(h_dim, 1.0):
                 # exact relabeling of the bond: move through the singular values to keep them consistent
                 S = self._S[i + 1]
+                S_dtype = S.dtype
                 is_diagonal = isinstance(S, lasy.DiagonalTensor)
                 if is_diagonal:
+                    if S_dtype.is_real and self.symmetry.has_complex_topological_data:
+                        # a (non-diagonal) SymmetricTensor needs a complex dtype
+                        S = S.copy(dtype=S_dtype.to_complex)
                     S = S.as_SymmetricTensor()
                 B, S = lasy.move_hidden_leg(B, S, 'vR', 'vL', tmp_label, target_domain_pos=0)
                 S, B_next = lasy.move_hidden_leg(S, self._B[i + 1], 'vR', 'vL', tmp_label, target_domain_pos=0)
+                if is_diagonal:
+                    S = lasy.DiagonalTensor.from_tensor(S)
+                    if S.dtype != S_dtype:
+                        # moving the leg can introduce phases -> absorb into B to make S real
+                        phase = lasy.exp(1.0j * lasy.angle(S))
+                        B = lasy.scale_axis(B, phase, 'vR')
+                        S = lasy.real(S * lasy.complex_conj(phase))
                 self._B[i] = B
                 self._B[i + 1] = B_next
-                self._S[i + 1] = lasy.DiagonalTensor.from_tensor(S) if is_diagonal else S
+                self._S[i + 1] = S
                 continue
             # dim > 1: the bond V \otimes h is not minimal and S \otimes id_h are no Schmidt values -> SVD
             raise NotImplementedError(
@@ -9741,27 +9759,6 @@ def _different_total_charges(bra: MPS, ket: MPS) -> bool:
     return bra.get_total_charge() != ket.get_total_charge()
 
 
-def _flatten_domain_pipe(B: lasy.SymmetricTensor, domain_pos: int) -> lasy.SymmetricTensor:
-    """Replace a one-dimensional pipe in the domain of `B` by the equivalent :class:`~lasyten.ElementarySpace`.
-
-    Only the leg changes, the data is unchanged (like in :func:`~lasyten.move_hidden_leg`).
-    A :class:`~lasyten.HiddenLegTensor` `B` gives a :class:`~lasyten.HiddenLegTensor` with the same hidden legs.
-    """
-    pipe = B.domain.factors[domain_pos]
-    assert lasy.is_leg_pipe(pipe) and pipe.dim == 1
-    leg = pipe.as_ElementarySpace(pipe.is_dual)
-    leg = lasy.ElementarySpace(B.symmetry, leg.defining_sectors, leg.multiplicities, leg.is_dual)
-    factors = list(B.domain.factors)
-    factors[domain_pos] = leg
-    domain = lasy.TensorProduct(factors, B.symmetry, B.domain.sector_decomposition, B.domain.multiplicities)
-    if not isinstance(B, lasy.HiddenLegTensor):
-        return lasy.SymmetricTensor(B.data, B.codomain, domain, B.backend, B.labels)
-    hidden_idcs = B.hidden_leg_idcs()
-    labels = [l[1:] if i in hidden_idcs else l for i, l in enumerate(B.labels.as_list())]  # strip '!'
-    T = lasy.SymmetricTensor(B.data, B.codomain, domain, B.backend, labels)
-    return lasy.HiddenLegTensor(T, [labels[i] for i in hidden_idcs])
-
-
 def _hidden_legs_to_codomain(T: lasy.Tensor) -> lasy.Tensor:
     """Bend the hidden legs in the domain of `T` to the front of its codomain, such that the domain is ``[vR]``.
 
@@ -9993,11 +9990,11 @@ def _weighted_sectors(sites: list[lasy.Site], p_state_list: np.ndarray) -> list[
             raise ValueError(f'The local state on site {i:d} vanishes.')
         for k in ks:
             sector = site.leg.sector_decomposition[k]
-            if not np.isclose(site.sym.qdim(sector), 1.0):
+            if not np.isclose(site.symmetry.qdim(sector), 1.0):
                 raise ValueError(
                     f'The local state on site {i:d} has weight in the sector {sector} with quantum dimension '
-                    f'{site.sym.qdim(sector)}, but projecting onto a charge sector requires all sectors with '
-                    'weight to have quantum dimension 1.'
+                    f'{site.symmetry.qdim(sector)}, but projecting onto a charge sector requires all sectors '
+                    'with weight to have quantum dimension 1.'
                 )
         weighted.append(ks)
     return weighted
