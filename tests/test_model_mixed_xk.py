@@ -114,10 +114,9 @@ def test_mixed_hubbard(conserve_S):
 
     if conserve_S == 'SU2':
         site, *_ = M.lattice.unit_cell
-        with pytest.raises(AssertionError, match='can only construct product states for Abelian symmetries'):
-            psi = MPS.from_singlets(site, L=Lx * Ly, pairs=[(0, 1), (2, 3), (4, 5)])
-        pytest.xfail('from_singlet broken for SU(2), uses from_product_state')
-        psi = MPS.from_singlets(site, L=Lx * Ly, pairs=[(0, 1), (2, 3), (4, 5)])
+        psi = MPS.from_singlets(
+            site, L=Lx * Ly, pairs=[(0, 1), (2, 3), (4, 5)], unit_cell_width=M.lattice.mps_unit_cell_width
+        )
     else:
         product_state = [[['full'], ['empty'], ['full']],
                         [['full'], ['empty'], ['empty']]]  # fmt: skip
