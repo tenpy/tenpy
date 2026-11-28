@@ -218,6 +218,316 @@ def test_singlet_mps():
     npt.assert_array_almost_equal(mutinf, 0.0, decimal=14)
 
 
+def _spin_spin_correlations(psi, site, L):
+    """<S_i . S_j> for all ``0 <= i < j < L`` (with ``j`` possibly beyond the unit cell)."""
+    SiSj = lasy.couplings.heisenberg_coupling([site] * 2)
+    return {
+        (i, j): psi.expectation_value(SiSj, sites=[i], offsets=[0, j - i])[0] for i in range(L) for j in range(i + 1, L)
+    }
+
+
+def test_singlet_mps_SU2():
+    s = lasy.sites.SpinSite(S=0.5, conserve='SU(2)')
+    # finite: same nested pairs as test_singlet_mps, but without lonely sites (no product state for a spin-1/2)
+    pairs = [(0, 3), (1, 6), (2, 5), (4, 7)]
+    bond_singlets = np.array([1, 2, 3, 2, 3, 2, 1])
+    L = 8
+    psi = mps.MPS.from_singlets(s, L, pairs, bc='finite', unit_cell_width=L)
+    psi.test_sanity()
+    assert np.linalg.norm(psi.norm_test()) < 1.0e-13
+    npt.assert_almost_equal(psi.norm, 1.0)
+    npt.assert_almost_equal(psi.overlap(psi), 1.0)
+    npt.assert_array_almost_equal(psi.entanglement_entropy() / np.log(2), bond_singlets, 12)
+    for (i, j), SiSj in _spin_spin_correlations(psi, s, L).items():
+        npt.assert_almost_equal(SiSj, -0.75 if (i, j) in pairs else 0.0)
+    # the dense two-site state is (|up down> - |down up>)/sqrt(2)
+    psi2 = mps.MPS.from_singlets(s, 2, [(0, 1)], unit_cell_width=2)
+    theta = np.asarray(psi2.get_theta(0, 2).to_numpy()).reshape(2, 2)
+    u, d = s.state_labels['up'], s.state_labels['down']
+    expect = np.zeros((2, 2))
+    expect[u, d], expect[d, u] = 0.5**0.5, -(0.5**0.5)
+    npt.assert_array_almost_equal(theta, expect)
+
+    # infinite: the pair (3, 4) crosses the unit cell boundary
+    psi = mps.MPS.from_singlets(s, 4, [(1, 2), (3, 4)], bc='infinite', unit_cell_width=4)
+    psi.test_sanity()
+    npt.assert_array_almost_equal(psi.entanglement_entropy() / np.log(2), [1, 0, 1, 0], 12)
+    SiSj = lasy.couplings.heisenberg_coupling([s] * 2)
+    npt.assert_array_almost_equal(psi.expectation_value(SiSj), [0.0, -0.75, 0.0, -0.75])
+
+
+def test_singlet_mps_SU2_fermions():
+    for conserve_N in ['N', 'parity']:
+        for lonely in ['empty', 'full']:
+            f = lasy.sites.SpinHalfFermionSite(conserve_N=conserve_N, conserve_S='SU(2)')
+            psi = mps.MPS.from_singlets(f, 5, [(0, 1), (2, 4)], lonely=[3], lonely_state=lonely, unit_cell_width=5)
+            psi.test_sanity()
+            assert psi.is_gauged
+            npt.assert_almost_equal(psi.norm, 1.0)
+            npt.assert_almost_equal(psi.overlap(psi), 1.0)
+            npt.assert_array_almost_equal(psi.entanglement_entropy() / np.log(2), [1, 0, 1, 1], 12)
+            n = 0 if lonely == 'empty' else 2
+            npt.assert_array_almost_equal(psi.expectation_value('Ntot'), [1, 1, 1, n, 1])
+
+
+def test_singlet_mps_errors():
+    s = lasy.sites.SpinSite(S=0.5, conserve='SU(2)')
+    with pytest.raises(ValueError, match='quantum dimension'):
+        mps.MPS.from_singlets(s, 3, [(0, 1)], lonely=[2])  # lonely spin-1/2 is not a product state
+    # 'empty' (quantum dimension 1) x 'up' (spin 1/2) contains no sector of quantum dimension 1
+    f = lasy.sites.SpinHalfFermionSite(conserve_N='N', conserve_S='SU(2)')
+    with pytest.raises(ValueError, match='sectors of quantum dimension 1'):
+        mps.MPS.from_singlets(f, 2, [(0, 1)], up='empty', down='up')
+    with pytest.raises(ValueError, match='singlet_sector'):
+        mps.MPS.from_singlets(s, 2, [(0, 1)], singlet_sector=s.leg.sector_decomposition[0])  # spin 1/2, not 0
+
+
+def test_singlet_mps_SU2_spin1():
+    # 'up' and 'down' select the spin-1 multiplets, the singlet is sum_m (-1)**(1-m) |m, -m> / sqrt(3)
+    s1 = lasy.sites.SpinSite(S=1, conserve='SU(2)')
+    psi = mps.MPS.from_singlets(s1, 4, [(0, 1), (2, 3)], unit_cell_width=4)
+    psi.test_sanity()
+    assert np.max(np.abs(psi.norm_test())) < 1.0e-13
+    npt.assert_array_almost_equal(psi.entanglement_entropy() / np.log(3), [1, 0, 1], 12)
+    SiSj = lasy.couplings.heisenberg_coupling([s1] * 2)
+    npt.assert_array_almost_equal(psi.expectation_value(SiSj), [-2, 0, -2])
+    psi2 = mps.MPS.from_singlets(s1, 4, [(0, 1), (2, 3)], unit_cell_width=4, singlet_sector=s1.symmetry.trivial_sector)
+    npt.assert_almost_equal(psi.overlap(psi2), 1.0)
+
+
+def test_singlet_mps_different_sectors():
+    # the singlet of two different multiplets a = (spin 1/2, q=1) and b = (spin 1/2, q=-1)
+    su2 = lasy.sites.SpinSite(S=0.5, conserve='SU(2)').symmetry.factors[0]
+    sym = lasy.Symmetry([su2, lasy.U1()])
+    a, b = lasy.Sector([1, 0, 1]), lasy.Sector([1, 0, -1])
+    leg = lasy.ElementarySpace(sym, [b, a], [1, 1])
+    site = lasy.Site(leg)
+    sectors = [leg.idx_to_sector(i) for i in range(leg.dim)]
+    idcs_a = [i for i in range(leg.dim) if sectors[i] == a]
+    idcs_b = [i for i in range(leg.dim) if sectors[i] == b]
+    psi = mps.MPS.from_singlets(site, 2, [(0, 1)], up=idcs_a[0], down=idcs_b[0], unit_cell_width=2)
+    psi.test_sanity()
+    assert psi.total_charge_leg is None  # a x b -> trivial sector
+    npt.assert_array_almost_equal(psi.entanglement_entropy() / np.log(2), [1], 12)
+    theta = np.asarray(psi.get_theta(0, 2).to_numpy()).reshape(leg.dim, leg.dim)
+    npt.assert_almost_equal(np.linalg.norm(theta), 1.0)
+    # site 0 is in multiplet a, site 1 in multiplet b, maximally entangled
+    npt.assert_array_almost_equal(theta[np.ix_(idcs_b, range(leg.dim))], 0.0)
+    npt.assert_array_almost_equal(theta[np.ix_(range(leg.dim), idcs_a)], 0.0)
+    npt.assert_array_almost_equal(np.linalg.svd(theta[np.ix_(idcs_a, idcs_b)])[1], [0.5**0.5] * 2)
+    # a x a -> (spin 0, q=2): a singlet with a non-trivial total charge
+    psi = mps.MPS.from_singlets(site, 2, [(0, 1)], up=idcs_a[0], down=idcs_a[1], unit_cell_width=2)
+    assert psi.get_total_charge() == lasy.Sector([0, 0, 2])
+    npt.assert_array_almost_equal(psi.entanglement_entropy() / np.log(2), [1], 12)
+
+
+def test_singlet_mps_anyons():
+    # Fibonacci anyons: tau x tau -> 1, with entanglement log(phi) per singlet
+    fib = lasy.sites.FibonacciAnyonSite()
+    log_phi = np.log(fib.symmetry.qdim(fib.leg.sector_decomposition[1]))
+    for pairs, bc, expect in [
+        ([(0, 1), (2, 3)], 'finite', [1, 0, 1]),
+        ([(0, 3), (1, 2)], 'finite', [1, 2, 1]),
+        ([(1, 2), (3, 4)], 'infinite', [1, 0, 1, 0]),
+    ]:
+        psi = mps.MPS.from_singlets(fib, 4, pairs, up=1, down=1, bc=bc, unit_cell_width=4)
+        psi.test_sanity()
+        assert np.max(np.abs(psi.norm_test())) < 1.0e-13
+        npt.assert_array_almost_equal(psi.entanglement_entropy() / log_phi, expect, 12)
+    with pytest.raises(NotImplementedError, match='symmetric braids'):
+        mps.MPS.from_singlets(fib, 4, [(0, 2), (1, 3)], up=1, down=1, unit_cell_width=4)  # crossing pairs
+
+    # semions have quantum dimension 1: (|s 1> - |1 s>)/sqrt(2), with total charge s per unit cell
+    semion = lasy.sites.AnyonSite(lasy.Symmetry([lasy.SU2_kAnyonCategory(1)]))
+    psi = mps.MPS.from_singlets(
+        semion, 2, [(0, 1)], up=1, down=0, bc='infinite', dtype=lasy.Dtype.complex128, unit_cell_width=2
+    )
+    psi.test_sanity()
+    assert np.max(np.abs(psi.norm_test())) < 1.0e-13
+    npt.assert_array_almost_equal(psi.entanglement_entropy() / np.log(2), [0, 1], 12)
+    # moving the charge leg across the bond (which is two-dimensional here) keeps the canonical form
+    rolled = psi.copy()
+    rolled.roll_mps_unit_cell(1)
+    rolled.gauge_total_charge()
+    assert np.max(np.abs(rolled.norm_test())) < 1.0e-13
+    npt.assert_array_almost_equal(rolled.entanglement_entropy() / np.log(2), [1, 0], 12)
+
+    L = 5
+    c = lasy.Dtype.complex128
+    psi = mps.MPS.from_singlets(
+        semion, L, [(0, 1), (2, 3)], up=1, down=0, lonely=[4], lonely_state=1, dtype=c, unit_cell_width=L
+    )
+    psi.test_sanity()
+
+    def product(state):
+        return mps.MPS.from_product_state([semion] * L, state, dtype=c, unit_cell_width=L)
+
+    ref_a = product([1, 0, 1, 0, 1]).add(product([1, 0, 0, 1, 1]), 0.5**0.5, -(0.5**0.5))
+    ref_b = product([0, 1, 1, 0, 1]).add(product([0, 1, 0, 1, 1]), 0.5**0.5, -(0.5**0.5))
+    ref = ref_a.add(ref_b, 0.5**0.5, -(0.5**0.5))
+    npt.assert_almost_equal(abs(complex(psi.overlap(ref))), 1.0)
+
+
+def test_product_state_non_abelian():
+    f = lasy.sites.SpinHalfFermionSite(conserve_N='N', conserve_S='SU(2)')
+    p_state = ['empty', 'full', 'full', 'empty']
+    for bc in ['finite', 'infinite']:
+        psi = mps.MPS.from_product_state([f] * 4, p_state, bc=bc, unit_cell_width=4)
+        psi.test_sanity()
+        assert np.all(np.array(psi.chi) == 1)
+        npt.assert_array_almost_equal(psi.entanglement_entropy(), 0.0)
+        npt.assert_array_almost_equal(psi.expectation_value('Ntot'), [0, 2, 2, 0])
+    # superposition within a single (one-dimensional) sector
+    psi = mps.MPS.from_product_state([f] * 2, ['empty', np.array([1.0, 0, 0, 0])], unit_cell_width=2)
+    npt.assert_almost_equal(psi.norm, 1.0)
+    # higher-dimensional sectors are not product states
+    with pytest.raises(ValueError, match='quantum dimension'):
+        mps.MPS.from_product_state([f] * 2, ['up', 'empty'], unit_cell_width=2)
+    spin_half_sector = f.leg.idx_to_sector(f.state_labels['up'])
+    with pytest.raises(ValueError, match='quantum dimension'):
+        mps.MPS.from_product_state([f] * 2, ['empty', 'empty'], chargeL=spin_half_sector, unit_cell_width=2)
+    with pytest.raises(ValueError, match='quantum dimension'):
+        mps.MPS.from_product_state([lasy.sites.SpinSite(S=0.5, conserve='SU(2)')], ['up'], unit_cell_width=1)
+
+
+def test_product_state_anyons():
+    sym = lasy.Symmetry([lasy.SU2_kAnyonCategory(1)])  # semions: all sectors have quantum dimension 1
+    semion = lasy.sites.AnyonSite(sym)
+    for bc in ['finite', 'infinite']:
+        psi = mps.MPS.from_product_state([semion] * 4, [1, 1, 0, 0], bc=bc, unit_cell_width=4)
+        psi.test_sanity()
+        assert np.all(np.array(psi.chi) == 1)
+        npt.assert_almost_equal(psi.norm, 1.0)
+        npt.assert_almost_equal(complex(psi.overlap(psi, understood_infinite=True)), 1.0)
+        npt.assert_array_almost_equal(psi.entanglement_entropy(), 0.0)
+
+    # odd number of semions per unit cell -> non-trivial total charge, carried by a hidden leg on the last tensor
+    psi = mps.MPS.from_product_state([semion] * 2, [1, 0], bc='infinite', unit_cell_width=2)
+    psi.test_sanity()
+    assert isinstance(psi._B[-1], lasy.HiddenLegTensor)
+    assert np.max(np.abs(psi.norm_test())) < 1e-12
+    npt.assert_almost_equal(complex(psi.overlap(psi, understood_infinite=True)), 1.0)
+    npt.assert_array_almost_equal(psi.entanglement_entropy(), 0.0)
+    with pytest.raises(ValueError, match='different total charges'):
+        other = mps.MPS.from_product_state([semion] * 2, [1, 1], bc='infinite', unit_cell_width=2)
+        psi.overlap(other, understood_infinite=True)
+
+    rolled = psi.copy()
+    rolled.roll_mps_unit_cell(1)
+    rolled.gauge_total_charge()
+    assert np.max(np.abs(rolled.norm_test())) < 1e-12
+    psi_01 = mps.MPS.from_product_state([semion] * 2, [0, 1], bc='infinite', unit_cell_width=2)
+    # the phase of the dominant transfer matrix eigenvalue depends on the gauge, only its modulus is meaningful
+    npt.assert_almost_equal(abs(complex(rolled.overlap(psi_01, understood_infinite=True))), 1.0)
+    npt.assert_almost_equal(abs(complex(rolled.overlap(psi, understood_infinite=True))), 0.0)
+    # two unit cells -> two charge legs, moving one to the tensor of the other (without braiding them)
+    big = psi.copy()
+    big.enlarge_mps_unit_cell(2)
+    big.gauge_total_charge()
+    assert big.is_gauged
+    assert np.max(np.abs(big.norm_test())) < 1e-12
+    npt.assert_almost_equal(complex(big.overlap(big, understood_infinite=True)), 1.0)
+
+    # multiplicities > 1: indices and arrays refer to the internal basis of 2 + 3 states
+    site = lasy.Site(lasy.ElementarySpace(sym, semion.leg.sector_decomposition, [2, 3]))
+    psi_a = mps.MPS.from_product_state([site] * 3, [np.array([0, 0, 1, 1j, 0]), 1, 4], unit_cell_width=3)
+    psi_b = mps.MPS.from_product_state([site] * 3, [2, 1, 4], unit_cell_width=3)
+    psi_c = mps.MPS.from_product_state([site] * 3, [3, 1, 4], unit_cell_width=3)
+    for psi in [psi_a, psi_b, psi_c]:
+        psi.test_sanity()
+        npt.assert_almost_equal(psi.norm, 1.0)
+    npt.assert_almost_equal(abs(complex(psi_a.overlap(psi_b))), 0.5**0.5)
+    npt.assert_almost_equal(abs(complex(psi_a.overlap(psi_c))), 0.5**0.5)
+    npt.assert_almost_equal(abs(complex(psi_b.overlap(psi_c))), 0.0)
+    with pytest.raises(ValueError, match='unique on-site sectors'):
+        mps.MPS.from_product_state([site], [np.array([1, 0, 1, 0, 0])], unit_cell_width=1)
+    with pytest.raises(ValueError, match='internal basis states'):
+        mps.MPS.from_product_state([site], [np.array([1, 0])], unit_cell_width=1)
+
+    # Fibonacci anyons: tau has quantum dimension (1 + sqrt(5)) / 2
+    fib = lasy.sites.FibonacciAnyonSite()
+    psi = mps.MPS.from_product_state([fib] * 2, [0, 0], unit_cell_width=2)
+    psi.test_sanity()
+    with pytest.raises(ValueError, match='quantum dimension'):
+        mps.MPS.from_product_state([fib] * 2, [1, 0], unit_cell_width=2)
+
+
+def test_project_onto_charge_sector():
+    # Abelian: the total Sz is fixed by the sector
+    sz = lasy.sites.SpinSite(S=0.5, conserve='Sz')
+    p_state = np.array([[1, 1], [-1, 1], [1, 1]]) / 2**0.5
+    for q in [-3, -1, 1, 3]:
+        psi = mps.MPS.project_onto_charge_sector([sz] * 3, p_state, lasy.Sector([q]), unit_cell_width=3)
+        psi.test_sanity()
+        npt.assert_almost_equal(np.sum(psi.expectation_value('Sz')), q / 2)
+    with pytest.raises(ValueError, match='incompatible with 3 sites'):
+        mps.MPS.project_onto_charge_sector([sz] * 3, np.ones((3, 3)), lasy.Sector([1]), unit_cell_width=3)
+    # sectors with quantum dimension > 1 have no unique fusion outcome
+    f = lasy.sites.SpinHalfFermionSite(conserve_N='N', conserve_S='SU(2)')
+    with pytest.raises(ValueError, match='quantum dimension'):
+        mps.MPS.project_onto_charge_sector([f] * 2, np.ones((2, 4)), f.symmetry.trivial_sector, unit_cell_width=2)
+    fib = lasy.sites.FibonacciAnyonSite()
+    with pytest.raises(ValueError, match='quantum dimension'):
+        mps.MPS.project_onto_charge_sector([fib] * 2, np.ones((2, 2)), fib.symmetry.trivial_sector, unit_cell_width=2)
+    # zero weights: only the reachable sectors appear on the bonds
+    p_state = np.array([[1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [1.0, 1.0]])
+    psi = mps.MPS.project_onto_charge_sector([sz] * 4, p_state, lasy.Sector([0]), unit_cell_width=4)
+    psi.test_sanity()
+    assert np.max(np.abs(psi.norm_test())) < 1.0e-13
+    npt.assert_almost_equal(np.sum(psi.expectation_value('Sz')), 0.0)
+    npt.assert_array_equal(psi.chi, [1, 2, 2])
+    with pytest.raises(ValueError, match="can't get desired charge sector"):
+        mps.MPS.project_onto_charge_sector([sz] * 4, np.array([[1.0, 0.0]] * 4), lasy.Sector([0]), unit_cell_width=4)
+    with pytest.raises(ValueError, match='vanishes'):
+        mps.MPS.project_onto_charge_sector(
+            [sz] * 2, np.array([[0.0, 0.0], [1, 1]]), lasy.Sector([1]), unit_cell_width=2
+        )
+
+
+@pytest.mark.parametrize('N', [2, 4, 6])
+def test_project_onto_charge_sector_SU2_fermions(N, L=4):
+    # only the sectors with weight need quantum dimension one: here 'empty' and 'full', but not 'up' and 'down'
+    f = lasy.sites.SpinHalfFermionSite(conserve_N='N', conserve_S='SU(2)')
+    f_N = lasy.sites.SpinHalfFermionSite(conserve_N='N', conserve_S=None)
+    p_state = np.zeros((L, f.dim))  # public basis, i.e. f.dim = 4 > f.leg.total_multiplicity = 3 columns
+    rng = np.random.default_rng(1)
+    p_state[:, f.state_labels['empty']] = rng.normal(size=L)
+    p_state[:, f.state_labels['full']] = rng.normal(size=L)
+    psi = mps.MPS.project_onto_charge_sector([f] * L, p_state, lasy.Sector([0, 0, N, 0]), unit_cell_width=L)
+    psi.test_sanity()
+    assert np.max(np.abs(psi.norm_test())) < 1.0e-13
+    npt.assert_almost_equal(np.sum(psi.expectation_value('Ntot')), N)
+    # same state as with only N conserved
+    psi_N = mps.MPS.project_onto_charge_sector([f_N] * L, p_state, lasy.Sector([N, 0]), unit_cell_width=L)
+    npt.assert_array_equal(psi.chi, psi_N.chi)
+    npt.assert_array_almost_equal(psi.entanglement_entropy(), psi_N.entanglement_entropy(), 12)
+    p_state[0, f.state_labels['up']] = 1.0
+    with pytest.raises(ValueError, match='has weight in the sector'):
+        mps.MPS.project_onto_charge_sector([f] * L, p_state, lasy.Sector([0, 0, N, 0]), unit_cell_width=L)
+    with pytest.raises(ValueError, match='incompatible with 4 sites'):
+        mps.MPS.project_onto_charge_sector([f] * L, np.ones((L, 3)), lasy.Sector([0, 0, N, 0]), unit_cell_width=L)
+
+
+@pytest.mark.parametrize('multiplicities', [[1, 1], [2, 3]])
+def test_project_onto_charge_sector_semions(multiplicities, L=5):
+    # semions have the fusion rules of Z2: the projected states have the same bonds and Schmidt values
+    z2 = lasy.sites.SpinSite(S=0.5, conserve='parity').symmetry
+    sem = lasy.Symmetry([lasy.SU2_kAnyonCategory(1)])
+    z2_sectors = [lasy.Sector([0]), lasy.Sector([1])]
+    sem_sectors = list(lasy.sites.AnyonSite(sem).leg.sector_decomposition)
+    z2_site = lasy.Site(lasy.ElementarySpace(z2, z2_sectors, multiplicities))
+    sem_site = lasy.Site(lasy.ElementarySpace(sem, sem_sectors, multiplicities))
+    p_state = np.random.default_rng(0).normal(size=(L, sum(multiplicities)))  # in the internal basis for semions
+    for z2_sector, sem_sector in zip(z2_sectors, sem_sectors):
+        psi_z2 = mps.MPS.project_onto_charge_sector([z2_site] * L, p_state, z2_sector, unit_cell_width=L)
+        psi = mps.MPS.project_onto_charge_sector([sem_site] * L, p_state, sem_sector, unit_cell_width=L)
+        psi.test_sanity()
+        assert np.max(np.abs(psi.norm_test())) < 1.0e-13
+        assert psi.get_total_charge() == sem_sector
+        npt.assert_array_equal(psi.chi, psi_z2.chi)
+        npt.assert_array_almost_equal(psi.entanglement_entropy(), psi_z2.entanglement_entropy(), 12)
+
+
 def test_from_mps_covering():
     spin = lasy.sites.SpinSite(S=0.5, conserve=None)
     psi_uuu = mps.MPS.from_product_state([spin] * 3, ['up', 'up', 'up'], unit_cell_width=3)
