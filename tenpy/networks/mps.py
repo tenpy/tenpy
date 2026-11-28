@@ -4211,13 +4211,21 @@ class MPS(BaseMPSExpectationValue):
     ) -> MPS:
         """Generates an MPS from a product state list which is projected onto a given charge sector.
 
+        Since a product state list is projected, the same restrictions as for product states apply
+        to this projection. In particular, local on-site states need to lie in sectors of quantum
+        dimension one.
+
         Parameters
         ----------
         sites : list of :class:`~lasyten.models.degrees_of_freedom.Site`
             The sites defining the local Hilbert space. The sites should conserve *some* charge,
             otherwise projecting onto a charge sector is meaningless.
         p_state_list : list | np.ndarray
-            list defining the product state out of which to project
+            List defining the product state out of which to project.
+            ``p_state_list[i]`` is the local state on site ``i``, for symmetries that can be dropped,
+            it is given in the public basis of ``sites[i].leg`` with ``site.dim`` entries. Otherwise,
+            it is given in the internal basis with ``site.leg.total_multiplicity``, see also
+            :meth:`from_product_state`.
         charge_sector : :class:`~lasyten.Sector`
             The charge sector corresponding to the conserved charge of the ``sites``
         dtype : type
@@ -4232,7 +4240,16 @@ class MPS(BaseMPSExpectationValue):
         projected_MPS : :class:`~tenpy.networks.mps.MPS`
 
         """
-        charge_tree = cls.get_charge_tree_for_given_charge_sector(sites, charge_sector)
+        p_state_list = np.asarray(p_state_list)  # convert (possible list) to ndarray for indexing
+        weighted_sectors = _weighted_sectors(sites, p_state_list)
+        # only the sectors in which the product state has weight can appear
+        weighted_legs = [
+            lasy.ElementarySpace.from_defining_sectors(
+                site.sym, [site.leg.sector_decomposition[k] for k in ks], unique_sectors=True
+            )
+            for site, ks in zip(sites, weighted_sectors)
+        ]
+        charge_tree = cls._get_charge_tree_from_legs(weighted_legs, charge_sector)
         return cls._project_onto_sector_from_charge_tree(
             sites,
             p_state_list,
@@ -4268,8 +4285,8 @@ class MPS(BaseMPSExpectationValue):
             The sites defining the local Hilbert space. The sites should conserve *some* charge,
             otherwise projecting onto a charge sector is meaningless.
         p_state_list : list | np.ndarray
-            List defining the product state out of which to project. ``p_state_list[i]`` is the
-            local state on site ``i`` in the public basis of ``sites[i].leg``.
+            List defining the product state out of which to project, see
+            :meth:`project_onto_charge_sector`.
         charge_tree : list[:class:`~lasyten.SectorArray`]
             List containing the possible charge sectors at each bond.
         dtype : type
@@ -4286,9 +4303,12 @@ class MPS(BaseMPSExpectationValue):
         """
         p_state_list = np.asarray(p_state_list)  # convert (possible list) to ndarray for indexing
         sym = sites[0].symmetry
-        assert sym.is_abelian, 'can only construct product states for Abelian symmetries'
         assert all(s.symmetry == sym for s in sites[1:]), 'Symmetry for all sites must be identical'
         assert bc in ['finite', 'segment'], 'charge trees are only defined for finite or segment MPS'
+        # also checks qdims of relevant sectors and shape of p_state_list
+        weighted_sectors = _weighted_sectors(sites, p_state_list)
+        # discard higher qdim sectors to make sure every charge_tree input actually reduces to Abelian sectors
+        charge_tree = [[s for s in sectors if np.isclose(sym.qdim(s), 1.0)] for sectors in charge_tree]
         if dtype is None:
             np_dtype = np.result_type(p_state_list.dtype, np.float64)
         else:
@@ -4297,6 +4317,20 @@ class MPS(BaseMPSExpectationValue):
         virtual_spaces = [
             lasy.ElementarySpace.from_defining_sectors(sym, sectors, unique_sectors=True) for sectors in charge_tree
         ]
+        if not sym.can_be_dropped:
+            return cls._project_onto_sector_internal_basis(
+                sites,
+                p_state_list,
+                virtual_spaces,
+                weighted_sectors,
+                dtype=dtype,
+                bc=bc,
+                form=form,
+                norm=norm,
+                unit_cell_width=unit_cell_width,
+                device=device,
+                understood_shift_symmetry=understood_shift_symmetry,
+            )
         Bflat = []
         for i, (site, leg_L, leg_R) in enumerate(zip(sites, virtual_spaces[:-1], virtual_spaces[1:])):
             # each charge appears exactly once on the bonds -> map sectors to (public) basis indices
@@ -4304,7 +4338,7 @@ class MPS(BaseMPSExpectationValue):
             sectors_L = [leg_L.idx_to_sector(vL) for vL in range(leg_L.dim)]
             # use p, vL, vR order for from_Bflat_virtual_spaces
             B = np.zeros((site.dim, leg_L.dim, leg_R.dim), dtype=np_dtype)
-            for j in range(site.dim):
+            for j in np.nonzero(p_state_list[i])[0]:
                 sector_p = site.leg.idx_to_sector(j)
                 for vL, sector_L in enumerate(sectors_L):
                     vR = idx_R.get(tuple(sym.fusion_outcomes(sector_L, sector_p)[0]))
@@ -4328,6 +4362,71 @@ class MPS(BaseMPSExpectationValue):
             # from_Bflat_virtual_spaces only brings the MPS into canonical form for chi > 1
             projected_state.canonical_form()
         return projected_state
+
+    @classmethod
+    def _project_onto_sector_internal_basis(
+        cls,
+        sites: list[lasy.Site],
+        p_state_list: np.ndarray,
+        virtual_spaces: list[lasy.ElementarySpace],
+        weighted_sectors: list[list[int]],
+        dtype: lasy.Dtype = None,
+        bc: Literal['finite', 'segment'] = 'finite',
+        form='B',
+        norm: float = 1.0,
+        unit_cell_width: int = None,
+        device: str = None,
+        understood_shift_symmetry: bool = False,
+    ) -> MPS:
+        """Implementation of :meth:`_project_onto_sector_from_charge_tree` for symmetries that can not be dropped.
+
+        `p_state_list` is given in the internal basis of the sites, and the bonds carry the sectors of the charge tree
+        once each. `weighted_sectors` are the indices (into ``site.leg.sector_decomposition``) of the sectors in which
+        the local states have weight; they and the bond sectors have quantum dimension one. The tensors are given by a
+        single fusion tree ``(vL, p) -> vR`` for each pair of sectors on ``vL`` and ``p``.
+        """
+        sym = sites[0].symmetry
+        backend = lasy.backends.get_same_backend(*sites)
+        if device is None:
+            device = sites[0].default_device
+        if dtype is None:
+            dtype = lasy.Dtype.from_numpy_dtype(np.result_type(p_state_list.dtype, np.float64))
+            if dtype.is_real and sym.has_complex_topological_data:
+                dtype = dtype.to_complex
+        Bs = []
+        for i, (site, leg_L, leg_R) in enumerate(zip(sites, virtual_spaces[:-1], virtual_spaces[1:])):
+            offsets = np.cumsum([0, *site.leg.multiplicities])
+            trees = {}
+            for sector_R in leg_R.sector_decomposition:
+                Y = lasy.FusionTree(sym, [sector_R], sector_R, [False], [], [])
+                for sector_L in leg_L.sector_decomposition:
+                    for k in weighted_sectors[i]:
+                        sector_p = site.leg.sector_decomposition[k]
+                        if sym.fusion_outcomes(sector_L, sector_p)[0] != sector_R:
+                            continue
+                        coeffs = p_state_list[i, offsets[k] : offsets[k + 1]].reshape(1, -1, 1)
+                        X = lasy.FusionTree(sym, [sector_L, sector_p], sector_R, [False, False], [], [0])
+                        trees[(X, Y)] = coeffs
+            B = lasy.SymmetricTensor.from_tree_pairs(
+                trees, [leg_L, site.leg], [leg_R], backend, ['vL', 'p', 'vR'], dtype=dtype, device=device
+            )
+            Bs.append(B)
+        SVs = [
+            lasy.DiagonalTensor.from_eye(leg, backend, ['vL', 'vR'], dtype.to_real, device) for leg in virtual_spaces
+        ]
+        SVs = [S / lasy.norm(S) for S in SVs]
+        res = cls(
+            sites,
+            Bs,
+            SVs,
+            bc=bc,
+            form=form,
+            norm=norm,
+            unit_cell_width=unit_cell_width,
+            understood_shift_symmetry=understood_shift_symmetry,
+        )
+        res.canonical_form()  # the SVs set above are only placeholders
+        return res
 
     @property
     def L(self) -> int:
@@ -5817,10 +5916,17 @@ class MPS(BaseMPSExpectationValue):
             is ``[{(0,)}, {(1,), (-1,)}, {(0,)}]``.
 
         """
-        L = len(sites)
-        assert L > 0, 'sites must contain a :class:`Site` with conserved charges'
-        sym = sites[0].symmetry
-        assert all(site.symmetry == sym for site in sites[1:]), 'Symmetry for all sites must be identical'
+        assert len(sites) > 0, 'sites must contain a :class:`Site` with conserved charges'
+        return MPS._get_charge_tree_from_legs([site.leg for site in sites], charge_sector)
+
+    @staticmethod
+    def _get_charge_tree_from_legs(
+        legs: list[lasy.ElementarySpace], charge_sector: lasy.Sector
+    ) -> list[lasy.SectorArray]:
+        """Same as :meth:`get_charge_tree_for_given_charge_sector`, but in terms of the physical `legs`."""
+        L = len(legs)
+        sym = legs[0].symmetry
+        assert all(leg.symmetry == sym for leg in legs[1:]), 'Symmetry for all sites must be identical'
 
         # use spaces to construct the overlapping charge sectors from left and right, similar to how
         # it is done in from_desired_bond_dimension, but we may set the all multiplicities to 1
@@ -5830,13 +5936,13 @@ class MPS(BaseMPSExpectationValue):
         for i in range((L + 1) // 2):
             # range is chosen such that the left and right parts always meet
             # in the center and we get a consistency condition in the charges
-            new_space_left = lasy.TensorProduct([virtual_spaces[i], sites[i].leg], sym).as_ElementarySpace()
+            new_space_left = lasy.TensorProduct([virtual_spaces[i], legs[i]], sym).as_ElementarySpace()
             # keep each sector once, i.e., set all multiplicities to 1
             new_space_left = lasy.ElementarySpace(sym, new_space_left.sector_decomposition)
             virtual_spaces[i + 1] = _truncate_virtual_space(
                 new_space_left, virtual_spaces[i + 1], chi=None, err=charge_err
             )
-            new_space_right = lasy.TensorProduct([virtual_spaces[-1 - i], sites[-1 - i].leg.dual], sym)
+            new_space_right = lasy.TensorProduct([virtual_spaces[-1 - i], legs[-1 - i].dual], sym)
             new_space_right = lasy.ElementarySpace(sym, new_space_right.as_ElementarySpace().sector_decomposition)
             virtual_spaces[-2 - i] = _truncate_virtual_space(
                 new_space_right, virtual_spaces[-2 - i], chi=None, err=charge_err
@@ -9309,7 +9415,8 @@ class InitialStateBuilder:
         if p_state is None:
             p_state = self.options.get('product_state', None)  # only optional
         if p_state is None:
-            p_state = np.ones((lat.N_sites, sites[0].leg.total_multiplicity))  # equal superposition product state
+            # equal superposition product state
+            p_state = np.ones((lat.N_sites, _num_local_basis_states(sites[0])))
         self.check_filling(p_state)
         # sites must all be the same, however an error would be raised anyways in :meth:`project_onto_charge_sector`
         psi = MPS.project_onto_charge_sector(sites, p_state, charge_sector=charge_sector, dtype=dtype, bc=lat.bc_MPS)
@@ -9714,6 +9821,18 @@ def _permute_theta_for_svd(theta: lasy.Tensor, charge_leg_right: bool) -> lasy.T
     return lasy.planar_permute_legs(theta, codomain=hidden + ['vL', 'p0'], domain=['vR', 'p1'])
 
 
+def _num_local_basis_states(site: lasy.Site) -> int:
+    """The number of entries of a local state vector on `site`, see :meth:`MPS.from_product_state`.
+
+    For symmetries that can be dropped, local states are given in the public basis with ``site.dim`` entries.
+    Otherwise, they are given in the internal basis, which enumerates the ``site.leg.total_multiplicity`` copies
+    of the sectors.
+    """
+    if site.symmetry.can_be_dropped:
+        return site.dim
+    return site.leg.total_multiplicity
+
+
 def _normalize_sector(charge_sector, symmetry: lasy.Symmetry) -> lasy.Sector:
     """Convert one entry of a `charge_sector` argument (a sector, ``0`` or ``'trivial'``) to a Sector."""
     if isinstance(charge_sector, lasy.Sector):
@@ -9852,6 +9971,36 @@ def _split_off_vL(T: lasy.Tensor) -> lasy.Tensor:
     labels = T.labels.as_list()
     k = labels.index('vL')
     return lasy.planar_permute_legs(T, codomain=['vL'], domain=(labels[k + 1 :] + labels[:k])[::-1])
+
+
+def _weighted_sectors(sites: list[lasy.Site], p_state_list: np.ndarray) -> list[list[int]]:
+    """The sectors in which the local states of a product state have weight, for :meth:`MPS.project_onto_charge_sector`.
+
+    Returns, for each site, the sorted indices (into ``site.leg.sector_decomposition``) of the sectors in which
+    ``p_state_list[i]`` is nonzero. Checks the shape of `p_state_list` (see :func:`_num_local_basis_states`) and that
+    these sectors have quantum dimension one; sectors without weight may have any quantum dimension.
+    """
+    num_states = [_num_local_basis_states(site) for site in sites]
+    if len(set(num_states)) != 1 or p_state_list.shape != (len(sites), num_states[0]):
+        raise ValueError(
+            f'p_state_list of shape {p_state_list.shape} incompatible with {len(sites)} sites with '
+            f'{num_states} basis states.'
+        )
+    weighted = []
+    for i, site in enumerate(sites):
+        ks = sorted({_sector_and_multiplicity(site.leg, j)[0] for j in np.nonzero(p_state_list[i])[0]})
+        if len(ks) == 0:
+            raise ValueError(f'The local state on site {i:d} vanishes.')
+        for k in ks:
+            sector = site.leg.sector_decomposition[k]
+            if not np.isclose(site.sym.qdim(sector), 1.0):
+                raise ValueError(
+                    f'The local state on site {i:d} has weight in the sector {sector} with quantum dimension '
+                    f'{site.sym.qdim(sector)}, but projecting onto a charge sector requires all sectors with '
+                    'weight to have quantum dimension 1.'
+                )
+        weighted.append(ks)
+    return weighted
 
 
 def _truncate_virtual_space(
